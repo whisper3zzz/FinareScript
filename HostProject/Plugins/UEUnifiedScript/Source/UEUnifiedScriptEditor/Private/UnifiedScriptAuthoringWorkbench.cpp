@@ -428,7 +428,13 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     {
         return false;
     }
-    Root->TryGetStringField(TEXT("sourcePath"), Candidate.SourcePath);
+    if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("sourcePath"), Candidate.SourcePath, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("sourceText"), Candidate.SourceText, OutError))
+    {
+        return false;
+    }
 
     const TSharedPtr<FJsonObject>* History = nullptr;
     if (!Root->TryGetObjectField(TEXT("history"), History) || !History->IsValid() ||

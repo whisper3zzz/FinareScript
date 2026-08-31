@@ -1840,6 +1840,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     const FString WorkspaceJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.5\","
              "\"revision\":2,\"sourcePath\":\"DemoScript.cs\","
+             "\"sourceText\":\"using System;\\n// canonical snapshot\\n\","
              "\"history\":{\"canUndo\":true,\"canRedo\":false,"
              "\"undoDepth\":2,\"redoDepth\":0,"
              "\"undoTransactionId\":\"txn-2\",\"undoDescription\":\"Reconnect flow\","
@@ -1880,6 +1881,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             Error));
     TestEqual(TEXT("Workbench response revision is retained"), Workspace.Revision, int64(2));
     TestEqual(TEXT("Workbench response generation is retained"), Workspace.Generation, int64(3));
+    TestEqual(
+        TEXT("Workbench response retains the exact canonical source snapshot"),
+        Workspace.SourceText,
+        FString(TEXT("using System;\n// canonical snapshot\n")));
     TestTrue(TEXT("Workbench response exposes undo availability"), Workspace.History.bCanUndo);
     TestFalse(TEXT("Workbench response exposes redo availability"), Workspace.History.bCanRedo);
     TestEqual(TEXT("Workbench response retains undo depth"), Workspace.History.UndoDepth, int64(2));
@@ -1928,6 +1933,17 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             RestartRequired.ToDisplayString().Contains(TEXT("active generation")));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 70);
+    FUnifiedScriptAuthoringWorkspaceResult MissingSourceWorkspace = Workspace;
+    TestFalse(
+        TEXT("Workspace v0.5 rejects a response without its canonical source snapshot"),
+        FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
+            WorkspaceJson.Replace(TEXT("\"sourceText\""), TEXT("\"ignoredSourceText\"")),
+            MissingSourceWorkspace,
+            Error));
+    TestEqual(
+        TEXT("Rejected workspace parsing preserves the previous canonical source snapshot"),
+        MissingSourceWorkspace.SourceText,
+        Workspace.SourceText);
     const FString AiCommitJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.ai-semantic-proposal-commit/v0.1\","
              "\"proposalId\":\"us_0123456789abcdef0123456789abcdef\","
@@ -1942,6 +1958,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             Error));
     TestEqual(TEXT("AI proposal commit retains the workspace revision"),
         AiWorkspace.Revision, int64(2));
+    TestEqual(
+        TEXT("AI proposal commit retains the canonical source snapshot"),
+        AiWorkspace.SourceText,
+        Workspace.SourceText);
 
     const FString PreviewJson =
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.2\","
@@ -2061,6 +2081,19 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         SNew(SUnifiedScriptAuthoringSurface).InitialSurfacePath(SurfacePath);
     TestTrue(TEXT("Native Slate workspace loads the checked-in Surface"),
         Widget->LoadSurface(SurfacePath));
+    TestEqual(
+        TEXT("Script Asset authoring opens in Graph mode"),
+        Widget->GetViewMode(),
+        EUnifiedScriptAuthoringViewMode::Graph);
+    Widget->SetViewMode(EUnifiedScriptAuthoringViewMode::Code);
+    TestEqual(
+        TEXT("Script Asset authoring can switch to its C# projection without another asset"),
+        Widget->GetViewMode(),
+        EUnifiedScriptAuthoringViewMode::Code);
+    TestFalse(
+        TEXT("A standalone Surface never masquerades as a canonical Workbench source snapshot"),
+        Widget->HasCanonicalSourceSnapshot());
+    Widget->SetViewMode(EUnifiedScriptAuthoringViewMode::Graph);
     TestTrue(TEXT("My Script navigation activates the UE Event Entry function"),
         Widget->SelectFunction(EventFunction->Id));
     TestTrue(

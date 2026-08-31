@@ -12,6 +12,12 @@
 class SEditableTextBox;
 class SGraphEditor;
 class SUnifiedScriptCanvasMinimap;
+
+enum class EUnifiedScriptAuthoringViewMode : uint8
+{
+    Graph,
+    Code,
+};
 class SUnifiedScriptDebugPanel;
 class SSearchBox;
 class STextBlock;
@@ -117,6 +123,10 @@ public:
         FUnifiedScriptGraphPaletteAction& OutAction) const;
     bool ToggleDebugBreakpoint(const FString& ActionId);
     bool IsDebugBreakpointEnabled(const FString& ActionId) const;
+    void SetViewMode(EUnifiedScriptAuthoringViewMode InViewMode);
+    EUnifiedScriptAuthoringViewMode GetViewMode() const { return ViewMode; }
+    bool HasCanonicalSourceSnapshot() const { return bHasCanonicalSourceSnapshot; }
+    const FString& GetCanonicalSourceText() const { return WorkbenchSourceText; }
 
     /** Executes one all-matching-instance preflight barrier before any reload. */
     static FUnifiedScriptReloadBatchResult ReloadMatchingComponentsForAsset(
@@ -135,6 +145,8 @@ private:
     FReply HandleBrowse();
     FReply HandleLoadSelectedAsset();
     FReply HandleLoadInitialSurface();
+    FReply HandleSetViewMode(EUnifiedScriptAuthoringViewMode InViewMode);
+    FReply HandleRefreshSourceSnapshot();
     FReply HandleOpenSource(FUnifiedScriptAuthoringSpan Span);
     FReply HandleCopyId(FString SemanticId);
     FReply HandleCopyPatch(
@@ -333,6 +345,7 @@ private:
     FString LoadedSurfacePath;
     FString LoadedLayoutPath;
     FString WorkbenchSourcePath;
+    FString WorkbenchSourceText;
     FDateTime LoadedSurfaceTimestamp;
     bool bAutoReload = true;
     bool bReloadMatchingComponents = true;
@@ -342,6 +355,7 @@ private:
     bool bPendingGraphFocus = false;
     bool bShowCanvasMinimap = true;
     bool bPendingRequestPublishesRuntime = true;
+    bool bHasCanonicalSourceSnapshot = false;
     bool bStatusError = false;
     bool bHasAuthoringFailure = false;
     FString StatusMessage;
@@ -377,6 +391,7 @@ private:
     TArray<FString> CopiedStatementIds;
     FString CopiedStatementFunctionId;
     int32 ActiveGraphActionCount = 0;
+    EUnifiedScriptAuthoringViewMode ViewMode = EUnifiedScriptAuthoringViewMode::Graph;
 
     TSharedPtr<SEditableTextBox> PathTextBox;
     TSharedPtr<SEditableTextBox> ServerUrlTextBox;

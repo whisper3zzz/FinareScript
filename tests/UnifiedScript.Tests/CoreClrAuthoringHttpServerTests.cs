@@ -227,6 +227,8 @@ public sealed class CoreClrAuthoringHttpServerTests
 
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
             Assert.Equal("unifiedscript.authoring-workspace/v0.5", baseline.SchemaVersion);
+            Assert.Equal(logicalPath, baseline.SourcePath);
+            Assert.Equal(Source, baseline.SourceText);
             Assert.Equal(
                 VisualCSharpProfileContract.CurrentSchemaVersion,
                 baseline.Profile.Profile.SchemaVersion);
@@ -496,6 +498,7 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal("Update MaxDamage", declared.History.UndoDescription);
             Assert.Equal("txn-declaration", declared.History.LastOperationId);
             Assert.Equal("persisted", declared.History.PersistenceState);
+            Assert.Equal(await File.ReadAllTextAsync(sourcePath), declared.SourceText);
             Assert.Contains("= 120;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.True(File.Exists(identityPath));
             Assert.Equal(
@@ -527,6 +530,7 @@ public sealed class CoreClrAuthoringHttpServerTests
 
             Assert.Equal(3, behavior.Revision);
             Assert.Equal(3, behavior.Generation.Number);
+            Assert.Equal(await File.ReadAllTextAsync(sourcePath), behavior.SourceText);
             Assert.Contains(
                 "Math.Clamp(scaled, 10f, MaxDamage)",
                 await File.ReadAllTextAsync(sourcePath),

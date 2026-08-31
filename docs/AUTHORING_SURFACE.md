@@ -337,3 +337,18 @@ earlier candidates, restarts their retained generations, and restores native
 state and overrides. Old contexts retire only after the complete batch commits;
 the receipt exposes `batchPrepare`, `batchCommit`, `batchAbort`, and
 `batchFinalize` rather than hiding a partial update behind one reload count.
+
+M13.2E-1 makes the two authoring projections explicit without introducing a
+second source of truth. Authoring workspace v0.5 already builds `SourceText`,
+the Script Asset declarations, Graph, and Surface from one
+`CSharpAuthoringSnapshot`; the UE parser now requires and retains that exact
+source text. The Script Asset editor exposes a **Graph / C#** switch backed by
+an `SWidgetSwitcher`. Graph keeps the native `SGraphEditor`; C# renders the
+exact Workbench revision in a read-only monospace view and can refresh both
+projections together. Switching to C# requests the canonical snapshot when it
+is not loaded, while a standalone `.surface.json` is labelled as non-canonical
+instead of silently reading a potentially different file. Accepted authoring
+transactions replace the source and Graph projections together through the
+existing `AdoptWorkspace` path. Direct C# editing remains deliberately outside
+this slice; M13.2E-2 will submit restricted source changes through the same
+preview-token and semantic-Diff transaction used by Graph edits.

@@ -163,6 +163,7 @@ struct FUnifiedScriptAuthoringWorkspaceResult
     int64 Revision = 0;
     int64 Generation = 0;
     FString SourcePath;
+    FString SourceText;
     FUnifiedScriptAuthoringSurfaceDocument Surface;
     FUnifiedScriptVisualProfileResult Profile;
     FUnifiedScriptAuthoringHistoryResult History;

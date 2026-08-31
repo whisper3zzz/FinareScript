@@ -49,6 +49,7 @@
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
+#include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/Views/STreeView.h"
 #include "Widgets/Views/SListView.h"
 #include "Widgets/SLeafWidget.h"
@@ -1002,7 +1003,7 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                     .AutoHeight()
                     [
                         SNew(STextBlock)
-                        .Text(LOCTEXT("Title", "UnifiedScript Blueprint"))
+                        .Text(LOCTEXT("Title", "UnifiedScript Script Asset"))
                         .Font(FAppStyle::GetFontStyle(TEXT("HeadingExtraSmall")))
                     ]
                     + SVerticalBox::Slot()
@@ -1439,9 +1440,16 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                     SNew(STextBlock)
                                     .Text_Lambda([this]()
                                     {
-                                        return FText::FromString(ActiveFunctionId.IsEmpty()
-                                            ? TEXT("Visual Behavior")
-                                            : ActiveFunctionSignature);
+                                        if (ViewMode == EUnifiedScriptAuthoringViewMode::Code)
+                                        {
+                                            return FText::FromString(WorkbenchSourcePath.IsEmpty()
+                                                ? TEXT("C# Source")
+                                                : FPaths::GetCleanFilename(WorkbenchSourcePath));
+                                        }
+                                        return FText::FromString(
+                                            ActiveFunctionId.IsEmpty()
+                                                ? TEXT("Visual Behavior")
+                                                : ActiveFunctionSignature);
                                     })
                                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
                                 ]
@@ -1451,6 +1459,19 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                     SNew(STextBlock)
                                     .Text_Lambda([this]()
                                     {
+                                        if (ViewMode == EUnifiedScriptAuthoringViewMode::Code)
+                                        {
+                                            return bHasCanonicalSourceSnapshot
+                                                ? FText::Format(
+                                                    LOCTEXT(
+                                                        "CodeSnapshotStatus",
+                                                        "Canonical workspace snapshot  /  revision {0}  /  {1} characters  /  read only"),
+                                                    WorkbenchRevision,
+                                                    WorkbenchSourceText.Len())
+                                                : LOCTEXT(
+                                                    "CodeSnapshotPending",
+                                                    "Canonical C# snapshot pending  /  switch or refresh to request the Workbench");
+                                        }
                                         return FText::Format(
                                             LOCTEXT("GraphNodeCount", "{0} visual nodes  /  {1} wires  /  Presentation v1"),
                                             ActiveGraphActionCount,
@@ -1462,10 +1483,66 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             ]
                             + SHorizontalBox::Slot()
                             .AutoWidth()
+                            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SBorder)
+                                .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+                                .Padding(1.0f)
+                                [
+                                    SNew(SHorizontalBox)
+                                    + SHorizontalBox::Slot()
+                                    .AutoWidth()
+                                    [
+                                        SNew(SButton)
+                                        .Text(LOCTEXT("GraphViewMode", "Graph"))
+                                        .ToolTipText(LOCTEXT(
+                                            "GraphViewModeTip",
+                                            "Show the visual projection of this Script Asset."))
+                                        .ButtonColorAndOpacity_Lambda([this]()
+                                        {
+                                            return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                                ? FSlateColor(FLinearColor(0.10f, 0.36f, 0.64f))
+                                                : FSlateColor(FLinearColor(0.12f, 0.13f, 0.15f));
+                                        })
+                                        .OnClicked(
+                                            this,
+                                            &SUnifiedScriptAuthoringSurface::HandleSetViewMode,
+                                            EUnifiedScriptAuthoringViewMode::Graph)
+                                    ]
+                                    + SHorizontalBox::Slot()
+                                    .AutoWidth()
+                                    [
+                                        SNew(SButton)
+                                        .Text(LOCTEXT("CodeViewMode", "C#"))
+                                        .ToolTipText(LOCTEXT(
+                                            "CodeViewModeTip",
+                                            "Show the exact C# source from the same canonical Workbench snapshot."))
+                                        .ButtonColorAndOpacity_Lambda([this]()
+                                        {
+                                            return ViewMode == EUnifiedScriptAuthoringViewMode::Code
+                                                ? FSlateColor(FLinearColor(0.10f, 0.36f, 0.64f))
+                                                : FSlateColor(FLinearColor(0.12f, 0.13f, 0.15f));
+                                        })
+                                        .OnClicked(
+                                            this,
+                                            &SUnifiedScriptAuthoringSurface::HandleSetViewMode,
+                                            EUnifiedScriptAuthoringViewMode::Code)
+                                    ]
+                                ]
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
                             .Padding(0.0f, 0.0f, 6.0f, 0.0f)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SBox)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .WidthOverride(144.0f)
                                 [
                                     SAssignNew(ExtractionNameTextBox, SEditableTextBox)
@@ -1482,6 +1559,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .Text(LOCTEXT("ExtractFunction", "Extract Function"))
                                 .ToolTipText(LOCTEXT(
                                     "ExtractFunctionTip",
@@ -1495,6 +1578,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .Text(LOCTEXT("CollapseScope", "Collapse Scope"))
                                 .ToolTipText(LOCTEXT(
                                     "CollapseScopeTip",
@@ -1508,6 +1597,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .Text(LOCTEXT("AddComment", "Add Comment"))
                                 .ToolTipText(LOCTEXT(
                                     "AddCommentTip",
@@ -1524,6 +1619,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SCheckBox)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .IsChecked_Lambda([this]()
                                 {
                                     return bShowCanvasMinimap
@@ -1548,6 +1649,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .Text(LOCTEXT("FocusSelection", "Focus Selection"))
                                 .ToolTipText(LOCTEXT(
                                     "FocusSelectionTip",
@@ -1564,6 +1671,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return ViewMode == EUnifiedScriptAuthoringViewMode::Graph
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
                                 .Text(LOCTEXT("FocusGraph", "Focus All"))
                                 .ToolTipText(LOCTEXT(
                                     "FocusGraphTip",
@@ -1579,47 +1692,118 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         + SVerticalBox::Slot()
                         .FillHeight(1.0f)
                         [
-                            SNew(SOverlay)
-                            + SOverlay::Slot()
+                            SNew(SWidgetSwitcher)
+                            .WidgetIndex_Lambda([this]()
+                            {
+                                return ViewMode == EUnifiedScriptAuthoringViewMode::Graph ? 0 : 1;
+                            })
+                            + SWidgetSwitcher::Slot()
                             [
-                                SAssignNew(GraphEditor, SGraphEditor)
-                                .AdditionalCommands(GraphCommands)
-                                .GraphToEdit(AuthoringGraph.Get())
-                                .GraphEvents(GraphEvents)
-                                .Appearance(GraphAppearance)
-                                .IsEditable(true)
-                                .IsEmpty_Lambda([this]()
-                                {
-                                    return AuthoringGraph.IsValid() && AuthoringGraph->Nodes.IsEmpty();
-                                })
-                                .ShowGraphStateOverlay(false)
-                                .AllowConnectionSlicing(false)
+                                SNew(SOverlay)
+                                + SOverlay::Slot()
+                                [
+                                    SAssignNew(GraphEditor, SGraphEditor)
+                                    .AdditionalCommands(GraphCommands)
+                                    .GraphToEdit(AuthoringGraph.Get())
+                                    .GraphEvents(GraphEvents)
+                                    .Appearance(GraphAppearance)
+                                    .IsEditable(true)
+                                    .IsEmpty_Lambda([this]()
+                                    {
+                                        return AuthoringGraph.IsValid() && AuthoringGraph->Nodes.IsEmpty();
+                                    })
+                                    .ShowGraphStateOverlay(false)
+                                    .AllowConnectionSlicing(false)
+                                ]
+                                + SOverlay::Slot()
+                                .HAlign(HAlign_Right)
+                                .VAlign(VAlign_Bottom)
+                                .Padding(0.0f, 0.0f, 12.0f, 12.0f)
+                                [
+                                    SNew(SBorder)
+                                    .Visibility_Lambda([this]()
+                                    {
+                                        return bShowCanvasMinimap && AuthoringGraph.IsValid() &&
+                                            !AuthoringGraph->Nodes.IsEmpty()
+                                            ? EVisibility::Visible
+                                            : EVisibility::Collapsed;
+                                    })
+                                    .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
+                                    .Padding(1.0f)
+                                    .ToolTipText(LOCTEXT(
+                                        "CanvasMinimapNavigationTip",
+                                        "Canvas Minimap - click or drag to center the graph view."))
+                                    [
+                                        SNew(SBox)
+                                        .WidthOverride(184.0f)
+                                        .HeightOverride(116.0f)
+                                        [
+                                            SNew(SUnifiedScriptCanvasMinimap)
+                                            .Owner(this)
+                                        ]
+                                    ]
+                                ]
                             ]
-                            + SOverlay::Slot()
-                            .HAlign(HAlign_Right)
-                            .VAlign(VAlign_Bottom)
-                            .Padding(0.0f, 0.0f, 12.0f, 12.0f)
+                            + SWidgetSwitcher::Slot()
                             [
                                 SNew(SBorder)
-                                .Visibility_Lambda([this]()
-                                {
-                                    return bShowCanvasMinimap && AuthoringGraph.IsValid() &&
-                                        !AuthoringGraph->Nodes.IsEmpty()
-                                        ? EVisibility::Visible
-                                        : EVisibility::Collapsed;
-                                })
                                 .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
-                                .Padding(1.0f)
-                                .ToolTipText(LOCTEXT(
-                                    "CanvasMinimapNavigationTip",
-                                    "Canvas Minimap - click or drag to center the graph view."))
+                                .Padding(10.0f)
                                 [
-                                    SNew(SBox)
-                                    .WidthOverride(184.0f)
-                                    .HeightOverride(116.0f)
+                                    SNew(SVerticalBox)
+                                    + SVerticalBox::Slot()
+                                    .AutoHeight()
+                                    .Padding(0.0f, 0.0f, 0.0f, 8.0f)
                                     [
-                                        SNew(SUnifiedScriptCanvasMinimap)
-                                        .Owner(this)
+                                        SNew(SHorizontalBox)
+                                        + SHorizontalBox::Slot()
+                                        .FillWidth(1.0f)
+                                        .VAlign(VAlign_Center)
+                                        [
+                                            SNew(STextBlock)
+                                            .Text_Lambda([this]()
+                                            {
+                                                return FText::FromString(WorkbenchSourcePath.IsEmpty()
+                                                    ? TEXT("No canonical source snapshot loaded")
+                                                    : WorkbenchSourcePath);
+                                            })
+                                            .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                                            .ColorAndOpacity(FLinearColor(0.55f, 0.58f, 0.62f))
+                                            .Clipping(EWidgetClipping::ClipToBounds)
+                                        ]
+                                        + SHorizontalBox::Slot()
+                                        .AutoWidth()
+                                        .Padding(8.0f, 0.0f, 0.0f, 0.0f)
+                                        [
+                                            SNew(SButton)
+                                            .Text(LOCTEXT("RefreshCodeSnapshot", "Refresh Snapshot"))
+                                            .ToolTipText(LOCTEXT(
+                                                "RefreshCodeSnapshotTip",
+                                                "Fetch C# and Graph again from one canonical Workbench revision."))
+                                            .IsEnabled_Lambda([this]()
+                                            {
+                                                return !bPatchRequestPending;
+                                            })
+                                            .OnClicked(
+                                                this,
+                                                &SUnifiedScriptAuthoringSurface::HandleRefreshSourceSnapshot)
+                                        ]
+                                    ]
+                                    + SVerticalBox::Slot()
+                                    .FillHeight(1.0f)
+                                    [
+                                        SNew(SMultiLineEditableTextBox)
+                                        .Text_Lambda([this]()
+                                        {
+                                            return bHasCanonicalSourceSnapshot
+                                                ? FText::FromString(WorkbenchSourceText)
+                                                : LOCTEXT(
+                                                    "CanonicalSourceUnavailable",
+                                                    "The C# view is bound to the Workbench snapshot, not a second editor buffer.\n\nStart the authoring host, then choose Refresh Snapshot.");
+                                        })
+                                        .IsReadOnly(true)
+                                        .AutoWrapText(false)
+                                        .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
                                     ]
                                 ]
                             ]
@@ -1702,6 +1886,30 @@ SUnifiedScriptAuthoringSurface::~SUnifiedScriptAuthoringSurface()
     PersistCurrentLayout(true);
 }
 
+void SUnifiedScriptAuthoringSurface::SetViewMode(
+    EUnifiedScriptAuthoringViewMode InViewMode)
+{
+    ViewMode = InViewMode;
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleSetViewMode(
+    EUnifiedScriptAuthoringViewMode InViewMode)
+{
+    SetViewMode(InViewMode);
+    if (InViewMode == EUnifiedScriptAuthoringViewMode::Code &&
+        !bHasCanonicalSourceSnapshot && !bPatchRequestPending)
+    {
+        RequestWorkspaceRefresh();
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRefreshSourceSnapshot()
+{
+    RequestWorkspaceRefresh();
+    return FReply::Handled();
+}
+
 FReply SUnifiedScriptAuthoringSurface::OnPreviewKeyDown(
     const FGeometry& MyGeometry,
     const FKeyEvent& InKeyEvent)
@@ -1759,6 +1967,10 @@ bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
 
     PersistCanvasView(true);
     PersistCurrentLayout(true);
+    WorkbenchSourcePath.Reset();
+    WorkbenchSourceText.Reset();
+    WorkbenchRevision = 0;
+    bHasCanonicalSourceSnapshot = false;
     Document = MoveTemp(Candidate);
     LoadedSurfacePath = FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(ConfiguredPath);
     LoadedLayoutPath = FUnifiedScriptGraphLayoutStore::GetLayoutPath(LoadedSurfacePath);
@@ -3984,10 +4196,6 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     {
         RecordNodePaletteUsage(CompletedNodePaletteActionId);
     }
-    if (!LoadedSurfacePath.IsEmpty())
-    {
-        LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
-    }
     RebuildTree();
 
     int32 Matched = 0;
@@ -4070,6 +4278,8 @@ void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
     FUnifiedScriptAuthoringWorkspaceResult Workspace)
 {
     WorkbenchSourcePath = MoveTemp(Workspace.SourcePath);
+    WorkbenchSourceText = MoveTemp(Workspace.SourceText);
+    bHasCanonicalSourceSnapshot = true;
     Document = MoveTemp(Workspace.Surface);
     WorkbenchRevision = Workspace.Revision;
     bCanUndoAuthoring = Workspace.History.bCanUndo;
@@ -4089,6 +4299,10 @@ void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
     ActiveAuthoringGroupStagedCount = Workspace.Group.bActive
         ? Workspace.Group.StagedOperationCount
         : 0;
+    if (!LoadedSurfacePath.IsEmpty())
+    {
+        LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
+    }
     RebuildTree();
 }
 

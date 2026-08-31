@@ -6817,6 +6817,23 @@ def main() -> int:
         "Transactional Slate Workbench apply or managed artifact publication is missing",
     )
     checks.append("UE Slate applies patches transactionally and reloads matching components")
+    require(
+        "FString SourceText;" in unreal_authoring_workbench_header
+        and 'TEXT("sourceText")' in unreal_authoring_workbench_source
+        and "WorkbenchSourceText = MoveTemp(Workspace.SourceText)"
+        in unreal_authoring_widget
+        and "SNew(SWidgetSwitcher)" in unreal_authoring_widget
+        and "EUnifiedScriptAuthoringViewMode::Code" in unreal_authoring_widget
+        and "Workspace v0.5 rejects a response without its canonical source snapshot"
+        in unreal_authoring_test
+        and "Assert.Equal(Source, baseline.SourceText)" in authoring_http_test
+        and "[x] **M13.2E-1 — canonical snapshot dual projection:**"
+        in roadmap_document,
+        "M13.2E-1 canonical SourceText transport, Graph/C# switch, or exact-snapshot regressions are incomplete",
+    )
+    checks.append(
+        "M13.2E-1 opens one canonical Script Asset snapshot as Graph or C#"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")
