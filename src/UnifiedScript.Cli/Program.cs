@@ -138,6 +138,11 @@ internal static class Program
             return RunUnrealBindings(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-contract-propose")
+        {
+            return RunUnrealContractProposal(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-data-plane")
         {
             return RunUnrealDataPlane(args);
@@ -1037,6 +1042,72 @@ internal static class Program
         foreach (OutputFile output in outputs)
         {
             Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        return 0;
+    }
+
+    private static int RunUnrealContractProposal(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealContractProposalArguments(
+                args,
+                out UnrealContractProposalOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal Contract proposal options.");
+        string[] inputPaths =
+        [
+            Path.GetFullPath(options.ReflectionPath),
+            Path.GetFullPath(options.RequestPath),
+            Path.GetFullPath(options.BaseContractPath),
+        ];
+        foreach (string inputPath in inputPaths)
+        {
+            if (!File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"Unreal Contract proposal input does not exist: {inputPath}");
+                return 66;
+            }
+        }
+
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        foreach (string inputPath in inputPaths)
+        {
+            EnsureDifferentPath(
+                inputPath,
+                fullOutputPath,
+                "Unreal Contract proposal cannot overwrite an input artifact.");
+        }
+
+        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(
+            File.ReadAllText(inputPaths[0]));
+        UnrealPuertsContractRequestSet requests =
+            UnrealPuertsMigrationPackageJson.DeserializeContractRequests(
+                File.ReadAllText(inputPaths[1]));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
+            File.ReadAllText(inputPaths[2]));
+        UnrealApiContractProposal proposal = new UnrealApiContractProposalGenerator().Generate(
+            reflection,
+            requests,
+            contract);
+        WriteTransactionally(
+        [
+            new OutputFile(fullOutputPath, UnrealApiContractProposalJson.Serialize(proposal)),
+        ]);
+        Console.WriteLine(fullOutputPath);
+        Console.WriteLine(
+            $"requests={proposal.Summary.RequestCount}; " +
+            $"selected={proposal.Summary.SelectedCount}; " +
+            $"already-selected={proposal.Summary.AlreadySelectedCount}; " +
+            $"open={proposal.Summary.OpenDecisionCount}; review-required=true");
+        if (options.FailOnOpenDecisions && proposal.Summary.OpenDecisionCount > 0)
+        {
+            Console.Error.WriteLine(
+                "Unreal API Contract proposal has open decisions. Review the proposal before changing the shipped Contract.");
+            return 65;
         }
         return 0;
     }
@@ -3566,6 +3637,64 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealContractProposalArguments(
+        IReadOnlyList<string> args,
+        out UnrealContractProposalOptions? options)
+    {
+        options = null;
+        if (args.Count < 8 || args[0] != "ue-contract-propose" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string reflectionPath = args[1];
+        string? requestPath = null;
+        string? baseContractPath = null;
+        string? outputPath = null;
+        bool failOnOpenDecisions = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-open-decisions" && !failOnOpenDecisions)
+            {
+                failOnOpenDecisions = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--requests" when requestPath is null:
+                    requestPath = value;
+                    break;
+                case "--base" when baseContractPath is null:
+                    baseContractPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (requestPath is null || baseContractPath is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealContractProposalOptions(
+            reflectionPath,
+            requestPath,
+            baseContractPath,
+            outputPath,
+            failOnOpenDecisions);
+        return true;
+    }
+
     private static bool TryParseUnrealDataPlaneArguments(
         IReadOnlyList<string> args,
         out UnrealDataPlaneOptions? options)
@@ -5137,6 +5266,7 @@ internal static class Program
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  unifiedscript ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
@@ -5305,6 +5435,13 @@ internal static class Program
         string? NodeCatalogOutputPath,
         string? BrowserOutputPath,
         bool FailOnRejected);
+
+    private sealed record UnrealContractProposalOptions(
+        string ReflectionPath,
+        string RequestPath,
+        string BaseContractPath,
+        string OutputPath,
+        bool FailOnOpenDecisions);
 
     private sealed record UnrealDataPlaneOptions(
         string SchemaPath,

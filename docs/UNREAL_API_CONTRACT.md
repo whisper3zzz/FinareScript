@@ -107,6 +107,37 @@ UnrealEditor-Cmd.exe Game.uproject -run=UnifiedScriptExport `
   -unattended -nop4 -nosplash
 ```
 
+## Review-only Contract proposals
+
+Migration discovery does not write the shipped Contract. The migration planner's
+`contract-requests.json`, a current reflection export, and the current reviewed
+Contract instead produce a separate
+`unifiedscript.unreal-api-contract-proposal/v0.1` artifact:
+
+```powershell
+unifiedscript ue-contract-propose Generated\Game.reflection.json `
+  --requests Migration\contract-requests.json `
+  --base Contracts\Game.unreal-api-contract.json `
+  --out Review\Game.unreal-api-contract-proposal.json `
+  --fail-on-open-decisions
+```
+
+The proposal fingerprints all three inputs, preserves the base Contract's
+policy and coverage baseline, and records exactly one decision for every
+dependency request. A unique reflected member is `selected`; an exact member
+already in the base is `already-selected`. Missing types/members remain
+`unresolved-*`, overloads and duplicate type names remain `ambiguous-*`, and
+type construction or data-plane schema work remains `manual-review`. The
+generator never chooses an overload by name, exposes a type without an explicit
+member, or converts a data-plane request into a reflected call.
+
+`--fail-on-open-decisions` writes the review artifact first and then exits 65 if
+any manual, unresolved, or ambiguous decision remains. A request set carrying a
+Contract fingerprint is rejected when it no longer matches the base, so an old
+scan cannot expand a newer surface. Reviewers copy the accepted selectors into
+the project-owned Contract; only the ordinary `ue-bindings` transaction changes
+the native, managed, visual, browser, and coverage outputs.
+
 ## Atomic generation
 
 `ue-bindings` accepts the contract and writes every requested output as one

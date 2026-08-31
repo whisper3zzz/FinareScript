@@ -46,12 +46,15 @@ current cursor, validate it, and advance this document.
 
 ## Current execution cursor
 
-Last refreshed: **2026-08-29**
+Last refreshed: **2026-08-31**
 
-- Active milestone: **Paused after M12 — local `1.0.0-rc.1` acceptance complete**
-- Next slice when resumed: **M13.1 — external real-project pilot and field-adoption hardening**
+- Active milestone: **M13.1 in progress — external real-project pilot and Universal Unreal Binding**
+- Current tranche: **review-only API Contract proposal loop complete; external UE proof pending**
+- Next slice: **freeze and install a non-BlockBreaker pilot, then export its first project/Blueprint reflection inventory**
+- Pilot candidate: **`D:\Project\LyraStarterGame` (read-only discovery only; not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
+- Competitive objective: **close Puerts' practical Unreal coverage before claiming a general replacement**
 
 ## Verified baseline
 
@@ -1767,36 +1770,156 @@ cleanup are covered, and the performance lane now restores its comparison
 checkout on both success and failure. `1.0.0-rc.1` is locally accepted; no
 remote publication is implied by this evidence.
 
-## M13 — Field adoption and ecosystem hardening
+## M13 — Puerts-scope closure and field adoption
 
-This milestone starts only when iteration is explicitly resumed. The next work
-is deliberately adoption-driven rather than another internal feature burst.
+This milestone began after iteration was explicitly resumed. M12 proved a
+deep, complete BlockBreaker vertical slice; M13 closes the horizontal product
+surface required by ordinary Puerts projects. It does not attempt to reproduce
+JavaScript semantics. The delivery rule is pilot first, generalized generator
+second, and a versioned regression gate in the same slice.
 
-### M13.1 — External real-project pilot
+### Competitive scope baseline (2026-08-31)
 
-- [ ] install the frozen RC1 SDK into at least one non-BlockBreaker UE project
-- [ ] migrate one representative gameplay vertical slice and record every
-  missing API, generator escape hatch, authoring friction, and runtime issue
-- [ ] turn pilot findings into versioned compatibility, migration, and
-  regression gates without weakening the RC1 baseline
+The Puerts baseline below follows its current official Unreal documentation:
+[manual](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/manual.md),
+[automatic binding](https://github.com/Tencent/puerts/blob/master/doc/unreal/en/getting_started.md),
+[mixin](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/mixin.md),
+and [repository support matrix](https://github.com/Tencent/puerts). Those are
+upstream claims, not locally reproduced evidence. UnifiedScript claims remain
+limited to the gates in this repository.
 
-### M13.2 — Distribution and operational feedback
+| Capability | Puerts practical baseline | UnifiedScript RC1 baseline | M13 decision |
+| --- | --- | --- | --- |
+| Reflected Unreal API reach | Blueprint-visible `UCLASS`, `UPROPERTY`, `UFUNCTION`, `USTRUCT`, and `UENUM` APIs are reflection-callable without per-member generation | exact allowlisted Contract; current product surface is seven generated types, 103 selected members, and 101 native paths | P0: generate a complete project-owned surface on demand while retaining exact coverage policy |
+| Non-reflected C++ | template static binding covers constructors, overloads, fields, methods, inheritance, callbacks, and custom converters | generated DirectThunk/CallFrame routes plus explicit native extensions | P0: publish a supported native-extension contract and generator rather than handwritten facades |
+| Script class model | TypeScript proxy Blueprints, engine-class extension, lifecycle/events/input/RPC, and Blueprint/native mixin | Actor/Component/Script Asset hosts with exposed state and events, but no general managed proxy Blueprint, RPC, RepNotify, or mixin-equivalent model | P0: deliver a generated managed script-class model with explicit lifecycle ownership |
+| Runtime and ecosystem | JavaScript/TypeScript on V8, Node.js, or QuickJS; Node.js can consume npm/Node APIs | C# on CoreCLR with deterministic compiled chunks and .NET project loading | intentional difference: migrate behavior, do not emulate `eval`, `Proxy`, prototype mutation, or arbitrary dynamic import |
+| Platform breadth | upstream publishes desktop/mobile backend coverage | packaged runtime is declared only for UE 5.8.1 Win64 | P1: add rows only after native ABI, runtime closure, cook/package, and smoke pass |
+| Authoring and review | source-oriented TypeScript workflow and engine-generated Blueprint proxies | restricted C#/Graph round trip, stable semantic IDs, transactional edits, semantic diff/merge, typed AI proposals, and graph/source runtime insight | preserve as a product advantage; do not weaken semantics to gain API count |
+| Performance shape | mature scalar/reflection/static binding and fast incremental reload | stronger measured batch/container/event/data-plane paths; slower scalar, resource/spawn, and reload paths in the frozen suite | P1: keep broad matched workloads and optimize only reproduced losses |
+| Adoption maturity | established ecosystem and multiple UE generations/platforms | one fully migrated gameplay project plus clean SDK consumer fixtures | P0: a non-BlockBreaker production-shaped pilot is required before a general replacement claim |
+
+Until every P0 row has pilot evidence, the supported statement is: UnifiedScript
+fully replaces Puerts for the validated BlockBreaker surface and can host
+Contract-selected gameplay projects. It is not yet a drop-in replacement for an
+arbitrary Puerts project.
+
+### M13.1 — External real-project pilot and universal binding substrate
+
+Outcome: a non-BlockBreaker project can generate and package its ordinary
+Blueprint-visible gameplay API without adding handwritten member dispatch, and
+every dependency has an explicit supported route or rejection reason.
+
+- [ ] install the frozen RC1 SDK into one non-BlockBreaker UE project and freeze
+  a representative gameplay slice containing assets, UI or interaction,
+  delegates/async work, containers/structs, and project-native Blueprint APIs
+- [ ] scan the pilot's authored Puerts/Blueprint/C++ boundary into one versioned
+  dependency inventory before adding bindings
+- [ ] export project, plugin, Engine, and loaded Blueprint reflection on demand,
+  with bounded module/class filters and deterministic transitive type closure
+- [ ] generate a proposed project API Contract for reflected properties,
+  functions, structs, enums, containers, delegates, soft references, overloads,
+  defaults, and ref/out shapes; require review before the shipped surface grows
+- [ ] route every selected member through DirectThunk, CallFrame, data plane,
+  safe cold-path reflection, or rejected-with-reason coverage
+- [ ] provide a versioned native-extension contract for non-reflected C++ APIs,
+  including generated C++ registration, C# declarations, visual nodes, and
+  ownership/conversion diagnostics
+- [ ] prove deterministic regeneration, zero handwritten member-ID dispatch,
+  editor execution, Development packaging, and exact pilot smoke observables
+- [ ] turn every pilot-discovered defect into a fixture and repository/UE gate
+  before advancing the cursor
+
+Progress (2026-08-31, first M13.1 tranche):
+`ue-contract-propose` closes the dependency-request to review loop without
+mutating the shipped allowlist. It consumes the planner's versioned
+`contract-requests.json`, the exact reflection export, and the current Contract;
+fingerprints all three; preserves policy and coverage baselines; and emits one
+explicit decision per request. Unique members enter only the proposed Contract,
+existing selectors remain classified, overload/type ambiguity is never guessed,
+missing reflection remains unresolved, and type-construction/data-plane work is
+held for manual review. The optional open-decision gate writes the diagnosable
+proposal before failing. Managed regression covers deterministic input-order
+normalization, unique selection, already-selected members, overload ambiguity,
+missing type/member, manual routes, stale Contract fingerprints, strict JSON,
+and CLI failure semantics. External project install/reflection/package evidence
+is still pending; this tranche does not claim the pilot complete. The complete
+managed suite passes 622/622 and the repository validator passes 93/93. A local
+end-to-end replay of the existing BlockBreaker scan/plan inputs classified all
+16 emitted requests as one safe proposed selector plus 15 explicit open
+decisions; it is regression evidence for the new loop, not the required
+non-BlockBreaker pilot.
+
+Acceptance: 100% of the pilot slice's statically discovered Unreal dependencies
+are classified; no dependency is silently omitted or name-guessed; the same
+reviewed Contract generates native, managed, visual, browser, and coverage
+outputs; source and packaged gameplay pass without repository-specific facade
+code.
+
+### M13.2 — Managed script class, Blueprint, and networking model
+
+Outcome: managed gameplay types can participate in the ordinary UE class model
+instead of requiring a pre-authored host Component for each use case.
+
+- [ ] generate proxy Blueprint/UClass assets for reviewed managed UObject,
+  Actor, ActorComponent, and BlueprintFunctionLibrary types
+- [ ] support constructor/default state, Blueprint-visible properties and
+  functions, lifecycle hooks, Blueprint events, input actions/axes, delegates,
+  and `Super` dispatch with stable managed/source identities
+- [ ] generate reviewed replication metadata, RPC routes, RepNotify callbacks,
+  authority diagnostics, and reload-safe network object ownership
+- [ ] provide an explicit managed extension/mixin-equivalent contract for
+  BlueprintNativeEvent and BlueprintImplementableEvent without runtime prototype
+  mutation or ambiguous multiple ownership
+- [ ] preserve class/default/subobject identity across compile, cook, reload,
+  duplication, rename, redirect, PIE multi-World, and package load
+- [ ] prove one client/server PIE gameplay case before claiming replication and
+  retain packaged WindowsServer as unsupported until its own row passes
+
+Acceptance: a generated managed Actor is selectable from Blueprint/project
+settings, receives lifecycle/input, exposes reviewed members, executes one
+replicated authority path, survives transactional reload, and packages without
+a handwritten proxy class.
+
+### M13.3 — Production gameplay-domain coverage
+
+- [ ] validate UMG/UI construction and event/data binding through generated APIs
+- [ ] validate AssetManager/DataAsset/soft-reference and async loading flows
+- [ ] validate at least one system-heavy domain selected by the pilot, such as
+  Gameplay Ability System, Animation, AI/Navigation, or project networking
+- [ ] classify latent actions, dynamic/multicast delegates, interfaces,
+  subsystems, components, Blueprint libraries, editor-only members, and common
+  engine value/container types through the same coverage model
+- [ ] promote only measured high-volume routes to generated batch/shared-memory
+  channels; leave cold paths on diagnosable safe reflection
+
+Acceptance: the pilot gameplay slice no longer requires a parallel Blueprint or
+Puerts behavior implementation, and exact isolated Puerts/UnifiedScript
+observables match before the old runtime owner is removed.
+
+### M13.4 — Distribution and operational feedback
 
 - [ ] publish a reproducible plugin/SDK distribution path with checksums,
-  upgrade/rollback instructions, and issue templates
+  upgrade/rollback instructions, issue templates, and a supported-version table
 - [ ] add privacy-bounded opt-in diagnostics for install, generation, runtime,
   reload, and packaging failures
 - [ ] maintain a field-issue dashboard and release criteria tied to reproduced
   failures rather than feature count
+- [ ] run at least one install, upgrade, rollback, and diagnostics-bundle cycle
+  outside the repository's own HostProject
 
-### M13.3 — Platform and performance hardening
+### M13.5 — Platform, reload, and remaining performance losses
 
 - [ ] add another explicitly supported UE/platform package-and-smoke row before
   broadening compatibility claims
 - [ ] optimize the scalar and resource/spawn paths, which remain slower than
   Puerts in the frozen RC1 workload
-- [ ] redesign reload measurement and user experience; the current CoreCLR and
-  Puerts reload mechanisms are not directly comparable and remain diagnostic
+- [ ] redesign reload measurement and user experience; keep CoreCLR generation
+  replacement and Puerts module-cache reexecution as mechanism-qualified metrics
+- [ ] reduce reload latency and retained allocation without weakening rollback,
+  state migration, World shutdown, or stale-generation rejection
+- [ ] rerun the complete matched workload and package-size suite on every newly
+  declared platform row
 
 ## Global release gates
 

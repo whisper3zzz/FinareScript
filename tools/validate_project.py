@@ -854,8 +854,8 @@ def main() -> int:
         and "run-unifiedscript-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
-        and "Paused after M12" in roadmap_document
-        and "M13.1 — external real-project pilot" in roadmap_document
+        and "M13.1 in progress" in roadmap_document
+        and "### M13.1 — External real-project pilot" in roadmap_document
         and "M12 strict release acceptance" in roadmap_document
         and "Frozen RC1 acceptance" in release_readiness_document
         and "One release-readiness command" in product_release_notes
@@ -864,6 +864,67 @@ def main() -> int:
     )
     checks.append(
         "M12 binds every 1.0 required gate to one clean-revision release-readiness verdict"
+    )
+
+    contract_proposal_source_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealApiContractProposal.cs"
+    )
+    contract_proposal_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealApiContractProposalTests.cs"
+    )
+    api_contract_document_path = ROOT / "docs" / "UNREAL_API_CONTRACT.md"
+    for path in [
+        contract_proposal_source_path,
+        contract_proposal_test_path,
+        api_contract_document_path,
+    ]:
+        require(path.is_file(), f"Missing M13.1 Contract proposal artifact: {path}")
+    contract_proposal_source = contract_proposal_source_path.read_text(
+        encoding="utf-8"
+    )
+    contract_proposal_test = contract_proposal_test_path.read_text(
+        encoding="utf-8"
+    )
+    api_contract_document = api_contract_document_path.read_text(encoding="utf-8")
+    require(
+        "unifiedscript.unreal-api-contract-proposal/v0.1"
+        in contract_proposal_source
+        and "ReviewRequired: true" in contract_proposal_source
+        and "NormalizeSha256(normalizedRequests.ContractFingerprint) != contractFingerprint"
+        in contract_proposal_source
+        and all(
+            status in contract_proposal_source
+            for status in [
+                '"selected"',
+                '"already-selected"',
+                '"manual-review"',
+                '"unresolved-type"',
+                '"unresolved-member"',
+                '"ambiguous-type"',
+                '"ambiguous-member"',
+            ]
+        )
+        and "ue-contract-propose" in cli_source
+        and "--fail-on-open-decisions" in cli_source
+        and "ProposalIsDeterministicAndClassifiesEveryDependencyRequest"
+        in contract_proposal_test
+        and "ProposalRejectsRequestsAssessedAgainstAnotherContract"
+        in contract_proposal_test
+        and "CliWritesReviewArtifactBeforeOpenDecisionGateFails"
+        in contract_proposal_test
+        and "Review-only Contract proposals" in api_contract_document
+        and "dependency request" in api_contract_document
+        and "first M13.1 tranche" in roadmap_document,
+        "M13.1 deterministic review-only Contract proposal loop is incomplete",
+    )
+    checks.append(
+        "M13.1 classifies every dependency request in a stale-safe review-only Contract proposal"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"

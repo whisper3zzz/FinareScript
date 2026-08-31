@@ -312,7 +312,7 @@ public static class UnrealApiContractProjector
         }
     }
 
-    private static string FunctionSelector(UnrealReflectedFunction function)
+    internal static string FunctionSelector(UnrealReflectedFunction function)
     {
         int open = function.Path.IndexOf('(', StringComparison.Ordinal);
         return open >= 0 ? function.Path[(function.Path.LastIndexOf(':') + 1)..] :

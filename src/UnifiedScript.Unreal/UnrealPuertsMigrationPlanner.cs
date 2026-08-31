@@ -185,6 +185,13 @@ public static class UnrealPuertsMigrationPackageJson
             static value => value.SchemaVersion,
             "Puerts verification harness");
 
+    public static UnrealPuertsContractRequestSet DeserializeContractRequests(string json) =>
+        Deserialize<UnrealPuertsContractRequestSet>(
+            json,
+            "unifiedscript.puerts-contract-requests/v0.1",
+            static value => value.SchemaVersion,
+            "Puerts contract request set");
+
     public static UnrealPuertsVerificationEvidence DeserializeEvidence(string json) =>
         Deserialize<UnrealPuertsVerificationEvidence>(
             json,
