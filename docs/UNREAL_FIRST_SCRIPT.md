@@ -170,7 +170,13 @@ the first component changes generation, every matching running and
 stopped/editor instance passes the same non-mutating configuration, ownership,
 artifact, declaration, and stable-ID state preflight. If one instance requires
 a restart, the entire batch remains on its previous generation/state and the
-reload receipt identifies `batchPreflight` plus the required action.
+reload receipt identifies `batchPreflight` plus the required action. After that
+barrier, every running candidate loads, starts, and rebinds while its stopped
+previous generation remains recoverable. The editor publishes pointers only
+after all candidates prepare; a late candidate failure aborts the full batch,
+restarts retained generations, and restores native state and overrides. The
+receipt records `batchPrepare`, `batchCommit`, `batchAbort`, and
+`batchFinalize` for this two-phase swap.
 
 ## 5. Packaged play
 

@@ -2153,11 +2153,6 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
     UUnifiedScriptAsset* IncompatibleAsset = NewObject<UUnifiedScriptAsset>(World);
     const TSharedPtr<IPlugin> Plugin =
         IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
-    const FString DemoChunkPath = Plugin.IsValid()
-        ? FPaths::Combine(
-            Plugin->GetBaseDir(),
-            TEXT("Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk"))
-        : FString();
     if (!TestTrue(TEXT("Reload-batch test resolves the installed plugin"), Plugin.IsValid()))
     {
         World->RemoveFromRoot();
@@ -2165,19 +2160,11 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
         return false;
     }
 
-    if (FPaths::FileExists(DemoChunkPath))
-    {
-        InitialAsset->CompiledChunkPath =
-            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
-    }
     InitialAsset->ScriptAssemblyPath =
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
     InitialAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.DemoScript");
-    if (InitialAsset->CompiledChunkPath.IsEmpty())
-    {
-        InitialAsset->DeclarationPath =
-            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
-    }
+    InitialAsset->DeclarationPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
     InitialAsset->DeclarationAssetPath = TEXT("Unreal/Demo");
     InitialAsset->AuthoringSurfacePath =
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json");
@@ -2240,6 +2227,57 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
         StoppedComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 53);
 
     SecondComponent->ScriptAsset = InitialAsset;
+    InitialAsset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.ReloadBatchDemoScript");
+    SecondComponent->bTickAutomatically = false;
+    AddExpectedError(
+        TEXT("Injected candidate OnStart failure after reload preflight."),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    const FUnifiedScriptReloadBatchResult PrepareRejected =
+        SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
+            InitialAsset,
+            FString(),
+            Publication);
+    TestEqual(TEXT("Dynamic-failure batch still matches every instance"),
+        PrepareRejected.Matched, 3);
+    TestEqual(TEXT("One earlier instance reaches managed prepare"),
+        PrepareRejected.Prepared, 1);
+    TestEqual(TEXT("Candidate OnStart failure is a prepare rejection"),
+        PrepareRejected.PrepareRejected, 1);
+    TestEqual(TEXT("Prepared sibling is aborted before any batch commit"),
+        PrepareRejected.Aborted, 1);
+    TestEqual(TEXT("Dynamic prepare failure commits no instance"),
+        PrepareRejected.Committed, 0);
+    TestEqual(TEXT("Dynamic prepare failure fails the whole batch"),
+        PrepareRejected.Failed, 3);
+    TestTrue(TEXT("Dynamic failure receipt records prepare and batch abort"),
+        PrepareRejected.ObservedReloadTransactionJson.Contains(
+            TEXT("\"batchPrepare\"")) &&
+            PrepareRejected.ObservedReloadTransactionJson.Contains(
+                TEXT("\"batchAbort\"")) &&
+            PrepareRejected.ObservedReloadTransactionJson.Contains(
+                TEXT("\"state\":\"rolledBack\"")));
+    TestEqual(TEXT("Aborted first candidate keeps generation one"),
+        FirstComponent->ActiveGeneration, FString(TEXT("1")));
+    TestEqual(TEXT("Failing second candidate keeps generation one"),
+        SecondComponent->ActiveGeneration, FString(TEXT("1")));
+    TestEqual(TEXT("Aborted first candidate restores exact component state"),
+        FirstComponent->ManagedState, FString(TEXT("Started:37")));
+    TestEqual(TEXT("Failing candidate restores the old managed state"),
+        SecondComponent->ManagedState, FString(TEXT("Started:41")));
+    TestFalse(TEXT("Failing candidate restores its pre-transaction tick setting"),
+        SecondComponent->bTickAutomatically);
+    TestEqual(TEXT("Aborted first candidate preserves its state override"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 37);
+    TestEqual(TEXT("Failing second candidate preserves its state override"),
+        SecondComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 41);
+    TestFalse(TEXT("No component retains a prepared transaction after abort"),
+        FirstComponent->HasPreparedScriptReload() ||
+            SecondComponent->HasPreparedScriptReload() ||
+            StoppedComponent->HasPreparedScriptReload());
+
+    SecondComponent->bTickAutomatically = true;
     const FUnifiedScriptReloadBatchResult Committed =
         SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
             InitialAsset,
@@ -2251,6 +2289,14 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
     TestEqual(TEXT("Compatible batch has no failures"), Committed.Failed, 0);
     TestEqual(TEXT("Compatible batch has no rejected preflight"),
         Committed.PreflightRejected, 0);
+    TestEqual(TEXT("Compatible batch prepares every matching instance"),
+        Committed.Prepared, 3);
+    TestEqual(TEXT("Compatible batch commits every matching instance"),
+        Committed.Committed, 3);
+    TestEqual(TEXT("Compatible batch needs no rollback"),
+        Committed.Aborted, 0);
+    TestEqual(TEXT("Compatible batch finalizes every retained generation"),
+        Committed.FinalizeFailed, 0);
     TestEqual(TEXT("First compatible instance advances together"),
         FirstComponent->ActiveGeneration, FString(TEXT("2")));
     TestEqual(TEXT("Second compatible instance advances together"),
@@ -2259,6 +2305,16 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
         StoppedComponent->bScriptRunning);
     TestEqual(TEXT("Compatible stopped/editor refresh preserves its override"),
         StoppedComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 53);
+    TestEqual(TEXT("First candidate observes its migrated state before commit"),
+        FirstComponent->ManagedState, FString(TEXT("BatchStarted:37")));
+    TestEqual(TEXT("Second candidate observes its migrated state before commit"),
+        SecondComponent->ManagedState, FString(TEXT("BatchStarted:41")));
+    TestTrue(TEXT("Committed receipt exposes the complete two-phase lifecycle"),
+        Committed.ObservedReloadTransactionJson.Contains(TEXT("\"batchPrepare\"")) &&
+            Committed.ObservedReloadTransactionJson.Contains(TEXT("\"batchCommit\"")) &&
+            Committed.ObservedReloadTransactionJson.Contains(TEXT("\"batchFinalize\"")) &&
+            Committed.ObservedReloadTransactionJson.Contains(
+                TEXT("\"state\":\"committed\"")));
 
     FirstComponent->StopScript();
     SecondComponent->StopScript();

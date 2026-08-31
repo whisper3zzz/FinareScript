@@ -176,7 +176,47 @@ public:
                 TEXT("The managed reload phase report was missing or invalid."));
             return;
         }
-        Phases.Append(*ManagedPhases);
+        for (const TSharedPtr<FJsonValue>& ManagedPhaseValue : *ManagedPhases)
+        {
+            const TSharedPtr<FJsonObject>* ManagedPhase = nullptr;
+            if (!ManagedPhaseValue.IsValid() ||
+                !ManagedPhaseValue->TryGetObject(ManagedPhase) ||
+                ManagedPhase == nullptr || !ManagedPhase->IsValid())
+            {
+                continue;
+            }
+            FString ManagedName;
+            FString ManagedStateValue;
+            FString ManagedDetail;
+            (*ManagedPhase)->TryGetStringField(TEXT("name"), ManagedName);
+            (*ManagedPhase)->TryGetStringField(TEXT("state"), ManagedStateValue);
+            (*ManagedPhase)->TryGetStringField(TEXT("detail"), ManagedDetail);
+            const bool bAlreadyPresent = Phases.ContainsByPredicate(
+                [&ManagedName, &ManagedStateValue, &ManagedDetail](
+                    const TSharedPtr<FJsonValue>& ExistingValue)
+                {
+                    const TSharedPtr<FJsonObject>* Existing = nullptr;
+                    if (!ExistingValue.IsValid() ||
+                        !ExistingValue->TryGetObject(Existing) ||
+                        Existing == nullptr || !Existing->IsValid())
+                    {
+                        return false;
+                    }
+                    FString ExistingName;
+                    FString ExistingState;
+                    FString ExistingDetail;
+                    (*Existing)->TryGetStringField(TEXT("name"), ExistingName);
+                    (*Existing)->TryGetStringField(TEXT("state"), ExistingState);
+                    (*Existing)->TryGetStringField(TEXT("detail"), ExistingDetail);
+                    return ExistingName == ManagedName &&
+                        ExistingState == ManagedStateValue &&
+                        ExistingDetail == ManagedDetail;
+                });
+            if (!bAlreadyPresent)
+            {
+                Phases.Add(ManagedPhaseValue);
+            }
+        }
         FString ManagedState;
         if (Managed->TryGetStringField(TEXT("state"), ManagedState))
         {
@@ -732,6 +772,7 @@ void UUnifiedScriptComponent::StopScript()
         }
     }
 
+    PreparedScriptReload.Reset();
     ManagedScriptInstanceId = 0;
     ManagedHostHandle = 0;
     ManagedTargetHandle = 0;
@@ -1237,6 +1278,579 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
         false,
         FString(),
         RetiredLoadContextsAlive);
+    LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
+    return true;
+}
+
+bool UUnifiedScriptComponent::PrepareScriptReloadWithTransaction(
+    const FString& PreflightTransactionJson)
+{
+    check(IsInGameThread());
+    if (PreparedScriptReload.IsValid())
+    {
+        SetScriptFailure(TEXT("A Script Class reload candidate is already prepared."));
+        return false;
+    }
+
+    const int32 FromGeneration = FCString::Atoi(*ActiveGeneration);
+    const int32 ExpectedCandidateGeneration = bScriptRunning
+        ? FMath::Max(1, FromGeneration + 1)
+        : FromGeneration;
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(PreflightTransactionJson, FromGeneration, Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    UUnifiedScriptWorldSubsystem* Host = bScriptRunning && GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (bScriptRunning && Host == nullptr)
+    {
+        Error = TEXT("The UnifiedScript World host is unavailable during reload prepare.");
+        Transaction.AddPhase(TEXT("batchPrepare"), TEXT("failed"), 0.0, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            ExpectedCandidateGeneration,
+            FromGeneration,
+            nullptr,
+            bSemanticDebugTickActive,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    if (bScriptRunning)
+    {
+        const double DebugDrainStarted = FPlatformTime::Seconds();
+        bDebugPausedAtFrameBoundary = false;
+        bDebugStepFrameRequested = false;
+        if (!DisableSemanticDebugAndDrain(Error))
+        {
+            Transaction.AddPhase(
+                TEXT("debugDrain"), TEXT("failed"), DebugDrainStarted, Error);
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("rolledBack"),
+                ExpectedCandidateGeneration,
+                FromGeneration,
+                Host,
+                bSemanticDebugTickActive,
+                Error);
+            SetScriptFailure(MoveTemp(Error));
+            return false;
+        }
+        Transaction.AddPhase(
+            TEXT("debugDrain"),
+            TEXT("succeeded"),
+            DebugDrainStarted,
+            TEXT("Disabled semantic execution before preparing the retained-generation swap."));
+    }
+
+    FString ResolvedAssemblyPath;
+    FString ResolvedTypeName;
+    UUnifiedScriptAsset* ResolvedAsset = nullptr;
+    double PhaseStarted = FPlatformTime::Seconds();
+    if (!ResolveScriptConfiguration(
+            ResolvedAssemblyPath,
+            ResolvedTypeName,
+            ResolvedAsset,
+            Error))
+    {
+        Transaction.AddPhase(
+            TEXT("configurationResolution"), TEXT("failed"), PhaseStarted, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            ExpectedCandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    Transaction.AddPhase(
+        TEXT("configurationResolution"),
+        TEXT("succeeded"),
+        PhaseStarted,
+        TEXT("Resolved the prepared Script Asset assembly, type, and declaration paths."));
+
+    if (bScriptRunning)
+    {
+        const FName CandidateOwnershipKey = LifecycleOwnershipKey.IsNone()
+            ? ActiveLifecycleOwnershipKey
+            : LifecycleOwnershipKey;
+        if (ActiveLifecycleOwnershipKey.IsNone() ||
+            CandidateOwnershipKey != ActiveLifecycleOwnershipKey)
+        {
+            Error = FString::Printf(
+                TEXT("Reload cannot change lifecycle ownership from '%s' to '%s'; stop the active runtime before changing coexistence routes."),
+                *ActiveLifecycleOwnershipKey.ToString(),
+                *CandidateOwnershipKey.ToString());
+            Transaction.AddPhase(
+                TEXT("ownershipValidation"), TEXT("failed"), 0.0, Error);
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("restartRequired"),
+                ExpectedCandidateGeneration,
+                FromGeneration,
+                Host,
+                false,
+                Error);
+            LastScriptError = Error;
+            LastRuntimeDiagnostic = {};
+            return false;
+        }
+        if (!IFileManager::Get().FileExists(*ResolvedAssemblyPath))
+        {
+            Error = FString::Printf(
+                TEXT("The managed script assembly does not exist: '%s'."),
+                *ResolvedAssemblyPath);
+            Transaction.AddPhase(
+                TEXT("artifactValidation"), TEXT("failed"), 0.0, Error);
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("rolledBack"),
+                ExpectedCandidateGeneration,
+                FromGeneration,
+                Host,
+                false,
+                Error);
+            SetScriptFailure(MoveTemp(Error));
+            return false;
+        }
+    }
+
+    FInstancedPropertyBag CandidateScriptState;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
+    FString CandidateDeclarationAssetPath;
+    PhaseStarted = FPlatformTime::Seconds();
+    if (!BuildScriptState(
+            ResolvedAsset,
+            ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
+            CandidateScriptState,
+            CandidateOverrideIds,
+            CandidateMigration,
+            CandidateDeclarationAssetPath,
+            Error))
+    {
+        Transaction.AddPhase(TEXT("stateMigration"), TEXT("failed"), PhaseStarted, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            ExpectedCandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    Transaction.AddPhase(
+        TEXT("stateMigration"),
+        TEXT("succeeded"),
+        PhaseStarted,
+        FString::Printf(
+            TEXT("Prepared %d state value(s), preserving %d override(s)."),
+            CandidateScriptState.GetNumPropertiesInBag(),
+            CandidateOverrideIds.Num()));
+    if (Transaction.IsAuthoringPublication() &&
+        CandidateMigration.DroppedOverrideCount > 0)
+    {
+        Error = FString::Printf(
+            TEXT("Restart required: this edit would discard %d explicit instance state override(s). No prepared candidate was published."),
+            CandidateMigration.DroppedOverrideCount);
+        Transaction.AddPhase(
+            TEXT("schemaCompatibility"), TEXT("restartRequired"), 0.0, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("restartRequired"),
+            ExpectedCandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
+        LastScriptError = Error;
+        LastRuntimeDiagnostic = {};
+        return false;
+    }
+
+    TUniquePtr<FPreparedScriptReloadState> Prepared =
+        MakeUnique<FPreparedScriptReloadState>();
+    Prepared->bWasRunning = bScriptRunning;
+    Prepared->FromGeneration = FromGeneration;
+    Prepared->CandidateGeneration = ExpectedCandidateGeneration;
+    Prepared->PreviousScriptState = ScriptState;
+    Prepared->PreviousOverrideIds = ScriptStateOverrideIds;
+    Prepared->bPreviousOverrideBaselineInitialized =
+        bScriptStateOverrideBaselineInitialized;
+    Prepared->PreviousMaterializedStateCount = MaterializedStateCount;
+    Prepared->PreviousMaterializedStateOverrideCount =
+        MaterializedStateOverrideCount;
+    Prepared->PreviousLastStateMigration = LastStateMigration;
+    Prepared->PreviousManagedState = ManagedState;
+    Prepared->bPreviousStartAutomatically = bStartAutomatically;
+    Prepared->bPreviousTickAutomatically = bTickAutomatically;
+    Prepared->PreviousActiveAsset = ActiveScriptAsset;
+    Prepared->PreviousActiveScriptAssetPath = ActiveScriptAssetPath;
+    Prepared->PreviousActiveDeclarationAssetPath = ActiveDeclarationAssetPath;
+    Prepared->PreviousResolvedAssemblyPath = ActiveResolvedAssemblyPath;
+    Prepared->PreviousResolvedTypeName = ActiveResolvedTypeName;
+    Prepared->CandidateAsset = ResolvedAsset;
+    Prepared->CandidateDeclarationAssetPath = CandidateDeclarationAssetPath;
+    Prepared->CandidateResolvedAssemblyPath = ResolvedAssemblyPath;
+    Prepared->CandidateResolvedTypeName = ResolvedTypeName;
+
+    ScriptState = MoveTemp(CandidateScriptState);
+    ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
+    bScriptStateOverrideBaselineInitialized = true;
+    ApplyStateMigrationDiagnostics(CandidateMigration);
+
+    if (bScriptRunning)
+    {
+        int32 ManagedCandidateGeneration = 0;
+        const bool bManagedPrepared = Host->PrepareManagedScriptReload(
+            ManagedScriptInstanceId,
+            ResolvedAssemblyPath,
+            ResolvedTypeName,
+            ManagedCandidateGeneration,
+            Error);
+        FString ManagedTransactionJson;
+        FString ManagedTransactionError;
+        if (Host->GetManagedScriptReloadState(
+                ManagedScriptInstanceId,
+                ManagedTransactionJson,
+                ManagedTransactionError))
+        {
+            Transaction.AppendManagedPhases(ManagedTransactionJson);
+        }
+        else
+        {
+            Transaction.AddPhase(
+                TEXT("managedTransactionRead"),
+                TEXT("failed"),
+                0.0,
+                ManagedTransactionError);
+        }
+        if (!bManagedPrepared)
+        {
+            ScriptState = MoveTemp(Prepared->PreviousScriptState);
+            ScriptStateOverrideIds = MoveTemp(Prepared->PreviousOverrideIds);
+            bScriptStateOverrideBaselineInitialized =
+                Prepared->bPreviousOverrideBaselineInitialized;
+            MaterializedStateCount = Prepared->PreviousMaterializedStateCount;
+            MaterializedStateOverrideCount =
+                Prepared->PreviousMaterializedStateOverrideCount;
+            LastStateMigration = Prepared->PreviousLastStateMigration;
+            ManagedState = Prepared->PreviousManagedState;
+            bStartAutomatically = Prepared->bPreviousStartAutomatically;
+            bTickAutomatically = Prepared->bPreviousTickAutomatically;
+            Transaction.AddPhase(
+                TEXT("batchPrepare"),
+                TEXT("failed"),
+                0.0,
+                TEXT("The managed candidate failed before the batch commit barrier; the retained generation was restored."));
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("rolledBack"),
+                ExpectedCandidateGeneration,
+                FromGeneration,
+                Host,
+                false,
+                Error);
+            SetScriptFailure(MoveTemp(Error));
+            return false;
+        }
+        Prepared->CandidateGeneration = ManagedCandidateGeneration;
+    }
+
+    Transaction.AddPhase(
+        TEXT("batchPrepare"),
+        TEXT("succeeded"),
+        0.0,
+        bScriptRunning
+            ? TEXT("Loaded, started, and rebound the candidate while retaining the stopped previous generation for batch rollback.")
+            : TEXT("Prepared compatible stopped/editor state without mutating its committed declaration identity."));
+    Prepared->TransactionJson = Transaction.Finish(
+        TEXT("prepared"),
+        Prepared->CandidateGeneration,
+        FromGeneration,
+        Host,
+        false);
+    LastReloadTransaction = Prepared->TransactionJson;
+    PreparedScriptReload = MoveTemp(Prepared);
+    LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
+    return true;
+}
+
+bool UUnifiedScriptComponent::CommitPreparedScriptReload()
+{
+    check(IsInGameThread());
+    if (!PreparedScriptReload.IsValid())
+    {
+        SetScriptFailure(TEXT("No Script Class reload candidate is prepared."));
+        return false;
+    }
+    if (PreparedScriptReload->bCommitted)
+    {
+        return true;
+    }
+
+    UUnifiedScriptWorldSubsystem* Host = PreparedScriptReload->bWasRunning &&
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(
+            PreparedScriptReload->TransactionJson,
+            PreparedScriptReload->FromGeneration,
+            Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    int32 ActiveCandidateGeneration = PreparedScriptReload->CandidateGeneration;
+    if (PreparedScriptReload->bWasRunning)
+    {
+        if (Host == nullptr ||
+            !Host->CommitManagedScriptReload(
+                ManagedScriptInstanceId,
+                PreparedScriptReload->CandidateGeneration,
+                ActiveCandidateGeneration,
+                Error))
+        {
+            Transaction.AddPhase(TEXT("batchCommit"), TEXT("failed"), 0.0, Error);
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("failed"),
+                PreparedScriptReload->CandidateGeneration,
+                PreparedScriptReload->FromGeneration,
+                Host,
+                false,
+                Error);
+            SetScriptFailure(MoveTemp(Error));
+            return false;
+        }
+        FString ManagedJson;
+        FString ManagedError;
+        if (Host->GetManagedScriptReloadState(
+                ManagedScriptInstanceId, ManagedJson, ManagedError))
+        {
+            Transaction.AppendManagedPhases(ManagedJson);
+        }
+    }
+
+    if (PreparedScriptReload->bWasRunning)
+    {
+        ActiveGeneration = FString::FromInt(ActiveCandidateGeneration);
+        ActiveScriptAsset = PreparedScriptReload->CandidateAsset.Get();
+        ActiveScriptAssetPath = ActiveScriptAsset != nullptr
+            ? ActiveScriptAsset->GetPathName()
+            : FString();
+        ActiveResolvedAssemblyPath = PreparedScriptReload->CandidateResolvedAssemblyPath;
+        ActiveResolvedTypeName = PreparedScriptReload->CandidateResolvedTypeName;
+    }
+    ActiveDeclarationAssetPath =
+        PreparedScriptReload->CandidateDeclarationAssetPath;
+    Transaction.AddPhase(
+        TEXT("stateCommit"),
+        TEXT("succeeded"),
+        0.0,
+        PreparedScriptReload->bWasRunning
+            ? TEXT("Committed migrated state with the prepared managed generation pointer swap.")
+            : TEXT("Committed compatible declaration state without starting managed code."));
+    Transaction.AddPhase(
+        TEXT("batchCommit"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("Published the prepared candidate without lifecycle callbacks or old-generation retirement."));
+    PreparedScriptReload->bCommitted = true;
+    LastReloadTransaction = Transaction.Finish(
+        TEXT("commitPendingFinalize"),
+        PreparedScriptReload->CandidateGeneration,
+        PreparedScriptReload->bWasRunning
+            ? ActiveCandidateGeneration
+            : PreparedScriptReload->FromGeneration,
+        Host,
+        false);
+    PreparedScriptReload->TransactionJson = LastReloadTransaction;
+    LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
+    return true;
+}
+
+bool UUnifiedScriptComponent::AbortPreparedScriptReload(const FString& Reason)
+{
+    check(IsInGameThread());
+    if (!PreparedScriptReload.IsValid())
+    {
+        return true;
+    }
+
+    UUnifiedScriptWorldSubsystem* Host = PreparedScriptReload->bWasRunning &&
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(
+            PreparedScriptReload->TransactionJson,
+            PreparedScriptReload->FromGeneration,
+            Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    bool bManagedRestored = true;
+    FString ManagedError;
+    if (PreparedScriptReload->bWasRunning)
+    {
+        bManagedRestored = Host != nullptr && Host->AbortManagedScriptReload(
+            ManagedScriptInstanceId,
+            PreparedScriptReload->CandidateGeneration,
+            ManagedError);
+        if (Host != nullptr)
+        {
+            FString ManagedJson;
+            FString ManagedTransactionError;
+            if (Host->GetManagedScriptReloadState(
+                    ManagedScriptInstanceId,
+                    ManagedJson,
+                    ManagedTransactionError))
+            {
+                Transaction.AppendManagedPhases(ManagedJson);
+            }
+        }
+    }
+
+    ScriptState = MoveTemp(PreparedScriptReload->PreviousScriptState);
+    ScriptStateOverrideIds = MoveTemp(PreparedScriptReload->PreviousOverrideIds);
+    bScriptStateOverrideBaselineInitialized =
+        PreparedScriptReload->bPreviousOverrideBaselineInitialized;
+    MaterializedStateCount = PreparedScriptReload->PreviousMaterializedStateCount;
+    MaterializedStateOverrideCount =
+        PreparedScriptReload->PreviousMaterializedStateOverrideCount;
+    LastStateMigration = PreparedScriptReload->PreviousLastStateMigration;
+    ManagedState = PreparedScriptReload->PreviousManagedState;
+    bStartAutomatically = PreparedScriptReload->bPreviousStartAutomatically;
+    bTickAutomatically = PreparedScriptReload->bPreviousTickAutomatically;
+    ActiveGeneration = FString::FromInt(PreparedScriptReload->FromGeneration);
+    ActiveScriptAsset = PreparedScriptReload->PreviousActiveAsset.Get();
+    ActiveScriptAssetPath = PreparedScriptReload->PreviousActiveScriptAssetPath;
+    ActiveDeclarationAssetPath =
+        PreparedScriptReload->PreviousActiveDeclarationAssetPath;
+    ActiveResolvedAssemblyPath =
+        PreparedScriptReload->PreviousResolvedAssemblyPath;
+    ActiveResolvedTypeName = PreparedScriptReload->PreviousResolvedTypeName;
+    Transaction.AddPhase(
+        TEXT("stateRollback"),
+        TEXT("restored"),
+        0.0,
+        TEXT("Restored the exact native state bag, overrides, active identity, and component lifecycle settings."));
+    Transaction.AddPhase(
+        TEXT("batchAbort"),
+        bManagedRestored ? TEXT("restored") : TEXT("failed"),
+        0.0,
+        bManagedRestored
+            ? TEXT("Discarded the prepared candidate and restarted the retained previous generation.")
+            : ManagedError);
+    const int32 CandidateGeneration = PreparedScriptReload->CandidateGeneration;
+    const int32 FromGeneration = PreparedScriptReload->FromGeneration;
+    PreparedScriptReload.Reset();
+    const FString Failure = bManagedRestored
+        ? Reason
+        : FString::Printf(TEXT("%s %s"), *Reason, *ManagedError);
+    LastReloadTransaction = Transaction.Finish(
+        bManagedRestored ? TEXT("rolledBack") : TEXT("failed"),
+        CandidateGeneration,
+        FromGeneration,
+        Host,
+        false,
+        Failure);
+    if (!bManagedRestored)
+    {
+        SetScriptFailure(Failure);
+        return false;
+    }
+    LastScriptError = Failure;
+    LastRuntimeDiagnostic = {};
+    return true;
+}
+
+bool UUnifiedScriptComponent::FinalizePreparedScriptReload()
+{
+    check(IsInGameThread());
+    if (!PreparedScriptReload.IsValid() || !PreparedScriptReload->bCommitted)
+    {
+        SetScriptFailure(TEXT("A committed Script Class reload candidate is required before finalization."));
+        return false;
+    }
+
+    UUnifiedScriptWorldSubsystem* Host = PreparedScriptReload->bWasRunning &&
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(
+            PreparedScriptReload->TransactionJson,
+            PreparedScriptReload->FromGeneration,
+            Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    bool bFinalized = true;
+    if (PreparedScriptReload->bWasRunning)
+    {
+        bFinalized = Host != nullptr && Host->FinalizeManagedScriptReload(
+            ManagedScriptInstanceId,
+            PreparedScriptReload->CandidateGeneration,
+            Error);
+        if (Host != nullptr)
+        {
+            FString ManagedJson;
+            FString ManagedTransactionError;
+            if (Host->GetManagedScriptReloadState(
+                    ManagedScriptInstanceId,
+                    ManagedJson,
+                    ManagedTransactionError))
+            {
+                Transaction.AppendManagedPhases(ManagedJson);
+            }
+        }
+    }
+    Transaction.AddPhase(
+        TEXT("batchFinalize"),
+        bFinalized ? TEXT("succeeded") : TEXT("failed"),
+        0.0,
+        bFinalized
+            ? TEXT("Retired the retained previous generation after every batch member committed.")
+            : Error);
+    const int32 CandidateGeneration = PreparedScriptReload->CandidateGeneration;
+    const int32 ActiveWorldGeneration = PreparedScriptReload->bWasRunning
+        ? FCString::Atoi(*ActiveGeneration)
+        : PreparedScriptReload->FromGeneration;
+    PreparedScriptReload.Reset();
+    const int32 RetiredLoadContextsAlive = bFinalized
+        ? FUnifiedScriptCoreClrHost::Get().CollectRetiredManagedLoadContexts()
+        : INDEX_NONE;
+    LastReloadTransaction = Transaction.Finish(
+        bFinalized ? TEXT("committed") : TEXT("failed"),
+        CandidateGeneration,
+        ActiveWorldGeneration,
+        Host,
+        false,
+        bFinalized ? FString() : Error,
+        RetiredLoadContextsAlive);
+    if (!bFinalized)
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
     LastScriptError.Reset();
     LastRuntimeDiagnostic = {};
     return true;

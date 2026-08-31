@@ -81,6 +81,12 @@ struct FUnifiedScriptReloadBatchResult
     int32 Reloaded = 0;
     int32 Failed = 0;
     int32 PreflightRejected = 0;
+    int32 Prepared = 0;
+    int32 PrepareRejected = 0;
+    int32 Committed = 0;
+    int32 CommitRejected = 0;
+    int32 Aborted = 0;
+    int32 FinalizeFailed = 0;
     FString ObservedReloadTransactionJson;
 };
 

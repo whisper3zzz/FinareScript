@@ -4468,28 +4468,84 @@ SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
         return Result;
     }
 
+    auto AbortPreparedBatch = [&MatchingComponents, &Result](const FString& Reason)
+    {
+        for (const TWeakObjectPtr<UUnifiedScriptComponent>& WeakComponent :
+             MatchingComponents)
+        {
+            UUnifiedScriptComponent* Component = WeakComponent.Get();
+            if (Component == nullptr || !Component->HasPreparedScriptReload())
+            {
+                continue;
+            }
+            Component->AbortPreparedScriptReload(Reason);
+            ++Result.Aborted;
+            if (!Component->LastReloadTransaction.IsEmpty())
+            {
+                Result.ObservedReloadTransactionJson =
+                    Component->LastReloadTransaction;
+            }
+        }
+    };
+
     for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
     {
         UUnifiedScriptComponent* Component = MatchingComponents[Index].Get();
-        if (Component == nullptr)
+        if (Component == nullptr ||
+            !Component->PrepareScriptReloadWithTransaction(
+                PreflightTransactions[Index]))
         {
+            ++Result.PrepareRejected;
+            if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+            {
+                Result.ObservedReloadTransactionJson =
+                    Component->LastReloadTransaction;
+            }
+            AbortPreparedBatch(
+                TEXT("The all-instance reload batch aborted because another candidate failed during managed load, start, or event rebinding."));
+            Result.Failed = Result.Matched;
+            return Result;
+        }
+        ++Result.Prepared;
+    }
+
+    for (const TWeakObjectPtr<UUnifiedScriptComponent>& WeakComponent :
+         MatchingComponents)
+    {
+        UUnifiedScriptComponent* Component = WeakComponent.Get();
+        if (Component == nullptr || !Component->CommitPreparedScriptReload())
+        {
+            ++Result.CommitRejected;
+            if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+            {
+                Result.ObservedReloadTransactionJson =
+                    Component->LastReloadTransaction;
+            }
+            AbortPreparedBatch(
+                TEXT("The all-instance reload batch rolled back because a prepared candidate could not publish its generation pointer."));
+            Result.Failed = Result.Matched;
+            Result.Committed = 0;
+            return Result;
+        }
+        ++Result.Committed;
+    }
+
+    for (const TWeakObjectPtr<UUnifiedScriptComponent>& WeakComponent :
+         MatchingComponents)
+    {
+        UUnifiedScriptComponent* Component = WeakComponent.Get();
+        if (Component == nullptr || !Component->FinalizePreparedScriptReload())
+        {
+            ++Result.FinalizeFailed;
             ++Result.Failed;
-            continue;
-        }
-        const bool bUpdated = Component->bScriptRunning
-            ? Component->ReloadScriptWithTransaction(PreflightTransactions[Index])
-            : Component->RefreshScriptStateWithTransaction(PreflightTransactions[Index]);
-        if (!Component->LastReloadTransaction.IsEmpty())
-        {
-            Result.ObservedReloadTransactionJson = Component->LastReloadTransaction;
-        }
-        if (bUpdated)
-        {
-            ++Result.Reloaded;
         }
         else
         {
-            ++Result.Failed;
+            ++Result.Reloaded;
+        }
+        if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+        {
+            Result.ObservedReloadTransactionJson = Component->LastReloadTransaction;
         }
     }
     return Result;

@@ -1606,6 +1606,50 @@ def main() -> int:
     checks.append(
         "M13.2D preflights every matching running and stopped instance before reload"
     )
+    managed_reload_transaction_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests"
+        / "UnrealManagedReloadTransactionTests.cs"
+    ).read_text(encoding="utf-8")
+    hot_reload_reliability_document = (
+        ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "public static int PrepareScriptReload(" in unreal_world_entry
+        and "public static int CommitScriptReload(" in unreal_world_entry
+        and "public static int AbortScriptReload(" in unreal_world_entry
+        and "public static int FinalizeScriptReload(" in unreal_world_entry
+        and "oldGenerationRetention" in unreal_world_entry
+        and "The managed script generation did not retire cleanly."
+        in unreal_world_entry
+        and "PrepareScriptReloadWithTransaction" in unreal_component_header
+        and "CommitPreparedScriptReload" in unreal_component_header
+        and "AbortPreparedScriptReload" in unreal_component_header
+        and "FinalizePreparedScriptReload" in unreal_component_header
+        and 'TEXT("batchPrepare")' in unreal_component
+        and 'TEXT("batchCommit")' in unreal_component
+        and 'TEXT("batchAbort")' in unreal_component
+        and 'TEXT("batchFinalize")' in unreal_component
+        and "PrepareScriptReloadWithTransaction(" in authoring_surface_widget
+        and "CommitPreparedScriptReload()" in authoring_surface_widget
+        and "AbortPreparedScriptReload(Reason)" in authoring_surface_widget
+        and "FinalizePreparedScriptReload()" in authoring_surface_widget
+        and "CandidateStartFailureNeverPublishesOrRetiresOldGeneration"
+        in managed_reload_transaction_tests
+        and "AbortAfterCommitRestoresRetainedGeneration"
+        in managed_reload_transaction_tests
+        and "Candidate OnStart failure is a prepare rejection"
+        in authoring_surface_tests
+        and "Dynamic prepare failure commits no instance"
+        in authoring_surface_tests
+        and "late candidate `OnStart` or event-rebinding failure"
+        in hot_reload_reliability_document
+        and "- [x] **M13.2D-2 — two-phase runtime swap:**"
+        in roadmap_document,
+        "M13.2D-2 retained-generation prepare/commit/abort/finalize transaction or late-failure proof is incomplete",
+    )
+    checks.append(
+        "M13.2D-2 atomically swaps all prepared runtime generations and restores late failures"
+    )
     require(
         "UnifiedScriptScriptClassSmoke" in native_host_source_template
         and "LoadClass<AUnifiedScriptActor>" in native_host_source_template
@@ -6716,7 +6760,9 @@ def main() -> int:
         and "HandleCancelAuthoringGroup" in unreal_authoring_widget
         and "Apply & Reload" in unreal_authoring_widget
         and "ReloadMatchingComponents" in unreal_authoring_widget
-        and "Component->ReloadScriptWithTransaction(" in unreal_authoring_widget
+        and "Component->PrepareScriptReloadWithTransaction(" in unreal_authoring_widget
+        and "Component->CommitPreparedScriptReload()" in unreal_authoring_widget
+        and "Component->FinalizePreparedScriptReload()" in unreal_authoring_widget
         and "AuthoringServerUrl" in unreal_script_asset_header
         and "AuthoringArtifactOutputs" in debug_server_source
         and "persistedSources" in debug_server_source

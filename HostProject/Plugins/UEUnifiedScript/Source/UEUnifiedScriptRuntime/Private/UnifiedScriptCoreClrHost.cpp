@@ -102,6 +102,12 @@ using FReloadScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     int32 AssemblyPathLength,
     const uint8* TypeNameData,
     int32 TypeNameLength);
+using FPrepareScriptReloadEntryPoint = FReloadScriptEntryPoint;
+using FCommitScriptReloadEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 CandidateGeneration);
+using FReloadControlEntryPoint = FCommitScriptReloadEntryPoint;
 using FDestroyScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId);
@@ -379,6 +385,10 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
+    PrepareScriptReloadEntryPoint = nullptr;
+    CommitScriptReloadEntryPoint = nullptr;
+    AbortScriptReloadEntryPoint = nullptr;
+    FinalizeScriptReloadEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;
@@ -1025,6 +1035,187 @@ bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
     return true;
 }
 
+bool FUnifiedScriptCoreClrHost::PrepareManagedScriptReload(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32& OutCandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    OutCandidateGeneration = 0;
+    FPrepareScriptReloadEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            PrepareScriptReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed prepare-reload entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FPrepareScriptReloadEntryPoint>(
+            PrepareScriptReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The managed script assembly does not exist: '%s'."),
+            *AssemblyPath);
+        return false;
+    }
+    if (TypeName.IsEmpty())
+    {
+        OutError = TEXT("The managed script type name is empty.");
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length());
+    if (Result <= 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script reload prepare"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutCandidateGeneration = Result;
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::CommitManagedScriptReload(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    int32& OutActiveGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    OutActiveGeneration = 0;
+    FCommitScriptReloadEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            CommitScriptReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed commit-reload entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FCommitScriptReloadEntryPoint>(
+            CommitScriptReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (CandidateGeneration <= 0)
+    {
+        OutError = TEXT("The managed reload candidate generation is invalid.");
+        return false;
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+    if (Result <= 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script reload commit"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutActiveGeneration = Result;
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::AbortManagedScriptReload(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FReloadControlEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            AbortScriptReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed abort-reload entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
+            AbortScriptReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script reload abort"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::FinalizeManagedScriptReload(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FReloadControlEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            FinalizeScriptReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed finalize-reload entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
+            FinalizeScriptReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script reload finalize"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
 bool FUnifiedScriptCoreClrHost::DestroyManagedScript(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -1281,6 +1472,14 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         TEXT("IsScriptDebugActive"), &IsScriptDebugActiveEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
+    const int32 PrepareReloadResult = LoadEntryPoint(
+        TEXT("PrepareScriptReload"), &PrepareScriptReloadEntryPoint);
+    const int32 CommitReloadResult = LoadEntryPoint(
+        TEXT("CommitScriptReload"), &CommitScriptReloadEntryPoint);
+    const int32 AbortReloadResult = LoadEntryPoint(
+        TEXT("AbortScriptReload"), &AbortScriptReloadEntryPoint);
+    const int32 FinalizeReloadResult = LoadEntryPoint(
+        TEXT("FinalizeScriptReload"), &FinalizeScriptReloadEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
@@ -1314,6 +1513,14 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         "IsScriptDebugActive", &IsScriptDebugActiveEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
+    const int32 PrepareReloadResult = LoadEntryPoint(
+        "PrepareScriptReload", &PrepareScriptReloadEntryPoint);
+    const int32 CommitReloadResult = LoadEntryPoint(
+        "CommitScriptReload", &CommitScriptReloadEntryPoint);
+    const int32 AbortReloadResult = LoadEntryPoint(
+        "AbortScriptReload", &AbortScriptReloadEntryPoint);
+    const int32 FinalizeReloadResult = LoadEntryPoint(
+        "FinalizeScriptReload", &FinalizeScriptReloadEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
@@ -1324,7 +1531,9 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
         ReloadStateResult != 0 || ProfilerControlResult != 0 || ProfilerTraceResult != 0 ||
         DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
-        ReloadScriptResult != 0 ||
+        ReloadScriptResult != 0 || PrepareReloadResult != 0 ||
+        CommitReloadResult != 0 || AbortReloadResult != 0 ||
+        FinalizeReloadResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
         LastErrorResult != 0 ||
         CreateWorldEntryPoint == nullptr ||
@@ -1344,13 +1553,17 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         IsScriptDebugActiveEntryPoint == nullptr ||
         DispatchEventEntryPoint == nullptr ||
         ReloadScriptEntryPoint == nullptr ||
+        PrepareScriptReloadEntryPoint == nullptr ||
+        CommitScriptReloadEntryPoint == nullptr ||
+        AbortScriptReloadEntryPoint == nullptr ||
+        FinalizeScriptReloadEntryPoint == nullptr ||
         DestroyScriptEntryPoint == nullptr ||
         GetScriptCountEntryPoint == nullptr ||
         GetInvocationMetricsEntryPoint == nullptr ||
         GetLastManagedErrorEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) profiler=(0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) profiler=(0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
@@ -1359,6 +1572,10 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
             static_cast<uint32>(TickScriptResult),
             static_cast<uint32>(DispatchEventResult),
             static_cast<uint32>(ReloadScriptResult),
+            static_cast<uint32>(PrepareReloadResult),
+            static_cast<uint32>(CommitReloadResult),
+            static_cast<uint32>(AbortReloadResult),
+            static_cast<uint32>(FinalizeReloadResult),
             static_cast<uint32>(DestroyScriptResult),
             static_cast<uint32>(ScriptCountResult),
             static_cast<uint32>(ConfigureDebugResult),
@@ -1408,6 +1625,10 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
+    PrepareScriptReloadEntryPoint = nullptr;
+    CommitScriptReloadEntryPoint = nullptr;
+    AbortScriptReloadEntryPoint = nullptr;
+    FinalizeScriptReloadEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;

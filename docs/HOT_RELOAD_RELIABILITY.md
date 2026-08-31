@@ -18,8 +18,11 @@ is extended with:
 - `artifactValidation` and `stateMigration` while the old generation remains
   recoverable;
 - managed `generationLoad`, `oldGenerationStop`, `candidateStart`,
-  `eventRebinding`, `generationSwap`, and `oldContextRetirement` phases;
-- native `stateCommit` and `oldContextCollection` after the generation swap.
+  `eventRebinding`, `oldGenerationRetention`, `generationSwap`, and
+  `oldContextRetirement` phases;
+- native `batchPrepare`, `stateCommit`, `batchCommit`, `batchAbort`,
+  `batchFinalize`, and `oldContextCollection` phases around the generation
+  swap.
 
 Every phase carries a state, non-negative duration, and bounded detail. The
 top-level transaction retains the Workbench `fromGeneration`,
@@ -44,6 +47,23 @@ property bag, debug session, and component receipt remains untouched. A single
 reports `batchPreflight`, and no compatible sibling is allowed to advance early.
 Stopped/editor instances participate in the same barrier but a successful
 commit refreshes declaration state without starting managed code.
+
+After preflight, every running instance enters managed prepare before any
+instance publishes a generation pointer. Prepare stops but retains the previous
+generation, loads the candidate, applies migrated native state for candidate
+`OnStart`, and binds candidate events. Stopped/editor instances prepare the
+same state/declaration transaction without starting managed code. A failure in
+any prepare aborts every earlier candidate, restarts each retained previous
+generation, rebinds its events, and restores the exact native state bag,
+override IDs, active asset/configuration identity, and lifecycle settings.
+
+Only a completely prepared batch enters commit. Commit swaps managed and native
+generation/state pointers without script callbacks or old-context retirement.
+A commit-boundary failure aborts both already committed and merely prepared
+members back to the retained generation. After every member commits, finalize
+retires the retained old contexts and collects them. Finalize is cleanup rather
+than a publication decision: a cleanup failure keeps the already committed
+candidate active and reports the retained resource in the transaction receipt.
 
 ## Rollback guarantees
 
@@ -95,11 +115,11 @@ evidence.
 
 ## Current boundary
 
-The deterministic all-instance preflight closes configuration, ownership,
-artifact, declaration, and state-compatibility partial updates. After the
-barrier, managed candidates are still committed instance by instance. An
-unexpected dynamic failure in a later managed candidate therefore still needs
-the M13.2D two-phase prepare/commit/abort coordinator before the whole batch can
-claim atomic rollback for every possible failure. Per-node gameplay timing,
+The deterministic preflight plus two-phase prepare/commit/abort coordinator
+closes mixed-generation publication for one Workbench reload batch, including a
+late candidate `OnStart` or event-rebinding failure. Finalize cleanup is
+observable but intentionally does not roll back an already published complete
+batch. M13.2D-3 still needs to route the ordinary source/Graph Build and Play
+loop through this same batch receipt automatically. Per-node gameplay timing,
 bridge-call attribution, remote debug framing, and a frame timeline remain
 owned by M9.3.

@@ -147,6 +147,20 @@ public:
         const FString& PublicationTransactionJson,
         FString& OutPreflightTransactionJson) const;
 
+    /** Loads, starts, and rebinds a candidate while retaining the old generation. */
+    bool PrepareScriptReloadWithTransaction(const FString& PreflightTransactionJson);
+
+    /** Publishes a prepared candidate without invoking managed lifecycle code. */
+    bool CommitPreparedScriptReload();
+
+    /** Restores retained state/generation after any batch prepare or commit failure. */
+    bool AbortPreparedScriptReload(const FString& Reason);
+
+    /** Retires the retained old generation after every batch member commits. */
+    bool FinalizePreparedScriptReload();
+
+    bool HasPreparedScriptReload() const { return PreparedScriptReload.IsValid(); }
+
     UFUNCTION(BlueprintCallable, Category="UnifiedScript")
     void RequestReload();
 
@@ -254,6 +268,33 @@ public:
 #endif
 
 private:
+    struct FPreparedScriptReloadState
+    {
+        bool bWasRunning = false;
+        bool bCommitted = false;
+        int32 FromGeneration = 0;
+        int32 CandidateGeneration = 0;
+        FString TransactionJson;
+        FInstancedPropertyBag PreviousScriptState;
+        TArray<FGuid> PreviousOverrideIds;
+        bool bPreviousOverrideBaselineInitialized = false;
+        int32 PreviousMaterializedStateCount = 0;
+        int32 PreviousMaterializedStateOverrideCount = 0;
+        FString PreviousLastStateMigration;
+        FString PreviousManagedState;
+        bool bPreviousStartAutomatically = false;
+        bool bPreviousTickAutomatically = false;
+        TWeakObjectPtr<UUnifiedScriptAsset> PreviousActiveAsset;
+        FString PreviousActiveScriptAssetPath;
+        FString PreviousActiveDeclarationAssetPath;
+        FString PreviousResolvedAssemblyPath;
+        FString PreviousResolvedTypeName;
+        TWeakObjectPtr<UUnifiedScriptAsset> CandidateAsset;
+        FString CandidateDeclarationAssetPath;
+        FString CandidateResolvedAssemblyPath;
+        FString CandidateResolvedTypeName;
+    };
+
     UFUNCTION()
     void HandleActorBeginOverlap(AActor* OverlappedActor, AActor* OtherActor);
 
@@ -313,6 +354,7 @@ private:
     bool bSemanticDebugTickActive = false;
     bool bSemanticDebugPaused = false;
     FString SemanticDebugStateJson;
+    TUniquePtr<FPreparedScriptReloadState> PreparedScriptReload;
     FVector BenchmarkActorLocation = FVector::ZeroVector;
     FRotator BenchmarkActorRotation = FRotator::ZeroRotator;
 };

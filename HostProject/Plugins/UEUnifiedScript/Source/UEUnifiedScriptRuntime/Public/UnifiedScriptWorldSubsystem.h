@@ -253,6 +253,25 @@ public:
         const FString& TypeName,
         int32& OutGeneration,
         FString& OutError);
+    bool PrepareManagedScriptReload(
+        uint64 InstanceId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32& OutCandidateGeneration,
+        FString& OutError);
+    bool CommitManagedScriptReload(
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        int32& OutActiveGeneration,
+        FString& OutError);
+    bool AbortManagedScriptReload(
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        FString& OutError);
+    bool FinalizeManagedScriptReload(
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        FString& OutError);
 
     bool GetManagedScriptReloadState(
         uint64 InstanceId,

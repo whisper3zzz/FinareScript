@@ -311,7 +311,12 @@ any component reloads, the editor preflights every running and stopped/editor
 instance of the selected Script Asset. One incompatible declaration, lost
 stable-ID override, ownership change, missing live artifact, or invalid
 configuration returns the same actionable reload receipt and blocks the whole
-batch. Compatible running instances then reload; compatible stopped/editor
-instances refresh declaration state without starting managed code. Dynamic
-candidate failures after this deterministic barrier remain the next two-phase
-batch-commit slice.
+batch. Compatible running instances then prepare their candidate by loading,
+starting, and rebinding it while the stopped previous generation remains
+recoverable; compatible stopped/editor instances prepare declaration state
+without starting managed code. Only after every instance prepares does the
+batch publish its candidate pointers. A late candidate failure aborts all
+earlier candidates, restarts their retained generations, and restores native
+state and overrides. Old contexts retire only after the complete batch commits;
+the receipt exposes `batchPrepare`, `batchCommit`, `batchAbort`, and
+`batchFinalize` rather than hiding a partial update behind one reload count.

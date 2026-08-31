@@ -771,6 +771,82 @@ bool UUnifiedScriptWorldSubsystem::ReloadManagedScript(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::PrepareManagedScriptReload(
+    uint64 InstanceId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32& OutCandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutCandidateGeneration = 0;
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().PrepareManagedScriptReload(
+        WorldHostId,
+        InstanceId,
+        AssemblyPath,
+        TypeName,
+        OutCandidateGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::CommitManagedScriptReload(
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    int32& OutActiveGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutActiveGeneration = 0;
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().CommitManagedScriptReload(
+        WorldHostId,
+        InstanceId,
+        CandidateGeneration,
+        OutActiveGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::AbortManagedScriptReload(
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().AbortManagedScriptReload(
+        WorldHostId,
+        InstanceId,
+        CandidateGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::FinalizeManagedScriptReload(
+    uint64 InstanceId,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().FinalizeManagedScriptReload(
+        WorldHostId,
+        InstanceId,
+        CandidateGeneration,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::GetManagedScriptReloadState(
     uint64 InstanceId,
     FString& OutJson,

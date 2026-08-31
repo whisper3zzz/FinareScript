@@ -102,6 +102,29 @@ public:
         const FString& TypeName,
         int32& OutGeneration,
         FString& OutError);
+    bool PrepareManagedScriptReload(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32& OutCandidateGeneration,
+        FString& OutError);
+    bool CommitManagedScriptReload(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        int32& OutActiveGeneration,
+        FString& OutError);
+    bool AbortManagedScriptReload(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        FString& OutError);
+    bool FinalizeManagedScriptReload(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 CandidateGeneration,
+        FString& OutError);
     bool DestroyManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -144,6 +167,10 @@ private:
     void* IsScriptDebugActiveEntryPoint = nullptr;
     void* DispatchEventEntryPoint = nullptr;
     void* ReloadScriptEntryPoint = nullptr;
+    void* PrepareScriptReloadEntryPoint = nullptr;
+    void* CommitScriptReloadEntryPoint = nullptr;
+    void* AbortScriptReloadEntryPoint = nullptr;
+    void* FinalizeScriptReloadEntryPoint = nullptr;
     void* DestroyScriptEntryPoint = nullptr;
     void* GetScriptCountEntryPoint = nullptr;
     void* GetInvocationMetricsEntryPoint = nullptr;

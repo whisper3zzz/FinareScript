@@ -540,6 +540,122 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int PrepareScriptReload(
+        ulong worldId,
+        ulong instanceId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            int generation = entry.PrepareScriptReload(
+                instanceId,
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength));
+            return generation > 0
+                ? generation
+                : -(int)UnrealWorldManagedEntryStatus.ScriptNotFound;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(PrepareScriptReload),
+                exception);
+            return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int CommitScriptReload(
+        ulong worldId,
+        ulong instanceId,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            int generation = entry.CommitScriptReload(instanceId, candidateGeneration);
+            return generation > 0
+                ? generation
+                : -(int)UnrealWorldManagedEntryStatus.ScriptNotFound;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(CommitScriptReload),
+                exception);
+            return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int AbortScriptReload(
+        ulong worldId,
+        ulong instanceId,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.AbortScriptReload(instanceId, candidateGeneration);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(AbortScriptReload),
+                exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FinalizeScriptReload(
+        ulong worldId,
+        ulong instanceId,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.FinalizeScriptReload(instanceId, candidateGeneration);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(FinalizeScriptReload),
+                exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DestroyScript(ulong worldId, ulong instanceId)
     {
         ClearBoundaryFailure(worldId);
@@ -957,6 +1073,63 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        public int PrepareScriptReload(
+            ulong instanceId,
+            string assemblyPath,
+            string typeName)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.PrepareReload(assemblyPath, typeName)
+                    : 0;
+            }
+        }
+
+        public int CommitScriptReload(ulong instanceId, int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.CommitPreparedReload(candidateGeneration)
+                    : 0;
+            }
+        }
+
+        public UnrealWorldManagedEntryStatus AbortScriptReload(
+            ulong instanceId,
+            int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.AbortPreparedReload(candidateGeneration);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public UnrealWorldManagedEntryStatus FinalizeScriptReload(
+            ulong instanceId,
+            int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.FinalizePreparedReload(candidateGeneration);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
         public UnrealWorldManagedEntryStatus DestroyScript(ulong instanceId)
         {
             lock (_gate)
@@ -1006,7 +1179,7 @@ public static class UnrealWorldManagedEntryPoint
         }
     }
 
-    private sealed class ManagedScriptInstance : IDisposable
+    internal sealed class ManagedScriptInstance : IDisposable
     {
         private readonly ulong _worldId;
         private readonly ulong _instanceId;
@@ -1020,6 +1193,7 @@ public static class UnrealWorldManagedEntryPoint
         private readonly UnrealGameplayProfiler _profiler;
         private UnrealManagedReloadTransaction? _lastReloadTransaction;
         private CoreClrGenerationPrewarmOperation? _lastReloadPrewarm;
+        private PreparedScriptReload? _preparedReload;
         private bool _started;
 
         private ManagedScriptInstance(
@@ -1064,6 +1238,11 @@ public static class UnrealWorldManagedEntryPoint
 
         public void Tick(float deltaSeconds)
         {
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "The managed script is inside a two-phase reload transaction.");
+            }
             if (!_started)
             {
                 throw new InvalidOperationException("The managed script is not started.");
@@ -1140,6 +1319,11 @@ public static class UnrealWorldManagedEntryPoint
 
         public void DispatchEvent(UnrealScriptEvent scriptEvent)
         {
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "The managed script is inside a two-phase reload transaction.");
+            }
             if (!_started)
             {
                 throw new InvalidOperationException("The managed script is not started.");
@@ -1152,10 +1336,42 @@ public static class UnrealWorldManagedEntryPoint
 
         public int Reload(string assemblyPath, string typeName)
         {
+            int candidateGeneration = PrepareReload(assemblyPath, typeName);
+            try
+            {
+                int generation = CommitPreparedReload(candidateGeneration);
+                FinalizePreparedReload(candidateGeneration);
+                return generation;
+            }
+            catch
+            {
+                if (_preparedReload is not null)
+                {
+                    try
+                    {
+                        AbortPreparedReload(candidateGeneration);
+                    }
+                    catch
+                    {
+                        // Preserve the original boundary failure. Abort records
+                        // its own failed restoration in the reload receipt.
+                    }
+                }
+                throw;
+            }
+        }
+
+        public int PrepareReload(string assemblyPath, string typeName)
+        {
             if (_debug.IsActive)
             {
                 throw new InvalidOperationException(
                     "A live World debug execution must be disabled before script reload.");
+            }
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "A managed reload candidate is already prepared for this script instance.");
             }
             _debug.Disable();
             string nextAssemblyPath = Path.GetFullPath(assemblyPath);
@@ -1184,7 +1400,7 @@ public static class UnrealWorldManagedEntryPoint
                     "rollback",
                     "unchanged",
                     0,
-                    "The active generation was never stopped or swapped."));
+                    "The active generation was never stopped, swapped, or retired."));
                 SetReloadTransaction(
                     "rolledBack",
                     previous.Generation,
@@ -1247,7 +1463,11 @@ public static class UnrealWorldManagedEntryPoint
                         ? $"Scheduled at most {prewarm.MaximumMethodCount} method(s) with a " +
                             $"{prewarm.TimeBudgetNanoseconds / 1_000_000d:0.###} ms budget."
                         : "Background prewarm is disabled for the controlled compatibility lane."));
-                _started = true;
+                phases.Add(new UnrealManagedReloadPhase(
+                    "oldGenerationRetention",
+                    "retained",
+                    0,
+                    "The stopped previous generation remains loaded and recoverable until the complete batch commits."));
             }
             catch (Exception exception)
             {
@@ -1256,7 +1476,7 @@ public static class UnrealWorldManagedEntryPoint
                     phaseStart,
                     "failed",
                     exception.Message));
-                Exception? cleanupFailure = null;
+                List<Exception>? cleanupFailures = null;
                 try
                 {
                     if (candidateStartAttempted)
@@ -1270,11 +1490,15 @@ public static class UnrealWorldManagedEntryPoint
                 }
                 catch (Exception cleanupException)
                 {
-                    cleanupFailure = cleanupException;
+                    (cleanupFailures ??= []).Add(cleanupException);
                 }
-                finally
+                try
                 {
                     next.Dispose();
+                }
+                catch (Exception cleanupException)
+                {
+                    (cleanupFailures ??= []).Add(cleanupException);
                 }
 
                 phaseStart = Stopwatch.GetTimestamp();
@@ -1305,11 +1529,15 @@ public static class UnrealWorldManagedEntryPoint
                         phaseStart,
                         "failed",
                         restoreException.Message));
+                    var restorationFailures = new List<Exception> { exception };
+                    if (cleanupFailures is not null)
+                    {
+                        restorationFailures.AddRange(cleanupFailures);
+                    }
+                    restorationFailures.Add(restoreException);
                     var aggregate = new AggregateException(
                         "The candidate generation failed and the previous generation could not be restored.",
-                        cleanupFailure is null
-                            ? [exception, restoreException]
-                            : [exception, cleanupFailure, restoreException]);
+                        restorationFailures);
                     SetReloadTransaction(
                         "failed",
                         previous.Generation,
@@ -1321,9 +1549,18 @@ public static class UnrealWorldManagedEntryPoint
                     throw aggregate;
                 }
 
-                Exception reported = cleanupFailure is null
-                    ? exception
-                    : new AggregateException(exception, cleanupFailure);
+                Exception reported;
+                if (cleanupFailures is null)
+                {
+                    reported = exception;
+                }
+                else
+                {
+                    cleanupFailures.Insert(0, exception);
+                    reported = new AggregateException(
+                        "The candidate generation failed and its resources did not retire cleanly.",
+                        cleanupFailures);
+                }
                 SetReloadTransaction(
                     "rolledBack",
                     previous.Generation,
@@ -1335,36 +1572,209 @@ public static class UnrealWorldManagedEntryPoint
                 throw reported;
             }
 
-            phaseStart = Stopwatch.GetTimestamp();
-            _current = next;
-            _assemblyPath = nextAssemblyPath;
-            _typeName = typeName;
-            phases.Add(CompletePhase(
-                "generationSwap",
-                phaseStart,
+            _preparedReload = new PreparedScriptReload(
+                previous,
+                next,
+                _assemblyPath,
+                _typeName,
+                nextAssemblyPath,
+                typeName,
+                previousWasStarted,
+                previousStopAttempted,
+                phases);
+            phases.Add(new UnrealManagedReloadPhase(
+                "batchPrepare",
                 "succeeded",
-                "Published the candidate as the only active managed generation."));
-
-            phaseStart = Stopwatch.GetTimestamp();
-            previous.Dispose();
-            phases.Add(CompletePhase(
-                "oldContextRetirement",
-                phaseStart,
-                "scheduled",
-                "Released the old generation and requested collectible-context unload."));
+                0,
+                "The candidate completed load, start, and event rebinding without publishing its generation."));
             SetReloadTransaction(
-                "committed",
+                "prepared",
                 previous.Generation,
                 candidateGeneration,
-                next.Generation,
+                previous.Generation,
                 phases,
                 failure: null,
                 next.Prewarm);
-            return next.Generation;
+            return candidateGeneration;
+        }
+
+        public int CommitPreparedReload(int candidateGeneration)
+        {
+            PreparedScriptReload prepared = RequirePreparedReload(candidateGeneration);
+            if (prepared.IsCommitted)
+            {
+                return prepared.Candidate.Generation;
+            }
+
+            long phaseStart = Stopwatch.GetTimestamp();
+            _current = prepared.Candidate;
+            _assemblyPath = prepared.CandidateAssemblyPath;
+            _typeName = prepared.CandidateTypeName;
+            _started = true;
+            prepared.IsCommitted = true;
+            prepared.Phases.Add(CompletePhase(
+                "generationSwap",
+                phaseStart,
+                "succeeded",
+                "Published the prepared candidate while retaining the stopped previous generation for batch rollback."));
+            prepared.Phases.Add(new UnrealManagedReloadPhase(
+                "batchCommit",
+                "succeeded",
+                0,
+                "Committed the prepared generation without invoking script code or retiring the rollback generation."));
+            SetReloadTransaction(
+                "commitPendingFinalize",
+                prepared.Previous.Generation,
+                prepared.Candidate.Generation,
+                prepared.Candidate.Generation,
+                prepared.Phases,
+                failure: null,
+                prepared.Candidate.Prewarm);
+            return prepared.Candidate.Generation;
+        }
+
+        public void AbortPreparedReload(int candidateGeneration)
+        {
+            PreparedScriptReload prepared = RequirePreparedReload(candidateGeneration);
+            if (prepared.IsCommitted)
+            {
+                _current = prepared.Previous;
+                _assemblyPath = prepared.PreviousAssemblyPath;
+                _typeName = prepared.PreviousTypeName;
+            }
+            _started = false;
+
+            List<Exception>? failures = null;
+            long phaseStart = Stopwatch.GetTimestamp();
+            try
+            {
+                StopGeneration(prepared.Candidate);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                prepared.Candidate.Dispose();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+
+            try
+            {
+                if (prepared.PreviousWasStarted && prepared.PreviousStopAttempted)
+                {
+                    StartGeneration(prepared.Previous);
+                    _started = true;
+                }
+                else
+                {
+                    _started = prepared.PreviousWasStarted;
+                }
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+                _started = false;
+            }
+
+            _preparedReload = null;
+            string rollbackState = failures is null ? "restored" : "failed";
+            string rollbackDetail = failures is null
+                ? "Discarded the candidate and restarted the retained previous generation without changing its identity."
+                : "The previous generation identity was restored, but candidate cleanup or lifecycle restart reported a failure.";
+            prepared.Phases.Add(CompletePhase(
+                "batchRollback",
+                phaseStart,
+                rollbackState,
+                rollbackDetail));
+            Exception? failure = failures is null
+                ? null
+                : new AggregateException(
+                    "The two-phase reload batch could not restore every lifecycle resource cleanly.",
+                    failures);
+            SetReloadTransaction(
+                failures is null ? "rolledBack" : "failed",
+                prepared.Previous.Generation,
+                prepared.Candidate.Generation,
+                prepared.Previous.Generation,
+                prepared.Phases,
+                failure,
+                prepared.Candidate.Prewarm);
+            if (failure is not null)
+            {
+                throw failure;
+            }
+        }
+
+        public void FinalizePreparedReload(int candidateGeneration)
+        {
+            PreparedScriptReload prepared = RequirePreparedReload(candidateGeneration);
+            if (!prepared.IsCommitted)
+            {
+                throw new InvalidOperationException(
+                    "A managed reload candidate must be committed before finalization.");
+            }
+
+            _preparedReload = null;
+            long phaseStart = Stopwatch.GetTimestamp();
+            Exception? retirementFailure = null;
+            try
+            {
+                prepared.Previous.Dispose();
+            }
+            catch (Exception exception)
+            {
+                retirementFailure = exception;
+            }
+            prepared.Phases.Add(CompletePhase(
+                "oldContextRetirement",
+                phaseStart,
+                retirementFailure is null ? "scheduled" : "retained",
+                retirementFailure is null
+                    ? "Released the retained old generation and requested collectible-context unload after the whole batch committed."
+                    : "The candidate remains active, but old-generation cleanup reported a retained resource."));
+            SetReloadTransaction(
+                "committed",
+                prepared.Previous.Generation,
+                prepared.Candidate.Generation,
+                prepared.Candidate.Generation,
+                prepared.Phases,
+                retirementFailure,
+                prepared.Candidate.Prewarm);
+        }
+
+        private PreparedScriptReload RequirePreparedReload(int candidateGeneration)
+        {
+            PreparedScriptReload prepared = _preparedReload ??
+                throw new InvalidOperationException(
+                    "No managed reload candidate is prepared for this script instance.");
+            if (candidateGeneration <= 0 ||
+                prepared.Candidate.Generation != candidateGeneration)
+            {
+                throw new InvalidOperationException(
+                    $"Prepared reload token '{candidateGeneration}' does not match candidate generation '{prepared.Candidate.Generation}'.");
+            }
+            return prepared;
         }
 
         public void Dispose()
         {
+            if (_preparedReload is not null)
+            {
+                try
+                {
+                    AbortPreparedReload(_preparedReload.Candidate.Generation);
+                }
+                catch
+                {
+                    // Continue with active-generation teardown below. The
+                    // boundary caller reports aggregate World cleanup failures.
+                }
+            }
             try
             {
                 _debug.Dispose();
@@ -1378,6 +1788,38 @@ public static class UnrealWorldManagedEntryPoint
             {
                 _current.Dispose();
             }
+        }
+
+        private sealed class PreparedScriptReload(
+            ScriptGeneration previous,
+            ScriptGeneration candidate,
+            string previousAssemblyPath,
+            string previousTypeName,
+            string candidateAssemblyPath,
+            string candidateTypeName,
+            bool previousWasStarted,
+            bool previousStopAttempted,
+            List<UnrealManagedReloadPhase> phases)
+        {
+            public ScriptGeneration Previous { get; } = previous;
+
+            public ScriptGeneration Candidate { get; } = candidate;
+
+            public string PreviousAssemblyPath { get; } = previousAssemblyPath;
+
+            public string PreviousTypeName { get; } = previousTypeName;
+
+            public string CandidateAssemblyPath { get; } = candidateAssemblyPath;
+
+            public string CandidateTypeName { get; } = candidateTypeName;
+
+            public bool PreviousWasStarted { get; } = previousWasStarted;
+
+            public bool PreviousStopAttempted { get; } = previousStopAttempted;
+
+            public List<UnrealManagedReloadPhase> Phases { get; } = phases;
+
+            public bool IsCommitted { get; set; }
         }
 
         private UnrealScriptContext CreateContext(ScriptGeneration generation)
@@ -1549,9 +1991,37 @@ public static class UnrealWorldManagedEntryPoint
                 return;
             }
             _disposed = true;
-            Prewarm.Cancel();
-            Bridge.Dispose();
-            RetireLoadContext(LoadContext);
+            List<Exception>? failures = null;
+            try
+            {
+                Prewarm.Cancel();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                Bridge.Dispose();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                RetireLoadContext(LoadContext);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            if (failures is not null)
+            {
+                throw new AggregateException(
+                    "The managed script generation did not retire cleanly.",
+                    failures);
+            }
         }
     }
 
