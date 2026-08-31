@@ -9,6 +9,9 @@ struct FUnifiedScriptReflectionExportOptions
 
     /** Optional exact /Script/Module.Type allowlist. Empty exports every native class in Modules. */
     TArray<FString> ClassPaths;
+
+    /** Optional exact generated C# short names resolved uniquely across loaded native /Script classes. */
+    TArray<FString> TypeNames;
 };
 
 struct FUnifiedScriptReflectionExportResult
@@ -18,6 +21,7 @@ struct FUnifiedScriptReflectionExportResult
     int32 FunctionCount = 0;
     int32 DelegateCount = 0;
     int32 ExcludedTypeCount = 0;
+    int32 DiscoveredClassCount = 0;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptReflectionExporter

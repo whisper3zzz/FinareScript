@@ -25,6 +25,7 @@
     "requireCompleteNativeCoverage": true,
     "developmentSurface": {
       "enabled": true,
+      "typeHintsOutput": "../Generated/__PROJECT_NAME__.api-type-hints.json",
       "requestsOutput": "../Generated/__PROJECT_NAME__.api-requests.json",
       "contractOutput": "../Generated/__PROJECT_NAME__.development-api-contract.json",
       "reportOutput": "../Generated/__PROJECT_NAME__.development-surface.json",

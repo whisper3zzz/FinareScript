@@ -774,6 +774,31 @@ bool FUnifiedScriptReflectionExporter::Export(
     }
     ClassPaths.Sort();
 
+    TArray<FString> TypeNames = Options.TypeNames;
+    TSet<FString> TypeNameSet;
+    for (FString& TypeName : TypeNames)
+    {
+        TypeName.TrimStartAndEndInline();
+        bool bValidIdentifier = !TypeName.IsEmpty() &&
+            (FChar::IsAlpha(TypeName[0]) || TypeName[0] == TEXT('_'));
+        for (const TCHAR Character : TypeName)
+        {
+            if (!FChar::IsAlnum(Character) && Character != TEXT('_'))
+            {
+                bValidIdentifier = false;
+                break;
+            }
+        }
+        if (!bValidIdentifier || TypeNameSet.Contains(TypeName))
+        {
+            OutError = FText::FromString(
+                TEXT("Reflected source type names must be unique C++/C# identifiers."));
+            return false;
+        }
+        TypeNameSet.Add(TypeName);
+    }
+    TypeNames.Sort();
+
     TArray<const UClass*> Classes;
     for (TObjectIterator<UClass> It; It; ++It)
     {
@@ -793,23 +818,79 @@ bool FUnifiedScriptReflectionExporter::Export(
             Classes.Add(Class);
         }
     }
+    if (!TypeNameSet.IsEmpty())
+    {
+        TMap<FString, TArray<const UClass*>> CandidatesByName;
+        for (TObjectIterator<UClass> It; It; ++It)
+        {
+            const UClass* Class = *It;
+            if (Class->HasAnyFlags(RF_NewerVersionExists) ||
+                !Class->HasAnyClassFlags(CLASS_Native) ||
+                Class->HasMetaData(InternalBindingMetadata) ||
+                !Class->GetPathName().StartsWith(TEXT("/Script/")) ||
+                !TypeNameSet.Contains(Class->GetName()))
+            {
+                continue;
+            }
+            CandidatesByName.FindOrAdd(Class->GetName()).Add(Class);
+        }
+        for (const FString& TypeName : TypeNames)
+        {
+            TArray<const UClass*>* Candidates = CandidatesByName.Find(TypeName);
+            if (Candidates == nullptr || Candidates->IsEmpty())
+            {
+                OutError = FText::FromString(FString::Printf(
+                    TEXT("Source-requested reflected type '%s' was not found among loaded native /Script classes."),
+                    *TypeName));
+                return false;
+            }
+            Candidates->Sort([](const UClass& Left, const UClass& Right)
+            {
+                return Left.GetPathName() < Right.GetPathName();
+            });
+            if (Candidates->Num() != 1)
+            {
+                TArray<FString> CandidatePaths;
+                for (const UClass* Candidate : *Candidates)
+                {
+                    CandidatePaths.Add(Candidate->GetPathName());
+                }
+                OutError = FText::FromString(FString::Printf(
+                    TEXT("Source-requested reflected type '%s' is ambiguous: %s"),
+                    *TypeName,
+                    *FString::Join(CandidatePaths, TEXT(", "))));
+                return false;
+            }
+            const UClass* Discovered = (*Candidates)[0];
+            if (!Classes.Contains(Discovered))
+            {
+                Classes.Add(Discovered);
+                Modules.AddUnique(ModuleName(Discovered));
+                ++OutResult.DiscoveredClassCount;
+            }
+        }
+        Modules.Sort();
+    }
     Classes.Sort([](const UClass& Left, const UClass& Right)
     {
         return Left.GetPathName() < Right.GetPathName();
     });
-    if (!ClassPathSet.IsEmpty() && Classes.Num() != ClassPathSet.Num())
+    if (!ClassPathSet.IsEmpty())
     {
         TSet<FString> Missing = ClassPathSet;
         for (const UClass* Class : Classes)
         {
             Missing.Remove(Class->GetPathName());
         }
-        TArray<FString> MissingPaths = Missing.Array();
-        MissingPaths.Sort();
-        OutError = FText::FromString(FString::Printf(
-            TEXT("Requested reflected classes could not be loaded: %s"),
-            *FString::Join(MissingPaths, TEXT(", "))));
-        return false;
+        if (!Missing.IsEmpty())
+        {
+            TArray<FString> MissingPaths = Missing.Array();
+            MissingPaths.Sort();
+            OutError = FText::FromString(FString::Printf(
+                TEXT("Requested reflected classes could not be loaded: %s"),
+                *FString::Join(MissingPaths, TEXT(", "))));
+            return false;
+        }
     }
 
     TSet<const UScriptStruct*> ReferencedStructSet;

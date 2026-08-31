@@ -158,6 +158,11 @@ internal static class Program
             return RunUnrealDevelopmentSurface(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-reflection-hints")
+        {
+            return RunUnrealReflectionHints(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-data-plane")
         {
             return RunUnrealDataPlane(args);
@@ -1376,6 +1381,102 @@ internal static class Program
                 "No overlay Contract was written; inspect the source-linked report.");
             return 65;
         }
+        return 0;
+    }
+
+    private static int RunUnrealReflectionHints(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealReflectionHintArguments(args, out UnrealReflectionHintOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal reflection-hint options.");
+        string baseContractPath = Path.GetFullPath(options.BaseContractPath);
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        string[] projectPaths = options.ProjectPaths.Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        foreach (string inputPath in new[] { baseContractPath }.Concat(projectPaths))
+        {
+            if (!File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"Unreal reflection-hint input does not exist: {inputPath}");
+                return 66;
+            }
+            EnsureDifferentPath(
+                inputPath,
+                outputPath,
+                "Unreal reflection hints cannot overwrite an input artifact.");
+        }
+
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
+            File.ReadAllText(baseContractPath));
+        var sources = new List<CSharpSourceDocument>();
+        var loadedRequests = new List<CSharpCompilationRequest>();
+        foreach (string projectPath in projectPaths)
+        {
+            CSharpProjectLoadResult loaded;
+            try
+            {
+                loaded = new CSharpProjectLoader().Load(
+                    projectPath,
+                    options: new CSharpProjectLoadOptions(
+                        options.Configuration,
+                        Restore: true,
+                        Build: false,
+                        DotNetPath: options.DotNetPath));
+            }
+            catch (CSharpProjectLoadException exception)
+            {
+                Console.Error.WriteLine(exception.Message);
+                return 65;
+            }
+            loadedRequests.Add(loaded.Request);
+            string prefix = Path.GetFileNameWithoutExtension(projectPath);
+            sources.AddRange(loaded.Request.Sources.Select(source => new CSharpSourceDocument(
+                $"{prefix}/{source.LogicalPath}",
+                source.Source)));
+        }
+
+        string[] configurationKeys = loadedRequests
+            .Select(static request => request.Settings.ConfigurationKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        bool[] defaultReferenceModes = loadedRequests
+            .Select(static request => request.IncludeDefaultReferences)
+            .Distinct()
+            .ToArray();
+        if (configurationKeys.Length != 1 || defaultReferenceModes.Length != 1)
+        {
+            Console.Error.WriteLine(
+                "Managed projects in one Unreal reflection-hint scan must use compatible C# " +
+                "parse/compilation settings and default-reference policy.");
+            return 65;
+        }
+        string[] referencePaths = loadedRequests
+            .SelectMany(static request => request.ReferencePaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var scanRequest = new CSharpCompilationRequest(
+            "UnifiedScript.ReflectionHintScan",
+            sources,
+            referencePaths,
+            settings: loadedRequests[0].Settings,
+            runtimeReferencePaths: referencePaths,
+            includeDefaultReferences: defaultReferenceModes[0]);
+        UnrealApiSourceTypeHintSet hints = new UnrealApiSourceTypeHintScanner().Scan(
+            contract.ContractName,
+            scanRequest,
+            contract);
+        WriteTransactionally(
+            [new OutputFile(outputPath, UnrealApiSourceTypeHintJson.Serialize(hints))]);
+        Console.WriteLine(outputPath);
+        Console.WriteLine($"type-hints={hints.Hints.Count}; source={hints.SourceFingerprint}");
         return 0;
     }
 
@@ -4172,6 +4273,65 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealReflectionHintArguments(
+        IReadOnlyList<string> args,
+        out UnrealReflectionHintOptions? options)
+    {
+        options = null;
+        if (args.Count < 7 || args[0] != "ue-reflection-hints")
+        {
+            return false;
+        }
+
+        var projectPaths = new List<string>();
+        string? baseContractPath = null;
+        string? outputPath = null;
+        string configuration = "Release";
+        string? dotNetPath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--project":
+                    projectPaths.Add(value);
+                    break;
+                case "--base" when baseContractPath is null:
+                    baseContractPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--configuration" when configuration == "Release":
+                    configuration = value;
+                    break;
+                case "--dotnet" when dotNetPath is null:
+                    dotNetPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (projectPaths.Count == 0 || baseContractPath is null || outputPath is null ||
+            string.IsNullOrWhiteSpace(configuration))
+        {
+            return false;
+        }
+        options = new UnrealReflectionHintOptions(
+            projectPaths,
+            baseContractPath,
+            outputPath,
+            configuration,
+            dotNetPath);
+        return true;
+    }
+
     private static bool TryParseUnrealDataPlaneArguments(
         IReadOnlyList<string> args,
         out UnrealDataPlaneOptions? options)
@@ -5747,6 +5907,7 @@ internal static class Program
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
+        "  unifiedscript ue-reflection-hints --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --out <type-hints.json> [--configuration <name>] [--dotnet <path>]\n" +
         "  unifiedscript ue-surface-expand <reflection.json> --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --requests-out <requests.json> --overlay-out <development-contract.json> --report <surface.json> [--configuration <name>] [--dotnet <path>] [--fail-on-open-decisions]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
@@ -5934,6 +6095,13 @@ internal static class Program
         string Configuration,
         string? DotNetPath,
         bool FailOnOpenDecisions);
+
+    private sealed record UnrealReflectionHintOptions(
+        IReadOnlyList<string> ProjectPaths,
+        string BaseContractPath,
+        string OutputPath,
+        string Configuration,
+        string? DotNetPath);
 
     private sealed record UnrealDataPlaneOptions(
         string SchemaPath,

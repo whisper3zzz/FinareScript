@@ -99,7 +99,9 @@ Apply performs these phases in order:
 2. build the UnifiedScript CLI/runtime and stage the managed host into the
    selected project's plugin;
 3. bootstrap native bindings from the last reflection artifact when present;
-4. build the editor target and export current reflection;
+4. build the editor target, scan source for collision-safe generated type hints,
+   and export the configured classes plus uniquely requested native project,
+   plugin, or Engine classes;
 5. analyze ordinary imported, aliased, or fully qualified generated-API use in
    the managed projects, use Roslyn symbols to reject user-type collisions,
    resolve deterministic overloads, and fold every request into an all-or-nothing
@@ -111,8 +113,8 @@ Apply performs these phases in order:
    ordinary BuildCookRun cannot silently fall back to a generic game that omits
    the source plugin;
 8. synchronize the deployment manifest into deterministic Script Assets;
-9. regenerate the dependency requests, development Contract/report, and all
-   five binding consumers in `Saved` and compare their exact bytes;
+9. regenerate the type hints, dependency requests, development Contract/report,
+   and all five binding consumers in `Saved` and compare their exact bytes;
 10. optionally run the configured UE Automation filter and require its minimum
    successful test count.
 
@@ -131,7 +133,8 @@ powershell -ExecutionPolicy Bypass `
 ```
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
-reflection, dependency requests, the development Contract/report, bindings,
+reflection, source type hints, dependency requests, the development
+Contract/report, bindings,
 native thunks, node catalogs, browser, coverage, or Script Assets.
 That baseline must match the current managed assemblies and compiled chunks. If
 a shared UnifiedScript assembly changed after the last Apply run, run ordinary
@@ -177,6 +180,7 @@ configuration file.
     "requireCompleteNativeCoverage": true,
     "developmentSurface": {
       "enabled": true,
+      "typeHintsOutput": "../Generated/Game.api-type-hints.json",
       "requestsOutput": "../Generated/Game.api-requests.json",
       "contractOutput": "../Generated/Game.development-api-contract.json",
       "reportOutput": "../Generated/Game.development-surface.json",

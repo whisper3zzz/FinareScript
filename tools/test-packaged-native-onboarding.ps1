@@ -258,6 +258,10 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.api-requests.json") `
         -Label 'Source API dependency requests'
+    apiTypeHints = Assert-File `
+        -Path (Join-Path $projectRoot `
+            "Generated\$projectName.api-type-hints.json") `
+        -Label 'Source reflection type hints'
     developmentContract = Assert-File `
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.development-api-contract.json") `
@@ -296,6 +300,9 @@ $surfaceReport = Get-Content `
 $surfaceRequests = Get-Content `
     -LiteralPath $generatedEvidence.apiRequests.path `
     -Raw | ConvertFrom-Json
+$sourceTypeHints = Get-Content `
+    -LiteralPath $generatedEvidence.apiTypeHints.path `
+    -Raw | ConvertFrom-Json
 $surfaceContract = Get-Content `
     -LiteralPath $generatedEvidence.developmentContract.path `
     -Raw | ConvertFrom-Json
@@ -308,22 +315,40 @@ if ($surfaceReport.schemaVersion -ne
         $_.suggestedTypePath -eq '/Script/Engine.Actor' -and
         $_.memberName -eq 'GetActorLocation'
     }).Count -ne 1 -or
+    @($surfaceRequests.requests | Where-Object {
+        $_.suggestedTypePath -eq '/Script/Engine.Pawn' -and
+        $_.memberName -eq 'GetController'
+    }).Count -ne 1 -or
     @($surfaceContract.types | Where-Object {
         $_.path -eq '/Script/Engine.Actor' -and
         'K2_GetActorLocation' -in @($_.members)
+    }).Count -ne 1 -or
+    @($surfaceContract.types | Where-Object {
+        $_.path -eq '/Script/Engine.Pawn' -and
+        'GetController' -in @($_.members)
     }).Count -ne 1) {
-    throw 'Automatic Actor.GetActorLocation development surface acceptance failed.'
+    throw 'Automatic Actor/Pawn development surface acceptance failed.'
+}
+if ($sourceTypeHints.schemaVersion -ne
+        'unifiedscript.unreal-api-source-type-hints/v0.1' -or
+    @($sourceTypeHints.hints | Where-Object {
+        $_.managedTypeName -eq 'Pawn'
+    }).Count -ne 1) {
+    throw 'Managed source did not produce the bounded Pawn reflection hint.'
 }
 $managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path -Raw
 if ($managedBindingText -notmatch 'class Actor' -or
-    $managedBindingText -notmatch 'GetActorLocation') {
-    throw 'Generated managed binding does not contain the source-requested Actor API.'
+    $managedBindingText -notmatch 'GetActorLocation' -or
+    $managedBindingText -notmatch 'class Pawn' -or
+    $managedBindingText -notmatch 'GetController') {
+    throw 'Generated managed binding does not contain the source-requested Actor/Pawn API.'
 }
 $firstScriptText = Get-Content -LiteralPath $generatedEvidence.firstScriptSource.path -Raw
 $generatedNamespacePattern = [regex]::Escape("$assemblyName.Generated")
 if ($firstScriptText -notmatch "using\s+$generatedNamespacePattern\s*;" -or
     $firstScriptText -match 'using\s+UnrealApi\s*=' -or
-    $firstScriptText -notmatch 'new\s+Actor\s*\(') {
+    $firstScriptText -notmatch 'new\s+Actor\s*\(' -or
+    $firstScriptText -notmatch 'new\s+Pawn\s*\(') {
     throw 'First-script source did not exercise the ordinary generated-namespace import.'
 }
 

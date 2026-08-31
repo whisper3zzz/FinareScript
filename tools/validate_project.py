@@ -1102,6 +1102,12 @@ def main() -> int:
         / "UnifiedScript.Cli"
         / "UnrealApiSourceDependencyScanner.cs"
     )
+    source_type_hint_scanner_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Cli"
+        / "UnrealApiSourceTypeHintScanner.cs"
+    )
     managed_naming_path = (
         ROOT
         / "src"
@@ -1131,6 +1137,7 @@ def main() -> int:
     for path in [
         development_surface_source_path,
         source_dependency_scanner_path,
+        source_type_hint_scanner_path,
         managed_naming_path,
         development_surface_test_path,
         onboarding_template_path,
@@ -1141,6 +1148,9 @@ def main() -> int:
         encoding="utf-8"
     )
     source_dependency_scanner = source_dependency_scanner_path.read_text(
+        encoding="utf-8"
+    )
+    source_type_hint_scanner = source_type_hint_scanner_path.read_text(
         encoding="utf-8"
     )
     managed_naming = managed_naming_path.read_text(encoding="utf-8")
@@ -1185,7 +1195,7 @@ def main() -> int:
         in development_surface_test
         and "CliExpandsProjectSourcesWithoutRequiringThemToCompileFirst"
         in development_surface_test
-        and "Automatic Actor.GetActorLocation development surface acceptance failed."
+        and "Automatic Actor/Pawn development surface acceptance failed."
         in packaged_native_onboarding
         and "M13.1B-1 source-use vertical" in roadmap_document,
         "M13.1B source dependency requests, safe overlay, Setup integration, fixtures, or acceptance are incomplete",
@@ -1222,6 +1232,31 @@ def main() -> int:
     )
     checks.append(
         "M13.1B-2 resolves ordinary C# imports and exact overloads without capturing user types"
+    )
+    require(
+        "unifiedscript.unreal-api-source-type-hints/v0.1"
+        in source_type_hint_scanner
+        and "CanUseBareGeneratedName" in source_type_hint_scanner
+        and "IsPotentialStaticTypeReceiver" in source_type_hint_scanner
+        and "SourceTypeHintsAreDeterministicAndRejectCSharpTypeCollisions"
+        in development_surface_test
+        and "ue-reflection-hints" in cli_source
+        and "source-reflection-hints" in onboarding_script
+        and "developmentSurfaceTypeHints" in onboarding_script
+        and "typeHintsOutput" in onboarding_template
+        and "Options.TypeNames" in reflection_exporter
+        and "CandidatesByName" in reflection_exporter
+        and "DiscoveredClassCount" in reflection_exporter
+        and "new Pawn" in first_script_template
+        and "Managed source did not produce the bounded Pawn reflection hint."
+        in packaged_native_onboarding
+        and "unifiedscript.unreal-api-source-type-hints/v0.1"
+        in api_contract_document
+        and "M13.1B-2 bounded native reflection discovery" in roadmap_document,
+        "M13.1B-2 bounded source-driven native reflection discovery is incomplete",
+    )
+    checks.append(
+        "M13.1B-2 discovers bounded native Unreal types before reflection export"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"

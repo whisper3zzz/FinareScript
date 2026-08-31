@@ -298,6 +298,72 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
+    public void SourceTypeHintsAreDeterministicAndRejectCSharpTypeCollisions()
+    {
+        UnrealApiContract contract = CreateContract();
+        CSharpSourceDocument[] sources =
+        [
+            Source(
+                "Gameplay/GlobalUsings.cs",
+                "global using UnifiedScript.Tests.AutoSurface;"),
+            Source(
+                "Gameplay/Discovery.cs",
+                """
+                using System;
+
+                namespace Gameplay;
+
+                public static class Discovery
+                {
+                    public static void Run()
+                    {
+                        Actor actor = new(default!, default!);
+                        _ = actor.GetActorLocation();
+                        _ = MissingPawn.WorldTime(default);
+                        Version referenced = new(1, 0);
+                        _ = referenced.Major;
+                    }
+                }
+                """),
+            Source(
+                "Gameplay/Collision.cs",
+                """
+                namespace Gameplay;
+
+                public sealed class MissingComponent { }
+
+                public static class Collision
+                {
+                    public static MissingComponent Run(MissingComponent value) => value;
+                }
+                """),
+        ];
+        var request = new CSharpCompilationRequest("TypeHints", sources);
+        var scanner = new UnrealApiSourceTypeHintScanner();
+
+        UnrealApiSourceTypeHintSet first = scanner.Scan("TypeHintProject", request, contract);
+        UnrealApiSourceTypeHintSet second = scanner.Scan("TypeHintProject", request, contract);
+
+        Assert.Equal(["Actor", "MissingPawn"], first.Hints
+            .Select(static hint => hint.ManagedTypeName));
+        Assert.Equal(
+            UnrealApiSourceTypeHintJson.Serialize(first),
+            UnrealApiSourceTypeHintJson.Serialize(second));
+        Assert.All(first.Hints.SelectMany(static hint => hint.Locations),
+            static location => Assert.Equal("Gameplay/Discovery.cs", location.SourcePath));
+        UnrealApiSourceTypeHintSet roundTripped = UnrealApiSourceTypeHintJson.Deserialize(
+            UnrealApiSourceTypeHintJson.Serialize(first));
+        Assert.Equal(
+            UnrealApiSourceTypeHintJson.Serialize(first),
+            UnrealApiSourceTypeHintJson.Serialize(roundTripped));
+        Assert.Throws<JsonException>(() => UnrealApiSourceTypeHintJson.Deserialize(
+            UnrealApiSourceTypeHintJson.Serialize(first).Replace(
+                "\"hints\":",
+                "\"unexpected\": true, \"hints\":",
+                StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void ScannerSelectsExactOverloadsFromInvocationArgumentTypes()
     {
         UnrealReflectionManifest reflection = LoadReflection();

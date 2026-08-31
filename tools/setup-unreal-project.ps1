@@ -387,6 +387,36 @@ function Invoke-DevelopmentSurfaceExpansion {
         -FailureMessage 'Automatic Unreal API development-surface expansion failed.'
 }
 
+function Invoke-ReflectionHintScan {
+    param(
+        [Parameter(Mandatory)][string]$DotNet,
+        [Parameter(Mandatory)][string]$CliAssembly,
+        [Parameter(Mandatory)][string]$BaseContract,
+        [Parameter(Mandatory)][string[]]$ManagedProjects,
+        [Parameter(Mandatory)][string]$ManagedConfiguration,
+        [Parameter(Mandatory)][string]$Output,
+        [Parameter(Mandatory)][string]$LogPath
+    )
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
+    $arguments = @($CliAssembly, 'ue-reflection-hints')
+    foreach ($managedProject in $ManagedProjects) {
+        $arguments += @('--project', $managedProject)
+    }
+    $arguments += @(
+        '--base', $BaseContract,
+        '--out', $Output,
+        '--configuration', $ManagedConfiguration,
+        '--dotnet', $DotNet
+    )
+    Invoke-LoggedCommand `
+        -FilePath $DotNet `
+        -Arguments $arguments `
+        -LogPath $LogPath `
+        -FailureCode 'USONB2006' `
+        -FailureMessage 'Managed source reflection-hint scan failed.'
+}
+
 function Assert-GeneratedFileMatches {
     param(
         [Parameter(Mandatory)][string]$Expected,
@@ -584,8 +614,8 @@ try {
             Assert-AllowedProperties `
                 -Value $configJson.bindings.developmentSurface `
                 -Allowed @(
-                    'enabled', 'requestsOutput', 'contractOutput', 'reportOutput',
-                    'failOnOpenDecisions') `
+                    'enabled', 'typeHintsOutput', 'requestsOutput', 'contractOutput',
+                    'reportOutput', 'failOnOpenDecisions') `
                 -Context 'bindings.developmentSurface'
         }
         Assert-AllowedProperties `
@@ -692,6 +722,27 @@ try {
             $resolved.developmentSurfaceRequests = Resolve-FullPath `
                 -Path ([string]$configJson.bindings.developmentSurface.requestsOutput) `
                 -BaseDirectory $configDirectory
+            $resolved.developmentSurfaceTypeHints = if ([string]::IsNullOrWhiteSpace(
+                    $configJson.bindings.developmentSurface.typeHintsOutput)) {
+                $requestFileName = [IO.Path]::GetFileName(
+                    $resolved.developmentSurfaceRequests)
+                $hintFileName = if ($requestFileName.EndsWith(
+                        '.api-requests.json', [StringComparison]::OrdinalIgnoreCase)) {
+                    $requestFileName.Substring(
+                        0,
+                        $requestFileName.Length - '.api-requests.json'.Length) +
+                        '.api-type-hints.json'
+                } else {
+                    $requestFileName + '.type-hints.json'
+                }
+                Join-Path `
+                    (Split-Path -Parent $resolved.developmentSurfaceRequests) `
+                    $hintFileName
+            } else {
+                Resolve-FullPath `
+                    -Path ([string]$configJson.bindings.developmentSurface.typeHintsOutput) `
+                    -BaseDirectory $configDirectory
+            }
             $resolved.developmentSurfaceContract = Resolve-FullPath `
                 -Path ([string]$configJson.bindings.developmentSurface.contractOutput) `
                 -BaseDirectory $configDirectory
@@ -699,6 +750,7 @@ try {
                 -Path ([string]$configJson.bindings.developmentSurface.reportOutput) `
                 -BaseDirectory $configDirectory
         } else {
+            $resolved.developmentSurfaceTypeHints = $null
             $resolved.developmentSurfaceRequests = $null
             $resolved.developmentSurfaceContract = $null
             $resolved.developmentSurfaceReport = $null
@@ -836,6 +888,7 @@ try {
              $resolved.browserOutput,
              $resolved.coverageOutput,
              $resolved.managedStage,
+             $resolved.developmentSurfaceTypeHints,
              $resolved.developmentSurfaceRequests,
              $resolved.developmentSurfaceContract,
              $resolved.developmentSurfaceReport) |
@@ -925,6 +978,7 @@ try {
                  $resolved.coverageOutput)
              if ($resolved.developmentSurfaceEnabled) {
                  $validatePrerequisites += @(
+                     $resolved.developmentSurfaceTypeHints,
                      $resolved.developmentSurfaceRequests,
                      $resolved.developmentSurfaceContract,
                      $resolved.developmentSurfaceReport)
@@ -1023,7 +1077,20 @@ try {
                 -FailureMessage 'Initial Unreal editor build failed.'
         }
 
-         Invoke-OnboardingPhase -Name 'reflection-export' -Action {
+        if ($resolved.developmentSurfaceEnabled) {
+            Invoke-OnboardingPhase -Name 'source-reflection-hints' -Action {
+                Invoke-ReflectionHintScan `
+                    -DotNet $resolved.dotnet `
+                    -CliAssembly $cliAssembly `
+                    -BaseContract $resolved.contract `
+                    -ManagedProjects $resolved.managedProjects `
+                    -ManagedConfiguration $resolved.managedConfiguration `
+                    -Output $resolved.developmentSurfaceTypeHints `
+                    -LogPath (Join-Path $script:RunDirectory 'source-reflection-hints.log')
+            }
+        }
+
+        Invoke-OnboardingPhase -Name 'reflection-export' -Action {
             New-Item -ItemType Directory -Force -Path `
                 (Split-Path -Parent $resolved.reflection) | Out-Null
             $arguments = @(
@@ -1038,6 +1105,23 @@ try {
             )
             if ($resolved.classes.Count -gt 0) {
                 $arguments += "-Classes=$($resolved.classes -join ',')"
+            }
+            if ($resolved.developmentSurfaceEnabled) {
+                $hintDocument = Get-Content `
+                    -LiteralPath $resolved.developmentSurfaceTypeHints `
+                    -Raw | ConvertFrom-Json
+                if ($hintDocument.schemaVersion -ne
+                        'unifiedscript.unreal-api-source-type-hints/v0.1') {
+                    Throw-OnboardingError `
+                        -Code 'USONB2006' `
+                        -Message 'Managed source reflection hints have an unsupported schema.'
+                }
+                $typeNames = @($hintDocument.hints | ForEach-Object {
+                    [string]$_.managedTypeName
+                })
+                if ($typeNames.Count -gt 0) {
+                    $arguments += "-TypeNames=$($typeNames -join ',')"
+                }
             }
             Invoke-LoggedCommand `
                 -FilePath $resolved.editorCmd `
@@ -1220,9 +1304,19 @@ try {
             $surfaceValidationDirectory = Join-Path `
                 $script:RunDirectory `
                 'development-surface-validation'
+            $tempTypeHints = Join-Path $surfaceValidationDirectory 'api-type-hints.json'
             $tempRequests = Join-Path $surfaceValidationDirectory 'api-requests.json'
             $tempContract = Join-Path $surfaceValidationDirectory 'development-contract.json'
             $tempReport = Join-Path $surfaceValidationDirectory 'development-surface.json'
+            Invoke-ReflectionHintScan `
+                -DotNet $resolved.dotnet `
+                -CliAssembly $cliAssembly `
+                -BaseContract $resolved.contract `
+                -ManagedProjects $resolved.managedProjects `
+                -ManagedConfiguration $resolved.managedConfiguration `
+                -Output $tempTypeHints `
+                -LogPath (Join-Path $script:RunDirectory `
+                    'source-reflection-hints-validation.log')
             Invoke-DevelopmentSurfaceExpansion `
                 -DotNet $resolved.dotnet `
                 -CliAssembly $cliAssembly `
@@ -1235,6 +1329,9 @@ try {
                 -ReportOutput $tempReport `
                 -FailOnOpenDecisions $resolved.developmentSurfaceFailOnOpen `
                 -LogPath (Join-Path $script:RunDirectory 'development-surface-validation.log')
+            Assert-GeneratedFileMatches `
+                -Expected $resolved.developmentSurfaceTypeHints `
+                -Actual $tempTypeHints
             Assert-GeneratedFileMatches `
                 -Expected $resolved.developmentSurfaceRequests `
                 -Actual $tempRequests
@@ -1394,6 +1491,7 @@ try {
         developmentSurface = if ($resolved.developmentSurfaceEnabled) {
             [ordered]@{
                 baseContract = $resolved.contract
+                typeHints = $resolved.developmentSurfaceTypeHints
                 requests = $resolved.developmentSurfaceRequests
                 effectiveContract = $resolved.developmentSurfaceContract
                 report = $resolved.developmentSurfaceReport

@@ -123,14 +123,17 @@ Open the project in UE 5.8, then:
 5. confirm `bScriptRunning` is true and `LastScriptError` is empty.
 
 The generated `FirstScript` exposes `StartValue`, a Visual
-`AddClamped(value, delta)` function, and an ordinary source call to
-`Actor.GetActorLocation`. The source uses a normal
+`AddClamped(value, delta)` function, and ordinary source calls to
+`Actor.GetActorLocation` and `Pawn.GetController`. The source uses a normal
 `using Game.UnifiedScript.Generated;` import; an alias or fully qualified name is
-no longer required. During the first Setup run, current Engine reflection
-turns that call into a source dependency request and safe development Contract
-overlay before the managed project needs to compile. The same effective member
-then appears in the generated native thunk, C# wrapper, visual node catalog, API
-browser, and coverage report; the reviewed seed Contract is not hand-edited.
+no longer required. During the first Setup run, a deterministic source type-hint
+artifact requests `Pawn` even though it is absent from the seed reflection
+selection. UE resolves it uniquely, exports that one additional Engine class,
+then turns both calls into source dependency requests and a safe development
+Contract overlay before the managed project needs to compile. The same effective
+members then appear in the generated native thunk, C# wrapper, visual node
+catalog, API browser, and coverage report; the reviewed seed Contract is not
+hand-edited.
 This still contains no fixture gameplay: it is the smallest lifecycle,
 source-to-Unreal API, and C#/Visual round-trip starting point.
 
