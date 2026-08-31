@@ -8,6 +8,7 @@
 #include "Misc/Paths.h"
 #include "ToolMenus.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptBlueprint.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptAssetWorkflowContractTest,
@@ -51,6 +52,38 @@ bool FUnifiedScriptAssetWorkflowContractTest::RunTest(const FString& Parameters)
     TestTrue(
         TEXT("Duplicate points authors to the complete-class operation"),
         Duplicate.GetErrorText().ToString().Contains(TEXT("Duplicate UnifiedScript Class")));
+
+    UUnifiedScriptBlueprint* GeneratedBlueprint =
+        NewObject<UUnifiedScriptBlueprint>(
+            GetTransientPackage(),
+            TEXT("M13GeneratedBlueprintWorkflow"),
+            RF_Transient);
+    const FAssetData BlueprintData(GeneratedBlueprint);
+    const UAssetDefinition_UnifiedScriptBlueprint* BlueprintDefinition =
+        Cast<UAssetDefinition_UnifiedScriptBlueprint>(
+            Registry->GetAssetDefinitionForAsset(BlueprintData));
+    if (!TestNotNull(
+            TEXT("Generated proxies resolve to the UnifiedScript Blueprint definition"),
+            BlueprintDefinition))
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("Blueprint definition owns exactly UUnifiedScriptBlueprint"),
+        BlueprintDefinition->GetAssetClass().Get(),
+        UUnifiedScriptBlueprint::StaticClass());
+    TestFalse(
+        TEXT("Content Browser blocks generated Blueprint rename"),
+        BlueprintDefinition->CanRename(BlueprintData).IsSupported());
+    const FAssetSupportResponse BlueprintDuplicate =
+        BlueprintDefinition->CanDuplicate(BlueprintData);
+    TestFalse(
+        TEXT("Content Browser blocks generated Blueprint duplicate"),
+        BlueprintDuplicate.IsSupported());
+    TestTrue(
+        TEXT("Generated Blueprint duplicate guidance names the complete-class action"),
+        BlueprintDuplicate.GetErrorText().ToString().Contains(
+            TEXT("Duplicate UnifiedScript Class")));
 
     TArray<FAssetData> Assets{AssetData};
     FAssetSourceFilesArgs SourceArgs;

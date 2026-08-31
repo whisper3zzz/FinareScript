@@ -9,6 +9,15 @@
   "CanContainContent": false,
   "IsBetaVersion": true,
   "Installed": false,
+  "Plugins": [
+    {
+      "Name": "EngineAssetDefinitions",
+      "Enabled": true,
+      "TargetAllowList": [
+        "Editor"
+      ]
+    }
+  ],
   "Modules": [
     {
       "Name": "UEUnifiedScriptRuntime",

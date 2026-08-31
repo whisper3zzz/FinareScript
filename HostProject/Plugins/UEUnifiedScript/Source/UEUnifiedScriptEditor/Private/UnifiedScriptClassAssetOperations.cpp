@@ -1060,6 +1060,53 @@ bool ValidateNoExternalAssetReferencers(
     return true;
 }
 
+bool CollectExternalAssetReferencers(
+    const FClassOperationContext& Context,
+    TArray<FName>& OutReferencers,
+    FString& OutError)
+{
+    IAssetRegistry& AssetRegistry =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    const FName InternalPackages[] = {
+        FName(*Context.BlueprintPackagePath),
+        FName(*Context.ScriptAssetPackagePath),
+    };
+    TArray<FName> Referencers;
+    for (const FName Package : InternalPackages)
+    {
+        TArray<FName> PackageReferencers;
+        AssetRegistry.GetReferencers(
+            Package,
+            PackageReferencers,
+            UE::AssetRegistry::EDependencyCategory::Package);
+        for (const FName Referencer : PackageReferencers)
+        {
+            if (Referencer != InternalPackages[0] &&
+                Referencer != InternalPackages[1])
+            {
+                Referencers.AddUnique(Referencer);
+            }
+        }
+    }
+    Referencers.Sort(FNameLexicalLess());
+    for (const FName Referencer : Referencers)
+    {
+        if (const UPackage* LoadedPackage = FindPackage(
+                nullptr,
+                *Referencer.ToString());
+            LoadedPackage != nullptr && LoadedPackage->IsDirty())
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot rename Script Class '%s'; UE referencer '%s' has unsaved changes. Save or revert that package before retrying."),
+                *Context.ManagedTypeName,
+                *Referencer.ToString());
+            return false;
+        }
+    }
+    OutReferencers = MoveTemp(Referencers);
+    return true;
+}
+
 bool BuildFirstPlayRequest(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
@@ -1159,6 +1206,7 @@ bool BuildRecoverySnapshots(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
     const TArray<FFileSnapshot>& ExternalSnapshots,
+    const TArray<FName>& AdditionalPackageNames,
     TArray<FFileSnapshot>& OutSnapshots,
     FString& OutError)
 {
@@ -1168,6 +1216,10 @@ bool BuildRecoverySnapshots(
     AddPackageFileCandidates(Context.ScriptAssetPackagePath, PackagePaths);
     AddPackageFileCandidates(Target.BlueprintPackagePath, PackagePaths);
     AddPackageFileCandidates(Target.ScriptAssetPackagePath, PackagePaths);
+    for (const FName PackageName : AdditionalPackageNames)
+    {
+        AddPackageFileCandidates(PackageName.ToString(), PackagePaths);
+    }
     for (const FString& Path : PackagePaths)
     {
         if (!CaptureSnapshotIfMissing(Path, Snapshots, OutError))
@@ -1177,6 +1229,187 @@ bool BuildRecoverySnapshots(
     }
     OutSnapshots = MoveTemp(Snapshots);
     return true;
+}
+
+bool FixupRedirectorsAndVerify(
+    const TArray<FString>& RedirectorObjectPaths,
+    const TArray<FName>& ExpectedReferencerPackages,
+    const TMap<FSoftObjectPath, FSoftObjectPath>& SoftPathRedirects,
+    TArray<FString>& OutRepairedPackages,
+    FString& OutError)
+{
+    IAssetTools& AssetTools = FAssetToolsModule::GetModule().Get();
+    TArray<UPackage*> ReferencerPackages;
+    TArray<FString> ReferencerFiles;
+    for (const FName PackageName : ExpectedReferencerPackages)
+    {
+        UPackage* Package = LoadPackage(nullptr, *PackageName.ToString(), LOAD_None);
+        if (Package == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot load UE referencer package '%s' for repair."),
+                *PackageName.ToString());
+            return false;
+        }
+        ReferencerPackages.Add(Package);
+    }
+    if (!ReferencerPackages.IsEmpty() && !SoftPathRedirects.IsEmpty())
+    {
+        AssetTools.RenameReferencingSoftObjectPaths(
+            ReferencerPackages,
+            SoftPathRedirects);
+        FSavePackageArgs SaveArguments;
+        SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+        SaveArguments.SaveFlags = SAVE_None;
+        for (UPackage* Package : ReferencerPackages)
+        {
+            const FString Filename = FPackageName::LongPackageNameToFilename(
+                Package->GetName(),
+                FPackageName::GetAssetPackageExtension());
+            if (!UPackage::SavePackage(
+                    Package,
+                    nullptr,
+                    *Filename,
+                    SaveArguments))
+            {
+                OutError = FString::Printf(
+                    TEXT("Cannot save repaired UE referencer package '%s'."),
+                    *Package->GetName());
+                return false;
+            }
+            ReferencerFiles.Add(Filename);
+        }
+    }
+
+    TArray<UObjectRedirector*> Redirectors;
+    TArray<FName> RedirectorPackages;
+    for (const FString& ObjectPath : RedirectorObjectPaths)
+    {
+        RedirectorPackages.AddUnique(FName(*FPackageName::ObjectPathToPackageName(ObjectPath)));
+        if (UObjectRedirector* Redirector = LoadObject<UObjectRedirector>(
+                nullptr,
+                *ObjectPath,
+                nullptr,
+                LOAD_NoWarn | LOAD_Quiet))
+        {
+            Redirectors.AddUnique(Redirector);
+        }
+    }
+
+    if (!Redirectors.IsEmpty())
+    {
+        FScopedAssetToolsMutation Mutation;
+        AssetTools.FixupReferencers(
+            Redirectors,
+            false,
+            ERedirectFixupMode::DeleteFixedUpRedirectors);
+        if (AssetTools.IsFixupReferencersInProgress())
+        {
+            OutError = TEXT("UE redirector fixup did not complete synchronously.");
+            return false;
+        }
+    }
+
+    IAssetRegistry& AssetRegistry =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    if (!ReferencerFiles.IsEmpty())
+    {
+        AssetRegistry.ScanModifiedAssetFiles(ReferencerFiles);
+    }
+    TArray<FString> Failures;
+    for (const FName RedirectorPackage : RedirectorPackages)
+    {
+        const FString Filename = FPackageName::LongPackageNameToFilename(
+            RedirectorPackage.ToString(),
+            FPackageName::GetAssetPackageExtension());
+        if (IFileManager::Get().FileExists(*Filename))
+        {
+            Failures.Add(FString::Printf(
+                TEXT("redirector package remains at '%s'"),
+                *RedirectorPackage.ToString()));
+        }
+        TArray<FName> RemainingReferencers;
+        AssetRegistry.GetReferencers(
+            RedirectorPackage,
+            RemainingReferencers,
+            UE::AssetRegistry::EDependencyCategory::Package);
+        if (!RemainingReferencers.IsEmpty())
+        {
+            TArray<FString> Names;
+            for (const FName Referencer : RemainingReferencers)
+            {
+                Names.Add(Referencer.ToString());
+            }
+            Names.Sort();
+            Failures.Add(FString::Printf(
+                TEXT("'%s' still has referencers: %s"),
+                *RedirectorPackage.ToString(),
+                *FString::Join(Names, TEXT(", "))));
+        }
+    }
+    for (const FName ReferencerPackage : ExpectedReferencerPackages)
+    {
+        TArray<FName> Dependencies;
+        AssetRegistry.GetDependencies(
+            ReferencerPackage,
+            Dependencies,
+            UE::AssetRegistry::EDependencyCategory::Package);
+        for (const FName RedirectorPackage : RedirectorPackages)
+        {
+            if (Dependencies.Contains(RedirectorPackage))
+            {
+                Failures.Add(FString::Printf(
+                    TEXT("referencer '%s' still depends on '%s'"),
+                    *ReferencerPackage.ToString(),
+                    *RedirectorPackage.ToString()));
+            }
+        }
+    }
+    if (!Failures.IsEmpty())
+    {
+        OutError = TEXT("UE reference repair failed: ") +
+            FString::Join(Failures, TEXT("; "));
+        return false;
+    }
+
+    TArray<FString> RepairedPackages;
+    for (const FName Package : ExpectedReferencerPackages)
+    {
+        RepairedPackages.Add(Package.ToString());
+    }
+    RepairedPackages.Sort();
+    OutRepairedPackages = MoveTemp(RepairedPackages);
+    return true;
+}
+
+TMap<FSoftObjectPath, FSoftObjectPath> BuildRenameSoftPathRedirects(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    bool bReverse)
+{
+    const FSoftObjectPath OriginalBlueprint(GetBlueprintAssetPath(Context));
+    const FSoftObjectPath OriginalClass(FString::Printf(
+        TEXT("%s.%s_C"),
+        *Context.BlueprintPackagePath,
+        *Context.OldTypeName));
+    const FSoftObjectPath OriginalScriptAsset(GetScriptAssetObjectPath(Context));
+    const FSoftObjectPath TargetBlueprint(Target.BlueprintAssetPath);
+    const FSoftObjectPath TargetClass(Target.BlueprintClassPath);
+    const FSoftObjectPath TargetScriptAsset(Target.ScriptAssetObjectPath);
+    TMap<FSoftObjectPath, FSoftObjectPath> Redirects;
+    if (bReverse)
+    {
+        Redirects.Add(TargetBlueprint, OriginalBlueprint);
+        Redirects.Add(TargetClass, OriginalClass);
+        Redirects.Add(TargetScriptAsset, OriginalScriptAsset);
+    }
+    else
+    {
+        Redirects.Add(OriginalBlueprint, TargetBlueprint);
+        Redirects.Add(OriginalClass, TargetClass);
+        Redirects.Add(OriginalScriptAsset, TargetScriptAsset);
+    }
+    return Redirects;
 }
 
 const FFileSnapshot* FindSnapshot(
@@ -1637,6 +1870,7 @@ bool RollbackRename(
     FClassOperationContext& Context,
     const FTargetIdentity& Target,
     const TArray<FFileSnapshot>& FileSnapshots,
+    const TArray<FName>& UEReferencerPackages,
     FString& OutError)
 {
     TArray<FString> Failures;
@@ -1665,30 +1899,21 @@ bool RollbackRename(
             Failures.Add(TEXT("cannot restore renamed UE assets"));
         }
     }
-    TArray<UObject*> TargetRedirectors;
     const FString TargetObjectPaths[] = {
         Target.BlueprintAssetPath,
         Target.ScriptAssetObjectPath,
     };
-    for (const FString& ObjectPath : TargetObjectPaths)
+    TArray<FString> RepairedPackages;
+    FString ReferenceRepairError;
+    if (!FixupRedirectorsAndVerify(
+            TArray<FString>(TargetObjectPaths, UE_ARRAY_COUNT(TargetObjectPaths)),
+            UEReferencerPackages,
+            BuildRenameSoftPathRedirects(Context, Target, true),
+            RepairedPackages,
+            ReferenceRepairError))
     {
-        if (UObjectRedirector* Redirector = LoadObject<UObjectRedirector>(
-                nullptr,
-                *ObjectPath,
-                nullptr,
-                LOAD_NoWarn | LOAD_Quiet))
-        {
-            TargetRedirectors.Add(Redirector);
-        }
-    }
-    if (!TargetRedirectors.IsEmpty())
-    {
-        FScopedAssetToolsMutation Mutation;
-        if (ObjectTools::DeleteObjectsUnchecked(TargetRedirectors) !=
-            TargetRedirectors.Num())
-        {
-            Failures.Add(TEXT("cannot remove rollback redirectors"));
-        }
+        Failures.Add(TEXT("cannot repair rollback redirectors: ") +
+            ReferenceRepairError);
     }
     const FString TargetPackages[] = {
         Target.BlueprintPackagePath,
@@ -1794,6 +2019,7 @@ bool FUnifiedScriptClassAssetOperations::Rename(
     FString FirstPlayRequest;
     TArray<FFileSnapshot> FileSnapshots;
     TArray<FFileSnapshot> RecoverySnapshots;
+    TArray<FName> UEReferencerPackages;
     UE::UnifiedScript::ClassOperationJournal::FReceipt Receipt;
     if (!RunManagedReferencePlanner(
             Context,
@@ -1810,7 +2036,11 @@ bool FUnifiedScriptClassAssetOperations::Rename(
     {
         ReferencePaths.Add(Document.Path);
     }
-    if (!BuildDeployment(Context, Target, false, Deployment, Error) ||
+    if (!CollectExternalAssetReferencers(
+            Context,
+            UEReferencerPackages,
+            Error) ||
+        !BuildDeployment(Context, Target, false, Deployment, Error) ||
         !BuildFirstPlayRequest(Context, Target, FirstPlayRequest, Error) ||
         !CaptureExternalSnapshots(
             Context,
@@ -1833,6 +2063,7 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             Context,
             Target,
             FileSnapshots,
+            UEReferencerPackages,
             RecoverySnapshots,
             Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Begin(
@@ -1891,11 +2122,20 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
             Error) ||
+        !SaveClassPackages(Context.Blueprint, ScriptAsset, Error) ||
+        !FixupRedirectorsAndVerify(
+            {
+                GetBlueprintAssetPath(Context),
+                GetScriptAssetObjectPath(Context),
+            },
+            UEReferencerPackages,
+            BuildRenameSoftPathRedirects(Context, Target, false),
+            OutResult.RepairedUEReferencerPackages,
+            Error) ||
         ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
             FailurePoint,
             Error) ||
-        !SaveClassPackages(Context.Blueprint, ScriptAsset, Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Close(Receipt, Error))
     {
         FString RollbackError;
@@ -1903,11 +2143,13 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             Context,
             Target,
             FileSnapshots,
+            UEReferencerPackages,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
             OutResult.bRolledBack,
             RollbackError);
+        OutResult.RepairedUEReferencerPackages.Reset();
         OutResult.Error = Error;
         if (!RollbackError.IsEmpty())
         {
@@ -1973,6 +2215,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             Context,
             Target,
             FileSnapshots,
+            TArray<FName>(),
             RecoverySnapshots,
             Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Begin(
@@ -2204,6 +2447,7 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             Context,
             Tombstone,
             FileSnapshots,
+            TArray<FName>(),
             RecoverySnapshots,
             Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Begin(
@@ -2244,6 +2488,7 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             Context,
             Tombstone,
             FileSnapshots,
+            TArray<FName>(),
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2369,4 +2614,47 @@ bool FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(const UObject* Ass
 bool FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive()
 {
     return UE::UnifiedScript::ClassAssetOperations::Private::GAssetToolsMutationActive;
+}
+
+bool FUnifiedScriptClassAssetOperations::IsOrphanedGeneratedBlueprintDuplicate(
+    const UBlueprint* Blueprint)
+{
+    using namespace UE::UnifiedScript::ClassAssetOperations::Private;
+    if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
+    {
+        return false;
+    }
+    const UUnifiedScriptAsset* ScriptAsset = GetBlueprintScriptAsset(
+        const_cast<UBlueprint*>(Blueprint));
+    if (ScriptAsset == nullptr || !ScriptAsset->ScriptClassId.IsValid() ||
+        ScriptAsset->ScriptClassKind == EUnifiedScriptClassKind::None)
+    {
+        return false;
+    }
+    return ScriptAsset->GeneratedClassPath.ToString() !=
+        Blueprint->GeneratedClass->GetPathName();
+}
+
+bool FUnifiedScriptClassAssetOperations::DeleteOrphanedGeneratedBlueprintDuplicate(
+    UBlueprint* Blueprint,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::ClassAssetOperations::Private;
+    OutError.Reset();
+    if (!IsOrphanedGeneratedBlueprintDuplicate(Blueprint))
+    {
+        OutError = TEXT("The Blueprint is not an orphaned UnifiedScript proxy duplicate.");
+        return false;
+    }
+    TArray<UObject*> Objects{Blueprint};
+    FScopedAssetToolsMutation Mutation;
+    const int32 DeletedCount = ObjectTools::DeleteObjectsUnchecked(Objects);
+    if (DeletedCount != 1)
+    {
+        OutError = FString::Printf(
+            TEXT("UE deleted %d of 1 orphaned UnifiedScript Blueprint proxies."),
+            DeletedCount);
+        return false;
+    }
+    return true;
 }

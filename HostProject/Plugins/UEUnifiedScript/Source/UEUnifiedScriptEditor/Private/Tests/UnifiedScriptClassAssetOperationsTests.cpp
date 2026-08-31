@@ -3,6 +3,8 @@
 #include "UnifiedScriptClassAssetOperations.h"
 #include "UnifiedScriptClassOperationJournal.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
 #include "Engine/Blueprint.h"
 #include "Editor.h"
 #include "HAL/FileManager.h"
@@ -12,6 +14,8 @@
 #include "Misc/Paths.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptAssetDefinition.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassFactory.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptProjectSetup.h"
@@ -273,6 +277,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     const FString DuplicateName = OriginalName + TEXT("_Copy");
     const FString RenameFailureName = OriginalName + TEXT("_RenameRollback");
     const FString DuplicateFailureName = OriginalName + TEXT("_DuplicateRollback");
+    const FString BareDuplicateName = OriginalName + TEXT("_BareBlueprintCopy");
+    const FString DirtyReferencerRenameName =
+        OriginalName + TEXT("_DirtyReferencerRename");
+    const FString ReferencerName = OriginalName + TEXT("_UEReferencer");
     const FString PackageRoot = TEXT("/Game/UnifiedScriptAutomation");
     const FString OriginalPackage = PackageRoot / OriginalName;
     const FString OriginalSidecar = PackageRoot / (TEXT("SA_") + OriginalName);
@@ -286,6 +294,12 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     const FString DuplicateFailurePackage = PackageRoot / DuplicateFailureName;
     const FString DuplicateFailureSidecar =
         PackageRoot / (TEXT("SA_") + DuplicateFailureName);
+    const FString BareDuplicatePackage = PackageRoot / BareDuplicateName;
+    const FString DirtyReferencerRenamePackage =
+        PackageRoot / DirtyReferencerRenameName;
+    const FString DirtyReferencerRenameSidecar =
+        PackageRoot / (TEXT("SA_") + DirtyReferencerRenameName);
+    const FString ReferencerPackage = PackageRoot / ReferencerName;
     Cleanup.PackageNames = {
         OriginalPackage,
         OriginalSidecar,
@@ -297,6 +311,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         RenameFailureSidecar,
         DuplicateFailurePackage,
         DuplicateFailureSidecar,
+        BareDuplicatePackage,
+        DirtyReferencerRenamePackage,
+        DirtyReferencerRenameSidecar,
+        ReferencerPackage,
     };
 
     UPackage* Package = CreatePackage(*OriginalPackage);
@@ -316,6 +334,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     {
         return false;
     }
+    TestTrue(
+        TEXT("Factory creates the product-owned generated Blueprint type"),
+        Blueprint->IsA<UUnifiedScriptBlueprint>());
     Cleanup.Assets.Add(Blueprint);
     Cleanup.Assets.Add(ScriptAsset);
     Cleanup.SourcePaths.Add(ResolveConfiguredPath(ScriptAsset->SourcePath));
@@ -344,6 +365,53 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     {
         return false;
     }
+
+    UPackage* ReferencerOuter = CreatePackage(*ReferencerPackage);
+    UUnifiedScriptAsset* UEReferencer = NewObject<UUnifiedScriptAsset>(
+        ReferencerOuter,
+        *ReferencerName,
+        RF_Public | RF_Standalone | RF_Transactional);
+    UEReferencer->GeneratedClassPath = FSoftClassPath(
+        Blueprint->GeneratedClass->GetPathName());
+    UEReferencer->MarkPackageDirty();
+    FAssetRegistryModule::AssetCreated(UEReferencer);
+    Cleanup.Assets.Add(UEReferencer);
+    const FString ReferencerFilename = FPackageName::LongPackageNameToFilename(
+        ReferencerPackage,
+        FPackageName::GetAssetPackageExtension());
+    if (!TestTrue(
+            TEXT("Saves a real UE package that references the generated class"),
+            UPackage::SavePackage(
+                ReferencerOuter,
+                UEReferencer,
+                *ReferencerFilename,
+                SaveArguments)))
+    {
+        return false;
+    }
+    IAssetRegistry& AssetRegistry =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    AssetRegistry.ScanModifiedAssetFiles({ReferencerFilename});
+    TArray<FName> InitialUEReferencers;
+    AssetRegistry.GetReferencers(
+        FName(*OriginalPackage),
+        InitialUEReferencers,
+        UE::AssetRegistry::EDependencyCategory::Package);
+    TestTrue(
+        TEXT("Asset Registry discovers the saved external UE referencer"),
+        InitialUEReferencers.Contains(FName(*ReferencerPackage)));
+    UEReferencer->MarkPackageDirty();
+    FUnifiedScriptClassAssetOperationResult DirtyReferencerRenameResult;
+    TestFalse(
+        TEXT("Rename rejects an external UE referencer with unsaved changes"),
+        FUnifiedScriptClassAssetOperations::Rename(
+            ScriptAsset,
+            DirtyReferencerRenamePackage,
+            DirtyReferencerRenameResult));
+    TestTrue(
+        TEXT("Dirty referencer rejection gives an actionable save boundary"),
+        DirtyReferencerRenameResult.Error.Contains(TEXT("has unsaved changes")));
+    UEReferencer->GetOutermost()->SetDirtyFlag(false);
 
     const FGuid OriginalClassId = ScriptAsset->ScriptClassId;
     FString OriginalSource;
@@ -380,6 +448,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     ScriptAsset = RenameResult.ScriptAsset;
     Cleanup.SourcePaths.Add(RenameResult.SourcePath);
     TestTrue(TEXT("Rename transaction reports success"), RenameResult.bSucceeded);
+    TestTrue(
+        TEXT("Rename reports the repaired external UE package"),
+        RenameResult.RepairedUEReferencerPackages.Contains(ReferencerPackage));
     TestFalse(
         TEXT("Rename closes its committed recovery receipt"),
         IFileManager::Get().FileExists(*RenameResult.RecoveryReceiptPath));
@@ -392,6 +463,16 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         TEXT("Rename updates generated class identity"),
         ScriptAsset->GeneratedClassPath.ToString(),
         RenamedPackage + TEXT(".") + RenamedName + TEXT("_C"));
+    TestEqual(
+        TEXT("Rename rewrites the UE soft class reference"),
+        UEReferencer->GeneratedClassPath.ToString(),
+        RenamedPackage + TEXT(".") + RenamedName + TEXT("_C"));
+    TestFalse(
+        TEXT("Rename removes the old Blueprint redirector package"),
+        IFileManager::Get().FileExists(*OriginalBlueprintFilename));
+    TestFalse(
+        TEXT("Rename removes the old Script Asset redirector package"),
+        IFileManager::Get().FileExists(*OriginalSidecarFilename));
     TestFalse(
         TEXT("Rename removes the old source file"),
         IFileManager::Get().FileExists(*Cleanup.SourcePaths[0]));
@@ -500,6 +581,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Rename rollback restores generated class identity"),
         ScriptAsset->GeneratedClassPath.ToString(),
+        RenamedPackage + TEXT(".") + RenamedName + TEXT("_C"));
+    TestEqual(
+        TEXT("Rename rollback restores the UE soft class reference"),
+        UEReferencer->GeneratedClassPath.ToString(),
         RenamedPackage + TEXT(".") + RenamedName + TEXT("_C"));
     TestFalse(
         TEXT("Rename rollback removes the failed target source"),
@@ -624,6 +709,34 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestFalse(
         TEXT("Editor guard rejects bare generated Blueprint rename or move"),
         BareRenameArgs.Result.bSuccess);
+
+    UBlueprint* BareDuplicate = Cast<UBlueprint>(
+        FAssetToolsModule::GetModule().Get().DuplicateAsset(
+            BareDuplicateName,
+            PackageRoot,
+            DuplicateResult.Blueprint));
+    if (!TestNotNull(
+            TEXT("Low-level AssetTools can create a Blueprint-only copy before guard cleanup"),
+            BareDuplicate))
+    {
+        return false;
+    }
+    TestTrue(
+        TEXT("Blueprint-only copy is classified as an orphaned Script Class proxy"),
+        FUnifiedScriptClassAssetOperations::IsOrphanedGeneratedBlueprintDuplicate(
+            BareDuplicate));
+    TArray<FString> BareDuplicateCleanupErrors;
+    TestEqual(
+        TEXT("Deferred guard removes exactly one Blueprint-only copy"),
+        UE::UnifiedScript::Editor::ProcessPendingUnifiedScriptBlueprintDuplicateCleanup(
+            BareDuplicateCleanupErrors),
+        1);
+    TestTrue(
+        TEXT("Blueprint-only duplicate cleanup reports no errors"),
+        BareDuplicateCleanupErrors.IsEmpty());
+    TestFalse(
+        TEXT("Blueprint-only duplicate package does not survive cleanup"),
+        FPackageName::DoesPackageExist(BareDuplicatePackage));
 
     const FString ManagedReferenceProbePath = FPaths::Combine(
         FPaths::GetPath(DuplicateResult.SourcePath),

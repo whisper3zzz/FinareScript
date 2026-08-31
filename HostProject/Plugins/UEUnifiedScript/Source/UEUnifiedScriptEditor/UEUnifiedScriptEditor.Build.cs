@@ -17,6 +17,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "ContentBrowser",
             "DesktopPlatform",
             "Engine",
+            "EngineAssetDefinitions",
             "GraphEditor",
             "HTTP",
             "Json",

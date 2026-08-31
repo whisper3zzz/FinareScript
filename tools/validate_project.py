@@ -1738,6 +1738,49 @@ def main() -> int:
     checks.append(
         "M13.2A persists and recovers interrupted Script Class transactions"
     )
+    unified_script_blueprint_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptBlueprint.h"
+    ).read_text(encoding="utf-8")
+    unified_script_factory_source = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptClassFactory.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "UUnifiedScriptBlueprint" in unified_script_blueprint_header
+        and "UUnifiedScriptBlueprint::StaticClass()"
+        in unified_script_factory_source
+        and "UAssetDefinition_UnifiedScriptBlueprint"
+        in script_asset_definition_header
+        and '"EngineAssetDefinitions"' in editor_build_rules
+        and "CollectExternalAssetReferencers"
+        in script_class_operations_source
+        and "AdditionalPackageNames" in script_class_operations_source
+        and "RenameReferencingSoftObjectPaths"
+        in script_class_operations_source
+        and "FixupReferencers" in script_class_operations_source
+        and "RepairedUEReferencerPackages"
+        in script_class_operations_header
+        and "IsOrphanedGeneratedBlueprintDuplicate"
+        in script_class_operations_header
+        and "OnInMemoryAssetCreated" in script_asset_definition_source
+        and "ProcessPendingUnifiedScriptBlueprintDuplicateCleanup"
+        in script_asset_definition_source
+        and "Rename rewrites the UE soft class reference"
+        in script_class_operations_tests
+        and "Rename rollback restores the UE soft class reference"
+        in script_class_operations_tests
+        and "Deferred guard removes exactly one Blueprint-only copy"
+        in script_class_operations_tests
+        and "Content Browser blocks generated Blueprint duplicate"
+        in script_asset_definition_tests
+        and "[x] **M13.2A-2b2c — UE reference and duplicate closure:**"
+        in roadmap_document,
+        "M13.2A-2b2c UE reference repair, redirector cleanup, generated Blueprint identity, or direct-duplicate closure is incomplete",
+    )
+    checks.append(
+        "M13.2A repairs UE references and rejects orphaned Blueprint-only copies"
+    )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"

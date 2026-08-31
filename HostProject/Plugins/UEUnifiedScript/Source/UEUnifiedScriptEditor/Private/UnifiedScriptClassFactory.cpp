@@ -15,6 +15,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UnifiedScriptActor.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptProjectSetup.h"
 #include "UObject/Package.h"
@@ -519,7 +520,7 @@ UUnifiedScriptClassFactory::UUnifiedScriptClassFactory(
     bCreateNew = true;
     bEditAfterNew = true;
     bSkipClassPicker = true;
-    SupportedClass = UBlueprint::StaticClass();
+    SupportedClass = UUnifiedScriptBlueprint::StaticClass();
 }
 
 UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
@@ -698,14 +699,14 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     ParentClass = ScriptClassKind == EUnifiedScriptClassKind::Actor
         ? AUnifiedScriptActor::StaticClass()
         : UUnifiedScriptComponent::StaticClass();
-    UBlueprint* Blueprint = Cast<UBlueprint>(Super::FactoryCreateNew(
-        Class,
+    UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
+        ParentClass,
         InParent,
         Name,
-        Flags,
-        Context,
-        Warn,
-        CallingContext));
+        BlueprintType,
+        UUnifiedScriptBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        CallingContext);
     if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
     {
         FString RollbackError;

@@ -23,6 +23,8 @@ struct FUnifiedScriptClassAssetOperationResult
     FString SourcePath;
     FString ManagedTypeName;
     FString RecoveryReceiptPath;
+    /** UE packages whose references were rewritten during a successful rename. */
+    TArray<FString> RepairedUEReferencerPackages;
     bool bSucceeded = false;
     bool bRolledBack = false;
     UBlueprint* Blueprint = nullptr;
@@ -76,4 +78,12 @@ public:
 
     /** True only while the complete-class transaction invokes AssetTools. */
     static bool IsAssetToolsMutationActive();
+
+    /** Detects a generated Blueprint copy that still points at another class's sidecar. */
+    static bool IsOrphanedGeneratedBlueprintDuplicate(const UBlueprint* Blueprint);
+
+    /** Removes one detected Blueprint-only copy under the complete-class guard. */
+    static bool DeleteOrphanedGeneratedBlueprintDuplicate(
+        UBlueprint* Blueprint,
+        FString& OutError);
 };

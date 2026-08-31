@@ -1,7 +1,9 @@
 #include "UnifiedScriptAssetDefinition.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "ContentBrowserMenuContexts.h"
 #include "ContentBrowserModule.h"
+#include "Containers/Ticker.h"
 #include "Dialogs/DlgPickAssetPath.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
@@ -14,16 +16,64 @@
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptAuthoringSurface.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassAssetOperations.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(UnifiedScriptAssetDefinition)
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptAssetDefinition"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUnifiedScriptAssetDefinition, Log, All);
+
 namespace UE::UnifiedScript::Editor::Private
 {
 FDelegateHandle AssetsCanDeleteHandle;
 FDelegateHandle PreDestructiveAssetActionHandle;
+FDelegateHandle InMemoryAssetCreatedHandle;
+FTSTicker::FDelegateHandle DuplicateCleanupHandle;
+TArray<TWeakObjectPtr<UBlueprint>> PendingBlueprintDuplicates;
+
+bool RunPendingBlueprintDuplicateCleanup(float DeltaTime)
+{
+    DuplicateCleanupHandle.Reset();
+    TArray<FString> Errors;
+    UE::UnifiedScript::Editor::ProcessPendingUnifiedScriptBlueprintDuplicateCleanup(
+        Errors);
+    for (const FString& Error : Errors)
+    {
+        UE_LOG(
+            LogUnifiedScriptAssetDefinition,
+            Error,
+            TEXT("%s"),
+            *Error);
+    }
+    return false;
+}
+
+void GuardGenericBlueprintDuplicate(UObject* Object)
+{
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive())
+    {
+        return;
+    }
+    UBlueprint* Blueprint = Cast<UBlueprint>(Object);
+    if (!FUnifiedScriptClassAssetOperations::IsOrphanedGeneratedBlueprintDuplicate(
+            Blueprint))
+    {
+        return;
+    }
+    PendingBlueprintDuplicates.AddUnique(Blueprint);
+    UE_LOG(
+        LogUnifiedScriptAssetDefinition,
+        Warning,
+        TEXT("Rejected Blueprint-only duplicate '%s'; use Duplicate UnifiedScript Class on the Script Asset."),
+        *Blueprint->GetPathName());
+    if (!DuplicateCleanupHandle.IsValid())
+    {
+        DuplicateCleanupHandle = FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateStatic(&RunPendingBlueprintDuplicateCleanup));
+    }
+}
 
 bool ContainsCompleteScriptClassAsset(const TArray<UObject*>& Objects)
 {
@@ -230,6 +280,40 @@ FText UAssetDefinition_UnifiedScriptAsset::GetAssetDisplayName() const
     return LOCTEXT("DisplayName", "UnifiedScript Script Asset");
 }
 
+FText UAssetDefinition_UnifiedScriptBlueprint::GetAssetDisplayName() const
+{
+    return LOCTEXT("BlueprintDisplayName", "UnifiedScript Generated Blueprint");
+}
+
+TSoftClassPtr<UObject> UAssetDefinition_UnifiedScriptBlueprint::GetAssetClass() const
+{
+    return UUnifiedScriptBlueprint::StaticClass();
+}
+
+FAssetSupportResponse UAssetDefinition_UnifiedScriptBlueprint::CanRename(
+    const FAssetData& InAsset) const
+{
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive())
+    {
+        return FAssetSupportResponse::Supported();
+    }
+    return FAssetSupportResponse::Error(LOCTEXT(
+        "BlueprintRenameBlocked",
+        "Use Rename UnifiedScript Class on the Script Asset; renaming only the generated Blueprint would break the complete class identity."));
+}
+
+FAssetSupportResponse UAssetDefinition_UnifiedScriptBlueprint::CanDuplicate(
+    const FAssetData& InAsset) const
+{
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive())
+    {
+        return FAssetSupportResponse::Supported();
+    }
+    return FAssetSupportResponse::Error(LOCTEXT(
+        "BlueprintDuplicateBlocked",
+        "Use Duplicate UnifiedScript Class on the Script Asset; duplicating only the generated Blueprint would omit its source, sidecar, deployment, and semantic identity."));
+}
+
 FLinearColor UAssetDefinition_UnifiedScriptAsset::GetAssetColor() const
 {
     return FLinearColor(FColor(39, 168, 206));
@@ -409,6 +493,13 @@ void UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetOperationGuards()
             FEditorDelegates::OnPreDestructiveAssetActionWithArgs.AddStatic(
                 &GuardBareDestructiveAction);
     }
+    if (!InMemoryAssetCreatedHandle.IsValid())
+    {
+        IAssetRegistry& AssetRegistry =
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+        InMemoryAssetCreatedHandle = AssetRegistry.OnInMemoryAssetCreated().AddStatic(
+            &GuardGenericBlueprintDuplicate);
+    }
 }
 
 void UE::UnifiedScript::Editor::UnregisterUnifiedScriptAssetOperationGuards()
@@ -425,6 +516,59 @@ void UE::UnifiedScript::Editor::UnregisterUnifiedScriptAssetOperationGuards()
             PreDestructiveAssetActionHandle);
         PreDestructiveAssetActionHandle.Reset();
     }
+    if (InMemoryAssetCreatedHandle.IsValid())
+    {
+        if (FAssetRegistryModule* AssetRegistryModule =
+                FModuleManager::GetModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry")))
+        {
+            AssetRegistryModule->Get().OnInMemoryAssetCreated().Remove(
+                InMemoryAssetCreatedHandle);
+        }
+        InMemoryAssetCreatedHandle.Reset();
+    }
+    if (DuplicateCleanupHandle.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(DuplicateCleanupHandle);
+        DuplicateCleanupHandle.Reset();
+    }
+    PendingBlueprintDuplicates.Reset();
+}
+
+int32 UE::UnifiedScript::Editor::ProcessPendingUnifiedScriptBlueprintDuplicateCleanup(
+    TArray<FString>& OutErrors)
+{
+    using namespace UE::UnifiedScript::Editor::Private;
+    OutErrors.Reset();
+    TArray<TWeakObjectPtr<UBlueprint>> Pending =
+        MoveTemp(PendingBlueprintDuplicates);
+    PendingBlueprintDuplicates.Reset();
+    int32 DeletedCount = 0;
+    for (const TWeakObjectPtr<UBlueprint>& WeakBlueprint : Pending)
+    {
+        UBlueprint* Blueprint = WeakBlueprint.Get();
+        if (Blueprint == nullptr ||
+            !FUnifiedScriptClassAssetOperations::IsOrphanedGeneratedBlueprintDuplicate(
+                Blueprint))
+        {
+            continue;
+        }
+        const FString AssetPath = Blueprint->GetPathName();
+        FString Error;
+        if (FUnifiedScriptClassAssetOperations::DeleteOrphanedGeneratedBlueprintDuplicate(
+                Blueprint,
+                Error))
+        {
+            ++DeletedCount;
+        }
+        else
+        {
+            OutErrors.Add(FString::Printf(
+                TEXT("Cannot remove rejected Blueprint-only duplicate '%s': %s"),
+                *AssetPath,
+                *Error));
+        }
+    }
+    return DeletedCount;
 }
 
 #undef LOCTEXT_NAMESPACE

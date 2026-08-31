@@ -16,6 +16,7 @@
 #include "UnifiedScriptClassFactory.h"
 #include "UnifiedScriptClassAssetOperations.h"
 #include "UnifiedScriptAssetDefinition.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptEditorDiagnostics.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SUnifiedScriptAuthoringSurface.h"
@@ -302,7 +303,7 @@ private:
     {
         TFactory* Factory = NewObject<TFactory>(GetTransientPackage());
         UObject* CreatedAsset = FAssetToolsModule::GetModule().Get().CreateAssetWithDialog(
-            UBlueprint::StaticClass(),
+            UUnifiedScriptBlueprint::StaticClass(),
             Factory,
             TEXT("CreateUnifiedScriptClass"));
         if (CreatedAsset != nullptr)
