@@ -196,6 +196,15 @@ for Apply, Validate, UE Automation, Editor/Game native builds, and no-change
 Repair before ordinary Win64 BuildCookRun. Acceptance requires the executable,
 managed gameplay DLL, compiled chunk, `UnifiedScript.Core` and
 `UnifiedScript.Unreal`, `hostfxr`, and cooked Script Asset; Puerts and
-project-authored JavaScript payloads must be absent. The final rollback must
-restore the original `.uproject` hash and remove the four generated host source
-files plus the installed transactional product surface.
+project-authored JavaScript payloads must be absent.
+
+M13.1C-1d extends that gate through actual packaged Script Class execution. The
+fresh SDK consumer creates one Actor and one ActorComponent class, cooks both
+Blueprint proxies and exact Script Asset sidecars, launches the archived EXE,
+loads the exact generated class paths from the package, and proves managed
+`BeginPlay`/`Tick`/`EndPlay`, compiled-chunk use, two simultaneous World-owned
+instances, and leak-free teardown. A post-run ValidateOnly pass must preserve all
+generated fingerprints. Doctor and a zero-change project-local Repair run before
+rollback; rollback must restore the original `.uproject`, `DefaultEngine.ini`,
+and an independent user-owned sentinel while removing the four generated host
+source files plus the installed transactional product surface.

@@ -7,7 +7,9 @@ param(
 
     [string]$OutputDirectory,
 
-    [switch]$SkipCook
+    [switch]$SkipCook,
+
+    [int]$SmokeTimeoutSeconds = 90
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,7 @@ $ProgressPreference = 'SilentlyContinue'
 $startedAt = [DateTime]::UtcNow
 $projectPath = [IO.Path]::GetFullPath($Project)
 $projectRoot = Split-Path -Parent $projectPath
+$projectName = [IO.Path]::GetFileNameWithoutExtension($projectPath)
 $enginePath = [IO.Path]::GetFullPath($EngineRoot)
 $editorCmd = Join-Path $enginePath 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
@@ -269,10 +272,13 @@ $createProcessId = 0
 $reloadProcessId = 0
 $applyReportPath = Join-Path $outputRoot 'onboarding-apply.json'
 $validateReportPath = Join-Path $outputRoot 'onboarding-validate.json'
+$postSmokeValidateReportPath = Join-Path $outputRoot `
+    'onboarding-post-smoke-validate.json'
 $cleanupReportPath = Join-Path $outputRoot 'onboarding-cleanup.json'
 $packageArchive = Join-Path $outputRoot 'package'
 $cookedAssets = @()
 $firstPlayResult = $null
+$packagedSmoke = [ordered]@{ skipped = [bool]$SkipCook }
 
 try {
     Remove-FixtureFiles -Paths $receiptFiles
@@ -404,10 +410,127 @@ try {
             }
             $cookedAssets += $cooked.FullName
         }
+
+        $packageRoot = Join-Path $packageArchive 'Windows'
+        $packagedExecutable = Join-Path $packageRoot "$projectName.exe"
+        if (-not (Test-Path -LiteralPath $packagedExecutable -PathType Leaf)) {
+            throw "Packaged Script Class executable is missing: $packagedExecutable"
+        }
+        $actorClassPath =
+            '/Game/UnifiedScriptAutomation/M13C0PersistentActor.M13C0PersistentActor_C'
+        $componentClassPath =
+            '/Game/UnifiedScriptAutomation/M13C0PersistentComponent.M13C0PersistentComponent_C'
+        $smokeResultPath = Join-Path $outputRoot 'packaged-script-class-smoke.txt'
+        $smokeLogPath = Join-Path $outputRoot 'packaged-script-class-smoke.log'
+        $previousDotNetRoot = $env:DOTNET_ROOT
+        $previousUnifiedScriptDotNetRoot = $env:UNIFIEDSCRIPT_DOTNET_ROOT
+        try {
+            $env:DOTNET_ROOT = Join-Path $outputRoot `
+                'intentionally-missing-dotnet-root'
+            $env:UNIFIEDSCRIPT_DOTNET_ROOT = Join-Path $outputRoot `
+                'intentionally-missing-unifiedscript-dotnet-root'
+            $smokeProcess = Start-Process `
+                -FilePath $packagedExecutable `
+                -WorkingDirectory (Split-Path -Parent $packagedExecutable) `
+                -ArgumentList @(
+                    '-UnifiedScriptScriptClassSmoke',
+                    "-UnifiedScriptActorClass=$actorClassPath",
+                    "-UnifiedScriptComponentClass=$componentClassPath",
+                    "-UnifiedScriptScriptClassSmokeResult=`"$smokeResultPath`"",
+                    '-unattended',
+                    '-nullrhi',
+                    '-nosplash',
+                    "-abslog=`"$smokeLogPath`"",
+                    '-log') `
+                -WindowStyle Hidden `
+                -PassThru
+            if (-not $smokeProcess.WaitForExit($SmokeTimeoutSeconds * 1000)) {
+                Stop-Process -Id $smokeProcess.Id
+                $smokeProcess.WaitForExit()
+                throw "Packaged Script Class smoke timed out after $SmokeTimeoutSeconds seconds."
+            }
+        } finally {
+            $env:DOTNET_ROOT = $previousDotNetRoot
+            $env:UNIFIEDSCRIPT_DOTNET_ROOT = $previousUnifiedScriptDotNetRoot
+        }
+        if ($smokeProcess.ExitCode -ne 0) {
+            throw "Packaged Script Class smoke exited with code $($smokeProcess.ExitCode). Log=$smokeLogPath"
+        }
+        if (-not (Test-Path -LiteralPath $smokeResultPath -PathType Leaf)) {
+            throw "Packaged Script Class smoke did not write its result: $smokeResultPath"
+        }
+        $smokeText = Get-Content -LiteralPath $smokeResultPath -Raw
+        $smokeWorlds = [regex]::Match(
+            $smokeText,
+            'managedWorldCountBefore=(\d+); managedWorldCountAfter=(\d+)')
+        if (($smokeText -notmatch '^PASS\r?\n') -or
+            $smokeText -notmatch 'actorStarted=true' -or
+            $smokeText -notmatch 'componentStarted=true' -or
+            $smokeText -notmatch 'actorTicked=true' -or
+            $smokeText -notmatch 'componentTicked=true' -or
+            $smokeText -notmatch 'managedScriptCount=2' -or
+            $smokeText -notmatch 'lifecycleClaimCount=2' -or
+            $smokeText -notmatch 'finalManagedScriptCount=0' -or
+            $smokeText -notmatch 'finalLifecycleClaimCount=0' -or
+            $smokeText -notmatch 'actorProgram=[^;\r\n]+\.uschunk' -or
+            $smokeText -notmatch 'componentProgram=[^;\r\n]+\.uschunk' -or
+            $smokeText -notmatch
+                'hostfxr=.*UEUnifiedScript[/\\]Binaries[/\\]ThirdParty[/\\]DotNet[/\\]10\.0' -or
+            -not $smokeWorlds.Success -or
+            $smokeWorlds.Groups[1].Value -ne $smokeWorlds.Groups[2].Value) {
+            throw "Packaged Script Class smoke result is incomplete: $smokeText"
+        }
+        $packagedSmoke = [ordered]@{
+            skipped = $false
+            status = 'passed'
+            executable = $packagedExecutable
+            executableSha256 = (Get-FileHash `
+                -LiteralPath $packagedExecutable `
+                -Algorithm SHA256).Hash.ToLowerInvariant()
+            actorClass = $actorClassPath
+            componentClass = $componentClassPath
+            actorLifecycle = 'BeginPlay/Tick/EndPlay passed'
+            componentLifecycle = 'BeginPlay/Tick/EndPlay passed'
+            managedScriptsAtPeak = 2
+            lifecycleClaimsAtPeak = 2
+            managedWorldCountBefore = [int]$smokeWorlds.Groups[1].Value
+            managedWorldCountAfter = [int]$smokeWorlds.Groups[2].Value
+            compiledChunks = $true
+            pluginLocalRuntime = $true
+            poisonedExternalDotNetRoots = $true
+            result = $smokeResultPath
+            resultSha256 = (Get-FileHash `
+                -LiteralPath $smokeResultPath `
+                -Algorithm SHA256).Hash.ToLowerInvariant()
+            log = $smokeLogPath
+            exitCode = $smokeProcess.ExitCode
+        }
+
+        Invoke-LoggedCommand `
+            -FilePath 'powershell.exe' `
+            -Arguments @(
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', $setupScript,
+                '-Project', $projectPath,
+                '-EngineRoot', $enginePath,
+                '-ValidateOnly',
+                '-Report', $postSmokeValidateReportPath) `
+            -LogPath (Join-Path $outputRoot `
+                'onboarding-post-smoke-validate.log') `
+            -FailureMessage `
+                'Script Class post-smoke no-change validation failed.'
+        $postSmokeValidateReport = Get-Content `
+            -LiteralPath $postSmokeValidateReportPath -Raw | ConvertFrom-Json
+        if ($postSmokeValidateReport.status -ne 'passed' -or
+            $postSmokeValidateReport.mode -ne 'validateOnly') {
+            throw "Script Class post-smoke ValidateOnly report did not pass: $postSmokeValidateReportPath"
+        }
+        Assert-FingerprintsUnchanged -Before $fingerprints
     }
 
     $report = [ordered]@{
-        schemaVersion = 'unifiedscript.script-class-golden-path/v0.1'
+        schemaVersion = 'unifiedscript.script-class-golden-path/v0.2'
         status = 'passed'
         project = $projectPath
         engineRoot = $enginePath
@@ -416,7 +539,11 @@ try {
         onboarding = [ordered]@{
             applyReport = $applyReportPath
             validateReport = $validateReportPath
+            postSmokeValidateReport = if ($SkipCook) { $null } else {
+                $postSmokeValidateReportPath
+            }
             deterministicOutputs = $fingerprints.Count
+            postSmokeGeneratedDiff = if ($SkipCook) { 'not-run' } else { 'none' }
         }
         lifecycle = [ordered]@{
             actor = 'BeginPlay/Tick/EndPlay passed'
@@ -438,6 +565,7 @@ try {
             }
             cookedAssets = $cookedAssets
         }
+        packagedSmoke = $packagedSmoke
         durationMs = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
     }
     [IO.File]::WriteAllText(

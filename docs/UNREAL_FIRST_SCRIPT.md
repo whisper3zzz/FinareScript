@@ -187,9 +187,26 @@ The plugin stages all files under `Binaries/Managed`, the matching UE-bundled
 CoreCLR runtime, the generated Script Asset, and the project native thunk table.
 Launch the archived executable and inspect the same actor behavior. No SDK or
 UnifiedScript repository path is consulted at runtime. The clean Blueprint-only
-acceptance runs this BuildCookRun path and checks the executable, managed DLLs,
-compiled chunk, CoreCLR host, cooked Script Asset, and absence of Puerts or
-project-authored JavaScript payloads.
+acceptance also invokes the command-line-only smoke hook carried by its generated
+native host. It passes the exact generated Actor and ActorComponent class paths,
+loads both classes from the packaged asset store, and requires both to complete
+`BeginPlay`, `Tick`, and `EndPlay` from the compiled chunk before the process can
+exit successfully:
+
+```powershell
+& $packagedExe `
+  -UnifiedScriptScriptClassSmoke `
+  '-UnifiedScriptActorClass=/Game/MyScripts/MyActor.MyActor_C' `
+  '-UnifiedScriptComponentClass=/Game/MyScripts/MyComponent.MyComponent_C' `
+  "-UnifiedScriptScriptClassSmokeResult=$resultPath" `
+  -unattended -nullrhi -nosplash
+```
+
+The smoke additionally requires two live managed instances and lifecycle claims,
+compiled-chunk execution, the plugin-local CoreCLR runtime, and zero retained
+instances, claims, or Worlds after teardown. The normal player launch does not
+activate this hook. Existing native projects can use their own equivalent game
+smoke; Blueprint-only projects receive the generic hook with the generated host.
 
 ## Template inventory
 

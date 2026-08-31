@@ -301,7 +301,7 @@ Automation fixture. The BlockBreaker UnifiedScript project carries the same
 schema for its nine-type, 40-member gameplay contract. Both configurations pass
 Apply and a following deterministic validation against UE 5.8.1.
 
-The M13.1A-2 clean Blueprint-only acceptance additionally proves packaged-SDK
+The clean Blueprint-only acceptance additionally proves packaged-SDK
 Adopt, project-local Apply/Validate, Editor and Game builds, Script Asset sync,
 Automation, BuildCookRun, no-change Repair, Doctor, and exact adoption rollback.
 The archived Win64 product contains the managed gameplay assembly, compiled
@@ -309,3 +309,13 @@ chunk, UnifiedScript runtime assemblies, UE-bundled CoreCLR host, and cooked
 Script Asset with no Puerts or project-authored JavaScript payload. Adoption
 rollback restores its owned source/configuration surface; normal Unreal-derived
 `Binaries`, `Intermediate`, and `Saved` outputs remain ordinary build artifacts.
+
+With Script Class first Play enabled, the same fresh consumer creates exact Actor
+and ActorComponent proxies, runs them in a second Editor process, cooks their four
+asset packages, and then launches the archived executable. The generated native
+host's opt-in smoke accepts exact class paths and requires both classes to load
+from the package, execute managed `BeginPlay`/`Tick`/`EndPlay` from `.uschunk`,
+share one World host, and release every managed instance, lifecycle claim, and
+World context. A post-smoke ValidateOnly run must produce no fingerprint change.
+Final rollback separately hashes the original project descriptor, engine config,
+and a user-owned sentinel so product cleanup cannot be mistaken for preservation.

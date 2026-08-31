@@ -33,9 +33,13 @@ $projectRoot = Join-Path $outputRoot 'consumer'
 $project = Join-Path $projectRoot "$projectName.uproject"
 $packageArchive = Join-Path $outputRoot 'package'
 $reportPath = Join-Path $outputRoot 'packaged-native-onboarding-report.json'
+$baselinePath = Join-Path $outputRoot 'blueprint-only-baseline.json'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
 $scriptClassGoldenPath = Join-Path $repoRoot 'tools\test-script-class-golden-path.ps1'
 $originalProjectSha256 = $null
+$originalDefaultEngineSha256 = $null
+$originalUserSentinelSha256 = $null
+$userSentinelPath = Join-Path $projectRoot 'Content\UserOwned\keep.txt'
 $scriptClassFirstPlayReport = $null
 
 function Write-Utf8 {
@@ -168,10 +172,42 @@ if (-not $Resume) {
 [/Script/EngineSettings.GameMapsSettings]
 EditorStartupMap=/Engine/Maps/Entry
 GameDefaultMap=/Engine/Maps/Entry
+
+[/Script/AndroidFileServerEditor.AndroidFileServerRuntimeSettings]
+bEnablePlugin=False
+bAllowNetworkConnection=False
+SecurityToken=00000000000000000000000000000000
+bIncludeInShipping=False
+bAllowExternalStartInShipping=False
+bCompileAFSProject=False
+bUseCompression=False
+bLogFiles=False
+bReportStats=False
+ConnectionType=USBOnly
+bUseManualIPAddress=False
+ManualIPAddress=
 "@
+    Write-Utf8 `
+        -Path $userSentinelPath `
+        -Text "user-owned acceptance sentinel`n"
     $originalProjectSha256 = (Get-FileHash `
         -LiteralPath $project `
         -Algorithm SHA256).Hash.ToLowerInvariant()
+    $originalDefaultEngineSha256 = (Get-FileHash `
+        -LiteralPath (Join-Path $projectRoot 'Config\DefaultEngine.ini') `
+        -Algorithm SHA256).Hash.ToLowerInvariant()
+    $originalUserSentinelSha256 = (Get-FileHash `
+        -LiteralPath $userSentinelPath `
+        -Algorithm SHA256).Hash.ToLowerInvariant()
+    $baselineDocument = [ordered]@{
+        schemaVersion = 'unifiedscript.blueprint-only-baseline/v0.1'
+        projectSha256 = $originalProjectSha256
+        defaultEngineSha256 = $originalDefaultEngineSha256
+        userSentinelSha256 = $originalUserSentinelSha256
+    }
+    Write-Utf8 `
+        -Path $baselinePath `
+        -Text (($baselineDocument | ConvertTo-Json -Depth 4) + "`n")
     Invoke-LoggedCommand `
         -FilePath $sdkCli `
         -Arguments @(
@@ -182,19 +218,17 @@ GameDefaultMap=/Engine/Maps/Entry
         -LogPath (Join-Path $outputRoot 'adoption.log') `
         -FailureMessage 'Packaged project adoption failed.'
 }
-if ([string]::IsNullOrWhiteSpace($originalProjectSha256)) {
-    $transaction = Get-Content `
-        -LiteralPath (Join-Path $projectRoot `
-            'Saved\UnifiedScript\Adoption\current.json') `
-        -Raw | ConvertFrom-Json
-    $transactionPath = Join-Path $projectRoot (
-        "Saved\UnifiedScript\Adoption\transactions\$($transaction.transactionId)\transaction.json")
-    $transactionDocument = Get-Content -LiteralPath $transactionPath -Raw |
-        ConvertFrom-Json
-    $projectEntry = $transactionDocument.files |
-        Where-Object { $_.kind -eq 'project-merge' } |
-        Select-Object -First 1
-    $originalProjectSha256 = [string]$projectEntry.previousSha256
+if ($Resume) {
+    if (-not (Test-Path -LiteralPath $baselinePath -PathType Leaf)) {
+        throw "Native onboarding baseline is missing and cannot be resumed: $baselinePath"
+    }
+    $baseline = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+    if ($baseline.schemaVersion -ne 'unifiedscript.blueprint-only-baseline/v0.1') {
+        throw "Native onboarding baseline schema is unsupported: $baselinePath"
+    }
+    $originalProjectSha256 = [string]$baseline.projectSha256
+    $originalDefaultEngineSha256 = [string]$baseline.defaultEngineSha256
+    $originalUserSentinelSha256 = [string]$baseline.userSentinelSha256
 }
 
 $projectTools = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
@@ -391,11 +425,17 @@ if ($IncludeScriptClassFirstPlay) {
         'script-class-golden-path-report.json'
     $scriptClassFirstPlayReport = Get-Content `
         -LiteralPath $scriptClassReportPath -Raw | ConvertFrom-Json
-    if ($scriptClassFirstPlayReport.status -ne 'passed' -or
+    if ($scriptClassFirstPlayReport.schemaVersion -ne
+            'unifiedscript.script-class-golden-path/v0.2' -or
+        $scriptClassFirstPlayReport.status -ne 'passed' -or
         $scriptClassFirstPlayReport.firstPlay.status -ne 'ready' -or
         [bool]$scriptClassFirstPlayReport.cook.skipped -or
-        @($scriptClassFirstPlayReport.cook.cookedAssets).Count -ne 4) {
-        throw "Packaged Script Class report did not prove first Play and Cook: $scriptClassReportPath"
+        @($scriptClassFirstPlayReport.cook.cookedAssets).Count -ne 4 -or
+        $scriptClassFirstPlayReport.packagedSmoke.status -ne 'passed' -or
+        [int]$scriptClassFirstPlayReport.packagedSmoke.managedScriptsAtPeak -ne 2 -or
+        [int]$scriptClassFirstPlayReport.packagedSmoke.lifecycleClaimsAtPeak -ne 2 -or
+        $scriptClassFirstPlayReport.onboarding.postSmokeGeneratedDiff -ne 'none') {
+        throw "Packaged Script Class report did not prove first Play, Cook, packaged execution, and no-change rerun: $scriptClassReportPath"
     }
 }
 
@@ -546,16 +586,36 @@ Invoke-LoggedCommand `
 $restoredProjectSha256 = (Get-FileHash `
     -LiteralPath $project `
     -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($restoredProjectSha256 -ne $originalProjectSha256 -or
-    (Test-Path -LiteralPath (Join-Path $projectRoot `
-        'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin')) -or
-    (Test-Path -LiteralPath (Join-Path $projectRoot `
-        'Plugins\UEUnifiedScript\Source')) -or
-    (Test-Path -LiteralPath (Join-Path $projectRoot `
-        'Plugins\UEUnifiedScript\Tools')) -or
-    (Test-Path -LiteralPath (Join-Path $projectRoot "Source\$projectName.Target.cs")) -or
-    (Test-Path -LiteralPath (Join-Path $projectRoot "Source\$projectName"))) {
-    throw 'Rollback did not restore the original Blueprint-only project surface.'
+$restoredDefaultEngineSha256 = (Get-FileHash `
+    -LiteralPath (Join-Path $projectRoot 'Config\DefaultEngine.ini') `
+    -Algorithm SHA256).Hash.ToLowerInvariant()
+$restoredUserSentinelSha256 = (Get-FileHash `
+    -LiteralPath $userSentinelPath `
+    -Algorithm SHA256).Hash.ToLowerInvariant()
+$rollbackViolations = @()
+if ($restoredProjectSha256 -ne $originalProjectSha256) {
+    $rollbackViolations += 'project-hash'
+}
+if ($restoredDefaultEngineSha256 -ne $originalDefaultEngineSha256) {
+    $rollbackViolations += 'default-engine-hash'
+}
+if ($restoredUserSentinelSha256 -ne $originalUserSentinelSha256) {
+    $rollbackViolations += 'user-sentinel-hash'
+}
+foreach ($unexpectedPath in @(
+        'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
+        'Plugins\UEUnifiedScript\Source',
+        'Plugins\UEUnifiedScript\Tools',
+        "Source\$projectName.Target.cs",
+        "Source\$projectName")) {
+    if (Test-Path -LiteralPath (Join-Path $projectRoot $unexpectedPath)) {
+        $rollbackViolations += $unexpectedPath
+    }
+}
+if ($rollbackViolations.Count -ne 0) {
+    throw (
+        'Rollback did not restore the original Blueprint-only project surface: ' +
+        ($rollbackViolations -join ', '))
 }
 
 $report = [ordered]@{
@@ -598,6 +658,9 @@ $report = [ordered]@{
         nativeHostFiles = $nativeHostRepair.Count
         rollback = 'passed'
         restoredProjectSha256 = $restoredProjectSha256
+        restoredDefaultEngineSha256 = $restoredDefaultEngineSha256
+        restoredUserSentinelSha256 = $restoredUserSentinelSha256
+        userOwnedFilesPreserved = $true
     }
     durationMs = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 }

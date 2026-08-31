@@ -1385,7 +1385,7 @@ def main() -> int:
         and "BuildCookRun" in script_class_golden_path
         and "SA_M13C0PersistentActor" in script_class_golden_path
         and "SA_M13C0PersistentComponent" in script_class_golden_path
-        and "Current tranche: **M13.1C-1d" in roadmap_document
+        and "Current tranche: **M13.1C-1e" in roadmap_document
         and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
         and "require no handwritten facade | Complete |" in roadmap_document,
         "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
@@ -1500,11 +1500,43 @@ def main() -> int:
         and "UnifiedScript Diagnostics" in authoring_diagnostics_document
         and "Export Support Bundle" in diagnostics_bundle_document
         and "M13.1C-1c — diagnostics" in roadmap_document
-        and "Current tranche: **M13.1C-1d" in roadmap_document,
+        and "Current tranche: **M13.1C-1e" in roadmap_document,
         "M13.1C-1c unified UE diagnostics, navigation, recovery guidance, or support bundle is incomplete",
     )
     checks.append(
         "M13.1C-1c unifies UE diagnostics, navigation, recovery, and support bundles"
+    )
+    require(
+        "UnifiedScriptScriptClassSmoke" in native_host_source_template
+        and "LoadClass<AUnifiedScriptActor>" in native_host_source_template
+        and "LoadClass<UUnifiedScriptComponent>" in native_host_source_template
+        and "ValidateGeneratedClassIdentity" in native_host_source_template
+        and "GetManagedScriptCount" in native_host_source_template
+        and "GetGameplayLifecycleClaimCount" in native_host_source_template
+        and "GetHostFxrPath" in native_host_source_template
+        and "RequestExitWithStatus" in native_host_source_template
+        and "unifiedscript.script-class-golden-path/v0.2"
+        in script_class_golden_path
+        and "packaged-script-class-smoke" in script_class_golden_path
+        and "actorStarted=true" in script_class_golden_path
+        and "componentStarted=true" in script_class_golden_path
+        and "postSmokeGeneratedDiff" in script_class_golden_path
+        and "Assert-FingerprintsUnchanged" in script_class_golden_path
+        and "packagedSmoke.status" in packaged_native_onboarding
+        and "userOwnedFilesPreserved" in packaged_native_onboarding
+        and "restoredDefaultEngineSha256" in packaged_native_onboarding
+        and "restoredUserSentinelSha256" in packaged_native_onboarding
+        and "unifiedscript.blueprint-only-baseline/v0.1"
+        in packaged_native_onboarding
+        and "-UnifiedScriptScriptClassSmoke" in first_script_guide
+        and "M13.1C-1d extends that gate" in sdk_distribution
+        and "A post-smoke ValidateOnly run" in unreal_onboarding_guide
+        and "[x] **M13.1C-1d — packaged execution" in roadmap_document
+        and "Current tranche: **M13.1C-1e" in roadmap_document,
+        "M13.1C-1d packaged generated-class execution, no-change replay, or user-owned rollback proof is incomplete",
+    )
+    checks.append(
+        "M13.1C-1d executes packaged Actor and Component classes from the clean SDK"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
