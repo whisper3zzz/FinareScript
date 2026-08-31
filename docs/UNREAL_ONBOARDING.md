@@ -63,6 +63,8 @@ Adoption also installs these project-local product tools below
 
 - `unifiedscript.cmd` and `UnifiedScript.Cli` for Preview, Repair, and Doctor;
 - `setup-unreal-project.ps1` for native/managed onboarding;
+- `UnifiedScript.BuildGraph.psm1` for deterministic dependency and output
+  invalidation;
 - `run-unifiedscript-onboarding-after-process.ps1` for a build that must wait
   until the current Editor releases the plugin DLL;
 - the versioned project templates used by deterministic Repair.
@@ -107,6 +109,24 @@ project. `-EngineRoot` may be omitted when `UNIFIEDSCRIPT_UE_ROOT` is set or the
 project's `EngineAssociation` resolves through the registered Unreal builds.
 `-Modules` and `-Classes` can override the checked-in reflection selection for
 an explicit local run.
+
+Apply persists one dependency graph at
+`Saved/UnifiedScript/BuildGraph/onboarding-state.json`. Each stage fingerprints
+its configuration, source inputs, dependency outputs, and tracked outputs. A
+stage prints `RUN` with the changed input/dependency or missing-output reason,
+or `SKIP` when all four boundaries match. Downstream invalidation follows the
+bytes produced by an upstream stage: if an upstream command runs but reproduces
+the same bytes, unaffected consumers still skip. The state is replaced
+atomically only after the complete Apply succeeds, so an interrupted or failed
+run cannot become a valid cache baseline.
+
+Consequently, a second no-change Apply skips the expensive toolchain,
+reflection, binding, managed build, chunk, native build, deployment,
+determinism, and startup stages. Managed body changes and API-shape changes
+invalidate different transitive subsets of that same graph. The onboarding
+report exposes this decision surface under `outputs.buildGraph`, including the
+cache status, state path, executed/skipped totals, fingerprints, durations, and
+per-stage reasons.
 
 Apply performs these phases in order:
 
@@ -155,6 +175,9 @@ powershell -ExecutionPolicy Bypass `
 reflection, source type hints, dependency requests, the development
 Contract/report, generated surface lock, bindings, native thunks, node catalogs,
 browser, coverage, or Script Assets.
+ValidateOnly deliberately does not trust Build/Play skip decisions: it reruns
+the non-mutating development-surface, deployment, deterministic-generation,
+coverage, and configured Automation checks against the accepted baseline.
 That baseline must match the current managed assemblies and compiled chunks. If
 a shared UnifiedScript assembly changed after the last Apply run, run ordinary
 Apply onboarding once to rebuild, recompile, and deploy the chunks before using

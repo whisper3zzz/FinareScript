@@ -120,6 +120,41 @@ function Assert-OnboardingReport {
     return $report
 }
 
+function Assert-IncrementalNoChangeReport {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string[]]$ExpectedSkippedPhases
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Incremental onboarding report is missing: $Path"
+    }
+    $report = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $graph = $report.outputs.buildGraph
+    $phaseByName = @{}
+    foreach ($phase in @($report.phases)) {
+        $phaseByName[[string]$phase.name] = [string]$phase.status
+    }
+    $unexpected = @($ExpectedSkippedPhases | Where-Object {
+        $phaseByName[$_] -ne 'skipped'
+    })
+    if ($report.schemaVersion -ne
+            'unifiedscript.unreal-project-onboarding-report/v0.1' -or
+        $report.status -ne 'passed' -or
+        $report.mode -ne 'apply' -or
+        $report.outputs.sdkLayout -ne 'embedded' -or
+        $graph.schemaVersion -ne
+            'unifiedscript.unreal-build-graph-state/v0.1' -or
+        [int]$graph.executed -ne 0 -or
+        [int]$graph.skipped -ne $ExpectedSkippedPhases.Count -or
+        $unexpected.Count -ne 0) {
+        throw (
+            'Project-local no-change Build did not skip the exact dependency graph. ' +
+            "Unexpected=$($unexpected -join ', '); Report=$Path")
+    }
+    return $report
+}
+
 function Assert-File {
     param([string]$Path, [string]$Label)
 
@@ -238,8 +273,9 @@ if ($Resume) {
 
 $projectTools = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
 $localSetup = Join-Path $projectTools 'setup-unreal-project.ps1'
+$localBuildGraph = Join-Path $projectTools 'UnifiedScript.BuildGraph.psm1'
 $localCli = Join-Path $projectTools 'unifiedscript.cmd'
-foreach ($required in @($localSetup, $localCli)) {
+foreach ($required in @($localSetup, $localBuildGraph, $localCli)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Adoption did not install its project-local entry point: $required"
     }
@@ -279,6 +315,40 @@ $applyReport = Assert-OnboardingReport `
         'deployment',
         'determinism',
         'managed-startup')
+
+$incrementalPhases = @(
+    'managed-toolchain',
+    'native-bootstrap-build',
+    'source-reflection-hints',
+    'reflection-export',
+    'development-surface',
+    'binding-generation',
+    'managed-gameplay-build',
+    'compiled-chunks',
+    'native-final-build',
+    'native-game-build',
+    'deployment',
+    'determinism',
+    'managed-startup')
+$incrementalReportPath = Join-Path $projectRoot `
+    'Saved\UnifiedScript\ProjectSetup\native-onboarding-no-change.json'
+if (-not $Resume -or
+    -not (Test-Path -LiteralPath $incrementalReportPath -PathType Leaf)) {
+    Invoke-LoggedCommand `
+        -FilePath 'powershell.exe' `
+        -Arguments @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', $localSetup,
+            '-Project', $project,
+            '-EngineRoot', $enginePath,
+            '-Report', $incrementalReportPath) `
+        -LogPath (Join-Path $outputRoot 'native-onboarding-no-change.log') `
+        -FailureMessage 'Project-local no-change dependency-aware Build failed.'
+}
+$incrementalReport = Assert-IncrementalNoChangeReport `
+    -Path $incrementalReportPath `
+    -ExpectedSkippedPhases $incrementalPhases
 
 $assemblyName = "$projectName.UnifiedScript"
 $generatedEvidence = [ordered]@{
@@ -681,6 +751,10 @@ $report = [ordered]@{
     onboarding = [ordered]@{
         applyReport = $applyReportPath
         applyDurationMs = [long]$applyReport.durationMs
+        incrementalReport = $incrementalReportPath
+        incrementalDurationMs = [long]$incrementalReport.durationMs
+        incrementalExecuted = [int]$incrementalReport.outputs.buildGraph.executed
+        incrementalSkipped = [int]$incrementalReport.outputs.buildGraph.skipped
         validateReport = $validateReportPath
         validateDurationMs = [long]$validateReport.durationMs
         automationPassed = [int]$applyReport.outputs.automation.passed

@@ -343,6 +343,12 @@ internal static partial class UnrealProjectAdoptionService
         AddDesired(
             desired,
             projectRoot,
+            Path.Combine("Plugins", "UEUnifiedScript", "Tools", "UnifiedScript.BuildGraph.psm1"),
+            "tool",
+            File.ReadAllBytes(layout.BuildGraphModulePath));
+        AddDesired(
+            desired,
+            projectRoot,
             Path.Combine(
                 "Plugins",
                 "UEUnifiedScript",
@@ -773,6 +779,10 @@ internal static partial class UnrealProjectAdoptionService
             pluginRoot,
             "Tools",
             "setup-unreal-project.ps1");
+        string projectBuildGraph = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "UnifiedScript.BuildGraph.psm1");
         string projectDeferredOnboarding = Path.Combine(
             pluginRoot,
             "Tools",
@@ -789,6 +799,7 @@ internal static partial class UnrealProjectAdoptionService
         checks.Add(File.Exists(projectCli) &&
                    File.Exists(projectCliWrapper) &&
                    File.Exists(projectOnboarding) &&
+                   File.Exists(projectBuildGraph) &&
                    File.Exists(projectDeferredOnboarding) &&
                    File.Exists(projectAuthoring) &&
                    File.Exists(projectAuthoringWorkbench)
@@ -799,7 +810,7 @@ internal static partial class UnrealProjectAdoptionService
             : new UnrealProjectDoctorCheck(
                 "project-tools",
                 "failed",
-                "The project-local UnifiedScript CLI, onboarding tool, authoring launcher, or Workbench is missing.",
+                "The project-local UnifiedScript CLI, dependency-aware build graph, onboarding tool, authoring launcher, or Workbench is missing.",
                 "Re-run unifiedscript adopt from the intended SDK."));
 
         string configPath = Path.Combine(projectRoot, "Config", "UnifiedScript.onboarding.json");
@@ -1554,6 +1565,17 @@ internal static partial class UnrealProjectAdoptionService
             string? onboarding = File.Exists(packagedOnboarding)
                 ? packagedOnboarding
                 : File.Exists(repositoryOnboarding) ? repositoryOnboarding : null;
+            string packagedBuildGraph = Path.Combine(
+                root,
+                "Tools",
+                "UnifiedScript.BuildGraph.psm1");
+            string repositoryBuildGraph = Path.Combine(
+                root,
+                "tools",
+                "UnifiedScript.BuildGraph.psm1");
+            string? buildGraph = File.Exists(packagedBuildGraph)
+                ? packagedBuildGraph
+                : File.Exists(repositoryBuildGraph) ? repositoryBuildGraph : null;
             string packagedDeferredOnboarding = Path.Combine(
                 root,
                 "Tools",
@@ -1587,6 +1609,7 @@ internal static partial class UnrealProjectAdoptionService
                     : null;
             if (templateRoot is not null && pluginRoot is not null && runtimeRoot is not null &&
                 cliRoot is not null && wrapper is not null && onboarding is not null &&
+                buildGraph is not null &&
                 deferredOnboarding is not null && authoring is not null &&
                 authoringWorkbench is not null)
             {
@@ -1602,6 +1625,7 @@ internal static partial class UnrealProjectAdoptionService
                         Path.GetFullPath(cliRoot),
                         Path.GetFullPath(wrapper),
                         Path.GetFullPath(onboarding),
+                        Path.GetFullPath(buildGraph),
                         Path.GetFullPath(deferredOnboarding),
                         Path.GetFullPath(authoring),
                         Path.GetFullPath(authoringWorkbench));
@@ -1795,6 +1819,7 @@ internal static partial class UnrealProjectAdoptionService
         string CliRoot,
         string CliWrapperPath,
         string OnboardingScriptPath,
+        string BuildGraphModulePath,
         string DeferredOnboardingScriptPath,
         string AuthoringScriptPath,
         string AuthoringWorkbenchRoot);

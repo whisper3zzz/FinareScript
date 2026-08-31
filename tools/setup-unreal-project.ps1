@@ -28,6 +28,8 @@ $script:RunDirectory = $null
 $script:StartedAtUtc = [DateTime]::UtcNow
 $script:AutomationSuccessCount = 0
 $script:AutomationFailureCount = 0
+$script:BuildGraphContext = $null
+$script:BuildGraphReport = $null
 
 function Throw-OnboardingError {
     param(
@@ -83,6 +85,178 @@ function Invoke-OnboardingPhase {
         })
         throw
     }
+}
+
+function Invoke-DependencyAwareOnboardingPhase {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Collections.IDictionary]$Values = [ordered]@{},
+        [Collections.IDictionary]$PathInputs = [ordered]@{},
+        [string[]]$Dependencies = @(),
+        [string[]]$OutputPaths = @(),
+        [Parameter(Mandatory)][scriptblock]$Action
+    )
+
+    if ($null -eq $script:BuildGraphContext) {
+        Invoke-OnboardingPhase -Name $Name -Action $Action
+        return
+    }
+
+    $decision = Get-UnifiedScriptBuildGraphStageDecision `
+        -Context $script:BuildGraphContext `
+        -Name $Name `
+        -Values $Values `
+        -PathInputs $PathInputs `
+        -Dependencies $Dependencies `
+        -OutputPaths $OutputPaths
+    $script:CurrentPhase = $Name
+    if (-not $decision.ShouldRun) {
+        Write-Host "[$Name] SKIP - $($decision.Reason)"
+        Complete-UnifiedScriptBuildGraphStage `
+            -Context $script:BuildGraphContext `
+            -Decision $decision `
+            -Executed $false | Out-Null
+        $script:PhaseRecords.Add([ordered]@{
+            name = $Name
+            status = 'skipped'
+            durationMs = 0
+            reason = $decision.Reason
+            buildGraph = [ordered]@{
+                changedInputs = @($decision.ChangedInputs)
+                changedDependencies = @($decision.ChangedDependencies)
+            }
+        })
+        return
+    }
+
+    $startedAt = [DateTime]::UtcNow
+    Write-Host "[$Name] RUN - $($decision.Reason)"
+    try {
+        & $Action
+        $duration = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+        Complete-UnifiedScriptBuildGraphStage `
+            -Context $script:BuildGraphContext `
+            -Decision $decision `
+            -Executed $true `
+            -DurationMs $duration | Out-Null
+        $script:PhaseRecords.Add([ordered]@{
+            name = $Name
+            status = 'passed'
+            durationMs = $duration
+            reason = $decision.Reason
+            buildGraph = [ordered]@{
+                changedInputs = @($decision.ChangedInputs)
+                changedDependencies = @($decision.ChangedDependencies)
+            }
+        })
+    } catch {
+        $script:PhaseRecords.Add([ordered]@{
+            name = $Name
+            status = 'failed'
+            durationMs = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+            code = Get-OnboardingErrorCode -Exception $_.Exception
+            message = $_.Exception.Message
+            reason = $decision.Reason
+        })
+        throw
+    }
+}
+
+function Get-OnboardingSourceFiles {
+    param(
+        [Parameter(Mandatory)][string[]]$Roots,
+        [Parameter(Mandatory)][string[]]$Extensions,
+        [string[]]$ExcludedDirectories = @(
+            '.git', '.vs', 'bin', 'obj', 'Binaries', 'DerivedDataCache',
+            'Intermediate', 'Saved')
+    )
+
+    $files = [Collections.Generic.List[string]]::new()
+    foreach ($root in $Roots) {
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+        if (Test-Path -LiteralPath $root -PathType Leaf) {
+            $files.Add([IO.Path]::GetFullPath($root))
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+            continue
+        }
+        foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File) {
+            $relative = Get-RelativeFilePath `
+                -BaseDirectory $root `
+                -Path $file.FullName
+            $segments = $relative -split '[\\/]'
+            if (@($segments | Where-Object { $_ -in $ExcludedDirectories }).Count -gt 0) {
+                continue
+            }
+            if ($Extensions.Count -gt 0 -and
+                [IO.Path]::GetExtension($file.Name) -notin $Extensions) {
+                continue
+            }
+            $files.Add($file.FullName)
+        }
+    }
+    return @($files | Sort-Object -Unique)
+}
+
+function Get-OnboardingDeploymentOutputs {
+    param(
+        [Parameter(Mandatory)][string]$Manifest,
+        [Parameter(Mandatory)][string]$ProjectDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $Manifest -PathType Leaf)) {
+        return @()
+    }
+    $document = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
+    $outputs = [Collections.Generic.List[string]]::new()
+    foreach ($entry in @($document.scripts)) {
+        $assetPath = [string]$entry.assetPath
+        if ($assetPath.StartsWith('/Game/', [StringComparison]::OrdinalIgnoreCase)) {
+            $relative = $assetPath.Substring('/Game/'.Length).Replace('/', '\')
+            $outputs.Add((Join-Path $ProjectDirectory "Content\$relative.uasset"))
+            continue
+        }
+        $match = [regex]::Match($assetPath, '^/([^/]+)/(.+)$')
+        if ($match.Success) {
+            $pluginName = $match.Groups[1].Value
+            $relative = $match.Groups[2].Value.Replace('/', '\')
+            $outputs.Add((Join-Path $ProjectDirectory `
+                "Plugins\$pluginName\Content\$relative.uasset"))
+        }
+    }
+    return @($outputs | Sort-Object -Unique)
+}
+
+function Get-OnboardingDeploymentManagedOutputs {
+    param(
+        [Parameter(Mandatory)][string]$Manifest,
+        [Parameter(Mandatory)][string]$ProjectDirectory,
+        [Parameter(Mandatory)][string]$PluginDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $Manifest -PathType Leaf)) {
+        return @()
+    }
+    $document = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
+    $outputs = [Collections.Generic.List[string]]::new()
+    foreach ($entry in @($document.scripts)) {
+        $assemblyPath = [string]$entry.assemblyPath
+        if ([string]::IsNullOrWhiteSpace($assemblyPath)) {
+            continue
+        }
+        $resolvedPath = $assemblyPath.
+            Replace('{ProjectDir}', $ProjectDirectory).
+            Replace('{PluginDir}', $PluginDirectory).
+            Replace('/', '\')
+        if (-not [IO.Path]::IsPathRooted($resolvedPath)) {
+            $resolvedPath = Join-Path $ProjectDirectory $resolvedPath
+        }
+        $outputs.Add([IO.Path]::GetFullPath($resolvedPath))
+    }
+    return @($outputs | Sort-Object -Unique)
 }
 
 function Assert-AllowedProperties {
@@ -524,6 +698,13 @@ try {
         Resolve-FullPath -Path $Report -BaseDirectory (Get-Location).Path
     }
     New-Item -ItemType Directory -Force -Path $script:RunDirectory | Out-Null
+
+    $buildGraphModulePath = Join-Path $PSScriptRoot 'UnifiedScript.BuildGraph.psm1'
+    Assert-RequiredPath `
+        -Path $buildGraphModulePath `
+        -Label 'UnifiedScript dependency-aware Build/Play graph' `
+        -Code 'USONB1101'
+    Import-Module -Name $buildGraphModulePath -Force
 
     $sdkRoot = Split-Path -Parent $PSScriptRoot
     $repositoryCliProject = Join-Path $sdkRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
@@ -1046,6 +1227,19 @@ try {
         }
     }
 
+    if (-not $ValidateOnly) {
+        $buildGraphStatePath = Join-Path $projectDirectory `
+            'Saved\UnifiedScript\BuildGraph\onboarding-state.json'
+        $script:BuildGraphContext = New-UnifiedScriptBuildGraphContext `
+            -StatePath $buildGraphStatePath `
+            -Project $script:ResolvedProjectPath `
+            -Config $script:ResolvedConfigPath `
+            -EngineVersion $resolved.engineVersion
+        Write-Host (
+            "[build-graph] Cache=$($script:BuildGraphContext.CacheStatus); " +
+            "State=$buildGraphStatePath")
+    }
+
     if ($ValidateOnly -and $sdkLayout -eq 'repository') {
         Invoke-OnboardingPhase -Name 'managed-toolchain-validation' -Action {
             Invoke-LoggedCommand `
@@ -1065,7 +1259,40 @@ try {
     }
 
     if (-not $ValidateOnly) {
-        Invoke-OnboardingPhase -Name 'managed-toolchain' -Action {
+        $toolchainInputs = if ($sdkLayout -eq 'repository') {
+            @(
+                Get-OnboardingSourceFiles `
+                    -Roots @((Join-Path $sdkRoot 'src')) `
+                    -Extensions @('.cs', '.csproj', '.props', '.targets')
+            ) + @(
+                (Join-Path $sdkRoot 'global.json'),
+                (Join-Path $sdkRoot 'Directory.Build.props'))
+        } elseif ($sdkLayout -eq 'packaged') {
+            @($cliAssembly, $packagedManagedRuntime, $packagedSdkManifest)
+        } else {
+            @($cliAssembly) + @(
+                Get-ChildItem `
+                    -LiteralPath $packagedManagedRuntime `
+                    -File `
+                    -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Extension -ne '.uschunk'
+                    } | ForEach-Object { $_.FullName }
+            )
+        }
+        $toolchainOutputs = @(
+            $cliAssembly,
+            (Join-Path $resolved.managedStage 'UnifiedScript.Core.dll'),
+            (Join-Path $resolved.managedStage 'UnifiedScript.Unreal.dll'),
+            (Join-Path $resolved.managedStage 'UnifiedScript.Unreal.deps.json'))
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'managed-toolchain' `
+            -Values ([ordered]@{
+                sdkLayout = $sdkLayout
+                configuration = $resolved.managedConfiguration
+            }) `
+            -PathInputs ([ordered]@{ toolchain = $toolchainInputs }) `
+            -OutputPaths $toolchainOutputs `
+            -Action {
             New-Item -ItemType Directory -Force -Path $resolved.managedStage | Out-Null
             if ($sdkLayout -eq 'repository') {
                 $log = Join-Path $script:RunDirectory 'managed-toolchain.log'
@@ -1099,7 +1326,63 @@ try {
             Assert-RequiredPath -Path $cliAssembly -Label 'UnifiedScript CLI assembly' -Code 'USONB2101'
         }
 
-        if (Test-Path -LiteralPath $resolved.reflection) {
+        $managedSourceRoots = @($resolved.managedProjects | ForEach-Object {
+            Split-Path -Parent $_
+        })
+        $managedSourceInputs = @(Get-OnboardingSourceFiles `
+            -Roots $managedSourceRoots `
+            -Extensions @('.cs', '.csproj', '.json', '.props', '.targets', '.usgraph') |
+            Where-Object {
+                [IO.Path]::GetFullPath($_) -ne
+                    [IO.Path]::GetFullPath($resolved.managedOutput)
+            })
+        $nativeSourceInputs = Get-OnboardingSourceFiles `
+            -Roots @(
+                (Join-Path $resolved.plugin 'Source'),
+                (Join-Path $projectDirectory 'Source')) `
+            -Extensions @('.Build.cs', '.Target.cs', '.cpp', '.cs', '.h', '.hpp', '.inl')
+        $nativeBootstrapInputs = @($nativeSourceInputs | Where-Object {
+            [IO.Path]::GetFullPath($_) -ne [IO.Path]::GetFullPath($resolved.nativeOutput)
+        })
+        $managedRuntimeInputs = @(Get-ChildItem `
+            -LiteralPath $resolved.managedStage `
+            -File `
+            -ErrorAction SilentlyContinue | Where-Object {
+                $_.Extension -ne '.uschunk'
+            } | ForEach-Object { $_.FullName })
+        $nativeConfigurationInputs = @(
+            $script:ResolvedProjectPath,
+            $script:ResolvedConfigPath,
+            (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin'),
+            (Join-Path $script:ResolvedEngineRoot 'Engine\Build\Build.version'))
+        $bindingOutputs = @(
+            $resolved.managedOutput,
+            $resolved.nativeOutput,
+            $resolved.nodeCatalogOutput,
+            $resolved.browserOutput,
+            $resolved.coverageOutput)
+        $managedBuildOutputs = Get-OnboardingDeploymentManagedOutputs `
+            -Manifest $resolved.deployment `
+            -ProjectDirectory $projectDirectory `
+            -PluginDirectory $resolved.plugin
+        if ($managedBuildOutputs.Count -eq 0) {
+            $managedBuildOutputs = @($resolved.managedProjects | ForEach-Object {
+                Join-Path (Split-Path -Parent $_) `
+                    "bin\$($resolved.managedConfiguration)"
+            })
+        }
+        $editorTargetReceipt = Join-Path $projectDirectory `
+            "Binaries\$($resolved.platform)\$($resolved.editorTarget).target"
+        $gameTargetReceipt = Join-Path $projectDirectory `
+            "Binaries\$($resolved.platform)\$($resolved.gameTarget).target"
+        $deploymentOutputs = if ($resolved.deploymentEnabled) {
+            Get-OnboardingDeploymentOutputs `
+                -Manifest $resolved.deployment `
+                -ProjectDirectory $projectDirectory
+        } else { @() }
+
+        if ((Test-Path -LiteralPath $resolved.reflection) -and
+            -not (Test-Path -LiteralPath $resolved.nativeOutput)) {
             Invoke-OnboardingPhase -Name 'bootstrap-bindings' -Action {
                 Invoke-BindingGeneration `
                  -DotNet $resolved.dotnet `
@@ -1114,9 +1397,28 @@ try {
                     -FailOnRejected $resolved.failOnRejected `
                     -LogPath (Join-Path $script:RunDirectory 'bootstrap-bindings.log')
             }
+        } elseif (Test-Path -LiteralPath $resolved.reflection) {
+            Write-Host '[bootstrap-bindings] SKIP - generated native bootstrap source exists'
+            $script:PhaseRecords.Add([ordered]@{
+                name = 'bootstrap-bindings'
+                status = 'skipped'
+                durationMs = 0
+                reason = 'generated native bootstrap source exists'
+            })
         }
 
-        Invoke-OnboardingPhase -Name 'native-bootstrap-build' -Action {
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'native-bootstrap-build' `
+            -Values ([ordered]@{
+                target = $resolved.editorTarget
+                platform = $resolved.platform
+                configuration = $resolved.configuration
+            }) `
+            -PathInputs ([ordered]@{
+                nativeSources = $nativeBootstrapInputs
+                nativeConfiguration = $nativeConfigurationInputs
+            }) `
+            -Action {
             Invoke-LoggedCommand `
                 -FilePath $resolved.build `
                 -Arguments @(
@@ -1132,7 +1434,18 @@ try {
         }
 
         if ($resolved.developmentSurfaceEnabled) {
-            Invoke-OnboardingPhase -Name 'source-reflection-hints' -Action {
+            Invoke-DependencyAwareOnboardingPhase `
+                -Name 'source-reflection-hints' `
+                -Values ([ordered]@{
+                    configuration = $resolved.managedConfiguration
+                }) `
+                -PathInputs ([ordered]@{
+                    managedSources = $managedSourceInputs
+                    baseContract = @($resolved.contract)
+                    generator = @($cliAssembly)
+                }) `
+                -OutputPaths @($resolved.developmentSurfaceTypeHints) `
+                -Action {
                 Invoke-ReflectionHintScan `
                     -DotNet $resolved.dotnet `
                     -CliAssembly $cliAssembly `
@@ -1144,7 +1457,24 @@ try {
             }
         }
 
-        Invoke-OnboardingPhase -Name 'reflection-export' -Action {
+        $reflectionDependencies = @('managed-toolchain', 'native-bootstrap-build')
+        if ($resolved.developmentSurfaceEnabled) {
+            $reflectionDependencies += 'source-reflection-hints'
+        }
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'reflection-export' `
+            -Values ([ordered]@{
+                modules = @($resolved.modules)
+                classes = @($resolved.classes)
+                blueprintAssets = @($resolved.blueprintAssets)
+            }) `
+            -PathInputs ([ordered]@{
+                project = @($script:ResolvedProjectPath)
+                sourceTypeHints = @($resolved.developmentSurfaceTypeHints)
+            }) `
+            -Dependencies $reflectionDependencies `
+            -OutputPaths @($resolved.reflection) `
+            -Action {
             New-Item -ItemType Directory -Force -Path `
                 (Split-Path -Parent $resolved.reflection) | Out-Null
             $arguments = @(
@@ -1190,10 +1520,30 @@ try {
                 -Path $resolved.reflection `
                 -Label 'Reflection manifest' `
                 -Code 'USONB2202'
-         }
+        }
 
         if ($resolved.developmentSurfaceEnabled) {
-            Invoke-OnboardingPhase -Name 'development-surface' -Action {
+            Invoke-DependencyAwareOnboardingPhase `
+                -Name 'development-surface' `
+                -Values ([ordered]@{
+                    configuration = $resolved.managedConfiguration
+                    lockMode = $resolved.developmentSurfaceLockMode
+                    failOnOpenDecisions = $resolved.developmentSurfaceFailOnOpen
+                }) `
+                -PathInputs ([ordered]@{
+                    reflection = @($resolved.reflection)
+                    baseContract = @($resolved.contract)
+                    managedSources = $managedSourceInputs
+                    typeHints = @($resolved.developmentSurfaceTypeHints)
+                    generator = @($cliAssembly)
+                }) `
+                -Dependencies @('reflection-export', 'source-reflection-hints') `
+                -OutputPaths @(
+                    $resolved.developmentSurfaceRequests,
+                    $resolved.developmentSurfaceContract,
+                    $resolved.developmentSurfaceReport,
+                    $resolved.developmentSurfaceLock) `
+                -Action {
                 Invoke-DevelopmentSurfaceExpansion `
                     -DotNet $resolved.dotnet `
                     -CliAssembly $cliAssembly `
@@ -1219,7 +1569,24 @@ try {
             }
         }
 
-         Invoke-OnboardingPhase -Name 'binding-generation' -Action {
+        $bindingDependencies = @('reflection-export')
+        if ($resolved.developmentSurfaceEnabled) {
+            $bindingDependencies += 'development-surface'
+        }
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'binding-generation' `
+            -Values ([ordered]@{
+                failOnRejected = $resolved.failOnRejected
+                requireCompleteNativeCoverage = $resolved.requireCompleteNativeCoverage
+            }) `
+            -PathInputs ([ordered]@{
+                reflection = @($resolved.reflection)
+                contract = @($resolved.effectiveContract)
+                generator = @($cliAssembly)
+            }) `
+            -Dependencies $bindingDependencies `
+            -OutputPaths $bindingOutputs `
+            -Action {
             Invoke-BindingGeneration `
                 -DotNet $resolved.dotnet `
                 -CliAssembly $cliAssembly `
@@ -1234,7 +1601,20 @@ try {
                 -LogPath (Join-Path $script:RunDirectory 'binding-generation.log')
         }
 
-        Invoke-OnboardingPhase -Name 'managed-gameplay-build' -Action {
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'managed-gameplay-build' `
+            -Values ([ordered]@{
+                configuration = $resolved.managedConfiguration
+                projects = @($resolved.managedProjects)
+            }) `
+            -PathInputs ([ordered]@{
+                managedSources = $managedSourceInputs
+                generatedBindings = @($resolved.managedOutput)
+                managedRuntime = $managedRuntimeInputs
+            }) `
+            -Dependencies @('managed-toolchain', 'binding-generation') `
+            -OutputPaths $managedBuildOutputs `
+            -Action {
             foreach ($managedProject in $resolved.managedProjects) {
                 $safeName = [IO.Path]::GetFileNameWithoutExtension($managedProject)
                 Invoke-LoggedCommand `
@@ -1251,7 +1631,19 @@ try {
         }
 
         if ($resolved.managedChunks.Count -gt 0) {
-            Invoke-OnboardingPhase -Name 'compiled-chunks' -Action {
+            Invoke-DependencyAwareOnboardingPhase `
+                -Name 'compiled-chunks' `
+                -Values ([ordered]@{
+                    configuration = $resolved.managedConfiguration
+                    projects = @($resolved.managedChunks.project)
+                }) `
+                -PathInputs ([ordered]@{
+                    managedBuild = $managedBuildOutputs
+                    generator = @($cliAssembly)
+                }) `
+                -Dependencies @('managed-gameplay-build') `
+                -OutputPaths @($resolved.managedChunks.stagePath) `
+                -Action {
                 for ($index = 0; $index -lt $resolved.managedChunks.Count; ++$index) {
                     $chunk = $resolved.managedChunks[$index]
                     $safeName = [IO.Path]::GetFileNameWithoutExtension($chunk.stagePath)
@@ -1310,7 +1702,20 @@ try {
             }
         }
 
-        Invoke-OnboardingPhase -Name 'native-final-build' -Action {
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'native-final-build' `
+            -Values ([ordered]@{
+                target = $resolved.editorTarget
+                platform = $resolved.platform
+                configuration = $resolved.configuration
+            }) `
+            -PathInputs ([ordered]@{
+                nativeSources = $nativeSourceInputs
+                nativeConfiguration = $nativeConfigurationInputs
+            }) `
+            -Dependencies @('native-bootstrap-build', 'binding-generation') `
+            -OutputPaths @($editorTargetReceipt) `
+            -Action {
             Invoke-LoggedCommand `
                 -FilePath $resolved.build `
                 -Arguments @(
@@ -1325,7 +1730,23 @@ try {
                 -FailureMessage 'Final Unreal editor build failed.'
         }
 
-        Invoke-OnboardingPhase -Name 'native-game-build' -Action {
+        $nativeGameOutputs = if ($resolved.gameTarget -eq 'UnrealGame') {
+            @()
+        } else { @($gameTargetReceipt) }
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'native-game-build' `
+            -Values ([ordered]@{
+                target = $resolved.gameTarget
+                platform = $resolved.platform
+                configuration = $resolved.configuration
+            }) `
+            -PathInputs ([ordered]@{
+                nativeSources = $nativeSourceInputs
+                nativeConfiguration = $nativeConfigurationInputs
+            }) `
+            -Dependencies @('native-final-build') `
+            -OutputPaths $nativeGameOutputs `
+            -Action {
             if ($resolved.gameTarget -eq 'UnrealGame') {
                 $pluginDescriptor = Get-Content `
                     -LiteralPath (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin') `
@@ -1413,7 +1834,31 @@ try {
         }
     }
 
-     Invoke-OnboardingPhase -Name 'deployment' -Action {
+    $deploymentDependencies = @()
+    if ($null -ne $script:BuildGraphContext) {
+        $deploymentDependencies = @(
+            'managed-gameplay-build',
+            'native-final-build',
+            'native-game-build')
+        if ($resolved.managedChunks.Count -gt 0) {
+            $deploymentDependencies += 'compiled-chunks'
+        }
+    }
+    Invoke-DependencyAwareOnboardingPhase `
+        -Name 'deployment' `
+        -Values ([ordered]@{
+            enabled = $resolved.deploymentEnabled
+            validateOnly = [bool]$ValidateOnly
+        }) `
+        -PathInputs ([ordered]@{
+            manifest = @($resolved.deployment)
+            managedStage = @($resolved.managedStage)
+        }) `
+        -Dependencies $deploymentDependencies `
+        -OutputPaths $(if ($null -ne $script:BuildGraphContext) {
+            @($deploymentOutputs)
+        } else { @() }) `
+        -Action {
         if (-not $resolved.deploymentEnabled) {
             Write-Host 'Deployment synchronization is disabled by project policy.'
             return
@@ -1450,7 +1895,28 @@ try {
         }
     }
 
-    Invoke-OnboardingPhase -Name 'determinism' -Action {
+    $determinismDependencies = if ($null -ne $script:BuildGraphContext) {
+        @('binding-generation')
+    } else { @() }
+    Invoke-DependencyAwareOnboardingPhase `
+        -Name 'determinism' `
+        -Values ([ordered]@{
+            failOnRejected = $resolved.failOnRejected
+            requireCompleteNativeCoverage = $resolved.requireCompleteNativeCoverage
+        }) `
+        -PathInputs ([ordered]@{
+            reflection = @($resolved.reflection)
+            contract = @($resolved.effectiveContract)
+            generatedBindings = @(
+                $resolved.managedOutput,
+                $resolved.nativeOutput,
+                $resolved.nodeCatalogOutput,
+                $resolved.browserOutput,
+                $resolved.coverageOutput)
+            generator = @($cliAssembly)
+        }) `
+        -Dependencies $determinismDependencies `
+        -Action {
         $tempDirectory = Join-Path $script:RunDirectory 'generated-validation'
         $tempManaged = Join-Path $tempDirectory 'bindings.cs'
         $tempNative = Join-Path $tempDirectory 'native-thunks.cpp'
@@ -1491,7 +1957,23 @@ try {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($resolved.automationFilter)) {
-        Invoke-OnboardingPhase -Name 'managed-startup' -Action {
+        $startupDependencies = if ($null -ne $script:BuildGraphContext) {
+            @('deployment', 'determinism', 'native-game-build')
+        } else { @() }
+        Invoke-DependencyAwareOnboardingPhase `
+            -Name 'managed-startup' `
+            -Values ([ordered]@{
+                filter = $resolved.automationFilter
+                minimumTests = $resolved.minimumAutomationTests
+            }) `
+            -PathInputs ([ordered]@{
+                project = @($script:ResolvedProjectPath)
+                editorReceipt = @($editorTargetReceipt)
+                deployment = @($deploymentOutputs)
+                chunks = @($resolved.managedChunks.stagePath)
+            }) `
+            -Dependencies $startupDependencies `
+            -Action {
             $defaultConfigPaths = @(
                 (Join-Path $projectDirectory 'Config\DefaultEngine.ini'),
                 (Join-Path $projectDirectory 'Config\DefaultInput.ini'))
@@ -1544,6 +2026,12 @@ try {
         }
     }
 
+    if ($null -ne $script:BuildGraphContext) {
+        Save-UnifiedScriptBuildGraphState -Context $script:BuildGraphContext
+        $script:BuildGraphReport = Get-UnifiedScriptBuildGraphReport `
+            -Context $script:BuildGraphContext
+    }
+
     $outputContext = [ordered]@{
         sdkLayout = $sdkLayout
         sdkRoot = $sdkRoot
@@ -1570,6 +2058,7 @@ try {
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage
         compiledChunks = @($resolved.managedChunks.stagePath)
+        buildGraph = $script:BuildGraphReport
         runDirectory = $script:RunDirectory
         automation = [ordered]@{
             filter = $resolved.automationFilter

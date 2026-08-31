@@ -292,6 +292,32 @@
 			"functions": []
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
+			"name": "UnifiedScriptBlueprint",
+			"nativeName": "UUnifiedScriptBlueprint",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptBlueprint.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.Blueprint",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint",
+				"tooltip": "Product-owned Blueprint proxy for one complete UnifiedScript Class.\n\nThe distinct asset class lets Content Browser route rename and duplicate\nthrough the complete source/sidecar/deployment transaction instead of the\ngeneric Blueprint-only operations.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
 			"name": "UnifiedScriptComponent",
 			"nativeName": "UUnifiedScriptComponent",

@@ -537,6 +537,9 @@ public sealed class UnrealProjectAdoptionTests
                 Path.Combine(SdkRoot, "Tools", "setup-unreal-project.ps1"),
                 "# fixture onboarding\n");
             Write(
+                Path.Combine(SdkRoot, "Tools", "UnifiedScript.BuildGraph.psm1"),
+                "# fixture build graph\n");
+            Write(
                 Path.Combine(SdkRoot, "Tools", "run-unifiedscript-onboarding-after-process.ps1"),
                 "# fixture deferred onboarding\n");
             Write(

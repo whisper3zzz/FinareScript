@@ -585,6 +585,8 @@ def main() -> int:
     checks.append("one Unreal API Contract drives C++, C#, coverage, and visual nodes")
 
     onboarding_script_path = ROOT / "tools" / "setup-unreal-project.ps1"
+    build_graph_module_path = ROOT / "tools" / "UnifiedScript.BuildGraph.psm1"
+    build_graph_test_path = ROOT / "tools" / "test-unifiedscript-build-graph.ps1"
     onboarding_config_path = (
         ROOT / "HostProject" / "Config" / "UnifiedScript.onboarding.json"
     )
@@ -592,6 +594,8 @@ def main() -> int:
         ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.binding-coverage.json"
     )
     onboarding_script = onboarding_script_path.read_text(encoding="utf-8")
+    build_graph_module = build_graph_module_path.read_text(encoding="utf-8")
+    build_graph_test = build_graph_test_path.read_text(encoding="utf-8")
     with onboarding_config_path.open("r", encoding="utf-8") as handle:
         onboarding_config = json.load(handle)
     with onboarding_coverage_path.open("r", encoding="utf-8") as handle:
@@ -655,6 +659,26 @@ def main() -> int:
         "One-command Unreal onboarding, determinism, or native coverage gate is missing",
     )
     checks.append("one command onboards and deterministically validates an Unreal project")
+
+    require(
+        build_graph_module_path.is_file()
+        and build_graph_test_path.is_file()
+        and "unifiedscript.unreal-build-graph-state/v0.1" in build_graph_module
+        and "Get-UnifiedScriptBuildGraphStageDecision" in build_graph_module
+        and "dependencyFingerprint" in build_graph_module
+        and "tracked outputs are missing or modified" in build_graph_module
+        and "Save-UnifiedScriptBuildGraphState" in onboarding_script
+        and "Invoke-DependencyAwareOnboardingPhase" in onboarding_script
+        and "source-reflection-hints" in onboarding_script
+        and "managed-gameplay-build" in onboarding_script
+        and "native-final-build" in onboarding_script
+        and "Byte-identical semantic output must not invalidate its consumer"
+        in build_graph_test,
+        "Dependency-aware Build/Play graph, invalidation reasons, or dynamic output boundary is missing",
+    )
+    checks.append(
+        "Build and Play execute only invalidated stages from one explainable dependency graph"
+    )
 
     adoption_source_path = (
         ROOT / "src" / "UnifiedScript.Cli" / "UnrealProjectAdoption.cs"
@@ -4059,6 +4083,7 @@ def main() -> int:
         == {
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
