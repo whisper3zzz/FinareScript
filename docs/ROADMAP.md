@@ -57,12 +57,12 @@ Last refreshed: **2026-08-31**
 
 - Active milestone: **M13.2 in progress — Puerts-grade daily authoring and one C#/Graph workflow**
 - Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure**
-- Current tranche: **M13.2A — authoritative daily-workflow entry and asset operations**
-- Current implementation state: **M13.1 now has a reproducible command-line closure for exact Actor and ActorComponent Script Classes. Creation is name-first and transactional, generic create-then-rename factories are hidden, only the canonical product commands are published, Project Setup is deferred until AssetTools has finished, and failed external publication restores deployment/request bytes and removes newly created source. The clean packaged-SDK path still compiles the generated native host, cooks both proxies and Script Asset sidecars, runs both exact `_C` paths from `.uschunk`, and rolls back without touching user-owned files**
-- Current verification state: **the UE 5.8.1 native build passes; the current `UnrealEditor-Cmd` + NullRHI run passes 23/23 `UnifiedScript.Unreal` Automation tests, including `ScriptClass.FactoryContract` and `WorldHost.Lifecycle`; 645/645 managed tests and 106/106 repository invariants pass. The packaged execution/no-change/rollback proof remains the M13.1C-1d clean-SDK report. Current headless evidence is at `artifacts/m13-1c1e/automation/unifiedscript-unreal-full-rerun.log`; packaged evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json`**
+- Current tranche: **M13.2A-2 — transactional full-class asset operations**
+- Current implementation state: **M13.2A-1 makes the Script Asset the native daily-workflow entry: normal Content Browser open/double-click routes the exact asset to the shared Authoring Surface; class-specific actions open Authoring, open the exact C# source, locate the exact generated class, or enter Repair. Bare Script Asset rename and duplicate are rejected with identity-safe guidance instead of silently desynchronizing source, proxy, deployment, and semantic artifacts. M13.1's name-first transactional creation and packaged Actor/Component execution remain intact**
+- Current verification state: **the UE 5.8.1 native build passes; the current `UnrealEditor-Cmd` + NullRHI run passes 24/24 `UnifiedScript.Unreal` Automation tests, including `ScriptAsset.WorkflowContract`, `ScriptClass.FactoryContract`, and `WorldHost.Lifecycle`; 645/645 managed tests and 107/107 repository invariants pass. M13.2A evidence is at `artifacts/m13-2a/automation/script-asset-workflow.log` and `artifacts/m13-2a/automation/unifiedscript-unreal-full.log`; packaged execution/no-change/rollback evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json`**
 - Current UI finding: **the first exploratory interactive pass exposed the temporary `NewBlueprint` identity route, duplicate entries, focus stealing, and incomplete-creation cleanup risk. The P0 implementation defects are now repaired and covered by build/headless contracts; manual Editor timing is deliberately deferred to M13.2G usability measurement and is not an M13.1 correctness gate**
-- Next acceptance: **make create/open/build/reload and normal asset operations one dependency-aware installed-product workflow, then prove its contracts through command-line Automation and packaged fixtures; collect optional human timing separately when M13.2G freezes usability budgets**
-- Next user-visible slice: **the same Script Class opens as C# or Graph and uses one obvious Build/Play/reload route without exposing generator order or repository paths**
+- Next acceptance: **finish full-class rename, duplicate, delete, cleanup, and repair as product-owned transactions, then make Build/Play dependency-aware; prove both through command-line Automation and packaged fixtures**
+- Next user-visible slice: **rename, duplicate, or remove one Script Class without breaking its source, generated proxy, deployment, semantic identity, or references**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -143,17 +143,18 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 645 / 645 passed |
-| Repository validator | 106 / 106 passed |
+| Repository validator | 107 / 107 passed |
 | M13.1B-1 automatic source surface | 6 / 6 focused regressions plus 634 / 634 full managed tests and 97 / 97 repository invariants passed; fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 234,215 ms; report at `artifacts/a/b1/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `e217472bffd951893d45f6e21fc44f285e92f9e46b0eb2fe032a79daa8005997` |
 | M13.1B-2 ordinary source/signature matrix | 9 / 9 focused regressions plus 637 / 637 full managed tests and 98 / 98 repository invariants passed; ordinary imports, semantic collision safety, exact overload selection, delegate projection, and the representative Blueprint-visible signature matrix use the real generators; a fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 278,254 ms; report at `artifacts/a/b3/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `eb205ca8313c068ff2e822e930a79e52e7a189feffdabc658bd33e7dbe97210f` |
 | M13.1B-2 bounded native reflection discovery | 10 / 10 focused regressions plus 638 / 638 full managed tests and 99 / 99 repository invariants passed; the clean template produced only `Actor`/`Pawn` source hints, UE uniquely added one source-discovered Engine class, and the resulting `Pawn.GetController` plus `Actor.GetActorLocation` surface passed Editor/Game build, ValidateOnly byte locks, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 250,077 ms; report at `artifacts/a/b4/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `97995eea92e45af2b37f076c1a9ba89d11128be718125358a19ac819063f2cc8` |
 | M13.1B-2b Blueprint discovery and surface lock | 12 / 12 focused regressions plus 640 / 640 full managed tests and 100 / 100 repository invariants passed; full UE 5.8.1 Automation passed 21 / 21 including exact transient Blueprint generated-class discovery; a fresh packaged consumer passed Apply, 3,000-byte exact per-type lock generation, ValidateOnly frozen verification, Editor/Game builds, two project Setup Automation tests, Win64 BuildCookRun, zero-change Repair, Doctor, and rollback in 279,057 ms; report at `artifacts/a/b5/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `01d30c2066570d90b21a6be0adaa602a8fb9d99bd219cabf043df48b651d1b71` |
 | M13.1C-0 attachable Script Class foundation | 5 new managed identity regressions plus 645 / 645 full managed tests, 102 / 102 repository invariants, UE 5.8.1 build, and 22 / 22 normal Automation tests passed; isolated creation and reload processes proved persistent Actor/ActorComponent identity, `BeginPlay`/`Tick`/`EndPlay`, World teardown, six-output deterministic ValidateOnly, and Win64 Cook of both proxies and both exact Script Asset sidecars in 210,632 ms; report at `HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json` |
-| M13.1C-1 first-Play connection | first Build, state-safe edit/reload, unified diagnostics, packaged Actor/Component execution, and the headless creation/rollback workflow contract are verified. UE 5.8.1 clean-consumer Editor/Game builds, the current 23/23 Automation run, 645/645 managed tests, and 106/106 invariants pass; packaged execution/no-change/rollback evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json`, and the current full headless log is `artifacts/m13-1c1e/automation/unifiedscript-unreal-full-rerun.log` |
+| M13.1C-1 first-Play connection | first Build, state-safe edit/reload, unified diagnostics, packaged Actor/Component execution, and the headless creation/rollback workflow contract are verified. UE 5.8.1 clean-consumer Editor/Game builds, 645/645 managed tests, and the packaged execution/no-change/rollback proof pass; evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json` and `artifacts/m13-1c1e/automation/unifiedscript-unreal-full-rerun.log` |
+| M13.2A-1 native Script Asset entry | UE 5.8.1 build, 24/24 `UnrealEditor-Cmd` + NullRHI Automation tests, 645/645 managed tests, and 107/107 repository invariants pass. Normal Script Asset opening reaches the shared Authoring tab; exact source/generated-class/repair actions are registered; unsafe bare rename/duplicate are rejected. Evidence is at `artifacts/m13-2a/automation/script-asset-workflow.log` and `artifacts/m13-2a/automation/unifiedscript-unreal-full.log` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 23 / 23 passed through `UnrealEditor-Cmd` + NullRHI, including name-first Script Class factory/menu contracts, exact transient Blueprint generated-class reflection, Actor/ActorComponent creation and save, project-local Setup, bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
+| `UnifiedScript.Unreal` Automation | 24 / 24 passed through `UnrealEditor-Cmd` + NullRHI, including the native Script Asset open/action/operation contract, name-first Script Class factory/menu contracts, exact transient Blueprint generated-class reflection, Actor/ActorComponent creation and save, project-local Setup, bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -2566,6 +2567,14 @@ not expose generator ordering or runtime-generation bookkeeping.
 - [ ] **M13.2A — editor-native workflow:** provide one authoritative create/open
   entry, name-first transactional creation, normal double-click/open behavior,
   explicit cleanup/repair, and no duplicate or create-then-rename identity route
+  - [x] **M13.2A-1 — canonical Script Asset entry:** register a native Asset
+    Definition so normal open/double-click reaches the exact shared Authoring
+    Surface; expose exact source, generated-class, and repair actions; reject bare
+    asset rename/duplicate with actionable identity guidance; cover the contract
+    through `UnrealEditor-Cmd` + NullRHI Automation
+  - [ ] **M13.2A-2 — transactional full-class operations:** make rename,
+    duplicate, delete, cleanup, redirect/reference repair, and failure rollback
+    operate on the complete source/proxy/deployment/semantic artifact set
 - [ ] **M13.2B — dependency-aware Play:** make Build/Play run the minimum
   required reflection, binding, semantic, managed compile, native compile, and
   deployment steps from one dependency graph
@@ -2592,6 +2601,18 @@ SDK within the workflow budgets above, without repository knowledge or manual
 generator commands; C# and Graph produce equivalent behavior; expected edit
 errors are diagnosable from the UE editor; a compatible change reloads without
 restarting the editor.
+
+Progress (2026-08-31, M13.2A-1): `UUnifiedScriptAsset` now owns a native Asset
+Definition rather than falling through to the generic Data Asset editor. Normal
+open routes the selected identity into `UnifiedScriptAuthoringSurface`; the
+class-specific Content Browser menu opens Authoring or the exact C# source,
+locates the exact generated Blueprint, and exposes Repair. Unsafe bare rename
+and duplicate are blocked until the whole-class transaction exists. UE 5.8.1
+build and the focused `ScriptAsset.WorkflowContract` pass; the full CMD-only
+`UnrealEditor-Cmd` + NullRHI suite passes 24/24. Evidence is at
+`artifacts/m13-2a/automation/script-asset-workflow.log` and
+`artifacts/m13-2a/automation/unifiedscript-unreal-full.log`. Interactive Editor
+timing remains optional M13.2G usability evidence, not a correctness gate.
 
 ### M13.3 — Managed Script Class and Blueprint parity
 

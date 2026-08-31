@@ -14,6 +14,7 @@
 #include "ToolMenus.h"
 #include "UnifiedScriptEdGraph.h"
 #include "UnifiedScriptClassFactory.h"
+#include "UnifiedScriptAssetDefinition.h"
 #include "UnifiedScriptEditorDiagnostics.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SUnifiedScriptAuthoringSurface.h"
@@ -326,6 +327,7 @@ private:
             FUIAction(FExecuteAction::CreateRaw(
                 this,
                 &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptActorComponentClassFactory>)));
+        UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetContextMenu();
     }
 };
 

@@ -10,6 +10,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "Core",
             "CoreUObject",
             "ApplicationCore",
+            "AssetDefinition",
             "AssetTools",
             "AssetRegistry",
             "BlueprintGraph",

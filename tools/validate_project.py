@@ -1018,8 +1018,8 @@ def main() -> int:
         and "run-unifiedscript-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
-        and "M13.1 in progress" in roadmap_document
-        and "### M13.1 — External real-project pilot" in roadmap_document
+        and "Active milestone: **M13.2 in progress" in roadmap_document
+        and "### M13.2 — Puerts-grade daily authoring" in roadmap_document
         and "M12 strict release acceptance" in roadmap_document
         and "Frozen RC1 acceptance" in release_readiness_document
         and "One release-readiness command" in product_release_notes
@@ -1385,7 +1385,7 @@ def main() -> int:
         and "BuildCookRun" in script_class_golden_path
         and "SA_M13C0PersistentActor" in script_class_golden_path
         and "SA_M13C0PersistentComponent" in script_class_golden_path
-        and "Current tranche: **M13.1C-1e" in roadmap_document
+        and "M13.1C-1e headless workflow-contract closure" in roadmap_document
         and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
         and "require no handwritten facade | Complete |" in roadmap_document,
         "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
@@ -1407,7 +1407,7 @@ def main() -> int:
         and "firstPlayResult.status -ne 'ready'" in script_class_golden_path
         and "IncludeScriptClassFirstPlay" in packaged_native_onboarding
         and "cook.cookedAssets).Count -ne 4" in packaged_native_onboarding
-        and "M13.1C-1 first-Play connection (active)" in roadmap_document
+        and "M13.1C-1 — first-Play golden path" in roadmap_document
         and "M13.1C-1a — first Build" in roadmap_document
         and "connect class creation to the adopted project's single Build/Onboard"
         in roadmap_document,
@@ -1500,7 +1500,7 @@ def main() -> int:
         and "UnifiedScript Diagnostics" in authoring_diagnostics_document
         and "Export Support Bundle" in diagnostics_bundle_document
         and "M13.1C-1c — diagnostics" in roadmap_document
-        and "Current tranche: **M13.1C-1e" in roadmap_document,
+        and "M13.1C-1e headless workflow-contract closure" in roadmap_document,
         "M13.1C-1c unified UE diagnostics, navigation, recovery guidance, or support bundle is incomplete",
     )
     checks.append(
@@ -1532,11 +1532,50 @@ def main() -> int:
         and "M13.1C-1d extends that gate" in sdk_distribution
         and "A post-smoke ValidateOnly run" in unreal_onboarding_guide
         and "[x] **M13.1C-1d — packaged execution" in roadmap_document
-        and "Current tranche: **M13.1C-1e" in roadmap_document,
+        and "M13.1C-1e headless workflow-contract closure" in roadmap_document,
         "M13.1C-1d packaged generated-class execution, no-change replay, or user-owned rollback proof is incomplete",
     )
     checks.append(
         "M13.1C-1d executes packaged Actor and Component classes from the clean SDK"
+    )
+
+    script_asset_definition_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptAssetDefinition.h"
+    ).read_text(encoding="utf-8")
+    script_asset_definition_source = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptAssetDefinition.cpp"
+    ).read_text(encoding="utf-8")
+    script_asset_definition_tests = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Tests"
+        / "UnifiedScriptAssetDefinitionTests.cpp"
+    ).read_text(encoding="utf-8")
+    editor_build_rules = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "UEUnifiedScriptEditor.Build.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "UAssetDefinition_UnifiedScriptAsset" in script_asset_definition_header
+        and "OpenAssets" in script_asset_definition_header
+        and "CanRename" in script_asset_definition_header
+        and "CanDuplicate" in script_asset_definition_header
+        and "OpenAuthoringSurface(Asset)" in script_asset_definition_source
+        and "UnifiedScript.OpenAuthoring" in script_asset_definition_source
+        and "UnifiedScript.OpenSource" in script_asset_definition_source
+        and "UnifiedScript.LocateGeneratedClass" in script_asset_definition_source
+        and "UnifiedScript.OpenRepair" in script_asset_definition_source
+        and "RegisterUnifiedScriptAssetContextMenu" in editor_module
+        and '"AssetDefinition"' in editor_build_rules
+        and "UnifiedScript.Unreal.ScriptAsset.WorkflowContract"
+        in script_asset_definition_tests
+        and "FindExistingLiveTab" in script_asset_definition_tests
+        and "M13.2A-1 — canonical Script Asset entry" in roadmap_document,
+        "M13.2A native Script Asset opening, safe operations, actions, or headless contract is incomplete",
+    )
+    checks.append(
+        "M13.2A makes Script Assets the safe daily-workflow entry"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
