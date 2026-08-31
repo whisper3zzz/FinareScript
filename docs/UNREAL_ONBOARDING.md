@@ -1,13 +1,51 @@
 # Unreal project onboarding
 
-`tools/setup-unreal-project.ps1` is the M6.3 project-facing entry point. It
-turns the previously separate managed build, Unreal build, reflection export,
-binding generation, Script Asset synchronization, determinism, and Automation
-steps into one versioned operation driven by a project-owned configuration.
-The same script runs from either a source checkout or an extracted
-[distributable SDK](UNREAL_SDK.md); it reports `sdkLayout: repository` or
-`sdkLayout: packaged` and uses the SDK's verified managed payload in packaged
-mode.
+`unifiedscript adopt <Game.uproject>` is the M13.1A first-use entry point. It
+transactionally enables and installs the plugin/runtime and creates the first
+managed workspace plus project-owned onboarding, Contract, and deployment
+inputs. `--preview` makes no project changes, identical Apply is a no-op, and
+`--rollback` restores exact retained backups only when doing so cannot overwrite
+later user edits. `unifiedscript doctor <Game.uproject>` diagnoses the resulting
+ownership, runtime, engine, generation, and cook-readiness state.
+
+`tools/setup-unreal-project.ps1` is the build/onboarding stage used after
+adoption. It turns the managed build, Unreal build, reflection export, binding
+generation, Script Asset synchronization, determinism, and Automation steps
+into one versioned operation driven by the adopted configuration. The same
+script runs from either a source checkout or an extracted [distributable
+SDK](UNREAL_SDK.md); it reports `sdkLayout: repository` or `sdkLayout: packaged`
+and uses the SDK's verified managed payload in packaged mode.
+
+## Adopt and diagnose
+
+From an extracted SDK:
+
+```powershell
+& "$sdk\Tools\unifiedscript.cmd" `
+  adopt D:\Project\Game\Game.uproject --sdk-root $sdk --preview
+
+& "$sdk\Tools\unifiedscript.cmd" `
+  adopt D:\Project\Game\Game.uproject --sdk-root $sdk
+
+& "$sdk\Tools\unifiedscript.cmd" `
+  doctor D:\Project\Game\Game.uproject --engine-root D:\UE_5.8
+```
+
+The preview document uses
+`unifiedscript.unreal-project-adoption-plan/v0.1`. Every file is classified as
+`create`, `update`, `unchanged`, or `conflict` with current/desired SHA-256.
+Apply accepts only conflict-free plans and rechecks every current hash before
+the first commit. Its
+`unifiedscript.unreal-project-adoption-transaction/v0.1` state retains backups,
+the previous transaction link, and the exact product-owned paths required for
+safe upgrades and rollback. Project policy and managed source become
+user-editable after creation; future adoption never guesses through a changed
+file.
+
+The doctor report uses `unifiedscript.unreal-project-doctor/v0.1`. Missing
+first-generation coverage is a warning after adoption; a missing/disabled
+plugin, runtime closure, managed project, invalid onboarding schema, corrupt
+transaction state, or changed product-owned plugin/runtime is a failure.
 
 ## Apply
 

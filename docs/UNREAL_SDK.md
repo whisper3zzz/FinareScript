@@ -91,32 +91,48 @@ The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected
 engine family, managed target, and ABI contract before invoking Unreal.
 
-## Install into a project
+## Adopt an existing project
 
-Extract the ZIP and run its installer:
+Extract the ZIP and run the packaged CLI. This is the recommended first-use
+path for both C++ and Blueprint-only projects:
 
 ```powershell
 $sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
-powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\install-unifiedscript-sdk.ps1" `
-  -SdkRoot $sdk `
-  -Project D:\Project\Game\Game.uproject
+& "$sdk\Tools\unifiedscript.cmd" `
+  adopt D:\Project\Game\Game.uproject --sdk-root $sdk
 ```
 
-The `.uproject` must explicitly enable `UEUnifiedScript`. Installation is
-transactional: the plugin is assembled under a temporary project-local path
-and moved into place only after its runtime closure is verified. An existing
-plugin is rejected by default. `-Force` preserves it as a timestamped sibling
-backup before installing the new SDK rather than deleting it.
+`adopt` merges the plugin entry, installs the plugin and managed runtime, and
+renders the first managed project/script plus onboarding, Contract, and
+deployment inputs in one ownership transaction. Use `--preview` to emit the
+deterministic plan without changing files. A repeated Apply is a no-op; an
+unowned or edited collision is reported as a conflict rather than overwritten.
+Every changed file has a retained pre-transaction backup and exact content hash
+under `Saved/UnifiedScript/Adoption`; `adopt <project> --rollback` restores the
+latest transaction only when no post-adoption file has drifted.
 
-The machine-readable `unifiedscript.sdk-install-report/v0.1` is written under
-`Saved/UnifiedScript/Install`. It records SDK/project/plugin resolution and the
-backup path when an update replaced an existing plugin.
+Run the read-only product diagnosis with:
 
-## Run project onboarding
+```powershell
+& "$sdk\Tools\unifiedscript.cmd" `
+  doctor D:\Project\Game\Game.uproject --engine-root D:\UE_5.8
+```
 
-After adding the project-owned `Config/UnifiedScript.onboarding.json`, invoke
-the onboarding tool from the extracted SDK:
+`doctor` checks plugin enablement and payload, required managed runtime files,
+onboarding schema, managed workspace, transaction-owned payload drift, engine
+resolution, and the generated binding-coverage baseline. Warnings distinguish a
+valid adopted project that has not run its first native onboarding build from a
+broken installation.
+
+The older `Tools/install-unifiedscript-sdk.ps1` and
+`Tools/new-unifiedscript-project.ps1` commands remain compatibility/diagnostic
+entry points. They expose installation and scaffolding as separate operations
+and therefore are no longer the recommended golden path.
+
+## Build and run project onboarding
+
+After adoption creates `Config/UnifiedScript.onboarding.json`, invoke the
+build/onboarding tool from the extracted SDK:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
@@ -131,10 +147,8 @@ reflection/contract/build/deployment/determinism pipeline documented in
 [Unreal project onboarding](UNREAL_ONBOARDING.md). The generated onboarding
 report identifies `sdkLayout: packaged`.
 
-For a new consumer, `Tools/new-unifiedscript-project.ps1` renders all of those
-project-owned inputs, creates the first C# Script Asset type and Authoring
-Surface, and invokes onboarding in one operation. See the
-[first-script walkthrough](UNREAL_FIRST_SCRIPT.md). The companion
+See the [first-script walkthrough](UNREAL_FIRST_SCRIPT.md) for the complete
+adopt/build/Play path. The companion
 `Tools/start-unifiedscript-authoring.ps1` launches the packaged transactional
 Workbench for visual/C# edits and hot reload.
 

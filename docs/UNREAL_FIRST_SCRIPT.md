@@ -1,52 +1,69 @@
 # First UnifiedScript in an Unreal project
 
-This walkthrough starts from an existing C++ UE 5.8 project and ends with the
-same script running in editor play, opening in the native visual authoring
-surface, hot reloading, and shipping in a Win64 package. It does not copy source
-or generated files from HostProject or BlockBreaker.
+This walkthrough starts from an existing C++ or Blueprint-only UE 5.8 project
+and ends with the same script running in editor play, opening in the native
+visual authoring surface, hot reloading, and shipping in a Win64 package. It
+does not copy source or generated files from HostProject or BlockBreaker, and it
+does not require hand-editing `.uproject`, Contract, deployment, or onboarding
+JSON.
 
-## 1. Enable and install the plugin
+## 1. Adopt the existing project
 
-Add this entry to the `.uproject` `Plugins` array before installation:
-
-```json
-{
-  "Name": "UEUnifiedScript",
-  "Enabled": true
-}
-```
-
-Extract the SDK and install it:
+Extract the SDK and run the packaged CLI. `adopt` is Apply by default:
 
 ```powershell
 $sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
 $project = 'D:\Project\Game\Game.uproject'
 
-powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\install-unifiedscript-sdk.ps1" `
-  -SdkRoot $sdk `
-  -Project $project
+& "$sdk\Tools\unifiedscript.cmd" `
+  adopt $project --sdk-root $sdk
 ```
 
-The source plugin and framework-dependent managed host now belong to the game
-project. Native binaries are intentionally built by that project's selected
-engine.
+Use `--preview --report <path>` to inspect every create/update/unchanged/conflict
+decision without changing the project. Apply then performs one file transaction:
 
-## 2. Create the first script and integrate the project
+- merges the enabled `UEUnifiedScript` entry while preserving other `.uproject`
+  fields;
+- installs the SDK source plugin and managed runtime closure;
+- creates the managed project and `FirstScript.cs` from the selected template;
+- creates the project-owned onboarding, Contract, and deployment inputs;
+- records exact before/after hashes and backups under
+  `Saved/UnifiedScript/Adoption`.
 
-Run the SDK scaffold command:
+A second identical invocation reports `unchanged` and creates no product-file
+diff. Existing unowned or post-adoption edited files are conflicts and are never
+silently overwritten. To restore the latest applied transaction, first preserve
+any changed files and run:
+
+```powershell
+& "$sdk\Tools\unifiedscript.cmd" `
+  adopt $project --rollback
+```
+
+Run `doctor` at any point to diagnose the project/plugin/runtime/configuration,
+engine resolution, adopted payload drift, and whether the first generated
+binding coverage baseline exists:
+
+```powershell
+& "$sdk\Tools\unifiedscript.cmd" `
+  doctor $project --engine-root D:\UE_5.8
+```
+
+## 2. Build bindings and the first Script Asset
+
+Adoption intentionally finishes before native compilation so it remains
+previewable and rollback-safe. Run the existing project build/onboarding action
+to compile the plugin, export reflection, generate bindings, compile the managed
+project, and materialize the Script Asset:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\new-unifiedscript-project.ps1" `
+  -File "$sdk\Tools\setup-unreal-project.ps1" `
   -Project $project `
-  -EngineRoot D:\UE_5.8 `
-  -Template minimal `
-  -ScriptName FirstScript
+  -EngineRoot D:\UE_5.8
 ```
 
-The command discovers the project module and editor target, then renders
-project-owned files from placeholder templates:
+The adopted project owns:
 
 - `Managed/Game.UnifiedScript/FirstScript.cs` and its SDK-style project;
 - `Config/UnifiedScript.onboarding.json`;
@@ -56,10 +73,11 @@ project-owned files from placeholder templates:
   API nodes, API/diagnostic browser, coverage, and
   `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
 
-It immediately executes normal onboarding, so success means the managed
-project, reflection export, complete native contract, final editor target, and
-Script Asset have already passed together. Existing scaffold files are never
-overwritten unless `-Force` is explicit.
+Onboarding success means the managed project, reflection export, complete native
+Contract, final editor target, and Script Asset have passed together. The older
+`install-unifiedscript-sdk.ps1` and `new-unifiedscript-project.ps1` entry points
+remain available for compatibility and advanced diagnosis; new projects should
+use `adopt` so installation and scaffolding share one ownership transaction.
 
 ## 3. Editor play
 

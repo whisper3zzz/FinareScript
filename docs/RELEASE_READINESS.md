@@ -13,7 +13,7 @@ Run from a clean UnifiedScript checkout and clean comparison repositories:
 powershell -ExecutionPolicy Bypass `
   -File tools/run-unifiedscript-release-readiness.ps1 `
   -EngineRoot D:\UE_5.8 `
-  -ComparisonRoot D:\Project\UEUnifiedScriptComparison
+  -ComparisonRoot D:\Comparison\UEUnifiedScript
 ```
 
 The command owns these evidence families:

@@ -322,6 +322,7 @@ try {
     $toolDirectory = Join-Path $sdkRoot 'Tools'
     New-Item -ItemType Directory -Force -Path $toolDirectory | Out-Null
     foreach ($tool in @(
+        'unifiedscript.cmd',
         'setup-unreal-project.ps1',
         'install-unifiedscript-sdk.ps1',
         'new-unifiedscript-project.ps1',
@@ -394,6 +395,7 @@ try {
         -Force
 
     foreach ($requiredPayload in @(
+        'Tools\unifiedscript.cmd',
         'Tools\setup-unreal-project.ps1',
         'Tools\install-unifiedscript-sdk.ps1',
         'Tools\new-unifiedscript-project.ps1',

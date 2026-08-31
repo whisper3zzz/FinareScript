@@ -123,6 +123,16 @@ internal static class Program
             return RunDiagnosticsBundle(args);
         }
 
+        if (args.Count > 0 && args[0] == "adopt")
+        {
+            return RunUnrealProjectAdoption(args);
+        }
+
+        if (args.Count > 0 && args[0] == "doctor")
+        {
+            return RunUnrealProjectDoctor(args);
+        }
+
         if (args.Count > 0 && args[0] == "debug-serve")
         {
             return RunDebugServe(args);
@@ -544,6 +554,111 @@ internal static class Program
             $"redactions={result.Manifest.Reports.Sum(static report => report.RedactionCount)}; " +
             $"privacy={result.Manifest.PrivacyMode}");
         return 0;
+    }
+
+    private static int RunUnrealProjectAdoption(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealProjectAdoptionArguments(
+                args,
+                out UnrealProjectAdoptionCliOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal project adoption options.");
+        if (options.Rollback)
+        {
+            UnrealProjectAdoptionApplyResult rollback =
+                UnrealProjectAdoptionService.Rollback(
+                    options.ProjectPath,
+                    options.TransactionId);
+            Console.WriteLine(
+                $"adoption status={rollback.Status}; transaction={rollback.TransactionId}; " +
+                $"restored={rollback.Summary.Update}");
+            if (rollback.ReportPath is not null)
+            {
+                Console.WriteLine(rollback.ReportPath);
+            }
+            return 0;
+        }
+
+        UnrealProjectAdoptionPlan plan = UnrealProjectAdoptionService.CreatePlan(
+            new UnrealProjectAdoptionOptions(
+                options.ProjectPath,
+                options.SdkRoot,
+                options.TemplateId,
+                options.ScriptName,
+                options.ManagedNamespace));
+        string serializedPlan = UnrealProjectAdoptionService.SerializePlan(plan.Document);
+        if (options.ReportPath is not null)
+        {
+            UnrealProjectAdoptionService.WriteReport(options.ReportPath, serializedPlan);
+            Console.WriteLine(Path.GetFullPath(options.ReportPath));
+        }
+        Console.WriteLine(
+            $"adoption create={plan.Document.Summary.Create}; " +
+            $"update={plan.Document.Summary.Update}; " +
+            $"unchanged={plan.Document.Summary.Unchanged}; " +
+            $"conflicts={plan.Document.Summary.Conflicts}");
+        foreach (UnrealProjectAdoptionPlanEntry conflict in plan.Document.Files.Where(
+                     static file => file.Action == "conflict"))
+        {
+            Console.Error.WriteLine($"conflict: {conflict.Path}: {conflict.Reason}");
+        }
+        if (options.Preview)
+        {
+            return plan.Document.Summary.Conflicts == 0 ? 0 : 3;
+        }
+        if (plan.Document.Summary.Conflicts != 0)
+        {
+            return 65;
+        }
+
+        UnrealProjectAdoptionApplyResult result = UnrealProjectAdoptionService.Apply(plan);
+        Console.WriteLine($"adoption status={result.Status}; transaction={result.TransactionId ?? "none"}");
+        if (result.ReportPath is not null)
+        {
+            Console.WriteLine(result.ReportPath);
+        }
+        return 0;
+    }
+
+    private static int RunUnrealProjectDoctor(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealProjectDoctorArguments(
+                args,
+                out UnrealProjectDoctorCliOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal project doctor options.");
+        UnrealProjectDoctorReport report = UnrealProjectAdoptionService.Diagnose(
+            options.ProjectPath,
+            options.EngineRoot);
+        string reportPath = Path.GetFullPath(options.ReportPath ?? Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(options.ProjectPath)) ?? Environment.CurrentDirectory,
+            "Saved",
+            "UnifiedScript",
+            "Adoption",
+            "doctor-report.json"));
+        UnrealProjectAdoptionService.WriteReport(
+            reportPath,
+            UnrealProjectAdoptionService.SerializeDoctor(report));
+        Console.WriteLine(
+            $"doctor passed={report.Summary.Passed}; warnings={report.Summary.Warnings}; " +
+            $"failed={report.Summary.Failed}");
+        foreach (UnrealProjectDoctorCheck check in report.Checks.Where(
+                     static check => check.Status != "passed"))
+        {
+            Console.WriteLine($"{check.Status}: {check.Id}: {check.Message}");
+        }
+        Console.WriteLine(reportPath);
+        return report.Summary.Failed == 0 ? 0 : 2;
     }
 
     private static int RunUpgrade(IReadOnlyList<string> args, bool isPlan)
@@ -3546,6 +3661,136 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealProjectAdoptionArguments(
+        IReadOnlyList<string> args,
+        out UnrealProjectAdoptionCliOptions? options)
+    {
+        options = null;
+        if (args.Count < 2 || args[0] != "adopt" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string projectPath = args[1];
+        string? sdkRoot = null;
+        string templateId = "minimal";
+        string scriptName = "FirstScript";
+        string? managedNamespace = null;
+        string? reportPath = null;
+        string? transactionId = null;
+        bool templateSet = false;
+        bool scriptNameSet = false;
+        bool preview = false;
+        bool apply = false;
+        bool rollback = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--preview" && !preview)
+            {
+                preview = true;
+                continue;
+            }
+            if (option == "--apply" && !apply)
+            {
+                apply = true;
+                continue;
+            }
+            if (option == "--rollback" && !rollback)
+            {
+                rollback = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--sdk-root" when sdkRoot is null:
+                    sdkRoot = value;
+                    break;
+                case "--template" when !templateSet:
+                    templateId = value;
+                    templateSet = true;
+                    break;
+                case "--script-name" when !scriptNameSet:
+                    scriptName = value;
+                    scriptNameSet = true;
+                    break;
+                case "--namespace" when managedNamespace is null:
+                    managedNamespace = value;
+                    break;
+                case "--report" when reportPath is null:
+                    reportPath = value;
+                    break;
+                case "--transaction" when transactionId is null:
+                    transactionId = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (preview && apply || rollback && (preview || apply) ||
+            rollback && (sdkRoot is not null || managedNamespace is not null ||
+                reportPath is not null || templateSet || scriptNameSet) ||
+            !rollback && transactionId is not null)
+        {
+            return false;
+        }
+        options = new UnrealProjectAdoptionCliOptions(
+            projectPath,
+            sdkRoot,
+            templateId,
+            scriptName,
+            managedNamespace,
+            reportPath,
+            preview,
+            rollback,
+            transactionId);
+        return true;
+    }
+
+    private static bool TryParseUnrealProjectDoctorArguments(
+        IReadOnlyList<string> args,
+        out UnrealProjectDoctorCliOptions? options)
+    {
+        options = null;
+        if (args.Count < 2 || args[0] != "doctor" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        string? engineRoot = null;
+        string? reportPath = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--engine-root" when engineRoot is null:
+                    engineRoot = value;
+                    break;
+                case "--report" when reportPath is null:
+                    reportPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        options = new UnrealProjectDoctorCliOptions(args[1], engineRoot, reportPath);
+        return true;
+    }
+
     private static bool TryParseUnrealBindingArguments(
         IReadOnlyList<string> args,
         out UnrealBindingOptions? options)
@@ -5250,6 +5495,9 @@ internal static class Program
         "  unifiedscript upgrade-plan <file|directory> --out <report.json> [--policy <policy.json>] [--fail-on-blocked]\n" +
         "  unifiedscript upgrade-apply <file|directory> --out <directory> [--report <report.json>] [--policy <policy.json>]\n" +
         "  unifiedscript diagnostics-bundle <directory> --out <bundle.zip> [--policy <policy.json>]\n" +
+        "  unifiedscript adopt <Game.uproject> [--preview|--apply] [--sdk-root <directory>] [--template <id>] [--script-name <name>] [--namespace <name>] [--report <plan.json>]\n" +
+        "  unifiedscript adopt <Game.uproject> --rollback [--transaction <id>]\n" +
+        "  unifiedscript doctor <Game.uproject> [--engine-root <directory>] [--report <doctor.json>]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
@@ -5491,6 +5739,22 @@ internal static class Program
         string InputDirectory,
         string OutputPath,
         string? PolicyPath);
+
+    private sealed record UnrealProjectAdoptionCliOptions(
+        string ProjectPath,
+        string? SdkRoot,
+        string TemplateId,
+        string ScriptName,
+        string? ManagedNamespace,
+        string? ReportPath,
+        bool Preview,
+        bool Rollback,
+        string? TransactionId);
+
+    private sealed record UnrealProjectDoctorCliOptions(
+        string ProjectPath,
+        string? EngineRoot,
+        string? ReportPath);
 
     private sealed record UnrealPuertsInventoryOptions(
         string ProjectRoot,

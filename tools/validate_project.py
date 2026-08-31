@@ -654,6 +654,56 @@ def main() -> int:
     )
     checks.append("one command onboards and deterministically validates an Unreal project")
 
+    adoption_source_path = (
+        ROOT / "src" / "UnifiedScript.Cli" / "UnrealProjectAdoption.cs"
+    )
+    adoption_tests_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealProjectAdoptionTests.cs"
+    )
+    packaged_adoption_path = ROOT / "tools" / "test-packaged-adoption.ps1"
+    adoption_source = adoption_source_path.read_text(encoding="utf-8")
+    adoption_tests = adoption_tests_path.read_text(encoding="utf-8")
+    packaged_adoption = packaged_adoption_path.read_text(encoding="utf-8")
+    first_script_guide = (ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md").read_text(
+        encoding="utf-8"
+    )
+    require(
+        adoption_source_path.is_file()
+        and adoption_tests_path.is_file()
+        and packaged_adoption_path.is_file()
+        and 'args[0] == "adopt"' in cli_source
+        and 'args[0] == "doctor"' in cli_source
+        and "unifiedscript.unreal-project-adoption-plan/v0.1" in adoption_source
+        and "unifiedscript.unreal-project-adoption-transaction/v0.1"
+        in adoption_source
+        and "unifiedscript.unreal-project-doctor/v0.1" in adoption_source
+        and 'action = "conflict"' in adoption_source
+        and "ValidateCurrentPlanInputs" in adoption_source
+        and "RestoreCommittedFiles" in adoption_source
+        and "Rollback would overwrite post-adoption changes" in adoption_source
+        and "IsOwnedAndUnmodified" in adoption_source
+        and "CliPreviewsAppliesDiagnosesAndRerunsWithoutProductDiff"
+        in adoption_tests
+        and "InterruptedApplyRestoresEveryPreviouslyCommittedFile"
+        in adoption_tests
+        and "OwnedSdkPayloadUpgradesAndRollsBackOneGenerationAtATime"
+        in adoption_tests
+        and "BlueprintOnlyProjectUsesDeterministicFallbackModuleAndEditorTarget"
+        in adoption_tests
+        and "unifiedscript.packaged-adoption-acceptance/v0.1"
+        in packaged_adoption
+        and "Repeated adoption changed product files" in packaged_adoption
+        and "Rollback did not restore the original product files"
+        in packaged_adoption
+        and "Adopted managed project failed to build" in packaged_adoption
+        and "adopt $project --sdk-root $sdk" in first_script_guide
+        and "doctor $project --engine-root" in first_script_guide,
+        "Zero-config Unreal adoption, safe rollback, doctor, fixtures, or guide is missing",
+    )
+    checks.append(
+        "existing Unreal projects adopt transactionally with deterministic rerun and doctor"
+    )
+
     sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"
     sdk_install_path = ROOT / "tools" / "install-unifiedscript-sdk.ps1"
     sdk_distribution_path = ROOT / "docs" / "UNREAL_SDK.md"
@@ -671,6 +721,7 @@ def main() -> int:
         and "outside the SDK temp boundary" in sdk_package
         and "Managed\\Runtime" in sdk_package
         and "Tools\\UnifiedScript.Cli" in sdk_package
+        and "unifiedscript.cmd" in sdk_package
         and "measure-compiled-chunk-load.ps1" in sdk_package
         and "measure-readytorun-chunk.ps1" in sdk_package
         and "measure-generation-prewarm.ps1" in sdk_package

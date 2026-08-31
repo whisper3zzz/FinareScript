@@ -12,10 +12,10 @@ and no Puerts/TypeScript payload in the target project or package. M8.4 then
 completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
 IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
 M9-M11 complete observable hot reload, gameplay profiling, matched performance,
-reliability, packaging, compatibility, and compiled-chunk delivery. M12 now
-turns the proven runtime into a migration ecosystem and UnifiedScript 1.0; its
-current workflow scans a Puerts project and generates an auditable migration
-package instead of guessing at a one-click source translation.
+reliability, packaging, compatibility, and compiled-chunk delivery. M12 turned
+the proven runtime into a migration ecosystem and UnifiedScript 1.0 RC; M13 now
+targets Puerts-grade first-use and daily-development ergonomics without
+weakening the generated Contract or lifecycle model.
 
 ## Product roadmap
 
@@ -26,7 +26,24 @@ slice, acceptance gates, and the longer path through runtime coverage,
 visual/C# authoring, debugging, performance, release hardening, and migration.
 An unqualified request to continue iteration follows its current cursor.
 
-The M6.3 project entry point now applies the complete generated-contract path:
+The M13.1A first-use entry point previews or transactionally adopts an existing
+C++ or Blueprint-only project without hand-editing `.uproject`, Contract,
+deployment, or onboarding JSON:
+
+```powershell
+& D:\UE_5.8\Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe `
+  src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll `
+  adopt D:\Project\Game\Game.uproject --sdk-root . --preview
+```
+
+Omit `--preview` to Apply. Repeating Apply creates no product diff; collisions
+with unowned or edited files block instead of overwriting; `adopt <project>
+--rollback` restores the latest exact transaction; and `doctor <project>
+--engine-root D:\UE_5.8` reports installation, ownership, engine, generated
+surface, and cook-readiness diagnostics.
+
+After adoption, the M6.3 build/onboarding entry point applies the complete
+generated-contract path:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/setup-unreal-project.ps1 `
