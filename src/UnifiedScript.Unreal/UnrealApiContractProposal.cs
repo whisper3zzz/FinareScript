@@ -397,9 +397,10 @@ public sealed class UnrealApiContractProposalGenerator
         foreach (IGrouping<string, UnrealReflectedFunction> group in functionGroups)
         {
             UnrealReflectedFunction[] functions = group.ToArray();
+            string managedName = UnrealManagedNaming.FunctionName(functions[0]);
             if (functions.Length == 1)
             {
-                if (group.Key == requestedMember)
+                if (group.Key == requestedMember || managedName == requestedMember)
                 {
                     candidates.Add(group.Key);
                 }
@@ -408,7 +409,9 @@ public sealed class UnrealApiContractProposalGenerator
             foreach (UnrealReflectedFunction function in functions)
             {
                 string selector = UnrealApiContractProjector.FunctionSelector(function);
-                if (requestedMember == group.Key || requestedMember == selector)
+                string managedSelector = managedName + selector[group.Key.Length..];
+                if (requestedMember == group.Key || requestedMember == managedName ||
+                    requestedMember == selector || requestedMember == managedSelector)
                 {
                     candidates.Add(selector);
                 }

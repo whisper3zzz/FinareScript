@@ -48,13 +48,16 @@ managed project with engine-bundled .NET 10, and verifies Declaration IR and
 Authoring Surface output. Its report schema is
 `unifiedscript.project-template-acceptance/v0.1`.
 
-## One Contract, five generated consumers
+## One effective Contract, five generated consumers
 
 Project onboarding now emits the browser as part of the existing transactional
 binding generation:
 
 ```text
-Unreal reflection + project API Contract
+managed source use -> dependency requests
+                            +
+Unreal reflection + reviewed base Contract
+        -> safe development Contract overlay
         -> typed managed bindings
         -> native thunk table
         -> visual node catalog
@@ -82,6 +85,14 @@ unifiedscript ue-bindings Generated/Game.reflection.json `
   --report Generated/Game.binding-coverage.json `
   --fail-on-rejected
 ```
+
+New adopted projects first run `ue-surface-expand` inside project-local Setup.
+It emits the versioned source request set, development Contract, and
+development-surface decision report. Only a completely safe result becomes the
+effective `--contract` input shown above; an ambiguous, missing, manual, or
+unsupported request keeps the reviewed base Contract unchanged and emits an
+exact source-linked diagnostic. This preserves one identity across all five
+generated consumers without requiring a Contract edit before first Play.
 
 `setup-unreal-project.ps1` regenerates and byte-compares the browser during its
 determinism phase. New scaffold configurations declare `bindings.browserOutput`;
@@ -112,7 +123,8 @@ go through normal source review and onboarding regeneration.
 
 The catalog is a reviewed starting point, not a game generator. It does not
 create maps, game-specific assets, replicated authority policy, or native game
-classes. The browser describes the selected project Contract; APIs outside that
-allowlist are intentionally absent. Runtime diagnostic instances remain in the
+classes. The browser describes the effective project Contract: the reviewed
+base plus a fully accepted local development overlay when enabled. Unreferenced
+APIs and requests with open decisions are intentionally absent. Runtime diagnostic instances remain in the
 debug panel and privacy-safe diagnostics bundles—the browser catalogs stable API
 generation/coverage diagnostics rather than retaining gameplay failure data.

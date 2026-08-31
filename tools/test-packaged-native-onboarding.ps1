@@ -227,6 +227,7 @@ $applyReport = Assert-OnboardingReport `
         'managed-toolchain',
         'native-bootstrap-build',
         'reflection-export',
+        'development-surface',
         'binding-generation',
         'managed-gameplay-build',
         'compiled-chunks',
@@ -253,6 +254,18 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.binding-coverage.json") `
         -Label 'Binding coverage'
+    apiRequests = Assert-File `
+        -Path (Join-Path $projectRoot `
+            "Generated\$projectName.api-requests.json") `
+        -Label 'Source API dependency requests'
+    developmentContract = Assert-File `
+        -Path (Join-Path $projectRoot `
+            "Generated\$projectName.development-api-contract.json") `
+        -Label 'Automatic development API Contract'
+    developmentSurface = Assert-File `
+        -Path (Join-Path $projectRoot `
+            "Generated\$projectName.development-surface.json") `
+        -Label 'Automatic development API surface report'
     managedAssembly = Assert-File `
         -Path (Join-Path $projectRoot `
             "Plugins\UEUnifiedScript\Binaries\Managed\Scripts\$assemblyName.dll") `
@@ -273,6 +286,35 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Binaries\Win64\$projectName.target") `
         -Label 'Built game target receipt'
+}
+$surfaceReport = Get-Content `
+    -LiteralPath $generatedEvidence.developmentSurface.path `
+    -Raw | ConvertFrom-Json
+$surfaceRequests = Get-Content `
+    -LiteralPath $generatedEvidence.apiRequests.path `
+    -Raw | ConvertFrom-Json
+$surfaceContract = Get-Content `
+    -LiteralPath $generatedEvidence.developmentContract.path `
+    -Raw | ConvertFrom-Json
+if ($surfaceReport.schemaVersion -ne
+        'unifiedscript.unreal-api-development-surface/v0.1' -or
+    $surfaceReport.applied -ne $true -or
+    [int]$surfaceReport.summary.selectedCount -lt 1 -or
+    [int]$surfaceReport.summary.openDecisionCount -ne 0 -or
+    @($surfaceRequests.requests | Where-Object {
+        $_.suggestedTypePath -eq '/Script/Engine.Actor' -and
+        $_.memberName -eq 'GetActorLocation'
+    }).Count -ne 1 -or
+    @($surfaceContract.types | Where-Object {
+        $_.path -eq '/Script/Engine.Actor' -and
+        'K2_GetActorLocation' -in @($_.members)
+    }).Count -ne 1) {
+    throw 'Automatic Actor.GetActorLocation development surface acceptance failed.'
+}
+$managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path -Raw
+if ($managedBindingText -notmatch 'class Actor' -or
+    $managedBindingText -notmatch 'GetActorLocation') {
+    throw 'Generated managed binding does not contain the source-requested Actor API.'
 }
 
 $validateReportPath = Join-Path $projectRoot `
@@ -297,6 +339,7 @@ $validateReport = Assert-OnboardingReport `
     -Mode 'validateOnly' `
     -RequiredPhases @(
         'preflight',
+        'development-surface-validation',
         'deployment',
         'determinism',
         'managed-startup')

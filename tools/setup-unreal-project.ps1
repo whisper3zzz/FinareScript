@@ -342,6 +342,51 @@ function Invoke-BindingGeneration {
         -FailureMessage 'Unreal binding generation failed.'
 }
 
+function Invoke-DevelopmentSurfaceExpansion {
+    param(
+        [Parameter(Mandatory)][string]$DotNet,
+        [Parameter(Mandatory)][string]$CliAssembly,
+        [Parameter(Mandatory)][string]$ReflectionManifest,
+        [Parameter(Mandatory)][string]$BaseContract,
+        [Parameter(Mandatory)][string[]]$ManagedProjects,
+        [Parameter(Mandatory)][string]$ManagedConfiguration,
+        [Parameter(Mandatory)][string]$RequestsOutput,
+        [Parameter(Mandatory)][string]$OverlayOutput,
+        [Parameter(Mandatory)][string]$ReportOutput,
+        [Parameter(Mandatory)][bool]$FailOnOpenDecisions,
+        [Parameter(Mandatory)][string]$LogPath
+    )
+
+    foreach ($output in @($RequestsOutput, $OverlayOutput, $ReportOutput)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output) | Out-Null
+    }
+    $arguments = @(
+        $CliAssembly,
+        'ue-surface-expand',
+        $ReflectionManifest
+    )
+    foreach ($managedProject in $ManagedProjects) {
+        $arguments += @('--project', $managedProject)
+    }
+    $arguments += @(
+        '--base', $BaseContract,
+        '--requests-out', $RequestsOutput,
+        '--overlay-out', $OverlayOutput,
+        '--report', $ReportOutput,
+        '--configuration', $ManagedConfiguration,
+        '--dotnet', $DotNet
+    )
+    if ($FailOnOpenDecisions) {
+        $arguments += '--fail-on-open-decisions'
+    }
+    Invoke-LoggedCommand `
+        -FilePath $DotNet `
+        -Arguments $arguments `
+        -LogPath $LogPath `
+        -FailureCode 'USONB2005' `
+        -FailureMessage 'Automatic Unreal API development-surface expansion failed.'
+}
+
 function Assert-GeneratedFileMatches {
     param(
         [Parameter(Mandatory)][string]$Expected,
@@ -530,11 +575,19 @@ try {
             -Context 'reflection'
         Assert-AllowedProperties `
             -Value $configJson.bindings `
-            -Allowed @(
-                'contract', 'managedOutput', 'nativeOutput', 'nodeCatalogOutput',
-                'browserOutput', 'coverageOutput', 'failOnRejected',
-                'requireCompleteNativeCoverage') `
-            -Context 'bindings'
+             -Allowed @(
+                 'contract', 'managedOutput', 'nativeOutput', 'nodeCatalogOutput',
+                 'browserOutput', 'coverageOutput', 'failOnRejected',
+                 'requireCompleteNativeCoverage', 'developmentSurface') `
+             -Context 'bindings'
+        if ($null -ne $configJson.bindings.developmentSurface) {
+            Assert-AllowedProperties `
+                -Value $configJson.bindings.developmentSurface `
+                -Allowed @(
+                    'enabled', 'requestsOutput', 'contractOutput', 'reportOutput',
+                    'failOnOpenDecisions') `
+                -Context 'bindings.developmentSurface'
+        }
         Assert-AllowedProperties `
             -Value $configJson.deployment `
             -Allowed @('manifest', 'enabled') `
@@ -619,6 +672,44 @@ try {
         $resolved.failOnRejected = $configJson.bindings.failOnRejected -ne $false
         $resolved.requireCompleteNativeCoverage =
             $configJson.bindings.requireCompleteNativeCoverage -eq $true
+        $resolved.developmentSurfaceEnabled =
+            $null -ne $configJson.bindings.developmentSurface -and
+            $configJson.bindings.developmentSurface.enabled -ne $false
+        $resolved.developmentSurfaceFailOnOpen =
+            $resolved.developmentSurfaceEnabled -and
+            $configJson.bindings.developmentSurface.failOnOpenDecisions -ne $false
+        if ($resolved.developmentSurfaceEnabled) {
+            foreach ($requiredProperty in @(
+                'requestsOutput', 'contractOutput', 'reportOutput')) {
+                if ([string]::IsNullOrWhiteSpace(
+                        $configJson.bindings.developmentSurface.$requiredProperty)) {
+                    Throw-OnboardingError `
+                        -Code 'USONB1001' `
+                        -Message (
+                            "bindings.developmentSurface requires '$requiredProperty' when enabled.")
+                }
+            }
+            $resolved.developmentSurfaceRequests = Resolve-FullPath `
+                -Path ([string]$configJson.bindings.developmentSurface.requestsOutput) `
+                -BaseDirectory $configDirectory
+            $resolved.developmentSurfaceContract = Resolve-FullPath `
+                -Path ([string]$configJson.bindings.developmentSurface.contractOutput) `
+                -BaseDirectory $configDirectory
+            $resolved.developmentSurfaceReport = Resolve-FullPath `
+                -Path ([string]$configJson.bindings.developmentSurface.reportOutput) `
+                -BaseDirectory $configDirectory
+        } else {
+            $resolved.developmentSurfaceRequests = $null
+            $resolved.developmentSurfaceContract = $null
+            $resolved.developmentSurfaceReport = $null
+        }
+        $resolved.effectiveContract = if (
+            $resolved.developmentSurfaceEnabled -and
+            (Test-Path -LiteralPath $resolved.developmentSurfaceContract -PathType Leaf)) {
+            $resolved.developmentSurfaceContract
+        } else {
+            $resolved.contract
+        }
         $resolved.deploymentEnabled = $configJson.deployment.enabled -ne $false
         $resolved.deployment = Resolve-FullPath `
             -Path ([string]$configJson.deployment.manifest) `
@@ -738,15 +829,19 @@ try {
             Assert-RequiredPath -Path $required -Label 'Onboarding input'
         }
         foreach ($destination in @(
-            $resolved.reflection,
-            $resolved.managedOutput,
-            $resolved.nativeOutput,
-            $resolved.nodeCatalogOutput,
-            $resolved.browserOutput,
-            $resolved.coverageOutput,
-            $resolved.managedStage)) {
-            Assert-WritableDestination -Path $destination
-        }
+             $resolved.reflection,
+             $resolved.managedOutput,
+             $resolved.nativeOutput,
+             $resolved.nodeCatalogOutput,
+             $resolved.browserOutput,
+             $resolved.coverageOutput,
+             $resolved.managedStage,
+             $resolved.developmentSurfaceRequests,
+             $resolved.developmentSurfaceContract,
+             $resolved.developmentSurfaceReport) |
+             Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
+             Assert-WritableDestination -Path $destination
+         }
         $managedStageBoundary = [IO.Path]::GetFullPath(
             $resolved.managedStage).TrimEnd('\', '/') +
             [IO.Path]::DirectorySeparatorChar
@@ -819,16 +914,23 @@ try {
             'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
         Assert-RequiredPath -Path $resolved.dotnet -Label 'Engine-bundled .NET 10' -Code 'USONB1109'
 
-        if ($ValidateOnly) {
-            foreach ($required in @(
-                $cliAssembly,
-                $resolved.reflection,
-                $resolved.managedOutput,
-                $resolved.nativeOutput,
-                $resolved.nodeCatalogOutput,
-                $resolved.browserOutput,
-                $resolved.coverageOutput)) {
-                Assert-RequiredPath `
+         if ($ValidateOnly) {
+             $validatePrerequisites = @(
+                 $cliAssembly,
+                 $resolved.reflection,
+                 $resolved.managedOutput,
+                 $resolved.nativeOutput,
+                 $resolved.nodeCatalogOutput,
+                 $resolved.browserOutput,
+                 $resolved.coverageOutput)
+             if ($resolved.developmentSurfaceEnabled) {
+                 $validatePrerequisites += @(
+                     $resolved.developmentSurfaceRequests,
+                     $resolved.developmentSurfaceContract,
+                     $resolved.developmentSurfaceReport)
+             }
+             foreach ($required in $validatePrerequisites) {
+                 Assert-RequiredPath `
                     -Path $required `
                     -Label 'ValidateOnly prerequisite' `
                     -Code 'USONB1201'
@@ -892,10 +994,10 @@ try {
         if (Test-Path -LiteralPath $resolved.reflection) {
             Invoke-OnboardingPhase -Name 'bootstrap-bindings' -Action {
                 Invoke-BindingGeneration `
-                    -DotNet $resolved.dotnet `
-                    -CliAssembly $cliAssembly `
-                    -ReflectionManifest $resolved.reflection `
-                    -Contract $resolved.contract `
+                 -DotNet $resolved.dotnet `
+                 -CliAssembly $cliAssembly `
+                 -ReflectionManifest $resolved.reflection `
+                 -Contract $resolved.effectiveContract `
                     -ManagedOutput $resolved.managedOutput `
                     -NativeOutput $resolved.nativeOutput `
                     -NodeCatalogOutput $resolved.nodeCatalogOutput `
@@ -921,7 +1023,7 @@ try {
                 -FailureMessage 'Initial Unreal editor build failed.'
         }
 
-        Invoke-OnboardingPhase -Name 'reflection-export' -Action {
+         Invoke-OnboardingPhase -Name 'reflection-export' -Action {
             New-Item -ItemType Directory -Force -Path `
                 (Split-Path -Parent $resolved.reflection) | Out-Null
             $arguments = @(
@@ -947,14 +1049,36 @@ try {
                 -Path $resolved.reflection `
                 -Label 'Reflection manifest' `
                 -Code 'USONB2202'
+         }
+
+        if ($resolved.developmentSurfaceEnabled) {
+            Invoke-OnboardingPhase -Name 'development-surface' -Action {
+                Invoke-DevelopmentSurfaceExpansion `
+                    -DotNet $resolved.dotnet `
+                    -CliAssembly $cliAssembly `
+                    -ReflectionManifest $resolved.reflection `
+                    -BaseContract $resolved.contract `
+                    -ManagedProjects $resolved.managedProjects `
+                    -ManagedConfiguration $resolved.managedConfiguration `
+                    -RequestsOutput $resolved.developmentSurfaceRequests `
+                    -OverlayOutput $resolved.developmentSurfaceContract `
+                    -ReportOutput $resolved.developmentSurfaceReport `
+                    -FailOnOpenDecisions $resolved.developmentSurfaceFailOnOpen `
+                    -LogPath (Join-Path $script:RunDirectory 'development-surface.log')
+                Assert-RequiredPath `
+                    -Path $resolved.developmentSurfaceContract `
+                    -Label 'Automatic Unreal API development Contract' `
+                    -Code 'USONB2005'
+                $resolved.effectiveContract = $resolved.developmentSurfaceContract
+            }
         }
 
-        Invoke-OnboardingPhase -Name 'binding-generation' -Action {
+         Invoke-OnboardingPhase -Name 'binding-generation' -Action {
             Invoke-BindingGeneration `
                 -DotNet $resolved.dotnet `
                 -CliAssembly $cliAssembly `
                 -ReflectionManifest $resolved.reflection `
-                -Contract $resolved.contract `
+                 -Contract $resolved.effectiveContract `
                 -ManagedOutput $resolved.managedOutput `
                 -NativeOutput $resolved.nativeOutput `
                 -NodeCatalogOutput $resolved.nodeCatalogOutput `
@@ -1088,10 +1212,43 @@ try {
                     "Binaries\$($resolved.platform)\$($resolved.gameTarget).target") `
                 -Label 'Unreal game target receipt' `
                 -Code 'USONB2304'
+         }
+     }
+
+    if ($ValidateOnly -and $resolved.developmentSurfaceEnabled) {
+        Invoke-OnboardingPhase -Name 'development-surface-validation' -Action {
+            $surfaceValidationDirectory = Join-Path `
+                $script:RunDirectory `
+                'development-surface-validation'
+            $tempRequests = Join-Path $surfaceValidationDirectory 'api-requests.json'
+            $tempContract = Join-Path $surfaceValidationDirectory 'development-contract.json'
+            $tempReport = Join-Path $surfaceValidationDirectory 'development-surface.json'
+            Invoke-DevelopmentSurfaceExpansion `
+                -DotNet $resolved.dotnet `
+                -CliAssembly $cliAssembly `
+                -ReflectionManifest $resolved.reflection `
+                -BaseContract $resolved.contract `
+                -ManagedProjects $resolved.managedProjects `
+                -ManagedConfiguration $resolved.managedConfiguration `
+                -RequestsOutput $tempRequests `
+                -OverlayOutput $tempContract `
+                -ReportOutput $tempReport `
+                -FailOnOpenDecisions $resolved.developmentSurfaceFailOnOpen `
+                -LogPath (Join-Path $script:RunDirectory 'development-surface-validation.log')
+            Assert-GeneratedFileMatches `
+                -Expected $resolved.developmentSurfaceRequests `
+                -Actual $tempRequests
+            Assert-GeneratedFileMatches `
+                -Expected $resolved.developmentSurfaceContract `
+                -Actual $tempContract
+            Assert-GeneratedFileMatches `
+                -Expected $resolved.developmentSurfaceReport `
+                -Actual $tempReport
+            $resolved.effectiveContract = $resolved.developmentSurfaceContract
         }
     }
 
-    Invoke-OnboardingPhase -Name 'deployment' -Action {
+     Invoke-OnboardingPhase -Name 'deployment' -Action {
         if (-not $resolved.deploymentEnabled) {
             Write-Host 'Deployment synchronization is disabled by project policy.'
             return
@@ -1136,10 +1293,10 @@ try {
         $tempBrowser = Join-Path $tempDirectory 'api-browser.json'
         $tempCoverage = Join-Path $tempDirectory 'binding-coverage.json'
         Invoke-BindingGeneration `
-            -DotNet $resolved.dotnet `
-            -CliAssembly $cliAssembly `
-            -ReflectionManifest $resolved.reflection `
-            -Contract $resolved.contract `
+             -DotNet $resolved.dotnet `
+             -CliAssembly $cliAssembly `
+             -ReflectionManifest $resolved.reflection `
+             -Contract $resolved.effectiveContract `
             -ManagedOutput $tempManaged `
             -NativeOutput $tempNative `
             -NodeCatalogOutput $tempNodes `
@@ -1233,7 +1390,15 @@ try {
         nativeThunks = $resolved.nativeOutput
         apiNodeCatalog = $resolved.nodeCatalogOutput
         apiBrowser = $resolved.browserOutput
-        bindingCoverage = $resolved.coverageOutput
+         bindingCoverage = $resolved.coverageOutput
+        developmentSurface = if ($resolved.developmentSurfaceEnabled) {
+            [ordered]@{
+                baseContract = $resolved.contract
+                requests = $resolved.developmentSurfaceRequests
+                effectiveContract = $resolved.developmentSurfaceContract
+                report = $resolved.developmentSurfaceReport
+            }
+        } else { $null }
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage
         compiledChunks = @($resolved.managedChunks.stagePath)

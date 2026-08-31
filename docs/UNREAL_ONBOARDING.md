@@ -10,8 +10,9 @@ ownership, runtime, engine, generation, and cook-readiness state.
 
 `tools/setup-unreal-project.ps1` is the build/onboarding stage used after
 adoption. It turns the managed build, Unreal build, reflection export, binding
-generation, Script Asset synchronization, determinism, and Automation steps
-into one versioned operation driven by the adopted configuration. The same
+generation, source-driven development-surface expansion, Script Asset
+synchronization, determinism, and Automation steps into one versioned operation
+driven by the adopted configuration. The same
 script runs from a source checkout, an extracted [distributable SDK](UNREAL_SDK.md),
 or the tools installed inside an adopted plugin. It reports `sdkLayout:
 repository`, `sdkLayout: packaged`, or `sdkLayout: embedded`; embedded mode uses
@@ -98,16 +99,20 @@ Apply performs these phases in order:
 2. build the UnifiedScript CLI/runtime and stage the managed host into the
    selected project's plugin;
 3. bootstrap native bindings from the last reflection artifact when present;
-4. build the editor target, export current reflection, and generate the C#
-   wrappers, native thunks, visual API catalog, and coverage report atomically;
-5. build project managed assemblies and rebuild the editor target against the
+4. build the editor target and export current reflection;
+5. analyze explicit generated-API use in the managed projects, resolve every
+   request into an all-or-nothing development Contract overlay, and generate the
+   C# wrappers, native thunks, visual API catalog, API browser, and coverage
+   report atomically from that effective Contract;
+6. build project managed assemblies and rebuild the editor target against the
    final native thunks;
-6. build the configured project Game target and require its target receipt, so
+7. build the configured project Game target and require its target receipt, so
    ordinary BuildCookRun cannot silently fall back to a generic game that omits
    the source plugin;
-7. synchronize the deployment manifest into deterministic Script Assets;
-8. regenerate all four contract outputs in `Saved` and compare SHA-256 hashes;
-9. optionally run the configured UE Automation filter and require its minimum
+8. synchronize the deployment manifest into deterministic Script Assets;
+9. regenerate the dependency requests, development Contract/report, and all
+   five binding consumers in `Saved` and compare their exact bytes;
+10. optionally run the configured UE Automation filter and require its minimum
    successful test count.
 
 The initial native build intentionally uses the last known reflection artifact.
@@ -125,7 +130,8 @@ powershell -ExecutionPolicy Bypass `
 ```
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
-reflection, bindings, native thunks, node catalogs, coverage, or Script Assets.
+reflection, dependency requests, the development Contract/report, bindings,
+native thunks, node catalogs, browser, coverage, or Script Assets.
 That baseline must match the current managed assemblies and compiled chunks. If
 a shared UnifiedScript assembly changed after the last Apply run, run ordinary
 Apply onboarding once to rebuild, recompile, and deploy the chunks before using
@@ -135,9 +141,9 @@ When it runs from this repository, it first builds the current Release CLI for
 validation only, so deterministic output checks cannot accidentally use a stale
 tool binary. The rebuilt CLI is not staged into the Unreal plugin.
 It validates the deployment manifest through the editor commandlet, regenerates
-contract outputs under `Saved` for byte comparison, verifies configured native
-coverage, and runs the optional managed-startup Automation gate. Logs and the
-machine-readable report are diagnostic artifacts under
+the source request/development-surface artifacts and binding outputs under
+`Saved` for byte comparison, verifies configured native coverage, and runs the
+optional managed-startup Automation gate. Logs and the machine-readable report are diagnostic artifacts under
 `Saved/UnifiedScript/Onboarding` rather than project source.
 
 ## Configuration contract
@@ -164,9 +170,17 @@ configuration file.
     "managedOutput": "../Managed/Generated/Game.bindings.generated.cs",
     "nativeOutput": "../Source/Game/Generated/Game.native-thunks.generated.cpp",
     "nodeCatalogOutput": "../Generated/Game.api-nodes.json",
+    "browserOutput": "../Generated/Game.api-browser.json",
     "coverageOutput": "../Generated/Game.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true
+    "requireCompleteNativeCoverage": true,
+    "developmentSurface": {
+      "enabled": true,
+      "requestsOutput": "../Generated/Game.api-requests.json",
+      "contractOutput": "../Generated/Game.development-api-contract.json",
+      "reportOutput": "../Generated/Game.development-surface.json",
+      "failOnOpenDecisions": true
+    }
   },
   "deployment": {
     "manifest": "../Deployment/Game.unifiedscript-deployment.json",
@@ -192,8 +206,18 @@ configuration file.
 
 `reflection.modules` controls what Unreal may inspect. `reflection.classes`
 narrows broad modules such as Engine to an exact allowlist. The separate API
-Contract remains the shipped member allowlist; the onboarding command consumes
-it to produce C++, C#, coverage, and visual nodes from the same selection.
+Contract remains the reviewed shipped-member boundary. When
+`bindings.developmentSurface.enabled` is true, Setup scans the declared managed
+projects before they need to compile, writes exact source dependency requests,
+and uses a safe development Contract overlay for C++, C#, visual nodes, browser,
+and coverage. Any ambiguous, unresolved, manual, or unsupported request leaves
+the base Contract effective and fails before partial binding generation. Setting
+`failOnOpenDecisions` to false retains the diagnostic report but still does not
+partially apply an unsafe overlay.
+
+The generated request, overlay, and report paths are resolved relative to the
+configuration exactly like other outputs. Existing v0.1 configurations that do
+not declare `developmentSurface` keep their reviewed Contract-only behavior.
 
 `requireCompleteNativeCoverage` requires every selected member to have a native
 thunk and rejects reflection fallback, rejected members, and deferred types.

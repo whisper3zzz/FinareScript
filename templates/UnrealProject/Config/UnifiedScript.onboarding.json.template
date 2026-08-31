@@ -6,8 +6,9 @@
   "configuration": "Development",
   "pluginPath": "../Plugins/UEUnifiedScript",
   "reflection": {
-    "modules": ["UEUnifiedScriptRuntime"],
+    "modules": ["Engine", "UEUnifiedScriptRuntime"],
     "classes": [
+      "/Script/Engine.Actor",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
     ],
@@ -21,7 +22,14 @@
     "browserOutput": "../Generated/__PROJECT_NAME__.api-browser.json",
     "coverageOutput": "../Generated/__PROJECT_NAME__.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true
+    "requireCompleteNativeCoverage": true,
+    "developmentSurface": {
+      "enabled": true,
+      "requestsOutput": "../Generated/__PROJECT_NAME__.api-requests.json",
+      "contractOutput": "../Generated/__PROJECT_NAME__.development-api-contract.json",
+      "reportOutput": "../Generated/__PROJECT_NAME__.development-surface.json",
+      "failOnOpenDecisions": true
+    }
   },
   "deployment": {
     "manifest": "../Deployment/__PROJECT_NAME__.unifiedscript-deployment.json",

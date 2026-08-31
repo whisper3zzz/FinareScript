@@ -153,6 +153,11 @@ internal static class Program
             return RunUnrealContractProposal(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-surface-expand")
+        {
+            return RunUnrealDevelopmentSurface(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-data-plane")
         {
             return RunUnrealDataPlane(args);
@@ -1222,6 +1227,123 @@ internal static class Program
         {
             Console.Error.WriteLine(
                 "Unreal API Contract proposal has open decisions. Review the proposal before changing the shipped Contract.");
+            return 65;
+        }
+        return 0;
+    }
+
+    private static int RunUnrealDevelopmentSurface(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealDevelopmentSurfaceArguments(
+                args,
+                out UnrealDevelopmentSurfaceOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal development surface options.");
+        string reflectionPath = Path.GetFullPath(options.ReflectionPath);
+        string baseContractPath = Path.GetFullPath(options.BaseContractPath);
+        string[] projectPaths = options.ProjectPaths.Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        foreach (string inputPath in new[] { reflectionPath, baseContractPath }.Concat(projectPaths))
+        {
+            if (!File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"Unreal development surface input does not exist: {inputPath}");
+                return 66;
+            }
+        }
+
+        string requestOutputPath = Path.GetFullPath(options.RequestOutputPath);
+        string overlayOutputPath = Path.GetFullPath(options.OverlayOutputPath);
+        string reportOutputPath = Path.GetFullPath(options.ReportOutputPath);
+        string[] outputPaths = [requestOutputPath, overlayOutputPath, reportOutputPath];
+        if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
+        {
+            throw new ArgumentException("Unreal development surface outputs must be distinct.");
+        }
+        foreach (string inputPath in new[] { reflectionPath, baseContractPath }.Concat(projectPaths))
+        {
+            foreach (string outputPath in outputPaths)
+            {
+                EnsureDifferentPath(
+                    inputPath,
+                    outputPath,
+                    "Unreal development surface cannot overwrite an input artifact.");
+            }
+        }
+
+        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(
+            File.ReadAllText(reflectionPath));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
+            File.ReadAllText(baseContractPath));
+        var sources = new List<CSharpSourceDocument>();
+        foreach (string projectPath in projectPaths)
+        {
+            CSharpProjectLoadResult loaded;
+            try
+            {
+                loaded = new CSharpProjectLoader().Load(
+                    projectPath,
+                    options: new CSharpProjectLoadOptions(
+                        options.Configuration,
+                        Restore: true,
+                        Build: false,
+                        DotNetPath: options.DotNetPath));
+            }
+            catch (CSharpProjectLoadException exception)
+            {
+                Console.Error.WriteLine(exception.Message);
+                return 65;
+            }
+            string prefix = Path.GetFileNameWithoutExtension(projectPath);
+            sources.AddRange(loaded.Request.Sources.Select(source => new CSharpSourceDocument(
+                $"{prefix}/{source.LogicalPath}",
+                source.Source)));
+        }
+
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            contract.ContractName,
+            sources,
+            reflection,
+            contract);
+        UnrealApiDevelopmentSurfaceResult result =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        var outputs = new List<OutputFile>
+        {
+            new(requestOutputPath, UnrealApiDependencyRequestJson.Serialize(requests)),
+            new(reportOutputPath, UnrealApiDevelopmentSurfaceJson.Serialize(result)),
+        };
+        if (result.Applied)
+        {
+            outputs.Add(new OutputFile(
+                overlayOutputPath,
+                UnrealApiContractJson.Serialize(result.EffectiveContract)));
+        }
+        WriteTransactionally(outputs);
+
+        Console.WriteLine(requestOutputPath);
+        if (result.Applied)
+        {
+            Console.WriteLine(overlayOutputPath);
+        }
+        Console.WriteLine(reportOutputPath);
+        Console.WriteLine(
+            $"requests={result.Summary.RequestCount}; " +
+            $"selected={result.Summary.SelectedCount}; " +
+            $"already-selected={result.Summary.AlreadySelectedCount}; " +
+            $"open={result.Summary.OpenDecisionCount}; " +
+            $"applied={result.Applied.ToString().ToLowerInvariant()}");
+        if (options.FailOnOpenDecisions && !result.Applied)
+        {
+            Console.Error.WriteLine(
+                "Unreal API development surface has open decisions. " +
+                "No overlay Contract was written; inspect the source-linked report.");
             return 65;
         }
         return 0;
@@ -3940,6 +4062,86 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealDevelopmentSurfaceArguments(
+        IReadOnlyList<string> args,
+        out UnrealDevelopmentSurfaceOptions? options)
+    {
+        options = null;
+        if (args.Count < 10 || args[0] != "ue-surface-expand" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string reflectionPath = args[1];
+        var projectPaths = new List<string>();
+        string? baseContractPath = null;
+        string? requestOutputPath = null;
+        string? overlayOutputPath = null;
+        string? reportOutputPath = null;
+        string configuration = "Release";
+        string? dotNetPath = null;
+        bool failOnOpenDecisions = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-open-decisions" && !failOnOpenDecisions)
+            {
+                failOnOpenDecisions = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--project":
+                    projectPaths.Add(value);
+                    break;
+                case "--base" when baseContractPath is null:
+                    baseContractPath = value;
+                    break;
+                case "--requests-out" when requestOutputPath is null:
+                    requestOutputPath = value;
+                    break;
+                case "--overlay-out" when overlayOutputPath is null:
+                    overlayOutputPath = value;
+                    break;
+                case "--report" when reportOutputPath is null:
+                    reportOutputPath = value;
+                    break;
+                case "--configuration" when configuration == "Release":
+                    configuration = value;
+                    break;
+                case "--dotnet" when dotNetPath is null:
+                    dotNetPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (projectPaths.Count == 0 || baseContractPath is null ||
+            requestOutputPath is null || overlayOutputPath is null ||
+            reportOutputPath is null || string.IsNullOrWhiteSpace(configuration))
+        {
+            return false;
+        }
+        options = new UnrealDevelopmentSurfaceOptions(
+            reflectionPath,
+            projectPaths,
+            baseContractPath,
+            requestOutputPath,
+            overlayOutputPath,
+            reportOutputPath,
+            configuration,
+            dotNetPath,
+            failOnOpenDecisions);
+        return true;
+    }
+
     private static bool TryParseUnrealDataPlaneArguments(
         IReadOnlyList<string> args,
         out UnrealDataPlaneOptions? options)
@@ -5515,6 +5717,7 @@ internal static class Program
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
+        "  unifiedscript ue-surface-expand <reflection.json> --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --requests-out <requests.json> --overlay-out <development-contract.json> --report <surface.json> [--configuration <name>] [--dotnet <path>] [--fail-on-open-decisions]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
@@ -5689,6 +5892,17 @@ internal static class Program
         string RequestPath,
         string BaseContractPath,
         string OutputPath,
+        bool FailOnOpenDecisions);
+
+    private sealed record UnrealDevelopmentSurfaceOptions(
+        string ReflectionPath,
+        IReadOnlyList<string> ProjectPaths,
+        string BaseContractPath,
+        string RequestOutputPath,
+        string OverlayOutputPath,
+        string ReportOutputPath,
+        string Configuration,
+        string? DotNetPath,
         bool FailOnOpenDecisions);
 
     private sealed record UnrealDataPlaneOptions(

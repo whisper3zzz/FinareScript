@@ -56,10 +56,10 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-31**
 
 - Active milestone: **M13.1 in progress — Puerts-grade zero-config adoption and automatic Unreal API surface**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure**
-- Current tranche: **M13.1B-1 — automatic reflected API surface from source use to typed native/managed/visual routes**
-- Current implementation state: **a packaged SDK now adopts a clean Blueprint-only project into a rollback-owned native host, builds project Editor/Game targets, generates the managed/native/visual surface, and passes ordinary Win64 BuildCookRun; the remaining Puerts-grade friction is the hand-maintained API Contract selector**
-- Next acceptance: **make one newly referenced supported Blueprint-visible API produce a deterministic dependency request and localized Contract/surface expansion through the normal build action, while an unsupported reference produces one source-linked diagnostic and no partial generation**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical**
+- Current tranche: **M13.1B-2 — Puerts-grade reflected API/signature breadth and no-handwritten-metadata daily generation**
+- Current implementation state: **M13.1B-1 is accepted end to end: an explicit generated-API reference emits versioned source-span dependency requests, resolves through reflection into an all-or-nothing development Contract overlay, and regenerates matching native/C#/visual/browser/coverage artifacts through project-local Setup; a fresh packaged UE 5.8.1 consumer passed Apply, ValidateOnly, Automation, Win64 cook, no-change Repair, Doctor, and rollback**
+- Next acceptance: **expand the same safe path from the first `Actor.GetActorLocation` proof to ordinary semantic C# references and a representative Blueprint-visible type/signature matrix—properties, functions, structs, enums, containers, delegates, soft references, overloads, defaults, and ref/out—while keeping localized regeneration, source-linked rejection, no handwritten Contract edits, and a deterministic release lock**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -75,8 +75,9 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `5be7dde` (`fix: remove CI snapshots with long paths`) |
 | UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 628 / 628 passed |
-| Repository validator | 96 / 96 passed |
+| Managed tests | 634 / 634 passed |
+| Repository validator | 97 / 97 passed |
+| M13.1B-1 automatic source surface | 6 / 6 focused regressions plus 634 / 634 full managed tests and 97 / 97 repository invariants passed; fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 234,215 ms; report at `artifacts/a/b1/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `e217472bffd951893d45f6e21fc44f285e92f9e46b0eb2fe032a79daa8005997` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -1813,7 +1814,8 @@ become three independently configured products.
 | M13.1A-0 — packaged adoption CLI | `adopt` and `doctor` can transactionally install, diagnose, rerun, and roll back a consumer project | public packaged CLI passes clean native/Blueprint-only fixtures with deterministic no-change reruns | Complete (`9fe7f70`) |
 | M13.1A-1 — Editor project setup | an adopted project carries its own CLI and exposes Preview, Repair, Doctor, and Build/Onboard in Unreal Editor | Editor actions use exactly the CLI configuration model; native replacement is deferred safely until the Editor exits | Complete |
 | M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `UnifiedScript.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | Complete |
-| M13.1B-1 — automatic reflected API surface | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, localized regeneration, exact coverage, and unsupported-use diagnostics pass on consumer fixtures | **Active** |
+| M13.1B-1 — first automatic reflected API vertical | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, exact coverage, source-linked unsupported-use diagnostics, packaged UE build/cook, and no-change validation pass on a clean consumer | Complete |
+| M13.1B-2 — reflected API/signature breadth | ordinary C# use discovers the needed project/Engine/Blueprint surface and supports representative gameplay signatures without generator knowledge | type/signature matrix, semantic source discovery, localized regeneration, stale-lock rejection, and zero handwritten dispatch pass on clean consumers | **Active** |
 | M13.1C-1 — first managed Script Class | **Create UnifiedScript Class** produces an attachable Actor/Component/UObject behavior that reaches first Play | create, compile, attach, Play, stop, reload, reopen, cook, and package pass without a handwritten facade | Pending |
 | M13.2 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | Pending |
 | M13.3 — daily edit loop | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable workflow | a new user completes the published walkthrough without repository knowledge or generator commands | Pending |
@@ -2029,15 +2031,38 @@ and the review-only `ue-contract-propose` backend in this order:
    the release/CI freeze point;
 4. prove one ordinary Actor API expansion plus ambiguous and unsupported cases
    on clean consumer fixtures, and require native/C#/visual/browser/coverage
-   artifacts to agree on the same member identity before advancing to M13.1C-1.
+   artifacts to agree on the same member identity before advancing to M13.1B-2.
+
+M13.1B-1 execution checklist:
+
+- [x] define versioned source dependency-request and development-surface report
+  schemas with stable source spans, IDs, and fingerprints
+- [x] scan explicit generated-API aliases or fully qualified wrapper references
+  without guessing similarly named user types or scanning generated sources
+- [x] resolve unique supported requests into an all-or-nothing development
+  Contract overlay and preserve ambiguous, unresolved, manual, or policy-rejected
+  uses as source-linked diagnostics
+- [x] integrate source analysis and bounded overlay regeneration into
+  project-local Setup/ValidateOnly while retaining the reviewed base Contract as
+  the release boundary
+- [x] cover deterministic expansion, ambiguity, missing references,
+  policy rejection, generated-source exclusion, and pre-compilation project
+  loading and author-facing `K2_` name projection in focused managed regression
+  (6/6)
+- [x] pass the full managed suite and repository validator, package the SDK, and
+  prove fresh UE 5.8.1 Setup/ValidateOnly, generated-surface agreement,
+  Automation, BuildCookRun, no-change Repair, Doctor, and rollback
+
+M13.1B-2 execution checklist:
 
 - [ ] export bounded project, plugin, Engine, and loaded Blueprint reflection on
   demand with deterministic transitive type closure and incremental fingerprints
 - [ ] generate typed C# APIs and visual-node descriptors automatically for
   referenced Blueprint-visible classes, properties, functions, structs, enums,
   containers, delegates, soft references, overloads, defaults, and ref/out shapes
-- [ ] resolve source references into dependency requests so a missing reachable
-  type/member triggers localized generation instead of a manual Contract edit
+- [ ] resolve ordinary semantic C# type/member references, not only explicit
+  generated-namespace aliases, so a missing reachable dependency triggers
+  localized generation instead of a manual Contract edit or generator command
 - [ ] route each member through DirectThunk, CallFrame, data plane, safe
   cold-path reflection, or rejected-with-reason coverage without name guessing
 - [ ] keep an automatically generated surface lock for deterministic build/CI;
@@ -2073,6 +2098,42 @@ end-to-end replay of the existing BlockBreaker scan/plan inputs classified all
 16 emitted requests as one safe proposed selector plus 15 explicit open
 decisions; it is regression evidence for the new loop, not the required
 non-BlockBreaker pilot.
+
+Completed (2026-08-31, M13.1B-1 source-use vertical):
+ordinary managed source can now declare an explicit alias for its generated UE
+API namespace and use a reflected wrapper such as `Actor.GetActorLocation`.
+The new source analyzer ignores generated files and emits deterministic,
+source-span dependency requests rather than editing the reviewed Contract.
+The development-surface planner reuses the reflection/proposal policy, verifies
+the candidate through the real managed/native generators and coverage model,
+and applies no overlay unless every request is safe. Ambiguous, unresolved,
+manual, and generator-policy-rejected requests retain the base Contract and
+produce stable source-linked diagnostics, including an explicit unsupported
+member route. Project-local Setup now performs bootstrap -> reflect -> analyze
+-> expand -> regenerate -> compile, while ValidateOnly regenerates and
+byte-compares the request, overlay, and report artifacts. The clean-project
+template exercises `Actor.GetActorLocation` without adding it to the reviewed
+base Contract; its author-facing name resolves deterministically to UE's real
+`K2_GetActorLocation` reflection/native identity. Six focused managed tests
+pass. The complete managed suite passes 634/634 and the repository validator
+passes 97/97. SDK archive
+`artifacts/sdk/m13-1b1-source-surface-k2-20260831/UnifiedScript-SDK-1.0.0-rc.1-win-x64.zip`
+has SHA-256
+`e217472bffd951893d45f6e21fc44f285e92f9e46b0eb2fe032a79daa8005997`.
+A fresh UE 5.8.1 consumer then passed project-local Apply and deterministic
+ValidateOnly, generated-surface identity assertions, Editor/Game builds,
+Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback
+in 234,215 ms. The packaged build contains the managed program, compiled chunk,
+CoreCLR closure, and cooked Script Asset with zero Puerts or project-authored
+JavaScript files. Evidence is at
+`artifacts/a/b1/packaged-native-onboarding-report.json`.
+
+This completes the first safe vertical, not the full API-coverage claim. The
+scanner deliberately accepts only explicit generated-namespace aliases or fully
+qualified wrapper references, and the acceptance exercises one ordinary Actor
+API. M13.1B-2 now owns ordinary semantic C# discovery, broader project/Engine/
+Blueprint reflection, the Blueprint-visible type/signature matrix, localized
+incrementality, and release-lock closure before class scaffolding begins.
 
 #### M13.1C — First managed Script Class scaffold
 

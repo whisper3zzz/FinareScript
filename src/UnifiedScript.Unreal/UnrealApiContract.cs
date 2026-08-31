@@ -568,8 +568,12 @@ public static class UnrealApiNodeCatalogGenerator
             }
             foreach (UnrealReflectedFunction function in type.Functions)
             {
+                string managedFunctionName = UnrealManagedNaming.FunctionName(function);
                 bool overloaded = type.Functions.Count(candidate =>
-                    string.Equals(candidate.Name, function.Name, StringComparison.Ordinal)) > 1;
+                    string.Equals(
+                        UnrealManagedNaming.FunctionName(candidate),
+                        managedFunctionName,
+                        StringComparison.Ordinal)) > 1;
                 var pins = new List<UnrealApiNodePin>();
                 if (!function.Traits.Pure)
                 {
@@ -609,8 +613,8 @@ public static class UnrealApiNodeCatalogGenerator
                 }
                 nodes.Add(CreateNode(
                     overloaded
-                        ? $"ue.call|{managedName}|{function.Name}|{UnrealMemberId.FromPath(function.Path):X16}"
-                        : $"ue.call|{managedName}|{function.Name}",
+                        ? $"ue.call|{managedName}|{managedFunctionName}|{UnrealMemberId.FromPath(function.Path):X16}"
+                        : $"ue.call|{managedName}|{managedFunctionName}",
                     function.Path,
                     "function",
                     function.Metadata.DisplayName ?? function.Name,

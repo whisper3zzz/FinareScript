@@ -261,7 +261,7 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            string candidateName = ToIdentifier(function.Name);
+            string candidateName = UnrealManagedNaming.FunctionName(function);
             string memberName;
             if (!memberNames.Contains(candidateName))
             {
@@ -710,49 +710,49 @@ public sealed class UnrealBindingGenerator
     private static string? GetManagedType(
         UnrealTypeReference type,
         IReadOnlyDictionary<string, string> managedTypeNames) => type.Kind switch
-    {
-        UnrealValueKind.Void => "void",
-        UnrealValueKind.Boolean => "bool",
-        UnrealValueKind.Int8 => "sbyte",
-        UnrealValueKind.UInt8 => "byte",
-        UnrealValueKind.Int16 => "short",
-        UnrealValueKind.UInt16 => "ushort",
-        UnrealValueKind.Int32 => "int",
-        UnrealValueKind.UInt32 => "uint",
-        UnrealValueKind.Int64 => "long",
-        UnrealValueKind.UInt64 => "ulong",
-        UnrealValueKind.Float32 => "float",
-        UnrealValueKind.Float64 => "double",
-        UnrealValueKind.String => "string",
-        UnrealValueKind.Name => "global::UnifiedScript.Unreal.UnrealName",
-        UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
-        UnrealValueKind.Object =>
-            "global::UnifiedScript.Unreal.UnrealObjectHandle",
-        UnrealValueKind.Class =>
-            "global::UnifiedScript.Unreal.UnrealClassHandle",
-        UnrealValueKind.SoftObject =>
-            "global::UnifiedScript.Unreal.UnrealSoftObjectHandle",
-        UnrealValueKind.SoftClass =>
-            "global::UnifiedScript.Unreal.UnrealSoftClassHandle",
-        UnrealValueKind.Enum => "global::UnifiedScript.Unreal.UnrealEnumValue",
-        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
-            "global::UnifiedScript.Unreal.UnrealVector",
-        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Rotator" =>
-            "global::UnifiedScript.Unreal.UnrealRotator",
-        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" =>
-            "global::UnifiedScript.Unreal.UnrealTransform",
-        UnrealValueKind.Struct when type.TypePath is not null &&
-            managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
-        UnrealValueKind.Array when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
-            $"global::System.Collections.Generic.IReadOnlyList<{element}>",
-        UnrealValueKind.Set when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
-            $"global::System.Collections.Generic.IReadOnlySet<{element}>",
-        UnrealValueKind.Map
-            when GetManagedType(type.KeyType!, managedTypeNames) is string key &&
-                 GetManagedType(type.ValueType!, managedTypeNames) is string value =>
-            $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
-        _ => null,
-    };
+        {
+            UnrealValueKind.Void => "void",
+            UnrealValueKind.Boolean => "bool",
+            UnrealValueKind.Int8 => "sbyte",
+            UnrealValueKind.UInt8 => "byte",
+            UnrealValueKind.Int16 => "short",
+            UnrealValueKind.UInt16 => "ushort",
+            UnrealValueKind.Int32 => "int",
+            UnrealValueKind.UInt32 => "uint",
+            UnrealValueKind.Int64 => "long",
+            UnrealValueKind.UInt64 => "ulong",
+            UnrealValueKind.Float32 => "float",
+            UnrealValueKind.Float64 => "double",
+            UnrealValueKind.String => "string",
+            UnrealValueKind.Name => "global::UnifiedScript.Unreal.UnrealName",
+            UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
+            UnrealValueKind.Object =>
+                "global::UnifiedScript.Unreal.UnrealObjectHandle",
+            UnrealValueKind.Class =>
+                "global::UnifiedScript.Unreal.UnrealClassHandle",
+            UnrealValueKind.SoftObject =>
+                "global::UnifiedScript.Unreal.UnrealSoftObjectHandle",
+            UnrealValueKind.SoftClass =>
+                "global::UnifiedScript.Unreal.UnrealSoftClassHandle",
+            UnrealValueKind.Enum => "global::UnifiedScript.Unreal.UnrealEnumValue",
+            UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
+                "global::UnifiedScript.Unreal.UnrealVector",
+            UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Rotator" =>
+                "global::UnifiedScript.Unreal.UnrealRotator",
+            UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" =>
+                "global::UnifiedScript.Unreal.UnrealTransform",
+            UnrealValueKind.Struct when type.TypePath is not null &&
+                managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
+            UnrealValueKind.Array when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+                $"global::System.Collections.Generic.IReadOnlyList<{element}>",
+            UnrealValueKind.Set when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+                $"global::System.Collections.Generic.IReadOnlySet<{element}>",
+            UnrealValueKind.Map
+                when GetManagedType(type.KeyType!, managedTypeNames) is string key &&
+                     GetManagedType(type.ValueType!, managedTypeNames) is string value =>
+                $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
+            _ => null,
+        };
 
     private static string TrimNativeStructPrefix(string nativeName) =>
         nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName;

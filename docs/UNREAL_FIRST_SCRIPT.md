@@ -100,7 +100,8 @@ The adopted project owns:
 - `Contracts/Game.unreal-api-contract.json`;
 - `Deployment/Game.unifiedscript-deployment.json`;
 - generated Declaration IR, Graph, Authoring Surface, bindings, native thunks,
-  API nodes, API/diagnostic browser, coverage, and
+  source API requests, development Contract/report, API nodes, API/diagnostic
+  browser, coverage, and
   `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
 
 Onboarding success means the managed project, reflection export, complete native
@@ -121,9 +122,16 @@ Open the project in UE 5.8, then:
 4. start PIE and select the actor/component;
 5. confirm `bScriptRunning` is true and `LastScriptError` is empty.
 
-The generated `FirstScript` exposes `StartValue` and a Visual
-`AddClamped(value, delta)` function. This deliberately contains no fixture
-gameplay: it is the smallest lifecycle and C#/Visual round-trip starting point.
+The generated `FirstScript` exposes `StartValue`, a Visual
+`AddClamped(value, delta)` function, and an ordinary source call to
+`Actor.GetActorLocation`. The source imports its generated API namespace with an
+explicit `UnrealApi` alias. During the first Setup run, current Engine reflection
+turns that call into a source dependency request and safe development Contract
+overlay before the managed project needs to compile. The same effective member
+then appears in the generated native thunk, C# wrapper, visual node catalog, API
+browser, and coverage report; the reviewed seed Contract is not hand-edited.
+This still contains no fixture gameplay: it is the smallest lifecycle,
+source-to-Unreal API, and C#/Visual round-trip starting point.
 
 ## 4. Visual open and hot reload
 
