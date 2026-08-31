@@ -1686,6 +1686,58 @@ def main() -> int:
     checks.append(
         "M13.2A rewrites cross-file managed Script Class references semantically"
     )
+    script_class_journal_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private"
+        / "UnifiedScriptClassOperationJournal.h"
+    ).read_text(encoding="utf-8")
+    script_class_journal_source = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private"
+        / "UnifiedScriptClassOperationJournal.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "FUnifiedScriptClassAssetRecoveryResult"
+        in script_class_operations_header
+        and "RecoverPendingTransactions" in script_class_operations_header
+        and "RecoveryReceiptPath" in script_class_operations_header
+        and "Prepared" in script_class_journal_header
+        and "AssetsMutated" in script_class_journal_header
+        and "ExternalPublished" in script_class_journal_header
+        and "DeferredLiveReceiptCount" in script_class_journal_header
+        and "unifiedscript.class-operation-receipt/v0.1"
+        in script_class_journal_source
+        and "unifiedscript.class-operation-recovery/v0.1"
+        in script_class_journal_source
+        and "ownerProcessId" in script_class_journal_source
+        and "FPlatformProcess::IsApplicationRunning"
+        in script_class_journal_source
+        and "MaxSnapshotCount" in script_class_journal_source
+        and "MaxSnapshotBytes" in script_class_journal_source
+        and "PreserveInterruptedFiles" in script_class_journal_source
+        and "RestoreSnapshots" in script_class_journal_source
+        and "BuildRecoverySnapshots" in script_class_operations_source
+        and "ClassOperationJournal::Begin" in script_class_operations_source
+        and "ClassOperationJournal::Advance" in script_class_operations_source
+        and "ClassOperationJournal::Close" in script_class_operations_source
+        and "RecoverPendingTransactions" in editor_module
+        and "Recovery defers a receipt owned by the live Editor process"
+        in script_class_operations_tests
+        and "Recovery restores the existing preimage exactly"
+        in script_class_operations_tests
+        and "Recovery archives the interrupted receipt"
+        in script_class_operations_tests
+        and "Rename closes its committed recovery receipt"
+        in script_class_operations_tests
+        and "Delete rollback closes its recovery receipt"
+        in script_class_operations_tests
+        and "M13.2A-2b2b — persisted crash recovery"
+        in roadmap_document,
+        "M13.2A-2b2b persisted crash receipt, live-owner deferral, startup recovery, or archive coverage is incomplete",
+    )
+    checks.append(
+        "M13.2A persists and recovers interrupted Script Class transactions"
+    )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"

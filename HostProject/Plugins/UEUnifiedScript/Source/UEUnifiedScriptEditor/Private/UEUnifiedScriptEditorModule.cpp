@@ -14,6 +14,7 @@
 #include "ToolMenus.h"
 #include "UnifiedScriptEdGraph.h"
 #include "UnifiedScriptClassFactory.h"
+#include "UnifiedScriptClassAssetOperations.h"
 #include "UnifiedScriptAssetDefinition.h"
 #include "UnifiedScriptEditorDiagnostics.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -23,6 +24,8 @@
 #include "WorkspaceMenuStructureModule.h"
 
 #define LOCTEXT_NAMESPACE "UEUnifiedScriptEditorModule"
+
+DEFINE_LOG_CATEGORY_STATIC(LogUnifiedScriptEditor, Log, All);
 
 namespace UE::UnifiedScript::Editor::Private
 {
@@ -68,6 +71,24 @@ public:
     virtual void StartupModule() override
     {
         using namespace UE::UnifiedScript::Editor::Private;
+        FUnifiedScriptClassAssetRecoveryResult Recovery;
+        if (!FUnifiedScriptClassAssetOperations::RecoverPendingTransactions(Recovery))
+        {
+            UE_LOG(
+                LogUnifiedScriptEditor,
+                Error,
+                TEXT("UnifiedScript could not recover pending Script Class operations: %s"),
+                *Recovery.Error);
+        }
+        else if (Recovery.RecoveredReceiptCount > 0)
+        {
+            UE_LOG(
+                LogUnifiedScriptEditor,
+                Warning,
+                TEXT("UnifiedScript recovered %d interrupted Script Class operation(s); archives: %s"),
+                Recovery.RecoveredReceiptCount,
+                *FString::Join(Recovery.ArchivePaths, TEXT(", ")));
+        }
         FUnifiedScriptEditorDiagnostics::Register();
         UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetOperationGuards();
         GraphNodeFactory = MakeShared<FUnifiedScriptGraphPanelNodeFactory>();

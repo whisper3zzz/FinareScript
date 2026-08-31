@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "UnifiedScriptClassAssetOperations.h"
+#include "UnifiedScriptClassOperationJournal.h"
 
 #include "Engine/Blueprint.h"
 #include "Editor.h"
@@ -100,6 +101,135 @@ bool ReadBytes(const FString& Path, TArray<uint8>& OutBytes)
     OutBytes.Reset();
     return FFileHelper::LoadFileToArray(OutBytes, *Path);
 }
+
+bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
+{
+    using namespace UE::UnifiedScript::ClassOperationJournal;
+    const FString TransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    const FString ProbeRoot = FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("UnifiedScript/ClassOperationJournalTests"),
+        TransactionId);
+    const FString ExistingPath = ProbeRoot / TEXT("existing.bin");
+    const FString CreatedPath = ProbeRoot / TEXT("created.bin");
+    IFileManager::Get().MakeDirectory(*ProbeRoot, true);
+    const TArray<uint8> Before = {0x00, 0x13, 0x37, 0xff};
+    const TArray<uint8> Interrupted = {0xde, 0xad, 0xbe, 0xef};
+    if (!Test.TestTrue(
+            TEXT("Writes the journal recovery preimage"),
+            FFileHelper::SaveArrayToFile(Before, *ExistingPath)))
+    {
+        IFileManager::Get().DeleteDirectory(*ProbeRoot, false, true);
+        return false;
+    }
+
+    TArray<FSnapshot> Snapshots;
+    FString Error;
+    FSnapshot ExistingSnapshot;
+    FSnapshot CreatedSnapshot;
+    if (!Test.TestTrue(
+            TEXT("Captures an existing journal preimage"),
+            CaptureSnapshot(ExistingPath, ExistingSnapshot, Error)) ||
+        !Test.TestTrue(
+            TEXT("Captures a missing journal preimage"),
+            CaptureSnapshot(CreatedPath, CreatedSnapshot, Error)))
+    {
+        IFileManager::Get().DeleteDirectory(*ProbeRoot, false, true);
+        return false;
+    }
+    Snapshots.Add(MoveTemp(ExistingSnapshot));
+    Snapshots.Add(MoveTemp(CreatedSnapshot));
+
+    FReceipt Receipt;
+    if (!Test.TestTrue(
+            *FString::Printf(TEXT("Persists a prepared recovery receipt: %s"), *Error),
+            Begin(TEXT("rename"), TransactionId, Snapshots, Receipt, Error)) ||
+        !Test.TestTrue(
+            TEXT("Advances the recovery receipt after asset mutation"),
+            Advance(Receipt, EPhase::AssetsMutated, Error)) ||
+        !Test.TestTrue(
+            TEXT("Writes an interrupted existing output"),
+            FFileHelper::SaveArrayToFile(Interrupted, *ExistingPath)) ||
+        !Test.TestTrue(
+            TEXT("Writes an interrupted newly-created output"),
+            FFileHelper::SaveArrayToFile(Interrupted, *CreatedPath)) ||
+        !Test.TestTrue(
+            TEXT("Advances the recovery receipt after external publication"),
+            Advance(Receipt, EPhase::ExternalPublished, Error)))
+    {
+        IFileManager::Get().Delete(*Receipt.ReceiptPath, false, true);
+        IFileManager::Get().DeleteDirectory(*ProbeRoot, false, true);
+        return false;
+    }
+
+    FRecoveryReport LiveOwnerReport;
+    if (!Test.TestTrue(
+            TEXT("Recovery scan accepts a live-owner receipt"),
+            RecoverPending(LiveOwnerReport, Error)) ||
+        !Test.TestEqual(
+            TEXT("Recovery defers a receipt owned by the live Editor process"),
+            LiveOwnerReport.DeferredLiveReceiptCount,
+            1) ||
+        !Test.TestTrue(
+            TEXT("Deferred live-owner receipt remains pending"),
+            IFileManager::Get().FileExists(*Receipt.ReceiptPath)))
+    {
+        IFileManager::Get().Delete(*Receipt.ReceiptPath, false, true);
+        IFileManager::Get().DeleteDirectory(*ProbeRoot, false, true);
+        return false;
+    }
+
+    FRecoveryReport Report;
+    const bool bRecovered = RecoverPending(Report, Error, true);
+    TArray<uint8> Restored;
+    const bool bReadRestored = ReadBytes(ExistingPath, Restored);
+    const FString* ArchivePath = Report.ArchivePaths.FindByPredicate(
+        [&TransactionId](const FString& Path)
+        {
+            return FPaths::GetCleanFilename(Path) == TransactionId;
+        });
+    const bool bPassed =
+        Test.TestTrue(
+            *FString::Printf(TEXT("Recovers the pending journal: %s"), *Error),
+            bRecovered) &&
+        Test.TestTrue(
+            TEXT("Reports the recovered transaction identity"),
+            Report.RecoveredTransactionIds.Contains(TransactionId)) &&
+        Test.TestTrue(
+            TEXT("Reads the byte-exact recovered preimage"),
+            bReadRestored) &&
+        Test.TestEqual(
+            TEXT("Recovery restores the existing preimage exactly"),
+            Restored,
+            Before) &&
+        Test.TestFalse(
+            TEXT("Recovery removes the interrupted newly-created output"),
+            IFileManager::Get().FileExists(*CreatedPath)) &&
+        Test.TestFalse(
+            TEXT("Recovery closes the pending receipt"),
+            IFileManager::Get().FileExists(*Receipt.ReceiptPath)) &&
+        Test.TestNotNull(
+            TEXT("Recovery reports its archive"),
+            ArchivePath) &&
+        Test.TestTrue(
+            TEXT("Recovery archives the interrupted receipt"),
+            ArchivePath != nullptr &&
+                IFileManager::Get().FileExists(
+                    *(*ArchivePath / TEXT("receipt.json")))) &&
+        Test.TestTrue(
+            TEXT("Recovery records preserved interrupted bytes"),
+            ArchivePath != nullptr &&
+                IFileManager::Get().FileExists(
+                    *(*ArchivePath / TEXT("current-0000.bin"))));
+
+    IFileManager::Get().DeleteDirectory(*ProbeRoot, false, true);
+    if (ArchivePath != nullptr)
+    {
+        IFileManager::Get().DeleteDirectory(**ArchivePath, false, true);
+    }
+    return bPassed;
+}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -110,6 +240,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::ClassAssetOperations::Tests;
+    if (!RunJournalRecoveryProbe(*this))
+    {
+        return false;
+    }
     FScopedOperationCleanup Cleanup;
     Cleanup.DeploymentPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
         FPaths::ProjectDir(),
@@ -246,6 +380,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     ScriptAsset = RenameResult.ScriptAsset;
     Cleanup.SourcePaths.Add(RenameResult.SourcePath);
     TestTrue(TEXT("Rename transaction reports success"), RenameResult.bSucceeded);
+    TestFalse(
+        TEXT("Rename closes its committed recovery receipt"),
+        IFileManager::Get().FileExists(*RenameResult.RecoveryReceiptPath));
     TestEqual(TEXT("Rename preserves stable ClassId"), ScriptAsset->ScriptClassId, OriginalClassId);
     TestEqual(
         TEXT("Rename updates managed type identity"),
@@ -324,6 +461,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestTrue(
         TEXT("Injected rename failure rolls back the full transaction"),
         RenameFailureResult.bRolledBack);
+    TestFalse(
+        TEXT("Rename rollback closes its recovery receipt"),
+        IFileManager::Get().FileExists(
+            *RenameFailureResult.RecoveryReceiptPath));
     TArray<uint8> RenamedSourceAfterFailure;
     TArray<uint8> DeploymentAfterRenameFailure;
     TArray<uint8> RequestAfterRenameFailure;
@@ -384,6 +525,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     Cleanup.Assets.Add(DuplicateResult.ScriptAsset);
     Cleanup.SourcePaths.Add(DuplicateResult.SourcePath);
     TestTrue(TEXT("Duplicate transaction reports success"), DuplicateResult.bSucceeded);
+    TestFalse(
+        TEXT("Duplicate closes its committed recovery receipt"),
+        IFileManager::Get().FileExists(*DuplicateResult.RecoveryReceiptPath));
     TestNotEqual(
         TEXT("Duplicate receives an independent ClassId"),
         DuplicateResult.ScriptAsset->ScriptClassId,
@@ -427,6 +571,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
             FailureResult,
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication));
     TestTrue(TEXT("Injected failure rolls back the full transaction"), FailureResult.bRolledBack);
+    TestFalse(
+        TEXT("Duplicate rollback closes its recovery receipt"),
+        IFileManager::Get().FileExists(*FailureResult.RecoveryReceiptPath));
     TArray<uint8> DeploymentAfterFailure;
     TArray<uint8> RequestAfterFailure;
     TestTrue(
@@ -537,6 +684,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestTrue(
         TEXT("Injected delete failure rolls back the full transaction"),
         DeleteFailureResult.bRolledBack);
+    TestFalse(
+        TEXT("Delete rollback closes its recovery receipt"),
+        IFileManager::Get().FileExists(
+            *DeleteFailureResult.RecoveryReceiptPath));
     TArray<uint8> DuplicateSourceAfterDeleteFailure;
     TArray<uint8> DeploymentAfterDeleteFailure;
     TArray<uint8> RequestAfterDeleteFailure;
@@ -583,6 +734,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
             DuplicateResult.ScriptAsset,
             DeleteResult));
     TestTrue(TEXT("Delete transaction reports success"), DeleteResult.bSucceeded);
+    TestFalse(
+        TEXT("Delete closes its committed recovery receipt"),
+        IFileManager::Get().FileExists(*DeleteResult.RecoveryReceiptPath));
     TestNull(TEXT("Delete does not return a stale Blueprint pointer"), DeleteResult.Blueprint);
     TestNull(TEXT("Delete does not return a stale Script Asset pointer"), DeleteResult.ScriptAsset);
     TestFalse(

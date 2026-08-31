@@ -22,10 +22,22 @@ struct FUnifiedScriptClassAssetOperationResult
     FString ScriptAssetPath;
     FString SourcePath;
     FString ManagedTypeName;
+    FString RecoveryReceiptPath;
     bool bSucceeded = false;
     bool bRolledBack = false;
     UBlueprint* Blueprint = nullptr;
     UUnifiedScriptAsset* ScriptAsset = nullptr;
+};
+
+struct FUnifiedScriptClassAssetRecoveryResult
+{
+    int32 PendingReceiptCount = 0;
+    int32 RecoveredReceiptCount = 0;
+    int32 CleanedCommittedReceiptCount = 0;
+    int32 DeferredLiveReceiptCount = 0;
+    TArray<FString> RecoveredTransactionIds;
+    TArray<FString> ArchivePaths;
+    FString Error;
 };
 
 /**
@@ -54,6 +66,10 @@ public:
         FUnifiedScriptClassAssetOperationResult& OutResult,
         EUnifiedScriptClassAssetOperationFailurePoint FailurePoint =
             EUnifiedScriptClassAssetOperationFailurePoint::None);
+
+    /** Restores interrupted transactions before their assets are loaded. */
+    static bool RecoverPendingTransactions(
+        FUnifiedScriptClassAssetRecoveryResult& OutResult);
 
     /** True for either half of a persistent Script Class asset pair. */
     static bool IsCompleteClassAsset(const UObject* Asset);

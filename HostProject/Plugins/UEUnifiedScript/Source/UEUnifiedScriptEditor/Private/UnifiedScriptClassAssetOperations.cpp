@@ -1,5 +1,7 @@
 #include "UnifiedScriptClassAssetOperations.h"
 
+#include "UnifiedScriptClassOperationJournal.h"
+
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
@@ -33,6 +35,8 @@ THIRD_PARTY_INCLUDES_END
 
 namespace UE::UnifiedScript::ClassAssetOperations::Private
 {
+using FFileSnapshot = UE::UnifiedScript::ClassOperationJournal::FSnapshot;
+
 bool GAssetToolsMutationActive = false;
 
 class FScopedAssetToolsMutation
@@ -48,13 +52,6 @@ public:
     {
         GAssetToolsMutationActive = false;
     }
-};
-
-struct FFileSnapshot
-{
-    FString Path;
-    bool bExisted = false;
-    TArray<uint8> Bytes;
 };
 
 struct FClassOperationContext
@@ -197,16 +194,10 @@ bool WriteTextAtomically(const FString& Path, const FString& Text, FString& OutE
 
 bool CaptureFile(const FString& Path, FFileSnapshot& OutSnapshot, FString& OutError)
 {
-    FFileSnapshot Snapshot;
-    Snapshot.Path = Path;
-    Snapshot.bExisted = IFileManager::Get().FileExists(*Path);
-    if (Snapshot.bExisted && !FFileHelper::LoadFileToArray(Snapshot.Bytes, *Path))
-    {
-        OutError = FString::Printf(TEXT("Cannot snapshot '%s'."), *Path);
-        return false;
-    }
-    OutSnapshot = MoveTemp(Snapshot);
-    return true;
+    return UE::UnifiedScript::ClassOperationJournal::CaptureSnapshot(
+        Path,
+        OutSnapshot,
+        OutError);
 }
 
 bool RestoreFiles(const TArray<FFileSnapshot>& Snapshots, FString& OutError)
@@ -1128,6 +1119,66 @@ bool CaptureExternalSnapshots(
     return true;
 }
 
+bool CaptureSnapshotIfMissing(
+    const FString& Path,
+    TArray<FFileSnapshot>& Snapshots,
+    FString& OutError)
+{
+    if (Snapshots.ContainsByPredicate(
+            [&Path](const FFileSnapshot& Item)
+            {
+                return FPaths::IsSamePath(Item.Path, Path);
+            }))
+    {
+        return true;
+    }
+    FFileSnapshot Snapshot;
+    if (!CaptureFile(Path, Snapshot, OutError))
+    {
+        return false;
+    }
+    Snapshots.Add(MoveTemp(Snapshot));
+    return true;
+}
+
+void AddPackageFileCandidates(
+    const FString& PackagePath,
+    TArray<FString>& OutPaths)
+{
+    const FString AssetPath = FPaths::ConvertRelativePathToFull(
+        FPackageName::LongPackageNameToFilename(
+            PackagePath,
+            FPackageName::GetAssetPackageExtension()));
+    OutPaths.AddUnique(AssetPath);
+    OutPaths.AddUnique(FPaths::ChangeExtension(AssetPath, TEXT("uexp")));
+    OutPaths.AddUnique(FPaths::ChangeExtension(AssetPath, TEXT("ubulk")));
+    OutPaths.AddUnique(FPaths::ChangeExtension(AssetPath, TEXT("uptnl")));
+}
+
+bool BuildRecoverySnapshots(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const TArray<FFileSnapshot>& ExternalSnapshots,
+    TArray<FFileSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    TArray<FFileSnapshot> Snapshots = ExternalSnapshots;
+    TArray<FString> PackagePaths;
+    AddPackageFileCandidates(Context.BlueprintPackagePath, PackagePaths);
+    AddPackageFileCandidates(Context.ScriptAssetPackagePath, PackagePaths);
+    AddPackageFileCandidates(Target.BlueprintPackagePath, PackagePaths);
+    AddPackageFileCandidates(Target.ScriptAssetPackagePath, PackagePaths);
+    for (const FString& Path : PackagePaths)
+    {
+        if (!CaptureSnapshotIfMissing(Path, Snapshots, OutError))
+        {
+            return false;
+        }
+    }
+    OutSnapshots = MoveTemp(Snapshots);
+    return true;
+}
+
 const FFileSnapshot* FindSnapshot(
     const TArray<FFileSnapshot>& Snapshots,
     const FString& Path)
@@ -1516,13 +1567,14 @@ bool SaveClassPackages(
 
 void FillResult(
     const TCHAR* Operation,
+    const FString& TransactionId,
     const FTargetIdentity& Target,
     UBlueprint* Blueprint,
     UUnifiedScriptAsset* ScriptAsset,
     FUnifiedScriptClassAssetOperationResult& OutResult)
 {
     OutResult.Operation = Operation;
-    OutResult.TransactionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    OutResult.TransactionId = TransactionId;
     OutResult.BlueprintAssetPath = Target.BlueprintAssetPath;
     OutResult.ScriptAssetPath = Target.ScriptAssetObjectPath;
     OutResult.SourcePath = Target.SourcePath;
@@ -1559,6 +1611,26 @@ bool ShouldFail(
         TEXT("Injected Script Class transaction failure at phase %d."),
         static_cast<int32>(Actual));
     return true;
+}
+
+void CloseReceiptAfterRollback(
+    UE::UnifiedScript::ClassOperationJournal::FReceipt& Receipt,
+    bool bRolledBack,
+    FString& InOutRollbackError)
+{
+    if (!bRolledBack)
+    {
+        return;
+    }
+    FString CloseError;
+    if (!UE::UnifiedScript::ClassOperationJournal::Close(Receipt, CloseError))
+    {
+        if (!InOutRollbackError.IsEmpty())
+        {
+            InOutRollbackError += TEXT("; ");
+        }
+        InOutRollbackError += TEXT("cannot close recovery receipt: ") + CloseError;
+    }
 }
 
 bool RollbackRename(
@@ -1706,13 +1778,23 @@ bool FUnifiedScriptClassAssetOperations::Rename(
         OutResult.Error = Error;
         return false;
     }
-    FillResult(TEXT("rename"), Target, Context.Blueprint, ScriptAsset, OutResult);
+    const FString TransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    FillResult(
+        TEXT("rename"),
+        TransactionId,
+        Target,
+        Context.Blueprint,
+        ScriptAsset,
+        OutResult);
 
     FManagedReferencePlan ReferencePlan;
     TMap<FString, TArray<uint8>> ManagedSourceOutputs;
     FString Deployment;
     FString FirstPlayRequest;
     TArray<FFileSnapshot> FileSnapshots;
+    TArray<FFileSnapshot> RecoverySnapshots;
+    UE::UnifiedScript::ClassOperationJournal::FReceipt Receipt;
     if (!RunManagedReferencePlanner(
             Context,
             Target.TypeName,
@@ -1746,11 +1828,24 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             ReferencePlan,
             FileSnapshots,
             ManagedSourceOutputs,
+            Error) ||
+        !BuildRecoverySnapshots(
+            Context,
+            Target,
+            FileSnapshots,
+            RecoverySnapshots,
+            Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Begin(
+            TEXT("rename"),
+            TransactionId,
+            RecoverySnapshots,
+            Receipt,
             Error))
     {
         OutResult.Error = Error;
         return false;
     }
+    OutResult.RecoveryReceiptPath = Receipt.ReceiptPath;
 
     TArray<FAssetRenameData> Renames;
     Renames.Emplace(
@@ -1776,7 +1871,11 @@ bool FUnifiedScriptClassAssetOperations::Rename(
         Target,
         ScriptAsset->ScriptClassId);
     FBlueprintEditorUtils::MarkBlueprintAsModified(Context.Blueprint);
-    if (ShouldFail(
+    if (!UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::AssetsMutated,
+            Error) ||
+        ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterAssetMutation,
             FailurePoint,
             Error) ||
@@ -1788,17 +1887,26 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             Deployment,
             FirstPlayRequest,
             Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
+            Error) ||
         ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
             FailurePoint,
             Error) ||
-        !SaveClassPackages(Context.Blueprint, ScriptAsset, Error))
+        !SaveClassPackages(Context.Blueprint, ScriptAsset, Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Close(Receipt, Error))
     {
         FString RollbackError;
         OutResult.bRolledBack = RollbackRename(
             Context,
             Target,
             FileSnapshots,
+            RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
             RollbackError);
         OutResult.Error = Error;
         if (!RollbackError.IsEmpty())
@@ -1836,11 +1944,22 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
         OutResult.Error = Error;
         return false;
     }
+    const FString TransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    FillResult(
+        TEXT("duplicate"),
+        TransactionId,
+        Target,
+        nullptr,
+        nullptr,
+        OutResult);
 
     FString TargetSource;
     FString Deployment;
     FString FirstPlayRequest;
     TArray<FFileSnapshot> FileSnapshots;
+    TArray<FFileSnapshot> RecoverySnapshots;
+    UE::UnifiedScript::ClassOperationJournal::FReceipt Receipt;
     if (!TransformSource(Context, Target, TargetSource, Error) ||
         !BuildDeployment(Context, Target, true, Deployment, Error) ||
         !BuildFirstPlayRequest(Context, Target, FirstPlayRequest, Error) ||
@@ -1849,12 +1968,24 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             Target,
             TArray<FString>(),
             FileSnapshots,
+            Error) ||
+        !BuildRecoverySnapshots(
+            Context,
+            Target,
+            FileSnapshots,
+            RecoverySnapshots,
+            Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Begin(
+            TEXT("duplicate"),
+            TransactionId,
+            RecoverySnapshots,
+            Receipt,
             Error))
     {
-        OutResult.Operation = TEXT("duplicate");
         OutResult.Error = Error;
         return false;
     }
+    OutResult.RecoveryReceiptPath = Receipt.ReceiptPath;
 
     UBlueprint* NewBlueprint = nullptr;
     UUnifiedScriptAsset* NewScriptAsset = nullptr;
@@ -1873,7 +2004,8 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
                 ScriptAsset));
         }
     }
-    FillResult(TEXT("duplicate"), Target, NewBlueprint, NewScriptAsset, OutResult);
+    OutResult.Blueprint = NewBlueprint;
+    OutResult.ScriptAsset = NewScriptAsset;
     if (NewBlueprint == nullptr || NewScriptAsset == nullptr)
     {
         FString RollbackError;
@@ -1881,6 +2013,10 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
             RollbackError);
         OutResult.Error = TEXT("AssetTools could not duplicate the complete Script Class asset pair.");
         if (!RollbackError.IsEmpty())
@@ -1903,6 +2039,10 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewScriptAsset,
             FileSnapshots,
             RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
+            RollbackError);
         OutResult.Error = Error;
         if (!RollbackError.IsEmpty())
         {
@@ -1920,6 +2060,10 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewScriptAsset,
             FileSnapshots,
             RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
+            RollbackError);
         OutResult.Error = Error;
         if (!RollbackError.IsEmpty())
         {
@@ -1928,7 +2072,11 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
         return false;
     }
 
-    if (ShouldFail(
+    if (!UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::AssetsMutated,
+            Error) ||
+        ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterAssetMutation,
             FailurePoint,
             Error) ||
@@ -1941,17 +2089,26 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             FirstPlayRequest,
             false,
             Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
+            Error) ||
         ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
             FailurePoint,
             Error) ||
-        !SaveClassPackages(NewBlueprint, NewScriptAsset, Error))
+        !SaveClassPackages(NewBlueprint, NewScriptAsset, Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Close(Receipt, Error))
     {
         FString RollbackError;
         OutResult.bRolledBack = RollbackDuplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
             RollbackError);
         OutResult.Error = Error;
         if (!RollbackError.IsEmpty())
@@ -2041,6 +2198,25 @@ bool FUnifiedScriptClassAssetOperations::Delete(
         OutResult.Error = Error;
         return false;
     }
+    TArray<FFileSnapshot> RecoverySnapshots;
+    UE::UnifiedScript::ClassOperationJournal::FReceipt Receipt;
+    if (!BuildRecoverySnapshots(
+            Context,
+            Tombstone,
+            FileSnapshots,
+            RecoverySnapshots,
+            Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Begin(
+            TEXT("delete"),
+            TransactionId,
+            RecoverySnapshots,
+            Receipt,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    OutResult.RecoveryReceiptPath = Receipt.ReceiptPath;
 
     TArray<FAssetRenameData> TombstoneRenames;
     TombstoneRenames.Emplace(
@@ -2069,6 +2245,10 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             Tombstone,
             FileSnapshots,
             RollbackError);
+        CloseReceiptAfterRollback(
+            Receipt,
+            OutResult.bRolledBack,
+            RollbackError);
         if (!RollbackError.IsEmpty())
         {
             OutResult.Error += TEXT(" Rollback failed: ") + RollbackError;
@@ -2076,7 +2256,11 @@ bool FUnifiedScriptClassAssetOperations::Delete(
         return false;
     };
 
-    if (ShouldFail(
+    if (!UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::AssetsMutated,
+            Error) ||
+        ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterAssetMutation,
             FailurePoint,
             Error) ||
@@ -2085,6 +2269,10 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             Context,
             Deployment,
             bDeleteFirstPlayRequest,
+            Error) ||
+        !UE::UnifiedScript::ClassOperationJournal::Advance(
+            Receipt,
+            UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
             Error) ||
         ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
@@ -2131,10 +2319,35 @@ bool FUnifiedScriptClassAssetOperations::Delete(
         return false;
     }
 
-    OutResult.bSucceeded = true;
     OutResult.Blueprint = nullptr;
     OutResult.ScriptAsset = nullptr;
+    if (!UE::UnifiedScript::ClassOperationJournal::Close(Receipt, Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    OutResult.bSucceeded = true;
     return true;
+}
+
+bool FUnifiedScriptClassAssetOperations::RecoverPendingTransactions(
+    FUnifiedScriptClassAssetRecoveryResult& OutResult)
+{
+    OutResult = {};
+    UE::UnifiedScript::ClassOperationJournal::FRecoveryReport Report;
+    FString Error;
+    const bool bRecovered =
+        UE::UnifiedScript::ClassOperationJournal::RecoverPending(Report, Error);
+    OutResult.PendingReceiptCount = Report.PendingReceiptCount;
+    OutResult.RecoveredReceiptCount = Report.RecoveredReceiptCount;
+    OutResult.CleanedCommittedReceiptCount =
+        Report.CleanedCommittedReceiptCount;
+    OutResult.DeferredLiveReceiptCount = Report.DeferredLiveReceiptCount;
+    OutResult.RecoveredTransactionIds = MoveTemp(
+        Report.RecoveredTransactionIds);
+    OutResult.ArchivePaths = MoveTemp(Report.ArchivePaths);
+    OutResult.Error = MoveTemp(Error);
+    return bRecovered;
 }
 
 bool FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(const UObject* Asset)
