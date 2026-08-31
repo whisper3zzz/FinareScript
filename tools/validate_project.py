@@ -1593,6 +1593,14 @@ def main() -> int:
         / "UEUnifiedScriptEditor" / "Private" / "Tests"
         / "UnifiedScriptClassAssetOperationsTests.cpp"
     ).read_text(encoding="utf-8")
+    csharp_type_reference_planner = (
+        ROOT / "src" / "UnifiedScript.CSharp"
+        / "CSharpTypeReferencePlanner.cs"
+    ).read_text(encoding="utf-8")
+    csharp_type_reference_planner_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests"
+        / "CSharpTypeReferencePlannerTests.cs"
+    ).read_text(encoding="utf-8")
     require(
         "FUnifiedScriptClassAssetOperations" in script_class_operations_header
         and "static bool Rename" in script_class_operations_header
@@ -1623,13 +1631,13 @@ def main() -> int:
         and "IsCompleteClassAsset" in script_class_operations_header
         and "BuildDeleteDeployment" in script_class_operations_source
         and "ValidateNoExternalAssetReferencers" in script_class_operations_source
-        and "ValidateNoExternalManagedReferencers" in script_class_operations_source
+        and "RunManagedReferencePlanner" in script_class_operations_source
         and "PublishDeleteExternalFiles" in script_class_operations_source
         and "ObjectTools::DeleteObjectsUnchecked" in script_class_operations_source
         and "UnifiedScript.DeleteClass" in script_asset_definition_source
         and "RegisterUnifiedScriptAssetOperationGuards"
         in script_asset_definition_source
-        and "managed sources still reference"
+        and "managed semantic references remain"
         in script_class_operations_tests
         and "Delete rollback restores source bytes exactly"
         in script_class_operations_tests
@@ -1641,6 +1649,42 @@ def main() -> int:
     )
     checks.append(
         "M13.2A safely deletes unreferenced complete Script Classes"
+    )
+    require(
+        "CSharpProjectSource" in project_loader
+        and "IReadOnlyList<CSharpProjectSource> Sources" in project_loader
+        and "CSharpTypeReferencePlanner" in csharp_type_reference_planner
+        and "unifiedscript.csharp-type-reference-plan/v0.1"
+        in csharp_type_reference_planner
+        and "GetTypeByMetadataName" in csharp_type_reference_planner
+        and "SymbolEqualityComparer.Default" in csharp_type_reference_planner
+        and "CSharpTypeReferenceEditKind.TypeReference"
+        in csharp_type_reference_planner
+        and 'args[0] == "script-class-reference-plan"' in cli_source
+        and 'case "--dotnet"' in cli_source
+        and "RunManagedReferencePlanner" in script_class_operations_source
+        and "ValidateManagedReferencePlanSnapshots"
+        in script_class_operations_source
+        and "BuildManagedRenameOutputs" in script_class_operations_source
+        and "PublishManagedRenameExternalFiles"
+        in script_class_operations_source
+        and "managed semantic references remain"
+        in script_class_operations_source
+        and "Rename updates the Roslyn-bound external type reference"
+        in script_class_operations_tests
+        and "Rename rollback restores semantic reference bytes exactly"
+        in script_class_operations_tests
+        and "PlannerRenamesOnlyRoslynBoundTypeDeclarationsAndReferences"
+        in csharp_type_reference_planner_tests
+        and "DeletePlanReportsExternalSemanticReferencesWithoutReplacement"
+        in csharp_type_reference_planner_tests
+        and "CliWritesDeterministicProjectReferencePlan"
+        in csharp_type_reference_planner_tests
+        and "M13.2A-2b2a — Roslyn reference plan" in roadmap_document,
+        "M13.2A-2b2a Roslyn reference planning, UE transaction integration, or rollback coverage is incomplete",
+    )
+    checks.append(
+        "M13.2A rewrites cross-file managed Script Class references semantically"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"

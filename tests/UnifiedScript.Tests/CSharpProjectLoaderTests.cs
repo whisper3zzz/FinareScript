@@ -26,6 +26,11 @@ public sealed class CSharpProjectLoaderTests
             result.Request.Sources,
             static source => source.LogicalPath == "ProjectLoadingDemo.cs");
         Assert.Contains(
+            result.Sources,
+            static source =>
+                source.LogicalPath == "ProjectLoadingDemo.cs" &&
+                source.Path.EndsWith("ProjectLoadingDemo.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
             result.References,
             static reference =>
                 reference.Kind == CSharpProjectReferenceKind.Package &&

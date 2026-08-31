@@ -7,7 +7,9 @@
 #include "Engine/Blueprint.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Internationalization/Regex.h"
+#include "Interfaces/IPluginManager.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
@@ -24,6 +26,10 @@
 #include "UnifiedScriptProjectSetup.h"
 #include "UObject/ObjectRedirector.h"
 #include "UObject/SavePackage.h"
+
+THIRD_PARTY_INCLUDES_START
+#include <openssl/sha.h>
+THIRD_PARTY_INCLUDES_END
 
 namespace UE::UnifiedScript::ClassAssetOperations::Private
 {
@@ -58,6 +64,8 @@ struct FClassOperationContext
     FString ProjectRoot;
     FString DeploymentPath;
     FString FirstPlayRequestPath;
+    FString ManagedProjectPath;
+    FString CliExecutable;
     FString SourcePath;
     FString ConfiguredSourcePath;
     FString BlueprintPackagePath;
@@ -87,6 +95,32 @@ struct FTargetIdentity
     FString ManagedTypeName;
     FString DeclarationAssetPath;
     FString ClassId;
+};
+
+struct FManagedReferenceEdit
+{
+    int32 Start = 0;
+    int32 Length = 0;
+    int32 Line = 0;
+    int32 Column = 0;
+    FString Kind;
+    FString OriginalText;
+    FString Replacement;
+};
+
+struct FManagedReferenceDocument
+{
+    FString LogicalPath;
+    FString Path;
+    FString SourceDigest;
+    TArray<FManagedReferenceEdit> Edits;
+};
+
+struct FManagedReferencePlan
+{
+    FString ManagedTypeName;
+    FString ReplacementTypeName;
+    TArray<FManagedReferenceDocument> Documents;
 };
 
 bool IsManagedIdentifier(const FString& Value)
@@ -248,6 +282,200 @@ bool SerializeJson(
     return true;
 }
 
+FString QuoteProcessArgument(const FString& Value)
+{
+    FString Escaped = Value;
+    Escaped.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    return FString::Printf(TEXT("\"%s\""), *Escaped);
+}
+
+bool ComputeSourceDigest(const TArray<uint8>& Bytes, FString& OutDigest)
+{
+    uint8 Digest[SHA256_DIGEST_LENGTH]{};
+    if (SHA256(
+            Bytes.GetData(),
+            static_cast<size_t>(Bytes.Num()),
+            Digest) == nullptr)
+    {
+        return false;
+    }
+    OutDigest = TEXT("sha256:") +
+        BytesToHex(Digest, SHA256_DIGEST_LENGTH).ToLower();
+    return true;
+}
+
+bool ParseManagedReferencePlan(
+    const FString& PlanPath,
+    const FString& ExpectedManagedTypeName,
+    const FString& ExpectedReplacementTypeName,
+    FManagedReferencePlan& OutPlan,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    if (!ReadJsonFile(PlanPath, Root, OutError))
+    {
+        return false;
+    }
+    FString SchemaVersion;
+    FString ManagedTypeName;
+    FString ReplacementTypeName;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), SchemaVersion) ||
+        SchemaVersion != TEXT("unifiedscript.csharp-type-reference-plan/v0.1") ||
+        !Root->TryGetStringField(TEXT("managedTypeName"), ManagedTypeName) ||
+        ManagedTypeName != ExpectedManagedTypeName)
+    {
+        OutError = TEXT("Managed reference plan identity does not match the Script Class transaction.");
+        return false;
+    }
+    Root->TryGetStringField(TEXT("replacementTypeName"), ReplacementTypeName);
+    if (ReplacementTypeName != ExpectedReplacementTypeName)
+    {
+        OutError = TEXT("Managed reference plan replacement does not match the Script Class transaction.");
+        return false;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* DocumentValues = nullptr;
+    if (!Root->TryGetArrayField(TEXT("documents"), DocumentValues) ||
+        DocumentValues == nullptr)
+    {
+        OutError = TEXT("Managed reference plan documents are unavailable.");
+        return false;
+    }
+    FManagedReferencePlan Plan;
+    Plan.ManagedTypeName = ManagedTypeName;
+    Plan.ReplacementTypeName = ReplacementTypeName;
+    for (const TSharedPtr<FJsonValue>& DocumentValue : *DocumentValues)
+    {
+        const TSharedPtr<FJsonObject> DocumentObject =
+            DocumentValue.IsValid() ? DocumentValue->AsObject() : nullptr;
+        FManagedReferenceDocument Document;
+        if (!DocumentObject.IsValid() ||
+            !DocumentObject->TryGetStringField(TEXT("logicalPath"), Document.LogicalPath) ||
+            !DocumentObject->TryGetStringField(TEXT("path"), Document.Path) ||
+            !DocumentObject->TryGetStringField(TEXT("sourceDigest"), Document.SourceDigest))
+        {
+            OutError = TEXT("Managed reference plan contains an invalid document.");
+            return false;
+        }
+        Document.Path = FPaths::ConvertRelativePathToFull(Document.Path);
+        FPaths::NormalizeFilename(Document.Path);
+        const TArray<TSharedPtr<FJsonValue>>* EditValues = nullptr;
+        if (!DocumentObject->TryGetArrayField(TEXT("edits"), EditValues) ||
+            EditValues == nullptr || EditValues->IsEmpty())
+        {
+            OutError = TEXT("Managed reference plan contains an empty document edit set.");
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& EditValue : *EditValues)
+        {
+            const TSharedPtr<FJsonObject> EditObject =
+                EditValue.IsValid() ? EditValue->AsObject() : nullptr;
+            double Start = 0.0;
+            double Length = 0.0;
+            double Line = 0.0;
+            double Column = 0.0;
+            FManagedReferenceEdit Edit;
+            if (!EditObject.IsValid() ||
+                !EditObject->TryGetNumberField(TEXT("start"), Start) ||
+                !EditObject->TryGetNumberField(TEXT("length"), Length) ||
+                !EditObject->TryGetNumberField(TEXT("line"), Line) ||
+                !EditObject->TryGetNumberField(TEXT("column"), Column) ||
+                !EditObject->TryGetStringField(TEXT("kind"), Edit.Kind) ||
+                !EditObject->TryGetStringField(TEXT("originalText"), Edit.OriginalText))
+            {
+                OutError = TEXT("Managed reference plan contains an invalid edit.");
+                return false;
+            }
+            EditObject->TryGetStringField(TEXT("replacement"), Edit.Replacement);
+            Edit.Start = static_cast<int32>(Start);
+            Edit.Length = static_cast<int32>(Length);
+            Edit.Line = static_cast<int32>(Line);
+            Edit.Column = static_cast<int32>(Column);
+            if (Edit.Start < 0 || Edit.Length <= 0 || Edit.Line <= 0 ||
+                Edit.Column <= 0 ||
+                (!ExpectedReplacementTypeName.IsEmpty() &&
+                    Edit.Replacement != ExpectedReplacementTypeName))
+            {
+                OutError = TEXT("Managed reference plan edit is outside the supported transaction contract.");
+                return false;
+            }
+            Document.Edits.Add(MoveTemp(Edit));
+        }
+        Document.Edits.Sort(
+            [](const FManagedReferenceEdit& Left, const FManagedReferenceEdit& Right)
+            {
+                return Left.Start < Right.Start;
+            });
+        Plan.Documents.Add(MoveTemp(Document));
+    }
+    OutPlan = MoveTemp(Plan);
+    return true;
+}
+
+bool RunManagedReferencePlanner(
+    const FClassOperationContext& Context,
+    const FString& ReplacementTypeName,
+    const FString& TransactionId,
+    FManagedReferencePlan& OutPlan,
+    FString& OutError)
+{
+    const FString PlanDirectory = FPaths::Combine(
+        Context.ProjectRoot,
+        TEXT("Saved/UnifiedScript/ClassOperations"));
+    IFileManager::Get().MakeDirectory(*PlanDirectory, true);
+    const FString PlanPath = FPaths::Combine(
+        PlanDirectory,
+        TransactionId + TEXT(".references.json"));
+    FString Arguments = FString::Printf(
+        TEXT("script-class-reference-plan %s --type %s --out %s --configuration Debug"),
+        *QuoteProcessArgument(Context.ManagedProjectPath),
+        *QuoteProcessArgument(Context.ManagedTypeName),
+        *QuoteProcessArgument(PlanPath));
+    FString DotNetExecutable = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::EngineDir(),
+        TEXT("Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe")));
+    FPaths::NormalizeFilename(DotNetExecutable);
+    if (IFileManager::Get().FileExists(*DotNetExecutable))
+    {
+        Arguments += TEXT(" --dotnet ") + QuoteProcessArgument(DotNetExecutable);
+    }
+    if (!ReplacementTypeName.IsEmpty())
+    {
+        Arguments += TEXT(" --new-name ") + QuoteProcessArgument(ReplacementTypeName);
+    }
+
+    int32 ReturnCode = INDEX_NONE;
+    FString StandardOutput;
+    FString StandardError;
+    if (!FPlatformProcess::ExecProcess(
+            *Context.CliExecutable,
+            *Arguments,
+            &ReturnCode,
+            &StandardOutput,
+            &StandardError) ||
+        ReturnCode != 0)
+    {
+        StandardError.TrimStartAndEndInline();
+        StandardOutput.TrimStartAndEndInline();
+        OutError = FString::Printf(
+            TEXT("Managed reference planning failed with exit code %d: %s"),
+            ReturnCode,
+            *(StandardError.IsEmpty() ? StandardOutput : StandardError));
+        return false;
+    }
+    if (!ParseManagedReferencePlan(
+            PlanPath,
+            Context.ManagedTypeName,
+            ReplacementTypeName,
+            OutPlan,
+            OutError))
+    {
+        return false;
+    }
+    IFileManager::Get().Delete(*PlanPath, false, true);
+    return true;
+}
+
 UUnifiedScriptAsset* GetBlueprintScriptAsset(UBlueprint* Blueprint)
 {
     if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
@@ -374,6 +602,73 @@ bool BuildContext(
     TSharedPtr<FJsonObject> Onboarding;
     if (!ReadJsonFile(OnboardingPath, Onboarding, OutError))
     {
+        return false;
+    }
+    const TSharedPtr<FJsonObject>* Managed = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* ManagedProjects = nullptr;
+    if (!Onboarding->TryGetObjectField(TEXT("managed"), Managed) ||
+        Managed == nullptr ||
+        !(*Managed)->TryGetArrayField(TEXT("projects"), ManagedProjects) ||
+        ManagedProjects == nullptr ||
+        ManagedProjects->IsEmpty())
+    {
+        OutError = TEXT("UnifiedScript onboarding does not identify a managed project.");
+        return false;
+    }
+    TArray<FString> ResolvedManagedProjects;
+    for (const TSharedPtr<FJsonValue>& Value : *ManagedProjects)
+    {
+        FString ProjectPath;
+        if (!Value.IsValid() || !Value->TryGetString(ProjectPath))
+        {
+            OutError = TEXT("UnifiedScript onboarding contains an invalid managed project path.");
+            return false;
+        }
+        ResolvedManagedProjects.Add(ResolveRelativeTo(
+            FPaths::GetPath(OnboardingPath),
+            ProjectPath));
+    }
+    Context.ManagedProjectPath = ResolvedManagedProjects[0];
+    for (const FString& ProjectPath : ResolvedManagedProjects)
+    {
+        if (FPaths::IsUnderDirectory(
+                Context.SourcePath,
+                FPaths::GetPath(ProjectPath)))
+        {
+            Context.ManagedProjectPath = ProjectPath;
+            break;
+        }
+    }
+
+    const TSharedPtr<IPlugin> Plugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    const FString PluginRoot = Plugin.IsValid()
+        ? Plugin->GetBaseDir()
+        : FPaths::Combine(Context.ProjectRoot, TEXT("Plugins/UEUnifiedScript"));
+    const FString CliCandidates[] = {
+        FPaths::Combine(
+            PluginRoot,
+            TEXT("Tools/UnifiedScript.Cli/UnifiedScript.Cli.exe")),
+        FPaths::Combine(
+            Context.ProjectRoot,
+            TEXT("../src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.exe")),
+        FPaths::Combine(
+            Context.ProjectRoot,
+            TEXT("../src/UnifiedScript.Cli/bin/Debug/net10.0/UnifiedScript.Cli.exe")),
+    };
+    for (FString CliCandidate : CliCandidates)
+    {
+        CliCandidate = FPaths::ConvertRelativePathToFull(CliCandidate);
+        FPaths::NormalizeFilename(CliCandidate);
+        if (IFileManager::Get().FileExists(*CliCandidate))
+        {
+            Context.CliExecutable = MoveTemp(CliCandidate);
+            break;
+        }
+    }
+    if (Context.CliExecutable.IsEmpty())
+    {
+        OutError = TEXT("UnifiedScript CLI is unavailable; run Project Setup Repair before changing Script Class identity.");
         return false;
     }
     const TSharedPtr<FJsonObject>* Deployment = nullptr;
@@ -520,13 +815,14 @@ bool ReplaceUniqueCapture(
     return true;
 }
 
-bool TransformSource(
+bool TransformSourceText(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
+    FString Source,
+    bool bReplaceClassDeclaration,
     FString& OutSource,
     FString& OutError)
 {
-    FString Source = Context.Source;
     const FRegexPattern ScriptAssetPattern(TEXT(
         R"REGEX(\[\s*ScriptAsset\s*\(\s*"([^"]+)"\s*,\s*ClassId\s*=\s*"([^"]+)"\s*\)\s*\])REGEX"));
     if (!ReplaceUniqueCapture(
@@ -549,23 +845,41 @@ bool TransformSource(
         return false;
     }
 
-    const FRegexPattern ClassPattern(FString::Printf(
-        TEXT(R"(\bclass\s+(%s)\b)"),
-        *Context.OldTypeName));
-    if (!ReplaceUniqueCapture(
-            Source,
-            ClassPattern,
-            1,
-            Context.OldTypeName,
-            Target.TypeName,
-            TEXT("class declaration"),
-            OutError))
+    if (bReplaceClassDeclaration)
     {
-        return false;
+        const FRegexPattern ClassPattern(FString::Printf(
+            TEXT(R"(\bclass\s+(%s)\b)"),
+            *Context.OldTypeName));
+        if (!ReplaceUniqueCapture(
+                Source,
+                ClassPattern,
+                1,
+                Context.OldTypeName,
+                Target.TypeName,
+                TEXT("class declaration"),
+                OutError))
+        {
+            return false;
+        }
     }
     OutSource = MoveTemp(Source);
     OutError.Reset();
     return true;
+}
+
+bool TransformSource(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    FString& OutSource,
+    FString& OutError)
+{
+    return TransformSourceText(
+        Context,
+        Target,
+        Context.Source,
+        true,
+        OutSource,
+        OutError);
 }
 
 TSharedPtr<FJsonObject> FindDeploymentEntry(
@@ -755,81 +1069,6 @@ bool ValidateNoExternalAssetReferencers(
     return true;
 }
 
-FString FindManagedProjectRoot(const FString& SourcePath)
-{
-    FString Directory = FPaths::GetPath(SourcePath);
-    while (!Directory.IsEmpty())
-    {
-        TArray<FString> ProjectFiles;
-        IFileManager::Get().FindFiles(
-            ProjectFiles,
-            *(Directory / TEXT("*.csproj")),
-            true,
-            false);
-        if (!ProjectFiles.IsEmpty())
-        {
-            return Directory;
-        }
-        const FString Parent = FPaths::GetPath(Directory);
-        if (Parent.IsEmpty() || FPaths::IsSamePath(Parent, Directory))
-        {
-            break;
-        }
-        Directory = Parent;
-    }
-    return FPaths::GetPath(SourcePath);
-}
-
-bool ValidateNoExternalManagedReferencers(
-    const FClassOperationContext& Context,
-    FString& OutError)
-{
-    TArray<FString> SourceFiles;
-    IFileManager::Get().FindFilesRecursive(
-        SourceFiles,
-        *FindManagedProjectRoot(Context.SourcePath),
-        TEXT("*.cs"),
-        true,
-        false);
-    const FRegexPattern TypePattern(
-        TEXT("\\b") + Context.OldTypeName + TEXT("\\b"));
-    TArray<FString> Referencers;
-    for (FString SourceFile : SourceFiles)
-    {
-        SourceFile = FPaths::ConvertRelativePathToFull(SourceFile);
-        FPaths::NormalizeFilename(SourceFile);
-        if (FPaths::IsSamePath(SourceFile, Context.SourcePath) ||
-            SourceFile.Contains(TEXT("/bin/"), ESearchCase::IgnoreCase) ||
-            SourceFile.Contains(TEXT("/obj/"), ESearchCase::IgnoreCase))
-        {
-            continue;
-        }
-        FString Source;
-        if (!FFileHelper::LoadFileToString(Source, *SourceFile))
-        {
-            OutError = FString::Printf(
-                TEXT("Cannot inspect managed reference candidate '%s'."),
-                *SourceFile);
-            return false;
-        }
-        FRegexMatcher TypeMatcher(TypePattern, Source);
-        if (TypeMatcher.FindNext() || Source.Contains(Context.ClassId))
-        {
-            Referencers.Add(SourceFile);
-        }
-    }
-    Referencers.Sort();
-    if (!Referencers.IsEmpty())
-    {
-        OutError = FString::Printf(
-            TEXT("Cannot delete Script Class '%s'; managed sources still reference it: %s"),
-            *Context.ManagedTypeName,
-            *FString::Join(Referencers, TEXT(", ")));
-        return false;
-    }
-    return true;
-}
-
 bool BuildFirstPlayRequest(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
@@ -859,15 +1098,17 @@ bool BuildFirstPlayRequest(
 bool CaptureExternalSnapshots(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
+    const TArray<FString>& AdditionalPaths,
     TArray<FFileSnapshot>& OutSnapshots,
     FString& OutError)
 {
-    const FString Paths[] = {
+    TArray<FString> Paths = {
         Context.SourcePath,
         Target.SourcePath,
         Context.DeploymentPath,
         Context.FirstPlayRequestPath,
     };
+    Paths.Append(AdditionalPaths);
     TArray<FFileSnapshot> Snapshots;
     for (const FString& Path : Paths)
     {
@@ -887,19 +1128,230 @@ bool CaptureExternalSnapshots(
     return true;
 }
 
+const FFileSnapshot* FindSnapshot(
+    const TArray<FFileSnapshot>& Snapshots,
+    const FString& Path)
+{
+    return Snapshots.FindByPredicate(
+        [&Path](const FFileSnapshot& Snapshot)
+        {
+            return FPaths::IsSamePath(Snapshot.Path, Path);
+        });
+}
+
+bool EncodeTextLikeSnapshot(
+    const FString& Text,
+    const FFileSnapshot& Snapshot,
+    TArray<uint8>& OutBytes,
+    FString& OutError)
+{
+    OutBytes.Reset();
+    const TArray<uint8>& Original = Snapshot.Bytes;
+    if (Original.Num() >= 2 && Original[0] == 0xff && Original[1] == 0xfe)
+    {
+        OutBytes.Add(0xff);
+        OutBytes.Add(0xfe);
+        for (const TCHAR Character : Text)
+        {
+            OutBytes.Add(static_cast<uint8>(Character & 0xff));
+            OutBytes.Add(static_cast<uint8>((Character >> 8) & 0xff));
+        }
+        return true;
+    }
+    if (Original.Num() >= 2 && Original[0] == 0xfe && Original[1] == 0xff)
+    {
+        OutBytes.Add(0xfe);
+        OutBytes.Add(0xff);
+        for (const TCHAR Character : Text)
+        {
+            OutBytes.Add(static_cast<uint8>((Character >> 8) & 0xff));
+            OutBytes.Add(static_cast<uint8>(Character & 0xff));
+        }
+        return true;
+    }
+    const bool bUtf8Bom = Original.Num() >= 3 &&
+        Original[0] == 0xef && Original[1] == 0xbb && Original[2] == 0xbf;
+    if (bUtf8Bom)
+    {
+        OutBytes.Append({0xef, 0xbb, 0xbf});
+    }
+    FTCHARToUTF8 Utf8(*Text);
+    OutBytes.Append(
+        reinterpret_cast<const uint8*>(Utf8.Get()),
+        Utf8.Length());
+    if (OutBytes.IsEmpty() && !Text.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot encode managed source '%s'."),
+            *Snapshot.Path);
+        return false;
+    }
+    return true;
+}
+
+bool ValidateManagedReferencePlanSnapshots(
+    const FManagedReferencePlan& Plan,
+    const TArray<FFileSnapshot>& Snapshots,
+    FString& OutError)
+{
+    for (const FManagedReferenceDocument& Document : Plan.Documents)
+    {
+        const FFileSnapshot* Snapshot = FindSnapshot(Snapshots, Document.Path);
+        FString Digest;
+        if (Snapshot == nullptr || !Snapshot->bExisted ||
+            !ComputeSourceDigest(Snapshot->Bytes, Digest) ||
+            Digest != Document.SourceDigest)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed reference plan is stale for '%s'."),
+                *Document.Path);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool BuildManagedRenameOutputs(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const FManagedReferencePlan& Plan,
+    const TArray<FFileSnapshot>& Snapshots,
+    TMap<FString, TArray<uint8>>& OutOutputs,
+    FString& OutError)
+{
+    TMap<FString, TArray<uint8>> Outputs;
+    bool bFoundPrimarySource = false;
+    for (const FManagedReferenceDocument& Document : Plan.Documents)
+    {
+        const FFileSnapshot* Snapshot = FindSnapshot(Snapshots, Document.Path);
+        if (Snapshot == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed reference source '%s' was not snapshotted."),
+                *Document.Path);
+            return false;
+        }
+        FString Source;
+        FFileHelper::BufferToString(
+            Source,
+            Snapshot->Bytes.GetData(),
+            Snapshot->Bytes.Num());
+        for (int32 EditIndex = Document.Edits.Num() - 1; EditIndex >= 0; --EditIndex)
+        {
+            const FManagedReferenceEdit& Edit = Document.Edits[EditIndex];
+            if (Edit.Start < 0 || Edit.Length <= 0 ||
+                Edit.Start + Edit.Length > Source.Len() ||
+                Source.Mid(Edit.Start, Edit.Length) != Edit.OriginalText ||
+                Edit.Replacement != Target.TypeName)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed reference edit is stale at %s(%d,%d)."),
+                    *Document.Path,
+                    Edit.Line,
+                    Edit.Column);
+                return false;
+            }
+            Source = Source.Left(Edit.Start) +
+                Edit.Replacement +
+                Source.Mid(Edit.Start + Edit.Length);
+        }
+
+        FString OutputPath = Document.Path;
+        if (FPaths::IsSamePath(Document.Path, Context.SourcePath))
+        {
+            bFoundPrimarySource = true;
+            OutputPath = Target.SourcePath;
+            FString IdentityTransformed;
+            if (!TransformSourceText(
+                    Context,
+                    Target,
+                    MoveTemp(Source),
+                    false,
+                    IdentityTransformed,
+                    OutError))
+            {
+                return false;
+            }
+            Source = MoveTemp(IdentityTransformed);
+        }
+        TArray<uint8> Bytes;
+        if (!EncodeTextLikeSnapshot(Source, *Snapshot, Bytes, OutError))
+        {
+            return false;
+        }
+        if (Outputs.Contains(OutputPath))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed reference plan writes '%s' more than once."),
+                *OutputPath);
+            return false;
+        }
+        Outputs.Add(OutputPath, MoveTemp(Bytes));
+    }
+    if (!bFoundPrimarySource)
+    {
+        OutError = TEXT("Managed reference plan did not include the Script Class declaration source.");
+        return false;
+    }
+    OutOutputs = MoveTemp(Outputs);
+    return true;
+}
+
+bool ValidateDeleteManagedReferencePlan(
+    const FClassOperationContext& Context,
+    const FManagedReferencePlan& Plan,
+    FString& OutError)
+{
+    TArray<FString> ExternalReferences;
+    for (const FManagedReferenceDocument& Document : Plan.Documents)
+    {
+        if (FPaths::IsSamePath(Document.Path, Context.SourcePath))
+        {
+            continue;
+        }
+        for (const FManagedReferenceEdit& Edit : Document.Edits)
+        {
+            ExternalReferences.Add(FString::Printf(
+                TEXT("%s(%d,%d)"),
+                *Document.Path,
+                Edit.Line,
+                Edit.Column));
+        }
+    }
+    if (!ExternalReferences.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot delete Script Class '%s'; managed semantic references remain: %s"),
+            *Context.ManagedTypeName,
+            *FString::Join(ExternalReferences, TEXT(", ")));
+        return false;
+    }
+    return true;
+}
+
 bool CaptureDeleteExternalSnapshots(
     const FClassOperationContext& Context,
+    const TArray<FString>& AdditionalPaths,
     TArray<FFileSnapshot>& OutSnapshots,
     FString& OutError)
 {
-    const FString Paths[] = {
+    TArray<FString> Paths = {
         Context.SourcePath,
         Context.DeploymentPath,
         Context.FirstPlayRequestPath,
     };
+    Paths.Append(AdditionalPaths);
     TArray<FFileSnapshot> Snapshots;
     for (const FString& Path : Paths)
     {
+        if (Snapshots.ContainsByPredicate(
+                [&Path](const FFileSnapshot& Item)
+                {
+                    return FPaths::IsSamePath(Item.Path, Path);
+                }))
+        {
+            continue;
+        }
         FFileSnapshot Snapshot;
         if (!CaptureFile(Path, Snapshot, OutError))
         {
@@ -930,6 +1382,47 @@ bool PublishExternalFiles(
         return false;
     }
     if (bRename && Context.SourcePath != Target.SourcePath &&
+        !IFileManager::Get().Delete(*Context.SourcePath, false, true))
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot remove renamed source '%s'."),
+            *Context.SourcePath);
+        return false;
+    }
+    return true;
+}
+
+bool PublishManagedRenameExternalFiles(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const TMap<FString, TArray<uint8>>& SourceOutputs,
+    const FString& Deployment,
+    const FString& FirstPlayRequest,
+    FString& OutError)
+{
+    TArray<FString> OutputPaths;
+    SourceOutputs.GetKeys(OutputPaths);
+    OutputPaths.Sort();
+    for (const FString& OutputPath : OutputPaths)
+    {
+        if (!WriteBytesAtomically(
+                OutputPath,
+                SourceOutputs.FindChecked(OutputPath),
+                OutError))
+        {
+            return false;
+        }
+    }
+    if (!WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
+        !WriteTextAtomically(
+            Context.FirstPlayRequestPath,
+            FirstPlayRequest,
+            OutError))
+    {
+        return false;
+    }
+    if (Context.SourcePath != Target.SourcePath &&
+        IFileManager::Get().FileExists(*Context.SourcePath) &&
         !IFileManager::Get().Delete(*Context.SourcePath, false, true))
     {
         OutError = FString::Printf(
@@ -1215,14 +1708,45 @@ bool FUnifiedScriptClassAssetOperations::Rename(
     }
     FillResult(TEXT("rename"), Target, Context.Blueprint, ScriptAsset, OutResult);
 
-    FString TargetSource;
+    FManagedReferencePlan ReferencePlan;
+    TMap<FString, TArray<uint8>> ManagedSourceOutputs;
     FString Deployment;
     FString FirstPlayRequest;
     TArray<FFileSnapshot> FileSnapshots;
-    if (!TransformSource(Context, Target, TargetSource, Error) ||
-        !BuildDeployment(Context, Target, false, Deployment, Error) ||
+    if (!RunManagedReferencePlanner(
+            Context,
+            Target.TypeName,
+            OutResult.TransactionId,
+            ReferencePlan,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    TArray<FString> ReferencePaths;
+    for (const FManagedReferenceDocument& Document : ReferencePlan.Documents)
+    {
+        ReferencePaths.Add(Document.Path);
+    }
+    if (!BuildDeployment(Context, Target, false, Deployment, Error) ||
         !BuildFirstPlayRequest(Context, Target, FirstPlayRequest, Error) ||
-        !CaptureExternalSnapshots(Context, Target, FileSnapshots, Error))
+        !CaptureExternalSnapshots(
+            Context,
+            Target,
+            ReferencePaths,
+            FileSnapshots,
+            Error) ||
+        !ValidateManagedReferencePlanSnapshots(
+            ReferencePlan,
+            FileSnapshots,
+            Error) ||
+        !BuildManagedRenameOutputs(
+            Context,
+            Target,
+            ReferencePlan,
+            FileSnapshots,
+            ManagedSourceOutputs,
+            Error))
     {
         OutResult.Error = Error;
         return false;
@@ -1257,13 +1781,12 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             FailurePoint,
             Error) ||
         !VerifyFilesUnchanged(FileSnapshots, Error) ||
-        !PublishExternalFiles(
+        !PublishManagedRenameExternalFiles(
             Context,
             Target,
-            TargetSource,
+            ManagedSourceOutputs,
             Deployment,
             FirstPlayRequest,
-            true,
             Error) ||
         ShouldFail(
             EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
@@ -1321,7 +1844,12 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
     if (!TransformSource(Context, Target, TargetSource, Error) ||
         !BuildDeployment(Context, Target, true, Deployment, Error) ||
         !BuildFirstPlayRequest(Context, Target, FirstPlayRequest, Error) ||
-        !CaptureExternalSnapshots(Context, Target, FileSnapshots, Error))
+        !CaptureExternalSnapshots(
+            Context,
+            Target,
+            TArray<FString>(),
+            FileSnapshots,
+            Error))
     {
         OutResult.Operation = TEXT("duplicate");
         OutResult.Error = Error;
@@ -1456,8 +1984,15 @@ bool FUnifiedScriptClassAssetOperations::Delete(
     const FString TransactionId =
         FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
     FillDeleteResult(Context, TransactionId, OutResult);
+    FManagedReferencePlan ReferencePlan;
     if (!ValidateNoExternalAssetReferencers(Context, Error) ||
-        !ValidateNoExternalManagedReferencers(Context, Error))
+        !RunManagedReferencePlanner(
+            Context,
+            FString(),
+            TransactionId,
+            ReferencePlan,
+            Error) ||
+        !ValidateDeleteManagedReferencePlan(Context, ReferencePlan, Error))
     {
         OutResult.Error = Error;
         return false;
@@ -1466,12 +2001,25 @@ bool FUnifiedScriptClassAssetOperations::Delete(
     FString Deployment;
     bool bDeleteFirstPlayRequest = false;
     TArray<FFileSnapshot> FileSnapshots;
+    TArray<FString> ReferencePaths;
+    for (const FManagedReferenceDocument& Document : ReferencePlan.Documents)
+    {
+        ReferencePaths.Add(Document.Path);
+    }
     if (!BuildDeleteDeployment(Context, Deployment, Error) ||
         !ShouldDeleteFirstPlayRequest(
             Context,
             bDeleteFirstPlayRequest,
             Error) ||
-        !CaptureDeleteExternalSnapshots(Context, FileSnapshots, Error))
+        !CaptureDeleteExternalSnapshots(
+            Context,
+            ReferencePaths,
+            FileSnapshots,
+            Error) ||
+        !ValidateManagedReferencePlanSnapshots(
+            ReferencePlan,
+            FileSnapshots,
+            Error))
     {
         OutResult.Error = Error;
         return false;

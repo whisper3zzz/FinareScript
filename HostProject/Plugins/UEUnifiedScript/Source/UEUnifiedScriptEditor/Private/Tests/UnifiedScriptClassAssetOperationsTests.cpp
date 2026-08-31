@@ -218,6 +218,19 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         FFileHelper::LoadFileToString(
             OriginalSource,
             *ResolveConfiguredPath(ScriptAsset->SourcePath)));
+    const FString RenameReferencePath = FPaths::Combine(
+        FPaths::GetPath(ResolveConfiguredPath(ScriptAsset->SourcePath)),
+        OriginalName + TEXT("_RenameReference.cs"));
+    Cleanup.SourcePaths.Add(RenameReferencePath);
+    const FString RenameReferenceSource = FString::Printf(
+        TEXT("namespace UnifiedScript.Unreal.Demo; sealed class RenameReference { %s? Value; const string Text = \"%s\"; }\n"),
+        *OriginalName,
+        *OriginalName);
+    TestTrue(
+        TEXT("Writes a semantic cross-file rename reference"),
+        FFileHelper::SaveStringToFile(
+            RenameReferenceSource,
+            *RenameReferencePath));
 
     FUnifiedScriptClassAssetOperationResult RenameResult;
     if (!TestTrue(
@@ -258,6 +271,18 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestFalse(
         TEXT("Rename removes the old class declaration"),
         RenamedSource.Contains(TEXT("class ") + OriginalName + TEXT(" ")));
+    FString RenamedReferenceSource;
+    TestTrue(
+        TEXT("Rename publishes the cross-file semantic reference"),
+        FFileHelper::LoadFileToString(
+            RenamedReferenceSource,
+            *RenameReferencePath));
+    TestTrue(
+        TEXT("Rename updates the Roslyn-bound external type reference"),
+        RenamedReferenceSource.Contains(RenamedName + TEXT("? Value")));
+    TestTrue(
+        TEXT("Rename preserves unrelated string text with the old identifier"),
+        RenamedReferenceSource.Contains(TEXT("\"") + OriginalName + TEXT("\"")));
 
     FUnifiedScriptFirstPlayRequest RenameRequest;
     FString RequestError;
@@ -275,6 +300,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TArray<uint8> RenamedSourceBeforeFailure;
     TArray<uint8> DeploymentBeforeRenameFailure;
     TArray<uint8> RequestBeforeRenameFailure;
+    TArray<uint8> ReferenceBeforeRenameFailure;
     TestTrue(
         TEXT("Snapshots renamed source before rename rollback coverage"),
         ReadBytes(RenameResult.SourcePath, RenamedSourceBeforeFailure));
@@ -284,6 +310,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestTrue(
         TEXT("Snapshots request before rename rollback coverage"),
         ReadBytes(Cleanup.FirstPlayRequestPath, RequestBeforeRenameFailure));
+    TestTrue(
+        TEXT("Snapshots semantic reference before rename rollback coverage"),
+        ReadBytes(RenameReferencePath, ReferenceBeforeRenameFailure));
     FUnifiedScriptClassAssetOperationResult RenameFailureResult;
     TestFalse(
         TEXT("Injected post-publication failure rejects the rename"),
@@ -298,6 +327,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TArray<uint8> RenamedSourceAfterFailure;
     TArray<uint8> DeploymentAfterRenameFailure;
     TArray<uint8> RequestAfterRenameFailure;
+    TArray<uint8> ReferenceAfterRenameFailure;
     TestTrue(
         TEXT("Reads renamed source after rollback"),
         ReadBytes(RenameResult.SourcePath, RenamedSourceAfterFailure));
@@ -307,6 +337,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestTrue(
         TEXT("Reads request after rename rollback"),
         ReadBytes(Cleanup.FirstPlayRequestPath, RequestAfterRenameFailure));
+    TestTrue(
+        TEXT("Reads semantic reference after rename rollback"),
+        ReadBytes(RenameReferencePath, ReferenceAfterRenameFailure));
     TestEqual(
         TEXT("Rename rollback restores source bytes exactly"),
         RenamedSourceAfterFailure,
@@ -319,6 +352,10 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         TEXT("Rename rollback restores request bytes exactly"),
         RequestAfterRenameFailure,
         RequestBeforeRenameFailure);
+    TestEqual(
+        TEXT("Rename rollback restores semantic reference bytes exactly"),
+        ReferenceAfterRenameFailure,
+        ReferenceBeforeRenameFailure);
     TestEqual(
         TEXT("Rename rollback restores generated class identity"),
         ScriptAsset->GeneratedClassPath.ToString(),
@@ -461,7 +498,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
             ReferencedDeleteResult));
     TestTrue(
         TEXT("Referenced delete explains the managed referencer"),
-        ReferencedDeleteResult.Error.Contains(TEXT("managed sources still reference")));
+        ReferencedDeleteResult.Error.Contains(TEXT("managed semantic references remain")));
     TestTrue(
         TEXT("Rejected referenced delete preserves the managed source"),
         IFileManager::Get().FileExists(*DuplicateResult.SourcePath));

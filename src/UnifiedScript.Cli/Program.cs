@@ -43,6 +43,11 @@ internal static class Program
             return RunIdentityInit(args);
         }
 
+        if (args.Count > 0 && args[0] == "script-class-reference-plan")
+        {
+            return RunScriptClassReferencePlan(args);
+        }
+
         if (args.Count > 0 && args[0] == "layout-init")
         {
             return RunLayout(args, synchronize: false);
@@ -5757,6 +5762,117 @@ internal static class Program
         $"{diagnostic.Span.FilePath}({diagnostic.Span.Start.Line},{diagnostic.Span.Start.Column}): " +
         $"{diagnostic.Severity.ToString().ToLowerInvariant()} {diagnostic.Code}: {diagnostic.Message}";
 
+    private static int RunScriptClassReferencePlan(IReadOnlyList<string> args)
+    {
+        if (!TryParseScriptClassReferencePlanArguments(
+                args,
+                out ScriptClassReferencePlanOptions? options) ||
+            options is null)
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        CSharpProjectLoadResult project = new CSharpProjectLoader().Load(
+            options.ProjectPath,
+            options: new CSharpProjectLoadOptions(
+                options.Configuration,
+                options.TargetFramework,
+                options.Restore,
+                options.Build,
+                DotNetPath: options.DotNetPath));
+        CSharpTypeReferencePlan plan = new CSharpTypeReferencePlanner().Plan(
+            project,
+            options.ManagedTypeName,
+            options.ReplacementTypeName);
+        string json = JsonSerializer.Serialize(
+            plan,
+            UnifiedJson.CreateOptions(writeIndented: true)) + "\n";
+        WriteAtomically(options.OutputPath, json);
+        Console.WriteLine(Path.GetFullPath(options.OutputPath));
+        return 0;
+    }
+
+    private static bool TryParseScriptClassReferencePlanArguments(
+        IReadOnlyList<string> args,
+        out ScriptClassReferencePlanOptions? options)
+    {
+        options = null;
+        if (args.Count < 2 || args[0] != "script-class-reference-plan")
+        {
+            return false;
+        }
+        string projectPath = args[1];
+        string? managedTypeName = null;
+        string? replacementTypeName = null;
+        string? outputPath = null;
+        string configuration = "Debug";
+        string? targetFramework = null;
+        string? dotNetPath = null;
+        bool restore = false;
+        bool build = false;
+        for (int index = 2; index < args.Count; index++)
+        {
+            string option = args[index];
+            if (option == "--restore")
+            {
+                restore = true;
+                continue;
+            }
+            if (option == "--build")
+            {
+                build = true;
+                continue;
+            }
+            if (++index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index];
+            switch (option)
+            {
+                case "--type" when managedTypeName is null:
+                    managedTypeName = value;
+                    break;
+                case "--new-name" when replacementTypeName is null:
+                    replacementTypeName = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--configuration":
+                    configuration = value;
+                    break;
+                case "--framework" when targetFramework is null:
+                    targetFramework = value;
+                    break;
+                case "--dotnet" when dotNetPath is null:
+                    dotNetPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(projectPath) ||
+            string.IsNullOrWhiteSpace(managedTypeName) ||
+            string.IsNullOrWhiteSpace(outputPath) ||
+            string.IsNullOrWhiteSpace(configuration))
+        {
+            return false;
+        }
+        options = new ScriptClassReferencePlanOptions(
+            projectPath,
+            managedTypeName,
+            replacementTypeName,
+            outputPath,
+            configuration,
+            targetFramework,
+            restore,
+            build,
+            dotNetPath);
+        return true;
+    }
+
     private static string GetLogicalInputPath(string fullInputPath)
     {
         string relativePath = Path.GetRelativePath(Environment.CurrentDirectory, fullInputPath);
@@ -5937,6 +6053,7 @@ internal static class Program
 
     private static void PrintUsage() => Console.Error.WriteLine(
         "Usage:\n" +
+        "  unifiedscript script-class-reference-plan <project.csproj> --type <Namespace.Type> [--new-name <Type>] --out <plan.json> [--configuration <name>] [--framework <tfm>] [--dotnet <path>] [--restore] [--build]\n" +
         "  unifiedscript analyze <input.cs|project.csproj> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
         "  unifiedscript emit <input.cs|project.csproj> --out <directory> [options]\n" +
@@ -6230,6 +6347,17 @@ internal static class Program
         string ProjectPath,
         string? EngineRoot,
         string? ReportPath);
+
+    private sealed record ScriptClassReferencePlanOptions(
+        string ProjectPath,
+        string ManagedTypeName,
+        string? ReplacementTypeName,
+        string OutputPath,
+        string Configuration,
+        string? TargetFramework,
+        bool Restore,
+        bool Build,
+        string? DotNetPath);
 
     private sealed record UnrealPuertsInventoryOptions(
         string ProjectRoot,

@@ -30,5 +30,6 @@ public class UEUnifiedScriptEditor : ModuleRules
             "WorkspaceMenuStructure",
             "UEUnifiedScriptRuntime"
         });
+        AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
     }
 }

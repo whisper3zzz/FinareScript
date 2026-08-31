@@ -24,6 +24,10 @@ public sealed record CSharpProjectReference(
     string? PackageVersion,
     string? SourceProjectPath);
 
+public sealed record CSharpProjectSource(
+    string LogicalPath,
+    string Path);
+
 public sealed record CSharpProjectLoadOptions(
     string Configuration = "Debug",
     string? TargetFramework = null,
@@ -37,6 +41,7 @@ public sealed record CSharpProjectLoadResult(
     string Configuration,
     string TargetFramework,
     CSharpCompilationRequest Request,
+    IReadOnlyList<CSharpProjectSource> Sources,
     IReadOnlyList<CSharpProjectReference> References);
 
 public sealed class CSharpProjectLoadException : Exception
@@ -157,7 +162,10 @@ public sealed class CSharpProjectLoader
         JsonElement items = query.RootElement.GetProperty("Items");
         string assemblyName = RequiredProperty(properties, "AssemblyName", fullProjectPath);
         string projectDirectory = Path.GetDirectoryName(fullProjectPath)!;
-        CSharpSourceDocument[] sources = ReadSources(items, projectDirectory, fullProjectPath);
+        LoadedSource[] loadedSources = ReadSources(items, projectDirectory, fullProjectPath);
+        CSharpSourceDocument[] sources = loadedSources
+            .Select(static source => source.Document)
+            .ToArray();
         CSharpProjectReference[] references = ReadReferences(items, fullProjectPath);
         string[] referencePaths = references
             .Select(static reference => reference.Path)
@@ -187,6 +195,7 @@ public sealed class CSharpProjectLoader
             options.Configuration,
             targetFramework,
             request,
+            loadedSources.Select(static source => source.Source).ToArray(),
             references);
     }
 
@@ -237,7 +246,7 @@ public sealed class CSharpProjectLoader
             $"Target framework '{options.TargetFramework}' is not declared by '{projectPath}'.");
     }
 
-    private static CSharpSourceDocument[] ReadSources(
+    private static LoadedSource[] ReadSources(
         JsonElement items,
         string projectDirectory,
         string projectPath)
@@ -259,13 +268,23 @@ public sealed class CSharpProjectLoader
                 string logicalPath = string.IsNullOrWhiteSpace(link)
                     ? Path.GetRelativePath(projectDirectory, fullPath)
                     : link;
-                return new CSharpSourceDocument(
-                    logicalPath.Replace(Path.DirectorySeparatorChar, '/'),
-                    File.ReadAllText(fullPath));
+                string normalizedLogicalPath = logicalPath
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                return new LoadedSource(
+                    new CSharpSourceDocument(
+                        normalizedLogicalPath,
+                        File.ReadAllText(fullPath)),
+                    new CSharpProjectSource(
+                        normalizedLogicalPath,
+                        Path.GetFullPath(fullPath)));
             })
-            .OrderBy(static source => source.LogicalPath, StringComparer.Ordinal)
+            .OrderBy(static source => source.Document.LogicalPath, StringComparer.Ordinal)
             .ToArray();
     }
+
+    private sealed record LoadedSource(
+        CSharpSourceDocument Document,
+        CSharpProjectSource Source);
 
     private static CSharpProjectReference[] ReadReferences(JsonElement items, string projectPath)
     {
