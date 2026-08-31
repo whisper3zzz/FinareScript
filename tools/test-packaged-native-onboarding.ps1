@@ -8,7 +8,9 @@ param(
 
     [string]$OutputDirectory,
 
-    [switch]$Resume
+    [switch]$Resume,
+
+    [switch]$IncludeScriptClassFirstPlay
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,7 +34,9 @@ $project = Join-Path $projectRoot "$projectName.uproject"
 $packageArchive = Join-Path $outputRoot 'package'
 $reportPath = Join-Path $outputRoot 'packaged-native-onboarding-report.json'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
+$scriptClassGoldenPath = Join-Path $repoRoot 'tools\test-script-class-golden-path.ps1'
 $originalProjectSha256 = $null
+$scriptClassFirstPlayReport = $null
 
 function Write-Utf8 {
     param([string]$Path, [string]$Text)
@@ -370,6 +374,31 @@ if ($firstScriptText -notmatch "using\s+$generatedNamespacePattern\s*;" -or
     throw 'First-script source did not exercise the ordinary generated-namespace import.'
 }
 
+if ($IncludeScriptClassFirstPlay) {
+    $scriptClassOutput = Join-Path $outputRoot 'script-class-first-play'
+    Invoke-LoggedCommand `
+        -FilePath 'powershell.exe' `
+        -Arguments @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', $scriptClassGoldenPath,
+            '-Project', $project,
+            '-EngineRoot', $enginePath,
+            '-OutputDirectory', $scriptClassOutput) `
+        -LogPath (Join-Path $outputRoot 'script-class-first-play.log') `
+        -FailureMessage 'Packaged Script Class first-Play workflow failed.'
+    $scriptClassReportPath = Join-Path $scriptClassOutput `
+        'script-class-golden-path-report.json'
+    $scriptClassFirstPlayReport = Get-Content `
+        -LiteralPath $scriptClassReportPath -Raw | ConvertFrom-Json
+    if ($scriptClassFirstPlayReport.status -ne 'passed' -or
+        $scriptClassFirstPlayReport.firstPlay.status -ne 'ready' -or
+        [bool]$scriptClassFirstPlayReport.cook.skipped -or
+        @($scriptClassFirstPlayReport.cook.cookedAssets).Count -ne 4) {
+        throw "Packaged Script Class report did not prove first Play and Cook: $scriptClassReportPath"
+    }
+}
+
 $validateReportPath = Join-Path $projectRoot `
     'Saved\UnifiedScript\ProjectSetup\native-validate.json'
 if (-not $Resume -or
@@ -546,6 +575,11 @@ $report = [ordered]@{
         validateDurationMs = [long]$validateReport.durationMs
         automationPassed = [int]$applyReport.outputs.automation.passed
         generated = $generatedEvidence
+    }
+    scriptClassFirstPlay = if ($null -eq $scriptClassFirstPlayReport) {
+        [ordered]@{ included = $false }
+    } else {
+        $scriptClassFirstPlayReport
     }
     package = [ordered]@{
         archiveRoot = $packageRoot

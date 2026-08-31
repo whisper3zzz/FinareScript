@@ -1,5 +1,6 @@
 #include "Widgets/SUnifiedScriptProjectSetup.h"
 
+#include "Editor.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMisc.h"
@@ -13,6 +14,7 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "UObject/UObjectGlobals.h"
 
 #define LOCTEXT_NAMESPACE "SUnifiedScriptProjectSetup"
 
@@ -63,6 +65,52 @@ TSharedRef<SWidget> MakeActionRow(
             ]
         ];
 }
+
+TSharedRef<SWidget> MakeDynamicActionRow(
+    const FText& Title,
+    const TAttribute<FText>& Description,
+    const FText& ButtonLabel,
+    const TAttribute<bool>& IsEnabled,
+    const FOnClicked& OnClicked)
+{
+    return SNew(SBorder)
+        .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
+        .Padding(FMargin(12.0f, 10.0f))
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
+            .VAlign(VAlign_Center)
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
+                    SNew(STextBlock)
+                    .Text(Title)
+                    .TextStyle(FAppStyle::Get(), TEXT("DetailsView.CategoryTextStyle"))
+                ]
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0.0f, 3.0f, 16.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(Description)
+                    .AutoWrapText(true)
+                    .ColorAndOpacity(FSlateColor::UseSubduedForeground())
+                ]
+            ]
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            [
+                SNew(SButton)
+                .Text(ButtonLabel)
+                .IsEnabled(IsEnabled)
+                .OnClicked(OnClicked)
+            ]
+        ];
+}
 }
 
 void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
@@ -70,6 +118,7 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
     SetStatus(
         LOCTEXT("ReadyStatus", "Ready — inspect the project before applying changes."),
         FSlateColor::UseForeground());
+    RefreshFirstPlayRequest();
 
     const TAttribute<bool> CanRun = TAttribute<bool>::CreateLambda(
         [this]() { return CanRunAttachedOperation(); });
@@ -152,10 +201,23 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
             [
                 UE::UnifiedScript::ProjectSetup::Private::MakeActionRow(
                     LOCTEXT("BuildTitle", "4. Build and onboard"),
-                    LOCTEXT("BuildDescription", "Save the project, close the Editor, then build native and managed outputs after loaded plugin binaries are released."),
-                    LOCTEXT("BuildButton", "Save, Exit & Build"),
+                    LOCTEXT("BuildDescription", "Save and close the Editor, build the complete native/managed dependency graph, then reopen this project automatically."),
+                    LOCTEXT("BuildButton", "Build, Restart & Continue"),
                     CanRun,
                     FOnClicked::CreateSP(this, &SUnifiedScriptProjectSetup::BuildAndOnboard))
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 0.0f, 0.0f, 12.0f)
+            [
+                UE::UnifiedScript::ProjectSetup::Private::MakeDynamicActionRow(
+                    LOCTEXT("FirstPlayTitle", "5. Continue to first Play"),
+                    TAttribute<FText>::CreateLambda(
+                        [this]() { return GetFirstPlayDescription(); }),
+                    LOCTEXT("FirstPlayButton", "Locate Generated Class"),
+                    TAttribute<bool>::CreateLambda(
+                        [this]() { return CanLocateFirstPlayClass(); }),
+                    FOnClicked::CreateSP(this, &SUnifiedScriptProjectSetup::LocateFirstPlayClass))
             ]
             + SVerticalBox::Slot()
             .FillHeight(1.0f)
@@ -194,6 +256,40 @@ FReply SUnifiedScriptProjectSetup::RunDoctor()
     return RunAttachedOperation(
         EUnifiedScriptProjectSetupOperation::Doctor,
         LOCTEXT("DoctorOperation", "Project doctor"));
+}
+
+FReply SUnifiedScriptProjectSetup::LocateFirstPlayClass()
+{
+    if (!CanLocateFirstPlayClass())
+    {
+        return FReply::Handled();
+    }
+
+    UObject* BlueprintAsset = StaticLoadObject(
+        UObject::StaticClass(),
+        nullptr,
+        *FirstPlayRequest.BlueprintAssetPath);
+    if (BlueprintAsset == nullptr)
+    {
+        const FText ErrorText = FText::Format(
+            LOCTEXT("FirstPlayAssetMissing", "The generated class could not be loaded: {0}"),
+            FText::FromString(FirstPlayRequest.BlueprintAssetPath));
+        AppendOutput(ErrorText.ToString());
+        SetStatus(ErrorText, FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+        return FReply::Handled();
+    }
+
+    TArray<UObject*> Assets;
+    Assets.Add(BlueprintAsset);
+    GEditor->SyncBrowserToObjects(Assets);
+    SetStatus(
+        FText::Format(
+            LOCTEXT(
+                "FirstPlayLocated",
+                "Located {0}. Add it to the level or an Actor, then press Play."),
+            FText::FromString(FirstPlayRequest.ManagedTypeName)),
+        FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
+    return FReply::Handled();
 }
 
 FReply SUnifiedScriptProjectSetup::RunAttachedOperation(
@@ -302,7 +398,8 @@ FReply SUnifiedScriptProjectSetup::BuildAndOnboard()
         LOCTEXT(
             "BuildConfirmation",
             "UnifiedScript will save dirty project packages and close the Editor. "
-            "Native and managed onboarding will start after this Editor process exits.\n\nContinue?"),
+            "Native and managed onboarding will start after this Editor process exits, "
+            "then the project will reopen at the first-Play step.\n\nContinue?"),
         LOCTEXT("BuildConfirmationTitle", "Build and Onboard UnifiedScript"));
     if (Answer != EAppReturnType::Ok)
     {
@@ -340,7 +437,7 @@ FReply SUnifiedScriptProjectSetup::BuildAndOnboard()
         HelperProcessId,
         *Command.ReportPath));
     SetStatus(
-        LOCTEXT("DeferredStatus", "Project saved. Closing the Editor; onboarding will continue in the background."),
+        LOCTEXT("DeferredStatus", "Project saved. Closing the Editor; onboarding will build and reopen this project."),
         FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
     FPlatformMisc::RequestExit(false);
     return FReply::Handled();
@@ -378,6 +475,103 @@ bool SUnifiedScriptProjectSetup::ResolveProjectPaths(
 bool SUnifiedScriptProjectSetup::CanRunAttachedOperation() const
 {
     return !ActiveProcess.IsValid();
+}
+
+bool SUnifiedScriptProjectSetup::CanLocateFirstPlayClass() const
+{
+    return !ActiveProcess.IsValid() && bHasFirstPlayRequest &&
+        FirstPlayRequest.IsReady();
+}
+
+void SUnifiedScriptProjectSetup::RefreshFirstPlayRequest()
+{
+    bHasFirstPlayRequest = false;
+    FirstPlayRequest = FUnifiedScriptFirstPlayRequest();
+    const FString RequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
+        FPaths::ProjectDir());
+    if (!IFileManager::Get().FileExists(*RequestPath))
+    {
+        return;
+    }
+
+    FString Error;
+    if (!FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
+            RequestPath,
+            FirstPlayRequest,
+            Error))
+    {
+        SetStatus(
+            FText::FromString(Error),
+            FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+        return;
+    }
+    bHasFirstPlayRequest = true;
+    if (FirstPlayRequest.IsBuildRequired())
+    {
+        SetStatus(
+            FText::Format(
+                LOCTEXT(
+                    "FirstPlayBuildRequired",
+                    "{0} was created and requires Build, Restart & Continue before Play."),
+                FText::FromString(FirstPlayRequest.ManagedTypeName)),
+            FAppStyle::GetSlateColor(TEXT("Colors.Warning")));
+    }
+    else if (FirstPlayRequest.IsReady())
+    {
+        SetStatus(
+            FText::Format(
+                LOCTEXT(
+                    "FirstPlayReady",
+                    "{0} is built and ready for first Play."),
+                FText::FromString(FirstPlayRequest.ManagedTypeName)),
+            FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
+    }
+    else if (FirstPlayRequest.HasFailed())
+    {
+        SetStatus(
+            FText::Format(
+                LOCTEXT(
+                    "FirstPlayFailed",
+                    "The build for {0} failed with exit code {1}. Review the report and retry."),
+                FText::FromString(FirstPlayRequest.ManagedTypeName),
+                FText::AsNumber(FirstPlayRequest.ExitCode)),
+            FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+    }
+}
+
+FText SUnifiedScriptProjectSetup::GetFirstPlayDescription() const
+{
+    if (!bHasFirstPlayRequest)
+    {
+        return LOCTEXT(
+            "FirstPlayNoRequest",
+            "Create a UnifiedScript Actor or Actor Component class. Its exact build and Play handoff will appear here.");
+    }
+    if (FirstPlayRequest.IsBuildRequired())
+    {
+        return FText::Format(
+            LOCTEXT(
+                "FirstPlayPendingDescription",
+                "{0} is waiting for the complete Build/Onboard graph above."),
+            FText::FromString(FirstPlayRequest.ManagedTypeName));
+    }
+    if (FirstPlayRequest.HasFailed())
+    {
+        return FText::Format(
+            LOCTEXT(
+                "FirstPlayFailureDescription",
+                "Build failed. Report: {0}"),
+            FText::FromString(FirstPlayRequest.OnboardingReport));
+    }
+    const FText Placement = FirstPlayRequest.ClassKind == TEXT("actor")
+        ? LOCTEXT("FirstPlayActorPlacement", "Drag the Actor into the level")
+        : LOCTEXT("FirstPlayComponentPlacement", "Add the Component class to an Actor Blueprint");
+    return FText::Format(
+        LOCTEXT(
+            "FirstPlayReadyDescription",
+            "{0} is ready. {1}, then use the normal Play button."),
+        FText::FromString(FirstPlayRequest.ManagedTypeName),
+        Placement);
 }
 
 EActiveTimerReturnType SUnifiedScriptProjectSetup::PollAttachedOperation(

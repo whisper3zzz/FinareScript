@@ -1392,6 +1392,28 @@ def main() -> int:
     checks.append(
         "M13.1C-0 persists Script Classes across Editor processes, lifecycle, and cook"
     )
+    require(
+        "unifiedscript.first-play-request/v0.1" in project_setup_source
+        and "WriteFirstPlayRequest" in project_setup_header
+        and "WriteFirstPlayRequest" in script_class_factory
+        and "-FirstPlayRequest" in project_setup_source
+        and "-RelaunchEditor" in project_setup_source
+        and "Build, Restart & Continue" in project_setup_widget
+        and "Locate Generated Class" in project_setup_widget
+        and "UnifiedScriptFirstPlay" in editor_module
+        and "unifiedscript.first-play-request/v0.1" in deferred_onboarding
+        and "UnrealEditor.exe" in deferred_onboarding
+        and "firstPlayResult.status -ne 'ready'" in script_class_golden_path
+        and "IncludeScriptClassFirstPlay" in packaged_native_onboarding
+        and "cook.cookedAssets).Count -ne 4" in packaged_native_onboarding
+        and "M13.1C-1 first-Play connection (active)" in roadmap_document
+        and "- [x] connect class creation to the adopted project's single Build/Onboard"
+        in roadmap_document,
+        "M13.1C-1 first-Play receipt, single Build/relaunch, Editor continuation, or packaged acceptance is incomplete",
+    )
+    checks.append(
+        "M13.1C-1 connects Script Class creation to one packaged first-Play build"
+    )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"

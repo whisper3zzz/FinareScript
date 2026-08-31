@@ -18,7 +18,21 @@ $projectRoot = Split-Path -Parent $projectPath
 $enginePath = [IO.Path]::GetFullPath($EngineRoot)
 $editorCmd = Join-Path $enginePath 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
-$setupScript = Join-Path $PSScriptRoot 'setup-unreal-project.ps1'
+$projectToolRoot = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
+$projectSetupScript = Join-Path $projectToolRoot 'setup-unreal-project.ps1'
+$projectDeferredOnboardingScript = Join-Path $projectToolRoot `
+    'run-unifiedscript-onboarding-after-process.ps1'
+$setupScript = if (Test-Path -LiteralPath $projectSetupScript -PathType Leaf) {
+    $projectSetupScript
+} else {
+    Join-Path $PSScriptRoot 'setup-unreal-project.ps1'
+}
+$deferredOnboardingScript = if (Test-Path `
+        -LiteralPath $projectDeferredOnboardingScript -PathType Leaf) {
+    $projectDeferredOnboardingScript
+} else {
+    Join-Path $PSScriptRoot 'run-unifiedscript-onboarding-after-process.ps1'
+}
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $projectRoot "Saved\UnifiedScript\ScriptClassGoldenPath\$runId"
@@ -175,7 +189,12 @@ function Remove-FixtureFiles {
     }
 }
 
-foreach ($required in @($projectPath, $editorCmd, $runUat, $setupScript)) {
+foreach ($required in @(
+        $projectPath,
+        $editorCmd,
+        $runUat,
+        $setupScript,
+        $deferredOnboardingScript)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required Script Class golden-path input is missing: $required"
     }
@@ -207,6 +226,11 @@ $receiptRoot = Assert-ChildPath `
     -Path (Join-Path $projectRoot 'Saved\UnifiedScript\ScriptClassGoldenPath') `
     -Root (Join-Path $projectRoot 'Saved') `
     -Label 'Script Class fixture receipt root'
+$firstPlayRequestPath = Assert-ChildPath `
+    -Path (Join-Path $projectRoot `
+        'Saved\UnifiedScript\ProjectSetup\first-play-request.json') `
+    -Root (Join-Path $projectRoot 'Saved') `
+    -Label 'Script Class first-Play request'
 $fixtureNames = @('M13C0PersistentActor', 'M13C0PersistentComponent')
 $fixtureFiles = [Collections.Generic.List[string]]::new()
 foreach ($name in $fixtureNames) {
@@ -233,6 +257,12 @@ foreach ($path in $fixtureFiles) {
 }
 
 $deploymentBytes = [IO.File]::ReadAllBytes($deploymentPath)
+$hadFirstPlayRequest = Test-Path -LiteralPath $firstPlayRequestPath -PathType Leaf
+$firstPlayRequestBytes = if ($hadFirstPlayRequest) {
+    [IO.File]::ReadAllBytes($firstPlayRequestPath)
+} else {
+    $null
+}
 $onboardingStarted = $false
 $failure = $null
 $createProcessId = 0
@@ -242,6 +272,7 @@ $validateReportPath = Join-Path $outputRoot 'onboarding-validate.json'
 $cleanupReportPath = Join-Path $outputRoot 'onboarding-cleanup.json'
 $packageArchive = Join-Path $outputRoot 'package'
 $cookedAssets = @()
+$firstPlayResult = $null
 
 try {
     Remove-FixtureFiles -Paths $receiptFiles
@@ -255,7 +286,8 @@ try {
             (Join-Path $contentRoot 'SA_M13C0PersistentActor.uasset'),
             (Join-Path $contentRoot 'M13C0PersistentComponent.uasset'),
             (Join-Path $contentRoot 'SA_M13C0PersistentComponent.uasset'),
-            (Join-Path $receiptRoot 'create.pid'))) {
+            (Join-Path $receiptRoot 'create.pid'),
+            $firstPlayRequestPath)) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
             throw "Persistent Script Class creation output is missing: $required"
         }
@@ -264,21 +296,41 @@ try {
         Join-Path $receiptRoot 'create.pid') -Raw)
 
     $onboardingStarted = $true
+    $completedEditor = Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList @('-NoProfile', '-Command', 'exit 0') `
+        -WindowStyle Hidden `
+        -PassThru `
+        -Wait
     Invoke-LoggedCommand `
         -FilePath 'powershell.exe' `
         -Arguments @(
             '-NoProfile',
             '-ExecutionPolicy', 'Bypass',
-            '-File', $setupScript,
+            '-File', $deferredOnboardingScript,
             '-Project', $projectPath,
             '-EngineRoot', $enginePath,
+            '-WaitForProcessId', $completedEditor.Id,
+            '-FirstPlayRequest', $firstPlayRequestPath,
             '-Report', $applyReportPath) `
-        -LogPath (Join-Path $outputRoot 'onboarding-apply.log') `
-        -FailureMessage 'Script Class Build/Onboard failed.'
+        -LogPath (Join-Path $outputRoot 'deferred-onboarding-apply.log') `
+        -FailureMessage 'Script Class deferred Build/Onboard failed.'
     $applyReport = Get-Content -LiteralPath $applyReportPath -Raw |
         ConvertFrom-Json
     if ($applyReport.status -ne 'passed') {
         throw "Script Class Build/Onboard report did not pass: $applyReportPath"
+    }
+    $firstPlayResult = Get-Content -LiteralPath $firstPlayRequestPath -Raw |
+        ConvertFrom-Json
+    if ($firstPlayResult.schemaVersion -ne `
+            'unifiedscript.first-play-request/v0.1' -or
+        $firstPlayResult.status -ne 'ready' -or
+        [int]$firstPlayResult.exitCode -ne 0 -or
+        [IO.Path]::GetFullPath([string]$firstPlayResult.onboardingReport) -ne
+            [IO.Path]::GetFullPath($applyReportPath) -or
+        $firstPlayResult.blueprintAssetPath -notlike `
+            '*.M13C0PersistentComponent') {
+        throw "Deferred onboarding did not advance the exact Script Class first-Play request to ready: $firstPlayRequestPath"
     }
     $fingerprints = Get-OutputFingerprints -OnboardingReport $applyReport
 
@@ -371,6 +423,14 @@ try {
             actorComponent = 'BeginPlay/Tick/EndPlay passed'
             worldTeardown = 'passed'
         }
+        firstPlay = [ordered]@{
+            request = $firstPlayRequestPath
+            status = [string]$firstPlayResult.status
+            managedTypeName = [string]$firstPlayResult.managedTypeName
+            blueprintAssetPath = [string]$firstPlayResult.blueprintAssetPath
+            deferredBuild = 'passed'
+            editorRelaunch = 'suppressed by unattended regression'
+        }
         cook = [ordered]@{
             skipped = [bool]$SkipCook
             packageRoot = if ($SkipCook) { $null } else {
@@ -388,6 +448,11 @@ try {
     $failure = $_
 } finally {
     [IO.File]::WriteAllBytes($deploymentPath, $deploymentBytes)
+    if ($hadFirstPlayRequest) {
+        [IO.File]::WriteAllBytes($firstPlayRequestPath, $firstPlayRequestBytes)
+    } elseif (Test-Path -LiteralPath $firstPlayRequestPath) {
+        Remove-Item -LiteralPath $firstPlayRequestPath -Force
+    }
     Remove-FixtureFiles -Paths (@($fixtureFiles) + $receiptFiles)
     if ($onboardingStarted) {
         try {

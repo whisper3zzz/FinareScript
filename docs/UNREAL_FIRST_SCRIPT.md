@@ -84,12 +84,23 @@ uses the same project-local CLI and configuration model:
 1. **Preview** shows the transactional adoption plan without writes;
 2. **Repair** applies only owned, conflict-free project changes;
 3. **Run Doctor** checks runtime, generation, engine, ownership, and cook state;
-4. **Save, Exit & Build** saves dirty packages, closes the Editor, and starts
-   onboarding only after the loaded native plugin DLL has been released.
+4. **Build, Restart & Continue** saves dirty packages, closes the Editor, and
+   starts onboarding only after the loaded native plugin DLL has been released;
+   the helper then reopens the project.
 
 The last action deliberately exits the Editor. Replacing or rebuilding a loaded
 native plugin in place is unsafe on Windows; the deferred helper waits for the
 exact Editor process and then runs the installed setup script.
+
+For the first attachable behavior, choose **Create UnifiedScript Class** from
+the Tools menu or Content Browser and select Actor or ActorComponent. Creation
+writes the C# lifecycle source, exact Script Asset sidecar, Blueprint proxy, and
+deployment entry, then opens Project Setup. Run **Build, Restart & Continue**
+once. When the project reopens, choose **Locate Generated Class**, drag the Actor
+into a level or add the Component to an Actor Blueprint, and press Play. The
+receipt is marked `ready` only after the full project-local dependency graph
+succeeds; a failed build returns to the same panel with the report path and exit
+code.
 
 The adopted project owns:
 

@@ -13,6 +13,7 @@
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptProjectSetup.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -36,6 +37,9 @@ struct FScopedCreatedClassCleanup
 {
     FString DeploymentPath;
     TArray<uint8> OriginalDeployment;
+    FString FirstPlayRequestPath;
+    TArray<uint8> OriginalFirstPlayRequest;
+    bool bHadFirstPlayRequest = false;
     TArray<FString> SourcePaths;
     TArray<FString> PackagePaths;
 
@@ -44,6 +48,19 @@ struct FScopedCreatedClassCleanup
         if (!DeploymentPath.IsEmpty() && !OriginalDeployment.IsEmpty())
         {
             FFileHelper::SaveArrayToFile(OriginalDeployment, *DeploymentPath);
+        }
+        if (!FirstPlayRequestPath.IsEmpty())
+        {
+            if (bHadFirstPlayRequest)
+            {
+                FFileHelper::SaveArrayToFile(
+                    OriginalFirstPlayRequest,
+                    *FirstPlayRequestPath);
+            }
+            else
+            {
+                IFileManager::Get().Delete(*FirstPlayRequestPath, false, true);
+            }
         }
         for (const FString& SourcePath : SourcePaths)
         {
@@ -135,6 +152,34 @@ bool CreateAndVerify(
     Test.TestTrue(
         TEXT("Declaration identity uses a stable project/class path"),
         ScriptAsset->DeclarationAssetPath.EndsWith(TEXT("/") + TypeName));
+
+    const FString FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
+        FPaths::ProjectDir());
+    FUnifiedScriptFirstPlayRequest FirstPlayRequest;
+    FString FirstPlayError;
+    Test.TestTrue(
+        TEXT("Script Class writes its first-Play handoff"),
+        FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
+            FirstPlayRequestPath,
+            FirstPlayRequest,
+            FirstPlayError));
+    Test.TestEqual(
+        TEXT("First-Play handoff pins the same semantic class ID"),
+        FirstPlayRequest.RequestId,
+        FString::Printf(
+            TEXT("us_%s"),
+            *ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower()));
+    Test.TestEqual(
+        TEXT("First-Play handoff pins the Blueprint proxy"),
+        FirstPlayRequest.BlueprintAssetPath,
+        Blueprint->GetPathName());
+    Test.TestEqual(
+        TEXT("First-Play handoff pins the Script Asset sidecar"),
+        FirstPlayRequest.ScriptAssetPath,
+        ScriptAsset->GetPathName());
+    Test.TestTrue(
+        TEXT("First-Play handoff waits for Build/Onboard"),
+        FirstPlayRequest.IsBuildRequired());
 
     const FString SourcePath = ResolveConfiguredPath(ScriptAsset->SourcePath);
     if (Cleanup != nullptr)
@@ -259,6 +304,11 @@ bool FUnifiedScriptClassFactoryContractTest::RunTest(const FString& Parameters)
         AddError(TEXT("Cannot snapshot the deployment manifest before the Script Class factory test."));
         return false;
     }
+    Cleanup.FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
+        FPaths::ProjectDir());
+    Cleanup.bHadFirstPlayRequest = FFileHelper::LoadFileToArray(
+        Cleanup.OriginalFirstPlayRequest,
+        *Cleanup.FirstPlayRequestPath);
 
     const FString Suffix = FGuid::NewGuid()
         .ToString(EGuidFormats::Digits)

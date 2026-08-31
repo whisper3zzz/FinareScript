@@ -64,6 +64,40 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
         TEXT("Deferred script path"),
         Paths.DeferredOnboardingScript,
         FPaths::ConvertRelativePathToFull(DeferredScript));
+    TestEqual(
+        TEXT("First-Play request path"),
+        Paths.FirstPlayRequest,
+        FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(TestRoot));
+
+    FString FirstPlayPath;
+    TestTrue(
+        TEXT("Writes an exact Script Class first-Play request"),
+        FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
+            TestRoot,
+            TEXT("us_0123456789abcdef0123456789abcdef"),
+            TEXT("actor"),
+            TEXT("/Game/FirstPlayActor.FirstPlayActor"),
+            TEXT("/Game/SA_FirstPlayActor.SA_FirstPlayActor"),
+            FPaths::Combine(TestRoot, TEXT("Managed/FirstPlayActor.cs")),
+            TEXT("SetupGame.UnifiedScript.FirstPlayActor"),
+            FirstPlayPath,
+            Error));
+    TestEqual(TEXT("Writes the resolved first-Play path"), FirstPlayPath, Paths.FirstPlayRequest);
+    FUnifiedScriptFirstPlayRequest FirstPlayRequest;
+    TestTrue(
+        TEXT("Reads the first-Play request"),
+        FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
+            FirstPlayPath,
+            FirstPlayRequest,
+            Error));
+    TestEqual(
+        TEXT("First-Play request begins at the build gate"),
+        FirstPlayRequest.Status,
+        FString(TEXT("buildRequired")));
+    TestEqual(
+        TEXT("First-Play request pins the Blueprint asset"),
+        FirstPlayRequest.BlueprintAssetPath,
+        FString(TEXT("/Game/FirstPlayActor.FirstPlayActor")));
 
     FUnifiedScriptProjectSetupCommand Command;
     TestTrue(
@@ -126,6 +160,9 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestTrue(TEXT("Deferred wait process"), Command.Arguments.Contains(TEXT("-WaitForProcessId 4242")));
     TestTrue(TEXT("Deferred script"), Command.Arguments.Contains(
         FString::Printf(TEXT("-File \"%s\""), *Paths.DeferredOnboardingScript)));
+    TestTrue(TEXT("Deferred first-Play request"), Command.Arguments.Contains(
+        FString::Printf(TEXT("-FirstPlayRequest \"%s\""), *Paths.FirstPlayRequest)));
+    TestTrue(TEXT("Deferred Editor relaunch"), Command.Arguments.Contains(TEXT(" -RelaunchEditor")));
     TestEqual(TEXT("Onboarding report"), Command.ReportPath, Paths.OnboardingReport);
     TestTrue(TEXT("Deferred command is detached"), Command.bDetached);
 

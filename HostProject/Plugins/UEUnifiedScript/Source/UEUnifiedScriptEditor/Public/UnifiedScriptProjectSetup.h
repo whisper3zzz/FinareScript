@@ -22,6 +22,7 @@ struct FUnifiedScriptProjectSetupPaths
     FString RepairReport;
     FString DoctorReport;
     FString OnboardingReport;
+    FString FirstPlayRequest;
 };
 
 struct FUnifiedScriptProjectSetupCommand
@@ -30,6 +31,24 @@ struct FUnifiedScriptProjectSetupCommand
     FString Arguments;
     FString ReportPath;
     bool bDetached = false;
+};
+
+/** Persistent handoff from Script Class creation through deferred build and Editor restart. */
+struct FUnifiedScriptFirstPlayRequest
+{
+    FString RequestId;
+    FString Status;
+    FString ClassKind;
+    FString BlueprintAssetPath;
+    FString ScriptAssetPath;
+    FString SourcePath;
+    FString ManagedTypeName;
+    FString OnboardingReport;
+    int32 ExitCode = 0;
+
+    bool IsBuildRequired() const { return Status == TEXT("buildRequired"); }
+    bool IsReady() const { return Status == TEXT("ready"); }
+    bool HasFailed() const { return Status == TEXT("failed"); }
 };
 
 /** Resolves and builds the project-local M13.1A setup/doctor command contract. */
@@ -48,5 +67,23 @@ public:
         const FUnifiedScriptProjectSetupPaths& Paths,
         uint32 EditorProcessId,
         FUnifiedScriptProjectSetupCommand& OutCommand,
+        FString& OutError);
+
+    static FString GetFirstPlayRequestPath(const FString& ProjectRoot);
+
+    static bool WriteFirstPlayRequest(
+        const FString& ProjectRoot,
+        const FString& RequestId,
+        const FString& ClassKind,
+        const FString& BlueprintAssetPath,
+        const FString& ScriptAssetPath,
+        const FString& SourcePath,
+        const FString& ManagedTypeName,
+        FString& OutRequestPath,
+        FString& OutError);
+
+    static bool ReadFirstPlayRequest(
+        const FString& RequestPath,
+        FUnifiedScriptFirstPlayRequest& OutRequest,
         FString& OutError);
 };

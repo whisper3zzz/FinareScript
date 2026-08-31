@@ -1,11 +1,14 @@
 #include "Modules/ModuleManager.h"
 
 #include "AssetToolsModule.h"
+#include "Containers/Ticker.h"
 #include "EdGraphUtilities.h"
 #include "Engine/Blueprint.h"
 #include "Graph/SUnifiedScriptGraphNode.h"
 #include "HAL/IConsoleManager.h"
 #include "KismetPins/SGraphPinExec.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "SGraphNodeKnot.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
@@ -104,6 +107,15 @@ public:
             FSimpleMulticastDelegate::FDelegate::CreateRaw(
                 this,
                 &FUEUnifiedScriptEditorModule::RegisterMenus));
+
+        if (FParse::Param(FCommandLine::Get(), TEXT("UnifiedScriptFirstPlay")))
+        {
+            FirstPlayStartupHandle = FTSTicker::GetCoreTicker().AddTicker(
+                FTickerDelegate::CreateRaw(
+                    this,
+                    &FUEUnifiedScriptEditorModule::OpenFirstPlayOnStartup),
+                0.5f);
+        }
     }
 
     virtual void ShutdownModule() override
@@ -120,6 +132,11 @@ public:
         }
         UToolMenus::UnRegisterStartupCallback(this);
         UToolMenus::UnregisterOwner(this);
+        if (FirstPlayStartupHandle.IsValid())
+        {
+            FTSTicker::GetCoreTicker().RemoveTicker(FirstPlayStartupHandle);
+            FirstPlayStartupHandle.Reset();
+        }
         if (OpenAuthoringConsoleCommand != nullptr)
         {
             IConsoleManager::Get().UnregisterConsoleObject(OpenAuthoringConsoleCommand);
@@ -141,6 +158,7 @@ private:
     TSharedPtr<FGraphPanelPinFactory> GraphPinFactory;
     IConsoleObject* OpenAuthoringConsoleCommand = nullptr;
     IConsoleObject* OpenProjectSetupConsoleCommand = nullptr;
+    FTSTicker::FDelegateHandle FirstPlayStartupHandle;
 
     TSharedRef<SDockTab> SpawnAuthoringSurfaceTab(const FSpawnTabArgs& Args)
     {
@@ -172,14 +190,25 @@ private:
             UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
     }
 
+    bool OpenFirstPlayOnStartup(float DeltaTime)
+    {
+        FirstPlayStartupHandle.Reset();
+        OpenProjectSetup();
+        return false;
+    }
+
     template <typename TFactory>
     void CreateScriptClass()
     {
         TFactory* Factory = NewObject<TFactory>(GetTransientPackage());
-        FAssetToolsModule::GetModule().Get().CreateAssetWithDialog(
+        UObject* CreatedAsset = FAssetToolsModule::GetModule().Get().CreateAssetWithDialog(
             UBlueprint::StaticClass(),
             Factory,
             TEXT("CreateUnifiedScriptClass"));
+        if (CreatedAsset != nullptr)
+        {
+            OpenProjectSetup();
+        }
     }
 
     void RegisterMenus()

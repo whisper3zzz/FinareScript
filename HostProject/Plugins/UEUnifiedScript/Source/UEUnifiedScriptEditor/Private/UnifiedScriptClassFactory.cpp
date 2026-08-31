@@ -2,6 +2,7 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
+#include "Framework/Docking/TabManager.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -16,6 +17,7 @@
 #include "Serialization/JsonWriter.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptProjectSetup.h"
 #include "UObject/Package.h"
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptClassFactory"
@@ -558,6 +560,42 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     }
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
     Blueprint->MarkPackageDirty();
+
+    FString FirstPlayRequestPath;
+    FString FirstPlayError;
+    const FString RequestId = FString::Printf(
+        TEXT("us_%s"),
+        *ClassId.ToString(EGuidFormats::Digits).ToLower());
+    if (!FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
+            Settings.ProjectRoot,
+            RequestId,
+            ScriptClassKind == EUnifiedScriptClassKind::Actor
+                ? TEXT("actor")
+                : TEXT("actorComponent"),
+            Blueprint->GetPathName(),
+            ScriptAsset->GetPathName(),
+            SourcePath,
+            ManagedTypeName,
+            FirstPlayRequestPath,
+            FirstPlayError))
+    {
+        Warn->Logf(
+            ELogVerbosity::Warning,
+            TEXT("UnifiedScript Class was created, but its first-Play handoff could not be written: %s"),
+            *FirstPlayError);
+    }
+    else
+    {
+        Warn->Logf(
+            ELogVerbosity::Display,
+            TEXT("UnifiedScript Class is ready to build. Open Project Setup and choose Build, Restart & Continue. Request: %s"),
+            *FirstPlayRequestPath);
+        if (!FApp::IsUnattended())
+        {
+            FGlobalTabmanager::Get()->TryInvokeTab(
+                FName(TEXT("UnifiedScriptProjectSetup")));
+        }
+    }
     return Blueprint;
 }
 

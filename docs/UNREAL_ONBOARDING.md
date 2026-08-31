@@ -69,10 +69,19 @@ Adoption also installs these project-local product tools below
 
 After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
 same operations in Slate. Preview, Repair, and Doctor stream their child-process
-output without blocking the game thread. **Save, Exit & Build** saves dirty
-packages, launches the deferred helper with the current Editor process ID, and
-requests a normal Editor exit. The helper then invokes the project-local setup
-script and writes its report under `Saved/UnifiedScript/ProjectSetup`.
+output without blocking the game thread. **Build, Restart & Continue** saves
+dirty packages, launches the deferred helper with the current Editor process
+ID, and requests a normal Editor exit. The helper then invokes the project-local
+setup script, writes its report under `Saved/UnifiedScript/ProjectSetup`, and
+reopens the project.
+
+Creating an Actor or ActorComponent through **Create UnifiedScript Class** also
+opens Project Setup and records the exact managed type, Script Asset, and
+Blueprint proxy in a first-Play receipt. After the single build finishes, the
+reopened panel shows **Locate Generated Class**. Locate the Actor and drag it
+into a level, or locate the Component and add it to an Actor Blueprint, then use
+the normal Play button. No reflection, binding, thunk, asset-sync, or native
+build command is exposed in this path.
 
 ## Apply
 

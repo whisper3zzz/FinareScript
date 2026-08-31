@@ -23,12 +23,16 @@ private:
     FReply RepairProjectFiles();
     FReply RunDoctor();
     FReply BuildAndOnboard();
+    FReply LocateFirstPlayClass();
     FReply RunAttachedOperation(
         EUnifiedScriptProjectSetupOperation Operation,
         const FText& OperationLabel);
 
     bool ResolveProjectPaths(FUnifiedScriptProjectSetupPaths& OutPaths);
     bool CanRunAttachedOperation() const;
+    bool CanLocateFirstPlayClass() const;
+    void RefreshFirstPlayRequest();
+    FText GetFirstPlayDescription() const;
     EActiveTimerReturnType PollAttachedOperation(double CurrentTime, float DeltaTime);
     void AppendOutput(const FString& Text);
     void FinishAttachedOperation(int32 ReturnCode);
@@ -41,6 +45,8 @@ private:
     void* WritePipe = nullptr;
     FString ActiveOperationLabel;
     FString ActiveReportPath;
+    FUnifiedScriptFirstPlayRequest FirstPlayRequest;
+    bool bHasFirstPlayRequest = false;
     FText StatusText;
     FSlateColor StatusColor = FSlateColor::UseForeground();
 };
