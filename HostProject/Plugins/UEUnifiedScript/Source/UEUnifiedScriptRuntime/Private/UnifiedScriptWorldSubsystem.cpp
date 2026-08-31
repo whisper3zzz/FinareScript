@@ -2,6 +2,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Subsystems/SubsystemCollection.h"

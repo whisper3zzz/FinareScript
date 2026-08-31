@@ -1,6 +1,7 @@
 {
   "schemaVersion": "unifiedscript.unreal-project-onboarding/v0.1",
   "editorTarget": "__EDITOR_TARGET__",
+  "gameTarget": "__GAME_TARGET__",
   "platform": "Win64",
   "configuration": "Development",
   "pluginPath": "../Plugins/UEUnifiedScript",
@@ -38,5 +39,9 @@
         "stagePath": "../Plugins/UEUnifiedScript/Binaries/Managed/__ASSEMBLY_NAME__.uschunk"
       }
     ]
+  },
+  "validation": {
+    "automationFilter": "UnifiedScript.Unreal.ProjectSetup",
+    "minimumAutomationTests": 1
   }
 }

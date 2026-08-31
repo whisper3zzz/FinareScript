@@ -28,8 +28,14 @@ decision without changing the project. Apply then performs one file transaction:
   templates, setup script, and deferred onboarding helper;
 - creates the managed project and `FirstScript.cs` from the selected template;
 - creates the project-owned onboarding, Contract, and deployment inputs;
+- for a Blueprint-only project, creates a minimal Runtime module and matching
+  Game/Editor targets and merges the module into the `.uproject`;
 - records exact before/after hashes and backups under
   `Saved/UnifiedScript/Adoption`.
+
+Those native host files are generated product scaffolding; you do not need to
+write or maintain C++ to run the first script. Existing native projects keep
+their own module and targets.
 
 A second identical invocation reports `unchanged` and creates no product-file
 diff. Existing unowned or post-adoption edited files are conflicts and are never
@@ -40,6 +46,10 @@ any changed files and run:
 & "$sdk\Tools\unifiedscript.cmd" `
   adopt $project --rollback
 ```
+
+Rollback restores only the adoption-owned project surface. Derived Unreal
+outputs already produced under `Binaries`, `Intermediate`, or `Saved` are normal
+build artifacts and may remain after rollback.
 
 Run `doctor` at any point to diagnose the project/plugin/runtime/configuration,
 engine resolution, adopted payload drift, and whether the first generated
@@ -58,7 +68,8 @@ Adoption intentionally finishes before native compilation so it remains
 previewable and rollback-safe. If the source plugin has not been compiled and
 the project cannot open in the Editor yet, run its installed onboarding action
 once to compile the plugin, export reflection, generate bindings, compile the
-managed project, and materialize the Script Asset:
+managed project, build the project Game target, and materialize the Script
+Asset:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
@@ -82,6 +93,8 @@ exact Editor process and then runs the installed setup script.
 
 The adopted project owns:
 
+- `Source/Game/Game.cpp`, its module rules, and Game/Editor targets when the
+  original project was Blueprint-only;
 - `Managed/Game.UnifiedScript/FirstScript.cs` and its SDK-style project;
 - `Config/UnifiedScript.onboarding.json`;
 - `Contracts/Game.unreal-api-contract.json`;
@@ -91,7 +104,9 @@ The adopted project owns:
   `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
 
 Onboarding success means the managed project, reflection export, complete native
-Contract, final editor target, and Script Asset have passed together. The older
+Contract, final Editor target, Game target receipt, and Script Asset have passed
+together. This closes the same native dependency graph that normal packaging
+uses; generated thunk source is preserved by later no-change Repair. The older
 `install-unifiedscript-sdk.ps1` and `new-unifiedscript-project.ps1` entry points
 remain available for compatibility and advanced diagnosis; new projects should
 use `adopt` so installation and scaffolding share one ownership transaction.
@@ -148,7 +163,10 @@ Automation Tool. Replace the map path with the saved project map:
 The plugin stages all files under `Binaries/Managed`, the matching UE-bundled
 CoreCLR runtime, the generated Script Asset, and the project native thunk table.
 Launch the archived executable and inspect the same actor behavior. No SDK or
-UnifiedScript repository path is consulted at runtime.
+UnifiedScript repository path is consulted at runtime. The clean Blueprint-only
+acceptance runs this BuildCookRun path and checks the executable, managed DLLs,
+compiled chunk, CoreCLR host, cooked Script Asset, and absence of Puerts or
+project-authored JavaScript payloads.
 
 ## Template inventory
 

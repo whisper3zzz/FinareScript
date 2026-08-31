@@ -312,7 +312,10 @@ try {
             'Source plugin descriptor does not match the product release manifest.'
     }
     $pluginDescriptor.VersionName = $Version
-    $pluginDescriptor.Installed = $true
+    # This archive ships source, not precompiled engine binaries. Keeping the
+    # plugin project-local lets the adopted native host targets compile and
+    # link the runtime module during normal BuildCookRun packaging.
+    $pluginDescriptor.Installed = $false
     [IO.File]::WriteAllText(
         (Join-Path $packagedPlugin 'UEUnifiedScript.uplugin'),
         ($pluginDescriptor | ConvertTo-Json -Depth 10) + "`n",

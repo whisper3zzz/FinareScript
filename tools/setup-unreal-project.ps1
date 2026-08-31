@@ -507,7 +507,7 @@ try {
         Assert-AllowedProperties `
             -Value $configJson `
             -Allowed @(
-                'schemaVersion', 'editorTarget', 'platform', 'configuration',
+                'schemaVersion', 'editorTarget', 'gameTarget', 'platform', 'configuration',
                 'pluginPath', 'reflection', 'bindings', 'deployment', 'managed',
                 'validation') `
             -Context 'Onboarding config'
@@ -557,6 +557,9 @@ try {
         }
 
         $resolved.editorTarget = [string]$configJson.editorTarget
+        $resolved.gameTarget = if ([string]::IsNullOrWhiteSpace($configJson.gameTarget)) {
+            'UnrealGame'
+        } else { [string]$configJson.gameTarget }
         $resolved.platform = if ([string]::IsNullOrWhiteSpace($configJson.platform)) {
             'Win64'
         } else { [string]$configJson.platform }
@@ -658,6 +661,9 @@ try {
         if ([string]::IsNullOrWhiteSpace($resolved.editorTarget)) {
             Throw-OnboardingError -Code 'USONB1001' -Message 'editorTarget is required.'
         }
+        if ([string]::IsNullOrWhiteSpace($resolved.gameTarget)) {
+            Throw-OnboardingError -Code 'USONB1001' -Message 'gameTarget is required.'
+        }
         if ($resolved.modules.Count -eq 0 -or
             @($resolved.modules | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
             Throw-OnboardingError `
@@ -702,6 +708,18 @@ try {
             Throw-OnboardingError `
                 -Code 'USONB1108' `
                 -Message "Editor target source was not found: $($resolved.editorTarget).Target.cs"
+        }
+        $gameTargetFile = Get-ChildItem `
+            -LiteralPath (Join-Path $projectDirectory 'Source') `
+            -Recurse `
+            -Filter "$($resolved.gameTarget).Target.cs" `
+            -File `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -eq $gameTargetFile -and $resolved.gameTarget -ne 'UnrealGame') {
+            Throw-OnboardingError `
+                -Code 'USONB1108' `
+                -Message "Game target source was not found: $($resolved.gameTarget).Target.cs"
         }
 
         $requiredInputs = @($resolved.contract, $resolved.deployment) +
@@ -1036,6 +1054,41 @@ try {
                 -FailureCode 'USONB2302' `
                 -FailureMessage 'Final Unreal editor build failed.'
         }
+
+        Invoke-OnboardingPhase -Name 'native-game-build' -Action {
+            if ($resolved.gameTarget -eq 'UnrealGame') {
+                $pluginDescriptor = Get-Content `
+                    -LiteralPath (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin') `
+                    -Raw | ConvertFrom-Json
+                if ($pluginDescriptor.Installed -eq $true) {
+                    Throw-OnboardingError `
+                        -Code 'USONB2304' `
+                        -Message (
+                            'Blueprint-only packaging requires the source plugin descriptor ' +
+                            'to keep Installed=false so UAT can generate a temporary target.')
+                }
+                Write-Host (
+                    'Blueprint-only game linking is deferred to UAT BuildCookRun temporary-target generation.')
+                return
+            }
+            Invoke-LoggedCommand `
+                -FilePath $resolved.build `
+                -Arguments @(
+                    $resolved.gameTarget,
+                    $resolved.platform,
+                    $resolved.configuration,
+                    "-Project=$($script:ResolvedProjectPath)",
+                    '-WaitMutex',
+                    '-NoHotReloadFromIDE') `
+                -LogPath (Join-Path $script:RunDirectory 'native-game-build.log') `
+                -FailureCode 'USONB2304' `
+                -FailureMessage 'Final Unreal game target build failed.'
+            Assert-RequiredPath `
+                -Path (Join-Path $projectDirectory `
+                    "Binaries\$($resolved.platform)\$($resolved.gameTarget).target") `
+                -Label 'Unreal game target receipt' `
+                -Code 'USONB2304'
+        }
     }
 
     Invoke-OnboardingPhase -Name 'deployment' -Action {
@@ -1174,6 +1227,7 @@ try {
         sdkRoot = $sdkRoot
         engineVersion = $resolved.engineVersion
         editorTarget = $resolved.editorTarget
+        gameTarget = $resolved.gameTarget
         reflectionManifest = $resolved.reflection
         managedBindings = $resolved.managedOutput
         nativeThunks = $resolved.nativeOutput

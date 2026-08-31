@@ -158,7 +158,13 @@ internal static partial class UnrealProjectAdoptionService
         ValidateIdentifier(projectName, "Project name");
 
         AdoptionSdkLayout layout = ResolveSdkLayout(options.SdkRoot);
-        ProjectMetadata metadata = ReadProjectMetadata(projectPath, projectName);
+        UnrealProjectAdoptionTransaction? previous = ReadCurrentTransaction(projectRoot);
+        bool maintainProductNativeHost = previous?.Files.Any(static file =>
+            file.Kind == "native-host") == true;
+        ProjectMetadata metadata = ReadProjectMetadata(
+            projectPath,
+            projectName,
+            maintainProductNativeHost);
         string managedNamespace = string.IsNullOrWhiteSpace(options.ManagedNamespace)
             ? $"{projectName}.UnifiedScript"
             : options.ManagedNamespace;
@@ -172,7 +178,10 @@ internal static partial class UnrealProjectAdoptionService
             projectRoot,
             GetRelativePath(projectRoot, projectPath),
             "project-merge",
-            MergePluginIntoProject(projectPath));
+            MergeProductIntoProject(
+                projectPath,
+                metadata.RequiresProductNativeHost,
+                metadata.ProjectModule));
 
         var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -180,6 +189,7 @@ internal static partial class UnrealProjectAdoptionService
             ["PROJECT_IDENTIFIER"] = projectName,
             ["PROJECT_MODULE"] = metadata.ProjectModule,
             ["EDITOR_TARGET"] = metadata.EditorTarget,
+            ["GAME_TARGET"] = metadata.GameTarget,
             ["SCRIPT_NAME"] = options.ScriptName,
             ["MANAGED_NAMESPACE"] = managedNamespace,
             ["ASSEMBLY_NAME"] = assemblyName,
@@ -219,16 +229,59 @@ internal static partial class UnrealProjectAdoptionService
             Path.Combine("Managed", assemblyName, $"{options.ScriptName}.cs"),
             "managed-source",
             replacements);
+        if (metadata.RequiresProductNativeHost)
+        {
+            AddRenderedTemplate(
+                desired,
+                projectRoot,
+                Path.Combine(layout.TemplateRoot, "Source", "Project.Build.cs.template"),
+                Path.Combine("Source", projectName, $"{projectName}.Build.cs"),
+                "native-host",
+                replacements);
+            AddRenderedTemplate(
+                desired,
+                projectRoot,
+                Path.Combine(layout.TemplateRoot, "Source", "Project.cpp.template"),
+                Path.Combine("Source", projectName, $"{projectName}.cpp"),
+                "native-host",
+                replacements);
+            AddRenderedTemplate(
+                desired,
+                projectRoot,
+                Path.Combine(layout.TemplateRoot, "Source", "Project.Target.cs.template"),
+                Path.Combine("Source", $"{projectName}.Target.cs"),
+                "native-host",
+                replacements);
+            AddRenderedTemplate(
+                desired,
+                projectRoot,
+                Path.Combine(layout.TemplateRoot, "Source", "ProjectEditor.Target.cs.template"),
+                Path.Combine("Source", $"{projectName}Editor.Target.cs"),
+                "native-host",
+                replacements);
+        }
 
         foreach (string sourcePath in EnumeratePluginPayload(layout.PluginRoot))
         {
             string relative = GetRelativePath(layout.PluginRoot, sourcePath);
+            string installedRelative = Path.Combine("Plugins", "UEUnifiedScript", relative);
+            string normalizedInstalledRelative = NormalizeRelative(installedRelative);
+            bool isGeneratedSource = IsMutableGeneratedPluginSource(relative);
+            string installedPath = ResolveContainedPath(projectRoot, normalizedInstalledRelative);
+            bool preserveGeneratedSource = isGeneratedSource &&
+                previous?.Files.Any(entry =>
+                    entry.Kind == "generated-source" &&
+                    string.Equals(
+                        entry.Path,
+                        normalizedInstalledRelative,
+                        PathComparison)) == true &&
+                File.Exists(installedPath);
             AddDesired(
                 desired,
                 projectRoot,
-                Path.Combine("Plugins", "UEUnifiedScript", relative),
-                "plugin",
-                File.ReadAllBytes(sourcePath));
+                installedRelative,
+                isGeneratedSource ? "generated-source" : "plugin",
+                File.ReadAllBytes(preserveGeneratedSource ? installedPath : sourcePath));
         }
         foreach (string sourcePath in Directory.EnumerateFiles(layout.RuntimeRoot, "*", SearchOption.TopDirectoryOnly)
                      .OrderBy(static path => path, PathComparer))
@@ -307,7 +360,6 @@ internal static partial class UnrealProjectAdoptionService
             }
         }
 
-        UnrealProjectAdoptionTransaction? previous = ReadCurrentTransaction(projectRoot);
         var files = new List<UnrealProjectAdoptionDesiredFile>(desired.Count);
         foreach (DesiredFileBuilder item in desired.Values.OrderBy(static value => value.RelativePath, StringComparer.Ordinal))
         {
@@ -550,6 +602,7 @@ internal static partial class UnrealProjectAdoptionService
         {
             string target = ResolveContainedPath(projectRoot, entry.Path);
             if (!File.Exists(target) ||
+                entry.Kind != "generated-source" &&
                 !string.Equals(Hash(File.ReadAllBytes(target)), entry.DesiredSha256, StringComparison.Ordinal))
             {
                 throw new InvalidDataException(
@@ -1206,14 +1259,14 @@ internal static partial class UnrealProjectAdoptionService
     private static string Serialize<T>(T value) =>
         JsonSerializer.Serialize(value, JsonOptions).Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
-    private static byte[] MergePluginIntoProject(string projectPath)
+    private static byte[] MergeProductIntoProject(
+        string projectPath,
+        bool addNativeHost,
+        string projectModule)
     {
         JsonObject project = ParseProject(projectPath);
         JsonObject? existing = FindPlugin(project, "UEUnifiedScript");
-        if (existing is not null && existing["Enabled"]?.GetValue<bool>() == true)
-        {
-            return File.ReadAllBytes(projectPath);
-        }
+        bool changed = false;
         if (existing is null)
         {
             JsonArray plugins;
@@ -1232,10 +1285,44 @@ internal static partial class UnrealProjectAdoptionService
                 ["Name"] = "UEUnifiedScript",
                 ["Enabled"] = true,
             });
+            changed = true;
         }
-        else
+        else if (existing["Enabled"]?.GetValue<bool>() != true)
         {
             existing["Enabled"] = true;
+            changed = true;
+        }
+        if (addNativeHost)
+        {
+            JsonArray modules;
+            if (project["Modules"] is null)
+            {
+                modules = [];
+                project["Modules"] = modules;
+            }
+            else
+            {
+                modules = project["Modules"] as JsonArray ??
+                    throw new InvalidDataException("The .uproject Modules field must be an array.");
+            }
+            bool moduleExists = modules.OfType<JsonObject>().Any(module => string.Equals(
+                module["Name"]?.GetValue<string>(),
+                projectModule,
+                StringComparison.OrdinalIgnoreCase));
+            if (!moduleExists)
+            {
+                modules.Add(new JsonObject
+                {
+                    ["Name"] = projectModule,
+                    ["Type"] = "Runtime",
+                    ["LoadingPhase"] = "Default",
+                });
+                changed = true;
+            }
+        }
+        if (!changed)
+        {
+            return File.ReadAllBytes(projectPath);
         }
         return Encoding.UTF8.GetBytes(
             project.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
@@ -1280,29 +1367,57 @@ internal static partial class UnrealProjectAdoptionService
         return matches.SingleOrDefault();
     }
 
-    private static ProjectMetadata ReadProjectMetadata(string projectPath, string projectName)
+    private static ProjectMetadata ReadProjectMetadata(
+        string projectPath,
+        string projectName,
+        bool maintainProductNativeHost)
     {
         JsonObject project = ParseProject(projectPath);
-        string projectModule = project["Modules"] is JsonArray modules
-            ? modules.OfType<JsonObject>()
+        JsonArray? modules = project["Modules"] as JsonArray;
+        bool hasNativeModule = modules is not null &&
+            modules.OfType<JsonObject>().Any(module =>
+                !string.IsNullOrWhiteSpace(module["Name"]?.GetValue<string>()));
+        string projectModule = hasNativeModule
+            ? modules!.OfType<JsonObject>()
                 .Select(module => module["Name"]?.GetValue<string>())
                 .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? projectName
             : projectName;
         ValidateIdentifier(projectModule, "Project module");
         string projectRoot = Path.GetDirectoryName(projectPath)!;
-        string? editorTargetFile = Directory.Exists(Path.Combine(projectRoot, "Source"))
+        string sourceRoot = Path.Combine(projectRoot, "Source");
+        string? editorTargetFile = Directory.Exists(sourceRoot)
             ? Directory.EnumerateFiles(
-                    Path.Combine(projectRoot, "Source"),
+                    sourceRoot,
                     "*Editor.Target.cs",
                     SearchOption.AllDirectories)
                 .OrderBy(static path => path, PathComparer)
                 .FirstOrDefault()
             : null;
+        bool requiresProductNativeHost = !hasNativeModule || maintainProductNativeHost;
         string editorTarget = editorTargetFile is null
-            ? "UnrealEditor"
+            ? requiresProductNativeHost ? $"{projectName}Editor" : "UnrealEditor"
             : Path.GetFileName(editorTargetFile)[..^".Target.cs".Length];
         ValidateIdentifier(editorTarget, "Editor target");
-        return new ProjectMetadata(projectModule, editorTarget);
+        string? gameTargetFile = Directory.Exists(sourceRoot)
+            ? Directory.EnumerateFiles(
+                    sourceRoot,
+                    "*.Target.cs",
+                    SearchOption.AllDirectories)
+                .Where(static path => !Path.GetFileName(path).EndsWith(
+                    "Editor.Target.cs",
+                    StringComparison.OrdinalIgnoreCase))
+                .OrderBy(static path => path, PathComparer)
+                .FirstOrDefault()
+            : null;
+        string gameTarget = gameTargetFile is null
+            ? requiresProductNativeHost ? projectName : "UnrealGame"
+            : Path.GetFileName(gameTargetFile)[..^".Target.cs".Length];
+        ValidateIdentifier(gameTarget, "Game target");
+        return new ProjectMetadata(
+            projectModule,
+            editorTarget,
+            gameTarget,
+            requiresProductNativeHost);
     }
 
     private static AdoptionTemplate ReadTemplate(string templateRoot, string templateId)
@@ -1452,6 +1567,14 @@ internal static partial class UnrealProjectAdoptionService
             }
             yield return path;
         }
+    }
+
+    private static bool IsMutableGeneratedPluginSource(string relativePath)
+    {
+        string normalized = NormalizeRelative(relativePath);
+        return normalized.StartsWith("Source/", StringComparison.OrdinalIgnoreCase) &&
+            normalized.Contains("/Private/Generated/", StringComparison.OrdinalIgnoreCase) &&
+            normalized.EndsWith(".generated.cpp", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AddRenderedTemplate(
@@ -1615,7 +1738,11 @@ internal static partial class UnrealProjectAdoptionService
 
     private sealed record AdoptionTemplate(string Id, string ScriptTemplate);
 
-    private sealed record ProjectMetadata(string ProjectModule, string EditorTarget);
+    private sealed record ProjectMetadata(
+        string ProjectModule,
+        string EditorTarget,
+        string GameTarget,
+        bool RequiresProductNativeHost);
 
     private sealed record DesiredFileBuilder(
         string RelativePath,

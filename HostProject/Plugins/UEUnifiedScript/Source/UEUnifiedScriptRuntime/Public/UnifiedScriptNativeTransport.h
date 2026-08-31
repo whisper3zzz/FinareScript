@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Queue.h"
 #include "HAL/CriticalSection.h"
 #include "Templates/Function.h"
 #include "UObject/StrongObjectPtr.h"

@@ -43,6 +43,15 @@ safe upgrades and rollback. Project policy and managed source become
 user-editable after creation; future adoption never guesses through a changed
 file.
 
+For a Blueprint-only project, the same transaction also adds the smallest
+project-owned native host required by a source plugin: `Source/<Game>/<Game>.cpp`,
+its module rules, and matching Game/Editor targets. The `.uproject` Runtime
+module entry and all four source files are rollback-owned product scaffolding;
+the developer does not author C++ to reach the first script. Existing native
+projects keep their own module and targets. Generated plugin thunk sources are
+tracked separately as mutable product output, so a later no-change Repair keeps
+the current generated table instead of replacing it with the SDK seed.
+
 The doctor report uses `unifiedscript.unreal-project-doctor/v0.1`. Missing
 first-generation coverage is a warning after adoption; a missing/disabled
 plugin, runtime closure, managed project, invalid onboarding schema, corrupt
@@ -93,9 +102,12 @@ Apply performs these phases in order:
    wrappers, native thunks, visual API catalog, and coverage report atomically;
 5. build project managed assemblies and rebuild the editor target against the
    final native thunks;
-6. synchronize the deployment manifest into deterministic Script Assets;
-7. regenerate all four contract outputs in `Saved` and compare SHA-256 hashes;
-8. optionally run the configured UE Automation filter and require its minimum
+6. build the configured project Game target and require its target receipt, so
+   ordinary BuildCookRun cannot silently fall back to a generic game that omits
+   the source plugin;
+7. synchronize the deployment manifest into deterministic Script Assets;
+8. regenerate all four contract outputs in `Saved` and compare SHA-256 hashes;
+9. optionally run the configured UE Automation filter and require its minimum
    successful test count.
 
 The initial native build intentionally uses the last known reflection artifact.
@@ -138,6 +150,7 @@ configuration file.
 {
   "schemaVersion": "unifiedscript.unreal-project-onboarding/v0.1",
   "editorTarget": "GameEditor",
+  "gameTarget": "Game",
   "platform": "Win64",
   "configuration": "Development",
   "pluginPath": "../Plugins/UEUnifiedScript",
@@ -187,6 +200,12 @@ thunk and rejects reflection fallback, rejected members, and deferred types.
 Projects may set it to false only when their reviewed product policy permits a
 safe reflected fallback.
 
+`editorTarget` loads reflection/export and editor Automation; `gameTarget`
+closes the native runtime and cook dependency graph. Adoption renders both from
+the project name for a Blueprint-only consumer. A legacy native edge case may
+still use `UnrealGame`, but only with a source plugin descriptor that keeps
+`Installed=false` so UAT is allowed to synthesize its temporary target.
+
 The optional `managed.chunks` list compiles an already-built managed project
 into a deterministic `.uschunk`, verifies the container, and atomically replaces
 the declared file below `managed.stageDirectory` before UE Automation starts.
@@ -218,3 +237,12 @@ knowledge should be needed.
 Automation fixture. The BlockBreaker UnifiedScript project carries the same
 schema for its nine-type, 40-member gameplay contract. Both configurations pass
 Apply and a following deterministic validation against UE 5.8.1.
+
+The M13.1A-2 clean Blueprint-only acceptance additionally proves packaged-SDK
+Adopt, project-local Apply/Validate, Editor and Game builds, Script Asset sync,
+Automation, BuildCookRun, no-change Repair, Doctor, and exact adoption rollback.
+The archived Win64 product contains the managed gameplay assembly, compiled
+chunk, UnifiedScript runtime assemblies, UE-bundled CoreCLR host, and cooked
+Script Asset with no Puerts or project-authored JavaScript payload. Adoption
+rollback restores its owned source/configuration surface; normal Unreal-derived
+`Binaries`, `Intermediate`, and `Saved` outputs remain ordinary build artifacts.

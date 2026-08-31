@@ -10,6 +10,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/Interface.h"
 #include "UObject/Object.h"
 #include "UnifiedScriptInteropFixture.generated.h"
 

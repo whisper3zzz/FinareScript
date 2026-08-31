@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
-public class __EDITOR_TARGET__Target : TargetRules
+public class __PROJECT_NAME__EditorTarget : TargetRules
 {
-    public __EDITOR_TARGET__Target(TargetInfo Target) : base(Target)
+    public __PROJECT_NAME__EditorTarget(TargetInfo Target) : base(Target)
     {
         Type = TargetType.Editor;
         DefaultBuildSettings = BuildSettingsVersion.Latest;

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HAL/CriticalSection.h"
+#include "UObject/WeakObjectPtr.h"
 #include "UnifiedScriptObjectRegistry.h"
 
 #include <type_traits>

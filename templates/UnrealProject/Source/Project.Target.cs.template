@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
-public class __PROJECT_IDENTIFIER__Target : TargetRules
+public class __PROJECT_NAME__Target : TargetRules
 {
-    public __PROJECT_IDENTIFIER__Target(TargetInfo Target) : base(Target)
+    public __PROJECT_NAME__Target(TargetInfo Target) : base(Target)
     {
         Type = TargetType.Game;
         DefaultBuildSettings = BuildSettingsVersion.Latest;

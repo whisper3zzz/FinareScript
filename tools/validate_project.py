@@ -640,6 +640,8 @@ def main() -> int:
         and "UnifiedScriptSyncAssets" in onboarding_script
         and "managed.chunks entry" in onboarding_script
         and "compiled-chunks" in onboarding_script
+        and "native-game-build" in onboarding_script
+        and "gameTarget" in onboarding_script
         and "chunk-inspect" in onboarding_script
         and "--browser-out" in onboarding_script
         and "apiBrowser" in onboarding_script
@@ -688,7 +690,7 @@ def main() -> int:
         in adoption_tests
         and "OwnedSdkPayloadUpgradesAndRollsBackOneGenerationAtATime"
         in adoption_tests
-        and "BlueprintOnlyProjectUsesDeterministicFallbackModuleAndEditorTarget"
+        and "BlueprintOnlyProjectReceivesTransactionalNativeHostTargets"
         in adoption_tests
         and "unifiedscript.packaged-adoption-acceptance/v0.1"
         in packaged_adoption
@@ -703,6 +705,39 @@ def main() -> int:
     )
     checks.append(
         "existing Unreal projects adopt transactionally with deterministic rerun and doctor"
+    )
+
+    packaged_native_onboarding_path = (
+        ROOT / "tools" / "test-packaged-native-onboarding.ps1"
+    )
+    native_host_source_template_path = (
+        ROOT / "templates" / "UnrealProject" / "Source" / "Project.cpp.template"
+    )
+    packaged_native_onboarding = packaged_native_onboarding_path.read_text(
+        encoding="utf-8"
+    )
+    native_host_source_template = native_host_source_template_path.read_text(
+        encoding="utf-8"
+    )
+    require(
+        packaged_native_onboarding_path.is_file()
+        and native_host_source_template_path.is_file()
+        and "RequiresProductNativeHost" in adoption_source
+        and '"native-host"' in adoption_source
+        and '"generated-source"' in adoption_source
+        and "Project.Target.cs.template" in adoption_source
+        and "ProjectEditor.Target.cs.template" in adoption_source
+        and "IMPLEMENT_PRIMARY_GAME_MODULE" in native_host_source_template
+        and "native-game-build" in onboarding_script
+        and "gameTarget" in onboarding_script
+        and "BuildCookRun" in packaged_native_onboarding
+        and "Project-local no-change Repair failed" in packaged_native_onboarding
+        and "Packaged SDK rollback failed" in packaged_native_onboarding
+        and "forbidden Puerts/JavaScript payload" in packaged_native_onboarding,
+        "Blueprint-only native host, Game target build, or packaged cook acceptance is missing",
+    )
+    checks.append(
+        "Blueprint-only adoption owns a native host and proves Setup, Cook, repair, and rollback"
     )
 
     deferred_onboarding_path = (
@@ -809,6 +844,7 @@ def main() -> int:
         and "$releaseDocumentation" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
+        and "$pluginDescriptor.Installed = $false" in sdk_package
         and "unifiedscript.sdk-manifest/v0.1" in sdk_install
         and "Get-FileHash" in sdk_install
         and "Unmanifested SDK payload file" in sdk_install
@@ -1385,6 +1421,7 @@ def main() -> int:
         template_root / "Managed" / "VisualGameplayScript.cs.template",
         template_root / "Managed" / "DataPlaneScript.cs.template",
         template_root / "Source" / "Project.Build.cs.template",
+        template_root / "Source" / "Project.cpp.template",
         template_root / "Source" / "Project.Target.cs.template",
         template_root / "Source" / "ProjectEditor.Target.cs.template",
         template_root / "Project.plugin-fragment.json.template",

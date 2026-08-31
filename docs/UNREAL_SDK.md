@@ -8,6 +8,11 @@ Unreal binaries and the CoreCLR runtime are deliberately not copied from the
 build machine: the target UE 5.8 engine builds the plugin and stages its own
 matching .NET 10 runtime.
 
+The packaged project-local plugin is intentionally a source plugin with
+`Installed=false`. This tells UBT/UAT to compile it as part of the consumer
+instead of treating it as a precompiled engine-installed plugin; the SDK still
+ships no machine-specific Unreal binary.
+
 ## Build an SDK archive
 
 From a UnifiedScript source checkout:
@@ -112,6 +117,15 @@ Every changed file has a retained pre-transaction backup and exact content hash
 under `Saved/UnifiedScript/Adoption`; `adopt <project> --rollback` restores the
 latest transaction only when no post-adoption file has drifted.
 
+For a Blueprint-only project, Adopt also transactionally creates a minimal
+native Runtime module plus project Game and Editor targets and merges that
+module into the `.uproject`. This is product-owned host scaffolding, not a new
+C++ authoring requirement. It makes the project-local source plugin part of the
+same native dependency graph used by normal Game builds and packaging. Existing
+C++ projects retain their module/target layout. Rollback removes or restores the
+owned host files exactly; Unreal-derived `Binaries`, `Intermediate`, and `Saved`
+outputs are outside the adoption transaction and may be cleaned normally.
+
 Run the read-only product diagnosis from the installed project-local entry point:
 
 ```powershell
@@ -151,6 +165,13 @@ Invoking the copy under the extracted SDK remains supported for recovery and
 reports `sdkLayout: packaged`; it verifies and reinstalls the packaged runtime
 before running the same pipeline.
 
+Setup compiles both the project Editor target and the configured Game target.
+The latter must produce a target receipt before Setup succeeds, preventing a
+later BuildCookRun from silently packaging a generic target without the plugin's
+managed/CoreCLR runtime closure. Generated native thunk source remains managed
+output: repeat Repair preserves the generation produced by Setup instead of
+restoring the SDK's seed file.
+
 Once the plugin loads, **Tools > UnifiedScript Project Setup** provides Preview,
 Repair, Doctor, and **Save, Exit & Build** through the same project-local tools.
 The build action waits until the Editor exits before touching native binaries.
@@ -168,3 +189,13 @@ SDK installer and packaged-mode onboarding must pass there before a Win64
 `BuildCookRun` archive is accepted. The runnable smoke gate requires exactly
 300 managed ticks, one shot, one hit, two gameplay command completions, nonzero
 fast/call-frame calls, zero legacy calls, and process exit code zero.
+
+M13.1A-2 adds the complementary first-use gate: a clean Blueprint-only fixture
+is adopted from the released ZIP, then uses only its project-local Setup and CLI
+for Apply, Validate, UE Automation, Editor/Game native builds, and no-change
+Repair before ordinary Win64 BuildCookRun. Acceptance requires the executable,
+managed gameplay DLL, compiled chunk, `UnifiedScript.Core` and
+`UnifiedScript.Unreal`, `hostfxr`, and cooked Script Asset; Puerts and
+project-authored JavaScript payloads must be absent. The final rollback must
+restore the original `.uproject` hash and remove the four generated host source
+files plus the installed transactional product surface.

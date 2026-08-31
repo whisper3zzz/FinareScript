@@ -56,9 +56,10 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-31**
 
 - Active milestone: **M13.1 in progress — Puerts-grade zero-config adoption and automatic Unreal API surface**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local tools plus one Unreal Editor Setup/Doctor/Build surface**
-- Current tranche: **M13.1A-2 — native onboarding and cook acceptance from a clean adopted project**
-- Next acceptance: **run the project-local setup action through UE 5.8 reflection, bindings, native/managed builds, Script Asset synchronization, Automation, deterministic validation, and a managed cook without repository-relative tools**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure**
+- Current tranche: **M13.1B-1 — automatic reflected API surface from source use to typed native/managed/visual routes**
+- Current implementation state: **a packaged SDK now adopts a clean Blueprint-only project into a rollback-owned native host, builds project Editor/Game targets, generates the managed/native/visual surface, and passes ordinary Win64 BuildCookRun; the remaining Puerts-grade friction is the hand-maintained API Contract selector**
+- Next acceptance: **make one newly referenced supported Blueprint-visible API produce a deterministic dependency request and localized Contract/surface expansion through the normal build action, while an unsupported reference produces one source-linked diagnostic and no partial generation**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -75,8 +76,9 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 628 / 628 passed |
-| Repository validator | 94 / 94 passed |
+| Repository validator | 96 / 96 passed |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
+| Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 20 / 20 passed, including the project-local Setup command contract, bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1810,26 +1812,47 @@ become three independently configured products.
 | --- | --- | --- | --- |
 | M13.1A-0 — packaged adoption CLI | `adopt` and `doctor` can transactionally install, diagnose, rerun, and roll back a consumer project | public packaged CLI passes clean native/Blueprint-only fixtures with deterministic no-change reruns | Complete (`9fe7f70`) |
 | M13.1A-1 — Editor project setup | an adopted project carries its own CLI and exposes Preview, Repair, Doctor, and Build/Onboard in Unreal Editor | Editor actions use exactly the CLI configuration model; native replacement is deferred safely until the Editor exits | Complete |
-| M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `UnifiedScript.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | **Active** |
-| M13.1B-1 — automatic reflected API surface | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, localized regeneration, exact coverage, and unsupported-use diagnostics pass on consumer fixtures | Pending |
+| M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `UnifiedScript.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | Complete |
+| M13.1B-1 — automatic reflected API surface | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, localized regeneration, exact coverage, and unsupported-use diagnostics pass on consumer fixtures | **Active** |
 | M13.1C-1 — first managed Script Class | **Create UnifiedScript Class** produces an attachable Actor/Component/UObject behavior that reaches first Play | create, compile, attach, Play, stop, reload, reopen, cook, and package pass without a handwritten facade | Pending |
 | M13.2 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | Pending |
 | M13.3 — daily edit loop | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable workflow | a new user completes the published walkthrough without repository knowledge or generator commands | Pending |
 | M13.4 — external production pilot | a non-BlockBreaker project migrates a representative gameplay slice through the published golden path | exact old/new observables match and a second clean checkout reproduces adoption and packaging | Pending |
 | M13.5–M13.6 — ecosystem closure | native extensions, networking, platforms, distribution, and reproduced performance losses are covered | every advertised row has build, lifecycle, cook/package, smoke, upgrade/rollback, and workload evidence | Pending |
 
-The active M13.1A-1 slice is deliberately narrow:
+The completed M13.1A-2 slice closed in this order:
 
-1. install the packaged CLI, templates, setup script, and deferred onboarding
-   helper inside the adopted plugin/project;
-2. expose Preview Adoption, Repair Project Files, Doctor, and Build/Onboard from
-   one Editor panel, with non-blocking output and no second configuration model;
-3. save and close the Editor before replacing or rebuilding a loaded native
-   plugin, then continue onboarding through the project-local helper;
-4. prove command construction with native tests, then pass the UE 5.8 build,
-   Automation, managed suite, repository validator, and packaged adoption gate;
-5. update the user walkthrough and create one local commit before advancing the
-   cursor to M13.1B-1.
+1. make a clean Blueprint-only project a valid source-plugin host by adding a
+   minimal, transaction-owned native module and matching Game/Editor targets;
+2. teach the project-local setup action to build both native targets before
+   reflection, binding generation, managed compilation, Script Asset sync, and
+   Automation, while preserving the existing native-project path;
+3. prove Preview/Apply/no-change Repair/Doctor/rollback for every newly owned
+   host file and `.uproject` module edit, including interrupted Apply and later
+   user-edit protection;
+4. adopt a fresh project from the packaged SDK and run UE 5.8.1
+   Build/Cook/Stage/Pak/Archive, asserting the executable, managed program,
+   CoreCLR closure, generated Script Assets, and zero Puerts/JavaScript payload;
+5. rerun the managed suite, repository validator, native build, focused
+   `UnifiedScript.Unreal` Automation, and packaged acceptance, then record one
+   local commit and advance the cursor to M13.1B-1.
+
+M13.1A-2 acceptance (2026-08-31): a fresh packaged SDK adopted a clean
+Blueprint-only project with a transaction-owned Runtime module and matching
+Game/Editor targets. Project-local Setup exported 2 types, 23 properties, 25
+functions, and 2 delegates; generated deterministic C#, native thunks, visual
+nodes, coverage, a managed assembly, and an 11,030-byte compiled chunk; built
+both native targets; synchronized the Script Asset; and passed the configured
+Automation gate. ValidateOnly then passed from the installed project, ordinary
+Win64 BuildCookRun produced the executable plus UnifiedScript/CoreCLR managed
+closure and cooked Script Asset, and found zero Puerts or project-authored
+JavaScript files. Post-cook Doctor passed, Repair reported zero changes and zero
+conflicts while preserving all four native host files, and rollback restored the
+original `.uproject` SHA-256 and removed the transaction-owned installation.
+The full acceptance took 220,036 ms. Evidence is at
+`artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json`;
+the accepted SDK SHA-256 is
+`749a715b49173d35ad7a79941ad79ddc396fc78bfe621f05fb024bc974433ca8`.
 
 ### Product usability contract
 
@@ -1852,12 +1875,12 @@ prerequisite.
 
 | User task | Puerts-grade expectation | Current UnifiedScript friction | M13 acceptance |
 | --- | --- | --- | --- |
-| Add scripting to an existing project | install/enable once and start authoring | SDK install, onboarding, Contract, reflection, and deployment artifacts are separate concepts | one transactional adopt action creates or updates all owned files, with dry-run, backup, rollback, and repair |
+| Add scripting to an existing project | install/enable once and start authoring | Adopt/Setup is now transactional and self-contained, but the first class still starts from a pre-authored Script Asset workflow | one transactional adopt action creates or updates all owned files, with dry-run, backup, rollback, and repair |
 | Call an ordinary UE API | Blueprint-visible APIs are immediately reachable and typed | exact allowlist and generated route must already exist | filtered project/Engine/Blueprint reflection produces an automatic typed development surface and dependency closure |
 | Define gameplay behavior | extend an engine class and expose members to Blueprint | a native host Actor/Component or pre-authored Script Asset is normally required | create a managed Script Class from UE, attach/select it, receive lifecycle/events/input, and expose reviewed properties/functions |
 | Edit and iterate | edit source, see errors, reload, continue PIE | several tools and artifacts expose implementation details | one editor/CLI build action reports source-linked diagnostics and reloads transactionally without manual generation commands |
 | Use visual authoring | optional, consistent with source behavior | round trip exists but is not the default class workflow | C# and Graph open the same Script Class semantics and preserve stable IDs through rename/reload |
-| Package | normal project packaging includes the runtime | proven fixtures exist, but consumer configuration remains expert-facing | adopted projects cook/package with generated runtime closure and actionable missing-dependency diagnostics |
+| Package | normal project packaging includes the runtime | clean Blueprint-only source-plugin packaging is proven; automatic API/class authoring still precedes it | adopted projects cook/package with generated runtime closure and actionable missing-dependency diagnostics |
 | Diagnose a failure | error names the source/API/configuration fix | coverage and lifecycle evidence exists across multiple reports | editor diagnostics and `unifiedscript doctor` point to the owning file/member/route and offer safe repair where possible |
 
 Usability parity is not declared from a demo video or a successful generated
@@ -1909,7 +1932,7 @@ without learning the repository's internal artifact pipeline.
 - [ ] discover the compatible installed engine, project modules, plugin state,
   target platforms, and existing source/Blueprint layout; require explicit
   input only when discovery is genuinely ambiguous
-- [ ] install/enable the plugin and SDK, create the managed workspace, generated
+- [x] install/enable the plugin and SDK, create the managed workspace, generated
   directories, build/cook integration, and default diagnostics policy in one
   owned operation
 - [x] add `unifiedscript doctor <Game.uproject>` to classify missing runtime,
@@ -1972,13 +1995,41 @@ managed project without warnings, passed project-local Doctor, reran adoption
 from the project-local SDK root with 169 unchanged and zero changed/conflicts,
 and rolled back all 169 files. Evidence is at
 `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json`.
-The current M13.1A-2 tranche still owes a complete project-local native
-onboarding and managed cook/package proof from a clean adopted fixture.
+
+Progress (2026-08-31, M13.1A-2 native onboarding tranche): Blueprint-only
+adoption now adds the minimal project Runtime module and Game/Editor targets in
+the same ownership transaction. Setup requires both target builds and the Game
+receipt, while the packaged source plugin remains `Installed=false`. A clean
+packaged-SDK replay passed Apply, ValidateOnly, Automation, BuildCookRun,
+post-cook Doctor, zero-change Repair, and exact rollback without a repository
+tool path. The managed/CoreCLR closure and cooked Script Asset were present and
+Puerts/project JavaScript payloads were absent. Evidence and accepted SDK hash
+are recorded in the M13.1A-2 acceptance above. Automatic discovery of broader
+platform/target policy remains an unchecked M13.1A product-breadth item; it does
+not reopen this verified Win64 native/cook slice or preempt the M13.1B cursor.
 
 #### M13.1B — Automatic development API surface
 
 Outcome: gameplay authors can call ordinary Blueprint-visible Unreal APIs while
 the product generates and audits the exact native/managed/visual routes.
+
+The active M13.1B-1 vertical slice closes the existing gap between source use
+and the review-only `ue-contract-propose` backend in this order:
+
+1. analyze the adopted managed project against the current reflection and
+   generated-surface lock, and emit a versioned dependency request at the exact
+   source span for each missing Unreal type/member use;
+2. resolve only unique, supported reflected identities into a development
+   Contract overlay; keep overload ambiguity, missing reflection, unsupported
+   ownership/conversion, and policy rejection as explicit diagnostics rather
+   than guessing;
+3. fold that overlay into project-local Setup as one bounded
+   analyze -> reflect -> expand -> regenerate -> compile cycle with stable input
+   fingerprints and no-change determinism; retain the reviewed base Contract as
+   the release/CI freeze point;
+4. prove one ordinary Actor API expansion plus ambiguous and unsupported cases
+   on clean consumer fixtures, and require native/C#/visual/browser/coverage
+   artifacts to agree on the same member identity before advancing to M13.1C-1.
 
 - [ ] export bounded project, plugin, Engine, and loaded Blueprint reflection on
   demand with deterministic transitive type closure and incremental fingerprints

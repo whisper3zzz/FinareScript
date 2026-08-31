@@ -2,9 +2,11 @@
 
 #include "Containers/StringConv.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
+#include "Templates/Greater.h"
 
 #if PLATFORM_WINDOWS
 #define UNIFIEDSCRIPT_HOSTFXR_CALLTYPE __cdecl

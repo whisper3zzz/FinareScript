@@ -4,7 +4,10 @@
 #include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UObject/Class.h"
+#include "UObject/EnumProperty.h"
+#include "UObject/StrProperty.h"
 #include "UObject/StructOnScope.h"
+#include "UObject/TextProperty.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
