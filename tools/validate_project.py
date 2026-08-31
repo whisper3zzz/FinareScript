@@ -1781,6 +1781,37 @@ def main() -> int:
     checks.append(
         "M13.2A repairs UE references and rejects orphaned Blueprint-only copies"
     )
+    packaged_script_class_lifecycle_path = (
+        ROOT / "tools" / "test-packaged-script-class-lifecycle.ps1"
+    )
+    packaged_script_class_lifecycle = (
+        packaged_script_class_lifecycle_path.read_text(encoding="utf-8")
+    )
+    require(
+        packaged_script_class_lifecycle_path.is_file()
+        and "IncludeScriptClassLifecycleReplay" in packaged_native_onboarding
+        and "scriptClassLifecycleReplay" in packaged_native_onboarding
+        and "unifiedscript.packaged-script-class-lifecycle/v0.1"
+        in packaged_script_class_lifecycle
+        and "byte-exact-baseline" in packaged_script_class_lifecycle
+        and "beforeEqualsAfter" in packaged_script_class_lifecycle
+        and "@('create', 'rename', 'duplicate', 'delete')"
+        in packaged_script_class_lifecycle
+        and "persisted-recovery-passed" in packaged_script_class_lifecycle
+        and "CaptureCreationRecoverySnapshots" in unified_script_factory_source
+        and "SaveCreatedClassPackages" in unified_script_factory_source
+        and "ClassOperationJournal::Begin" in unified_script_factory_source
+        and 'TEXT("create")' in script_class_journal_source
+        and "Create rollback restores deployment bytes exactly"
+        in script_class_operations_tests
+        and "for (const FString& Operation" in script_class_operations_tests
+        and "[x] **M13.2A-2b2d — packaged lifecycle replay:**"
+        in roadmap_document,
+        "M13.2A-2b2d packaged create/rename/duplicate/delete replay, exact rollback, or persisted recovery closure is incomplete",
+    )
+    checks.append(
+        "M13.2A replays the complete Script Class lifecycle from a packaged SDK"
+    )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"

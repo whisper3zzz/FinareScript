@@ -56,13 +56,13 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-09-01**
 
 - Active milestone: **M13.2 in progress — Puerts-grade daily authoring and one C#/Graph workflow**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A-1 canonical Script Asset entry; M13.2A-2a complete-class rename/duplicate transaction; M13.2A-2b1 guarded safe delete; M13.2A-2b2a Roslyn reference plan; M13.2A-2b2b persisted crash recovery; M13.2A-2b2c UE reference and generic duplicate closure**
-- Current tranche: **M13.2A-2b2d — packaged lifecycle replay**
-- Current implementation state: **M13.2A-2b2c snapshots every on-disk external UE referencer package in the existing write-ahead receipt, rewrites generated-class/Blueprint/sidecar soft paths, saves the referencers, fixes hard references through AssetTools, deletes old redirectors, and verifies that no old dependency remains. Reverse rename performs the same repair in the other direction. New Script Classes use the runtime `UUnifiedScriptBlueprint` asset type; its Asset Definition blocks bare rename/duplicate, while an `OnInMemoryAssetCreated` guard detects and removes direct `AssetTools` Blueprint-only copies that bypass Content Browser. Packaged-SDK lifecycle replay remains M13.2A-2b2d**
-- Current verification state: **the UE 5.8.1 native build passes; focused CMD tests prove UE soft-reference rewrite, old redirector removal, reverse-reference rollback, the generated-Blueprint Asset Definition, direct Blueprint-only duplicate cleanup, and dirty-referencer rejection; the refreshed `UnrealEditor -cmd` + NullRHI run passes 25/25 `UnifiedScript.Unreal` Automation tests; 648/648 managed tests and 112/112 repository invariants pass. M13.2A-2b2c evidence is at `artifacts/m13-2a2/automation/script-class-ue-reference-duplicate-final.log`, `artifacts/m13-2a2/automation/script-blueprint-definition-focused.log`, and `artifacts/m13-2a2/automation/unifiedscript-unreal-ue-reference-duplicate-final-3.log`; packaged execution/no-change/rollback evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json`**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A-1 canonical Script Asset entry; M13.2A-2a complete-class rename/duplicate transaction; M13.2A-2b1 guarded safe delete; M13.2A-2b2a Roslyn reference plan; M13.2A-2b2b persisted crash recovery; M13.2A-2b2c UE reference and generic duplicate closure; M13.2A-2b2d packaged lifecycle replay**
+- Current tranche: **M13.2B — dependency-aware Play**
+- Current implementation state: **M13.2A now closes the complete product-owned Script Class lifecycle. Factory create joins the same write-ahead receipt protocol as rename/duplicate/delete, snapshots source/deployment/first-Play/Blueprint/sidecar surfaces before publication, saves both UE packages before commit, and restores exact preimages after injected failure or a persisted interruption. A packaged-SDK runner replays all four operations from a clean consumer and rejects any stale managed source, deployment byte, UE package, reference, redirector, or pending receipt. The next gap is a single dependency graph that drives the minimum Build/Play stages instead of rerunning the whole onboarding pipeline**
+- Current verification state: **the UE 5.8.1 native build, focused CMD lifecycle runner, refreshed 25/25 `UnifiedScript.Unreal` CMD Automation, 648/648 managed tests, and 113/113 repository invariants pass. A new deterministic SDK (`ff194a7eb87c62fc0833b89b3910adf5e9471de704383dce4ec3e3f6d56b8b90`) was installed into a fresh Blueprint consumer; first-Play create/reload, both Win64 Cook/Package passes, create/rename/duplicate/delete success paths, injected rollback, persisted recovery, exact baseline restoration, Validate, Doctor, no-change Repair, and installation rollback all pass in 569,454 ms. The packaged evidence is at `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/packaged-native-onboarding-report.json`, the lifecycle report is at `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/script-class-lifecycle-replay/packaged-script-class-lifecycle-report.json`, and the full CMD log is at `artifacts/m13-2a2d/automation-full-final-rerun/unifiedscript-unreal.log`**
 - Current UI finding: **the first exploratory interactive pass exposed the temporary `NewBlueprint` identity route, duplicate entries, focus stealing, and incomplete-creation cleanup risk. The P0 implementation defects are now repaired and covered by build/headless contracts; manual Editor timing is deliberately deferred to M13.2G usability measurement and is not an M13.1 correctness gate**
-- Next acceptance: **replay successful and interrupted create/rename/duplicate/delete from a clean packaged SDK consumer and prove that recovery leaves no stale source, deployment, UE package, reference, or redirector**
-- Next user-visible slice: **install the packaged SDK into a clean project and run the complete Script Class lifecycle from CMD with the same results as the source workspace**
+- Next acceptance: **one dependency graph computes reflection, binding, semantic, managed, native, chunk, and deployment invalidation; a no-change Build/Play skips every expensive stage, while isolated source and API-shape edits rebuild only their transitive dependents**
+- Next user-visible slice: **make project-local Build/Play fast enough for daily use by showing exactly which stages ran or were skipped and why**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -156,6 +156,7 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.2A-2b2a Roslyn reference plan | UE 5.8.1 build, focused CMD-mode `ScriptClass.AssetOperations`, refreshed 25/25 full Automation, 648/648 managed tests, and 110/110 repository invariants pass. Rename rewrites only Roslyn-bound declarations and cross-file type uses while preserving non-semantic text and source encoding; delete reports exact external semantic uses; cross-file conflicts and injected failure prove byte-exact rollback. Evidence is at `artifacts/m13-2a2/automation/script-class-semantic-reference-focused-3.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-semantic-reference-final.log` |
 | M13.2A-2b2b persisted crash recovery | UE 5.8.1 build, focused CMD-mode `ScriptClass.AssetOperations`, refreshed 25/25 full Automation, 648/648 managed tests, and 111/111 repository invariants pass. Every operation writes bounded package/external preimages and explicit phases; live-owner receipts are deferred; orphan recovery archives interrupted bytes before exact restore; success and rollback close their receipts. Evidence is at `artifacts/m13-2a2/automation/script-class-journal-focused-2.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-journal-final.log` |
 | M13.2A-2b2c UE reference and duplicate closure | UE 5.8.1 build, focused UE-reference/rollback, dirty-referencer rejection, Blueprint Asset Definition, and direct-duplicate cleanup CMD tests, refreshed 25/25 full Automation, 648/648 managed tests, and 112/112 repository invariants pass. Rename snapshots and rewrites external UE referencers, deletes old redirectors, verifies dependency closure, and reverses the rewrite on failure. Script Class proxies use `UUnifiedScriptBlueprint`; Content Browser rejects bare rename/duplicate and the Asset Registry guard removes direct Blueprint-only copies. Evidence is at `artifacts/m13-2a2/automation/script-class-ue-reference-duplicate-final.log`, `artifacts/m13-2a2/automation/script-blueprint-definition-focused.log`, and `artifacts/m13-2a2/automation/unifiedscript-unreal-ue-reference-duplicate-final-3.log` |
+| M13.2A-2b2d packaged lifecycle replay | Factory create now writes the same bounded recovery receipt as rename/duplicate/delete, saves both UE packages before commit, and restores exact external/package preimages on failure. The source CMD runner and a fresh packaged-SDK consumer replay all four success, injected rollback, and persisted recovery paths with byte-exact baseline restoration and zero pending receipts. The clean consumer also passes first-Play create/reload, Win64 Cook/Package, Validate, Doctor, no-change Repair, and SDK rollback in 569,454 ms; refreshed 25/25 CMD Automation, 648/648 managed tests, and 113/113 repository invariants pass. Evidence is at `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/packaged-native-onboarding-report.json` and `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/script-class-lifecycle-replay/packaged-script-class-lifecycle-report.json` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -2592,7 +2593,7 @@ not expose generator ordering or runtime-generation bookkeeping.
         referencers, stage both UE assets through a reversible tombstone, remove
         source/deployment/matching first-Play identity, prove byte-exact rollback,
         and reject bare destructive operations on sidecar or generated Blueprint
-      - [ ] **M13.2A-2b2 — reference and recovery closure:** rewrite reviewed
+      - [x] **M13.2A-2b2 — reference and recovery closure:** rewrite reviewed
         managed/UE references, close generic generated-Blueprint duplication,
         persist and replay crash receipts, and verify the full lifecycle through
         the packaged SDK
@@ -2609,8 +2610,9 @@ not expose generator ordering or runtime-generation bookkeeping.
         - [x] **M13.2A-2b2c — UE reference and duplicate closure:** repair UE
           referencers/redirectors during complete-class operations and reject or
           absorb generic generated-Blueprint duplication
-        - [ ] **M13.2A-2b2d — packaged lifecycle replay:** replay successful and
-          interrupted rename/duplicate/delete from a clean packaged SDK consumer
+        - [x] **M13.2A-2b2d — packaged lifecycle replay:** replay successful and
+          interrupted create/rename/duplicate/delete from a clean packaged SDK
+          consumer and prove exact baseline restoration with zero pending receipts
 - [ ] **M13.2B — dependency-aware Play:** make Build/Play run the minimum
   required reflection, binding, semantic, managed compile, native compile, and
   deployment steps from one dependency graph
@@ -2719,6 +2721,24 @@ Content Browser rename/duplicate; an Asset Registry creation guard also detects
 and removes low-level Blueprint-only copies that bypass that UI contract. The
 UE 5.8.1 build, both focused CMD contracts, refreshed 25/25 full CMD Automation,
 648/648 managed tests, and 112/112 repository invariants pass.
+
+Progress (2026-09-01, M13.2A-2b2d): Script Class creation now enters the same
+write-ahead recovery protocol as rename, duplicate, and delete. Before external
+publication the factory snapshots managed source, deployment, first-Play,
+generated Blueprint, sidecar, and every UE package sidecar; it persists the
+receipt, publishes all surfaces, saves both UE packages, then commits. Injected
+post-publication failure and startup recovery both restore byte-exact preimages
+and remove newly-created outputs. The receipt reader now accepts `create`, and a
+current-process owner is deferred deterministically. The new packaged lifecycle
+runner fingerprints the managed/deployment/UE-package surface, runs the full
+`ScriptClass.AssetOperations` contract through `UnrealEditor-Cmd` + NullRHI, and
+requires an identical final fingerprint with zero pending receipts. A fresh SDK
+consumer passed all four success, rollback, and persisted-recovery paths plus
+first-Play create/reload, two Win64 Cook/Package passes, Validate, Doctor,
+no-change Repair, and SDK rollback in 569,454 ms. Evidence is at
+`artifacts/m13-2a2d/clean-consumer-create-recovery-fix/packaged-native-onboarding-report.json`.
+The refreshed full gate passes 25/25 CMD Automation, 648/648 managed tests, and
+113/113 repository invariants.
 
 ### M13.3 — Managed Script Class and Blueprint parity
 

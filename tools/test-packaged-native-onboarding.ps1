@@ -10,7 +10,9 @@ param(
 
     [switch]$Resume,
 
-    [switch]$IncludeScriptClassFirstPlay
+    [switch]$IncludeScriptClassFirstPlay,
+
+    [switch]$IncludeScriptClassLifecycleReplay
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,11 +38,14 @@ $reportPath = Join-Path $outputRoot 'packaged-native-onboarding-report.json'
 $baselinePath = Join-Path $outputRoot 'blueprint-only-baseline.json'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
 $scriptClassGoldenPath = Join-Path $repoRoot 'tools\test-script-class-golden-path.ps1'
+$scriptClassLifecycleReplay = Join-Path $repoRoot `
+    'tools\test-packaged-script-class-lifecycle.ps1'
 $originalProjectSha256 = $null
 $originalDefaultEngineSha256 = $null
 $originalUserSentinelSha256 = $null
 $userSentinelPath = Join-Path $projectRoot 'Content\UserOwned\keep.txt'
 $scriptClassFirstPlayReport = $null
+$scriptClassLifecycleReport = $null
 
 function Write-Utf8 {
     param([string]$Path, [string]$Text)
@@ -439,6 +444,51 @@ if ($IncludeScriptClassFirstPlay) {
     }
 }
 
+if ($IncludeScriptClassLifecycleReplay) {
+    $scriptClassLifecycleOutput = Join-Path $outputRoot `
+        'script-class-lifecycle-replay'
+    Invoke-LoggedCommand `
+        -FilePath 'powershell.exe' `
+        -Arguments @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', $scriptClassLifecycleReplay,
+            '-Project', $project,
+            '-EngineRoot', $enginePath,
+            '-OutputDirectory', $scriptClassLifecycleOutput) `
+        -LogPath (Join-Path $outputRoot `
+            'script-class-lifecycle-replay.log') `
+        -FailureMessage 'Packaged Script Class lifecycle replay failed.'
+    $scriptClassLifecycleReportPath = Join-Path `
+        $scriptClassLifecycleOutput `
+        'packaged-script-class-lifecycle-report.json'
+    $scriptClassLifecycleReport = Get-Content `
+        -LiteralPath $scriptClassLifecycleReportPath -Raw | ConvertFrom-Json
+    $lifecycleOperations = @($scriptClassLifecycleReport.operations)
+    if ($scriptClassLifecycleReport.schemaVersion -ne
+            'unifiedscript.packaged-script-class-lifecycle/v0.1' -or
+        $scriptClassLifecycleReport.status -ne 'passed' -or
+        $lifecycleOperations.Count -ne 4 -or
+        @($lifecycleOperations | Where-Object {
+            $_.success -ne 'passed' -or
+            $_.injectedRollback -ne 'passed' -or
+            $_.recoveryReceipt -ne 'persisted-recovery-passed'
+        }).Count -ne 0 -or
+        [int]$scriptClassLifecycleReport.closure.pendingReceipts -ne 0 -or
+        $scriptClassLifecycleReport.closure.managedSources -ne
+            'baseline-restored' -or
+        $scriptClassLifecycleReport.closure.deployment -ne
+            'byte-exact-baseline' -or
+        $scriptClassLifecycleReport.closure.uePackages -ne
+            'baseline-restored' -or
+        $scriptClassLifecycleReport.closure.ueReferences -ne
+            'rewritten-and-rollback-verified' -or
+        $scriptClassLifecycleReport.closure.redirectors -ne
+            'removed-and-rollback-verified') {
+        throw "Packaged Script Class lifecycle report is incomplete: $scriptClassLifecycleReportPath"
+    }
+}
+
 $validateReportPath = Join-Path $projectRoot `
     'Saved\UnifiedScript\ProjectSetup\native-validate.json'
 if (-not $Resume -or
@@ -640,6 +690,11 @@ $report = [ordered]@{
         [ordered]@{ included = $false }
     } else {
         $scriptClassFirstPlayReport
+    }
+    scriptClassLifecycleReplay = if ($null -eq $scriptClassLifecycleReport) {
+        [ordered]@{ included = $false }
+    } else {
+        $scriptClassLifecycleReport
     }
     package = [ordered]@{
         archiveRoot = $packageRoot

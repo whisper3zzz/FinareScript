@@ -221,7 +221,8 @@ bool ReadReceipt(
         !Root->TryGetStringField(TEXT("transactionId"), TransactionId) ||
         !FGuid::Parse(TransactionId, ParsedTransactionId) ||
         !Root->TryGetStringField(TEXT("operation"), Operation) ||
-        (Operation != TEXT("rename") &&
+        (Operation != TEXT("create") &&
+            Operation != TEXT("rename") &&
             Operation != TEXT("duplicate") &&
             Operation != TEXT("delete")) ||
         !Root->TryGetStringField(TEXT("phase"), PhaseText) ||
@@ -562,8 +563,10 @@ bool RecoverPending(
             }
             continue;
         }
+        const uint32 CurrentProcessId = FPlatformProcess::GetCurrentProcessId();
         if (!bIncludeCurrentProcessForTesting &&
-            FPlatformProcess::IsApplicationRunning(Receipt.OwnerProcessId))
+            (Receipt.OwnerProcessId == CurrentProcessId ||
+             FPlatformProcess::IsApplicationRunning(Receipt.OwnerProcessId)))
         {
             ++OutReport.DeferredLiveReceiptCount;
             continue;

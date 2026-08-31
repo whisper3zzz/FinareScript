@@ -5,6 +5,13 @@
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptClassFactory.generated.h"
 
+/** Deterministic creation failure seam used by headless transaction coverage. */
+enum class EUnifiedScriptClassCreationFailurePoint : uint8
+{
+    None,
+    AfterExternalPublication,
+};
+
 /** Shared implementation for the Actor and ActorComponent Script Class assets. */
 UCLASS(Abstract)
 class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptClassFactory : public UBlueprintFactory
@@ -30,10 +37,29 @@ public:
 
     EUnifiedScriptClassKind GetScriptClassKind() const { return ScriptClassKind; }
 
+#if WITH_DEV_AUTOMATION_TESTS
+    void SetFailurePointForTesting(
+        EUnifiedScriptClassCreationFailurePoint InFailurePoint)
+    {
+        FailurePointForTesting = InFailurePoint;
+    }
+
+    const FString& GetLastRecoveryReceiptPathForTesting() const
+    {
+        return LastRecoveryReceiptPathForTesting;
+    }
+#endif
+
 protected:
     explicit UUnifiedScriptClassFactory(const FObjectInitializer& ObjectInitializer);
 
     EUnifiedScriptClassKind ScriptClassKind = EUnifiedScriptClassKind::None;
+
+#if WITH_DEV_AUTOMATION_TESTS
+    EUnifiedScriptClassCreationFailurePoint FailurePointForTesting =
+        EUnifiedScriptClassCreationFailurePoint::None;
+    FString LastRecoveryReceiptPathForTesting;
+#endif
 };
 
 /** Placeable managed Actor class backed by AUnifiedScriptActor. */

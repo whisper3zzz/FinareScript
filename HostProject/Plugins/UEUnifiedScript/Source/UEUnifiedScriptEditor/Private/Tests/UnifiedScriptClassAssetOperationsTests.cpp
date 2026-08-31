@@ -5,6 +5,7 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
+#include "Dom/JsonObject.h"
 #include "Engine/Blueprint.h"
 #include "Editor.h"
 #include "HAL/FileManager.h"
@@ -12,6 +13,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptAssetDefinition.h"
@@ -33,6 +36,46 @@ FString ResolveConfiguredPath(const FString& Value)
     Result = FPaths::ConvertRelativePathToFull(Result);
     FPaths::NormalizeFilename(Result);
     return Result;
+}
+
+bool ResolveProjectDeploymentPath(
+    FString& OutDeploymentPath,
+    FString& OutError)
+{
+    const FString ConfigPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectDir(),
+        TEXT("Config/UnifiedScript.onboarding.json")));
+    FString Json;
+    if (!FFileHelper::LoadFileToString(Json, *ConfigPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot read packaged project onboarding configuration '%s'."),
+            *ConfigPath);
+        return false;
+    }
+    TSharedPtr<FJsonObject> Config;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    const TSharedPtr<FJsonObject>* Deployment = nullptr;
+    FString Manifest;
+    if (!FJsonSerializer::Deserialize(Reader, Config) || !Config.IsValid() ||
+        !Config->TryGetObjectField(TEXT("deployment"), Deployment) ||
+        Deployment == nullptr ||
+        !(*Deployment)->TryGetStringField(TEXT("manifest"), Manifest) ||
+        Manifest.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Packaged project onboarding configuration '%s' has no deployment manifest."),
+            *ConfigPath);
+        return false;
+    }
+    if (FPaths::IsRelative(Manifest))
+    {
+        Manifest = FPaths::Combine(FPaths::GetPath(ConfigPath), Manifest);
+    }
+    OutDeploymentPath = FPaths::ConvertRelativePathToFull(Manifest);
+    FPaths::NormalizeFilename(OutDeploymentPath);
+    OutError.Reset();
+    return true;
 }
 
 UUnifiedScriptAsset* GetScriptAsset(UBlueprint* Blueprint)
@@ -106,7 +149,9 @@ bool ReadBytes(const FString& Path, TArray<uint8>& OutBytes)
     return FFileHelper::LoadFileToArray(OutBytes, *Path);
 }
 
-bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
+bool RunJournalRecoveryProbeForOperation(
+    FAutomationTestBase& Test,
+    const FString& Operation)
 {
     using namespace UE::UnifiedScript::ClassOperationJournal;
     const FString TransactionId =
@@ -114,6 +159,7 @@ bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
     const FString ProbeRoot = FPaths::Combine(
         FPaths::ProjectSavedDir(),
         TEXT("UnifiedScript/ClassOperationJournalTests"),
+        Operation,
         TransactionId);
     const FString ExistingPath = ProbeRoot / TEXT("existing.bin");
     const FString CreatedPath = ProbeRoot / TEXT("created.bin");
@@ -148,7 +194,7 @@ bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
     FReceipt Receipt;
     if (!Test.TestTrue(
             *FString::Printf(TEXT("Persists a prepared recovery receipt: %s"), *Error),
-            Begin(TEXT("rename"), TransactionId, Snapshots, Receipt, Error)) ||
+            Begin(Operation, TransactionId, Snapshots, Receipt, Error)) ||
         !Test.TestTrue(
             TEXT("Advances the recovery receipt after asset mutation"),
             Advance(Receipt, EPhase::AssetsMutated, Error)) ||
@@ -168,9 +214,12 @@ bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
     }
 
     FRecoveryReport LiveOwnerReport;
+    const bool bLiveOwnerScanAccepted = RecoverPending(LiveOwnerReport, Error);
     if (!Test.TestTrue(
-            TEXT("Recovery scan accepts a live-owner receipt"),
-            RecoverPending(LiveOwnerReport, Error)) ||
+            *FString::Printf(
+                TEXT("Recovery scan accepts a live-owner receipt: %s"),
+                *Error),
+            bLiveOwnerScanAccepted) ||
         !Test.TestEqual(
             TEXT("Recovery defers a receipt owned by the live Editor process"),
             LiveOwnerReport.DeferredLiveReceiptCount,
@@ -234,6 +283,23 @@ bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
     }
     return bPassed;
 }
+
+bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
+{
+    for (const FString& Operation : {
+             FString(TEXT("create")),
+             FString(TEXT("rename")),
+             FString(TEXT("duplicate")),
+             FString(TEXT("delete")),
+         })
+    {
+        if (!RunJournalRecoveryProbeForOperation(Test, Operation))
+        {
+            return false;
+        }
+    }
+    return true;
+}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -249,9 +315,18 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         return false;
     }
     FScopedOperationCleanup Cleanup;
-    Cleanup.DeploymentPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
-        FPaths::ProjectDir(),
-        TEXT("../samples/Unreal/UnifiedScript.Unreal.Demo.deployment.json")));
+    FString SettingsError;
+    const bool bResolvedDeployment = ResolveProjectDeploymentPath(
+        Cleanup.DeploymentPath,
+        SettingsError);
+    if (!TestTrue(
+            *FString::Printf(
+                TEXT("Resolves the active project's deployment manifest: %s"),
+                *SettingsError),
+            bResolvedDeployment))
+    {
+        return false;
+    }
     if (!TestTrue(
             TEXT("Snapshots deployment before class operations"),
             ReadBytes(Cleanup.DeploymentPath, Cleanup.DeploymentBytes)))
@@ -275,6 +350,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     const FString OriginalName = TEXT("M13Ops_") + Suffix;
     const FString RenamedName = OriginalName + TEXT("_Renamed");
     const FString DuplicateName = OriginalName + TEXT("_Copy");
+    const FString CreateFailureName = OriginalName + TEXT("_CreateRollback");
     const FString RenameFailureName = OriginalName + TEXT("_RenameRollback");
     const FString DuplicateFailureName = OriginalName + TEXT("_DuplicateRollback");
     const FString BareDuplicateName = OriginalName + TEXT("_BareBlueprintCopy");
@@ -288,6 +364,9 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     const FString RenamedSidecar = PackageRoot / (TEXT("SA_") + RenamedName);
     const FString DuplicatePackage = PackageRoot / DuplicateName;
     const FString DuplicateSidecar = PackageRoot / (TEXT("SA_") + DuplicateName);
+    const FString CreateFailurePackage = PackageRoot / CreateFailureName;
+    const FString CreateFailureSidecar =
+        PackageRoot / (TEXT("SA_") + CreateFailureName);
     const FString RenameFailurePackage = PackageRoot / RenameFailureName;
     const FString RenameFailureSidecar =
         PackageRoot / (TEXT("SA_") + RenameFailureName);
@@ -307,6 +386,8 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         RenamedSidecar,
         DuplicatePackage,
         DuplicateSidecar,
+        CreateFailurePackage,
+        CreateFailureSidecar,
         RenameFailurePackage,
         RenameFailureSidecar,
         DuplicateFailurePackage,
@@ -340,6 +421,21 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     Cleanup.Assets.Add(Blueprint);
     Cleanup.Assets.Add(ScriptAsset);
     Cleanup.SourcePaths.Add(ResolveConfiguredPath(ScriptAsset->SourcePath));
+    int32 NamespaceSeparator = INDEX_NONE;
+    if (!TestTrue(
+            TEXT("Created Script Class exposes its configured managed namespace"),
+            ScriptAsset->ScriptTypeName.FindLastChar(
+                TEXT('.'),
+                NamespaceSeparator)) ||
+        !TestEqual(
+            TEXT("Created Script Class type identity matches its asset name"),
+            ScriptAsset->ScriptTypeName.Mid(NamespaceSeparator + 1),
+            OriginalName))
+    {
+        return false;
+    }
+    const FString ManagedNamespace =
+        ScriptAsset->ScriptTypeName.Left(NamespaceSeparator);
     FSavePackageArgs SaveArguments;
     SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
     const FString OriginalBlueprintFilename = FPackageName::LongPackageNameToFilename(
@@ -365,6 +461,70 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     {
         return false;
     }
+
+    TArray<uint8> DeploymentBeforeCreateFailure;
+    TArray<uint8> RequestBeforeCreateFailure;
+    TestTrue(
+        TEXT("Snapshots deployment before create rollback coverage"),
+        ReadBytes(Cleanup.DeploymentPath, DeploymentBeforeCreateFailure));
+    TestTrue(
+        TEXT("Snapshots request before create rollback coverage"),
+        ReadBytes(Cleanup.FirstPlayRequestPath, RequestBeforeCreateFailure));
+    const FString CreateFailureSourcePath = FPaths::Combine(
+        FPaths::GetPath(ResolveConfiguredPath(ScriptAsset->SourcePath)),
+        CreateFailureName + TEXT(".cs"));
+    Cleanup.SourcePaths.Add(CreateFailureSourcePath);
+    UPackage* CreateFailureOuter = CreatePackage(*CreateFailurePackage);
+    UUnifiedScriptActorClassFactory* CreateFailureFactory =
+        NewObject<UUnifiedScriptActorClassFactory>();
+    CreateFailureFactory->SetFailurePointForTesting(
+        EUnifiedScriptClassCreationFailurePoint::AfterExternalPublication);
+    AddExpectedError(
+        TEXT("Injected Script Class creation failure after external publication"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    UObject* FailedCreate = CreateFailureFactory->FactoryCreateNew(
+        UBlueprint::StaticClass(),
+        CreateFailureOuter,
+        *CreateFailureName,
+        RF_Public | RF_Standalone | RF_Transactional,
+        nullptr,
+        GWarn,
+        TEXT("UnifiedScriptClassCreateRollbackAutomation"));
+    TestNull(
+        TEXT("Injected post-publication failure rejects Script Class creation"),
+        FailedCreate);
+    const FString CreateRecoveryReceipt =
+        CreateFailureFactory->GetLastRecoveryReceiptPathForTesting();
+    TestFalse(
+        TEXT("Create rollback closes its recovery receipt"),
+        CreateRecoveryReceipt.IsEmpty() ||
+            IFileManager::Get().FileExists(*CreateRecoveryReceipt));
+    TArray<uint8> DeploymentAfterCreateFailure;
+    TArray<uint8> RequestAfterCreateFailure;
+    TestTrue(
+        TEXT("Reads deployment after create rollback"),
+        ReadBytes(Cleanup.DeploymentPath, DeploymentAfterCreateFailure));
+    TestTrue(
+        TEXT("Reads request after create rollback"),
+        ReadBytes(Cleanup.FirstPlayRequestPath, RequestAfterCreateFailure));
+    TestEqual(
+        TEXT("Create rollback restores deployment bytes exactly"),
+        DeploymentAfterCreateFailure,
+        DeploymentBeforeCreateFailure);
+    TestEqual(
+        TEXT("Create rollback restores request bytes exactly"),
+        RequestAfterCreateFailure,
+        RequestBeforeCreateFailure);
+    TestFalse(
+        TEXT("Create rollback removes the managed source"),
+        IFileManager::Get().FileExists(*CreateFailureSourcePath));
+    TestFalse(
+        TEXT("Create rollback removes the Blueprint package"),
+        FPackageName::DoesPackageExist(CreateFailurePackage));
+    TestFalse(
+        TEXT("Create rollback removes the Script Asset package"),
+        FPackageName::DoesPackageExist(CreateFailureSidecar));
 
     UPackage* ReferencerOuter = CreatePackage(*ReferencerPackage);
     UUnifiedScriptAsset* UEReferencer = NewObject<UUnifiedScriptAsset>(
@@ -425,7 +585,8 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         OriginalName + TEXT("_RenameReference.cs"));
     Cleanup.SourcePaths.Add(RenameReferencePath);
     const FString RenameReferenceSource = FString::Printf(
-        TEXT("namespace UnifiedScript.Unreal.Demo; sealed class RenameReference { %s? Value; const string Text = \"%s\"; }\n"),
+        TEXT("namespace %s; sealed class RenameReference { %s? Value; const string Text = \"%s\"; }\n"),
+        *ManagedNamespace,
         *OriginalName,
         *OriginalName);
     TestTrue(
@@ -458,7 +619,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Rename updates managed type identity"),
         ScriptAsset->ScriptTypeName,
-        FString(TEXT("UnifiedScript.Unreal.Demo.")) + RenamedName);
+        ManagedNamespace + TEXT(".") + RenamedName);
     TestEqual(
         TEXT("Rename updates generated class identity"),
         ScriptAsset->GeneratedClassPath.ToString(),
@@ -743,7 +904,8 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         DuplicateName + TEXT("_ReferenceProbe.cs"));
     Cleanup.SourcePaths.Add(ManagedReferenceProbePath);
     const FString ManagedReferenceProbe = FString::Printf(
-        TEXT("namespace UnifiedScript.Unreal.Demo; sealed class ReferenceProbe { %s? Value; }\n"),
+        TEXT("namespace %s; sealed class ReferenceProbe { %s? Value; }\n"),
+        *ManagedNamespace,
         *DuplicateName);
     TestTrue(
         TEXT("Writes an external managed reference probe"),
