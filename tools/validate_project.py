@@ -6834,6 +6834,42 @@ def main() -> int:
     checks.append(
         "M13.2E-1 opens one canonical Script Asset snapshot as Graph or C#"
     )
+    source_text_patch_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourceTextPatch.cs"
+    ).read_text(encoding="utf-8")
+    authoring_workspace_test = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpAuthoringWorkspaceTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.csharp-source-text-patch/v0.1" in source_text_patch_source
+        and "MaximumSourceCharacters = 512 * 1024" in source_text_patch_source
+        and "BaselineContentDigest" in source_text_patch_source
+        and "JsonUnmappedMemberHandling.Disallow" in source_text_patch_source
+        and "Prepare(CSharpSourceTextPatchDocument patch)" in authoring_workspace_source
+        and "CSharpSourceTextPatchDiagnosticCodes.BaselineMismatch"
+        in authoring_workspace_source
+        and '"/api/authoring/preview/source-text"' in debug_server_source
+        and '"/api/authoring/source-text"' in debug_server_source
+        and "transaction.PreviewToken is null" in debug_server_source
+        and "BuildSourceTextPatch" in unreal_authoring_workbench_source
+        and 'TEXT("/api/authoring/preview/source-text")'
+        in unreal_authoring_workbench_source
+        and "HandleApplyCodeSource" in unreal_authoring_widget
+        and "HandleRevertCodeSource" in unreal_authoring_widget
+        and "bCodeEditDirty" in unreal_authoring_widget
+        and "SourceTextMutationPreservesStableIdentitiesAndUnchangedComments"
+        in authoring_workspace_test
+        and "SourceTextEndpointRequiresAndCommitsTheExactPreviewCandidate"
+        in authoring_http_test
+        and "C# source transaction hashes the exact UTF-8 baseline"
+        in unreal_authoring_test
+        and "[x] **M13.2E-2 — restricted transactional C# editing:**"
+        in roadmap_document,
+        "M13.2E-2 bounded C# edit buffer, exact preview-token commit, or regression proof is incomplete",
+    )
+    checks.append(
+        "M13.2E-2 commits bounded C# buffers through exact semantic preview tokens"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

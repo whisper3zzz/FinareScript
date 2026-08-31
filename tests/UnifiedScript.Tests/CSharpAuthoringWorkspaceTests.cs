@@ -129,6 +129,96 @@ public sealed class CSharpAuthoringWorkspaceTests
     }
 
     [Fact]
+    public void SourceTextMutationPreservesStableIdentitiesAndUnchangedComments()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(Source, path));
+        CSharpAuthoringSnapshot baseline = workspace.Current;
+        ScriptStateDeclaration baselineState = baseline.Analysis.ScriptAssets!.Assets[0].States
+            .Single(static state => state.Name == "BaseDamage");
+        ScriptFunctionDeclaration baselineFunction = baseline.Analysis.ScriptAssets.Assets[0].Functions
+            .Single(static function => function.Name == "ApplyDamage");
+        string edited = Source.Replace(
+            "float scaled = incomingDamage * BaseDamage;",
+            "// Keep this authored comment.\n        float scaled = incomingDamage * BaseDamage + 1;",
+            StringComparison.Ordinal);
+        CSharpSourceTextPatchDocument patch = CSharpSourceTextPatchDocument.Create(
+            path,
+            Source,
+            edited);
+
+        CSharpAuthoringMutation mutation = workspace.Prepare(patch);
+
+        Assert.True(mutation.Succeeded);
+        Assert.Same(baseline, workspace.Current);
+        Assert.Equal(2, mutation.Snapshot!.Revision);
+        Assert.Contains("// Keep this authored comment.", mutation.Snapshot.Request.Sources[0].Source);
+        ScriptAssetDeclaration candidateAsset = mutation.Snapshot.Analysis.ScriptAssets!.Assets[0];
+        Assert.Equal(
+            baselineState.Id,
+            candidateAsset.States.Single(static state => state.Name == "BaseDamage").Id);
+        Assert.Equal(
+            baselineFunction.Id,
+            candidateAsset.Functions.Single(static function => function.Name == "ApplyDamage").Id);
+    }
+
+    [Fact]
+    public void SourceTextMutationRejectsStaleDigestUnknownPathNoOpAndCompilerErrors()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(Source, path));
+
+        CSharpAuthoringMutation stale = workspace.Prepare(new CSharpSourceTextPatchDocument(
+            CSharpSourceTextPatchDocument.CurrentSchemaVersion,
+            path,
+            CSharpSourceTextPatchJson.ComputeContentDigest(Source + "// stale"),
+            Source.Replace("= 20;", "= 21;", StringComparison.Ordinal)));
+        CSharpAuthoringMutation unknown = workspace.Prepare(CSharpSourceTextPatchDocument.Create(
+            "Tests/Authoring/Other.cs",
+            Source,
+            Source.Replace("= 20;", "= 21;", StringComparison.Ordinal)));
+        CSharpAuthoringMutation noOp = workspace.Prepare(
+            CSharpSourceTextPatchDocument.Create(path, Source, Source));
+        CSharpAuthoringMutation invalid = workspace.Prepare(CSharpSourceTextPatchDocument.Create(
+            path,
+            Source,
+            Source.Replace("return scaled;", "return MissingSymbol;", StringComparison.Ordinal)));
+
+        Assert.Contains(stale.Diagnostics, static diagnostic =>
+            diagnostic.Code == CSharpSourceTextPatchDiagnosticCodes.BaselineMismatch);
+        Assert.Contains(unknown.Diagnostics, static diagnostic =>
+            diagnostic.Code == CSharpSourceTextPatchDiagnosticCodes.SourceNotFound);
+        Assert.Contains(noOp.Diagnostics, static diagnostic =>
+            diagnostic.Code == CSharpSourceTextPatchDiagnosticCodes.NoChange);
+        Assert.False(invalid.Succeeded);
+        Assert.Contains(invalid.Diagnostics, static diagnostic =>
+            diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+        Assert.Equal(1, workspace.Current.Revision);
+        Assert.Equal(Source, workspace.Current.Request.Sources[0].Source);
+    }
+
+    [Fact]
+    public void SourceTextPatchJsonIsBoundedNormalizedAndRejectsUnknownProperties()
+    {
+        CSharpSourceTextPatchDocument patch = CSharpSourceTextPatchDocument.Create(
+            "Tests\\Authoring\\DamagePolicy.cs",
+            Source,
+            Source.Replace("= 20;", "= 21;", StringComparison.Ordinal));
+
+        string json = CSharpSourceTextPatchJson.Serialize(patch, writeIndented: false);
+        CSharpSourceTextPatchDocument roundTrip = CSharpSourceTextPatchJson.Deserialize(json);
+
+        Assert.Equal("Tests/Authoring/DamagePolicy.cs", roundTrip.SourcePath);
+        Assert.Equal(CSharpSourceTextPatchJson.ComputeContentDigest(Source), roundTrip.BaselineContentDigest);
+        Assert.Throws<JsonException>(() => CSharpSourceTextPatchJson.Deserialize(
+            json[..^1] + ",\"unexpected\":true}"));
+        Assert.Throws<JsonException>(() => CSharpSourceTextPatchJson.NormalizeAndValidate(
+            patch with { SourcePath = "../DamagePolicy.cs" }));
+        Assert.Throws<JsonException>(() => CSharpSourceTextPatchJson.NormalizeAndValidate(
+            patch with { SourceText = new string('x', CSharpSourceTextPatchJson.MaximumSourceCharacters + 1) }));
+    }
+
+    [Fact]
     public void EmptyIdentitySidecarIsStabilizedBeforeTheFirstRename()
     {
         const string path = "Tests/Authoring/DamagePolicy.cs";

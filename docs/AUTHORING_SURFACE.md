@@ -339,16 +339,30 @@ the receipt exposes `batchPrepare`, `batchCommit`, `batchAbort`, and
 `batchFinalize` rather than hiding a partial update behind one reload count.
 
 M13.2E-1 makes the two authoring projections explicit without introducing a
-second source of truth. Authoring workspace v0.5 already builds `SourceText`,
-the Script Asset declarations, Graph, and Surface from one
-`CSharpAuthoringSnapshot`; the UE parser now requires and retains that exact
-source text. The Script Asset editor exposes a **Graph / C#** switch backed by
-an `SWidgetSwitcher`. Graph keeps the native `SGraphEditor`; C# renders the
-exact Workbench revision in a read-only monospace view and can refresh both
-projections together. Switching to C# requests the canonical snapshot when it
-is not loaded, while a standalone `.surface.json` is labelled as non-canonical
-instead of silently reading a potentially different file. Accepted authoring
-transactions replace the source and Graph projections together through the
-existing `AdoptWorkspace` path. Direct C# editing remains deliberately outside
-this slice; M13.2E-2 will submit restricted source changes through the same
-preview-token and semantic-Diff transaction used by Graph edits.
+second source of truth. Authoring workspace v0.5 builds `SourceText`, the Script
+Asset declarations, Graph, and Surface from one `CSharpAuthoringSnapshot`; the
+UE parser requires and retains that exact source text. The Script Asset editor
+exposes a **Graph / C#** switch backed by an `SWidgetSwitcher`. Graph keeps the
+native `SGraphEditor`, while a standalone `.surface.json` remains labelled as
+non-canonical instead of silently reading a potentially different file.
+
+M13.2E-2 turns the canonical C# projection into a restricted transaction
+buffer. Editing changes only the Slate-owned buffer and marks it dirty; it does
+not write the source file or optimistically replace Graph nodes. **Preview &
+Apply** posts `unifiedscript.csharp-source-text-patch/v0.1` with the exact
+logical source path, a SHA-256 digest of the loaded baseline text, and at most
+512 Ki characters of candidate text. The request also carries the loaded
+Workbench revision. The server rejects an unknown source, stale digest, stale
+revision, no-op, compiler error, or external file conflict before publication.
+
+Every accepted C# edit must first use `/api/authoring/preview/source-text`.
+Preview fully analyzes the candidate, reconciles stable identities, regenerates
+Graph/Surface, and presents the same stable-ID semantic Diff plus byte-exact
+before/after text used by Graph authoring. The write endpoint
+`/api/authoring/source-text` requires the returned preview token and commits the
+immutable prepared candidate; sending edited JSON or a different transaction
+context cannot change what was reviewed. Publication remains the existing
+atomic source, `.usids`, artifacts, history, CoreCLR, and daily Build & Reload
+path. **Revert** restores the loaded canonical text. Refresh, Graph mutation,
+history navigation, and Surface switching are blocked while the C# buffer is
+dirty so an unrelated workspace adoption cannot silently discard it.

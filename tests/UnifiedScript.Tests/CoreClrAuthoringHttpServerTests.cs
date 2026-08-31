@@ -168,6 +168,121 @@ public sealed class CoreClrAuthoringHttpServerTests
     }
 
     [Fact]
+    public async Task SourceTextEndpointRequiresAndCommitsTheExactPreviewCandidate()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"unifiedscript-source-text-http-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = sourcePath + ".usids";
+        string historyPath = sourcePath + ".ushistory.json";
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(
+            Path.Combine(contentRoot, "index.html"),
+            "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        var request = new CSharpCompilationRequest(
+            "UnifiedScript.Analysis",
+            [new CSharpSourceDocument(
+                logicalPath,
+                Source,
+                IdentitySidecarDocument.CreateEmpty(logicalPath))]);
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                request,
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath));
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{port}/"),
+            };
+
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            ScriptAssetDeclaration baselineAsset = Assert.Single(baseline.ScriptAssets.Assets);
+            SemanticId baselineFunctionId = Assert.Single(baselineAsset.Functions).Id;
+            string editedSource = baseline.SourceText.Replace(
+                "float scaled = incomingDamage * BaseDamage;",
+                "// Authored in the transactional C# view.\n        float scaled = incomingDamage * BaseDamage + 1;",
+                StringComparison.Ordinal);
+            string patchJson = CSharpSourceTextPatchJson.Serialize(
+                CSharpSourceTextPatchDocument.Create(
+                    baseline.SourcePath,
+                    baseline.SourceText,
+                    editedSource));
+            AuthoringPreviewResponse preview = await PreviewAsync(
+                client,
+                "api/authoring/preview/source-text",
+                patchJson,
+                baseline.Revision,
+                "txn-source-text",
+                "Edit C# source");
+
+            Assert.Equal(baseline.Revision, preview.BaselineRevision);
+            Assert.Equal(baseline.Revision + 1, preview.CandidateRevision);
+            Assert.True(preview.PublishesRuntime);
+            AuthoringPreviewFile file = Assert.Single(preview.Files);
+            Assert.Equal(logicalPath, file.Path);
+            Assert.Equal(Source, file.BeforeText);
+            Assert.Equal(editedSource, file.AfterText);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            using (HttpRequestMessage unconfirmed = AuthoringRequest(
+                "api/authoring/source-text",
+                patchJson,
+                baseline.Revision,
+                "txn-source-text-unconfirmed",
+                "Unconfirmed C# edit"))
+            using (HttpResponseMessage rejected = await client.SendAsync(unconfirmed))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+                Assert.Contains(
+                    "UAW1012",
+                    await rejected.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+            }
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringWorkspaceResponse committed = await PostAsync(
+                client,
+                "api/authoring/source-text",
+                patchJson,
+                baseline.Revision,
+                "txn-source-text",
+                "Edit C# source",
+                previewToken: preview.PreviewToken);
+
+            Assert.Equal(baseline.Revision + 1, committed.Revision);
+            Assert.Equal(editedSource, committed.SourceText);
+            Assert.Equal(editedSource, await File.ReadAllTextAsync(sourcePath));
+            Assert.Equal(
+                baselineFunctionId,
+                Assert.Single(Assert.Single(committed.ScriptAssets.Assets).Functions).Id);
+            Assert.Contains("// Authored in the transactional C# view.", committed.SourceText);
+            Assert.Equal("txn-source-text", committed.History.UndoTransactionId);
+            Assert.True(File.Exists(identityPath));
+            Assert.True(File.Exists(historyPath));
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AuthoringEndpointsPersistReloadAndRejectExternalConflicts()
     {
         string directory = Path.Combine(

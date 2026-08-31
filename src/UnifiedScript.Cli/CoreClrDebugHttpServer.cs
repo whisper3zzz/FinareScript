@@ -354,6 +354,10 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         SemanticPatchPlanJson.Deserialize(previewJson),
                         transaction,
                         cancellationToken),
+                    "/api/authoring/preview/source-text" => await session.PreviewAsync(
+                        CSharpSourceTextPatchJson.Deserialize(previewJson),
+                        transaction,
+                        cancellationToken),
                     _ => throw new HttpProtocolException(
                         HttpStatusCode.NotFound,
                         "Unknown authoring preview endpoint."),
@@ -410,6 +414,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         else
         {
             string json = await ReadJsonTextAsync(context.Request, cancellationToken);
+            if (path == "/api/authoring/source-text" && transaction.PreviewToken is null)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1012",
+                    "A C# source edit must commit the exact candidate accepted from its diff preview; no source, artifact, history, or runtime generation was changed.");
+            }
             response = path switch
             {
                 "/api/authoring/declaration-patch" => await session.ApplyAsync(
@@ -422,6 +433,10 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     cancellationToken),
                 "/api/authoring/semantic-patch-plan" => await session.ApplyAsync(
                     SemanticPatchPlanJson.Deserialize(json),
+                    transaction,
+                    cancellationToken),
+                "/api/authoring/source-text" => await session.ApplyAsync(
+                    CSharpSourceTextPatchJson.Deserialize(json),
                     transaction,
                     cancellationToken),
                 _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown authoring endpoint."),
@@ -438,6 +453,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         "/api/authoring/preview/semantic-patch" => "Semantic patch",
         "/api/authoring/semantic-patch-plan" or
         "/api/authoring/preview/semantic-patch-plan" => "Semantic patch plan",
+        "/api/authoring/source-text" or
+        "/api/authoring/preview/source-text" => "C# source edit",
         "/api/authoring/ai-semantic-proposal/draft" => "Draft AI semantic proposal",
         "/api/authoring/ai-semantic-proposal" or
         "/api/authoring/preview/ai-semantic-proposal" => "AI semantic proposal",
@@ -1376,6 +1393,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return ApplyAsync(workspace => workspace.Prepare(plan), transaction, cancellationToken);
         }
 
+        public Task<AuthoringWorkspaceResponse> ApplyAsync(
+            CSharpSourceTextPatchDocument patch,
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(patch);
+            return ApplyAsync(workspace => workspace.Prepare(patch), transaction, cancellationToken);
+        }
+
         public Task<AuthoringPreviewResponse> PreviewAsync(
             DeclarationPatchDocument patch,
             AuthoringTransactionContext transaction,
@@ -1401,6 +1427,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         {
             ArgumentNullException.ThrowIfNull(plan);
             return PreviewAsync(workspace => workspace.Prepare(plan), transaction, cancellationToken);
+        }
+
+        public Task<AuthoringPreviewResponse> PreviewAsync(
+            CSharpSourceTextPatchDocument patch,
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(patch);
+            return PreviewAsync(workspace => workspace.Prepare(patch), transaction, cancellationToken);
         }
 
         public async Task<AuthoringPreviewResponse> PreviewGroupCommitAsync(

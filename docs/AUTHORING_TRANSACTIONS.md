@@ -18,6 +18,8 @@ Mutation clients send these headers:
   256 characters.
 - `X-UnifiedScript-Group-Id`: the active grouped draft ID for stage, commit,
   and cancel requests.
+- `X-UnifiedScript-Preview-Token`: the SHA-256 identity of the exact prepared
+  candidate accepted in the Diff dialog.
 
 The revision and IDs remain optional for older clients. Updated browser and
 Slate clients always send them after receiving a live workspace. The server
@@ -29,6 +31,7 @@ The write endpoints are:
 - `POST /api/authoring/declaration-patch`;
 - `POST /api/authoring/semantic-patch`;
 - `POST /api/authoring/semantic-patch-plan`;
+- `POST /api/authoring/source-text`;
 - `POST /api/authoring/ai-semantic-proposal`;
 - `POST /api/authoring/group/begin`;
 - `POST /api/authoring/group/commit`;
@@ -58,9 +61,10 @@ IR, and Graph. AI proposal previews additionally bind the deterministic
 server keeps that immutable prepared snapshot in a bounded
 cache. An accepted native request sends its token as
 `X-UnifiedScript-Preview-Token` and commits that exact candidate; `UAW1012`
-rejects missing/expired tokens or transaction-context drift. Older clients may
-omit the header, but the native Unreal editor never bypasses its preview for a
-source-changing operation. Structured failures include diagnostic/quick-fix
+rejects missing/expired tokens or transaction-context drift. Older patch
+clients may omit the header, but the restricted C# source endpoint requires it
+and rejects direct commits. The native Unreal editor never bypasses its preview
+for a source-changing operation. Structured failures include diagnostic/quick-fix
 arrays and a rollback receipt. See
 [AUTHORING_DIAGNOSTICS.md](AUTHORING_DIAGNOSTICS.md).
 The standalone review/merge schemas and conservative function-level merge
@@ -69,10 +73,20 @@ boundary are documented in
 The AI envelope, offline pack command, and proposal-specific endpoints are
 documented in [AI_SEMANTIC_PROPOSALS.md](AI_SEMANTIC_PROPOSALS.md).
 
+`unifiedscript.csharp-source-text-patch/v0.1` is intentionally a whole-buffer
+transport, not an unrestricted file API. It identifies exactly one source that
+is already part of the workspace, carries the SHA-256 digest of the rendered
+baseline, and limits candidate text to 512 Ki characters under the server's
+1 MiB request cap. The Workbench also compares the request revision, validates
+that the source has not changed on disk, compiles the candidate under the same
+references/settings, and rejects no-op or invalid programs. Only the immutable
+candidate retained by preview-token lookup can enter the commit path.
+
 ## User-grouped transactions
 
 `group/begin` reserves one unique transaction ID and label at the current
-committed revision. While the group is active, declaration, semantic, and plan
+committed revision. While the group is active, declaration, semantic, plan, and
+source-text
 requests carry its group ID and unique stage operation IDs. Each accepted stage
 fully analyzes a new in-memory draft and returns its regenerated Surface, but
 does not write C# or `.usids`, emit artifacts, reload CoreCLR, change components,

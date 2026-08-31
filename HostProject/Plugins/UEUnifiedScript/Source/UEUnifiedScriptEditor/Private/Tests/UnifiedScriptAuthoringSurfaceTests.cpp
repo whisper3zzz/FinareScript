@@ -5,6 +5,7 @@
 #include "UnifiedScriptDebugWorkbench.h"
 
 #include "Engine/World.h"
+#include "Dom/JsonObject.h"
 #include "Framework/Docking/TabManager.h"
 #include "Graph/UnifiedScriptGraphLayoutStore.h"
 #include "Graph/UnifiedScriptNodePalette.h"
@@ -14,6 +15,8 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptEdGraph.h"
@@ -1488,6 +1491,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FUnifiedScriptAuthoringWorkbench::BuildAiSemanticProposalUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/ai-semantic-proposal")));
     TestEqual(
+        TEXT("Workbench C# source endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildSourceTextUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/source-text")));
+    TestEqual(
         TEXT("Workbench derives the matching semantic preview endpoint"),
         FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
             TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch")),
@@ -1497,6 +1504,39 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
             TEXT("http://127.0.0.1:4173/api/authoring/ai-semantic-proposal")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/ai-semantic-proposal")));
+    TestEqual(
+        TEXT("Workbench derives the matching C# source preview endpoint"),
+        FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            TEXT("http://127.0.0.1:4173/api/authoring/source-text")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/source-text")));
+    FString SourceTextPatch;
+    TestTrue(
+        *FString::Printf(TEXT("Workbench builds a bounded C# source transaction: %s"), *Error),
+        FUnifiedScriptAuthoringWorkbench::BuildSourceTextPatch(
+            TEXT("Tests\\DamagePolicy.cs"),
+            TEXT("class A {}\n"),
+            TEXT("class A { int Value = 1; }\n"),
+            SourceTextPatch,
+            Error));
+    TSharedPtr<FJsonObject> SourceTextPatchRoot;
+    const TSharedRef<TJsonReader<>> SourceTextPatchReader =
+        TJsonReaderFactory<>::Create(SourceTextPatch);
+    TestTrue(
+        TEXT("C# source transaction serializes as JSON"),
+        FJsonSerializer::Deserialize(SourceTextPatchReader, SourceTextPatchRoot) &&
+            SourceTextPatchRoot.IsValid());
+    TestEqual(
+        TEXT("C# source transaction normalizes the logical path"),
+        SourceTextPatchRoot->GetStringField(TEXT("sourcePath")),
+        FString(TEXT("Tests/DamagePolicy.cs")));
+    TestEqual(
+        TEXT("C# source transaction hashes the exact UTF-8 baseline"),
+        SourceTextPatchRoot->GetStringField(TEXT("baselineContentDigest")),
+        FString(TEXT("sha256:f119fc42a923d52cbd5420b0c5841969bef8dea5e8b78ba392ffb58312380247")));
+    TestEqual(
+        TEXT("C# source transaction retains the exact edit buffer"),
+        SourceTextPatchRoot->GetStringField(TEXT("sourceText")),
+        FString(TEXT("class A { int Value = 1; }\n")));
     TestEqual(
         TEXT("Workbench derives the grouped commit preview endpoint"),
         FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
@@ -2093,6 +2133,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestFalse(
         TEXT("A standalone Surface never masquerades as a canonical Workbench source snapshot"),
         Widget->HasCanonicalSourceSnapshot());
+    TestTrue(
+        TEXT("A standalone Surface has no C# edit buffer"),
+        Widget->GetCodeEditBuffer().IsEmpty());
+    TestFalse(
+        TEXT("A standalone Surface never reports unsaved canonical C# edits"),
+        Widget->IsCodeEditDirty());
     Widget->SetViewMode(EUnifiedScriptAuthoringViewMode::Graph);
     TestTrue(TEXT("My Script navigation activates the UE Event Entry function"),
         Widget->SelectFunction(EventFunction->Id));

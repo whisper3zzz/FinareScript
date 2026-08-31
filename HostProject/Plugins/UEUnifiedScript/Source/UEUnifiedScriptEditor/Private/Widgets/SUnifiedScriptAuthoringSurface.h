@@ -127,6 +127,8 @@ public:
     EUnifiedScriptAuthoringViewMode GetViewMode() const { return ViewMode; }
     bool HasCanonicalSourceSnapshot() const { return bHasCanonicalSourceSnapshot; }
     const FString& GetCanonicalSourceText() const { return WorkbenchSourceText; }
+    const FString& GetCodeEditBuffer() const { return CodeEditBuffer; }
+    bool IsCodeEditDirty() const { return bCodeEditDirty; }
 
     /** Executes one all-matching-instance preflight barrier before any reload. */
     static FUnifiedScriptReloadBatchResult ReloadMatchingComponentsForAsset(
@@ -147,6 +149,9 @@ private:
     FReply HandleLoadInitialSurface();
     FReply HandleSetViewMode(EUnifiedScriptAuthoringViewMode InViewMode);
     FReply HandleRefreshSourceSnapshot();
+    void HandleCodeTextChanged(const FText& Text);
+    FReply HandleApplyCodeSource();
+    FReply HandleRevertCodeSource();
     FReply HandleOpenSource(FUnifiedScriptAuthoringSpan Span);
     FReply HandleCopyId(FString SemanticId);
     FReply HandleCopyPatch(
@@ -346,6 +351,7 @@ private:
     FString LoadedLayoutPath;
     FString WorkbenchSourcePath;
     FString WorkbenchSourceText;
+    FString CodeEditBuffer;
     FDateTime LoadedSurfaceTimestamp;
     bool bAutoReload = true;
     bool bReloadMatchingComponents = true;
@@ -356,6 +362,7 @@ private:
     bool bShowCanvasMinimap = true;
     bool bPendingRequestPublishesRuntime = true;
     bool bHasCanonicalSourceSnapshot = false;
+    bool bCodeEditDirty = false;
     bool bStatusError = false;
     bool bHasAuthoringFailure = false;
     FString StatusMessage;

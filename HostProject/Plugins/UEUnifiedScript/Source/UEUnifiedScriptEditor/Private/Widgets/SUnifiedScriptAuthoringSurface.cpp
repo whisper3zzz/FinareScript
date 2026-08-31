@@ -1465,9 +1465,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                                 ? FText::Format(
                                                     LOCTEXT(
                                                         "CodeSnapshotStatus",
-                                                        "Canonical workspace snapshot  /  revision {0}  /  {1} characters  /  read only"),
+                                                        "Canonical workspace snapshot  /  revision {0}  /  {1} characters  /  {2}"),
                                                     WorkbenchRevision,
-                                                    WorkbenchSourceText.Len())
+                                                    CodeEditBuffer.Len(),
+                                                    bCodeEditDirty
+                                                        ? LOCTEXT("CodeSnapshotDirty", "unsaved edit")
+                                                        : LOCTEXT("CodeSnapshotClean", "in sync"))
                                                 : LOCTEXT(
                                                     "CodeSnapshotPending",
                                                     "Canonical C# snapshot pending  /  switch or refresh to request the Workbench");
@@ -1776,13 +1779,49 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                         .Padding(8.0f, 0.0f, 0.0f, 0.0f)
                                         [
                                             SNew(SButton)
+                                            .Text(LOCTEXT("ApplyCodeSource", "Preview & Apply"))
+                                            .ToolTipText(LOCTEXT(
+                                                "ApplyCodeSourceTip",
+                                                "Compile this bounded C# buffer, review its semantic/source diff, then atomically publish the confirmed candidate."))
+                                            .ButtonStyle(FAppStyle::Get(), TEXT("PrimaryButton"))
+                                            .IsEnabled_Lambda([this]()
+                                            {
+                                                return bHasCanonicalSourceSnapshot &&
+                                                    bCodeEditDirty && !bPatchRequestPending;
+                                            })
+                                            .OnClicked(
+                                                this,
+                                                &SUnifiedScriptAuthoringSurface::HandleApplyCodeSource)
+                                        ]
+                                        + SHorizontalBox::Slot()
+                                        .AutoWidth()
+                                        .Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                                        [
+                                            SNew(SButton)
+                                            .Text(LOCTEXT("RevertCodeSource", "Revert"))
+                                            .ToolTipText(LOCTEXT(
+                                                "RevertCodeSourceTip",
+                                                "Discard this local C# edit buffer and restore the loaded canonical revision."))
+                                            .IsEnabled_Lambda([this]()
+                                            {
+                                                return bCodeEditDirty && !bPatchRequestPending;
+                                            })
+                                            .OnClicked(
+                                                this,
+                                                &SUnifiedScriptAuthoringSurface::HandleRevertCodeSource)
+                                        ]
+                                        + SHorizontalBox::Slot()
+                                        .AutoWidth()
+                                        .Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                                        [
+                                            SNew(SButton)
                                             .Text(LOCTEXT("RefreshCodeSnapshot", "Refresh Snapshot"))
                                             .ToolTipText(LOCTEXT(
                                                 "RefreshCodeSnapshotTip",
-                                                "Fetch C# and Graph again from one canonical Workbench revision."))
+                                                "Fetch C# and Graph again from one canonical Workbench revision. Revert local edits first."))
                                             .IsEnabled_Lambda([this]()
                                             {
-                                                return !bPatchRequestPending;
+                                                return !bPatchRequestPending && !bCodeEditDirty;
                                             })
                                             .OnClicked(
                                                 this,
@@ -1796,12 +1835,18 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                         .Text_Lambda([this]()
                                         {
                                             return bHasCanonicalSourceSnapshot
-                                                ? FText::FromString(WorkbenchSourceText)
+                                                ? FText::FromString(CodeEditBuffer)
                                                 : LOCTEXT(
                                                     "CanonicalSourceUnavailable",
                                                     "The C# view is bound to the Workbench snapshot, not a second editor buffer.\n\nStart the authoring host, then choose Refresh Snapshot.");
                                         })
-                                        .IsReadOnly(true)
+                                        .IsReadOnly_Lambda([this]()
+                                        {
+                                            return !bHasCanonicalSourceSnapshot || bPatchRequestPending;
+                                        })
+                                        .OnTextChanged(
+                                            this,
+                                            &SUnifiedScriptAuthoringSurface::HandleCodeTextChanged)
                                         .AutoWrapText(false)
                                         .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
                                     ]
@@ -1910,10 +1955,82 @@ FReply SUnifiedScriptAuthoringSurface::HandleRefreshSourceSnapshot()
     return FReply::Handled();
 }
 
+void SUnifiedScriptAuthoringSurface::HandleCodeTextChanged(const FText& Text)
+{
+    if (!bHasCanonicalSourceSnapshot)
+    {
+        return;
+    }
+    CodeEditBuffer = Text.ToString();
+    bCodeEditDirty = !CodeEditBuffer.Equals(
+        WorkbenchSourceText,
+        ESearchCase::CaseSensitive);
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleApplyCodeSource()
+{
+    if (!bHasCanonicalSourceSnapshot)
+    {
+        SetStatus(TEXT("There is no canonical C# snapshot to edit."), true);
+        return FReply::Handled();
+    }
+    if (!bCodeEditDirty)
+    {
+        SetStatus(
+            FString::Printf(
+                TEXT("C# is already in sync with canonical revision %lld."),
+                WorkbenchRevision),
+            false);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringWorkbench::BuildSourceTextPatch(
+            WorkbenchSourcePath,
+            WorkbenchSourceText,
+            CodeEditBuffer,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+
+    SubmitAuthoringTransaction(
+        MoveTemp(Patch),
+        FUnifiedScriptAuthoringWorkbench::BuildSourceTextUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        TEXT("Edit C# source"));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRevertCodeSource()
+{
+    if (!bHasCanonicalSourceSnapshot)
+    {
+        SetStatus(TEXT("There is no canonical C# snapshot to restore."), true);
+        return FReply::Handled();
+    }
+    CodeEditBuffer = WorkbenchSourceText;
+    bCodeEditDirty = false;
+    SetStatus(
+        FString::Printf(
+            TEXT("Restored the C# edit buffer to canonical revision %lld."),
+            WorkbenchRevision),
+        false);
+    return FReply::Handled();
+}
+
 FReply SUnifiedScriptAuthoringSurface::OnPreviewKeyDown(
     const FGeometry& MyGeometry,
     const FKeyEvent& InKeyEvent)
 {
+    if (InKeyEvent.IsControlDown() && InKeyEvent.GetKey() == EKeys::S &&
+        ViewMode == EUnifiedScriptAuthoringViewMode::Code)
+    {
+        return HandleApplyCodeSource();
+    }
     if (InKeyEvent.IsControlDown() && InKeyEvent.GetKey() == EKeys::SpaceBar &&
         NodePaletteSearchBox.IsValid())
     {
@@ -1954,6 +2071,13 @@ FReply SUnifiedScriptAuthoringSurface::OnPreviewKeyDown(
 
 bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
 {
+    if (bCodeEditDirty)
+    {
+        SetStatus(
+            TEXT("Revert or apply the unsaved C# edit before loading another Surface."),
+            true);
+        return false;
+    }
     FUnifiedScriptAuthoringSurfaceDocument Candidate;
     FString Error;
     if (!FUnifiedScriptAuthoringSurfaceReader::LoadFile(
@@ -1969,8 +2093,10 @@ bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
     PersistCurrentLayout(true);
     WorkbenchSourcePath.Reset();
     WorkbenchSourceText.Reset();
+    CodeEditBuffer.Reset();
     WorkbenchRevision = 0;
     bHasCanonicalSourceSnapshot = false;
+    bCodeEditDirty = false;
     Document = MoveTemp(Candidate);
     LoadedSurfacePath = FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(ConfiguredPath);
     LoadedLayoutPath = FUnifiedScriptGraphLayoutStore::GetLayoutPath(LoadedSurfacePath);
@@ -3800,6 +3926,16 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
         SetStatus(TEXT("Enter a Workbench loopback URL before applying a patch."), true);
         return;
     }
+    const bool bSourceTextTransaction = Url.EndsWith(
+        TEXT("/api/authoring/source-text"),
+        ESearchCase::CaseSensitive);
+    if (bCodeEditDirty && !bSourceTextTransaction)
+    {
+        SetStatus(
+            TEXT("Apply or revert the unsaved C# buffer before starting another authoring transaction."),
+            true);
+        return;
+    }
 
     if (TransactionId.IsEmpty())
     {
@@ -4279,7 +4415,9 @@ void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
 {
     WorkbenchSourcePath = MoveTemp(Workspace.SourcePath);
     WorkbenchSourceText = MoveTemp(Workspace.SourceText);
+    CodeEditBuffer = WorkbenchSourceText;
     bHasCanonicalSourceSnapshot = true;
+    bCodeEditDirty = false;
     Document = MoveTemp(Workspace.Surface);
     WorkbenchRevision = Workspace.Revision;
     bCanUndoAuthoring = Workspace.History.bCanUndo;
@@ -4532,6 +4670,13 @@ void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
     if (bPatchRequestPending)
     {
         SetStatus(TEXT("Wait for the active Workbench request before refreshing."), true);
+        return;
+    }
+    if (bCodeEditDirty)
+    {
+        SetStatus(
+            TEXT("Apply or revert the unsaved C# buffer before refreshing the canonical workspace."),
+            true);
         return;
     }
     const FString Url = FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(

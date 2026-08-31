@@ -185,6 +185,8 @@ public:
 
     static FString BuildAiSemanticProposalUrl(const FString& ServerUrl);
 
+    static FString BuildSourceTextUrl(const FString& ServerUrl);
+
     static FString BuildPreviewUrl(const FString& TransactionUrl);
 
     static FString BuildWorkspaceUrl(const FString& ServerUrl);
@@ -198,6 +200,13 @@ public:
     static FString BuildGroupCommitUrl(const FString& ServerUrl);
 
     static FString BuildGroupCancelUrl(const FString& ServerUrl);
+
+    static bool BuildSourceTextPatch(
+        const FString& SourcePath,
+        const FString& BaselineSourceText,
+        const FString& SourceText,
+        FString& OutJson,
+        FString& OutError);
 
     static bool ParseWorkspaceResponse(
         const FString& Json,

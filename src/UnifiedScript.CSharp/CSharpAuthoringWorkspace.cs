@@ -221,6 +221,66 @@ public sealed class CSharpAuthoringWorkspace
         return CreateMutation(patchPlanApplier.Apply(Current.Request, plan));
     }
 
+    public CSharpAuthoringMutation Prepare(CSharpSourceTextPatchDocument patch)
+    {
+        patch = CSharpSourceTextPatchJson.NormalizeAndValidate(patch);
+        CSharpSourceDocument? source = Current.Request.Sources.SingleOrDefault(candidate =>
+            string.Equals(candidate.LogicalPath, patch.SourcePath, StringComparison.Ordinal));
+        if (source is null)
+        {
+            return SourceTextFailure(
+                CSharpSourceTextPatchDiagnosticCodes.SourceNotFound,
+                $"Source '{patch.SourcePath}' is not part of the current authoring workspace.",
+                patch.SourcePath);
+        }
+
+        string currentDigest = CSharpSourceTextPatchJson.ComputeContentDigest(source.Source);
+        if (!string.Equals(
+                currentDigest,
+                patch.BaselineContentDigest,
+                StringComparison.Ordinal))
+        {
+            return SourceTextFailure(
+                CSharpSourceTextPatchDiagnosticCodes.BaselineMismatch,
+                $"Source '{patch.SourcePath}' changed after the C# edit buffer was loaded; " +
+                "refresh before applying it.",
+                patch.SourcePath);
+        }
+        if (string.Equals(source.Source, patch.SourceText, StringComparison.Ordinal))
+        {
+            return SourceTextFailure(
+                CSharpSourceTextPatchDiagnosticCodes.NoChange,
+                $"Source '{patch.SourcePath}' contains no text change to preview.",
+                patch.SourcePath);
+        }
+
+        CSharpSourceDocument[] sources = Current.Request.Sources
+            .Select(candidate => string.Equals(
+                    candidate.LogicalPath,
+                    patch.SourcePath,
+                    StringComparison.Ordinal)
+                ? new CSharpSourceDocument(
+                    candidate.LogicalPath,
+                    patch.SourceText,
+                    candidate.IdentitySidecar,
+                    candidate.IdentityPins)
+                : candidate)
+            .ToArray();
+        var request = new CSharpCompilationRequest(
+            Current.Request.AssemblyName,
+            sources,
+            Current.Request.ReferencePaths,
+            Current.Request.EffectCatalog,
+            Current.Request.Settings,
+            Current.Request.RuntimeReferencePaths,
+            Current.Request.IncludeDefaultReferences);
+        CSharpAnalysisResult analysis = pipeline.Analyze(request);
+        return CreateMutation(new CSharpPatchResult(
+            analysis.Succeeded ? request : null,
+            analysis.Succeeded ? analysis : null,
+            analysis.Diagnostics));
+    }
+
     public void Commit(CSharpAuthoringMutation mutation) => Commit(
         mutation,
         $"local-{Guid.NewGuid():N}",
@@ -390,6 +450,18 @@ public sealed class CSharpAuthoringWorkspace
             snapshot,
             result.Diagnostics);
     }
+
+    private CSharpAuthoringMutation SourceTextFailure(
+        string code,
+        string message,
+        string sourcePath) => CreateMutation(new CSharpPatchResult(
+            null,
+            null,
+            [new UnifiedDiagnostic(
+                code,
+                UnifiedDiagnosticSeverity.Error,
+                message,
+                SourceSpan.Unknown(sourcePath))]));
 
     private CSharpAuthoringHistoryMutation PrepareHistoryMutation(
         CSharpAuthoringHistoryDirection direction,

@@ -14,6 +14,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
+#include <openssl/sha.h>
+
 namespace UE::UnifiedScript::AuthoringWorkbench::Private
 {
 constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.5");
@@ -25,6 +27,8 @@ constexpr TCHAR AiPreviewSchema[] = TEXT("unifiedscript.ai-semantic-proposal-pre
 constexpr TCHAR AiCommitSchema[] = TEXT("unifiedscript.ai-semantic-proposal-commit/v0.1");
 constexpr TCHAR SemanticDiffSchema[] = TEXT("unifiedscript.semantic-graph-diff/v0.1");
 constexpr TCHAR GraphSchema[] = TEXT("unifiedscript.graph/v0.13");
+constexpr TCHAR SourceTextPatchSchema[] = TEXT("unifiedscript.csharp-source-text-patch/v0.1");
+constexpr int32 MaximumSourceCharacters = 512 * 1024;
 
 bool ReadPositiveInteger(
     const TSharedPtr<FJsonObject>& Object,
@@ -312,6 +316,14 @@ FString FUnifiedScriptAuthoringWorkbench::BuildAiSemanticProposalUrl(const FStri
         : Normalized + TEXT("/api/authoring/ai-semantic-proposal");
 }
 
+FString FUnifiedScriptAuthoringWorkbench::BuildSourceTextUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/source-text");
+}
+
 FString FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(const FString& TransactionUrl)
 {
     const FString Normalized = NormalizeServerUrl(TransactionUrl);
@@ -319,6 +331,7 @@ FString FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(const FString& Transac
         {TEXT("/api/authoring/declaration-patch"), TEXT("/api/authoring/preview/declaration-patch")},
         {TEXT("/api/authoring/semantic-patch"), TEXT("/api/authoring/preview/semantic-patch")},
         {TEXT("/api/authoring/semantic-patch-plan"), TEXT("/api/authoring/preview/semantic-patch-plan")},
+        {TEXT("/api/authoring/source-text"), TEXT("/api/authoring/preview/source-text")},
         {TEXT("/api/authoring/ai-semantic-proposal"), TEXT("/api/authoring/preview/ai-semantic-proposal")},
         {TEXT("/api/authoring/group/commit"), TEXT("/api/authoring/preview/group/commit")},
         {TEXT("/api/authoring/undo"), TEXT("/api/authoring/preview/undo")},
@@ -380,6 +393,59 @@ FString FUnifiedScriptAuthoringWorkbench::BuildGroupCancelUrl(const FString& Ser
     return Normalized.IsEmpty()
         ? FString()
         : Normalized + TEXT("/api/authoring/group/cancel");
+}
+
+bool FUnifiedScriptAuthoringWorkbench::BuildSourceTextPatch(
+    const FString& SourcePath,
+    const FString& BaselineSourceText,
+    const FString& SourceText,
+    FString& OutJson,
+    FString& OutError)
+{
+    OutJson.Reset();
+    OutError.Reset();
+    if (SourcePath.IsEmpty())
+    {
+        OutError = TEXT("A canonical Workbench source path is required before editing C#.");
+        return false;
+    }
+    if (SourceText.Len() >
+        UE::UnifiedScript::AuthoringWorkbench::Private::MaximumSourceCharacters)
+    {
+        OutError = FString::Printf(
+            TEXT("C# source cannot exceed %d characters in one authoring transaction."),
+            UE::UnifiedScript::AuthoringWorkbench::Private::MaximumSourceCharacters);
+        return false;
+    }
+
+    const FTCHARToUTF8 BaselineUtf8(*BaselineSourceText);
+    uint8 Digest[SHA256_DIGEST_LENGTH]{};
+    if (SHA256(
+            reinterpret_cast<const unsigned char*>(BaselineUtf8.Get()),
+            static_cast<size_t>(BaselineUtf8.Length()),
+            Digest) == nullptr)
+    {
+        OutError = TEXT("Cannot compute the canonical C# baseline digest.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(
+        TEXT("schemaVersion"),
+        UE::UnifiedScript::AuthoringWorkbench::Private::SourceTextPatchSchema);
+    Root->SetStringField(TEXT("sourcePath"), SourcePath.Replace(TEXT("\\"), TEXT("/")));
+    Root->SetStringField(
+        TEXT("baselineContentDigest"),
+        TEXT("sha256:") + BytesToHex(Digest, SHA256_DIGEST_LENGTH).ToLower());
+    Root->SetStringField(TEXT("sourceText"), SourceText);
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+    if (!FJsonSerializer::Serialize(Root, Writer))
+    {
+        OutError = TEXT("Cannot serialize the C# source-text authoring transaction.");
+        return false;
+    }
+    OutError.Reset();
+    return true;
 }
 
 bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
