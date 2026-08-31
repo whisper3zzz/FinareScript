@@ -149,6 +149,10 @@ foreach ($fixture in @(
         -Arguments @('adopt', $project, '--sdk-root', $sdkRoot)
     foreach ($required in @(
             'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
+            'Plugins\UEUnifiedScript\Tools\UnifiedScript.Cli\UnifiedScript.Cli.exe',
+            'Plugins\UEUnifiedScript\Tools\unifiedscript.cmd',
+            'Plugins\UEUnifiedScript\Tools\setup-unreal-project.ps1',
+            'Plugins\UEUnifiedScript\Tools\run-unifiedscript-onboarding-after-process.ps1',
             "Managed\$([IO.Path]::GetFileNameWithoutExtension($project)).UnifiedScript\FirstScript.cs",
             'Config\UnifiedScript.onboarding.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $required) -PathType Leaf)) {
@@ -170,16 +174,39 @@ foreach ($fixture in @(
     }
     $afterBuild = Get-ProductSnapshot -ProjectRoot $projectRoot
 
-    $doctorArguments = @('doctor', $project)
+    $projectPlugin = Join-Path $projectRoot 'Plugins\UEUnifiedScript'
+    $projectCli = Join-Path $projectPlugin 'Tools\unifiedscript.cmd'
+    $doctorReportPath = Join-Path $projectRoot `
+        'Saved\UnifiedScript\ProjectSetup\doctor-report.json'
+    $doctorArguments = @('doctor', $project, '--report', $doctorReportPath)
     if (-not [string]::IsNullOrWhiteSpace($EngineRoot)) {
         $doctorArguments += @('--engine-root', [IO.Path]::GetFullPath($EngineRoot))
     }
-    Invoke-AdoptionCli -Cli $cli -Arguments $doctorArguments
+    Invoke-AdoptionCli -Cli $projectCli -Arguments $doctorArguments
+    $doctor = Get-Content -LiteralPath $doctorReportPath -Raw | ConvertFrom-Json
+    $projectToolsCheck = $doctor.checks |
+        Where-Object { $_.id -eq 'project-tools' } |
+        Select-Object -First 1
+    if ($doctor.status -ne 'passed' -or $projectToolsCheck.status -ne 'passed') {
+        throw "Project-local doctor did not validate the installed tools for $project"
+    }
+
+    $rerunReportPath = Join-Path $projectRoot `
+        'Saved\UnifiedScript\ProjectSetup\adoption-rerun.json'
     Invoke-AdoptionCli `
-        -Cli $cli `
-        -Arguments @('adopt', $project, '--sdk-root', $sdkRoot)
+        -Cli $projectCli `
+        -Arguments @(
+            'adopt', $project,
+            '--sdk-root', $projectPlugin,
+            '--apply',
+            '--report', $rerunReportPath)
+    $rerun = Get-Content -LiteralPath $rerunReportPath -Raw | ConvertFrom-Json
+    if ([int]$rerun.summary.changed -ne 0 -or
+        [int]$rerun.summary.conflicts -ne 0) {
+        throw "Project-local adoption rerun was not a deterministic no-op for $project"
+    }
     if ((Get-ProductSnapshot -ProjectRoot $projectRoot) -cne $afterBuild) {
-        throw "Repeated adoption changed product files for $project"
+        throw "Project-local repeated adoption changed product files for $project"
     }
 
     Invoke-AdoptionCli -Cli $cli -Arguments @('adopt', $project, '--rollback')
@@ -192,6 +219,8 @@ foreach ($fixture in @(
         status = 'passed'
         plannedChanges = [int]$preview.summary.changed
         previewFingerprint = [string]$preview.fingerprint
+        projectLocalDoctor = [string]$doctor.status
+        projectLocalRerunChanges = [int]$rerun.summary.changed
     })
 }
 

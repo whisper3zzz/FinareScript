@@ -692,7 +692,8 @@ def main() -> int:
         in adoption_tests
         and "unifiedscript.packaged-adoption-acceptance/v0.1"
         in packaged_adoption
-        and "Repeated adoption changed product files" in packaged_adoption
+        and "Project-local repeated adoption changed product files"
+        in packaged_adoption
         and "Rollback did not restore the original product files"
         in packaged_adoption
         and "Adopted managed project failed to build" in packaged_adoption
@@ -702,6 +703,81 @@ def main() -> int:
     )
     checks.append(
         "existing Unreal projects adopt transactionally with deterministic rerun and doctor"
+    )
+
+    deferred_onboarding_path = (
+        ROOT / "tools" / "run-unifiedscript-onboarding-after-process.ps1"
+    )
+    project_setup_header_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Public" / "UnifiedScriptProjectSetup.h"
+    )
+    project_setup_source_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptProjectSetup.cpp"
+    )
+    project_setup_widget_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
+        / "SUnifiedScriptProjectSetup.cpp"
+    )
+    project_setup_tests_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Tests"
+        / "UnifiedScriptProjectSetupTests.cpp"
+    )
+    editor_module_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UEUnifiedScriptEditorModule.cpp"
+    )
+    unreal_onboarding_guide_path = ROOT / "docs" / "UNREAL_ONBOARDING.md"
+    project_setup_sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"
+    deferred_onboarding = deferred_onboarding_path.read_text(encoding="utf-8")
+    project_setup_header = project_setup_header_path.read_text(encoding="utf-8")
+    project_setup_source = project_setup_source_path.read_text(encoding="utf-8")
+    project_setup_widget = project_setup_widget_path.read_text(encoding="utf-8")
+    project_setup_tests = project_setup_tests_path.read_text(encoding="utf-8")
+    editor_module = editor_module_path.read_text(encoding="utf-8")
+    unreal_onboarding_guide = unreal_onboarding_guide_path.read_text(encoding="utf-8")
+    project_setup_sdk_package = project_setup_sdk_package_path.read_text(
+        encoding="utf-8"
+    )
+    require(
+        deferred_onboarding_path.is_file()
+        and project_setup_header_path.is_file()
+        and project_setup_source_path.is_file()
+        and project_setup_widget_path.is_file()
+        and project_setup_tests_path.is_file()
+        and '"UnifiedScript.Cli"' in adoption_source
+        and '"run-unifiedscript-onboarding-after-process.ps1"'
+        in adoption_source
+        and '"project-tools"' in adoption_source
+        and "DeferredOnboardingScriptPath" in adoption_source
+        and "WaitForProcessId" in deferred_onboarding
+        and "setup-unreal-project.ps1" in deferred_onboarding
+        and "PreviewAdoption" in project_setup_header
+        and "BuildAfterEditorExit" in project_setup_header
+        and 'TEXT("powershell.exe")' in project_setup_source
+        and "--sdk-root %s --preview" in project_setup_source
+        and "FPlatformProcess::CreateProc" in project_setup_widget
+        and "RegisterActiveTimer" in project_setup_widget
+        and "SaveDirtyPackages" in project_setup_widget
+        and "RequestExit(false)" in project_setup_widget
+        and "UnifiedScript.OpenProjectSetup" in editor_module
+        and "ProjectSetupTabName" in editor_module
+        and "UnifiedScript.Unreal.ProjectSetup.CommandContract"
+        in project_setup_tests
+        and "run-unifiedscript-onboarding-after-process.ps1"
+        in project_setup_sdk_package
+        and "Project-local repeated adoption changed product files"
+        in packaged_adoption
+        and "project-tools" in packaged_adoption
+        and "UnifiedScript Project Setup" in first_script_guide
+        and "sdkLayout: embedded" in unreal_onboarding_guide,
+        "Project-local Editor setup, deferred build, packaged acceptance, or guide is missing",
+    )
+    checks.append(
+        "adopted projects carry one Editor-backed local setup, doctor, and deferred build path"
     )
 
     sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"

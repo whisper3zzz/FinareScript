@@ -228,7 +228,7 @@ public sealed class UnrealProjectAdoptionTests
             fixture.ProjectRoot,
             "Config",
             "UnifiedScript.onboarding.json"));
-        Assert.Contains("\"editorTarget\": \"AdoptGameEditor\"", config, StringComparison.Ordinal);
+        Assert.Contains("\"editorTarget\": \"UnrealEditor\"", config, StringComparison.Ordinal);
         Assert.Contains("AdoptGame.UnifiedScript", File.ReadAllText(Path.Combine(
             fixture.ProjectRoot,
             "Managed",
@@ -432,6 +432,18 @@ public sealed class UnrealProjectAdoptionTests
             {
                 Write(Path.Combine(SdkRoot, "Managed", "Runtime", runtime), $"fixture:{runtime}");
             }
+            Write(
+                Path.Combine(SdkRoot, "Tools", "UnifiedScript.Cli", "UnifiedScript.Cli.dll"),
+                "fixture-cli");
+            Write(
+                Path.Combine(SdkRoot, "Tools", "unifiedscript.cmd"),
+                "@echo off\n");
+            Write(
+                Path.Combine(SdkRoot, "Tools", "setup-unreal-project.ps1"),
+                "# fixture onboarding\n");
+            Write(
+                Path.Combine(SdkRoot, "Tools", "run-unifiedscript-onboarding-after-process.ps1"),
+                "# fixture deferred onboarding\n");
         }
 
         private void CreateEngine()

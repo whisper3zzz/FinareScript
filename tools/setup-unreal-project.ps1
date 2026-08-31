@@ -447,6 +447,8 @@ try {
     $packagedCliAssembly = Join-Path $sdkRoot 'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll'
     $packagedManagedRuntime = Join-Path $sdkRoot 'Managed\Runtime'
     $packagedSdkManifest = Join-Path $sdkRoot 'sdk-manifest.json'
+    $embeddedManagedRuntime = Join-Path $sdkRoot 'Binaries\Managed'
+    $embeddedPluginDescriptor = Join-Path $sdkRoot 'UEUnifiedScript.uplugin'
     if (Test-Path -LiteralPath $repositoryCliProject -PathType Leaf) {
         $sdkLayout = 'repository'
         $cliProject = $repositoryCliProject
@@ -456,12 +458,19 @@ try {
         $sdkLayout = 'packaged'
         $cliProject = $null
         $cliAssembly = $packagedCliAssembly
+    } elseif ((Test-Path -LiteralPath $packagedCliAssembly -PathType Leaf) -and
+        (Test-Path -LiteralPath $embeddedManagedRuntime -PathType Container) -and
+        (Test-Path -LiteralPath $embeddedPluginDescriptor -PathType Leaf)) {
+        $sdkLayout = 'embedded'
+        $cliProject = $null
+        $cliAssembly = $packagedCliAssembly
+        $packagedManagedRuntime = $embeddedManagedRuntime
     } else {
         Throw-OnboardingError `
             -Code 'USONB1101' `
             -Message (
                 "UnifiedScript SDK layout is incomplete under '$sdkRoot'. Expected " +
-                'a repository CLI project or packaged Tools/UnifiedScript.Cli and Managed/Runtime payloads.')
+                'a repository, packaged SDK, or adopted project-local CLI/runtime payload.')
     }
 
     $resolved = [ordered]@{}
@@ -689,7 +698,7 @@ try {
             -File `
             -ErrorAction SilentlyContinue |
             Select-Object -First 1
-        if ($null -eq $targetFile) {
+        if ($null -eq $targetFile -and $resolved.editorTarget -ne 'UnrealEditor') {
             Throw-OnboardingError `
                 -Code 'USONB1108' `
                 -Message "Editor target source was not found: $($resolved.editorTarget).Target.cs"
@@ -699,11 +708,13 @@ try {
             $resolved.managedProjects + @($resolved.managedChunks.project)
         if ($sdkLayout -eq 'repository') {
             $requiredInputs = @($cliProject) + $requiredInputs
-        } else {
+        } elseif ($sdkLayout -eq 'packaged') {
             $requiredInputs = @(
                 $cliAssembly,
                 $packagedManagedRuntime,
                 $packagedSdkManifest) + $requiredInputs
+        } else {
+            $requiredInputs = @($cliAssembly, $packagedManagedRuntime) + $requiredInputs
         }
         foreach ($required in $requiredInputs) {
             Assert-RequiredPath -Path $required -Label 'Onboarding input'
@@ -772,6 +783,15 @@ try {
                     -Code 'USONB1110' `
                     -Message 'The packaged SDK managed runtime or ABI contract is incompatible.'
             }
+        } elseif ($sdkLayout -eq 'embedded') {
+            $engineFamily = "$($engineVersion.MajorVersion).$($engineVersion.MinorVersion)"
+            if ($engineFamily -ne '5.8') {
+                Throw-OnboardingError `
+                    -Code 'USONB1110' `
+                    -Message (
+                        "The adopted project-local SDK supports Unreal 5.8, not " +
+                        "$($resolved.engineVersion).")
+            }
         }
         $resolved.dotnet = Join-Path $script:ResolvedEngineRoot `
             'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
@@ -831,7 +851,7 @@ try {
                     -LogPath $log `
                     -FailureCode 'USONB2101' `
                     -FailureMessage 'UnifiedScript managed toolchain build failed.'
-            } else {
+            } elseif ($sdkLayout -eq 'packaged') {
                 foreach ($runtimeFile in Get-ChildItem `
                     -LiteralPath $packagedManagedRuntime -Recurse -File) {
                     $relativePath = Get-RelativeFilePath `
@@ -844,6 +864,9 @@ try {
                 }
                 Write-Host (
                     "Installed packaged managed runtime into '$($resolved.managedStage)'.")
+            } else {
+                Write-Host (
+                    "Using adopted project-local managed runtime in '$packagedManagedRuntime'.")
             }
             Assert-RequiredPath -Path $cliAssembly -Label 'UnifiedScript CLI assembly' -Code 'USONB2101'
         }

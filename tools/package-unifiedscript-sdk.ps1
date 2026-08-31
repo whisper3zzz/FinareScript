@@ -323,6 +323,7 @@ try {
     New-Item -ItemType Directory -Force -Path $toolDirectory | Out-Null
     foreach ($tool in @(
         'unifiedscript.cmd',
+        'run-unifiedscript-onboarding-after-process.ps1',
         'setup-unreal-project.ps1',
         'install-unifiedscript-sdk.ps1',
         'new-unifiedscript-project.ps1',
@@ -396,6 +397,7 @@ try {
 
     foreach ($requiredPayload in @(
         'Tools\unifiedscript.cmd',
+        'Tools\run-unifiedscript-onboarding-after-process.ps1',
         'Tools\setup-unreal-project.ps1',
         'Tools\install-unifiedscript-sdk.ps1',
         'Tools\new-unifiedscript-project.ps1',

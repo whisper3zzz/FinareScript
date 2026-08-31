@@ -102,19 +102,21 @@ $sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
   adopt D:\Project\Game\Game.uproject --sdk-root $sdk
 ```
 
-`adopt` merges the plugin entry, installs the plugin and managed runtime, and
-renders the first managed project/script plus onboarding, Contract, and
-deployment inputs in one ownership transaction. Use `--preview` to emit the
+`adopt` merges the plugin entry, installs the plugin, managed runtime, CLI,
+templates, setup/deferred-build tools, and renders the first managed
+project/script plus onboarding, Contract, and deployment inputs in one ownership
+transaction. Use `--preview` to emit the
 deterministic plan without changing files. A repeated Apply is a no-op; an
 unowned or edited collision is reported as a conflict rather than overwritten.
 Every changed file has a retained pre-transaction backup and exact content hash
 under `Saved/UnifiedScript/Adoption`; `adopt <project> --rollback` restores the
 latest transaction only when no post-adoption file has drifted.
 
-Run the read-only product diagnosis with:
+Run the read-only product diagnosis from the installed project-local entry point:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" `
+$projectTools = 'D:\Project\Game\Plugins\UEUnifiedScript\Tools'
+& "$projectTools\unifiedscript.cmd" `
   doctor D:\Project\Game\Game.uproject --engine-root D:\UE_5.8
 ```
 
@@ -132,20 +134,26 @@ and therefore are no longer the recommended golden path.
 ## Build and run project onboarding
 
 After adoption creates `Config/UnifiedScript.onboarding.json`, invoke the
-build/onboarding tool from the extracted SDK:
+installed build/onboarding tool. The extracted SDK is no longer required:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\setup-unreal-project.ps1" `
+  -File "$projectTools\setup-unreal-project.ps1" `
   -Project D:\Project\Game\Game.uproject `
   -EngineRoot D:\UE_5.8
 ```
 
-The command automatically selects packaged SDK mode, copies the verified
-managed runtime into the installed plugin, and then executes the same
-reflection/contract/build/deployment/determinism pipeline documented in
-[Unreal project onboarding](UNREAL_ONBOARDING.md). The generated onboarding
-report identifies `sdkLayout: packaged`.
+The command automatically selects embedded mode, uses the installed managed
+runtime in place, and executes the same reflection/contract/build/deployment/
+determinism pipeline documented in [Unreal project onboarding](UNREAL_ONBOARDING.md).
+The generated onboarding report identifies `sdkLayout: embedded`.
+Invoking the copy under the extracted SDK remains supported for recovery and
+reports `sdkLayout: packaged`; it verifies and reinstalls the packaged runtime
+before running the same pipeline.
+
+Once the plugin loads, **Tools > UnifiedScript Project Setup** provides Preview,
+Repair, Doctor, and **Save, Exit & Build** through the same project-local tools.
+The build action waits until the Editor exits before touching native binaries.
 
 See the [first-script walkthrough](UNREAL_FIRST_SCRIPT.md) for the complete
 adopt/build/Play path. The companion

@@ -56,8 +56,9 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-31**
 
 - Active milestone: **M13.1 in progress — Puerts-grade zero-config adoption and automatic Unreal API surface**
-- Current tranche: **M13.1A packaged CLI adoption loop complete; Unreal Editor entry and one-action native onboarding remain**
-- Next slice: **M13.1A — expose adopt/doctor in the Unreal Editor and connect the adopted project to one build/onboarding action without revealing generator ordering**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local tools plus one Unreal Editor Setup/Doctor/Build surface**
+- Current tranche: **M13.1A-2 — native onboarding and cook acceptance from a clean adopted project**
+- Next acceptance: **run the project-local setup action through UE 5.8 reflection, bindings, native/managed builds, Script Asset synchronization, Automation, deterministic validation, and a managed cook without repository-relative tools**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -73,10 +74,11 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `5be7dde` (`fix: remove CI snapshots with long paths`) |
 | UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 619 / 619 passed |
-| Repository validator | 92 / 92 passed |
+| Managed tests | 628 / 628 passed |
+| Repository validator | 94 / 94 passed |
+| Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 19 / 19 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
+| `UnifiedScript.Unreal` Automation | 20 / 20 passed, including the project-local Setup command contract, bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -1798,6 +1800,37 @@ An external pilot is an acceptance gate, not the first user experience. We do
 not ask a pilot developer to manually assemble the system that M13 is meant to
 productize.
 
+### Ordered M13 delivery queue
+
+This queue is the operational breakdown of the milestones below. Only one row
+is active at a time so that setup, generation, and gameplay authoring do not
+become three independently configured products.
+
+| Slice | User-visible result | Exit gate | State |
+| --- | --- | --- | --- |
+| M13.1A-0 — packaged adoption CLI | `adopt` and `doctor` can transactionally install, diagnose, rerun, and roll back a consumer project | public packaged CLI passes clean native/Blueprint-only fixtures with deterministic no-change reruns | Complete (`9fe7f70`) |
+| M13.1A-1 — Editor project setup | an adopted project carries its own CLI and exposes Preview, Repair, Doctor, and Build/Onboard in Unreal Editor | Editor actions use exactly the CLI configuration model; native replacement is deferred safely until the Editor exits | Complete |
+| M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `UnifiedScript.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | **Active** |
+| M13.1B-1 — automatic reflected API surface | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, localized regeneration, exact coverage, and unsupported-use diagnostics pass on consumer fixtures | Pending |
+| M13.1C-1 — first managed Script Class | **Create UnifiedScript Class** produces an attachable Actor/Component/UObject behavior that reaches first Play | create, compile, attach, Play, stop, reload, reopen, cook, and package pass without a handwritten facade | Pending |
+| M13.2 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | Pending |
+| M13.3 — daily edit loop | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable workflow | a new user completes the published walkthrough without repository knowledge or generator commands | Pending |
+| M13.4 — external production pilot | a non-BlockBreaker project migrates a representative gameplay slice through the published golden path | exact old/new observables match and a second clean checkout reproduces adoption and packaging | Pending |
+| M13.5–M13.6 — ecosystem closure | native extensions, networking, platforms, distribution, and reproduced performance losses are covered | every advertised row has build, lifecycle, cook/package, smoke, upgrade/rollback, and workload evidence | Pending |
+
+The active M13.1A-1 slice is deliberately narrow:
+
+1. install the packaged CLI, templates, setup script, and deferred onboarding
+   helper inside the adopted plugin/project;
+2. expose Preview Adoption, Repair Project Files, Doctor, and Build/Onboard from
+   one Editor panel, with non-blocking output and no second configuration model;
+3. save and close the Editor before replacing or rebuilding a loaded native
+   plugin, then continue onboarding through the project-local helper;
+4. prove command construction with native tests, then pass the UE 5.8 build,
+   Automation, managed suite, repository validator, and packaged adoption gate;
+5. update the user walkthrough and create one local commit before advancing the
+   cursor to M13.1B-1.
+
 ### Product usability contract
 
 The target golden path for an existing Unreal project is:
@@ -1879,10 +1912,10 @@ without learning the repository's internal artifact pipeline.
 - [ ] install/enable the plugin and SDK, create the managed workspace, generated
   directories, build/cook integration, and default diagnostics policy in one
   owned operation
-- [ ] add `unifiedscript doctor <Game.uproject>` to classify missing runtime,
+- [x] add `unifiedscript doctor <Game.uproject>` to classify missing runtime,
   stale generation, engine mismatch, cook closure, and conflicting ownership,
   with safe repair actions where possible
-- [ ] provide the same adopt/doctor path from the Unreal editor without creating
+- [x] provide the same adopt/doctor path from the Unreal editor without creating
   a separate configuration model
 - [x] cover empty Blueprint-only, native C++, and already-adopted project
   fixtures, including upgrade, interrupted apply, rollback, and no-change rerun
@@ -1892,7 +1925,7 @@ buildable consumer; the second run has no diff; rollback restores the original
 project; no hand editing of `.uproject`, `.uplugin`, `.Build.cs`, JSON Contract,
 reflection, deployment, or generated source is required.
 
-Progress (2026-08-31, M13.1A packaged CLI tranche): `adopt` now plans or applies
+Progress (2026-08-31, M13.1A-0 packaged CLI tranche, commit `9fe7f70`): `adopt` now plans or applies
 one project-contained transaction across the `.uproject` plugin merge, source
 plugin, managed runtime closure, managed project/first script, onboarding
 configuration, Contract, and deployment manifest. Every target is classified as
@@ -1915,7 +1948,32 @@ on rollback. Evidence is at
 SDK archive SHA-256 is
 `98427205b0375db9f3caaae78c1cc52c4caef5e041abafb2b73dff4c9be472c2`.
 This tranche does not yet claim the UE Editor entry, native Unreal build, first
-binding coverage generation, or full M13.1A acceptance.
+binding coverage generation, or full M13.1A acceptance. M13.1A-1 now owns the
+project-local tools and Editor entry; M13.1A-2 owns the native/cook acceptance.
+
+Progress (2026-08-31, M13.1A-1 Editor project setup tranche): adoption now
+installs the framework-dependent CLI, templates, setup script, and deferred
+onboarding helper below `Plugins/UEUnifiedScript/Tools`. The native Editor module
+registers **UnifiedScript Project Setup** and `UnifiedScript.OpenProjectSetup`;
+its Slate surface exposes Preview, Repair, Doctor, and **Save, Exit & Build**.
+Attached commands stream output through a non-blocking active timer. The build
+path saves dirty packages, launches a helper bound to the current Editor PID,
+requests normal exit, and starts native onboarding only after Windows releases
+the loaded plugin DLL. Preview and Repair retain separate reports and every
+operation is constructed from the same project-local CLI/configuration contract.
+
+The final UE 5.8.1 editor target builds, the new native command-contract test and
+the complete `UnifiedScript.Unreal` Automation suite pass 20/20, the managed
+suite passes 628/628, and the repository validator passes 95/95. The final SDK
+archive SHA-256 is
+`fd6e85815b5d52ca0f537455b05c1298577c07b2d14224724a2aece38465c147`.
+Its two clean packaged fixtures each installed 169 owned files, built the first
+managed project without warnings, passed project-local Doctor, reran adoption
+from the project-local SDK root with 169 unchanged and zero changed/conflicts,
+and rolled back all 169 files. Evidence is at
+`artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json`.
+The current M13.1A-2 tranche still owes a complete project-local native
+onboarding and managed cook/package proof from a clean adopted fixture.
 
 #### M13.1B — Automatic development API surface
 

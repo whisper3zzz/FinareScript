@@ -12,9 +12,10 @@ ownership, runtime, engine, generation, and cook-readiness state.
 adoption. It turns the managed build, Unreal build, reflection export, binding
 generation, Script Asset synchronization, determinism, and Automation steps
 into one versioned operation driven by the adopted configuration. The same
-script runs from either a source checkout or an extracted [distributable
-SDK](UNREAL_SDK.md); it reports `sdkLayout: repository` or `sdkLayout: packaged`
-and uses the SDK's verified managed payload in packaged mode.
+script runs from a source checkout, an extracted [distributable SDK](UNREAL_SDK.md),
+or the tools installed inside an adopted plugin. It reports `sdkLayout:
+repository`, `sdkLayout: packaged`, or `sdkLayout: embedded`; embedded mode uses
+the project-local CLI/runtime without copying the payload onto itself.
 
 ## Adopt and diagnose
 
@@ -47,9 +48,26 @@ first-generation coverage is a warning after adoption; a missing/disabled
 plugin, runtime closure, managed project, invalid onboarding schema, corrupt
 transaction state, or changed product-owned plugin/runtime is a failure.
 
+Adoption also installs these project-local product tools below
+`Plugins/UEUnifiedScript/Tools`:
+
+- `unifiedscript.cmd` and `UnifiedScript.Cli` for Preview, Repair, and Doctor;
+- `setup-unreal-project.ps1` for native/managed onboarding;
+- `run-unifiedscript-onboarding-after-process.ps1` for a build that must wait
+  until the current Editor releases the plugin DLL;
+- the versioned project templates used by deterministic Repair.
+
+After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
+same operations in Slate. Preview, Repair, and Doctor stream their child-process
+output without blocking the game thread. **Save, Exit & Build** saves dirty
+packages, launches the deferred helper with the current Editor process ID, and
+requests a normal Editor exit. The helper then invokes the project-local setup
+script and writes its report under `Saved/UnifiedScript/ProjectSetup`.
+
 ## Apply
 
-From the UnifiedScript SDK/repository root:
+From the UnifiedScript repository, extracted SDK, or adopted project's plugin
+tools directory:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `

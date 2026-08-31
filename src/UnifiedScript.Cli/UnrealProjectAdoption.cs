@@ -240,6 +240,63 @@ internal static partial class UnrealProjectAdoptionService
                 "runtime",
                 File.ReadAllBytes(sourcePath));
         }
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     layout.CliRoot,
+                     "*",
+                     SearchOption.AllDirectories).OrderBy(static path => path, PathComparer))
+        {
+            AddDesired(
+                desired,
+                projectRoot,
+                Path.Combine(
+                    "Plugins",
+                    "UEUnifiedScript",
+                    "Tools",
+                    "UnifiedScript.Cli",
+                    GetRelativePath(layout.CliRoot, sourcePath)),
+                "tool",
+                File.ReadAllBytes(sourcePath));
+        }
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     layout.TemplateRoot,
+                     "*",
+                     SearchOption.AllDirectories).OrderBy(static path => path, PathComparer))
+        {
+            AddDesired(
+                desired,
+                projectRoot,
+                Path.Combine(
+                    "Plugins",
+                    "UEUnifiedScript",
+                    "Tools",
+                    "Templates",
+                    "UnrealProject",
+                    GetRelativePath(layout.TemplateRoot, sourcePath)),
+                "tool",
+                File.ReadAllBytes(sourcePath));
+        }
+        AddDesired(
+            desired,
+            projectRoot,
+            Path.Combine("Plugins", "UEUnifiedScript", "Tools", "unifiedscript.cmd"),
+            "tool",
+            File.ReadAllBytes(layout.CliWrapperPath));
+        AddDesired(
+            desired,
+            projectRoot,
+            Path.Combine("Plugins", "UEUnifiedScript", "Tools", "setup-unreal-project.ps1"),
+            "tool",
+            File.ReadAllBytes(layout.OnboardingScriptPath));
+        AddDesired(
+            desired,
+            projectRoot,
+            Path.Combine(
+                "Plugins",
+                "UEUnifiedScript",
+                "Tools",
+                "run-unifiedscript-onboarding-after-process.ps1"),
+            "tool",
+            File.ReadAllBytes(layout.DeferredOnboardingScriptPath));
 
         foreach (string required in RequiredRuntimeFiles)
         {
@@ -626,6 +683,34 @@ internal static partial class UnrealProjectAdoptionService
                 $"Managed runtime closure is missing: {string.Join(", ", missingRuntime)}",
                 "Re-run unifiedscript adopt from the intended SDK."));
 
+        string projectCli = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "UnifiedScript.Cli",
+            "UnifiedScript.Cli.dll");
+        string projectCliWrapper = Path.Combine(pluginRoot, "Tools", "unifiedscript.cmd");
+        string projectOnboarding = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "setup-unreal-project.ps1");
+        string projectDeferredOnboarding = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "run-unifiedscript-onboarding-after-process.ps1");
+        checks.Add(File.Exists(projectCli) &&
+                   File.Exists(projectCliWrapper) &&
+                   File.Exists(projectOnboarding) &&
+                   File.Exists(projectDeferredOnboarding)
+            ? new UnrealProjectDoctorCheck(
+                "project-tools",
+                "passed",
+                "Project-local adopt/doctor/build tools are installed for editor use.")
+            : new UnrealProjectDoctorCheck(
+                "project-tools",
+                "failed",
+                "The project-local UnifiedScript CLI or onboarding tool is missing.",
+                "Re-run unifiedscript adopt from the intended SDK."));
+
         string configPath = Path.Combine(projectRoot, "Config", "UnifiedScript.onboarding.json");
         checks.Add(ReadSchemaCheck(
             "onboarding-config",
@@ -826,7 +911,7 @@ internal static partial class UnrealProjectAdoptionService
 
         var drift = new List<string>();
         foreach (UnrealProjectAdoptionTransactionEntry entry in transaction.Files
-                     .Where(static entry => entry.Kind is "plugin" or "runtime"))
+                     .Where(static entry => entry.Kind is "plugin" or "runtime" or "tool"))
         {
             string target = ResolveContainedPath(projectRoot, entry.Path);
             if (!File.Exists(target) ||
@@ -1214,7 +1299,7 @@ internal static partial class UnrealProjectAdoptionService
                 .FirstOrDefault()
             : null;
         string editorTarget = editorTargetFile is null
-            ? $"{projectName}Editor"
+            ? "UnrealEditor"
             : Path.GetFileName(editorTargetFile)[..^".Target.cs".Length];
         ValidateIdentifier(editorTarget, "Editor target");
         return new ProjectMetadata(projectModule, editorTarget);
@@ -1273,16 +1358,19 @@ internal static partial class UnrealProjectAdoptionService
         {
             string packagedTemplates = Path.Combine(root, "Templates", "UnrealProject");
             string repositoryTemplates = Path.Combine(root, "templates", "UnrealProject");
+            string embeddedTemplates = Path.Combine(root, "Tools", "Templates", "UnrealProject");
             string? templateRoot = Directory.Exists(packagedTemplates)
                 ? packagedTemplates
-                : Directory.Exists(repositoryTemplates) ? repositoryTemplates : null;
+                : Directory.Exists(repositoryTemplates)
+                    ? repositoryTemplates
+                    : Directory.Exists(embeddedTemplates) ? embeddedTemplates : null;
             string packagedPlugin = Path.Combine(root, "Plugins", "UEUnifiedScript");
             string repositoryPlugin = Path.Combine(root, "HostProject", "Plugins", "UEUnifiedScript");
             string? pluginRoot = File.Exists(Path.Combine(packagedPlugin, "UEUnifiedScript.uplugin"))
                 ? packagedPlugin
                 : File.Exists(Path.Combine(repositoryPlugin, "UEUnifiedScript.uplugin"))
                     ? repositoryPlugin
-                    : null;
+                    : File.Exists(Path.Combine(root, "UEUnifiedScript.uplugin")) ? root : null;
             string packagedRuntime = Path.Combine(root, "Managed", "Runtime");
             string repositoryRuntime = pluginRoot is null
                 ? string.Empty
@@ -1290,7 +1378,43 @@ internal static partial class UnrealProjectAdoptionService
             string? runtimeRoot = Directory.Exists(packagedRuntime)
                 ? packagedRuntime
                 : Directory.Exists(repositoryRuntime) ? repositoryRuntime : null;
-            if (templateRoot is not null && pluginRoot is not null && runtimeRoot is not null)
+            string packagedCli = Path.Combine(root, "Tools", "UnifiedScript.Cli");
+            string repositoryCli = Path.Combine(
+                root,
+                "src",
+                "UnifiedScript.Cli",
+                "bin",
+                "Release",
+                "net10.0");
+            string? cliRoot = File.Exists(Path.Combine(packagedCli, "UnifiedScript.Cli.dll"))
+                ? packagedCli
+                : File.Exists(Path.Combine(repositoryCli, "UnifiedScript.Cli.dll"))
+                    ? repositoryCli
+                    : null;
+            string packagedWrapper = Path.Combine(root, "Tools", "unifiedscript.cmd");
+            string repositoryWrapper = Path.Combine(root, "tools", "unifiedscript.cmd");
+            string? wrapper = File.Exists(packagedWrapper)
+                ? packagedWrapper
+                : File.Exists(repositoryWrapper) ? repositoryWrapper : null;
+            string packagedOnboarding = Path.Combine(root, "Tools", "setup-unreal-project.ps1");
+            string repositoryOnboarding = Path.Combine(root, "tools", "setup-unreal-project.ps1");
+            string? onboarding = File.Exists(packagedOnboarding)
+                ? packagedOnboarding
+                : File.Exists(repositoryOnboarding) ? repositoryOnboarding : null;
+            string packagedDeferredOnboarding = Path.Combine(
+                root,
+                "Tools",
+                "run-unifiedscript-onboarding-after-process.ps1");
+            string repositoryDeferredOnboarding = Path.Combine(
+                root,
+                "tools",
+                "run-unifiedscript-onboarding-after-process.ps1");
+            string? deferredOnboarding = File.Exists(packagedDeferredOnboarding)
+                ? packagedDeferredOnboarding
+                : File.Exists(repositoryDeferredOnboarding) ? repositoryDeferredOnboarding : null;
+            if (templateRoot is not null && pluginRoot is not null && runtimeRoot is not null &&
+                cliRoot is not null && wrapper is not null && onboarding is not null &&
+                deferredOnboarding is not null)
             {
                 string catalog = Path.Combine(templateRoot, "unifiedscript.project-templates.json");
                 if (File.Exists(catalog) && RequiredRuntimeFiles.All(file =>
@@ -1300,7 +1424,11 @@ internal static partial class UnrealProjectAdoptionService
                         Path.GetFullPath(root),
                         Path.GetFullPath(templateRoot),
                         Path.GetFullPath(pluginRoot),
-                        Path.GetFullPath(runtimeRoot));
+                        Path.GetFullPath(runtimeRoot),
+                        Path.GetFullPath(cliRoot),
+                        Path.GetFullPath(wrapper),
+                        Path.GetFullPath(onboarding),
+                        Path.GetFullPath(deferredOnboarding));
                 }
             }
         }
@@ -1317,7 +1445,7 @@ internal static partial class UnrealProjectAdoptionService
         {
             string relative = NormalizeRelative(GetRelativePath(pluginRoot, path));
             string firstSegment = relative.Split('/')[0];
-            if (firstSegment is "Binaries" or "Intermediate" or "Saved" or "DerivedDataCache" ||
+            if (firstSegment is "Binaries" or "Intermediate" or "Saved" or "DerivedDataCache" or "Tools" ||
                 string.Equals(path, descriptor, PathComparison))
             {
                 continue;
@@ -1479,7 +1607,11 @@ internal static partial class UnrealProjectAdoptionService
         string SdkRoot,
         string TemplateRoot,
         string PluginRoot,
-        string RuntimeRoot);
+        string RuntimeRoot,
+        string CliRoot,
+        string CliWrapperPath,
+        string OnboardingScriptPath,
+        string DeferredOnboardingScriptPath);
 
     private sealed record AdoptionTemplate(string Id, string ScriptTemplate);
 

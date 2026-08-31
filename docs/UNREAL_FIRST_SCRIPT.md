@@ -24,7 +24,8 @@ decision without changing the project. Apply then performs one file transaction:
 
 - merges the enabled `UEUnifiedScript` entry while preserving other `.uproject`
   fields;
-- installs the SDK source plugin and managed runtime closure;
+- installs the SDK source plugin, managed runtime closure, project-local CLI,
+  templates, setup script, and deferred onboarding helper;
 - creates the managed project and `FirstScript.cs` from the selected template;
 - creates the project-owned onboarding, Contract, and deployment inputs;
 - records exact before/after hashes and backups under
@@ -42,26 +43,42 @@ any changed files and run:
 
 Run `doctor` at any point to diagnose the project/plugin/runtime/configuration,
 engine resolution, adopted payload drift, and whether the first generated
-binding coverage baseline exists:
+binding coverage baseline exists. After adoption, the project-local entry point
+is preferred because it proves the installed project is self-contained:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" `
+$projectTools = 'D:\Project\Game\Plugins\UEUnifiedScript\Tools'
+& "$projectTools\unifiedscript.cmd" `
   doctor $project --engine-root D:\UE_5.8
 ```
 
 ## 2. Build bindings and the first Script Asset
 
 Adoption intentionally finishes before native compilation so it remains
-previewable and rollback-safe. Run the existing project build/onboarding action
-to compile the plugin, export reflection, generate bindings, compile the managed
-project, and materialize the Script Asset:
+previewable and rollback-safe. If the source plugin has not been compiled and
+the project cannot open in the Editor yet, run its installed onboarding action
+once to compile the plugin, export reflection, generate bindings, compile the
+managed project, and materialize the Script Asset:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\setup-unreal-project.ps1" `
+  -File "$projectTools\setup-unreal-project.ps1" `
   -Project $project `
   -EngineRoot D:\UE_5.8
 ```
+
+Once the plugin loads, open **Tools > UnifiedScript Project Setup**. The panel
+uses the same project-local CLI and configuration model:
+
+1. **Preview** shows the transactional adoption plan without writes;
+2. **Repair** applies only owned, conflict-free project changes;
+3. **Run Doctor** checks runtime, generation, engine, ownership, and cook state;
+4. **Save, Exit & Build** saves dirty packages, closes the Editor, and starts
+   onboarding only after the loaded native plugin DLL has been released.
+
+The last action deliberately exits the Editor. Replacing or rebuilding a loaded
+native plugin in place is unsafe on Windows; the deferred helper waits for the
+exact Editor process and then runs the installed setup script.
 
 The adopted project owns:
 
