@@ -68,6 +68,9 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
     Candidate.CliExecutable = FPaths::Combine(
         Candidate.PluginRoot,
         TEXT("Tools/UnifiedScript.Cli/UnifiedScript.Cli.exe"));
+    Candidate.SetupScript = FPaths::Combine(
+        Candidate.PluginRoot,
+        TEXT("Tools/setup-unreal-project.ps1"));
     Candidate.DeferredOnboardingScript = FPaths::Combine(
         Candidate.PluginRoot,
         TEXT("Tools/run-unifiedscript-onboarding-after-process.ps1"));
@@ -81,6 +84,7 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
     Candidate.RepairReport = FPaths::Combine(ReportRoot, TEXT("adoption-repair.json"));
     Candidate.DoctorReport = FPaths::Combine(ReportRoot, TEXT("doctor-report.json"));
     Candidate.OnboardingReport = FPaths::Combine(ReportRoot, TEXT("onboarding-report.json"));
+    Candidate.DailyBuildReport = FPaths::Combine(ReportRoot, TEXT("daily-build-report.json"));
     Candidate.DiagnosticsInputRoot = FPaths::Combine(
         Candidate.ProjectRoot,
         TEXT("Saved/UnifiedScript"));
@@ -96,6 +100,10 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
         !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
             Candidate.CliExecutable,
             TEXT("Project-local UnifiedScript CLI"),
+            OutError) ||
+        !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
+            Candidate.SetupScript,
+            TEXT("Project-local onboarding tool"),
             OutError) ||
         !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
             Candidate.DeferredOnboardingScript,
@@ -157,6 +165,17 @@ bool FUnifiedScriptProjectSetup::BuildCommand(
         Candidate.Arguments = FString::Printf(
             TEXT("diagnostics-bundle %s --out %s"),
             *Quote(Paths.DiagnosticsInputRoot),
+            *Quote(Candidate.ReportPath));
+        break;
+    case EUnifiedScriptProjectSetupOperation::DailyBuildAttached:
+        Candidate.Executable = TEXT("powershell.exe");
+        Candidate.ReportPath = Paths.DailyBuildReport;
+        Candidate.Arguments = FString::Printf(
+            TEXT("-NoProfile -ExecutionPolicy Bypass -File %s -Project %s ")
+            TEXT("-EngineRoot %s -Report %s -EditorAttached"),
+            *Quote(Paths.SetupScript),
+            *Quote(Paths.ProjectFile),
+            *Quote(Paths.EngineRoot),
             *Quote(Candidate.ReportPath));
         break;
     case EUnifiedScriptProjectSetupOperation::BuildAfterEditorExit:
@@ -334,6 +353,89 @@ bool FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
     }
 
     OutRequest = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptProjectSetup::ReadDailyBuildReceipt(
+    const FString& ReportPath,
+    FUnifiedScriptDailyBuildReceipt& OutReceipt,
+    FString& OutError)
+{
+    FString Json;
+    if (!FFileHelper::LoadFileToString(Json, *ReportPath))
+    {
+        OutError = FString::Printf(TEXT("Cannot read daily build report '%s'."), *ReportPath);
+        return false;
+    }
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = FString::Printf(
+            TEXT("Invalid daily build report '%s': %s"),
+            *ReportPath,
+            *Reader->GetErrorMessage());
+        return false;
+    }
+
+    FString Schema;
+    FString Mode;
+    FUnifiedScriptDailyBuildReceipt Candidate;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != TEXT("unifiedscript.unreal-project-onboarding-report/v0.1") ||
+        !Root->TryGetStringField(TEXT("mode"), Mode) || Mode != TEXT("dailyEditor") ||
+        !Root->TryGetStringField(TEXT("status"), Candidate.Status) ||
+        (Candidate.Status != TEXT("passed") &&
+            Candidate.Status != TEXT("restartRequired") &&
+            Candidate.Status != TEXT("failed")))
+    {
+        OutError = TEXT("Daily build report schema, mode, or status is invalid.");
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* Outputs = nullptr;
+    if (Root->TryGetObjectField(TEXT("outputs"), Outputs) &&
+        Outputs != nullptr && Outputs->IsValid())
+    {
+        (*Outputs)->TryGetStringField(
+            TEXT("requiredAction"), Candidate.RequiredAction);
+        (*Outputs)->TryGetStringField(
+            TEXT("restartRequiredStage"), Candidate.RestartRequiredStage);
+        (*Outputs)->TryGetStringField(TEXT("restartReason"), Candidate.RestartReason);
+        const TSharedPtr<FJsonObject>* BuildGraph = nullptr;
+        if ((*Outputs)->TryGetObjectField(TEXT("buildGraph"), BuildGraph) &&
+            BuildGraph != nullptr && BuildGraph->IsValid())
+        {
+            double Count = 0.0;
+            if ((*BuildGraph)->TryGetNumberField(TEXT("executed"), Count))
+            {
+                Candidate.ExecutedStages = static_cast<int32>(Count);
+            }
+            if ((*BuildGraph)->TryGetNumberField(TEXT("skipped"), Count))
+            {
+                Candidate.SkippedStages = static_cast<int32>(Count);
+            }
+            if ((*BuildGraph)->TryGetNumberField(TEXT("deferred"), Count))
+            {
+                Candidate.DeferredStages = static_cast<int32>(Count);
+            }
+        }
+    }
+    const TSharedPtr<FJsonObject>* Error = nullptr;
+    if (Root->TryGetObjectField(TEXT("error"), Error) &&
+        Error != nullptr && Error->IsValid())
+    {
+        (*Error)->TryGetStringField(TEXT("code"), Candidate.ErrorCode);
+        (*Error)->TryGetStringField(TEXT("message"), Candidate.ErrorMessage);
+    }
+    if (Candidate.Status == TEXT("restartRequired") && !Candidate.RequiresRestart())
+    {
+        OutError = TEXT("Restart-required daily build report has no restartEditor action.");
+        return false;
+    }
+
+    OutReceipt = MoveTemp(Candidate);
     OutError.Reset();
     return true;
 }

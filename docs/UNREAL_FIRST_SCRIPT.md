@@ -178,6 +178,15 @@ restarts retained generations, and restores native state and overrides. The
 receipt records `batchPrepare`, `batchCommit`, `batchAbort`, and
 `batchFinalize` for this two-phase swap.
 
+For ordinary IDE source edits, use **Tools > UnifiedScript Project Setup >
+Build & Reload**. It evaluates the persistent Build/Play graph without closing
+the Editor, rebuilds only invalidated managed/chunk outputs, and then routes all
+loaded Script Class assets through the same preflight/prepare/commit/finalize
+coordinator. Editor-owned deployment and startup checks are deferred against
+their last successful state. If a native thunk, reflection surface, deployment
+schema, or baseline must change, the receipt names the blocking stage and asks
+for **Build, Restart & Continue**; no component is partially reloaded.
+
 ## 5. Packaged play
 
 Save the map containing the actor and package with the ordinary Unreal

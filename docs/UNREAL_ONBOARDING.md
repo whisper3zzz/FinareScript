@@ -94,7 +94,15 @@ detection, Repair, exact rollback, and embedded no-change adoption.
 
 After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
 same operations in Slate. Preview, Repair, Doctor, and support-bundle export stream their child-process
-output without blocking the game thread. **Build, Restart & Continue** saves
+output without blocking the game thread. **Build & Reload** runs the same
+dependency graph in `dailyEditor` mode while the Editor stays open. A compatible
+C# body change rebuilds and publishes only the managed assembly/chunk stages,
+defers Editor-owned asset sync and Automation, then passes one build receipt to
+the all-instance two-phase reload coordinator. A native, reflection, deployment
+schema, or missing-baseline change returns `restartRequired` with the exact
+stage and `restartEditor` action before any live generation changes.
+
+**Build, Restart & Continue** remains the explicit fallback. It saves
 dirty packages, launches the deferred helper with the current Editor process
 ID, and requests a normal Editor exit. The helper then invokes the project-local
 setup script, writes its report under `Saved/UnifiedScript/ProjectSetup`, and
@@ -132,6 +140,12 @@ project. `-EngineRoot` may be omitted when `UNIFIEDSCRIPT_UE_ROOT` is set or the
 project's `EngineAssociation` resolves through the registered Unreal builds.
 `-Modules` and `-Classes` can override the checked-in reflection selection for
 an explicit local run.
+
+The installed Editor calls the same script with `-EditorAttached` for a daily
+Build & Reload. This mode is not a weaker build: it executes invalidated
+Editor-safe stages, preserves prior state for deliberately deferred Editor-owned
+stages, and returns exit/report status `restartRequired` when an invalidated
+stage needs an Editor restart. Callers must not reload on that status.
 
 Apply persists one dependency graph at
 `Saved/UnifiedScript/BuildGraph/onboarding-state.json`. Each stage fingerprints

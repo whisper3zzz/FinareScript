@@ -276,6 +276,34 @@ try {
     Assert-BuildGraph ($report.executed -eq 0 -and $report.skipped -eq 2) `
         'No-change report must count two skipped stages and zero executions.'
 
+    $deferred = New-UnifiedScriptBuildGraphContext `
+        -StatePath $state `
+        -Project $project `
+        -Config $config `
+        -EngineVersion '5.8.1'
+    $deferredSemantic = Get-UnifiedScriptBuildGraphStageDecision `
+        -Context $deferred `
+        -Name 'semantic' `
+        -Values ([ordered]@{ classes = @() }) `
+        -PathInputs ([ordered]@{ source = @($source) }) `
+        -OutputPaths @($semantic)
+    Assert-BuildGraph $deferredSemantic.ShouldRun `
+        'Changed live input must request the Editor-unsafe stage.'
+    Defer-UnifiedScriptBuildGraphStage `
+        -Context $deferred `
+        -Decision $deferredSemantic `
+        -Reason 'Editor owns the published output' | Out-Null
+    $deferredReport = Get-UnifiedScriptBuildGraphReport -Context $deferred
+    Assert-BuildGraph (
+        $deferredReport.deferred -eq 1 -and
+        $deferredReport.executed -eq 0 -and
+        $deferredReport.skipped -eq 0) `
+        'Editor-attached report must count a deferred stage separately.'
+    Assert-BuildGraph (
+        $deferred.CurrentStages['semantic'].inputFingerprint -eq
+        $deferred.PreviousStages['semantic'].inputFingerprint) `
+        'Deferral must retain the last successful stage state instead of accepting new inputs.'
+
     $matrixRoot = Join-Path $root 'matrix'
     New-Item -ItemType Directory -Force -Path $matrixRoot | Out-Null
     $matrixSource = Join-Path $matrixRoot 'Gameplay.cs'

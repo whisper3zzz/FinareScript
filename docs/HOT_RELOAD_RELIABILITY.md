@@ -22,7 +22,17 @@ is extended with:
   `oldContextRetirement` phases;
 - native `batchPrepare`, `stateCommit`, `batchCommit`, `batchAbort`,
   `batchFinalize`, and `oldContextCollection` phases around the generation
-  swap.
+swap.
+
+The ordinary-source path starts the same receipt from Project Setup. Its
+`dailyBuild` source records `dependencyAwareBuild` and `artifactPublication`
+after `setup-unreal-project.ps1 -EditorAttached` succeeds. Editor-attached mode
+can execute managed toolchain/gameplay/chunk and deterministic generation
+stages, but it never attempts an invalidated native/reflection stage under a
+loaded Editor. Those changes return `restartRequired` with the exact stage and
+`restartEditor`; compatible output instead enters the same all-asset batch
+coordinator below. Deferred deployment/startup stages retain their last
+successful BuildGraph state and are not falsely accepted as newly completed.
 
 Every phase carries a state, non-negative duration, and bounded detail. The
 top-level transaction retains the Workbench `fromGeneration`,

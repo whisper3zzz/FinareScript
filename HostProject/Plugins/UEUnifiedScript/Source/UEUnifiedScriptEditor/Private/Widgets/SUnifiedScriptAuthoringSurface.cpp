@@ -4397,6 +4397,62 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
 }
 
 FUnifiedScriptReloadBatchResult
+SUnifiedScriptAuthoringSurface::ReloadAllScriptClassComponents(
+    const FString& ReloadTransactionJson)
+{
+    TArray<TWeakObjectPtr<UUnifiedScriptAsset>> Assets;
+    for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
+    {
+        UUnifiedScriptComponent* Component = *It;
+        UUnifiedScriptAsset* Asset = Component != nullptr ? Component->ScriptAsset.Get() : nullptr;
+        if (!IsValid(Component) || Component->IsTemplate() ||
+            Component->GetWorld() == nullptr || Asset == nullptr)
+        {
+            continue;
+        }
+        Assets.AddUnique(Asset);
+    }
+    Assets.Sort([](
+        const TWeakObjectPtr<UUnifiedScriptAsset>& Left,
+        const TWeakObjectPtr<UUnifiedScriptAsset>& Right)
+    {
+        const UUnifiedScriptAsset* LeftAsset = Left.Get();
+        const UUnifiedScriptAsset* RightAsset = Right.Get();
+        return LeftAsset != nullptr && RightAsset != nullptr
+            ? LeftAsset->GetPathName() < RightAsset->GetPathName()
+            : LeftAsset != nullptr;
+    });
+
+    FUnifiedScriptReloadBatchResult Aggregate;
+    for (const TWeakObjectPtr<UUnifiedScriptAsset>& WeakAsset : Assets)
+    {
+        const UUnifiedScriptAsset* Asset = WeakAsset.Get();
+        if (Asset == nullptr)
+        {
+            continue;
+        }
+        const FUnifiedScriptReloadBatchResult Batch =
+            ReloadMatchingComponentsForAsset(Asset, FString(), ReloadTransactionJson);
+        Aggregate.Matched += Batch.Matched;
+        Aggregate.Reloaded += Batch.Reloaded;
+        Aggregate.Failed += Batch.Failed;
+        Aggregate.PreflightRejected += Batch.PreflightRejected;
+        Aggregate.Prepared += Batch.Prepared;
+        Aggregate.PrepareRejected += Batch.PrepareRejected;
+        Aggregate.Committed += Batch.Committed;
+        Aggregate.CommitRejected += Batch.CommitRejected;
+        Aggregate.Aborted += Batch.Aborted;
+        Aggregate.FinalizeFailed += Batch.FinalizeFailed;
+        if (!Batch.ObservedReloadTransactionJson.IsEmpty())
+        {
+            Aggregate.ObservedReloadTransactionJson =
+                Batch.ObservedReloadTransactionJson;
+        }
+    }
+    return Aggregate;
+}
+
+FUnifiedScriptReloadBatchResult
 SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
     const UUnifiedScriptAsset* PreferredAsset,
     const FString& LoadedSurfacePath,

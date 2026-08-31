@@ -8,6 +8,7 @@ enum class EUnifiedScriptProjectSetupOperation : uint8
     RepairAdoption,
     Doctor,
     ExportDiagnostics,
+    DailyBuildAttached,
     BuildAfterEditorExit,
 };
 
@@ -18,12 +19,14 @@ struct FUnifiedScriptProjectSetupPaths
     FString PluginRoot;
     FString EngineRoot;
     FString CliExecutable;
+    FString SetupScript;
     FString DeferredOnboardingScript;
     FString AuthoringScript;
     FString PreviewReport;
     FString RepairReport;
     FString DoctorReport;
     FString OnboardingReport;
+    FString DailyBuildReport;
     FString DiagnosticsInputRoot;
     FString DiagnosticsBundle;
     FString FirstPlayRequest;
@@ -35,6 +38,27 @@ struct FUnifiedScriptProjectSetupCommand
     FString Arguments;
     FString ReportPath;
     bool bDetached = false;
+};
+
+/** One editor-attached dependency-aware build decision. */
+struct FUnifiedScriptDailyBuildReceipt
+{
+    FString Status;
+    FString RequiredAction;
+    FString RestartRequiredStage;
+    FString RestartReason;
+    FString ErrorCode;
+    FString ErrorMessage;
+    int32 ExecutedStages = 0;
+    int32 SkippedStages = 0;
+    int32 DeferredStages = 0;
+
+    bool IsReadyToReload() const { return Status == TEXT("passed"); }
+    bool RequiresRestart() const
+    {
+        return Status == TEXT("restartRequired") &&
+            RequiredAction == TEXT("restartEditor");
+    }
 };
 
 /** Persistent handoff from Script Class creation through deferred build and Editor restart. */
@@ -95,5 +119,10 @@ public:
     static bool ReadFirstPlayRequest(
         const FString& RequestPath,
         FUnifiedScriptFirstPlayRequest& OutRequest,
+        FString& OutError);
+
+    static bool ReadDailyBuildReceipt(
+        const FString& ReportPath,
+        FUnifiedScriptDailyBuildReceipt& OutReceipt,
         FString& OutError);
 };

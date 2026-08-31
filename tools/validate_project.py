@@ -1651,6 +1651,22 @@ def main() -> int:
         "M13.2D-2 atomically swaps all prepared runtime generations and restores late failures"
     )
     require(
+        "EditorAttached" in onboarding_script
+        and "USONB3001" in onboarding_script
+        and "Defer-UnifiedScriptBuildGraphStage" in build_graph_module
+        and "deferred" in build_graph_test
+        and "DailyBuildAttached" in project_setup_header
+        and "ReadDailyBuildReceipt" in project_setup_source
+        and "Build & Reload" in project_setup_widget
+        and "ReloadAllScriptClassComponents" in authoring_surface_widget
+        and "Daily Build coordinator reloads" in authoring_surface_tests
+        and "[x] **M13.2D-3a" in roadmap_document,
+        "M13.2D-3a editor-attached dependency-aware build, exact restart receipt, or all-instance reload path is incomplete",
+    )
+    checks.append(
+        "M13.2D-3a runs one editor-attached build/reload or returns an exact restart action"
+    )
+    require(
         "UnifiedScriptScriptClassSmoke" in native_host_source_template
         and "LoadClass<AUnifiedScriptActor>" in native_host_source_template
         and "LoadClass<UUnifiedScriptComponent>" in native_host_source_template

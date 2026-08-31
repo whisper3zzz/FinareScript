@@ -22,6 +22,7 @@ private:
     FReply PreviewAdoption();
     FReply RepairProjectFiles();
     FReply RunDoctor();
+    FReply BuildAndReload();
     FReply BuildAndOnboard();
     FReply LocateFirstPlayClass();
     FReply StartAuthoringAndOpenFirstPlayClass();

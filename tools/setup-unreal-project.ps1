@@ -13,7 +13,9 @@ param(
 
     [string]$Report,
 
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+
+    [switch]$EditorAttached
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +32,8 @@ $script:AutomationSuccessCount = 0
 $script:AutomationFailureCount = 0
 $script:BuildGraphContext = $null
 $script:BuildGraphReport = $null
+$script:RestartRequiredStage = $null
+$script:RestartRequiredReason = $null
 
 function Throw-OnboardingError {
     param(
@@ -94,6 +98,9 @@ function Invoke-DependencyAwareOnboardingPhase {
         [Collections.IDictionary]$PathInputs = [ordered]@{},
         [string[]]$Dependencies = @(),
         [string[]]$OutputPaths = @(),
+        [ValidateSet('run', 'restart', 'defer')]
+        [string]$EditorAttachedPolicy = 'run',
+        [string[]]$EditorAttachedRestartInputs = @(),
         [Parameter(Mandatory)][scriptblock]$Action
     )
 
@@ -121,6 +128,60 @@ function Invoke-DependencyAwareOnboardingPhase {
             status = 'skipped'
             durationMs = 0
             reason = $decision.Reason
+            buildGraph = [ordered]@{
+                changedInputs = @($decision.ChangedInputs)
+                changedDependencies = @($decision.ChangedDependencies)
+            }
+        })
+        return
+    }
+
+    if ($EditorAttached -and $EditorAttachedPolicy -ne 'run') {
+        $restartInputs = @($decision.ChangedInputs | Where-Object {
+            $_ -in $EditorAttachedRestartInputs
+        })
+        $requiresRestart = $EditorAttachedPolicy -eq 'restart' -or
+            $restartInputs.Count -gt 0 -or
+            -not $script:BuildGraphContext.PreviousStages.ContainsKey($Name)
+        if ($requiresRestart) {
+            $script:CurrentPhase = $Name
+            $script:RestartRequiredStage = $Name
+            $script:RestartRequiredReason = if ($restartInputs.Count -gt 0) {
+                "live Editor inputs changed: $($restartInputs -join ', ')"
+            } elseif (-not $script:BuildGraphContext.PreviousStages.ContainsKey($Name)) {
+                'no prior successful stage is available for live reuse'
+            } else {
+                $decision.Reason
+            }
+            $script:PhaseRecords.Add([ordered]@{
+                name = $Name
+                status = 'restartRequired'
+                durationMs = 0
+                reason = $script:RestartRequiredReason
+                buildGraph = [ordered]@{
+                    changedInputs = @($decision.ChangedInputs)
+                    changedDependencies = @($decision.ChangedDependencies)
+                }
+            })
+            Throw-OnboardingError `
+                -Code 'USONB3001' `
+                -Message (
+                    "Daily Editor build requires restart before '$Name': " +
+                    $script:RestartRequiredReason)
+        }
+
+        $deferredReason =
+            "deferred while the Editor is attached; prior published outputs remain active"
+        Write-Host "[$Name] DEFER - $deferredReason"
+        Defer-UnifiedScriptBuildGraphStage `
+            -Context $script:BuildGraphContext `
+            -Decision $decision `
+            -Reason $deferredReason | Out-Null
+        $script:PhaseRecords.Add([ordered]@{
+            name = $Name
+            status = 'deferred'
+            durationMs = 0
+            reason = $deferredReason
             buildGraph = [ordered]@{
                 changedInputs = @($decision.ChangedInputs)
                 changedDependencies = @($decision.ChangedDependencies)
@@ -664,7 +725,13 @@ function Write-OnboardingReport {
     $reportDocument = [ordered]@{
         schemaVersion = 'unifiedscript.unreal-project-onboarding-report/v0.1'
         status = $Status
-        mode = if ($ValidateOnly) { 'validateOnly' } else { 'apply' }
+        mode = if ($EditorAttached) {
+            'dailyEditor'
+        } elseif ($ValidateOnly) {
+            'validateOnly'
+        } else {
+            'apply'
+        }
         startedAtUtc = $script:StartedAtUtc.ToString('O')
         completedAtUtc = [DateTime]::UtcNow.ToString('O')
         durationMs = [long]([DateTime]::UtcNow - $script:StartedAtUtc).TotalMilliseconds
@@ -1418,6 +1485,7 @@ try {
                 nativeSources = $nativeBootstrapInputs
                 nativeConfiguration = $nativeConfigurationInputs
             }) `
+            -EditorAttachedPolicy 'restart' `
             -Action {
             Invoke-LoggedCommand `
                 -FilePath $resolved.build `
@@ -1474,6 +1542,7 @@ try {
             }) `
             -Dependencies $reflectionDependencies `
             -OutputPaths @($resolved.reflection) `
+            -EditorAttachedPolicy 'restart' `
             -Action {
             New-Item -ItemType Directory -Force -Path `
                 (Split-Path -Parent $resolved.reflection) | Out-Null
@@ -1715,6 +1784,7 @@ try {
             }) `
             -Dependencies @('native-bootstrap-build', 'binding-generation') `
             -OutputPaths @($editorTargetReceipt) `
+            -EditorAttachedPolicy 'restart' `
             -Action {
             Invoke-LoggedCommand `
                 -FilePath $resolved.build `
@@ -1746,6 +1816,7 @@ try {
             }) `
             -Dependencies @('native-final-build') `
             -OutputPaths $nativeGameOutputs `
+            -EditorAttachedPolicy 'restart' `
             -Action {
             if ($resolved.gameTarget -eq 'UnrealGame') {
                 $pluginDescriptor = Get-Content `
@@ -1858,6 +1929,8 @@ try {
         -OutputPaths $(if ($null -ne $script:BuildGraphContext) {
             @($deploymentOutputs)
         } else { @() }) `
+        -EditorAttachedPolicy 'defer' `
+        -EditorAttachedRestartInputs @('enabled', 'validateOnly', 'manifest') `
         -Action {
         if (-not $resolved.deploymentEnabled) {
             Write-Host 'Deployment synchronization is disabled by project policy.'
@@ -1973,6 +2046,7 @@ try {
                 chunks = @($resolved.managedChunks.stagePath)
             }) `
             -Dependencies $startupDependencies `
+            -EditorAttachedPolicy 'defer' `
             -Action {
             $defaultConfigPaths = @(
                 (Join-Path $projectDirectory 'Config\DefaultEngine.ini'),
@@ -2071,6 +2145,27 @@ try {
     Write-Host "UnifiedScript project onboarding: PASS ($($script:ReportPath))"
 } catch {
     $code = Get-OnboardingErrorCode -Exception $_.Exception
+    if ($code -eq 'USONB3001') {
+        if ($null -ne $script:BuildGraphContext) {
+            $script:BuildGraphReport = Get-UnifiedScriptBuildGraphReport `
+                -Context $script:BuildGraphContext
+        }
+        Write-OnboardingReport `
+            -Status 'restartRequired' `
+            -ErrorCode $code `
+            -ErrorMessage $_.Exception.Message `
+            -Context ([ordered]@{
+                runDirectory = $script:RunDirectory
+                buildGraph = $script:BuildGraphReport
+                requiredAction = 'restartEditor'
+                restartRequiredStage = $script:RestartRequiredStage
+                restartReason = $script:RestartRequiredReason
+            })
+        Write-Warning (
+            "UnifiedScript daily Editor build requires restart during " +
+            "'$($script:RestartRequiredStage)': $($script:RestartRequiredReason)")
+        exit 2
+    }
     Write-OnboardingReport `
         -Status 'failed' `
         -ErrorCode $code `

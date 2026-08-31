@@ -337,6 +337,32 @@ function Complete-UnifiedScriptBuildGraphStage {
     return [pscustomobject]$stage
 }
 
+function Defer-UnifiedScriptBuildGraphStage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][object]$Context,
+        [Parameter(Mandatory)][object]$Decision,
+        [Parameter(Mandatory)][string]$Reason
+    )
+
+    if (-not $Context.PreviousStages.ContainsKey($Decision.Name)) {
+        throw "Build graph stage '$($Decision.Name)' cannot be deferred without prior successful state."
+    }
+    $previous = $Context.PreviousStages[$Decision.Name]
+    $Context.CurrentStages[$Decision.Name] = $previous
+    $Context.Decisions.Add([ordered]@{
+        name = $Decision.Name
+        status = 'deferred'
+        reason = $Reason
+        durationMs = 0
+        changedInputs = @($Decision.ChangedInputs)
+        changedDependencies = @($Decision.ChangedDependencies)
+        inputFingerprint = $Decision.InputFingerprint
+        outputFingerprint = $Decision.OutputFingerprint
+    })
+    return $previous
+}
+
 function Save-UnifiedScriptBuildGraphState {
     [CmdletBinding()]
     param([Parameter(Mandatory)][object]$Context)
@@ -378,6 +404,7 @@ function Get-UnifiedScriptBuildGraphReport {
         cacheStatus = $Context.CacheStatus
         executed = @($decisions | Where-Object { $_.status -eq 'executed' }).Count
         skipped = @($decisions | Where-Object { $_.status -eq 'skipped' }).Count
+        deferred = @($decisions | Where-Object { $_.status -eq 'deferred' }).Count
         stages = $decisions
     }
 }
@@ -386,6 +413,7 @@ Export-ModuleMember -Function @(
     'New-UnifiedScriptBuildGraphContext',
     'Get-UnifiedScriptBuildGraphStageDecision',
     'Complete-UnifiedScriptBuildGraphStage',
+    'Defer-UnifiedScriptBuildGraphStage',
     'Save-UnifiedScriptBuildGraphState',
     'Get-UnifiedScriptBuildGraphReport'
 )

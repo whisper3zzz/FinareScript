@@ -124,6 +124,10 @@ public:
         const FString& LoadedSurfacePath,
         const FString& ReloadTransactionJson);
 
+    /** Reloads every exact Script Class asset currently represented by a World component. */
+    static FUnifiedScriptReloadBatchResult ReloadAllScriptClassComponents(
+        const FString& ReloadTransactionJson);
+
 private:
     friend class SUnifiedScriptCanvasMinimap;
 

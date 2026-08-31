@@ -1,6 +1,7 @@
 #include "Widgets/SUnifiedScriptProjectSetup.h"
 
 #include "Editor.h"
+#include "Dom/JsonObject.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -12,6 +13,7 @@
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptEditorDiagnostics.h"
+#include "Widgets/SUnifiedScriptAuthoringSurface.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -19,11 +21,54 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 #include "UObject/UObjectGlobals.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 #define LOCTEXT_NAMESPACE "SUnifiedScriptProjectSetup"
 
 namespace UE::UnifiedScript::ProjectSetup::Private
 {
+FString BuildDailyReloadTransaction(
+    const FUnifiedScriptDailyBuildReceipt& Receipt,
+    const FString& ReportPath)
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(
+        TEXT("schemaVersion"),
+        TEXT("unifiedscript.reload-transaction/v0.1"));
+    Root->SetStringField(
+        TEXT("transactionId"),
+        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+    Root->SetStringField(TEXT("source"), TEXT("dailyBuild"));
+    Root->SetStringField(TEXT("buildReport"), ReportPath);
+
+    TArray<TSharedPtr<FJsonValue>> Phases;
+    const auto AddPhase = [&Phases](const TCHAR* Name, const FString& Detail)
+    {
+        const TSharedRef<FJsonObject> Phase = MakeShared<FJsonObject>();
+        Phase->SetStringField(TEXT("name"), Name);
+        Phase->SetStringField(TEXT("state"), TEXT("published"));
+        Phase->SetNumberField(TEXT("durationMicroseconds"), 0.0);
+        Phase->SetStringField(TEXT("detail"), Detail);
+        Phases.Add(MakeShared<FJsonValueObject>(Phase));
+    };
+    AddPhase(
+        TEXT("dependencyAwareBuild"),
+        FString::Printf(
+            TEXT("Daily graph executed %d, skipped %d, and deferred %d Editor-only stages."),
+            Receipt.ExecutedStages,
+            Receipt.SkippedStages,
+            Receipt.DeferredStages));
+    AddPhase(
+        TEXT("artifactPublication"),
+        TEXT("Managed assemblies and compiled chunks were published atomically before reload."));
+    Root->SetArrayField(TEXT("phases"), MoveTemp(Phases));
+
+    FString Json;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+    return FJsonSerializer::Serialize(Root, Writer) ? Json : FString();
+}
+
 TSharedRef<SWidget> MakeActionRow(
     const FText& Title,
     const FText& Description,
@@ -201,10 +246,21 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
             ]
             + SVerticalBox::Slot()
             .AutoHeight()
+            .Padding(0.0f, 0.0f, 0.0f, 6.0f)
+            [
+                UE::UnifiedScript::ProjectSetup::Private::MakeActionRow(
+                    LOCTEXT("DailyBuildTitle", "4. Build and reload"),
+                    LOCTEXT("DailyBuildDescription", "Run only invalidated Editor-safe stages, then atomically reload every compatible Script Class instance. Native or schema changes return one explicit restart requirement."),
+                    LOCTEXT("DailyBuildButton", "Build & Reload"),
+                    CanRun,
+                    FOnClicked::CreateSP(this, &SUnifiedScriptProjectSetup::BuildAndReload))
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
             .Padding(0.0f, 0.0f, 0.0f, 12.0f)
             [
                 UE::UnifiedScript::ProjectSetup::Private::MakeActionRow(
-                    LOCTEXT("BuildTitle", "4. Build and onboard"),
+                    LOCTEXT("BuildTitle", "5. Build and restart"),
                     LOCTEXT("BuildDescription", "Save and close the Editor, build the complete native/managed dependency graph, then reopen this project automatically."),
                     LOCTEXT("BuildButton", "Build, Restart & Continue"),
                     CanRun,
@@ -215,7 +271,7 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
             .Padding(0.0f, 0.0f, 0.0f, 12.0f)
             [
                 UE::UnifiedScript::ProjectSetup::Private::MakeDynamicActionRow(
-                    LOCTEXT("FirstPlayTitle", "5. Continue to first Play"),
+                    LOCTEXT("FirstPlayTitle", "6. Continue to first Play"),
                     TAttribute<FText>::CreateLambda(
                         [this]() { return GetFirstPlayDescription(); }),
                     LOCTEXT("FirstPlayButton", "Locate Generated Class"),
@@ -228,7 +284,7 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
             .Padding(0.0f, 0.0f, 0.0f, 12.0f)
             [
                 UE::UnifiedScript::ProjectSetup::Private::MakeDynamicActionRow(
-                    LOCTEXT("AuthoringTitle", "6. Edit and reload"),
+                    LOCTEXT("AuthoringTitle", "7. Edit and reload"),
                     TAttribute<FText>::CreateLambda(
                         [this]() { return GetAuthoringDescription(); }),
                     LOCTEXT("AuthoringButton", "Open Authoring & Reload"),
@@ -243,7 +299,7 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
             .Padding(0.0f, 0.0f, 0.0f, 12.0f)
             [
                 UE::UnifiedScript::ProjectSetup::Private::MakeActionRow(
-                    LOCTEXT("DiagnosticsTitle", "7. Diagnose and share"),
+                    LOCTEXT("DiagnosticsTitle", "8. Diagnose and share"),
                     LOCTEXT(
                         "DiagnosticsDescription",
                         "Build one bounded, privacy-redacted support bundle from UnifiedScript reports and copy its path."),
@@ -290,6 +346,14 @@ FReply SUnifiedScriptProjectSetup::RunDoctor()
     return RunAttachedOperation(
         EUnifiedScriptProjectSetupOperation::Doctor,
         LOCTEXT("DoctorOperation", "Project doctor"));
+}
+
+FReply SUnifiedScriptProjectSetup::BuildAndReload()
+{
+    FEditorFileUtils::SaveDirtyPackages(true, true, true);
+    return RunAttachedOperation(
+        EUnifiedScriptProjectSetupOperation::DailyBuildAttached,
+        LOCTEXT("DailyBuildOperation", "daily Build & Reload"));
 }
 
 FReply SUnifiedScriptProjectSetup::LocateFirstPlayClass()
@@ -768,6 +832,62 @@ void SUnifiedScriptProjectSetup::FinishAttachedOperation(int32 ReturnCode)
     const TOptional<EUnifiedScriptProjectSetupOperation> CompletedOperation = ActiveOperation;
     ActiveOperation.Reset();
     CloseProcessResources();
+    if (CompletedOperation.IsSet() &&
+        CompletedOperation.GetValue() == EUnifiedScriptProjectSetupOperation::DailyBuildAttached)
+    {
+        FUnifiedScriptDailyBuildReceipt Receipt;
+        FString ReceiptError;
+        if (FUnifiedScriptProjectSetup::ReadDailyBuildReceipt(
+                ReportPath,
+                Receipt,
+                ReceiptError))
+        {
+            if (Receipt.RequiresRestart())
+            {
+                const FString RestartMessage = FString::Printf(
+                    TEXT("Restart required at %s: %s. Use Build, Restart & Continue; no live generation was changed."),
+                    *Receipt.RestartRequiredStage,
+                    *Receipt.RestartReason);
+                SetStatus(
+                    FText::FromString(RestartMessage),
+                    FAppStyle::GetSlateColor(TEXT("Colors.Warning")));
+                AppendOutput(RestartMessage);
+                return;
+            }
+            if (ReturnCode == 0 && Receipt.IsReadyToReload())
+            {
+                const FString ReloadTransaction =
+                    UE::UnifiedScript::ProjectSetup::Private::BuildDailyReloadTransaction(
+                        Receipt,
+                        ReportPath);
+                const FUnifiedScriptReloadBatchResult Reload =
+                    SUnifiedScriptAuthoringSurface::ReloadAllScriptClassComponents(
+                        ReloadTransaction);
+                const FString Completion = FString::Printf(
+                    TEXT("Daily Build completed: %d stages ran, %d skipped, %d deferred; %d components matched, %d reloaded, %d failed."),
+                    Receipt.ExecutedStages,
+                    Receipt.SkippedStages,
+                    Receipt.DeferredStages,
+                    Reload.Matched,
+                    Reload.Reloaded,
+                    Reload.Failed);
+                SetStatus(
+                    FText::FromString(Completion),
+                    Reload.Failed == 0
+                        ? FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen"))
+                        : FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+                AppendOutput(FString::Printf(
+                    TEXT("%s\nReport: %s"),
+                    *Completion,
+                    *ReportPath));
+                return;
+            }
+        }
+        else
+        {
+            AppendOutput(ReceiptError);
+        }
+    }
     if (ReturnCode == 0)
     {
         if (CompletedOperation.IsSet() &&

@@ -2316,6 +2316,24 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
             Committed.ObservedReloadTransactionJson.Contains(
                 TEXT("\"state\":\"committed\"")));
 
+    const FString DailyPublication = TEXT(
+        "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+        "\"transactionId\":\"daily-build-batch\","
+        "\"source\":\"dailyBuild\",\"state\":\"published\",\"phases\":[]}");
+    const FUnifiedScriptReloadBatchResult DailyCommitted =
+        SUnifiedScriptAuthoringSurface::ReloadAllScriptClassComponents(
+            DailyPublication);
+    TestEqual(TEXT("Daily Build coordinator finds every exact Script Class instance"),
+        DailyCommitted.Matched, 3);
+    TestEqual(TEXT("Daily Build coordinator reloads the complete compatible set"),
+        DailyCommitted.Reloaded, 3);
+    TestEqual(TEXT("Daily Build coordinator has no partial failures"),
+        DailyCommitted.Failed, 0);
+    TestEqual(TEXT("Daily Build advances the first instance again"),
+        FirstComponent->ActiveGeneration, FString(TEXT("3")));
+    TestEqual(TEXT("Daily Build advances the second instance again"),
+        SecondComponent->ActiveGeneration, FString(TEXT("3")));
+
     FirstComponent->StopScript();
     SecondComponent->StopScript();
     FirstComponent->UnregisterComponent();

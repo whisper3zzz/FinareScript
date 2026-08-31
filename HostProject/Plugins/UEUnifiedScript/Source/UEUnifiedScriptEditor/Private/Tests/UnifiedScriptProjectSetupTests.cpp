@@ -36,6 +36,9 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     const FString DeferredScript = FPaths::Combine(
         PluginRoot,
         TEXT("Tools/run-unifiedscript-onboarding-after-process.ps1"));
+    const FString SetupScript = FPaths::Combine(
+        PluginRoot,
+        TEXT("Tools/setup-unreal-project.ps1"));
     const FString AuthoringScript = FPaths::Combine(
         PluginRoot,
         TEXT("Tools/start-unifiedscript-authoring.ps1"));
@@ -50,6 +53,9 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestTrue(
         TEXT("Creates the project-local CLI fixture"),
         FFileHelper::SaveStringToFile(TEXT("fixture"), *CliExecutable));
+    TestTrue(
+        TEXT("Creates the attached setup fixture"),
+        FFileHelper::SaveStringToFile(TEXT("# fixture"), *SetupScript));
     TestTrue(
         TEXT("Creates the deferred setup fixture"),
         FFileHelper::SaveStringToFile(TEXT("# fixture"), *DeferredScript));
@@ -73,6 +79,10 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
             Error));
     TestTrue(TEXT("Path resolution has no error"), Error.IsEmpty());
     TestEqual(TEXT("CLI path"), Paths.CliExecutable, FPaths::ConvertRelativePathToFull(CliExecutable));
+    TestEqual(
+        TEXT("Setup script path"),
+        Paths.SetupScript,
+        FPaths::ConvertRelativePathToFull(SetupScript));
     TestEqual(
         TEXT("Deferred script path"),
         Paths.DeferredOnboardingScript,
@@ -171,6 +181,21 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestEqual(TEXT("Support bundle path"), Command.ReportPath, Paths.DiagnosticsBundle);
     TestFalse(TEXT("Support bundle command is attached"), Command.bDetached);
 
+    TestTrue(
+        TEXT("Builds the editor-attached daily command"),
+        FUnifiedScriptProjectSetup::BuildCommand(
+            EUnifiedScriptProjectSetupOperation::DailyBuildAttached,
+            Paths,
+            0,
+            Command,
+            Error));
+    TestEqual(TEXT("Daily build executable"), Command.Executable, FString(TEXT("powershell.exe")));
+    TestTrue(TEXT("Daily build setup script"), Command.Arguments.Contains(
+        FString::Printf(TEXT("-File \"%s\""), *Paths.SetupScript)));
+    TestTrue(TEXT("Daily build stays Editor-attached"), Command.Arguments.Contains(TEXT(" -EditorAttached")));
+    TestEqual(TEXT("Daily build report"), Command.ReportPath, Paths.DailyBuildReport);
+    TestFalse(TEXT("Daily build command is attached"), Command.bDetached);
+
     TestFalse(
         TEXT("Rejects deferred onboarding without an Editor process"),
         FUnifiedScriptProjectSetup::BuildCommand(
@@ -215,6 +240,47 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
             *FPaths::ConvertRelativePathToFull(ScriptClassSource))));
     TestTrue(TEXT("Authoring command is detached"), Command.bDetached);
     TestTrue(TEXT("Authoring command has no report"), Command.ReportPath.IsEmpty());
+
+    const FString DailyPassedJson = FString::Printf(
+        TEXT("{\"schemaVersion\":\"unifiedscript.unreal-project-onboarding-report/v0.1\",")
+        TEXT("\"status\":\"passed\",\"mode\":\"dailyEditor\",\"outputs\":{")
+        TEXT("\"buildGraph\":{\"executed\":3,\"skipped\":8,\"deferred\":2}}}"));
+    TestTrue(
+        TEXT("Writes the daily success receipt fixture"),
+        FFileHelper::SaveStringToFile(DailyPassedJson, *Paths.DailyBuildReport));
+    FUnifiedScriptDailyBuildReceipt DailyReceipt;
+    TestTrue(
+        TEXT("Reads a reload-ready daily receipt"),
+        FUnifiedScriptProjectSetup::ReadDailyBuildReceipt(
+            Paths.DailyBuildReport,
+            DailyReceipt,
+            Error));
+    TestTrue(TEXT("Daily receipt is reload-ready"), DailyReceipt.IsReadyToReload());
+    TestEqual(TEXT("Daily executed stage count"), DailyReceipt.ExecutedStages, 3);
+    TestEqual(TEXT("Daily deferred stage count"), DailyReceipt.DeferredStages, 2);
+
+    const FString DailyRestartJson =
+        TEXT("{\"schemaVersion\":\"unifiedscript.unreal-project-onboarding-report/v0.1\",")
+        TEXT("\"status\":\"restartRequired\",\"mode\":\"dailyEditor\",")
+        TEXT("\"error\":{\"code\":\"USONB3001\",\"message\":\"restart\"},")
+        TEXT("\"outputs\":{\"requiredAction\":\"restartEditor\",")
+        TEXT("\"restartRequiredStage\":\"native-final-build\",")
+        TEXT("\"restartReason\":\"generated native thunks changed\",")
+        TEXT("\"buildGraph\":{\"executed\":4,\"skipped\":3,\"deferred\":0}}}");
+    TestTrue(
+        TEXT("Writes the daily restart receipt fixture"),
+        FFileHelper::SaveStringToFile(DailyRestartJson, *Paths.DailyBuildReport));
+    TestTrue(
+        TEXT("Reads an actionable daily restart receipt"),
+        FUnifiedScriptProjectSetup::ReadDailyBuildReceipt(
+            Paths.DailyBuildReport,
+            DailyReceipt,
+            Error));
+    TestTrue(TEXT("Daily receipt requires restart"), DailyReceipt.RequiresRestart());
+    TestEqual(
+        TEXT("Daily restart stage"),
+        DailyReceipt.RestartRequiredStage,
+        FString(TEXT("native-final-build")));
 
     IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
     return true;
