@@ -10,6 +10,7 @@ struct FUnifiedScriptRuntimeDiagnostic;
 struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptEditorDiagnostic
 {
     FString Domain;
+    FString Stage;
     FString Code;
     FString Severity;
     FString Summary;
@@ -18,6 +19,11 @@ struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptEditorDiagnostic
     int32 Line = 0;
     int32 Column = 0;
     FString Member;
+    FString GraphNode;
+    FString PackagePath;
+    uint64 WorldHostId = 0;
+    uint64 InstanceId = 0;
+    int32 Generation = 0;
     FString RecoveryAction;
     FString EvidencePath;
 
@@ -57,6 +63,7 @@ public:
         const FText& PageLabel,
         const TArray<FUnifiedScriptEditorDiagnostic>& Diagnostics,
         bool bOpenLog = true);
+    static void ExecuteRecovery(const FUnifiedScriptEditorDiagnostic& Diagnostic);
     static bool OpenSource(const FString& SourcePath, int32 Line, int32 Column);
     static FString ResolveSourcePath(const FString& SourcePath);
     static FString GetSnapshotPath();

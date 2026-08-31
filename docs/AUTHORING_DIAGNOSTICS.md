@@ -82,23 +82,35 @@ result used by Project Setup and the live World debugger; the local failure
 panel remains a compact view of the same evidence rather than a separate error
 model.
 
-Each normalized entry carries a domain (`compile`, `generation`, `coverage`,
-`stale-surface`, `reload`, or `runtime`), stable code, severity, message,
-semantic member, exact source line/column when available, evidence report, and
-one explicit recovery classification:
+The retained `unifiedscript.editor-diagnostics/v0.2` entry carries the complete
+producer context needed to act on a failure: domain, pipeline stage, stable
+code, severity, message, semantic member, Graph node, exact source
+line/column, package, World host, script instance, runtime generation, evidence
+report, and one explicit recovery classification. Nested reports inherit stage,
+package, World, instance, and generation from their producer envelope, so the
+Message Log does not discard context merely because the leaf diagnostic is
+compact. v0.1 remains allowlisted for support bundles created by older builds.
+
+Current domains include `compile`, `generation`, `coverage`, `stale-surface`,
+`reload`, `runtime`, `lifetime`, and `package`:
 
 - **Retry** for compiler, stale-workspace, and transient runtime failures after
   the author has corrected or refreshed the failing state;
 - **Repair** for generated-surface, API-coverage, onboarding, or installed-file
   inconsistencies that must return through Project Setup;
 - **Restart Editor** only when the reload receipt says the schema change would
-  discard explicit instance state.
+  discard explicit instance state;
+- **Inspect Package** for cook/package omissions carrying a resolvable product
+  path.
 
 **Open Source** uses Unreal's configured source-code accessor. A semantic member
 token reopens the Authoring Surface, activates the owning function, selects the
-exact tree item, and focuses its graph node. **Copy** exports the normalized
-entry instead of raw HTTP or generator output. The most recent 128 entries are
-also written to
+exact tree item, and focuses its graph node; a distinct Graph-node token targets
+the precise semantic node. **Resolve** is a safe navigation action: Retry opens
+the Graph/member/source target, package inspection opens a real retained file,
+and Repair/Restart routes through Project Setup. It never replays a write or
+silently retries a transaction. **Copy** exports the normalized entry instead
+of raw HTTP or generator output. The most recent 128 entries are also written to
 `Saved/UnifiedScript/EditorDiagnostics/latest.json` for the privacy-safe support
 bundle; source paths, member names, messages, and evidence paths are redacted by
 the bundle policy before sharing.

@@ -145,23 +145,36 @@ public class ${editorTarget}Target : TargetRules
     $scaffoldReport = Get-Content -LiteralPath $scaffoldReportPath -Raw |
         ConvertFrom-Json
     $sourcePath = [string]$scaffoldReport.outputs.managedSource
-    $assetPath = Join-Path ([string]$scaffoldReport.outputs.managedStage) `
-        "$projectIdentifier.UnifiedScript.asset.json"
-    $surfacePath = Join-Path ([string]$scaffoldReport.outputs.managedStage) `
-        "$projectIdentifier.UnifiedScript.surface.json"
-    foreach ($required in @($sourcePath, $assetPath, $surfacePath)) {
+    $solutionPath = [string]$scaffoldReport.outputs.managedSolution
+    $workspacePath = [string]$scaffoldReport.outputs.ideWorkspace
+    $ideManifestPath = [string]$scaffoldReport.outputs.ideManifest
+    foreach ($required in @(
+            $sourcePath,
+            $solutionPath,
+            $workspacePath,
+            $ideManifestPath)) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
             throw "Project template '$templateId' output is missing: $required"
         }
     }
-    $asset = Get-Content -LiteralPath $assetPath -Raw | ConvertFrom-Json
-    $surface = Get-Content -LiteralPath $surfacePath -Raw | ConvertFrom-Json
+    $source = Get-Content -LiteralPath $sourcePath -Raw
+    [xml]$solution = Get-Content -LiteralPath $solutionPath -Raw
+    $workspace = Get-Content -LiteralPath $workspacePath -Raw | ConvertFrom-Json
+    $ideManifest = Get-Content -LiteralPath $ideManifestPath -Raw |
+        ConvertFrom-Json
+    $ideTaskLabels = @($workspace.tasks.tasks | ForEach-Object { [string]$_.label })
     if ($scaffoldReport.schemaVersion -ne 'unifiedscript.project-scaffold-report/v0.2' -or
         $scaffoldReport.status -ne 'passed' -or
         $scaffoldReport.template.id -ne $templateId -or
         $scaffoldReport.templateCatalog.sha256 -ne $catalogSha256 -or
-        $asset.schemaVersion -ne 'unifiedscript.script-asset/v0.1' -or
-        $surface.schemaVersion -ne 'unifiedscript.authoring-surface/v0.4') {
+        $source -notmatch '\[ScriptAsset\(' -or
+        $source -notmatch '\[Visual\]' -or
+        $solution.Solution.Project.Path -ne "$projectIdentifier.UnifiedScript.csproj" -or
+        $ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
+        'UnifiedScript: Build managed gameplay' -notin $ideTaskLabels -or
+        @($workspace.launch.configurations | Where-Object {
+            $_.type -eq 'coreclr' -and $_.request -eq 'attach'
+        }).Count -ne 1) {
         throw "Project template '$templateId' emitted inconsistent evidence."
     }
     $results.Add([ordered]@{
@@ -170,7 +183,7 @@ public class ${editorTarget}Target : TargetRules
         capabilities = @($template.capabilities)
         sourceSha256 = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.
             ToLowerInvariant()
-        visualFunctionCount = @($surface.assets.functions).Count
+        visualFunctionCount = ([regex]::Matches($source, '\[Visual\]')).Count
         scaffoldReport = $scaffoldReportPath
         log = $logPath
     })

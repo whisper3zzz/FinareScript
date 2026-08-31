@@ -225,6 +225,27 @@ internal static partial class UnrealProjectAdoptionService
         AddRenderedTemplate(
             desired,
             projectRoot,
+            Path.Combine(layout.TemplateRoot, "Managed", "Project.UnifiedScript.slnx.template"),
+            Path.Combine("Managed", assemblyName, $"{assemblyName}.slnx"),
+            "ide",
+            replacements);
+        AddRenderedTemplate(
+            desired,
+            projectRoot,
+            Path.Combine(layout.TemplateRoot, "IDE", "Project.UnifiedScript.code-workspace.template"),
+            $"{projectName}.UnifiedScript.code-workspace",
+            "ide",
+            replacements);
+        AddRenderedTemplate(
+            desired,
+            projectRoot,
+            Path.Combine(layout.TemplateRoot, "IDE", "UnifiedScript.ide.json.template"),
+            Path.Combine("Managed", "UnifiedScript.ide.json"),
+            "ide",
+            replacements);
+        AddRenderedTemplate(
+            desired,
+            projectRoot,
             Path.Combine(layout.TemplateRoot, selectedTemplate.ScriptTemplate),
             Path.Combine("Managed", assemblyName, $"{options.ScriptName}.cs"),
             "managed-source",
@@ -326,6 +347,23 @@ internal static partial class UnrealProjectAdoptionService
                     "UnrealProject",
                     GetRelativePath(layout.TemplateRoot, sourcePath)),
                 "tool",
+                File.ReadAllBytes(sourcePath));
+        }
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     layout.DocumentationRoot,
+                     "*",
+                     SearchOption.AllDirectories).OrderBy(static path => path, PathComparer))
+        {
+            AddDesired(
+                desired,
+                projectRoot,
+                Path.Combine(
+                    "Plugins",
+                    "UEUnifiedScript",
+                    "Tools",
+                    "Documentation",
+                    GetRelativePath(layout.DocumentationRoot, sourcePath)),
+                "documentation",
                 File.ReadAllBytes(sourcePath));
         }
         AddDesired(
@@ -839,6 +877,37 @@ internal static partial class UnrealProjectAdoptionService
                 "failed",
                 "No UnifiedScript managed project was found.",
                 "Run unifiedscript adopt to create the first managed project and script."));
+
+        string ideManifestPath = Path.Combine(projectRoot, "Managed", "UnifiedScript.ide.json");
+        checks.Add(ReadSchemaCheck(
+            "ide-manifest",
+            ideManifestPath,
+            "unifiedscript.ide-workspace/v0.1",
+            "Run unifiedscript adopt to regenerate the project-local IDE manifest."));
+        string solutionPath = Path.Combine(
+            projectRoot,
+            "Managed",
+            $"{projectName}.UnifiedScript",
+            $"{projectName}.UnifiedScript.slnx");
+        string workspacePath = Path.Combine(
+            projectRoot,
+            $"{projectName}.UnifiedScript.code-workspace");
+        string documentationRoot = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "Documentation");
+        checks.Add(File.Exists(solutionPath) && File.Exists(workspacePath) &&
+                   Directory.Exists(documentationRoot) &&
+                   Directory.EnumerateFiles(documentationRoot, "*", SearchOption.AllDirectories).Any()
+            ? new UnrealProjectDoctorCheck(
+                "ide-workspace",
+                "passed",
+                "Project-local solution, editor workspace, debugger configuration, and documentation are installed.")
+            : new UnrealProjectDoctorCheck(
+                "ide-workspace",
+                "failed",
+                "The UnifiedScript solution, editor workspace, debugger configuration, or installed documentation is missing.",
+                "Run unifiedscript adopt to regenerate the complete IDE workspace."));
 
         AddAdoptionStateChecks(projectRoot, checks);
         string? resolvedEngine = ResolveEngineRoot(engineRoot, project?["EngineAssociation"]?.GetValue<string>());
@@ -1607,11 +1676,19 @@ internal static partial class UnrealProjectAdoptionService
                 : File.Exists(Path.Combine(repositoryAuthoringWorkbench, "index.html"))
                     ? repositoryAuthoringWorkbench
                     : null;
+            string packagedDocumentation = Path.Combine(root, "Documentation");
+            string repositoryDocumentation = Path.Combine(root, "docs");
+            string embeddedDocumentation = Path.Combine(root, "Tools", "Documentation");
+            string? documentationRoot = Directory.Exists(packagedDocumentation)
+                ? packagedDocumentation
+                : Directory.Exists(repositoryDocumentation)
+                    ? repositoryDocumentation
+                    : Directory.Exists(embeddedDocumentation) ? embeddedDocumentation : null;
             if (templateRoot is not null && pluginRoot is not null && runtimeRoot is not null &&
                 cliRoot is not null && wrapper is not null && onboarding is not null &&
                 buildGraph is not null &&
                 deferredOnboarding is not null && authoring is not null &&
-                authoringWorkbench is not null)
+                authoringWorkbench is not null && documentationRoot is not null)
             {
                 string catalog = Path.Combine(templateRoot, "unifiedscript.project-templates.json");
                 if (File.Exists(catalog) && RequiredRuntimeFiles.All(file =>
@@ -1628,7 +1705,8 @@ internal static partial class UnrealProjectAdoptionService
                         Path.GetFullPath(buildGraph),
                         Path.GetFullPath(deferredOnboarding),
                         Path.GetFullPath(authoring),
-                        Path.GetFullPath(authoringWorkbench));
+                        Path.GetFullPath(authoringWorkbench),
+                        Path.GetFullPath(documentationRoot));
                 }
             }
         }
@@ -1822,7 +1900,8 @@ internal static partial class UnrealProjectAdoptionService
         string BuildGraphModulePath,
         string DeferredOnboardingScriptPath,
         string AuthoringScriptPath,
-        string AuthoringWorkbenchRoot);
+        string AuthoringWorkbenchRoot,
+        string DocumentationRoot);
 
     private sealed record AdoptionTemplate(string Id, string ScriptTemplate);
 

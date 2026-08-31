@@ -1505,12 +1505,15 @@ def main() -> int:
     require(
         "MaximumRetainedDiagnosticCount = 128" in editor_diagnostics_header
         and "UnifiedScriptDiagnostics" in editor_diagnostics_source
-        and "unifiedscript.editor-diagnostics/v0.1" in editor_diagnostics_source
+        and "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
         and "FromAuthoringFailure" in editor_diagnostics_source
         and "FromReloadTransaction" in editor_diagnostics_source
         and "FromRuntime" in editor_diagnostics_source
         and "Open Source" in editor_diagnostics_source
         and "OpenAuthoringMember" in editor_diagnostics_source
+        and "ExecuteRecovery" in editor_diagnostics_source
+        and "Graph node:" in editor_diagnostics_source
+        and "WorldHostId" in editor_diagnostics_source
         and "Restart Editor" in editor_diagnostics_source
         and "PersistSnapshot" in editor_diagnostics_source
         and "FUnifiedScriptEditorDiagnostics::Publish" in authoring_surface_widget
@@ -1529,6 +1532,52 @@ def main() -> int:
     )
     checks.append(
         "M13.1C-1c unifies UE diagnostics, navigation, recovery, and support bundles"
+    )
+    ide_solution_template = (
+        ROOT / "templates" / "UnrealProject" / "Managed"
+        / "Project.UnifiedScript.slnx.template"
+    ).read_text(encoding="utf-8")
+    ide_workspace_template = (
+        ROOT / "templates" / "UnrealProject" / "IDE"
+        / "Project.UnifiedScript.code-workspace.template"
+    ).read_text(encoding="utf-8")
+    ide_manifest_template = (
+        ROOT / "templates" / "UnrealProject" / "IDE"
+        / "UnifiedScript.ide.json.template"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
+        and 'TEXT("stage")' in editor_diagnostics_source
+        and 'TEXT("graphNodeId")' in editor_diagnostics_source
+        and 'TEXT("packagePath")' in editor_diagnostics_source
+        and "Diagnostic.WorldHostId = Runtime.WorldHostId"
+        in editor_diagnostics_source
+        and "Resolve:" in editor_diagnostics_source
+        and "ExecuteRecovery" in editor_diagnostics_source
+        and "Project.UnifiedScript.slnx.template" in adoption_source
+        and "Project.UnifiedScript.code-workspace.template" in adoption_source
+        and "UnifiedScript.ide.json.template" in adoption_source
+        and "DocumentationRoot" in adoption_source
+        and '"ide-workspace"' in adoption_source
+        and '<Project Path="__ASSEMBLY_NAME__.csproj" />'
+        in ide_solution_template
+        and "UnifiedScript: Build managed gameplay" in ide_workspace_template
+        and "UnifiedScript: Build and prepare Unreal" in ide_workspace_template
+        and "UnifiedScript: Validate project" in ide_workspace_template
+        and '"type": "coreclr"' in ide_workspace_template
+        and "unifiedscript.ide-workspace/v0.1" in ide_manifest_template
+        and "Generated/Unreal.bindings.generated.cs" in ide_manifest_template
+        and "unifiedscript.ide-workspace/v0.1" in adoption_tests
+        and "Generated IDE workspace lacks build, validate, or debugger configuration"
+        in packaged_adoption
+        and "Project-local IDE workspace" in packaged_native_onboarding
+        and "Project.UnifiedScript.slnx.template" in sdk_package
+        and "project-local IDE links" in unreal_onboarding_guide
+        and "M13.2C — diagnostics and IDE" in roadmap_document,
+        "M13.2C diagnostic context, safe navigation, project-local IDE workspace, or packaged proof is incomplete",
+    )
+    checks.append(
+        "M13.2C carries producer context into UE diagnostics and installs one project-local IDE workflow"
     )
     require(
         "UnifiedScriptScriptClassSmoke" in native_host_source_template
@@ -2084,8 +2133,8 @@ def main() -> int:
     require(
         diagnostics_policy["schemaVersion"]
         == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 32
-        and len(set(diagnostics_policy["allowedSchemas"])) == 32
+        and len(diagnostics_policy["allowedSchemas"]) == 33
+        and len(set(diagnostics_policy["allowedSchemas"])) == 33
         and diagnostics_policy["maximumReportCount"] == 256
         and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
         and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
@@ -2104,6 +2153,8 @@ def main() -> int:
         and "unifiedscript.generation-prewarm-experiment/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and "unifiedscript.editor-diagnostics/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.editor-diagnostics/v0.2"
         in diagnostics_policy["allowedSchemas"]
         and all(
             source_schema not in diagnostics_policy["allowedSchemas"]

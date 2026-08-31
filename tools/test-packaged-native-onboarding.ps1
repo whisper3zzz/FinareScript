@@ -402,6 +402,19 @@ $generatedEvidence = [ordered]@{
     firstScriptSource = Assert-File `
         -Path (Join-Path $projectRoot "Managed\$assemblyName\FirstScript.cs") `
         -Label 'Managed first-script source'
+    ideSolution = Assert-File `
+        -Path (Join-Path $projectRoot "Managed\$assemblyName\$assemblyName.slnx") `
+        -Label 'Project-local managed solution'
+    ideWorkspace = Assert-File `
+        -Path (Join-Path $projectRoot "$projectName.UnifiedScript.code-workspace") `
+        -Label 'Project-local IDE workspace'
+    ideManifest = Assert-File `
+        -Path (Join-Path $projectRoot 'Managed\UnifiedScript.ide.json') `
+        -Label 'Project-local IDE manifest'
+    ideDocumentation = Assert-File `
+        -Path (Join-Path $projectRoot `
+            'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md') `
+        -Label 'Project-local IDE documentation'
     editorPlugin = Assert-File `
         -Path (Join-Path $projectRoot `
             'Plugins\UEUnifiedScript\Binaries\Win64\UnrealEditor-UEUnifiedScriptRuntime.dll') `
@@ -410,6 +423,29 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Binaries\Win64\$projectName.target") `
         -Label 'Built game target receipt'
+}
+$engineDotNet = Join-Path $enginePath `
+    'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
+Invoke-LoggedCommand `
+    -FilePath $engineDotNet `
+    -Arguments @('sln', $generatedEvidence.ideSolution.path, 'list') `
+    -LogPath (Join-Path $outputRoot 'ide-solution-list.log') `
+    -FailureMessage 'Generated project-local .slnx could not be loaded.'
+$ideWorkspace = Get-Content -LiteralPath $generatedEvidence.ideWorkspace.path `
+    -Raw | ConvertFrom-Json
+$ideManifest = Get-Content -LiteralPath $generatedEvidence.ideManifest.path `
+    -Raw | ConvertFrom-Json
+$ideTaskLabels = @($ideWorkspace.tasks.tasks | ForEach-Object { [string]$_.label })
+if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
+    $ideManifest.typedApi.generatedBindings -ne
+        "Managed/$assemblyName/Generated/Unreal.bindings.generated.cs" -or
+    'UnifiedScript: Build managed gameplay' -notin $ideTaskLabels -or
+    'UnifiedScript: Build and prepare Unreal' -notin $ideTaskLabels -or
+    'UnifiedScript: Validate project' -notin $ideTaskLabels -or
+    @($ideWorkspace.launch.configurations | Where-Object {
+        $_.type -eq 'coreclr' -and $_.request -eq 'attach'
+    }).Count -ne 1) {
+    throw 'Generated project-local IDE workspace is incomplete.'
 }
 $surfaceReport = Get-Content `
     -LiteralPath $generatedEvidence.developmentSurface.path `

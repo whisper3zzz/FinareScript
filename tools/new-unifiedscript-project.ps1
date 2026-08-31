@@ -11,6 +11,8 @@ param(
 
     [string]$EditorTarget,
 
+    [string]$GameTarget,
+
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]*$')]
     [string]$ScriptName = 'FirstScript',
 
@@ -227,6 +229,23 @@ try {
     if ($EditorTarget -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
         Throw-ScaffoldError 'USNEW1003' "EditorTarget is invalid: $EditorTarget"
     }
+    if ([string]::IsNullOrWhiteSpace($GameTarget)) {
+        $gameTargetFile = Get-ChildItem `
+            -LiteralPath (Join-Path $projectRoot 'Source') `
+            -Recurse -File -Filter '*.Target.cs' |
+            Where-Object { $_.Name -notlike '*Editor.Target.cs' } |
+            Select-Object -First 1
+        $GameTarget = if ($null -eq $gameTargetFile) {
+            $ProjectName
+        } else {
+            $gameTargetFile.Name.Substring(
+                0,
+                $gameTargetFile.Name.Length - '.Target.cs'.Length)
+        }
+    }
+    if ($GameTarget -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+        Throw-ScaffoldError 'USNEW1003' "GameTarget is invalid: $GameTarget"
+    }
     if ([string]::IsNullOrWhiteSpace($ManagedNamespace)) {
         $ManagedNamespace = "$ProjectName.UnifiedScript"
     }
@@ -267,7 +286,10 @@ try {
         contract = Join-Path $projectRoot "Contracts\$ProjectName.unreal-api-contract.json"
         deployment = Join-Path $projectRoot "Deployment\$ProjectName.unifiedscript-deployment.json"
         managedProject = Join-Path $managedRoot "$assemblyName.csproj"
+        managedSolution = Join-Path $managedRoot "$assemblyName.slnx"
         managedSource = Join-Path $managedRoot "$ScriptName.cs"
+        ideWorkspace = Join-Path $projectRoot "$ProjectName.UnifiedScript.code-workspace"
+        ideManifest = Join-Path $projectRoot 'Managed\UnifiedScript.ide.json'
         managedStage = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Scripts'
         apiBrowser = Join-Path $projectRoot "Generated\$ProjectName.api-browser.json"
     }
@@ -276,7 +298,10 @@ try {
         $outputs.contract,
         $outputs.deployment,
         $outputs.managedProject,
-        $outputs.managedSource)) {
+        $outputs.managedSolution,
+        $outputs.managedSource,
+        $outputs.ideWorkspace,
+        $outputs.ideManifest)) {
         if ((Test-Path -LiteralPath $destination) -and -not $Force) {
             Throw-ScaffoldError `
                 'USNEW1101' `
@@ -288,6 +313,7 @@ try {
         PROJECT_IDENTIFIER = $ProjectName
         PROJECT_MODULE = $ProjectModule
         EDITOR_TARGET = $EditorTarget
+        GAME_TARGET = $GameTarget
         SCRIPT_NAME = $ScriptName
         MANAGED_NAMESPACE = $ManagedNamespace
         ASSEMBLY_NAME = $assemblyName
@@ -309,27 +335,21 @@ try {
         -Destination $outputs.managedProject `
         -Replacements $replacements
     Render-Template `
+        -TemplatePath (Join-Path $templateRoot 'Managed\Project.UnifiedScript.slnx.template') `
+        -Destination $outputs.managedSolution `
+        -Replacements $replacements
+    Render-Template `
+        -TemplatePath (Join-Path $templateRoot 'IDE\Project.UnifiedScript.code-workspace.template') `
+        -Destination $outputs.ideWorkspace `
+        -Replacements $replacements
+    Render-Template `
+        -TemplatePath (Join-Path $templateRoot 'IDE\UnifiedScript.ide.json.template') `
+        -Destination $outputs.ideManifest `
+        -Replacements $replacements
+    Render-Template `
         -TemplatePath $scriptTemplatePath `
         -Destination $outputs.managedSource `
         -Replacements $replacements
-
-    Write-Host '[authoring] Generating the first Declaration IR and Authoring Surface...'
-    New-Item -ItemType Directory -Force -Path $outputs.managedStage | Out-Null
-    & $dotnet $cliAssembly analyze $outputs.managedProject `
-        --out $outputs.managedStage `
-        --configuration Release `
-        --framework net10.0
-    if ($LASTEXITCODE -ne 0) {
-        Throw-ScaffoldError `
-            'USNEW2001' `
-            "Initial authoring artifact generation failed with exit code $LASTEXITCODE."
-    }
-    foreach ($artifactExtension in @('asset.json', 'surface.json')) {
-        $artifact = Join-Path $outputs.managedStage "$assemblyName.$artifactExtension"
-        if (-not (Test-Path -LiteralPath $artifact)) {
-            Throw-ScaffoldError 'USNEW2001' "Initial authoring artifact is missing: $artifact"
-        }
-    }
 
     if (-not $SkipOnboarding) {
         Write-Host '[onboarding] Building bindings, Script Asset, and project integration...'
@@ -358,6 +378,27 @@ try {
                 'USNEW2003' `
                 "Generated API browser has an unsupported schema: $($apiBrowser.schemaVersion)"
         }
+        Write-Host '[authoring] Generating the first Declaration IR and Authoring Surface...'
+        New-Item -ItemType Directory -Force -Path $outputs.managedStage | Out-Null
+        & $dotnet $cliAssembly analyze $outputs.managedProject `
+            --out $outputs.managedStage `
+            --configuration Release `
+            --framework net10.0
+        if ($LASTEXITCODE -ne 0) {
+            Throw-ScaffoldError `
+                'USNEW2001' `
+                "Initial authoring artifact generation failed with exit code $LASTEXITCODE."
+        }
+        foreach ($artifactExtension in @('asset.json', 'surface.json')) {
+            $artifact = Join-Path $outputs.managedStage "$assemblyName.$artifactExtension"
+            if (-not (Test-Path -LiteralPath $artifact)) {
+                Throw-ScaffoldError `
+                    'USNEW2001' `
+                    "Initial authoring artifact is missing: $artifact"
+            }
+        }
+    } else {
+        Write-Host '[authoring] Deferred until Build/Onboard materializes generated bindings.'
     }
 
     Write-ScaffoldReport `

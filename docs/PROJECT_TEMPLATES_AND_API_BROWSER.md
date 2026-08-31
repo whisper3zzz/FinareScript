@@ -43,9 +43,14 @@ powershell -ExecutionPolicy Bypass `
   -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT
 ```
 
-The runner creates isolated minimal UE project shells, compiles each rendered
-managed project with engine-bundled .NET 10, and verifies Declaration IR and
-Authoring Surface output. Its report schema is
+The runner creates isolated minimal UE project shells and verifies every
+rendered source/configuration, managed solution, IDE workspace, task/debugger
+contract, and manifest without running the expensive Unreal onboarding loop.
+The public scaffold's normal mode runs Build/Onboard first, so templates that
+use generated Unreal APIs receive their typed bindings before the managed
+project is compiled; it then verifies Declaration IR and Authoring Surface
+output. `-SkipOnboarding` deliberately defers those generated artifacts. The
+acceptance report schema is
 `unifiedscript.project-template-acceptance/v0.1`.
 
 ## One effective Contract, five generated consumers

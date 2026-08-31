@@ -78,6 +78,49 @@ public sealed class UnrealProjectAdoptionTests
             "Authoring",
             "Workbench",
             "index.html")));
+        string solutionPath = Path.Combine(
+            fixture.ProjectRoot,
+            "Managed",
+            "AdoptGame.UnifiedScript",
+            "AdoptGame.UnifiedScript.slnx");
+        string workspacePath = Path.Combine(
+            fixture.ProjectRoot,
+            "AdoptGame.UnifiedScript.code-workspace");
+        string ideManifestPath = Path.Combine(
+            fixture.ProjectRoot,
+            "Managed",
+            "UnifiedScript.ide.json");
+        Assert.True(File.Exists(solutionPath));
+        Assert.Contains("AdoptGame.UnifiedScript.csproj", File.ReadAllText(solutionPath));
+        Assert.True(File.Exists(workspacePath));
+        using (JsonDocument workspace = JsonDocument.Parse(File.ReadAllText(workspacePath)))
+        {
+            Assert.Contains(
+                workspace.RootElement.GetProperty("tasks").GetProperty("tasks").EnumerateArray(),
+                static task => task.GetProperty("label").GetString() ==
+                    "UnifiedScript: Build and prepare Unreal");
+            JsonElement debugger = Assert.Single(
+                workspace.RootElement.GetProperty("launch").GetProperty("configurations").EnumerateArray());
+            Assert.Equal("coreclr", debugger.GetProperty("type").GetString());
+            Assert.Equal("attach", debugger.GetProperty("request").GetString());
+        }
+        using (JsonDocument ideManifest = JsonDocument.Parse(File.ReadAllText(ideManifestPath)))
+        {
+            Assert.Equal(
+                "unifiedscript.ide-workspace/v0.1",
+                ideManifest.RootElement.GetProperty("schemaVersion").GetString());
+            Assert.Equal(
+                "Managed/AdoptGame.UnifiedScript/Generated/Unreal.bindings.generated.cs",
+                ideManifest.RootElement.GetProperty("typedApi")
+                    .GetProperty("generatedBindings").GetString());
+        }
+        Assert.True(File.Exists(Path.Combine(
+            fixture.ProjectRoot,
+            "Plugins",
+            "UEUnifiedScript",
+            "Tools",
+            "Documentation",
+            "GETTING_STARTED.md")));
 
         string doctorReport = Path.Combine(fixture.Root, "doctor.json");
         int doctor = Program.Main([
@@ -480,6 +523,55 @@ public sealed class UnrealProjectAdoptionTests
                 </Project>
                 """);
             Write(
+                Path.Combine(templates, "Managed", "Project.UnifiedScript.slnx.template"),
+                """
+                <Solution>
+                  <Project Path="__ASSEMBLY_NAME__.csproj" />
+                </Solution>
+                """);
+            Write(
+                Path.Combine(templates, "IDE", "Project.UnifiedScript.code-workspace.template"),
+                """
+                {
+                  "folders": [{ "name": "__PROJECT_NAME__", "path": "." }],
+                  "tasks": {
+                    "version": "2.0.0",
+                    "tasks": [{
+                      "label": "UnifiedScript: Build and prepare Unreal",
+                      "type": "process",
+                      "command": "powershell",
+                      "args": ["${workspaceFolder:__PROJECT_NAME__}/__PROJECT_NAME__.uproject"]
+                    }]
+                  },
+                  "launch": {
+                    "version": "0.2.0",
+                    "configurations": [{
+                      "name": "UnifiedScript: Attach managed gameplay",
+                      "type": "coreclr",
+                      "request": "attach",
+                      "processId": "${command:pickProcess}"
+                    }]
+                  }
+                }
+                """);
+            Write(
+                Path.Combine(templates, "IDE", "UnifiedScript.ide.json.template"),
+                """
+                {
+                  "schemaVersion": "unifiedscript.ide-workspace/v0.1",
+                  "project": "__PROJECT_NAME__.uproject",
+                  "workspace": "__PROJECT_NAME__.UnifiedScript.code-workspace",
+                  "solution": "Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.slnx",
+                  "managedProject": "Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.csproj",
+                  "typedApi": {
+                    "generatedBindings": "Managed/__ASSEMBLY_NAME__/Generated/Unreal.bindings.generated.cs",
+                    "runtimeAssembly": "Plugins/UEUnifiedScript/Binaries/Managed/UnifiedScript.Unreal.dll",
+                    "apiBrowser": "Generated/__PROJECT_NAME__.api-browser.json"
+                  },
+                  "documentation": "Plugins/UEUnifiedScript/Tools/Documentation"
+                }
+                """);
+            Write(
                 Path.Combine(templates, "Managed", "FirstScript.cs.template"),
                 """
                 namespace __MANAGED_NAMESPACE__;
@@ -548,6 +640,9 @@ public sealed class UnrealProjectAdoptionTests
             Write(
                 Path.Combine(SdkRoot, "Authoring", "Workbench", "index.html"),
                 "<!doctype html><title>Fixture Workbench</title>\n");
+            Write(
+                Path.Combine(SdkRoot, "Documentation", "GETTING_STARTED.md"),
+                "# UnifiedScript fixture documentation\n");
         }
 
         private void CreateEngine()

@@ -138,6 +138,8 @@ foreach ($fixture in @(
     Invoke-AdoptionCli `
         -Cli $cli `
         -Arguments @('adopt', $project, '--sdk-root', $sdkRoot)
+    $projectName = [IO.Path]::GetFileNameWithoutExtension($project)
+    $assemblyName = "$projectName.UnifiedScript"
     foreach ($required in @(
             'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
             'Plugins\UEUnifiedScript\Tools\UnifiedScript.Cli\UnifiedScript.Cli.exe',
@@ -145,12 +147,41 @@ foreach ($fixture in @(
             'Plugins\UEUnifiedScript\Tools\setup-unreal-project.ps1',
             'Plugins\UEUnifiedScript\Tools\run-unifiedscript-onboarding-after-process.ps1',
             'Plugins\UEUnifiedScript\Tools\start-unifiedscript-authoring.ps1',
+            'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md',
             'Plugins\UEUnifiedScript\Authoring\Workbench\index.html',
-            "Managed\$([IO.Path]::GetFileNameWithoutExtension($project)).UnifiedScript\FirstScript.cs",
+            "Managed\$assemblyName\FirstScript.cs",
+            "Managed\$assemblyName\$assemblyName.slnx",
+            'Managed\UnifiedScript.ide.json',
+            "$projectName.UnifiedScript.code-workspace",
             'Config\UnifiedScript.onboarding.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $required) -PathType Leaf)) {
             throw "Adoption output is missing: $required"
         }
+    }
+    [xml]$solution = Get-Content -LiteralPath `
+        (Join-Path $projectRoot "Managed\$assemblyName\$assemblyName.slnx") -Raw
+    if ($solution.Solution.Project.Path -ne "$assemblyName.csproj") {
+        throw "Generated IDE solution does not reference the managed project for $project"
+    }
+    $workspace = Get-Content -LiteralPath `
+        (Join-Path $projectRoot "$projectName.UnifiedScript.code-workspace") `
+        -Raw | ConvertFrom-Json
+    $workspaceTasks = @($workspace.tasks.tasks | ForEach-Object { [string]$_.label })
+    if ('UnifiedScript: Build managed gameplay' -notin $workspaceTasks -or
+        'UnifiedScript: Build and prepare Unreal' -notin $workspaceTasks -or
+        'UnifiedScript: Validate project' -notin $workspaceTasks -or
+        @($workspace.launch.configurations | Where-Object {
+            $_.type -eq 'coreclr' -and $_.request -eq 'attach'
+        }).Count -ne 1) {
+        throw "Generated IDE workspace lacks build, validate, or debugger configuration for $project"
+    }
+    $ideManifest = Get-Content -LiteralPath `
+        (Join-Path $projectRoot 'Managed\UnifiedScript.ide.json') `
+        -Raw | ConvertFrom-Json
+    if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
+        $ideManifest.typedApi.generatedBindings -ne
+            "Managed/$assemblyName/Generated/Unreal.bindings.generated.cs") {
+        throw "Generated IDE manifest is invalid for $project"
     }
 
     # FirstScript intentionally consumes generated Unreal wrappers. Their first
@@ -172,18 +203,28 @@ foreach ($fixture in @(
     $projectToolsCheck = $doctor.checks |
         Where-Object { $_.id -eq 'project-tools' } |
         Select-Object -First 1
-    if ($doctor.status -ne 'passed' -or $projectToolsCheck.status -ne 'passed') {
+    $ideWorkspaceCheck = $doctor.checks |
+        Where-Object { $_.id -eq 'ide-workspace' } |
+        Select-Object -First 1
+    $ideManifestCheck = $doctor.checks |
+        Where-Object { $_.id -eq 'ide-manifest' } |
+        Select-Object -First 1
+    if ($doctor.status -ne 'passed' -or
+        $projectToolsCheck.status -ne 'passed' -or
+        $ideWorkspaceCheck.status -ne 'passed' -or
+        $ideManifestCheck.status -ne 'passed') {
         throw "Project-local doctor did not validate the installed tools for $project"
     }
 
     $diagnosticsInput = Join-Path $projectRoot 'Saved\UnifiedScript\EditorDiagnostics'
     New-Item -ItemType Directory -Force -Path $diagnosticsInput | Out-Null
     $editorDiagnostic = [ordered]@{
-        schemaVersion = 'unifiedscript.editor-diagnostics/v0.1'
+        schemaVersion = 'unifiedscript.editor-diagnostics/v0.2'
         retainedCount = 1
         diagnostics = @([ordered]@{
             sequence = 1
             domain = 'compile'
+            stage = 'compile'
             code = 'CS0103'
             severity = 'error'
             message = 'Fixture compile diagnostic.'
@@ -191,6 +232,11 @@ foreach ($fixture in @(
             line = 7
             column = 5
             member = 'us_fixture_member'
+            graphNodeId = 'us_fixture_node'
+            packagePath = '/Game/FirstScript'
+            worldHostId = '0'
+            instanceId = '0'
+            generation = 0
             action = 'retry'
             evidencePath = $doctorReportPath
         })

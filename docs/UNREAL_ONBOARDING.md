@@ -67,7 +67,30 @@ Adoption also installs these project-local product tools below
   invalidation;
 - `run-unifiedscript-onboarding-after-process.ps1` for a build that must wait
   until the current Editor releases the plugin DLL;
-- the versioned project templates used by deterministic Repair.
+- the versioned project templates used by deterministic Repair;
+- the release documentation used by project-local IDE links.
+
+The same adoption transaction creates an IDE surface without requiring paths
+back into the SDK or repository:
+
+- `<Game>.UnifiedScript.code-workspace` opens the Unreal project and installed
+  documentation, recommends the C# tooling, and provides managed Build, full
+  Build/Prepare, and Validate tasks;
+- `Managed/<Game>.UnifiedScript/<Game>.UnifiedScript.slnx` loads the managed
+  gameplay project directly;
+- `Managed/UnifiedScript.ide.json` is the typed machine-readable index for the
+  solution, generated C# bindings, API browser, installed docs, task labels,
+  and debugger configuration;
+- **UnifiedScript: Attach managed gameplay** uses the CoreCLR process picker so
+  the user can attach to the running Unreal Editor or game without a
+  machine-specific process ID.
+
+Generated bindings live under the managed project and its references point to
+the project-local runtime assemblies, so autocomplete and Go to Definition use
+the same API surface that Build/Play consumes. Doctor treats a missing
+solution, workspace, IDE manifest, or documentation closure as a failed
+`ide-workspace` check. All of these files participate in Preview, conflict
+detection, Repair, exact rollback, and embedded no-change adoption.
 
 After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
 same operations in Slate. Preview, Repair, Doctor, and support-bundle export stream their child-process

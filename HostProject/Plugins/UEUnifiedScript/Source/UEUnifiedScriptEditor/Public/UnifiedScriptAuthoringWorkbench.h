@@ -55,6 +55,7 @@ struct FUnifiedScriptAuthoringDiagnostic
     FString Message;
     FUnifiedScriptAuthoringSpan Span;
     FString SemanticId;
+    FString GraphNodeId;
 
     FString ToDisplayString() const;
 };

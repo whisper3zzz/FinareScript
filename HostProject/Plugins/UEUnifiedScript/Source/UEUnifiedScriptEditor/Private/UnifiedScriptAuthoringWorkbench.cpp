@@ -151,6 +151,10 @@ bool ReadDiagnostics(
             return false;
         }
         Object->TryGetStringField(TEXT("semanticId"), Diagnostic.SemanticId);
+        if (!Object->TryGetStringField(TEXT("graphNodeId"), Diagnostic.GraphNodeId))
+        {
+            Object->TryGetStringField(TEXT("nodeId"), Diagnostic.GraphNodeId);
+        }
         OutDiagnostics.Add(MoveTemp(Diagnostic));
     }
     return true;

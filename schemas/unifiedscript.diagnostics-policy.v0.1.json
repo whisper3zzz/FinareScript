@@ -14,6 +14,7 @@
     "unifiedscript.compiled-chunk-process-profile/v0.1",
     "unifiedscript.deterministic-generation-gate/v0.1",
     "unifiedscript.editor-diagnostics/v0.1",
+    "unifiedscript.editor-diagnostics/v0.2",
     "unifiedscript.gameplay-profile/v0.3",
     "unifiedscript.generation-prewarm-experiment/v0.1",
     "unifiedscript.generation-prewarm-trial/v0.1",

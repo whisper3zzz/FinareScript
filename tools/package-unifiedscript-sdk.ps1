@@ -423,6 +423,9 @@ try {
         'Documentation\DOCUMENTATION.md',
         'Documentation\RELEASE_NOTES_1_0_RC1.md',
         'Documentation\AUTHORING_SURFACE.md',
+        'Documentation\AUTHORING_DIAGNOSTICS.md',
+        'Documentation\UNREAL_ONBOARDING.md',
+        'Documentation\DIAGNOSTICS_BUNDLES.md',
         'Documentation\RUNTIME_DIAGNOSTICS.md',
         'Documentation\PERFORMANCE_WORKLOAD_SUITE.md',
         'Documentation\UNREAL_RELEASE.md',
@@ -435,6 +438,9 @@ try {
         'Templates\UnrealProject\Managed\FirstScript.cs.template',
         'Templates\UnrealProject\Managed\VisualGameplayScript.cs.template',
         'Templates\UnrealProject\Managed\DataPlaneScript.cs.template',
+        'Templates\UnrealProject\Managed\Project.UnifiedScript.slnx.template',
+        'Templates\UnrealProject\IDE\Project.UnifiedScript.code-workspace.template',
+        'Templates\UnrealProject\IDE\UnifiedScript.ide.json.template',
         'Templates\UnrealProject\Config\UnifiedScript.onboarding.json.template',
         'Authoring\Workbench\index.html')) {
         $candidate = Join-Path $sdkRoot $requiredPayload

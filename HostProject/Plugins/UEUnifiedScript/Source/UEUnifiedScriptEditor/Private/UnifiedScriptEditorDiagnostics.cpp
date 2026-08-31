@@ -23,8 +23,17 @@ const FName FUnifiedScriptEditorDiagnostics::LogName(TEXT("UnifiedScriptDiagnost
 
 namespace UE::UnifiedScript::EditorDiagnostics::Private
 {
-constexpr TCHAR SnapshotSchema[] = TEXT("unifiedscript.editor-diagnostics/v0.1");
+constexpr TCHAR SnapshotSchema[] = TEXT("unifiedscript.editor-diagnostics/v0.2");
 TArray<FUnifiedScriptEditorDiagnostic> RetainedDiagnostics;
+
+struct FReportContext
+{
+    FString Stage;
+    FString PackagePath;
+    uint64 WorldHostId = 0;
+    uint64 InstanceId = 0;
+    int32 Generation = 0;
+};
 
 FString ReadString(
     const TSharedPtr<FJsonObject>& Object,
@@ -64,6 +73,56 @@ int32 ReadPositiveInteger(
     return 0;
 }
 
+int32 ReadNonNegativeInteger(
+    const TSharedPtr<FJsonObject>& Object,
+    std::initializer_list<const TCHAR*> Names,
+    int32 Fallback = 0)
+{
+    if (!Object.IsValid())
+    {
+        return Fallback;
+    }
+    double Value = 0.0;
+    for (const TCHAR* Name : Names)
+    {
+        if (Object->TryGetNumberField(Name, Value) && Value >= 0.0 && Value <= MAX_int32)
+        {
+            return static_cast<int32>(Value);
+        }
+    }
+    return Fallback;
+}
+
+uint64 ReadUnsignedIdentity(
+    const TSharedPtr<FJsonObject>& Object,
+    std::initializer_list<const TCHAR*> Names,
+    uint64 Fallback = 0)
+{
+    if (!Object.IsValid())
+    {
+        return Fallback;
+    }
+    for (const TCHAR* Name : Names)
+    {
+        FString StringValue;
+        if (Object->TryGetStringField(Name, StringValue))
+        {
+            uint64 Parsed = 0;
+            if (LexTryParseString(Parsed, *StringValue))
+            {
+                return Parsed;
+            }
+        }
+        double NumberValue = 0.0;
+        if (Object->TryGetNumberField(Name, NumberValue) &&
+            NumberValue >= 0.0 && NumberValue <= static_cast<double>(MAX_uint64))
+        {
+            return static_cast<uint64>(NumberValue);
+        }
+    }
+    return Fallback;
+}
+
 FString NormalizeSeverity(FString Severity)
 {
     Severity.ToLowerInline();
@@ -77,6 +136,19 @@ FString Classify(const FString& Code, const FString& Schema, const FString& Mess
     const FString UpperCode = Code.ToUpper();
     const FString LowerSchema = Schema.ToLower();
     const FString LowerMessage = Message.ToLower();
+    if (UpperCode.Contains(TEXT("HANDLE")) || UpperCode.Contains(TEXT("LIFETIME")) ||
+        LowerMessage.Contains(TEXT("stale handle")) ||
+        LowerMessage.Contains(TEXT("object lifetime")) ||
+        LowerMessage.Contains(TEXT("world teardown")))
+    {
+        return TEXT("lifetime");
+    }
+    if (LowerSchema.Contains(TEXT("package")) || LowerSchema.Contains(TEXT("cook")) ||
+        LowerMessage.Contains(TEXT("package omission")) ||
+        LowerMessage.Contains(TEXT("missing cooked")))
+    {
+        return TEXT("package");
+    }
     if (UpperCode.StartsWith(TEXT("CS")) || LowerSchema.Contains(TEXT("compile")))
     {
         return TEXT("compile");
@@ -103,7 +175,34 @@ FString RecoveryForDomain(const FString& Domain)
     {
         return TEXT("retry");
     }
+    if (Domain == TEXT("package"))
+    {
+        return TEXT("inspectPackage");
+    }
     return TEXT("repair");
+}
+
+FString NormalizeRecovery(FString Action, const FString& Domain)
+{
+    Action.TrimStartAndEndInline();
+    if (Action.Equals(TEXT("restartEditor"), ESearchCase::IgnoreCase))
+    {
+        return TEXT("restartEditor");
+    }
+    if (Action.Equals(TEXT("inspectPackage"), ESearchCase::IgnoreCase) ||
+        Action.Equals(TEXT("package"), ESearchCase::IgnoreCase))
+    {
+        return TEXT("inspectPackage");
+    }
+    if (Action.Equals(TEXT("repair"), ESearchCase::IgnoreCase))
+    {
+        return TEXT("repair");
+    }
+    if (Action.Equals(TEXT("retry"), ESearchCase::IgnoreCase))
+    {
+        return TEXT("retry");
+    }
+    return RecoveryForDomain(Domain);
 }
 
 FString RecoveryLabel(const FString& Action)
@@ -119,6 +218,10 @@ FString RecoveryLabel(const FString& Action)
     if (Action == TEXT("retry"))
     {
         return TEXT("Retry");
+    }
+    if (Action == TEXT("inspectPackage"))
+    {
+        return TEXT("Inspect Package");
     }
     return TEXT("Inspect");
 }
@@ -136,6 +239,7 @@ void AppendReportObject(
     const TSharedPtr<FJsonObject>& Object,
     const FString& Schema,
     const FString& ReportPath,
+    const FReportContext& InheritedContext,
     int32 Depth,
     TArray<FUnifiedScriptEditorDiagnostic>& OutDiagnostics)
 {
@@ -144,6 +248,34 @@ void AppendReportObject(
     {
         return;
     }
+
+    FReportContext Context = InheritedContext;
+    const FString Stage = ReadString(
+        Object,
+        {TEXT("stage"), TEXT("phase"), TEXT("currentPhase"), TEXT("operation")});
+    if (!Stage.IsEmpty())
+    {
+        Context.Stage = Stage.Left(256);
+    }
+    const FString PackagePath = ReadString(
+        Object,
+        {TEXT("packagePath"), TEXT("assetPath"), TEXT("cookedPackage"), TEXT("package")});
+    if (!PackagePath.IsEmpty())
+    {
+        Context.PackagePath = PackagePath.Left(4096);
+    }
+    Context.WorldHostId = ReadUnsignedIdentity(
+        Object,
+        {TEXT("worldHostId"), TEXT("worldId")},
+        Context.WorldHostId);
+    Context.InstanceId = ReadUnsignedIdentity(
+        Object,
+        {TEXT("instanceId"), TEXT("scriptInstanceId")},
+        Context.InstanceId);
+    Context.Generation = ReadNonNegativeInteger(
+        Object,
+        {TEXT("generation"), TEXT("runtimeGeneration")},
+        Context.Generation);
 
     const FString Code = ReadString(Object, {TEXT("code"), TEXT("diagnosticCode")});
     const FString Message = ReadString(
@@ -154,7 +286,11 @@ void AppendReportObject(
         {TEXT("sourcePath"), TEXT("filePath"), TEXT("source"), TEXT("file")});
     FString Member = ReadString(
         Object,
-        {TEXT("memberPath"), TEXT("memberName"), TEXT("member"), TEXT("symbol")});
+        {TEXT("memberPath"), TEXT("memberName"), TEXT("member"), TEXT("symbol"),
+         TEXT("semanticId")});
+    const FString GraphNode = ReadString(
+        Object,
+        {TEXT("graphNodeId"), TEXT("nodeId"), TEXT("semanticNodeId")});
     int32 Line = ReadPositiveInteger(Object, {TEXT("line"), TEXT("startLine")});
     int32 Column = ReadPositiveInteger(Object, {TEXT("column"), TEXT("startColumn")});
 
@@ -180,6 +316,7 @@ void AppendReportObject(
         (!Message.IsEmpty() && (!SourcePath.IsEmpty() || !Member.IsEmpty())))
     {
         FUnifiedScriptEditorDiagnostic Diagnostic;
+        Diagnostic.Stage = Context.Stage;
         Diagnostic.Code = Code.IsEmpty() ? TEXT("USREPORT") : Code.Left(128);
         Diagnostic.Severity = NormalizeSeverity(ReadString(Object, {TEXT("severity"), TEXT("level")}));
         Diagnostic.Summary = Message.Left(4096);
@@ -188,8 +325,19 @@ void AppendReportObject(
         Diagnostic.Line = Line;
         Diagnostic.Column = Column;
         Diagnostic.Member = Member.Left(512);
-        Diagnostic.Domain = Classify(Diagnostic.Code, Schema, Diagnostic.Summary);
-        Diagnostic.RecoveryAction = RecoveryForDomain(Diagnostic.Domain);
+        Diagnostic.GraphNode = GraphNode.Left(512);
+        Diagnostic.PackagePath = Context.PackagePath;
+        Diagnostic.WorldHostId = Context.WorldHostId;
+        Diagnostic.InstanceId = Context.InstanceId;
+        Diagnostic.Generation = Context.Generation;
+        Diagnostic.Domain = ReadString(Object, {TEXT("domain")}).ToLower();
+        if (Diagnostic.Domain.IsEmpty())
+        {
+            Diagnostic.Domain = Classify(Diagnostic.Code, Schema, Diagnostic.Summary);
+        }
+        Diagnostic.RecoveryAction = NormalizeRecovery(
+            ReadString(Object, {TEXT("recoveryAction"), TEXT("requiredAction"), TEXT("action")}),
+            Diagnostic.Domain);
         Diagnostic.EvidencePath = ReportPath;
 
         const bool bDuplicate = OutDiagnostics.ContainsByPredicate(
@@ -199,7 +347,11 @@ void AppendReportObject(
                     Existing.Summary == Diagnostic.Summary &&
                     Existing.SourcePath == Diagnostic.SourcePath &&
                     Existing.Line == Diagnostic.Line &&
-                    Existing.Member == Diagnostic.Member;
+                    Existing.Member == Diagnostic.Member &&
+                    Existing.GraphNode == Diagnostic.GraphNode &&
+                    Existing.Stage == Diagnostic.Stage &&
+                    Existing.WorldHostId == Diagnostic.WorldHostId &&
+                    Existing.Generation == Diagnostic.Generation;
             });
         if (!bDuplicate)
         {
@@ -216,7 +368,12 @@ void AppendReportObject(
         if (Field.Value->Type == EJson::Object)
         {
             AppendReportObject(
-                Field.Value->AsObject(), Schema, ReportPath, Depth + 1, OutDiagnostics);
+                Field.Value->AsObject(),
+                Schema,
+                ReportPath,
+                Context,
+                Depth + 1,
+                OutDiagnostics);
         }
         else if (Field.Value->Type == EJson::Array)
         {
@@ -225,7 +382,12 @@ void AppendReportObject(
                 if (Item.IsValid() && Item->Type == EJson::Object)
                 {
                     AppendReportObject(
-                        Item->AsObject(), Schema, ReportPath, Depth + 1, OutDiagnostics);
+                        Item->AsObject(),
+                        Schema,
+                        ReportPath,
+                        Context,
+                        Depth + 1,
+                        OutDiagnostics);
                 }
             }
         }
@@ -247,6 +409,7 @@ void PersistSnapshot()
         const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
         Json->SetNumberField(TEXT("sequence"), Index + 1);
         Json->SetStringField(TEXT("domain"), Diagnostic.Domain);
+        Json->SetStringField(TEXT("stage"), Diagnostic.Stage);
         Json->SetStringField(TEXT("code"), Diagnostic.Code);
         Json->SetStringField(TEXT("severity"), Diagnostic.Severity);
         Json->SetStringField(TEXT("message"), Diagnostic.Summary.Left(4096));
@@ -255,6 +418,11 @@ void PersistSnapshot()
         Json->SetNumberField(TEXT("line"), Diagnostic.Line);
         Json->SetNumberField(TEXT("column"), Diagnostic.Column);
         Json->SetStringField(TEXT("member"), Diagnostic.Member);
+        Json->SetStringField(TEXT("graphNodeId"), Diagnostic.GraphNode);
+        Json->SetStringField(TEXT("packagePath"), Diagnostic.PackagePath);
+        Json->SetStringField(TEXT("worldHostId"), LexToString(Diagnostic.WorldHostId));
+        Json->SetStringField(TEXT("instanceId"), LexToString(Diagnostic.InstanceId));
+        Json->SetNumberField(TEXT("generation"), Diagnostic.Generation);
         Json->SetStringField(TEXT("action"), Diagnostic.RecoveryAction);
         Json->SetStringField(TEXT("evidencePath"), Diagnostic.EvidencePath);
         Values.Add(MakeShared<FJsonValueObject>(Json));
@@ -282,14 +450,31 @@ void PersistSnapshot()
 FString FUnifiedScriptEditorDiagnostic::ToClipboardText() const
 {
     FString Result = FString::Printf(
-        TEXT("[%s] %s: %s\nRecovery: %s"),
+        TEXT("[%s/%s] %s: %s\nRecovery: %s"),
         *Domain,
+        Stage.IsEmpty() ? TEXT("unspecified") : *Stage,
         *Code,
         *Summary,
         *UE::UnifiedScript::EditorDiagnostics::Private::RecoveryLabel(RecoveryAction));
     if (!Member.IsEmpty())
     {
         Result += FString::Printf(TEXT("\nMember: %s"), *Member);
+    }
+    if (!GraphNode.IsEmpty())
+    {
+        Result += FString::Printf(TEXT("\nGraph node: %s"), *GraphNode);
+    }
+    if (WorldHostId != 0 || InstanceId != 0 || Generation != 0)
+    {
+        Result += FString::Printf(
+            TEXT("\nRuntime: World=%llu Instance=%llu Generation=%d"),
+            WorldHostId,
+            InstanceId,
+            Generation);
+    }
+    if (!PackagePath.IsEmpty())
+    {
+        Result += FString::Printf(TEXT("\nPackage: %s"), *PackagePath);
     }
     if (HasSource())
     {
@@ -343,6 +528,9 @@ TArray<FUnifiedScriptEditorDiagnostic> FUnifiedScriptEditorDiagnostics::FromAuth
     for (const FUnifiedScriptAuthoringDiagnostic& Source : Failure.Diagnostics)
     {
         FUnifiedScriptEditorDiagnostic Diagnostic;
+        Diagnostic.Stage = Source.Code.StartsWith(TEXT("CS"))
+            ? TEXT("compile")
+            : TEXT("graph-analysis");
         Diagnostic.Code = Source.Code;
         Diagnostic.Severity = UE::UnifiedScript::EditorDiagnostics::Private::NormalizeSeverity(
             Source.Severity);
@@ -353,6 +541,7 @@ TArray<FUnifiedScriptEditorDiagnostic> FUnifiedScriptEditorDiagnostics::FromAuth
         Diagnostic.Line = Source.Span.StartLine;
         Diagnostic.Column = Source.Span.StartColumn;
         Diagnostic.Member = Source.SemanticId;
+        Diagnostic.GraphNode = Source.GraphNodeId;
         Diagnostic.Domain = UE::UnifiedScript::EditorDiagnostics::Private::Classify(
             Source.Code, TEXT("authoring"), Source.Message);
         Diagnostic.RecoveryAction = UE::UnifiedScript::EditorDiagnostics::Private::RecoveryForDomain(
@@ -362,6 +551,7 @@ TArray<FUnifiedScriptEditorDiagnostic> FUnifiedScriptEditorDiagnostics::FromAuth
     if (Result.IsEmpty())
     {
         FUnifiedScriptEditorDiagnostic Diagnostic;
+        Diagnostic.Stage = TEXT("authoring");
         Diagnostic.Domain = UE::UnifiedScript::EditorDiagnostics::Private::Classify(
             Failure.Code, TEXT("authoring"), Failure.Message);
         Diagnostic.Code = Failure.Code.IsEmpty() ? TEXT("USAUTHORING") : Failure.Code;
@@ -384,6 +574,7 @@ FUnifiedScriptEditorDiagnostic FUnifiedScriptEditorDiagnostics::FromReloadTransa
 {
     FUnifiedScriptEditorDiagnostic Diagnostic;
     Diagnostic.Domain = TEXT("reload");
+    Diagnostic.Stage = TEXT("hot-reload");
     Diagnostic.Code = Transaction.State == TEXT("restartRequired")
         ? TEXT("USRELOAD_RESTART_REQUIRED")
         : TEXT("USRELOAD_FAILED");
@@ -405,7 +596,10 @@ FUnifiedScriptEditorDiagnostic FUnifiedScriptEditorDiagnostics::FromRuntime(
     const FUnifiedScriptRuntimeDiagnostic& Runtime)
 {
     FUnifiedScriptEditorDiagnostic Diagnostic;
-    Diagnostic.Domain = TEXT("runtime");
+    Diagnostic.Domain = Runtime.Bridge.HandleError.IsEmpty()
+        ? TEXT("runtime")
+        : TEXT("lifetime");
+    Diagnostic.Stage = Runtime.Operation;
     Diagnostic.Code = Runtime.Kind.IsEmpty() ? TEXT("USRUNTIME") : Runtime.Kind;
     Diagnostic.Severity = TEXT("error");
     Diagnostic.Summary = Runtime.Message;
@@ -416,6 +610,9 @@ FUnifiedScriptEditorDiagnostic FUnifiedScriptEditorDiagnostics::FromRuntime(
     Diagnostic.Member = Runtime.Bridge.MemberPath.IsEmpty()
         ? Runtime.Source.MethodName
         : Runtime.Bridge.MemberPath;
+    Diagnostic.WorldHostId = Runtime.WorldHostId;
+    Diagnostic.InstanceId = Runtime.InstanceId;
+    Diagnostic.Generation = Runtime.Generation;
     Diagnostic.RecoveryAction = TEXT("retry");
     return Diagnostic;
 }
@@ -427,6 +624,7 @@ FUnifiedScriptEditorDiagnostic FUnifiedScriptEditorDiagnostics::FromSetupFailure
 {
     FUnifiedScriptEditorDiagnostic Diagnostic;
     Diagnostic.Domain = TEXT("setup");
+    Diagnostic.Stage = Operation;
     Diagnostic.Code = TEXT("USSETUP_FAILED");
     Diagnostic.Severity = TEXT("error");
     Diagnostic.Summary = FString::Printf(
@@ -453,8 +651,9 @@ TArray<FUnifiedScriptEditorDiagnostic> FUnifiedScriptEditorDiagnostics::ReadRepo
     }
     FString Schema;
     Root->TryGetStringField(TEXT("schemaVersion"), Schema);
+    UE::UnifiedScript::EditorDiagnostics::Private::FReportContext Context;
     UE::UnifiedScript::EditorDiagnostics::Private::AppendReportObject(
-        Root, Schema, ReportPath, 0, Result);
+        Root, Schema, ReportPath, Context, 0, Result);
     return Result;
 }
 
@@ -486,8 +685,9 @@ void FUnifiedScriptEditorDiagnostics::Publish(
             UE::UnifiedScript::EditorDiagnostics::Private::ToMessageSeverity(
                 Diagnostic.Severity));
         Message->AddText(FText::FromString(FString::Printf(
-            TEXT("[%s] %s: %s"),
+            TEXT("[%s/%s] %s: %s"),
             *Diagnostic.Domain,
+            Diagnostic.Stage.IsEmpty() ? TEXT("unspecified") : *Diagnostic.Stage,
             *Diagnostic.Code,
             *Diagnostic.Summary)));
         if (!Diagnostic.Member.IsEmpty())
@@ -502,6 +702,20 @@ void FUnifiedScriptEditorDiagnostics::Publish(
                     [Member]()
                     {
                         IUEUnifiedScriptEditorModule::Get().OpenAuthoringMember(Member);
+                    })));
+        }
+        if (!Diagnostic.GraphNode.IsEmpty() && Diagnostic.GraphNode != Diagnostic.Member)
+        {
+            const FString GraphNode = Diagnostic.GraphNode;
+            Message->AddToken(FActionToken::Create(
+                FText::FromString(FString::Printf(TEXT("Graph: %s"), *GraphNode)),
+                LOCTEXT(
+                    "OpenGraphNodeTooltip",
+                    "Open and focus the matching semantic Graph node."),
+                FOnActionTokenExecuted::CreateLambda(
+                    [GraphNode]()
+                    {
+                        IUEUnifiedScriptEditorModule::Get().OpenAuthoringMember(GraphNode);
                     })));
         }
         const FString ResolvedSource = ResolveSourcePath(Diagnostic.SourcePath);
@@ -531,10 +745,34 @@ void FUnifiedScriptEditorDiagnostics::Publish(
                         FPlatformProcess::ExploreFolder(*EvidencePath);
                     })));
         }
+        const FString WorldHostText = Diagnostic.WorldHostId == 0
+            ? TEXT("-")
+            : LexToString(Diagnostic.WorldHostId);
+        const FString InstanceText = Diagnostic.InstanceId == 0
+            ? TEXT("-")
+            : LexToString(Diagnostic.InstanceId);
         Message->AddText(FText::FromString(FString::Printf(
-            TEXT("  Action: %s"),
-            *UE::UnifiedScript::EditorDiagnostics::Private::RecoveryLabel(
-                Diagnostic.RecoveryAction))));
+            TEXT("  World: %s  Instance: %s  Generation: %d"),
+            *WorldHostText,
+            *InstanceText,
+            Diagnostic.Generation)));
+        const FUnifiedScriptEditorDiagnostic RecoveryDiagnostic = Diagnostic;
+        Message->AddToken(FActionToken::Create(
+            FText::FromString(FString::Printf(
+                TEXT("Resolve: %s"),
+                *UE::UnifiedScript::EditorDiagnostics::Private::RecoveryLabel(
+                    Diagnostic.RecoveryAction))),
+            LOCTEXT(
+                "RunRecoveryTooltip",
+                "Open the exact safe surface for this diagnostic's prescribed recovery."),
+            FOnActionTokenExecuted::CreateLambda(
+                [RecoveryDiagnostic]()
+                {
+                    FUnifiedScriptEditorDiagnostics::ExecuteRecovery(RecoveryDiagnostic);
+                })));
+        Message->AddText(FText::FromString(FString::Printf(
+            TEXT("  Package: %s"),
+            Diagnostic.PackagePath.IsEmpty() ? TEXT("-") : *Diagnostic.PackagePath)));
         const FString ClipboardText = Diagnostic.ToClipboardText();
         Message->AddToken(FActionToken::Create(
             LOCTEXT("CopyDiagnosticAction", "Copy"),
@@ -562,6 +800,39 @@ void FUnifiedScriptEditorDiagnostics::Publish(
             0, Overflow, EAllowShrinking::No);
     }
     UE::UnifiedScript::EditorDiagnostics::Private::PersistSnapshot();
+}
+
+void FUnifiedScriptEditorDiagnostics::ExecuteRecovery(
+    const FUnifiedScriptEditorDiagnostic& Diagnostic)
+{
+    if (Diagnostic.RecoveryAction == TEXT("retry"))
+    {
+        if (!Diagnostic.GraphNode.IsEmpty() &&
+            IUEUnifiedScriptEditorModule::Get().OpenAuthoringMember(Diagnostic.GraphNode))
+        {
+            return;
+        }
+        if (!Diagnostic.Member.IsEmpty() &&
+            IUEUnifiedScriptEditorModule::Get().OpenAuthoringMember(Diagnostic.Member))
+        {
+            return;
+        }
+        if (OpenSource(Diagnostic.SourcePath, Diagnostic.Line, Diagnostic.Column))
+        {
+            return;
+        }
+    }
+    if (Diagnostic.RecoveryAction == TEXT("inspectPackage") &&
+        !Diagnostic.PackagePath.IsEmpty())
+    {
+        const FString ResolvedPackage = ResolveSourcePath(Diagnostic.PackagePath);
+        if (!ResolvedPackage.IsEmpty())
+        {
+            FPlatformProcess::ExploreFolder(*ResolvedPackage);
+            return;
+        }
+    }
+    IUEUnifiedScriptEditorModule::Get().OpenProjectSetup();
 }
 
 bool FUnifiedScriptEditorDiagnostics::OpenSource(
