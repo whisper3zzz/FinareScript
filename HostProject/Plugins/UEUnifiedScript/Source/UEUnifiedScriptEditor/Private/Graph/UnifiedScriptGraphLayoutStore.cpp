@@ -355,6 +355,41 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
         return A.SemanticId < B.SemanticId;
     });
 
+    const TArray<TSharedPtr<FJsonValue>>* ExistingOrphans = nullptr;
+    if (!Root->TryGetArrayField(TEXT("orphanedNodes"), ExistingOrphans) ||
+        ExistingOrphans == nullptr)
+    {
+        OutError = TEXT("Graph layout requires an orphanedNodes array.");
+        return false;
+    }
+    TArray<TSharedPtr<FJsonValue>> RetainedOrphans;
+    for (const TSharedPtr<FJsonValue>& OrphanValue : *ExistingOrphans)
+    {
+        const TSharedPtr<FJsonObject> Orphan = OrphanValue.IsValid()
+            ? OrphanValue->AsObject()
+            : nullptr;
+        const TSharedPtr<FJsonObject>* OrphanNode = nullptr;
+        FString OrphanFunctionId;
+        FString OrphanNodeId;
+        if (!Orphan.IsValid() ||
+            !Orphan->TryGetStringField(TEXT("functionId"), OrphanFunctionId) ||
+            !IsSemanticId(OrphanFunctionId) ||
+            !Orphan->TryGetObjectField(TEXT("node"), OrphanNode) ||
+            OrphanNode == nullptr || !OrphanNode->IsValid() ||
+            !(*OrphanNode)->TryGetStringField(TEXT("nodeId"), OrphanNodeId) ||
+            !IsSemanticId(OrphanNodeId))
+        {
+            OutError = TEXT("Graph layout contains an invalid orphaned node entry.");
+            return false;
+        }
+        if (OrphanFunctionId == FunctionId && ScriptNodeIds.Contains(OrphanNodeId))
+        {
+            continue;
+        }
+        RetainedOrphans.Add(OrphanValue);
+    }
+    Root->SetArrayField(TEXT("orphanedNodes"), MoveTemp(RetainedOrphans));
+
     TArray<TSharedPtr<FJsonValue>> JsonNodes;
     for (const UUnifiedScriptEdGraphNode* Node : ScriptNodes)
     {

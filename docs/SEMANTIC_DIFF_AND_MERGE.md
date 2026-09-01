@@ -52,12 +52,19 @@ itself; the report is evidence for a subsequent reviewed source transaction.
 
 ## Workbench review
 
-Authoring preview protocol `unifiedscript.authoring-preview/v0.2` embeds the
+Authoring preview protocol `unifiedscript.authoring-preview/v0.3` embeds the
 same semantic diff beside exact C# before/after files. Both native Slate and
 the browser Workbench show the typed stable-ID summary before commit. The
 accepted client resends the unchanged transaction identity, payload, baseline,
 group identity, and SHA-256 preview token. Cancel performs no source, identity,
 artifact, history, or runtime write.
+
+The preview also carries `unifiedscript.csharp-graph-round-trip/v0.1`. This
+separates intentional semantic changes from preservation evidence: it reports
+stable IDs and source comments retained across the source projection, then
+reports node placement, layout-only Graph comments, routes, and new unplaced
+nodes from the synchronized `.usgraph` projection. A changed sidecar appears as
+another exact before/after file and is bound to the same preview token.
 
 Declaration-only edits may legitimately show zero graph changes while still
 showing exact C# text. Behavior edits expose the changed executable values,

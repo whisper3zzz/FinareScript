@@ -177,6 +177,7 @@ public sealed class CoreClrAuthoringHttpServerTests
         string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
         string identityPath = sourcePath + ".usids";
         string historyPath = sourcePath + ".ushistory.json";
+        string layoutPath = Path.Combine(directory, "DamagePolicy.usgraph");
         string contentRoot = Path.Combine(directory, "workbench");
         Directory.CreateDirectory(contentRoot);
         await File.WriteAllTextAsync(sourcePath, Source);
@@ -200,7 +201,9 @@ public sealed class CoreClrAuthoringHttpServerTests
                 identityPath,
                 contentRoot,
                 port,
-                new AuthoringArtifactOutputs(HistoryPath: historyPath));
+                new AuthoringArtifactOutputs(
+                    HistoryPath: historyPath,
+                    GraphLayoutPath: layoutPath));
             using var cancellation = new CancellationTokenSource();
             Task serverTask = server.RunAsync(cancellation.Token);
             using var client = new HttpClient
@@ -211,6 +214,31 @@ public sealed class CoreClrAuthoringHttpServerTests
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
             ScriptAssetDeclaration baselineAsset = Assert.Single(baseline.ScriptAssets.Assets);
             SemanticId baselineFunctionId = Assert.Single(baselineAsset.Functions).Id;
+            GraphFunction baselineGraphFunction = Assert.Single(baseline.Graph.Functions);
+            GraphLayoutDocument baselineLayout = new(
+                GraphLayoutDocument.CurrentSchemaVersion,
+                [new GraphFunctionLayout(
+                    baselineGraphFunction.Id,
+                    baselineGraphFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                        node.Id,
+                        GraphNodePlacement.Placed,
+                        new GraphLayoutPoint(index * 240, index * 120),
+                        new GraphLayoutSize(220, 90),
+                        false)).ToArray(),
+                    [new GraphCommentRegion(
+                        "damage-flow",
+                        "Damage flow",
+                        new GraphLayoutBounds(-40, -40, 1200, 720),
+                        baselineGraphFunction.Nodes.Select(static node => node.Id).ToArray(),
+                        false)],
+                    baselineGraphFunction.Edges.Count == 0
+                        ? []
+                        : [new GraphRoutingHint(
+                            baselineGraphFunction.Edges[0].Id,
+                            [new GraphLayoutPoint(180, 80)])])],
+                []);
+            string baselineLayoutText = GraphLayoutJson.Serialize(baselineLayout) + "\n";
+            await File.WriteAllTextAsync(layoutPath, baselineLayoutText);
             string editedSource = baseline.SourceText.Replace(
                 "float scaled = incomingDamage * BaseDamage;",
                 "// Authored in the transactional C# view.\n        float scaled = incomingDamage * BaseDamage + 1;",
@@ -231,10 +259,22 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(baseline.Revision, preview.BaselineRevision);
             Assert.Equal(baseline.Revision + 1, preview.CandidateRevision);
             Assert.True(preview.PublishesRuntime);
-            AuthoringPreviewFile file = Assert.Single(preview.Files);
+            Assert.Equal("unifiedscript.authoring-preview/v0.3", preview.SchemaVersion);
+            AuthoringPreviewFile file = Assert.Single(preview.Files, candidate =>
+                candidate.Path == logicalPath);
             Assert.Equal(logicalPath, file.Path);
             Assert.Equal(Source, file.BeforeText);
             Assert.Equal(editedSource, file.AfterText);
+            AuthoringPreviewFile layoutPreview = Assert.Single(preview.Files, candidate =>
+                candidate.Path == Path.GetFullPath(layoutPath));
+            Assert.Equal(baselineLayoutText, layoutPreview.BeforeText);
+            Assert.True(preview.RoundTrip.LayoutChecked);
+            Assert.True(preview.RoundTrip.PreservedSemanticIds > 0);
+            Assert.Equal(1, preview.RoundTrip.AddedSourceComments);
+            Assert.Equal(0, preview.RoundTrip.RemovedSourceComments);
+            Assert.Equal(1, preview.RoundTrip.PreservedGraphComments);
+            Assert.True(preview.RoundTrip.PreservedNodeLayouts > 0);
+            Assert.True(preview.RoundTrip.NewUnplacedNodes > 0);
             Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
 
             using (HttpRequestMessage unconfirmed = AuthoringRequest(
@@ -272,6 +312,81 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal("txn-source-text", committed.History.UndoTransactionId);
             Assert.True(File.Exists(identityPath));
             Assert.True(File.Exists(historyPath));
+            GraphLayoutDocument sourceEditedLayout = GraphLayoutJson.Deserialize(
+                await File.ReadAllTextAsync(layoutPath));
+            GraphFunctionLayout sourceEditedFunctionLayout = Assert.Single(
+                sourceEditedLayout.Functions);
+            Assert.Equal("Damage flow", Assert.Single(sourceEditedFunctionLayout.CommentRegions).Title);
+            Assert.Contains(
+                sourceEditedFunctionLayout.Nodes,
+                static node => node.Placement == GraphNodePlacement.Unplaced);
+
+            GraphNode addedLiteral = Assert.Single(
+                committed.Graph.Functions.SelectMany(static function => function.Nodes),
+                static node => node.Kind == "literal" &&
+                    node.Properties.GetValueOrDefault("value") == "1");
+            SemanticPatchDocument graphPatch = SemanticPatchDocument.Create(
+                committed.ScriptAssets.SourceCompilationId,
+                committed.ScriptAssets.SemanticConfigurationId,
+                [new ReplaceLiteralPatchOperation(addedLiteral.Id, "1", "2")]);
+            string graphPatchJson = SemanticPatchJson.Serialize(graphPatch);
+            AuthoringPreviewResponse graphPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/semantic-patch",
+                graphPatchJson,
+                committed.Revision,
+                "txn-graph-round-trip-stale",
+                "Edit Graph literal");
+            Assert.True(graphPreview.RoundTrip.LayoutChecked);
+            Assert.Equal(1, graphPreview.RoundTrip.PreservedSourceComments);
+            Assert.Equal(0, graphPreview.RoundTrip.RemovedSourceComments);
+            Assert.Equal(1, graphPreview.RoundTrip.PreservedGraphComments);
+            Assert.Equal(0, graphPreview.RoundTrip.NewUnplacedNodes);
+            string sourceEditedLayoutText = await File.ReadAllTextAsync(layoutPath);
+            await File.AppendAllTextAsync(layoutPath, "\n");
+            using (HttpRequestMessage staleLayoutRequest = AuthoringRequest(
+                "api/authoring/semantic-patch",
+                graphPatchJson,
+                committed.Revision,
+                "txn-graph-round-trip-stale",
+                "Edit Graph literal",
+                previewToken: graphPreview.PreviewToken))
+            using (HttpResponseMessage staleLayoutResponse = await client.SendAsync(staleLayoutRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, staleLayoutResponse.StatusCode);
+                Assert.Contains(
+                    "UAW1015",
+                    await staleLayoutResponse.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+            }
+            Assert.Equal(editedSource, await File.ReadAllTextAsync(sourcePath));
+
+            await File.WriteAllTextAsync(layoutPath, sourceEditedLayoutText);
+            AuthoringPreviewResponse confirmedGraphPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/semantic-patch",
+                graphPatchJson,
+                committed.Revision,
+                "txn-graph-round-trip",
+                "Edit Graph literal");
+            AuthoringWorkspaceResponse graphCommitted = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                graphPatchJson,
+                committed.Revision,
+                "txn-graph-round-trip",
+                "Edit Graph literal",
+                previewToken: confirmedGraphPreview.PreviewToken);
+            Assert.Equal(
+                editedSource.Replace("+ 1;", "+ 2;", StringComparison.Ordinal),
+                graphCommitted.SourceText);
+            Assert.Contains("// Authored in the transactional C# view.", graphCommitted.SourceText);
+            GraphNode replacedLiteral = Assert.Single(
+                graphCommitted.Graph.Functions.SelectMany(static function => function.Nodes),
+                static node => node.Kind == "literal" &&
+                    node.Properties.GetValueOrDefault("value") == "2");
+            Assert.Equal(addedLiteral.Id, replacedLiteral.Id);
+            Assert.Equal(sourceEditedLayoutText, await File.ReadAllTextAsync(layoutPath));
 
             cancellation.Cancel();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
@@ -551,7 +666,7 @@ public sealed class CoreClrAuthoringHttpServerTests
                 baseline.Revision,
                 "txn-declaration",
                 "Update MaxDamage");
-            Assert.Equal("unifiedscript.authoring-preview/v0.2", declarationPreview.SchemaVersion);
+            Assert.Equal("unifiedscript.authoring-preview/v0.3", declarationPreview.SchemaVersion);
             Assert.Equal(baseline.Revision, declarationPreview.BaselineRevision);
             Assert.Equal(baseline.Revision + 1, declarationPreview.CandidateRevision);
             Assert.True(declarationPreview.PublishesRuntime);

@@ -113,11 +113,13 @@ Every endpoint runs under the authoring/debug session gate:
 
 1. reject edits while a debug execution is active;
 2. validate the client revision and operation identity;
-3. reject source or identity files changed outside the Workbench;
+3. reject source or identity files changed outside the Workbench and snapshot
+   the current validated `.usgraph` baseline;
 4. prepare and fully analyze the candidate snapshot;
 5. reload the candidate through the same CoreCLR transport;
-6. transactionally publish source, `.usids`, Declaration IR, Surface, DLL, PDB,
-   and the prospective history journal;
+6. synchronize stable-ID layout and transactionally publish source, `.usids`,
+   `.usgraph`, Declaration IR, Surface, DLL, PDB, and the prospective history
+   journal;
 7. commit the in-memory workspace and history entry, then expose the new
    revision and runtime generation.
 
@@ -152,6 +154,14 @@ untouched and reported as `history.persistenceState = rejected`; the workspace
 starts a fresh revision-1 history instead of applying an unsafe snapshot. The
 states `empty`, `restored`, `persisted`, and `disabled` distinguish the other
 startup/publication paths in browser and Slate clients.
+
+`--layout-out` opts the shareable `.usgraph` sidecar into the same transaction.
+Layout remains directly authorable by the native Graph canvas before preview,
+so the server snapshots its latest validated bytes rather than treating normal
+node movement as an external source edit. The preview token binds that exact
+SHA-256 baseline. Any subsequent layout write rejects commit with `UAW1015`;
+successful publication writes only a semantically changed synchronized layout,
+preserving byte-exact JSON when the Graph edit does not alter layout ownership.
 
 Atomic semantic patch plans already group dependent source operations. Semantic
 Patch v0.24 statement duplication is also one server-owned transaction, so its

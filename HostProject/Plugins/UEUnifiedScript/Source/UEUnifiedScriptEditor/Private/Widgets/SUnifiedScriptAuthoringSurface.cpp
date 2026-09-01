@@ -1710,7 +1710,10 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                                     .GraphToEdit(AuthoringGraph.Get())
                                     .GraphEvents(GraphEvents)
                                     .Appearance(GraphAppearance)
-                                    .IsEditable(true)
+                                    .IsEditable_Lambda([this]()
+                                    {
+                                        return !bPatchRequestPending && !bCodeEditDirty;
+                                    })
                                     .IsEmpty_Lambda([this]()
                                     {
                                         return AuthoringGraph.IsValid() && AuthoringGraph->Nodes.IsEmpty();
@@ -3936,6 +3939,10 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
             true);
         return;
     }
+    if (bPublishesRuntime && !PersistCurrentLayout(true))
+    {
+        return;
+    }
 
     if (TransactionId.IsEmpty())
     {
@@ -4031,6 +4038,23 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
         UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewDiagnosticsText(Preview);
     const FString SemanticReviewText =
         UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildSemanticReviewText(Preview);
+    const FString LayoutRoundTripText = Preview.RoundTrip.bLayoutChecked
+        ? FString::Printf(
+            TEXT("layout %lld nodes + %lld graph comments + %lld routes kept; %lld new nodes unplaced"),
+            Preview.RoundTrip.PreservedNodeLayouts,
+            Preview.RoundTrip.PreservedGraphComments,
+            Preview.RoundTrip.PreservedRoutingHints,
+            Preview.RoundTrip.NewUnplacedNodes)
+        : FString(TEXT("layout not configured for this Workbench"));
+    const FString RoundTripReviewText = FString::Printf(
+        TEXT("ROUND-TRIP GUARD  |  stable IDs %lld kept / +%lld / -%lld  |  source comments %lld kept / +%lld / -%lld  |  %s"),
+        Preview.RoundTrip.PreservedSemanticIds,
+        Preview.RoundTrip.IntroducedSemanticIds,
+        Preview.RoundTrip.RetiredSemanticIds,
+        Preview.RoundTrip.PreservedSourceComments,
+        Preview.RoundTrip.AddedSourceComments,
+        Preview.RoundTrip.RemovedSourceComments,
+        *LayoutRoundTripText);
     const TSharedRef<SWindow> Window = SNew(SWindow)
         .Title(FText::FromString(FString::Printf(
             TEXT("UnifiedScript Diff Preview - %s"),
@@ -4080,6 +4104,14 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
                             Preview.SemanticSummary.ChangeCount)))
                         .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
                         .ColorAndOpacity(FLinearColor(0.32f, 0.68f, 0.95f))
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(FText::FromString(RoundTripReviewText))
+                        .AutoWrapText(true)
+                        .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                        .ColorAndOpacity(FLinearColor(0.48f, 0.80f, 0.58f))
                     ]
                     + SVerticalBox::Slot().FillHeight(1.0f)
                     [
@@ -6982,12 +7014,12 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     RefreshNodePaletteItems();
 }
 
-void SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
+bool SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
 {
     if (!AuthoringGraph.IsValid() || ActiveFunctionId.IsEmpty() || LoadedLayoutPath.IsEmpty() ||
         AuthoringGraph->Nodes.IsEmpty())
     {
-        return;
+        return true;
     }
     TArray<UEdGraphNode*> Nodes;
     for (UEdGraphNode* Node : AuthoringGraph->Nodes)
@@ -6997,18 +7029,20 @@ void SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
     const FString CurrentFingerprint = BuildCanvasLayoutFingerprint();
     if (bOnlyIfChanged && CurrentFingerprint == PersistedCanvasLayoutFingerprint)
     {
-        return;
+        return true;
     }
     FString Error;
     if (FUnifiedScriptGraphLayoutStore::SaveFunction(
             LoadedLayoutPath, ActiveFunctionId, Nodes, Error))
     {
         PersistedCanvasLayoutFingerprint = CurrentFingerprint;
+        return true;
     }
     else if (!Error.IsEmpty())
     {
         SetStatus(MoveTemp(Error), true);
     }
+    return false;
 }
 
 FString SUnifiedScriptAuthoringSurface::BuildCanvasLayoutFingerprint() const

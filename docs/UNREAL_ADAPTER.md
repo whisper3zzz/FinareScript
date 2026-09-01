@@ -412,10 +412,10 @@ status also distinguishes empty, restored, persisted, disabled, and rejected
 history journals so a stale restart never looks like a valid empty stack.
 
 `debug-serve` now supports repeatable `--source` plus transactional
-`--asset-out`, `--surface-out`, `--managed-out`, `--pdb-out`, and `--history`
+`--asset-out`, `--surface-out`, `--layout-out`, `--managed-out`, `--pdb-out`, and `--history`
 targets. A
 successful mutation validates the complete multi-source candidate and publishes
-C#, primary `.usids`, Declaration IR, Authoring Surface, uninstrumented managed
+C#, primary `.usids`, synchronized `.usgraph`, Declaration IR, Authoring Surface, uninstrumented managed
 DLL, portable PDB, and the prospective `authoring-history/v0.1` journal through
 one rollback-capable file transaction. Initial
 sidecar creation retains existing deterministic Semantic IDs, so a checked-in

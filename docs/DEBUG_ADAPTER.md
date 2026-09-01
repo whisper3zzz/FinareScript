@@ -146,8 +146,8 @@ label headers so stale tabs and ambiguous retries fail before publication. See
 [AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md) for the v0.3 contract.
 
 For Unreal authoring, `debug-serve` also accepts repeatable `--source` inputs
-and optional `--asset-out`, `--surface-out`, `--managed-out`, `--pdb-out`, and
-`--history` targets. These outputs join source and identity in the same
+and optional `--asset-out`, `--surface-out`, `--layout-out`, `--managed-out`,
+`--pdb-out`, and `--history` targets. These outputs join source and identity in the same
 rollback-capable file transaction, allowing a successful Slate request to
 publish the exact artifacts consumed by UE before component reload begins.
 

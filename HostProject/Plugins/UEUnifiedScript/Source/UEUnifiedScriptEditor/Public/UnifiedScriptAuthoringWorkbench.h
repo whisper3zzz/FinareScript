@@ -142,6 +142,21 @@ struct FUnifiedScriptAuthoringSemanticDiffSummary
     int64 ChangeCount = 0;
 };
 
+struct FUnifiedScriptAuthoringRoundTripResult
+{
+    int64 PreservedSemanticIds = 0;
+    int64 IntroducedSemanticIds = 0;
+    int64 RetiredSemanticIds = 0;
+    int64 PreservedSourceComments = 0;
+    int64 AddedSourceComments = 0;
+    int64 RemovedSourceComments = 0;
+    bool bLayoutChecked = false;
+    int64 PreservedNodeLayouts = 0;
+    int64 PreservedGraphComments = 0;
+    int64 PreservedRoutingHints = 0;
+    int64 NewUnplacedNodes = 0;
+};
+
 struct FUnifiedScriptAuthoringPreviewResult
 {
     int64 BaselineRevision = 0;
@@ -153,6 +168,7 @@ struct FUnifiedScriptAuthoringPreviewResult
     bool bPublishesRuntime = false;
     FString PreviewToken;
     FUnifiedScriptAuthoringSemanticDiffSummary SemanticSummary;
+    FUnifiedScriptAuthoringRoundTripResult RoundTrip;
     TArray<FUnifiedScriptAuthoringSemanticChange> SemanticChanges;
     TArray<FUnifiedScriptAuthoringPreviewFile> Files;
     TArray<FUnifiedScriptAuthoringDiagnostic> Diagnostics;

@@ -366,3 +366,23 @@ atomic source, `.usids`, artifacts, history, CoreCLR, and daily Build & Reload
 path. **Revert** restores the loaded canonical text. Refresh, Graph mutation,
 history navigation, and Surface switching are blocked while the C# buffer is
 dirty so an unrelated workspace adoption cannot silently discard it.
+
+M13.2E-3 closes the layout half of that transaction. `debug-serve` accepts an
+explicit `--layout-out` path and parses the current `.usgraph` immediately
+before preview. It synchronizes the confirmed candidate Graph in memory:
+surviving stable IDs retain exact node placement, Graph-comment title, bounds,
+membership, and surviving routing hints; removed nodes become recoverable
+orphans; genuinely new nodes enter as `unplaced`. Semantically unchanged
+layouts retain their byte-exact original formatting instead of being rewritten.
+
+Preview v0.3 includes a required
+`unifiedscript.csharp-graph-round-trip/v0.1` receipt with kept, introduced, and
+retired semantic IDs; kept, added, and removed source comments; retained layout
+and Graph-comment counts; and the new-unplaced-node count. If synchronization
+changes the sidecar, its exact before/after JSON appears beside the C# diff. The
+preview token binds the layout path, baseline SHA-256, and synchronized
+candidate. `UAW1015` rejects a layout changed while the review modal was open,
+and `UAW1016` rejects an invalid sidecar. Commit publishes source, `.usids`,
+`.usgraph`, generated artifacts, history, and the CoreCLR generation through
+one rollback-safe boundary. Slate checkpoints layout before preview and locks
+Graph mutation while the request is active.

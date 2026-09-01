@@ -6573,7 +6573,7 @@ def main() -> int:
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.authoring-preview/v0.2" in debug_server_source
+        "unifiedscript.authoring-preview/v0.3" in debug_server_source
         and "X-UnifiedScript-Preview-Token" in debug_server_source
         and "TakePreparedPreview" in debug_server_source
         and "preparedPreviews" in debug_server_source
@@ -6869,6 +6869,40 @@ def main() -> int:
     )
     checks.append(
         "M13.2E-2 commits bounded C# buffers through exact semantic preview tokens"
+    )
+    csharp_graph_round_trip_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpGraphRoundTripInspector.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.csharp-graph-round-trip/v0.1"
+        in csharp_graph_round_trip_source
+        and "VerifyLayoutPreservation" in csharp_graph_round_trip_source
+        and "PreservedSourceComments" in csharp_graph_round_trip_source
+        and "New graph node" in csharp_graph_round_trip_source
+        and "GraphLayoutPath" in debug_server_source
+        and "PrepareGraphLayout" in debug_server_source
+        and "ValidateGraphLayoutBaseline" in debug_server_source
+        and '"UAW1015"' in debug_server_source
+        and '"UAW1016"' in debug_server_source
+        and "graphLayout.CandidateText" in debug_server_source
+        and 'case "--layout-out"' in cli_source
+        and "--layout-out" in authoring_start_path.read_text(encoding="utf-8")
+        and "--layout-out" in unreal_authoring_helper
+        and "FUnifiedScriptAuthoringRoundTripResult"
+        in unreal_authoring_workbench_header
+        and "RoundTripSchema" in unreal_authoring_workbench_source
+        and "ROUND-TRIP GUARD" in unreal_authoring_widget
+        and "!PersistCurrentLayout(true)" in unreal_authoring_widget
+        and "RetainedOrphans" in unreal_graph_layout_store
+        and "txn-graph-round-trip" in authoring_http_test
+        and "UAW1015" in authoring_http_test
+        and "Preview retains graph-comment evidence" in unreal_authoring_test
+        and "[x] **M13.2E-3 — identity/comment round-trip:**"
+        in roadmap_document,
+        "M13.2E-3 transactional layout, visible preservation receipt, or bidirectional round-trip proof is incomplete",
+    )
+    checks.append(
+        "M13.2E-3 preserves identity, comments, source text, and layout bidirectionally"
     )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"

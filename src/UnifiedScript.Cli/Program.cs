@@ -2497,7 +2497,8 @@ internal static class Program
                     options.SurfaceOutputPath,
                     options.ManagedAssemblyOutputPath,
                     options.PortablePdbOutputPath,
-                    historyPath),
+                    historyPath,
+                    options.GraphLayoutPath),
                 sourceFiles,
                 apiBrowser);
             using var cancellation = new CancellationTokenSource();
@@ -4905,6 +4906,7 @@ internal static class Program
         string? managedAssemblyOutputPath = null;
         string? portablePdbOutputPath = null;
         string? historyPath = null;
+        string? graphLayoutPath = null;
         string? apiBrowserPath = null;
         int port = 4173;
         bool hasPort = false;
@@ -4959,6 +4961,9 @@ internal static class Program
                 case "--history" when historyPath is null:
                     historyPath = value;
                     break;
+                case "--layout-out" when graphLayoutPath is null:
+                    graphLayoutPath = value;
+                    break;
                 case "--api-browser" when apiBrowserPath is null:
                     apiBrowserPath = value;
                     break;
@@ -4986,6 +4991,7 @@ internal static class Program
             managedAssemblyOutputPath,
             portablePdbOutputPath,
             historyPath,
+            graphLayoutPath,
             apiBrowserPath);
         return true;
     }
@@ -6121,6 +6127,7 @@ internal static class Program
         "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
         "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
         "  --history <path>        Persistent transactional Undo/Redo journal for debug-serve.\n" +
+        "  --layout-out <path>     Transactional .usgraph layout synchronized by debug-serve.\n" +
         "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
         "  --native-out <path>     Also emit ABI v3 generated fast-binding C++.\n" +
         "  --native-header <path>  Header included by generated native fast bindings.\n" +
@@ -6189,6 +6196,7 @@ internal static class Program
         string? ManagedAssemblyOutputPath,
         string? PortablePdbOutputPath,
         string? HistoryPath,
+        string? GraphLayoutPath,
         string? ApiBrowserPath);
 
     private sealed record DebugFrameServeOptions(

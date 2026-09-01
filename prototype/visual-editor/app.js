@@ -1161,10 +1161,18 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
 }
 
 function validateAuthoringPreview(preview) {
-  assertArtifact(preview?.schemaVersion === 'unifiedscript.authoring-preview/v0.2', 'Unsupported authoring preview protocol');
+  assertArtifact(preview?.schemaVersion === 'unifiedscript.authoring-preview/v0.3', 'Unsupported authoring preview protocol');
   assertArtifact(preview.semanticDiff?.schemaVersion === 'unifiedscript.semantic-graph-diff/v0.1', 'Preview has no versioned semantic graph diff');
   assertArtifact(preview.semanticDiff.graphSchemaVersion === 'unifiedscript.graph/v0.13', 'Preview semantic diff targets an unsupported Graph schema');
   assertArtifact(Array.isArray(preview.semanticDiff.functions) && Array.isArray(preview.files), 'Malformed authoring preview');
+  assertArtifact(preview.roundTrip?.schemaVersion === 'unifiedscript.csharp-graph-round-trip/v0.1', 'Preview has no C#/Graph round-trip evidence');
+  for (const field of ['preservedSemanticIds', 'introducedSemanticIds', 'retiredSemanticIds',
+    'preservedSourceComments', 'addedSourceComments', 'removedSourceComments',
+    'preservedNodeLayouts', 'preservedGraphComments', 'preservedRoutingHints', 'newUnplacedNodes']) {
+    assertArtifact(Number.isInteger(preview.roundTrip[field]) && preview.roundTrip[field] >= 0,
+      `Preview round-trip field ${field} is invalid`);
+  }
+  assertArtifact(typeof preview.roundTrip.layoutChecked === 'boolean', 'Preview layout evidence is invalid');
   assertArtifact(typeof preview.previewToken === 'string' && /^[0-9a-f]{64}$/i.test(preview.previewToken), 'Preview token is invalid');
   return preview;
 }
@@ -1208,6 +1216,8 @@ function showSemanticReview(preview) {
   document.getElementById('semanticReviewSummary').innerHTML = [
     [summary.addedFunctions, 'FUNCTIONS ADDED'], [summary.removedFunctions, 'FUNCTIONS REMOVED'],
     [summary.modifiedFunctions, 'FUNCTIONS MODIFIED'], [summary.changeCount, 'STABLE-ID CHANGES'],
+    [`${preview.roundTrip.preservedSemanticIds} / ${preview.roundTrip.preservedSourceComments}`,
+      'IDS / COMMENTS KEPT'],
     [`R${preview.baselineRevision} → R${preview.candidateRevision}`, preview.publishesRuntime ? 'SOURCE + RUNTIME' : 'DRAFT ONLY'],
   ].map(([value, label]) => `<div><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join('');
   const changes = diff.functions.flatMap(func => func.changes.map(change => ({ func, change })));

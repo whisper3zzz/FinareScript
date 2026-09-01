@@ -38,18 +38,22 @@ runtime is unchanged. Group commit previews the complete accumulated draft
 against the published workspace before creating one history entry and one new
 runtime generation.
 
-## Preview response v0.2
+## Preview response v0.3
 
-`unifiedscript.authoring-preview/v0.2` contains:
+`unifiedscript.authoring-preview/v0.3` contains:
 
 - baseline and candidate revisions;
 - exact transaction ID and description;
 - whether acceptance publishes a runtime generation or only stages a draft;
 - a lowercase SHA-256 preview token over transaction context, complete candidate
-  source/identity sidecars, Declaration IR, and Graph;
+  source/identity sidecars, Declaration IR, Graph, and any synchronized
+  `.usgraph` candidate plus its exact baseline digest;
 - a strict `unifiedscript.semantic-graph-diff/v0.1` document describing stable
   function/node/edge/region changes without source-span or layout noise;
 - changed logical source paths with exact `beforeText` and `afterText`;
+- required `unifiedscript.csharp-graph-round-trip/v0.1` evidence for stable
+  semantic IDs, source comments, node layout, Graph comments, routes, and new
+  unplaced nodes;
 - structured compiler/contract diagnostics with severity, code, message,
   source span, and optional semantic ID.
 
@@ -58,6 +62,11 @@ duplicate paths, unchanged file entries, malformed spans, or unsupported
 diagnostic severities reject the preview instead of silently applying it.
 The semantic summary and nested change counts are also checked before Slate
 renders the review. See [Semantic Graph diff and merge](SEMANTIC_DIFF_AND_MERGE.md).
+
+`UAW1015` means the shareable layout changed after preview, so the candidate is
+not the artifact the user reviewed. `UAW1016` means the layout schema or its
+round-trip synchronization is invalid. Both fail before source, identity,
+layout, history, or runtime publication.
 
 ## Failure panel and safe quick fixes
 

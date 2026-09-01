@@ -144,6 +144,7 @@ $scriptStage = Join-Path $managedStage 'Scripts'
 $identityPath = Join-Path $scriptStage "$([IO.Path]::GetFileName($scriptPath)).usids"
 $assetPath = Join-Path $scriptStage "$assemblyName.asset.json"
 $surfacePath = Join-Path $scriptStage "$assemblyName.surface.json"
+$layoutPath = Join-Path $scriptStage "$assemblyName.usgraph"
 $assemblyPath = Join-Path $scriptStage "$assemblyName.dll"
 $pdbPath = Join-Path $scriptStage "$assemblyName.pdb"
 $historyPath = Join-Path $scriptStage "$assemblyName.authoring-history.json"
@@ -187,6 +188,7 @@ foreach ($argument in @(
     '--identity', $identityPath,
     '--asset-out', $assetPath,
     '--surface-out', $surfacePath,
+    '--layout-out', $layoutPath,
     '--managed-out', $assemblyPath,
     '--pdb-out', $pdbPath,
     '--history', $historyPath)) {

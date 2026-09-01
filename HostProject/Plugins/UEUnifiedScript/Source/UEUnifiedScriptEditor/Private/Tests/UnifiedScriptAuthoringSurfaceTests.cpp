@@ -17,6 +17,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptEdGraph.h"
@@ -1408,6 +1409,57 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Round trip retains comment membership"),
             RoundTripLayout.CommentRegions[0].NodeIds.Num(), 2);
     }
+    FString LayoutWithOrphanJson;
+    TSharedPtr<FJsonObject> LayoutWithOrphanRoot;
+    TestTrue(TEXT("Round-trip layout can be decoded for orphan restoration"),
+        FFileHelper::LoadFileToString(LayoutWithOrphanJson, *RoundTripLayoutPath) &&
+        FJsonSerializer::Deserialize(
+            TJsonReaderFactory<>::Create(LayoutWithOrphanJson),
+            LayoutWithOrphanRoot) &&
+        LayoutWithOrphanRoot.IsValid());
+    if (LayoutWithOrphanRoot.IsValid())
+    {
+        const TSharedRef<FJsonObject> Orphan = MakeShared<FJsonObject>();
+        Orphan->SetStringField(
+            TEXT("functionId"),
+            TEXT("us_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"));
+        const TSharedRef<FJsonObject> OrphanNode = MakeShared<FJsonObject>();
+        OrphanNode->SetStringField(
+            TEXT("nodeId"),
+            TEXT("us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        OrphanNode->SetStringField(TEXT("placement"), TEXT("unplaced"));
+        OrphanNode->SetBoolField(TEXT("collapsed"), false);
+        Orphan->SetObjectField(TEXT("node"), OrphanNode);
+        Orphan->SetStringField(TEXT("reason"), TEXT("missingNode"));
+        LayoutWithOrphanRoot->SetArrayField(
+            TEXT("orphanedNodes"),
+            {MakeShared<FJsonValueObject>(Orphan)});
+        LayoutWithOrphanJson.Reset();
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(
+            &LayoutWithOrphanJson);
+        TestTrue(TEXT("Synthetic restored-node orphan can be serialized"),
+            FJsonSerializer::Serialize(LayoutWithOrphanRoot.ToSharedRef(), Writer) &&
+            FFileHelper::SaveStringToFile(LayoutWithOrphanJson, *RoundTripLayoutPath));
+        TestTrue(TEXT("Saving a restored node removes its stale orphan atomically"),
+            FUnifiedScriptGraphLayoutStore::SaveFunction(
+                RoundTripLayoutPath,
+                TEXT("us_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+                RoundTripNodes,
+                Error));
+        TSharedPtr<FJsonObject> RestoredRoot;
+        const TArray<TSharedPtr<FJsonValue>>* RestoredOrphans = nullptr;
+        TestTrue(TEXT("Restored layout remains valid JSON with an orphan array"),
+            FFileHelper::LoadFileToString(LayoutWithOrphanJson, *RoundTripLayoutPath) &&
+            FJsonSerializer::Deserialize(
+                TJsonReaderFactory<>::Create(LayoutWithOrphanJson),
+                RestoredRoot) &&
+            RestoredRoot.IsValid() &&
+            RestoredRoot->TryGetArrayField(TEXT("orphanedNodes"), RestoredOrphans) &&
+            RestoredOrphans != nullptr);
+        TestEqual(TEXT("Restored semantic nodes no longer remain orphaned"),
+            RestoredOrphans != nullptr ? RestoredOrphans->Num() : -1,
+            0);
+    }
     FString InvalidLayoutJson;
     TestTrue(TEXT("Round-trip canvas JSON remains readable for strictness testing"),
         FFileHelper::LoadFileToString(InvalidLayoutJson, *RoundTripLayoutPath));
@@ -2004,7 +2056,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         Workspace.SourceText);
 
     const FString PreviewJson =
-        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.2\","
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.3\","
              "\"baselineRevision\":2,\"candidateRevision\":3,"
              "\"transactionId\":\"txn-preview\",\"description\":\"Change value\","
              "\"publishesRuntime\":true,"
@@ -2026,6 +2078,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"category\":\"value\",\"facet\":\"property:value\","
              "\"before\":\"1\",\"after\":\"2\","
              "\"summary\":\"Changed literal value from 1 to 2.\"}]}]},"
+             "\"roundTrip\":{"
+             "\"schemaVersion\":\"unifiedscript.csharp-graph-round-trip/v0.1\","
+             "\"preservedSemanticIds\":14,\"introducedSemanticIds\":0,"
+             "\"retiredSemanticIds\":0,\"preservedSourceComments\":2,"
+             "\"addedSourceComments\":0,\"removedSourceComments\":0,"
+             "\"layoutChecked\":true,\"preservedNodeLayouts\":8,"
+             "\"preservedGraphComments\":1,\"preservedRoutingHints\":1,"
+             "\"newUnplacedNodes\":0},"
              "\"files\":[{\"path\":\"DemoScript.cs\",\"beforeText\":\"return 1;\","
              "\"afterText\":\"return 2;\"}],"
              "\"diagnostics\":[{\"code\":\"CS0168\",\"severity\":\"warning\","
@@ -2049,6 +2109,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         Preview.SemanticSummary.ChangeCount, int64(1));
     TestEqual(TEXT("Preview retains semantic change category"),
         Preview.SemanticChanges[0].Category, FString(TEXT("value")));
+    TestEqual(TEXT("Preview retains preserved semantic identity evidence"),
+        Preview.RoundTrip.PreservedSemanticIds, int64(14));
+    TestEqual(TEXT("Preview retains source-comment evidence"),
+        Preview.RoundTrip.PreservedSourceComments, int64(2));
+    TestTrue(TEXT("Preview confirms transactional layout inspection"),
+        Preview.RoundTrip.bLayoutChecked);
+    TestEqual(TEXT("Preview retains graph-comment evidence"),
+        Preview.RoundTrip.PreservedGraphComments, int64(1));
     const FString AiPreviewJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.ai-semantic-proposal-preview/v0.1\","
              "\"proposal\":{\"schemaVersion\":\"unifiedscript.ai-semantic-patch-proposal/v0.1\","

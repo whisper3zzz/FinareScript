@@ -21,7 +21,8 @@ namespace UE::UnifiedScript::AuthoringWorkbench::Private
 constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.5");
 constexpr TCHAR ProfileReportSchema[] = TEXT("unifiedscript.visual-csharp-profile-report/v0.1");
 constexpr TCHAR VisualProfileSchema[] = TEXT("unifiedscript.visual-csharp-profile/v0.3");
-constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.2");
+constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.3");
+constexpr TCHAR RoundTripSchema[] = TEXT("unifiedscript.csharp-graph-round-trip/v0.1");
 constexpr TCHAR AiProposalSchema[] = TEXT("unifiedscript.ai-semantic-patch-proposal/v0.1");
 constexpr TCHAR AiPreviewSchema[] = TEXT("unifiedscript.ai-semantic-proposal-preview/v0.1");
 constexpr TCHAR AiCommitSchema[] = TEXT("unifiedscript.ai-semantic-proposal-commit/v0.1");
@@ -869,6 +870,73 @@ bool FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(
     if (Candidate.SemanticChanges.Num() != ChangeCount)
     {
         OutError = TEXT("The semantic graph diff change count is inconsistent.");
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* RoundTrip = nullptr;
+    FString RoundTripSchema;
+    if (!Root->TryGetObjectField(TEXT("roundTrip"), RoundTrip) ||
+        RoundTrip == nullptr || !RoundTrip->IsValid() ||
+        !(*RoundTrip)->TryGetStringField(TEXT("schemaVersion"), RoundTripSchema) ||
+        RoundTripSchema != UE::UnifiedScript::AuthoringWorkbench::Private::RoundTripSchema ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("preservedSemanticIds"),
+            Candidate.RoundTrip.PreservedSemanticIds,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("introducedSemanticIds"),
+            Candidate.RoundTrip.IntroducedSemanticIds,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("retiredSemanticIds"),
+            Candidate.RoundTrip.RetiredSemanticIds,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("preservedSourceComments"),
+            Candidate.RoundTrip.PreservedSourceComments,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("addedSourceComments"),
+            Candidate.RoundTrip.AddedSourceComments,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("removedSourceComments"),
+            Candidate.RoundTrip.RemovedSourceComments,
+            OutError) ||
+        !(*RoundTrip)->TryGetBoolField(
+            TEXT("layoutChecked"),
+            Candidate.RoundTrip.bLayoutChecked) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("preservedNodeLayouts"),
+            Candidate.RoundTrip.PreservedNodeLayouts,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("preservedGraphComments"),
+            Candidate.RoundTrip.PreservedGraphComments,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("preservedRoutingHints"),
+            Candidate.RoundTrip.PreservedRoutingHints,
+            OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *RoundTrip,
+            TEXT("newUnplacedNodes"),
+            Candidate.RoundTrip.NewUnplacedNodes,
+            OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The authoring preview requires valid C#/Graph round-trip evidence.");
+        }
         return false;
     }
 

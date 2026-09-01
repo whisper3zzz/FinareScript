@@ -714,6 +714,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly string? identityPath;
         private readonly AuthoringArtifactOutputs artifactOutputs;
         private readonly CSharpProgramEmitter emitter = new();
+        private readonly CSharpGraphRoundTripInspector roundTripInspector = new();
         private readonly Dictionary<string, PreparedAuthoringPreview> preparedPreviews =
             new(StringComparer.Ordinal);
         private readonly List<SemanticId> breakpointIds = [];
@@ -900,7 +901,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     authoring,
                     _ => authoring.PrepareDraftCommit(group.Draft),
                     transaction,
-                    publishesRuntime: true);
+                    publishesRuntime: true,
+                    out PreparedGraphLayout? graphLayout);
                 CSharpAuthoringHistoryDocument persistedHistory = authoring.PreviewCommit(
                     mutation,
                     group.Id,
@@ -909,7 +911,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     mutation.Snapshot!,
                     () => authoring.Commit(mutation, group.Id, group.Description),
                     persistedHistory,
-                    group.Id);
+                    group.Id,
+                    graphLayout);
                 activeGroup = null;
                 preparedPreviews.Clear();
                 Workspace = CreateWorkspace(
@@ -1546,7 +1549,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         authoring.Current,
                         mutation.Snapshot,
                         transaction,
-                        publishesRuntime: true),
+                        publishesRuntime: true,
+                        out PreparedGraphLayout? graphLayout),
                 };
                 CSharpAuthoringHistoryDocument persistedHistory = authoring.PreviewCommit(
                     mutation,
@@ -1555,7 +1559,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     mutation.Snapshot,
                     () => authoring.Commit(mutation, transaction.TransactionId),
                     persistedHistory,
-                    transaction.TransactionId);
+                    transaction.TransactionId,
+                    graphLayout);
             }
             finally
             {
@@ -1664,7 +1669,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray();
-            AuthoringPreviewFile[] files = paths
+            List<AuthoringPreviewFile> files = paths
                 .Select(path => new AuthoringPreviewFile(
                     path,
                     beforeSources.GetValueOrDefault(path, string.Empty),
@@ -1673,8 +1678,28 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     file.BeforeText,
                     file.AfterText,
                     StringComparison.Ordinal))
-                .ToArray();
-            string previewToken = ComputePreviewToken(baseline, candidate, transaction, publishesRuntime);
+                .ToList();
+            PreparedGraphLayout? graphLayout = publishesRuntime
+                ? PrepareGraphLayout(baseline, candidate)
+                : null;
+            CSharpGraphRoundTripReport roundTrip = graphLayout?.Report ??
+                roundTripInspector.Inspect(baseline, candidate).Report;
+            if (graphLayout is not null && !string.Equals(
+                    graphLayout.BaselineText,
+                    graphLayout.CandidateText,
+                    StringComparison.Ordinal))
+            {
+                files.Add(new AuthoringPreviewFile(
+                    graphLayout.Path,
+                    graphLayout.BaselineText,
+                    graphLayout.CandidateText));
+            }
+            string previewToken = ComputePreviewToken(
+                baseline,
+                candidate,
+                transaction,
+                publishesRuntime,
+                graphLayout);
             if (preparedPreviews.Count >= 32)
             {
                 preparedPreviews.Clear();
@@ -1688,9 +1713,10 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 transaction.BoundPayloadId,
                 publishesRuntime,
                 candidate,
-                diagnostics);
+                diagnostics,
+                graphLayout);
             return new AuthoringPreviewResponse(
-                "unifiedscript.authoring-preview/v0.2",
+                "unifiedscript.authoring-preview/v0.3",
                 baseline.Revision,
                 candidate.Revision,
                 transaction.TransactionId,
@@ -1698,6 +1724,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 publishesRuntime,
                 previewToken,
                 new SemanticGraphDiffer().Compare(baseline.Graph, candidate.Graph),
+                roundTrip,
                 files,
                 diagnostics);
         }
@@ -1706,7 +1733,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CSharpAuthoringSnapshot baseline,
             CSharpAuthoringSnapshot candidate,
             AuthoringTransactionContext transaction,
-            bool publishesRuntime)
+            bool publishesRuntime,
+            PreparedGraphLayout? graphLayout)
         {
             var tokenSource = new StringBuilder();
             AppendTokenPart(tokenSource, baseline.Revision.ToString());
@@ -1733,6 +1761,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 tokenSource,
                 ScriptAssetJson.Serialize(candidate.Analysis.ScriptAssets!, writeIndented: false));
             AppendTokenPart(tokenSource, GraphJson.Serialize(candidate.Graph, writeIndented: false));
+            if (graphLayout is not null)
+            {
+                AppendTokenPart(tokenSource, graphLayout.Path);
+                AppendTokenPart(tokenSource, graphLayout.BaselineDigest);
+                AppendTokenPart(tokenSource, graphLayout.CandidateText);
+            }
             return Convert.ToHexString(
                     SHA256.HashData(Encoding.UTF8.GetBytes(tokenSource.ToString())))
                 .ToLowerInvariant();
@@ -1743,20 +1777,104 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             builder.Append(value.Length).Append(':').Append(value).Append(';');
         }
 
+        private PreparedGraphLayout? PrepareGraphLayout(
+            CSharpAuthoringSnapshot baseline,
+            CSharpAuthoringSnapshot candidate)
+        {
+            if (artifactOutputs.GraphLayoutPath is null)
+            {
+                return null;
+            }
+
+            string path = artifactOutputs.GraphLayoutPath;
+            string baselineText = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            try
+            {
+                GraphLayoutDocument baselineLayout = baselineText.Length == 0
+                    ? GraphLayoutDocument.CreateEmpty()
+                    : GraphLayoutJson.Deserialize(baselineText);
+                CSharpGraphRoundTripInspection inspection = roundTripInspector.Inspect(
+                    baseline,
+                    candidate,
+                    baselineLayout);
+                string baselineCanonical = GraphLayoutJson.Serialize(
+                    baselineLayout,
+                    writeIndented: false);
+                string candidateCanonical = GraphLayoutJson.Serialize(
+                    inspection.CandidateLayout!,
+                    writeIndented: false);
+                string candidateText = string.Equals(
+                        baselineCanonical,
+                        candidateCanonical,
+                        StringComparison.Ordinal)
+                    ? baselineText
+                    : GraphLayoutJson.Serialize(
+                        inspection.CandidateLayout!,
+                        writeIndented: true) + "\n";
+                return new PreparedGraphLayout(
+                    path,
+                    ComputeTextDigest(baselineText),
+                    baselineText,
+                    candidateText,
+                    inspection.Report);
+            }
+            catch (Exception exception) when (
+                exception is JsonException or InvalidDataException or ArgumentException)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1016",
+                    $"The graph layout cannot join the authoring transaction: {exception.Message}",
+                    innerException: exception);
+            }
+        }
+
+        private static string ComputeTextDigest(string text) =>
+            "sha256:" + Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(text)))
+                .ToLowerInvariant();
+
+        private static void ValidateGraphLayoutBaseline(PreparedGraphLayout? graphLayout)
+        {
+            if (graphLayout is null)
+            {
+                return;
+            }
+            string currentText = File.Exists(graphLayout.Path)
+                ? File.ReadAllText(graphLayout.Path)
+                : string.Empty;
+            if (!string.Equals(
+                    ComputeTextDigest(currentText),
+                    graphLayout.BaselineDigest,
+                    StringComparison.Ordinal))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1015",
+                    "The graph layout changed after the diff preview; refresh and review the synchronized layout again.");
+            }
+        }
+
         private CSharpAuthoringMutation PrepareMutation(
             CSharpAuthoringWorkspace workspace,
             Func<CSharpAuthoringWorkspace, CSharpAuthoringMutation> prepare,
             AuthoringTransactionContext transaction,
-            bool publishesRuntime)
+            bool publishesRuntime,
+            out PreparedGraphLayout? graphLayout)
         {
             if (transaction.PreviewToken is null)
             {
-                return prepare(workspace);
+                CSharpAuthoringMutation mutation = prepare(workspace);
+                graphLayout = publishesRuntime && mutation.Succeeded && mutation.Snapshot is not null
+                    ? PrepareGraphLayout(workspace.Current, mutation.Snapshot)
+                    : null;
+                return mutation;
             }
             PreparedAuthoringPreview prepared = TakePreparedPreview(
                 workspace.Current,
                 transaction,
                 publishesRuntime);
+            graphLayout = prepared.GraphLayout;
             return new CSharpAuthoringMutation(
                 workspace.Current.Revision,
                 prepared.Candidate,
@@ -1767,13 +1885,22 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CSharpAuthoringSnapshot baseline,
             CSharpAuthoringSnapshot fallbackCandidate,
             AuthoringTransactionContext transaction,
-            bool publishesRuntime)
+            bool publishesRuntime,
+            out PreparedGraphLayout? graphLayout)
         {
             if (transaction.PreviewToken is null)
             {
+                graphLayout = publishesRuntime
+                    ? PrepareGraphLayout(baseline, fallbackCandidate)
+                    : null;
                 return fallbackCandidate;
             }
-            return TakePreparedPreview(baseline, transaction, publishesRuntime).Candidate;
+            PreparedAuthoringPreview prepared = TakePreparedPreview(
+                baseline,
+                transaction,
+                publishesRuntime);
+            graphLayout = prepared.GraphLayout;
+            return prepared.Candidate;
         }
 
         private PreparedAuthoringPreview TakePreparedPreview(
@@ -1804,6 +1931,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     "UAW1012",
                     "The candidate no longer matches the confirmed diff preview; no source, artifact, history, or runtime generation was changed.");
             }
+            ValidateGraphLayoutBaseline(prepared.GraphLayout);
             return prepared;
         }
 
@@ -1842,7 +1970,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         group.Draft,
                         prepare,
                         transaction,
-                        publishesRuntime: false);
+                        publishesRuntime: false,
+                        out _);
                     if (!stagedMutation.Succeeded || stagedMutation.Snapshot is null)
                     {
                         throw new AuthoringProtocolException(
@@ -1870,7 +1999,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     authoring,
                     prepare,
                     transaction,
-                    publishesRuntime: true);
+                    publishesRuntime: true,
+                    out PreparedGraphLayout? graphLayout);
                 if (!mutation.Succeeded || mutation.Snapshot is null)
                 {
                     throw new AuthoringProtocolException(
@@ -1890,7 +2020,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         transaction.TransactionId,
                         transaction.Description),
                     persistedHistory,
-                    transaction.TransactionId);
+                    transaction.TransactionId,
+                    graphLayout);
             }
             finally
             {
@@ -2018,7 +2149,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CSharpAuthoringSnapshot snapshot,
             Action commit,
             CSharpAuthoringHistoryDocument persistedHistory,
-            string transactionId)
+            string transactionId,
+            PreparedGraphLayout? graphLayout)
         {
             CSharpAuthoringSnapshot previous = authoring.Current;
             long fromGeneration = reload.Generation.Number;
@@ -2066,12 +2198,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             phaseStart = Stopwatch.GetTimestamp();
             try
             {
-                Persist(snapshot, persistedHistory);
+                ValidateGraphLayoutBaseline(graphLayout);
+                Persist(snapshot, persistedHistory, graphLayout);
                 phases.Add(CompleteReloadPhase(
                     "artifactPublication",
                     phaseStart,
                     "succeeded",
-                    "Atomically published source, identities, authoring artifacts, PE/PDB, and history."));
+                    "Atomically published source, identities, graph layout, authoring artifacts, PE/PDB, and history."));
             }
             catch (Exception exception)
             {
@@ -2229,7 +2362,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private void Persist(
             CSharpAuthoringSnapshot snapshot,
-            CSharpAuthoringHistoryDocument history)
+            CSharpAuthoringHistoryDocument history,
+            PreparedGraphLayout? graphLayout)
         {
             var outputs = snapshot.Request.Sources
                 .Select(source => new AuthoringOutput(
@@ -2263,6 +2397,16 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 outputs.Add(new AuthoringOutput(
                     artifactOutputs.SurfacePath,
                     Encoding.UTF8.GetBytes(AuthoringSurfaceJson.Serialize(surface) + "\n")));
+            }
+
+            if (graphLayout is not null && !string.Equals(
+                    graphLayout.BaselineText,
+                    graphLayout.CandidateText,
+                    StringComparison.Ordinal))
+            {
+                outputs.Add(new AuthoringOutput(
+                    graphLayout.Path,
+                    Encoding.UTF8.GetBytes(graphLayout.CandidateText)));
             }
 
             if (artifactOutputs.ManagedAssemblyPath is not null ||
@@ -2529,7 +2673,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             SemanticId? BoundPayloadId,
             bool PublishesRuntime,
             CSharpAuthoringSnapshot Candidate,
-            IReadOnlyList<UnifiedDiagnostic> Diagnostics);
+            IReadOnlyList<UnifiedDiagnostic> Diagnostics,
+            PreparedGraphLayout? GraphLayout);
+
+        private sealed record PreparedGraphLayout(
+            string Path,
+            string BaselineDigest,
+            string BaselineText,
+            string CandidateText,
+            CSharpGraphRoundTripReport Report);
     }
 
     private sealed class HttpProtocolException(HttpStatusCode status, string message)
@@ -2576,14 +2728,16 @@ internal sealed record AuthoringArtifactOutputs(
     string? SurfacePath = null,
     string? ManagedAssemblyPath = null,
     string? PortablePdbPath = null,
-    string? HistoryPath = null)
+    string? HistoryPath = null,
+    string? GraphLayoutPath = null)
 {
     public AuthoringArtifactOutputs Normalize() => new(
         NormalizePath(DeclarationPath),
         NormalizePath(SurfacePath),
         NormalizePath(ManagedAssemblyPath),
         NormalizePath(PortablePdbPath),
-        NormalizePath(HistoryPath));
+        NormalizePath(HistoryPath),
+        NormalizePath(GraphLayoutPath));
 
     private static string? NormalizePath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
@@ -2629,6 +2783,7 @@ internal sealed record AuthoringPreviewResponse(
     bool PublishesRuntime,
     string PreviewToken,
     SemanticGraphDiffDocument SemanticDiff,
+    CSharpGraphRoundTripReport RoundTrip,
     IReadOnlyList<AuthoringPreviewFile> Files,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics);
 

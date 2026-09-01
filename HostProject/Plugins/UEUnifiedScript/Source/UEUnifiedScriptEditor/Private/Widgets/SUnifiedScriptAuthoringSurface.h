@@ -327,7 +327,7 @@ private:
     void SaveCanvasPreferences() const;
     void RecordNodePaletteUsage(const FString& ActionId);
     FText GetNodePaletteContextText() const;
-    void PersistCurrentLayout(bool bOnlyIfChanged);
+    bool PersistCurrentLayout(bool bOnlyIfChanged);
     FString BuildCanvasLayoutFingerprint() const;
     void PersistCanvasView(bool bOnlyIfChanged);
     bool RestoreCanvasView();
