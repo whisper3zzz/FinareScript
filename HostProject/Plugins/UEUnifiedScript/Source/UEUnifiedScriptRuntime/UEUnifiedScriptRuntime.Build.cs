@@ -7,7 +7,7 @@ public class UEUnifiedScriptRuntime : ModuleRules
     public UEUnifiedScriptRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "EnhancedInput" });
         PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "Json", "Projects" });
         AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
 

@@ -154,6 +154,54 @@ public sealed class UnrealNativeThunkGeneratorTests
         Assert.Contains("EUnifiedScriptNativeValueKindV3::Vector3", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void GenerateDispatchesUInterfaceFunctionsThroughExecuteWrappers()
+    {
+        const string typePath = "/Script/FixtureRuntime.FixtureContract";
+        var int32Type = new UnrealTypeReference(UnrealValueKind.Int32, "int32");
+        UnrealReflectionManifest manifest = UnrealReflectionManifest.Create(
+            new UnrealEngineIdentity(5, 8, 1, "UE5"),
+            ["FixtureRuntime"],
+            [new UnrealReflectedType(
+                typePath,
+                "FixtureContract",
+                "UFixtureContract",
+                "FixtureRuntime",
+                UnrealReflectedTypeKind.Class,
+                "/Script/CoreUObject.Interface",
+                new UnrealTypeTraits(true, true) { Interface = true },
+                [],
+                [new UnrealReflectedFunction(
+                    $"{typePath}:Transform",
+                    "Transform",
+                    int32Type,
+                    [new UnrealReflectedParameter(
+                        "Value",
+                        int32Type,
+                        UnrealParameterDirection.Input)],
+                    new UnrealFunctionTraits(false, false, true))],
+                "FixtureContract.h")]);
+
+        string source = new UnrealNativeThunkGenerator().Generate(manifest).Source;
+
+        Assert.Contains(
+            "Target->GetClass()->ImplementsInterface(UFixtureContract::StaticClass())",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "IFixtureContract::Execute_Transform(Target, Argument0)",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ResolveTarget<UFixtureContract>",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "TypedTarget->Transform",
+            source,
+            StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("UE::Generated::")]

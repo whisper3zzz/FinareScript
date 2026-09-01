@@ -470,8 +470,16 @@ try {
             $smokeText -notmatch 'componentTicked=true' -or
             $smokeText -notmatch 'actorEvent=true' -or
             $smokeText -notmatch 'componentEvent=true' -or
+            $smokeText -notmatch 'actorInput=true' -or
+            $smokeText -notmatch 'actorDelegate=true' -or
+            $smokeText -notmatch 'actorInterface=true' -or
+            $smokeText -notmatch 'actorReload=true' -or
+            $smokeText -notmatch 'inputBindingCount=1' -or
+            $smokeText -notmatch 'eventSubscriptionCount=1' -or
             $smokeText -notmatch 'managedScriptCount=2' -or
             $smokeText -notmatch 'lifecycleClaimCount=2' -or
+            $smokeText -notmatch 'finalInputBindingCount=0' -or
+            $smokeText -notmatch 'finalEventSubscriptionCount=0' -or
             $smokeText -notmatch 'finalManagedScriptCount=0' -or
             $smokeText -notmatch 'finalLifecycleClaimCount=0' -or
             $smokeText -notmatch 'actorProgram=[^;\r\n]+\.uschunk' -or
@@ -495,6 +503,12 @@ try {
             componentLifecycle = 'BeginPlay/Tick/EndPlay passed'
             actorBlueprintEvent = 'managed default passed'
             componentBlueprintEvent = 'managed default passed'
+            actorEnhancedInput = 'managed callback passed'
+            actorDelegate = 'exactly-once callback passed'
+            actorInterface = 'native-to-managed return passed'
+            compatibleReload = 'no duplicate input/delegate bindings passed'
+            inputBindingsAtPeak = 1
+            eventSubscriptionsAtPeak = 1
             managedScriptsAtPeak = 2
             lifecycleClaimsAtPeak = 2
             managedWorldCountBefore = [int]$smokeWorlds.Groups[1].Value
@@ -555,6 +569,11 @@ try {
             actorBlueprintEvent = 'explicit-Super managed default passed'
             actorComponentBlueprintEvent = 'explicit-Super managed default passed'
             worldTeardown = 'passed'
+        }
+        gameplayContracts = [ordered]@{
+            enhancedInput = 'persistent bind/dispatch/reload/unbind passed'
+            delegate = 'persistent exactly-once bind/reload/unbind passed'
+            interface = 'persistent native-to-managed dispatch passed'
         }
         firstPlay = [ordered]@{
             request = $firstPlayRequestPath

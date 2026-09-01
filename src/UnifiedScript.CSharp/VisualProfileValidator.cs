@@ -66,7 +66,9 @@ public sealed class VisualProfileValidator
         };
 
         return shortName is "Visual" or "VisualAttribute" or
-            "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute";
+            "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute" or
+            "UnrealInputAction" or "UnrealInputActionAttribute" or
+            "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute";
     }
 
     private static void ValidateMethodDeclaration(

@@ -21,6 +21,32 @@ enum class EUnifiedScriptManagedLifecycleHookKind : uint8
     EndPlay = 3,
 };
 
+UENUM()
+enum class EUnifiedScriptManagedInputTriggerEvent : uint8
+{
+    Started = 1,
+    Ongoing = 2,
+    Triggered = 3,
+    Completed = 4,
+    Canceled = 5,
+};
+
+UENUM()
+enum class EUnifiedScriptManagedInputValueType : uint8
+{
+    Boolean = 1,
+    Axis1D = 2,
+    Axis2D = 3,
+    Axis3D = 4,
+};
+
+UENUM()
+enum class EUnifiedScriptManagedDelegateSource : uint8
+{
+    Target = 1,
+    Host = 2,
+};
+
 USTRUCT()
 struct FUnifiedScriptManagedLifecycleBinding
 {
@@ -33,6 +59,79 @@ struct FUnifiedScriptManagedLifecycleBinding
     /** Stable Roslyn declaration identity, independent from method-body edits. */
     UPROPERTY()
     FGuid HookId;
+};
+
+USTRUCT()
+struct FUnifiedScriptManagedInputActionBinding
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FName ManagedName;
+
+    UPROPERTY()
+    FGuid BindingId;
+
+    /** Exact UInputAction asset path, or a native UInputAction class fixture path. */
+    UPROPERTY()
+    FString ActionPath;
+
+    UPROPERTY()
+    EUnifiedScriptManagedInputTriggerEvent TriggerEvent =
+        EUnifiedScriptManagedInputTriggerEvent::Triggered;
+
+    UPROPERTY()
+    EUnifiedScriptManagedInputValueType ValueType =
+        EUnifiedScriptManagedInputValueType::Boolean;
+
+    UPROPERTY()
+    bool bConsumeInput = false;
+};
+
+USTRUCT()
+struct FUnifiedScriptManagedDelegateBinding
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FName ManagedName;
+
+    UPROPERTY()
+    FGuid BindingId;
+
+    UPROPERTY()
+    FString SourceTypePath;
+
+    UPROPERTY()
+    FString EventPath;
+
+    UPROPERTY()
+    EUnifiedScriptManagedDelegateSource Source =
+        EUnifiedScriptManagedDelegateSource::Target;
+
+    UPROPERTY()
+    FString SourceMember;
+};
+
+USTRUCT()
+struct FUnifiedScriptManagedInterfaceFunctionBinding
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FString InterfacePath;
+
+    UPROPERTY()
+    FName FunctionName;
+
+    UPROPERTY()
+    FName ManagedName;
+
+    UPROPERTY()
+    FGuid BindingId;
+
+    UPROPERTY()
+    FGuid FunctionId;
 };
 
 USTRUCT()
@@ -84,6 +183,10 @@ struct FUnifiedScriptManagedFunctionBinding
     UPROPERTY()
     bool bBlueprintEvent = false;
 
+    /** Implements a native Blueprint interface through the managed dispatcher. */
+    UPROPERTY()
+    bool bInterfaceFunction = false;
+
     /** Blueprint overrides reach the managed default only through Call Parent Function. */
     UPROPERTY()
     EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
@@ -119,6 +222,18 @@ public:
     UPROPERTY()
     TMap<EUnifiedScriptManagedLifecycleHookKind, FUnifiedScriptManagedLifecycleBinding>
         ManagedLifecycleBindings;
+
+    /** Enhanced Input routes owned by the live Script Component generation. */
+    UPROPERTY()
+    TArray<FUnifiedScriptManagedInputActionBinding> ManagedInputActionBindings;
+
+    /** Reflected delegate routes validated against generation-owned subscriptions. */
+    UPROPERTY()
+    TArray<FUnifiedScriptManagedDelegateBinding> ManagedDelegateBindings;
+
+    /** Native interfaces and exact functions implemented by this generated class. */
+    UPROPERTY()
+    TArray<FUnifiedScriptManagedInterfaceFunctionBinding> ManagedInterfaceBindings;
 
     /** Cook-retained program identity used by generated static FunctionLibrary calls. */
     UPROPERTY()

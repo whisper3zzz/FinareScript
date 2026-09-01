@@ -62,6 +62,48 @@ public enum ScriptBlueprintEventSuperMode
 public sealed record ScriptBlueprintEventDeclaration(
     ScriptBlueprintEventSuperMode SuperMode);
 
+public enum ScriptInputTriggerEvent
+{
+    Started,
+    Ongoing,
+    Triggered,
+    Completed,
+    Canceled,
+}
+
+public enum ScriptInputValueType
+{
+    Boolean,
+    Axis1D,
+    Axis2D,
+    Axis3D,
+}
+
+public sealed record ScriptInputActionBindingDeclaration(
+    SemanticId Id,
+    string ActionPath,
+    ScriptInputTriggerEvent TriggerEvent,
+    ScriptInputValueType ValueType,
+    bool ConsumeInput);
+
+public enum ScriptDelegateSource
+{
+    Target,
+    Host,
+}
+
+public sealed record ScriptDelegateBindingDeclaration(
+    SemanticId Id,
+    string SourceTypePath,
+    string EventPath,
+    ScriptDelegateSource Source,
+    string? SourceMember);
+
+public sealed record ScriptInterfaceFunctionDeclaration(
+    SemanticId Id,
+    string InterfacePath,
+    string FunctionName);
+
 public enum ScriptLifecycleHookKind
 {
     BeginPlay,
@@ -85,7 +127,10 @@ public sealed record ScriptFunctionDeclaration(
     bool IsEvent,
     IReadOnlyList<ScriptParameterDeclaration> Parameters,
     ScriptFunctionValueTypeDeclaration? ReturnUnrealType = null,
-    ScriptBlueprintEventDeclaration? BlueprintEvent = null);
+    ScriptBlueprintEventDeclaration? BlueprintEvent = null,
+    IReadOnlyList<ScriptInputActionBindingDeclaration>? InputActions = null,
+    IReadOnlyList<ScriptDelegateBindingDeclaration>? DelegateBindings = null,
+    IReadOnlyList<ScriptInterfaceFunctionDeclaration>? InterfaceFunctions = null);
 
 public sealed record ScriptAssetDeclaration(
     SemanticId Id,

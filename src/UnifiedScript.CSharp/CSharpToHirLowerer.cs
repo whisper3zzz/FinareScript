@@ -110,7 +110,9 @@ public sealed class CSharpToHirLowerer
                 int separator = name.LastIndexOf('.');
                 name = separator >= 0 ? name[(separator + 1)..] : name;
                 return name is "UnrealEvent" or "UnrealEventAttribute" or
-                    "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute";
+                    "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute" or
+                    "UnrealInputAction" or "UnrealInputActionAttribute" or
+                    "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute";
             })
             .Select(attribute =>
             {

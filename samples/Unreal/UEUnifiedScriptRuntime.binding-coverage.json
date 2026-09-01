@@ -8,13 +8,13 @@
   },
   "summary": {
     "typeCount": 7,
-    "memberCount": 110,
-    "directThunkCount": 29,
+    "memberCount": 111,
+    "directThunkCount": 30,
     "callFrameCount": 78,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 107,
+    "nativeThunkCount": 108,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -519,6 +519,14 @@
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
       "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+      "kind": "function",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },

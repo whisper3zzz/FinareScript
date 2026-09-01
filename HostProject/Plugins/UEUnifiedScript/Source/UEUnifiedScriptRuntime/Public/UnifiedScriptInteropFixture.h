@@ -10,6 +10,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InputAction.h"
 #include "UObject/Interface.h"
 #include "UObject/Object.h"
 #include "UnifiedScriptInteropFixture.generated.h"
@@ -38,6 +39,21 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropContract : public UInterfa
 class UEUNIFIEDSCRIPTRUNTIME_API IUnifiedScriptInteropContract
 {
     GENERATED_BODY()
+
+public:
+    /** Reviewed native interface route used by generated managed Script Classes. */
+    UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="UnifiedScript|Interop")
+    int32 TransformManagedValue(int32 Value);
+};
+
+/** Cook-safe Enhanced Input action used by the Script Class product smoke. */
+UCLASS()
+class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInputActionFixture : public UInputAction
+{
+    GENERATED_BODY()
+
+public:
+    UUnifiedScriptInputActionFixture();
 };
 
 /** Public interop fixture used to keep generated common-type bindings executable. */
@@ -49,6 +65,8 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropFixture
     GENERATED_BODY()
 
 public:
+    virtual int32 TransformManagedValue_Implementation(int32 Value) override;
+
     UPROPERTY(BlueprintAssignable, Category="UnifiedScript|Interop")
     FUnifiedScriptInteropChanged OnInteropChanged;
 

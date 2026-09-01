@@ -283,6 +283,18 @@ public sealed class CSharpScriptAssetLowererTests
                 [UnrealBlueprintEvent]
                 public void Activate(int amount) { }
 
+                [UnrealInputAction(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+                    TriggerEvent = UnrealInputTriggerEvent.Triggered,
+                    ValueType = UnrealInputValueType.Axis1D,
+                    ConsumeInput = true)]
+                public void Move(float value) { }
+
+                [UnrealInterfaceFunction(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                    "TransformManagedValue")]
+                public int TransformManagedValue(int value) { return value * 2; }
+
                 protected override void OnBeginPlay() { }
                 protected override void OnTick(float deltaSeconds) { }
                 protected override void OnEndPlay() { }
@@ -328,7 +340,8 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Empty(library.States);
         ScriptAssetDeclaration actor = result.ScriptAssets.Assets.Single(
             static asset => asset.QualifiedName == "Game.ActorBehavior");
-        ScriptFunctionDeclaration blueprintEvent = Assert.Single(actor.Functions);
+        ScriptFunctionDeclaration blueprintEvent = actor.Functions.Single(
+            static function => function.Name == "Activate");
         Assert.Equal("Activate", blueprintEvent.Name);
         Assert.Equal(
             ScriptBlueprintEventSuperMode.Explicit,
@@ -340,11 +353,29 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(
             ["OnBeginPlay", "OnTick", "OnEndPlay"],
             actor.LifecycleHooks!.Select(static hook => hook.ManagedName));
+        ScriptInputActionBindingDeclaration input = Assert.Single(
+            actor.Functions.Single(static function => function.Name == "Move").InputActions!);
+        Assert.Equal(ScriptInputTriggerEvent.Triggered, input.TriggerEvent);
+        Assert.Equal(ScriptInputValueType.Axis1D, input.ValueType);
+        Assert.True(input.ConsumeInput);
+        ScriptInterfaceFunctionDeclaration interfaceFunction = Assert.Single(
+            actor.Functions.Single(static function =>
+                function.Name == "TransformManagedValue").InterfaceFunctions!);
+        Assert.Equal(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+            interfaceFunction.InterfacePath);
+        Assert.Equal("TransformManagedValue", interfaceFunction.FunctionName);
         ScriptFunctionDeclaration eventFunction = Assert.Single(
             result.ScriptAssets.Assets.Single(
                 static asset => asset.QualifiedName == "Game.ComponentBehavior").Functions);
         Assert.False(eventFunction.IsPublic);
         Assert.True(eventFunction.IsEvent);
+        ScriptDelegateBindingDeclaration delegateBinding = Assert.Single(
+            eventFunction.DelegateBindings!);
+        Assert.Equal(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+            delegateBinding.SourceTypePath);
+        Assert.Equal(ScriptDelegateSource.Target, delegateBinding.Source);
         Assert.Equal(
             "AddOne",
             Assert.Single(result.ScriptAssets.Assets
@@ -401,6 +432,74 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(Assert.Single(firstAsset.Functions).Id, Assert.Single(editedAsset.Functions).Id);
         Assert.Contains("\"blueprintEvent\"", ScriptAssetJson.Serialize(first.ScriptAssets));
         Assert.Contains("\"lifecycleHooks\"", ScriptAssetJson.Serialize(first.ScriptAssets));
+    }
+
+    [Fact]
+    public void InputDelegateAndInterfaceBindingIdsSurviveBodyEdits()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/Contracts", ClassId = "us_00000000000000000000000000000008")]
+            [UnrealScriptClass(UnrealScriptClassKind.Actor)]
+            public sealed class GameplayContracts : UnrealActorScript
+            {
+                [UnrealInputAction(
+                    "/Game/Input/IA_Move.IA_Move",
+                    ValueType = UnrealInputValueType.Axis2D)]
+                public void Move(UnrealVector value) { }
+
+                [Visual]
+                [UnrealEvent(
+                    typeof(UnrealObject),
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+                    Source = UnrealEventSource.Host)]
+                private void OnSignal(int value, UnrealObjectHandle context) { }
+
+                [UnrealInterfaceFunction(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                    "TransformManagedValue")]
+                public int TransformManagedValue(int value) { return value + 1; }
+            }
+            """;
+        var firstRequest = new CSharpCompilationRequest(
+            "StableGameplayBindings",
+            [new CSharpSourceDocument("Game/Contracts.cs", source)],
+            [typeof(UnrealActorScript).Assembly.Location]);
+        var editedRequest = new CSharpCompilationRequest(
+            "StableGameplayBindings",
+            [new CSharpSourceDocument(
+                "Game/Contracts.cs",
+                source.Replace("return value + 1", "return value + 2", StringComparison.Ordinal))],
+            [typeof(UnrealActorScript).Assembly.Location]);
+
+        CSharpAnalysisResult first = new CSharpSemanticPipeline().Analyze(firstRequest);
+        CSharpAnalysisResult edited = new CSharpSemanticPipeline().Analyze(editedRequest);
+
+        Assert.True(first.Succeeded, string.Join(Environment.NewLine, first.Diagnostics));
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        ScriptAssetDeclaration firstAsset = Assert.Single(first.ScriptAssets!.Assets);
+        ScriptAssetDeclaration editedAsset = Assert.Single(edited.ScriptAssets!.Assets);
+        Assert.Equal(
+            Assert.Single(firstAsset.Functions.Single(static function =>
+                function.Name == "Move").InputActions!).Id,
+            Assert.Single(editedAsset.Functions.Single(static function =>
+                function.Name == "Move").InputActions!).Id);
+        Assert.Equal(
+            Assert.Single(firstAsset.Functions.Single(static function =>
+                function.Name == "OnSignal").DelegateBindings!).Id,
+            Assert.Single(editedAsset.Functions.Single(static function =>
+                function.Name == "OnSignal").DelegateBindings!).Id);
+        Assert.Equal(
+            Assert.Single(firstAsset.Functions.Single(static function =>
+                function.Name == "TransformManagedValue").InterfaceFunctions!).Id,
+            Assert.Single(editedAsset.Functions.Single(static function =>
+                function.Name == "TransformManagedValue").InterfaceFunctions!).Id);
+        string json = ScriptAssetJson.Serialize(first.ScriptAssets);
+        Assert.Contains("\"inputActions\"", json);
+        Assert.Contains("\"delegateBindings\"", json);
+        Assert.Contains("\"interfaceFunctions\"", json);
     }
 
     [Fact]

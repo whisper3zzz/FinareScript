@@ -9,6 +9,16 @@
  */
 #include "UnifiedScriptInteropFixture.h"
 
+UUnifiedScriptInputActionFixture::UUnifiedScriptInputActionFixture()
+{
+    ValueType = EInputActionValueType::Axis1D;
+}
+
+int32 UUnifiedScriptInteropFixture::TransformManagedValue_Implementation(int32 Value)
+{
+    return Value;
+}
+
 FVector UUnifiedScriptInteropFixture::AddVector(FVector Left, FVector Right) const
 {
     return Left + Right;

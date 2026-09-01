@@ -103,7 +103,9 @@ internal sealed class UnrealManagedFunctionDispatcher
 
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
         method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
-        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null;
+        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null ||
+        method.GetCustomAttributes<UnrealInputActionAttribute>(inherit: false).Any() ||
+        method.GetCustomAttributes<UnrealInterfaceFunctionAttribute>(inherit: false).Any();
 
     public unsafe UnrealManagedFunctionValueV1 Invoke(
         object target,
@@ -386,7 +388,9 @@ internal sealed class UnrealManagedFunctionDispatcherV2
 
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
         method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
-        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null;
+        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null ||
+        method.GetCustomAttributes<UnrealInputActionAttribute>(inherit: false).Any() ||
+        method.GetCustomAttributes<UnrealInterfaceFunctionAttribute>(inherit: false).Any();
 
     public void Invoke(object? target, string functionName, nint frameAddress)
     {

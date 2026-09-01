@@ -5,8 +5,11 @@
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
 #include "Dom/JsonObject.h"
+#include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
+#include "InputAction.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -15,8 +18,10 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
+#include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptObjectRegistry.h"
 #include "UnifiedScriptRuntimeDiagnostic.h"
 #include "UnifiedScriptWorldSubsystem.h"
@@ -58,6 +63,56 @@ uint64 AllocateScriptInstanceId()
             return Result;
         }
     }
+}
+
+ETriggerEvent ToEnhancedInputTriggerEvent(
+    EUnifiedScriptManagedInputTriggerEvent TriggerEvent)
+{
+    switch (TriggerEvent)
+    {
+        case EUnifiedScriptManagedInputTriggerEvent::Started:
+            return ETriggerEvent::Started;
+        case EUnifiedScriptManagedInputTriggerEvent::Ongoing:
+            return ETriggerEvent::Ongoing;
+        case EUnifiedScriptManagedInputTriggerEvent::Triggered:
+            return ETriggerEvent::Triggered;
+        case EUnifiedScriptManagedInputTriggerEvent::Completed:
+            return ETriggerEvent::Completed;
+        case EUnifiedScriptManagedInputTriggerEvent::Canceled:
+            return ETriggerEvent::Canceled;
+        default:
+            return ETriggerEvent::None;
+    }
+}
+
+bool InputValueTypeMatches(
+    EUnifiedScriptManagedInputValueType Declared,
+    EInputActionValueType Reflected)
+{
+    switch (Declared)
+    {
+        case EUnifiedScriptManagedInputValueType::Boolean:
+            return Reflected == EInputActionValueType::Boolean;
+        case EUnifiedScriptManagedInputValueType::Axis1D:
+            return Reflected == EInputActionValueType::Axis1D;
+        case EUnifiedScriptManagedInputValueType::Axis2D:
+            return Reflected == EInputActionValueType::Axis2D;
+        case EUnifiedScriptManagedInputValueType::Axis3D:
+            return Reflected == EInputActionValueType::Axis3D;
+        default:
+            return false;
+    }
+}
+
+void StoreFloat32(float Value, uint64& OutPayload)
+{
+    OutPayload = 0;
+    FMemory::Memcpy(&OutPayload, &Value, sizeof(Value));
+}
+
+void StoreFloat64(double Value, uint64& OutPayload)
+{
+    FMemory::Memcpy(&OutPayload, &Value, sizeof(Value));
 }
 
 const TCHAR* DescribeWorldType(EWorldType::Type WorldType)
@@ -339,6 +394,11 @@ void UUnifiedScriptComponent::TickComponent(
     if (!bScriptRunning)
     {
         SetComponentTickEnabled(false);
+        return;
+    }
+    if (bStopRequestedByInputFailure)
+    {
+        StopScript();
         return;
     }
 
@@ -659,7 +719,15 @@ bool UUnifiedScriptComponent::StartScript()
     SemanticDebugStateJson.Reset();
     bGameplayProfilerEnabled = false;
     LastGameplayProfileTrace.Reset();
+    bStopRequestedByInputFailure = false;
     BindManagedActorEvents();
+    FString InputBindingError;
+    if (!BindManagedInputActions(InputBindingError))
+    {
+        SetScriptFailure(MoveTemp(InputBindingError));
+        StopScript();
+        return false;
+    }
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
     const double FinalizationMilliseconds =
         (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
@@ -695,6 +763,8 @@ bool UUnifiedScriptComponent::StartScript()
 void UUnifiedScriptComponent::StopScript()
 {
     check(IsInGameThread());
+    UnbindManagedInputActions();
+    bStopRequestedByInputFailure = false;
     if (!bScriptRunning && ManagedScriptInstanceId == 0 &&
         ManagedHostHandle == 0 && ManagedTargetHandle == 0 &&
         ActiveLifecycleOwnershipKey.IsNone())
@@ -2546,6 +2616,270 @@ UObject* UUnifiedScriptComponent::GetScriptTarget()
         return Owner;
     }
     return this;
+}
+
+bool UUnifiedScriptComponent::BindManagedInputActions(FString& OutError)
+{
+    check(IsInGameThread());
+    OutError.Reset();
+    if (!ManagedInputBindingHandles.IsEmpty() ||
+        ManagedEnhancedInputComponent.IsValid())
+    {
+        OutError = TEXT("Managed Enhanced Input bindings are already active.");
+        return false;
+    }
+
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass = nullptr;
+    for (const UClass* Candidate = GetClass();
+         Candidate != nullptr && GeneratedClass == nullptr;
+         Candidate = Candidate->GetSuperClass())
+    {
+        GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+    }
+    if (GeneratedClass == nullptr)
+    {
+        const AActor* Owner = GetOwner();
+        for (const UClass* Candidate = Owner != nullptr ? Owner->GetClass() : nullptr;
+             Candidate != nullptr && GeneratedClass == nullptr;
+             Candidate = Candidate->GetSuperClass())
+        {
+            GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+        }
+    }
+    if (GeneratedClass == nullptr ||
+        GeneratedClass->ManagedInputActionBindings.IsEmpty())
+    {
+        return true;
+    }
+
+    struct FResolvedInputBinding
+    {
+        const FUnifiedScriptManagedInputActionBinding* Declaration = nullptr;
+        UInputAction* Action = nullptr;
+    };
+    TArray<FResolvedInputBinding> ResolvedBindings;
+    ResolvedBindings.Reserve(GeneratedClass->ManagedInputActionBindings.Num());
+    for (const FUnifiedScriptManagedInputActionBinding& Declaration :
+         GeneratedClass->ManagedInputActionBindings)
+    {
+        UInputAction* Action = LoadObject<UInputAction>(
+            nullptr,
+            *Declaration.ActionPath);
+        if (Action == nullptr)
+        {
+            UClass* ActionClass = LoadObject<UClass>(
+                nullptr,
+                *Declaration.ActionPath);
+            if (ActionClass != nullptr &&
+                ActionClass->IsChildOf(UInputAction::StaticClass()))
+            {
+                Action = ActionClass->GetDefaultObject<UInputAction>();
+            }
+        }
+        const ETriggerEvent TriggerEvent =
+            UE::UnifiedScript::Component::Private::ToEnhancedInputTriggerEvent(
+                Declaration.TriggerEvent);
+        if (Action == nullptr || TriggerEvent == ETriggerEvent::None)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed input handler '%s' cannot resolve action '%s' or its trigger event."),
+                *Declaration.ManagedName.ToString(),
+                *Declaration.ActionPath);
+            return false;
+        }
+        if (!UE::UnifiedScript::Component::Private::InputValueTypeMatches(
+                Declaration.ValueType,
+                Action->ValueType))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed input handler '%s' value contract does not match action '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *Declaration.ActionPath);
+            return false;
+        }
+        FResolvedInputBinding& Resolved =
+            ResolvedBindings.AddDefaulted_GetRef();
+        Resolved.Declaration = &Declaration;
+        Resolved.Action = Action;
+    }
+
+    AActor* Owner = GetOwner();
+    if (Owner == nullptr)
+    {
+        OutError = TEXT("Managed Enhanced Input bindings require an owning Actor.");
+        return false;
+    }
+    bManagedCreatedInputComponent = Owner->InputComponent == nullptr;
+    if (bManagedCreatedInputComponent)
+    {
+        Owner->CreateInputComponent(UEnhancedInputComponent::StaticClass());
+    }
+    UEnhancedInputComponent* EnhancedInput =
+        Cast<UEnhancedInputComponent>(Owner->InputComponent);
+    if (EnhancedInput == nullptr)
+    {
+        bManagedCreatedInputComponent = false;
+        OutError = FString::Printf(
+            TEXT("Actor '%s' uses input component '%s'; managed input bindings require UEnhancedInputComponent."),
+            *Owner->GetPathName(),
+            *GetPathNameSafe(Owner->InputComponent));
+        return false;
+    }
+
+    ManagedEnhancedInputComponent = EnhancedInput;
+    if (bManagedCreatedInputComponent)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            if (APlayerController* PlayerController =
+                    World->GetFirstPlayerController())
+            {
+                Owner->EnableInput(PlayerController);
+                ManagedInputPlayerController = PlayerController;
+            }
+        }
+    }
+
+    ManagedInputActions.Reserve(ResolvedBindings.Num());
+    ManagedInputBindingHandles.Reserve(ResolvedBindings.Num());
+    for (const FResolvedInputBinding& Resolved : ResolvedBindings)
+    {
+        const FUnifiedScriptManagedInputActionBinding& Declaration =
+            *Resolved.Declaration;
+        FEnhancedInputActionEventBinding& RuntimeBinding =
+            EnhancedInput->BindAction(
+                Resolved.Action,
+                UE::UnifiedScript::Component::Private::ToEnhancedInputTriggerEvent(
+                    Declaration.TriggerEvent),
+                this,
+                &UUnifiedScriptComponent::HandleManagedInputAction,
+                Declaration.ManagedName,
+                Declaration.ValueType);
+        RuntimeBinding.SetShouldConsume(Declaration.bConsumeInput);
+        ManagedInputBindingHandles.Add(RuntimeBinding.GetHandle());
+        ManagedInputActions.Add(Resolved.Action);
+    }
+    return true;
+}
+
+void UUnifiedScriptComponent::UnbindManagedInputActions()
+{
+    check(IsInGameThread());
+    UEnhancedInputComponent* EnhancedInput =
+        ManagedEnhancedInputComponent.Get();
+    if (EnhancedInput != nullptr)
+    {
+        for (const uint32 Handle : ManagedInputBindingHandles)
+        {
+            EnhancedInput->RemoveBindingByHandle(Handle);
+        }
+    }
+    ManagedInputBindingHandles.Reset();
+    ManagedInputActions.Reset();
+
+    if (bManagedCreatedInputComponent && EnhancedInput != nullptr)
+    {
+        if (AActor* Owner = GetOwner())
+        {
+            if (Owner->InputComponent == EnhancedInput)
+            {
+                Owner->DisableInput(ManagedInputPlayerController.Get());
+                Owner->InputComponent = nullptr;
+            }
+        }
+        EnhancedInput->DestroyComponent();
+    }
+    bManagedCreatedInputComponent = false;
+    ManagedEnhancedInputComponent.Reset();
+    ManagedInputPlayerController.Reset();
+}
+
+void UUnifiedScriptComponent::HandleManagedInputAction(
+    const FInputActionInstance& ActionInstance,
+    FName ManagedName,
+    EUnifiedScriptManagedInputValueType ValueType)
+{
+    if (!bScriptRunning || ManagedScriptInstanceId == 0 || ManagedName.IsNone())
+    {
+        return;
+    }
+
+    const FInputActionValue InputValue = ActionInstance.GetValue();
+    FUnifiedScriptNativeValueV3 Argument;
+    switch (ValueType)
+    {
+        case EUnifiedScriptManagedInputValueType::Boolean:
+            Argument.Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+            Argument.Payload0 = InputValue.Get<bool>() ? 1 : 0;
+            break;
+        case EUnifiedScriptManagedInputValueType::Axis1D:
+            Argument.Kind = EUnifiedScriptNativeValueKindV3::Float32;
+            UE::UnifiedScript::Component::Private::StoreFloat32(
+                InputValue.Get<float>(),
+                Argument.Payload0);
+            break;
+        case EUnifiedScriptManagedInputValueType::Axis2D:
+        {
+            const FVector2D Axis = InputValue.Get<FVector2D>();
+            Argument.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                Axis.X,
+                Argument.Payload0);
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                Axis.Y,
+                Argument.Payload1);
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                0.0,
+                Argument.Payload2);
+            break;
+        }
+        case EUnifiedScriptManagedInputValueType::Axis3D:
+        {
+            const FVector Axis = InputValue.Get<FVector>();
+            Argument.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                Axis.X,
+                Argument.Payload0);
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                Axis.Y,
+                Argument.Payload1);
+            UE::UnifiedScript::Component::Private::StoreFloat64(
+                Axis.Z,
+                Argument.Payload2);
+            break;
+        }
+        default:
+            SetScriptFailure(FString::Printf(
+                TEXT("Managed input handler '%s' has an unsupported value contract."),
+                *ManagedName.ToString()));
+            bStopRequestedByInputFailure = true;
+            SetComponentTickEnabled(true);
+            return;
+    }
+
+    uint8 Arena[512] = {};
+    FUnifiedScriptNativeCallFrameV3 Frame;
+    Frame.Arguments = &Argument;
+    Frame.ArgumentCount = 1;
+    Frame.ByteBuffer = Arena;
+    Frame.ByteCapacity = UE_ARRAY_COUNT(Arena);
+    FString Error;
+    if (!InvokeManagedScriptFunctionV2(ManagedName.ToString(), Frame, Error) ||
+        Frame.Status != EUnifiedScriptNativeCallStatusV3::Success ||
+        Frame.ResultCount != 0)
+    {
+        if (Error.IsEmpty())
+        {
+            Error = FString::Printf(
+                TEXT("Managed input handler '%s' failed ABI v2 dispatch (status=%u, results=%u)."),
+                *ManagedName.ToString(),
+                static_cast<uint32>(Frame.Status),
+                Frame.ResultCount);
+        }
+        SetScriptFailure(MoveTemp(Error));
+        bStopRequestedByInputFailure = true;
+        SetComponentTickEnabled(true);
+    }
 }
 
 void UUnifiedScriptComponent::BindManagedActorEvents()

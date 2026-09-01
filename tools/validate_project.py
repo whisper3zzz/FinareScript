@@ -4230,6 +4230,18 @@ def main() -> int:
         if item["path"]
         == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
     )
+    unreal_interop_contract_manifest = next(
+        item
+        for item in unreal_manifest["types"]
+        if item["path"]
+        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract"
+    )
+    unreal_input_action_manifest = next(
+        item
+        for item in unreal_manifest["types"]
+        if item["path"]
+        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture"
+    )
     unreal_actor_manifest = next(
         item
         for item in unreal_manifest["types"]
@@ -4247,6 +4259,7 @@ def main() -> int:
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
@@ -4325,6 +4338,18 @@ def main() -> int:
         }
         and unreal_interop_manifest["headerPath"]
         == "UnifiedScriptInteropFixture.h"
+        and unreal_input_action_manifest["headerPath"]
+        == "UnifiedScriptInteropFixture.h"
+        and unreal_input_action_manifest["baseTypePath"]
+        == "/Script/EnhancedInput.InputAction"
+        and unreal_interop_contract_manifest["headerPath"]
+        == "UnifiedScriptInteropFixture.h"
+        and unreal_interop_contract_manifest["traits"]["interface"] is True
+        and {
+            item["name"]
+            for item in unreal_interop_contract_manifest["functions"]
+        }
+        == {"TransformManagedValue"}
         and {item["name"] for item in unreal_interop_manifest["properties"]}
         == {
             "ByteValue",

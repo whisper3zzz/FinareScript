@@ -4,8 +4,10 @@
 
 #include "Engine/Blueprint.h"
 #include "Engine/World.h"
+#include "EnhancedInputComponent.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
+#include "InputAction.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
@@ -15,10 +17,12 @@
 #include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptProjectSetup.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::UnifiedScript::ClassFactory::Tests
@@ -400,6 +404,111 @@ bool WriteProcessReceipt(FAutomationTestBase& Test, const TCHAR* Stage)
             FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
 }
 
+bool AugmentPersistentActorGameplayContracts(FAutomationTestBase& Test)
+{
+    UUnifiedScriptAsset* ActorAsset = LoadObject<UUnifiedScriptAsset>(
+        nullptr,
+        *PersistentSidecarPath(PersistentActorType));
+    if (!Test.TestNotNull(
+            TEXT("Loads the persistent Actor sidecar for gameplay-contract authoring"),
+            ActorAsset))
+    {
+        return false;
+    }
+
+    const FString SourcePath = ResolveConfiguredPath(ActorAsset->SourcePath);
+    FString Source;
+    if (!Test.TestTrue(
+            TEXT("Loads the persistent Actor source for gameplay-contract authoring"),
+            FFileHelper::LoadFileToString(Source, *SourcePath)))
+    {
+        return false;
+    }
+
+    if (!Source.Contains(TEXT("using UnifiedScript.Unreal.Generated;")))
+    {
+        const FString UsingAnchor = TEXT("using UnifiedScript.Unreal;\n");
+        if (!Test.TestTrue(
+                TEXT("Persistent Actor source exposes the Unreal namespace anchor"),
+                Source.Contains(UsingAnchor)))
+        {
+            return false;
+        }
+        Source.ReplaceInline(
+            *UsingAnchor,
+            TEXT("using UnifiedScript.Unreal;\n")
+            TEXT("using UnifiedScript.Unreal.Generated;\n"),
+            ESearchCase::CaseSensitive);
+    }
+
+    if (!Source.Contains(TEXT("[UnrealInputAction(")))
+    {
+        const FString LifecycleAnchor =
+            TEXT("    protected override void OnBeginPlay()\n");
+        const FString GameplayContracts =
+            TEXT("    private UnifiedScriptComponent _component = null!;\n\n")
+            TEXT("    [UnrealInputAction(\n")
+            TEXT("        \"/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture\",\n")
+            TEXT("        TriggerEvent = UnrealInputTriggerEvent.Triggered,\n")
+            TEXT("        ValueType = UnrealInputValueType.Axis1D,\n")
+            TEXT("        ConsumeInput = true)]\n")
+            TEXT("    public void OnManagedMove(float value)\n")
+            TEXT("    {\n")
+            TEXT("        _component.ManagedState = value == 0f ? \"Input:0\" : \"Input:nonzero\";\n")
+            TEXT("    }\n\n")
+            TEXT("    [Visual]\n")
+            TEXT("    [UnrealEvent(\n")
+            TEXT("        typeof(UnifiedScriptComponent),\n")
+            TEXT("        \"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal\",\n")
+            TEXT("        Source = UnrealEventSource.Host)]\n")
+            TEXT("    private void OnManagedSignal(int value, UnrealObjectHandle context)\n")
+            TEXT("    {\n")
+            TEXT("        _component.ManagedState += \"|Event:\" + value;\n")
+            TEXT("    }\n\n")
+            TEXT("    [UnrealInterfaceFunction(\n")
+            TEXT("        \"/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract\",\n")
+            TEXT("        \"TransformManagedValue\")]\n")
+            TEXT("    public int TransformManagedValue(int value)\n")
+            TEXT("    {\n")
+            TEXT("        return value * 2;\n")
+            TEXT("    }\n\n");
+        if (!Test.TestTrue(
+                TEXT("Persistent Actor source exposes the BeginPlay insertion anchor"),
+                Source.Contains(LifecycleAnchor)))
+        {
+            return false;
+        }
+        Source.ReplaceInline(
+            *LifecycleAnchor,
+            *(GameplayContracts + LifecycleAnchor),
+            ESearchCase::CaseSensitive);
+    }
+
+    if (!Source.Contains(TEXT("_component = new UnifiedScriptComponent(")))
+    {
+        const FString StateInitialization =
+            TEXT("        StartValue = AddOne(StartValue);\n");
+        if (!Test.TestTrue(
+                TEXT("Persistent Actor source exposes the BeginPlay body anchor"),
+                Source.Contains(StateInitialization)))
+        {
+            return false;
+        }
+        Source.ReplaceInline(
+            *StateInitialization,
+            TEXT("        _component = new UnifiedScriptComponent(HostHandle, Bridge);\n")
+            TEXT("        StartValue = AddOne(StartValue);\n"),
+            ESearchCase::CaseSensitive);
+    }
+
+    return Test.TestTrue(
+        TEXT("Writes the persistent Actor gameplay contracts"),
+        FFileHelper::SaveStringToFile(
+            Source,
+            *SourcePath,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+}
+
 UUnifiedScriptComponent* GetActorScriptComponent(UBlueprint* Blueprint)
 {
     const AUnifiedScriptActor* Defaults = Blueprint != nullptr &&
@@ -498,7 +607,10 @@ bool FUnifiedScriptPersistentClassCreateTest::RunTest(const FString& Parameters)
         PersistentComponentType,
         EUnifiedScriptClassKind::ActorComponent,
         nullptr);
-    return bActor && bComponent && WriteProcessReceipt(*this, TEXT("create"));
+    const bool bGameplayContracts = bActor &&
+        AugmentPersistentActorGameplayContracts(*this);
+    return bActor && bComponent && bGameplayContracts &&
+        WriteProcessReceipt(*this, TEXT("create"));
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -563,6 +675,42 @@ bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
         TEXT("Reloaded Component CDO retains the exact Script Asset"),
         ComponentDefaults != nullptr && ComponentDefaults->ScriptAsset == ComponentAsset);
 
+    const UUnifiedScriptBlueprintGeneratedClass* ActorGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(ActorBlueprint->GeneratedClass);
+    if (!TestNotNull(
+            TEXT("Reloaded Actor retains the product GeneratedClass"),
+            ActorGeneratedClass))
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("Reloaded Actor retains one Enhanced Input contract"),
+        ActorGeneratedClass->ManagedInputActionBindings.Num(),
+        1);
+    TestEqual(
+        TEXT("Reloaded Actor retains one delegate contract"),
+        ActorGeneratedClass->ManagedDelegateBindings.Num(),
+        1);
+    TestEqual(
+        TEXT("Reloaded Actor retains one interface contract"),
+        ActorGeneratedClass->ManagedInterfaceBindings.Num(),
+        1);
+    TestTrue(
+        TEXT("Reloaded Actor implements the native interface"),
+        ActorBlueprint->GeneratedClass->ImplementsInterface(
+            UUnifiedScriptInteropContract::StaticClass()));
+    const FUnifiedScriptManagedFunctionBinding* ReloadedInterfaceBinding =
+        ActorGeneratedClass->ManagedFunctionBindings.Find(
+            TEXT("TransformManagedValue"));
+    TestTrue(
+        TEXT("Reloaded Actor retains the interface event-entry contract"),
+        ReloadedInterfaceBinding != nullptr &&
+            ReloadedInterfaceBinding->bInterfaceFunction);
+    TestTrue(
+        TEXT("Reloaded Actor restores the managed interface dispatcher"),
+        ActorGeneratedClass->IsManagedFunctionBound(
+            TEXT("TransformManagedValue")));
+
     const int32 InitialManagedWorldCount =
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
@@ -571,6 +719,10 @@ bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
         return false;
     }
     World->AddToRoot();
+    World->InitializeActorsForPlay(FURL());
+    TestTrue(
+        TEXT("Second-process gameplay World enables Actor ProcessEvent dispatch"),
+        World->AreActorsInitialized());
     UUnifiedScriptWorldSubsystem* Host =
         World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
     if (!TestNotNull(TEXT("Gameplay World owns a managed host"), Host))
@@ -596,6 +748,17 @@ bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
         World->DestroyWorld(false);
         return false;
     }
+    TestTrue(
+        TEXT("First persistent Actor instance retains the managed interface dispatcher"),
+        ActorGeneratedClass->IsManagedFunctionBound(
+            TEXT("TransformManagedValue")));
+    UFunction* OwnedInterfaceFunction =
+        ActorGeneratedClass->FindFunctionByName(
+            TEXT("TransformManagedValue"),
+            EIncludeSuperFlag::ExcludeSuper);
+    TestNotNull(
+        TEXT("Persistent generated class owns the interface function"),
+        OwnedInterfaceFunction);
     ComponentOwner->AddInstanceComponent(AttachedComponent);
     AttachedComponent->RegisterComponentWithWorld(World);
 
@@ -636,6 +799,114 @@ bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
         AttachedComponent->GetScriptStateInt32(TEXT("StartValue"), -1), 1);
     TestEqual(TEXT("Two generated Script Classes are live in one World"),
         Host->GetManagedScriptCount(), 2);
+    TestEqual(
+        TEXT("Persistent Actor owns exactly one Enhanced Input handle"),
+        ActorComponent->GetManagedInputBindingCount(),
+        1);
+    TestEqual(
+        TEXT("Persistent Actor owns exactly one delegate subscription"),
+        Host->GetEventSubscriptionCount(),
+        1);
+    TestTrue(
+        TEXT("Persistent interface dispatcher remains installed after managed BeginPlay"),
+        ActorGeneratedClass->IsManagedFunctionBound(
+            TEXT("TransformManagedValue")));
+    if (OwnedInterfaceFunction != nullptr)
+    {
+        const FIntProperty* InterfaceValueProperty =
+            FindFProperty<FIntProperty>(OwnedInterfaceFunction, TEXT("Value"));
+        const FIntProperty* InterfaceReturnProperty =
+            CastField<FIntProperty>(OwnedInterfaceFunction->GetReturnProperty());
+        if (TestNotNull(
+                TEXT("Persistent interface function retains its value parameter"),
+                InterfaceValueProperty) &&
+            TestNotNull(
+                TEXT("Persistent interface function retains its return parameter"),
+                InterfaceReturnProperty))
+        {
+            FStructOnScope InterfaceParameters(OwnedInterfaceFunction);
+            InterfaceValueProperty->SetPropertyValue_InContainer(
+                InterfaceParameters.GetStructMemory(),
+                20);
+            ScriptActor->ProcessEvent(
+                OwnedInterfaceFunction,
+                InterfaceParameters.GetStructMemory());
+            TestEqual(
+                TEXT("Persistent owned interface UFunction directly reaches managed code"),
+                InterfaceReturnProperty->GetPropertyValue_InContainer(
+                    InterfaceParameters.GetStructMemory()),
+                40);
+        }
+    }
+    TestEqual(
+        TEXT("Persistent Actor interface reaches its managed implementation"),
+        IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+            ScriptActor,
+            21),
+        42);
+
+    ActorComponent->ManagedState = TEXT("Delegate");
+    ActorComponent->BroadcastManagedSignal(73, ActorComponent);
+    TestEqual(
+        TEXT("Persistent Actor delegate dispatches exactly once"),
+        ActorComponent->ManagedState,
+        FString(TEXT("Delegate|Event:73")));
+
+    UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(
+        ScriptActor->InputComponent);
+    if (TestNotNull(
+            TEXT("Persistent Actor creates its Enhanced Input component"),
+            EnhancedInput))
+    {
+        TestEqual(
+            TEXT("Persistent Actor owns one generated action binding"),
+            EnhancedInput->GetActionEventBindings().Num(),
+            1);
+        if (EnhancedInput->GetActionEventBindings().Num() == 1)
+        {
+            const FEnhancedInputActionEventBinding& InputBinding =
+                *EnhancedInput->GetActionEventBindings()[0];
+            FInputActionInstance InputInstance(InputBinding.GetAction());
+            InputBinding.Execute(InputInstance);
+            TestEqual(
+                TEXT("Persistent Actor Enhanced Input reaches managed code"),
+                ActorComponent->ManagedState,
+                FString(TEXT("Input:0")));
+        }
+    }
+
+    TestTrue(
+        *FString::Printf(
+            TEXT("Persistent gameplay-contract reload succeeds: %s"),
+            *ActorComponent->LastScriptError),
+        ActorComponent->ReloadScript());
+    TestEqual(
+        TEXT("Reload retains one Enhanced Input handle"),
+        ActorComponent->GetManagedInputBindingCount(),
+        1);
+    TestEqual(
+        TEXT("Reload replaces rather than duplicates delegate subscriptions"),
+        Host->GetEventSubscriptionCount(),
+        1);
+    if (EnhancedInput != nullptr)
+    {
+        TestEqual(
+            TEXT("Reload does not duplicate native action bindings"),
+            EnhancedInput->GetActionEventBindings().Num(),
+            1);
+    }
+    ActorComponent->ManagedState = TEXT("Reloaded");
+    ActorComponent->BroadcastManagedSignal(74, ActorComponent);
+    TestEqual(
+        TEXT("Reloaded delegate dispatches exactly once"),
+        ActorComponent->ManagedState,
+        FString(TEXT("Reloaded|Event:74")));
+    TestEqual(
+        TEXT("Reloaded interface uses the active managed generation"),
+        IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+            ScriptActor,
+            22),
+        44);
 
     Host->EndManagedFrame();
     Host->BeginManagedFrame();
@@ -658,6 +929,13 @@ bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
         Host->GetManagedScriptCount(), 0);
     TestEqual(TEXT("EndPlay releases both lifecycle claims"),
         Host->GetGameplayLifecycleClaimCount(), 0);
+    TestEqual(TEXT("EndPlay releases every Enhanced Input handle"),
+        ActorComponent->GetManagedInputBindingCount(), 0);
+    TestEqual(TEXT("EndPlay releases every delegate subscription"),
+        Host->GetEventSubscriptionCount(), 0);
+    TestNull(
+        TEXT("EndPlay destroys the Actor input component owned by UnifiedScript"),
+        ScriptActor->InputComponent.Get());
 
     AttachedComponent->UnregisterComponent();
     ScriptActor->Destroy();

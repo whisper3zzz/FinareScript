@@ -1,5 +1,6 @@
 #include "Containers/Ticker.h"
 #include "Engine/World.h"
+#include "EnhancedInputComponent.h"
 #include "GameFramework/Actor.h"
 #include "HAL/PlatformMemory.h"
 #include "HAL/PlatformTime.h"
@@ -8,11 +9,13 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
+#include "InputAction.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -216,6 +219,12 @@ void Run()
     FString Failure;
     FString ActorIdentityError;
     FString ComponentIdentityError;
+    bool bActorInput = false;
+    bool bActorDelegate = false;
+    bool bActorInterface = false;
+    bool bActorReload = false;
+    int32 LiveInputBindingCount = -1;
+    int32 LiveEventSubscriptionCount = -1;
     const bool bObjectsReady = World->AreActorsInitialized() &&
         Host != nullptr && ScriptActor != nullptr &&
         ComponentOwner != nullptr && AttachedComponent != nullptr &&
@@ -243,6 +252,20 @@ void Run()
             TEXT("Generated-class identity failed; actor=%s; component=%s"),
             *ActorIdentityError,
             *ComponentIdentityError);
+    }
+
+    const UUnifiedScriptBlueprintGeneratedClass* ManagedActorClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(ActorClass);
+    const bool bGameplayContractMetadata = ManagedActorClass != nullptr &&
+        ManagedActorClass->ManagedInputActionBindings.Num() == 1 &&
+        ManagedActorClass->ManagedDelegateBindings.Num() == 1 &&
+        ManagedActorClass->ManagedInterfaceBindings.Num() == 1 &&
+        ActorClass->ImplementsInterface(
+            UUnifiedScriptInteropContract::StaticClass());
+    if (Failure.IsEmpty() && !bGameplayContractMetadata)
+    {
+        Failure = TEXT(
+            "Packaged Actor lost its Input, Delegate, or Interface GeneratedClass contract.");
     }
 
     if (Failure.IsEmpty())
@@ -326,6 +349,92 @@ void Run()
         }
     }
 
+
+    if (Failure.IsEmpty())
+    {
+        LiveInputBindingCount = ActorComponent->GetManagedInputBindingCount();
+        LiveEventSubscriptionCount = Host->GetEventSubscriptionCount();
+        UEnhancedInputComponent* EnhancedInput =
+            Cast<UEnhancedInputComponent>(ScriptActor->InputComponent);
+        if (LiveInputBindingCount != 1 || LiveEventSubscriptionCount != 1 ||
+            EnhancedInput == nullptr ||
+            EnhancedInput->GetActionEventBindings().Num() != 1)
+        {
+            Failure = FString::Printf(
+                TEXT("Packaged gameplay binding ownership is incomplete; inputHandles=%d; subscriptions=%d; actionBindings=%d"),
+                LiveInputBindingCount,
+                LiveEventSubscriptionCount,
+                EnhancedInput != nullptr
+                    ? EnhancedInput->GetActionEventBindings().Num()
+                    : -1);
+        }
+        else
+        {
+            bActorInterface =
+                IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+                    ScriptActor,
+                    21) == 42;
+
+            ActorComponent->ManagedState = TEXT("Delegate");
+            ActorComponent->BroadcastManagedSignal(73, ActorComponent);
+            bActorDelegate =
+                ActorComponent->ManagedState == TEXT("Delegate|Event:73");
+
+            const FEnhancedInputActionEventBinding& InputBinding =
+                *EnhancedInput->GetActionEventBindings()[0];
+            FInputActionInstance InputInstance(InputBinding.GetAction());
+            InputBinding.Execute(InputInstance);
+            bActorInput = ActorComponent->ManagedState == TEXT("Input:0");
+
+            if (!bActorInterface || !bActorDelegate || !bActorInput)
+            {
+                Failure = FString::Printf(
+                    TEXT("Packaged gameplay dispatch failed; input=%s; delegate=%s; interface=%s; state=%s"),
+                    bActorInput ? TEXT("true") : TEXT("false"),
+                    bActorDelegate ? TEXT("true") : TEXT("false"),
+                    bActorInterface ? TEXT("true") : TEXT("false"),
+                    *ActorComponent->ManagedState);
+            }
+        }
+    }
+
+    if (Failure.IsEmpty())
+    {
+        bActorReload = ActorComponent->ReloadScript();
+        UEnhancedInputComponent* ReloadedEnhancedInput =
+            Cast<UEnhancedInputComponent>(ScriptActor->InputComponent);
+        const int32 ReloadedSubscriptionCount = Host->GetEventSubscriptionCount();
+        const bool bReloadBindingsExact = bActorReload &&
+            ActorComponent->GetManagedInputBindingCount() == 1 &&
+            ReloadedSubscriptionCount == 1 &&
+            ReloadedEnhancedInput != nullptr &&
+            ReloadedEnhancedInput->GetActionEventBindings().Num() == 1;
+        ActorComponent->ManagedState = TEXT("Reloaded");
+        ActorComponent->BroadcastManagedSignal(74, ActorComponent);
+        const bool bReloadDelegateExact =
+            ActorComponent->ManagedState == TEXT("Reloaded|Event:74");
+        const bool bReloadInterfaceExact =
+            IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+                ScriptActor,
+                22) == 44;
+        bActorReload = bReloadBindingsExact && bReloadDelegateExact &&
+            bReloadInterfaceExact;
+        if (!bActorReload)
+        {
+            Failure = FString::Printf(
+                TEXT("Packaged gameplay reload failed; reload=%s; inputHandles=%d; subscriptions=%d; actionBindings=%d; delegate=%s; interface=%s; error=%s"),
+                bReloadBindingsExact ? TEXT("true") : TEXT("false"),
+                ActorComponent->GetManagedInputBindingCount(),
+                ReloadedSubscriptionCount,
+                ReloadedEnhancedInput != nullptr
+                    ? ReloadedEnhancedInput->GetActionEventBindings().Num()
+                    : -1,
+                bReloadDelegateExact ? TEXT("true") : TEXT("false"),
+                bReloadInterfaceExact ? TEXT("true") : TEXT("false"),
+                *ActorComponent->LastScriptError);
+        }
+    }
+
     const FString ActorProgram = ActorComponent != nullptr
         ? ActorComponent->GetActiveProgramPath()
         : FString();
@@ -360,6 +469,12 @@ void Run()
     const int32 FinalLifecycleClaimCount = Host != nullptr
         ? Host->GetGameplayLifecycleClaimCount()
         : -1;
+    const int32 FinalInputBindingCount = ActorComponent != nullptr
+        ? ActorComponent->GetManagedInputBindingCount()
+        : -1;
+    const int32 FinalEventSubscriptionCount = Host != nullptr
+        ? Host->GetEventSubscriptionCount()
+        : -1;
     if (AttachedComponent != nullptr)
     {
         AttachedComponent->UnregisterComponent();
@@ -378,12 +493,15 @@ void Run()
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
     if (Failure.IsEmpty() &&
         (FinalManagedScriptCount != 0 || FinalLifecycleClaimCount != 0 ||
+         FinalInputBindingCount != 0 || FinalEventSubscriptionCount != 0 ||
          FinalManagedWorldCount != InitialManagedWorldCount))
     {
         Failure = FString::Printf(
-            TEXT("Packaged teardown leaked state; scripts=%d; claims=%d; worldsBefore=%d; worldsAfter=%d"),
+            TEXT("Packaged teardown leaked state; scripts=%d; claims=%d; inputHandles=%d; subscriptions=%d; worldsBefore=%d; worldsAfter=%d"),
             FinalManagedScriptCount,
             FinalLifecycleClaimCount,
+            FinalInputBindingCount,
+            FinalEventSubscriptionCount,
             InitialManagedWorldCount,
             FinalManagedWorldCount);
     }
@@ -392,9 +510,11 @@ void Run()
         Failure.IsEmpty(),
         Failure.IsEmpty()
             ? FString::Printf(
-                TEXT("actorClass=%s; componentClass=%s; actorStarted=true; componentStarted=true; actorTicked=true; componentTicked=true; actorEvent=true; componentEvent=true; managedScriptCount=2; lifecycleClaimCount=2; finalManagedScriptCount=0; finalLifecycleClaimCount=0; managedWorldCountBefore=%d; managedWorldCountAfter=%d; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
+                TEXT("actorClass=%s; componentClass=%s; actorStarted=true; componentStarted=true; actorTicked=true; componentTicked=true; actorEvent=true; componentEvent=true; actorInput=true; actorDelegate=true; actorInterface=true; actorReload=true; inputBindingCount=%d; eventSubscriptionCount=%d; managedScriptCount=2; lifecycleClaimCount=2; finalInputBindingCount=0; finalEventSubscriptionCount=0; finalManagedScriptCount=0; finalLifecycleClaimCount=0; managedWorldCountBefore=%d; managedWorldCountAfter=%d; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
                 *ActorClassPath,
                 *ComponentClassPath,
+                LiveInputBindingCount,
+                LiveEventSubscriptionCount,
                 InitialManagedWorldCount,
                 FinalManagedWorldCount,
                 *ActorProgram,

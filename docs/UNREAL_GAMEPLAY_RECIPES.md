@@ -132,6 +132,44 @@ the exact Blueprint-generated-class identity first. Verify subscribe, fire,
 unsubscribe on reload, Actor deletion, and level travel; a retired generation
 must never receive the event.
 
+## Enhanced Input and native interface
+
+Bind Enhanced Input with the exact `UInputAction` object path produced by the
+project. The attribute also fixes the trigger phase, value shape, and consume
+policy in Declaration IR, so changing any of them is a reviewed contract change:
+
+```csharp
+[UnrealInputAction(
+    "/Game/Input/IA_Move.IA_Move",
+    TriggerEvent = UnrealInputTriggerEvent.Triggered,
+    ValueType = UnrealInputValueType.Axis2D,
+    ConsumeInput = true)]
+private void OnMove(UnrealVector value)
+{
+    ApplyMovement(value);
+}
+```
+
+Implement a native Unreal interface by naming its exact `/Script/Module.Type`
+path and reflected function. The method signature must match the reviewed API
+Contract exactly; native callers continue to use Unreal's normal `Execute_`
+entry point:
+
+```csharp
+[UnrealInterfaceFunction(
+    "/Script/MyGame.Damageable",
+    "ApplyManagedDamage")]
+public int ApplyManagedDamage(int amount)
+{
+    return ApplyDamage(amount);
+}
+```
+
+Build & Reload must leave one input binding and one delegate subscription per
+running Actor. Verify input and interface return values before and after a
+compatible reload, then delete the Actor or travel to another level and confirm
+that the retired generation receives no callback.
+
 ## Asset load
 
 Use the generated World service for synchronous startup loads whose hitch is

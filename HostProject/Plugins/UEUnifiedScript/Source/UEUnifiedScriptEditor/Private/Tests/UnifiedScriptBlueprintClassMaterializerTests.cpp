@@ -6,7 +6,9 @@
 #include "Engine/EngineTypes.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/World.h"
+#include "EnhancedInputComponent.h"
 #include "GameFramework/Actor.h"
+#include "InputAction.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_Event.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -116,7 +118,8 @@ FString Function(
     bool bIsPublic = true,
     bool bIsEvent = false,
     const FString& ReturnUnrealType = FString(),
-    bool bBlueprintEvent = false)
+    bool bBlueprintEvent = false,
+    const FString& AdditionalFields = FString())
 {
     return FString::Printf(
         TEXT(R"JSON({
@@ -126,7 +129,7 @@ FString Function(
       "returnTypeMetadataName": "%s"%s,
       "isStatic": %s,
       "isPublic": %s,
-      "isEvent": %s%s,
+      "isEvent": %s%s%s,
       "parameters": [%s]
     })JSON"),
         Id,
@@ -144,6 +147,7 @@ FString Function(
         bBlueprintEvent
             ? TEXT(",\n      \"blueprintEvent\": { \"superMode\": \"explicit\" }")
             : TEXT(""),
+        *AdditionalFields,
         *Parameters);
 }
 
@@ -896,6 +900,12 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
     constexpr const TCHAR* FunctionId = TEXT("4b2b9a44f72edea2e4f0cdf31376c2d1");
     constexpr const TCHAR* ActivationFunctionId =
         TEXT("6c4d746b47fc4fa8ae54f6d4e3ce1a01");
+    constexpr const TCHAR* InputFunctionId =
+        TEXT("ad58fc50ea45402b967fe7d06552a8d1");
+    constexpr const TCHAR* DelegateFunctionId =
+        TEXT("2bc08f81fbde47f5b85f19d3952041a2");
+    constexpr const TCHAR* InterfaceFunctionId =
+        TEXT("75af9e6e61724bf0a36bfe445685879b");
     const FString RewireParameters = FString::Join(
         TArray<FString>{
             Parameter(
@@ -931,8 +941,83 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
         false,
         FString(),
         true);
+    const FString InputFunction = Function(
+        InputFunctionId,
+        TEXT("OnManagedMove"),
+        TEXT("System.Void"),
+        Parameter(
+            TEXT("a7c6265a5a144552a0fc34ebdd2ccf40"),
+            TEXT("value"),
+            TEXT("System.Single")),
+        false,
+        true,
+        false,
+        FString(),
+        false,
+        TEXT(R"JSON(,
+      "inputActions": [{
+        "id": "us_43971457ceac41beb545c5fa2ca503d1",
+        "actionPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+        "triggerEvent": "triggered",
+        "valueType": "axis1D",
+        "consumeInput": true
+      }])JSON"));
+    const FString DelegateFunction = Function(
+        DelegateFunctionId,
+        TEXT("OnManagedSignal"),
+        TEXT("System.Void"),
+        FString::Join(
+            TArray<FString>{
+                Parameter(
+                    TEXT("13904f09252e47eea553f72913d3d77e"),
+                    TEXT("value"),
+                    TEXT("System.Int32")),
+                Parameter(
+                    TEXT("7588b815fa94489c8c90ca3d15e681d5"),
+                    TEXT("signalContext"),
+                    TEXT("UnifiedScript.Unreal.UnrealObjectHandle")),
+            },
+            TEXT(",")),
+        false,
+        false,
+        true,
+        FString(),
+        false,
+        TEXT(R"JSON(,
+      "delegateBindings": [{
+        "id": "us_e32bc94f847c4f92941e502658b89c2c",
+        "sourceTypePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+        "eventPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+        "source": "host",
+        "sourceMember": null
+      }])JSON"));
+    const FString InterfaceFunction = Function(
+        InterfaceFunctionId,
+        TEXT("TransformManagedValue"),
+        TEXT("System.Int32"),
+        Parameter(
+            TEXT("1eb6944f834e467e9bfd253b4ba6aa8b"),
+            TEXT("value"),
+            TEXT("System.Int32")),
+        false,
+        true,
+        false,
+        FString(),
+        false,
+        TEXT(R"JSON(,
+      "interfaceFunctions": [{
+        "id": "us_0590a882f00746a1ad5db6df4f49d3c0",
+        "interfacePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+        "functionName": "TransformManagedValue"
+      }])JSON"));
     const FString ManagedFunctions = FString::Join(
-        TArray<FString>{RewireFunction, ActivationFunction},
+        TArray<FString>{
+            RewireFunction,
+            ActivationFunction,
+            InputFunction,
+            DelegateFunction,
+            InterfaceFunction,
+        },
         TEXT(","));
     const FString InitialValueState = State(
         TEXT("d4463d57397c77264a0e282ca6c29432"),
@@ -958,18 +1043,19 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
     Blueprint->ScriptAsset = ScriptAsset;
 
+    const FString ScriptDocument = Document(
+        InitialValueState,
+        ManagedFunctions,
+        DemoClassId,
+        DemoQualifiedName,
+        DemoAssetPath);
     FUnifiedScriptBlueprintClassSyncResult SyncResult;
     FString Error;
     const bool bSynchronized =
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(
-                InitialValueState,
-                ManagedFunctions,
-                DemoClassId,
-                DemoQualifiedName,
-                DemoAssetPath),
+            ScriptDocument,
             false,
             SyncResult,
             Error);
@@ -978,6 +1064,87 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
             bSynchronized))
     {
         return false;
+    }
+    TestEqual(TEXT("One Enhanced Input contract is declared"),
+        SyncResult.DeclaredInputBindingCount, 1);
+    TestEqual(TEXT("One delegate contract is declared"),
+        SyncResult.DeclaredDelegateBindingCount, 1);
+    TestEqual(TEXT("One interface contract is declared"),
+        SyncResult.DeclaredInterfaceBindingCount, 1);
+    const UUnifiedScriptBlueprintGeneratedClass* DispatchGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Gameplay contracts use the product GeneratedClass"),
+            DispatchGeneratedClass))
+    {
+        return false;
+    }
+    TestEqual(TEXT("GeneratedClass persists the exact input route"),
+        DispatchGeneratedClass->ManagedInputActionBindings.Num(), 1);
+    TestEqual(TEXT("GeneratedClass persists the exact delegate route"),
+        DispatchGeneratedClass->ManagedDelegateBindings.Num(), 1);
+    TestEqual(TEXT("GeneratedClass persists the exact interface route"),
+        DispatchGeneratedClass->ManagedInterfaceBindings.Num(), 1);
+    TestTrue(TEXT("Generated component implements the native interface"),
+        Blueprint->GeneratedClass->ImplementsInterface(
+            UUnifiedScriptInteropContract::StaticClass()));
+    TestTrue(TEXT("Native interface function binds to the generic managed dispatcher"),
+        DispatchGeneratedClass->IsManagedFunctionBound(
+            TEXT("TransformManagedValue")));
+    const FUnifiedScriptManagedFunctionBinding* InterfaceDispatchBinding =
+        DispatchGeneratedClass->ManagedFunctionBindings.Find(
+            TEXT("TransformManagedValue"));
+    TestTrue(TEXT("Native interface function retains its event-entry contract"),
+        InterfaceDispatchBinding != nullptr &&
+            InterfaceDispatchBinding->bInterfaceFunction);
+
+    UEdGraph* InterfaceGraph = nullptr;
+    for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
+    {
+        for (UEdGraph* Graph : Interface.Graphs)
+        {
+            if (Graph != nullptr &&
+                Graph->GetFName() == TEXT("TransformManagedValue"))
+            {
+                InterfaceGraph = Graph;
+                break;
+            }
+        }
+        if (InterfaceGraph != nullptr)
+        {
+            break;
+        }
+    }
+    FKismetUserDeclaredFunctionMetadata* InterfaceMetadata =
+        FBlueprintEditorUtils::GetGraphFunctionMetaData(InterfaceGraph);
+    if (TestNotNull(
+            TEXT("Managed interface owns its generated Blueprint graph"),
+            InterfaceGraph))
+    {
+        // Kismet owns native-interface graph signatures and does not expose
+        // user-declared function metadata for them, even immediately after
+        // creation. Prove the durable GeneratedClass binding keeps
+        // ValidateOnly idempotent instead of reporting a user graph collision.
+        TestNull(
+            TEXT("Kismet interface graph has no user-function metadata carrier"),
+            InterfaceMetadata);
+        FUnifiedScriptBlueprintClassSyncResult ReloadReplayResult;
+        FString ReloadReplayError;
+        const bool bReloadReplay =
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset,
+                *Blueprint,
+                ScriptDocument,
+                true,
+                ReloadReplayResult,
+                ReloadReplayError);
+        TestTrue(
+            *FString::Printf(
+                TEXT("Reloaded interface metadata loss remains a no-change replay: %s"),
+                *ReloadReplayError),
+            bReloadReplay);
+        TestFalse(
+            TEXT("Persisted interface ownership prevents regeneration churn"),
+            ReloadReplayResult.bChanged);
     }
 
     const FName InternalName(
@@ -1003,8 +1170,6 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
     }
     TestTrue(TEXT("Live managed dispatch remains a Blueprint event"),
         ManagedFunction->HasAllFunctionFlags(FUNC_Event | FUNC_BlueprintEvent));
-    const UUnifiedScriptBlueprintGeneratedClass* DispatchGeneratedClass =
-        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
     const FUnifiedScriptManagedFunctionBinding* DispatchBinding =
         DispatchGeneratedClass != nullptr
             ? DispatchGeneratedClass->ManagedFunctionBindings.Find(InternalName)
@@ -1108,10 +1273,16 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
     World->AddToRoot();
     UUnifiedScriptWorldSubsystem* Host =
         World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    AActor* InputOwner = World->SpawnActor<AActor>();
     UUnifiedScriptComponent* Component =
-        NewObject<UUnifiedScriptComponent>(World, ChildBlueprint->GeneratedClass);
+        InputOwner != nullptr
+        ? NewObject<UUnifiedScriptComponent>(
+            InputOwner,
+            ChildBlueprint->GeneratedClass)
+        : nullptr;
     const bool bRuntimeObjectsReady =
         TestNotNull(TEXT("Managed dispatch World has a host"), Host) &&
+        TestNotNull(TEXT("Creates an Actor owner for Enhanced Input"), InputOwner) &&
         TestNotNull(TEXT("Creates the generated managed component"), Component);
     if (bRuntimeObjectsReady)
     {
@@ -1125,6 +1296,18 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
 
         if (Component->bScriptRunning)
         {
+            UEnhancedInputComponent* EnhancedInput = InputOwner != nullptr
+                ? Cast<UEnhancedInputComponent>(InputOwner->InputComponent)
+                : nullptr;
+            TestEqual(TEXT("Runtime owns one Enhanced Input handle"),
+                Component->GetManagedInputBindingCount(), 1);
+            if (TestNotNull(TEXT("Runtime creates an Enhanced Input component"),
+                    EnhancedInput))
+            {
+                TestEqual(TEXT("Enhanced Input component has one generated binding"),
+                    EnhancedInput->GetActionEventBindings().Num(), 1);
+            }
+
             FStructOnScope FunctionParameters(ManagedFunction);
             uint8* ParameterMemory = FunctionParameters.GetStructMemory();
             ValueProperty->SetPropertyValue_InContainer(ParameterMemory, 21);
@@ -1134,6 +1317,52 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
                 TEXT("Blueprint UFunction reaches CoreCLR and returns managed result"),
                 ReturnProperty->GetPropertyValue_InContainer(ParameterMemory),
                 42);
+
+            TestEqual(TEXT("Native interface executes the managed implementation"),
+                IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+                    Component,
+                    21),
+                42);
+
+            Component->ManagedState = TEXT("Delegate");
+            Component->BroadcastManagedSignal(73, Component);
+            TestEqual(TEXT("Generated delegate contract dispatches exactly once"),
+                Component->ManagedState,
+                FString(TEXT("Delegate|Event:73")));
+
+            if (EnhancedInput != nullptr &&
+                EnhancedInput->GetActionEventBindings().Num() == 1)
+            {
+                const FEnhancedInputActionEventBinding& InputBinding =
+                    *EnhancedInput->GetActionEventBindings()[0];
+                FInputActionInstance InputInstance(InputBinding.GetAction());
+                InputBinding.Execute(InputInstance);
+                TestEqual(TEXT("Enhanced Input reaches the managed Axis1D handler"),
+                    Component->ManagedState,
+                    FString(TEXT("Input:0")));
+            }
+
+            TestTrue(
+                *FString::Printf(TEXT("Compatible gameplay-contract reload succeeds: %s"),
+                    *Component->LastScriptError),
+                Component->ReloadScript());
+            TestEqual(TEXT("Reload retains exactly one native input handle"),
+                Component->GetManagedInputBindingCount(), 1);
+            if (EnhancedInput != nullptr)
+            {
+                TestEqual(TEXT("Reload does not duplicate Enhanced Input bindings"),
+                    EnhancedInput->GetActionEventBindings().Num(), 1);
+            }
+            Component->ManagedState = TEXT("Reloaded");
+            Component->BroadcastManagedSignal(74, Component);
+            TestEqual(TEXT("Reload replaces rather than duplicates delegate subscriptions"),
+                Component->ManagedState,
+                FString(TEXT("Reloaded|Event:74")));
+            TestEqual(TEXT("Reloaded interface uses the active generation"),
+                IUnifiedScriptInteropContract::Execute_TransformManagedValue(
+                    Component,
+                    22),
+                44);
 
             UFunction* ActivationOverrideFunction = Component->FindFunction(
                 ActivationInternalName);
@@ -1162,6 +1391,10 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
             Component->EndPlay(EEndPlayReason::Destroyed);
             TestFalse(TEXT("Managed dispatch instance stops cleanly"),
                 Component->bScriptRunning);
+            TestEqual(TEXT("Stop releases every managed input handle"),
+                Component->GetManagedInputBindingCount(), 0);
+            TestNull(TEXT("Stop destroys its owned Enhanced Input component"),
+                InputOwner != nullptr ? InputOwner->InputComponent.Get() : nullptr);
         }
     }
 

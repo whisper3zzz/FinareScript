@@ -23,6 +23,16 @@ internal sealed class CSharpScriptAssetLowerer
         "UnifiedScript.Unreal.UnrealStructFieldAttribute";
     private const string UnrealScriptClassAttributeName =
         "UnifiedScript.Unreal.UnrealScriptClassAttribute";
+    private const string UnrealBlueprintEventAttributeName =
+        "UnifiedScript.Unreal.UnrealBlueprintEventAttribute";
+    private const string UnrealInputActionAttributeName =
+        "UnifiedScript.Unreal.UnrealInputActionAttribute";
+    private const string UnrealInterfaceFunctionAttributeName =
+        "UnifiedScript.Unreal.UnrealInterfaceFunctionAttribute";
+    private const string UnrealEventAttributeName =
+        "UnifiedScript.Unreal.UnrealEventAttribute";
+    private const string UnrealTypeAttributeName =
+        "UnifiedScript.Unreal.UnrealTypeAttribute";
 
     private static readonly SymbolDisplayFormat TypeMetadataFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
@@ -104,7 +114,8 @@ internal sealed class CSharpScriptAssetLowerer
                         hirType,
                         hirTypes,
                         semanticTypes,
-                        semanticMethods);
+                        semanticMethods,
+                        diagnostics);
                 IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
                     LowerLifecycleHooks(typeSymbol);
                 SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
@@ -310,7 +321,8 @@ internal sealed class CSharpScriptAssetLowerer
         HirTypeDeclaration type,
         IReadOnlyDictionary<string, HirTypeDeclaration> hirTypes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
-        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods)
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        ICollection<UnifiedDiagnostic> diagnostics)
     {
         var declarations = new List<HirMethodDeclaration>(type.Methods.Count);
         var shadowedNames = new HashSet<string>(StringComparer.Ordinal);
@@ -346,6 +358,10 @@ internal sealed class CSharpScriptAssetLowerer
             string[] parameterTypeNames = descriptor.Parameters
                 .Select(parameter => types[parameter.TypeId].MetadataName)
                 .ToArray();
+            IMethodSymbol? methodSymbol = FindMethodSymbol(
+                typeSymbol,
+                method,
+                parameterTypeNames);
             ScriptParameterDeclaration[] parameters = method.Parameters
                 .Select((parameter, index) => new ScriptParameterDeclaration(
                     parameter.Id,
@@ -354,6 +370,16 @@ internal sealed class CSharpScriptAssetLowerer
                     LowerFunctionValueType(compilation, parameterTypeNames[index])))
                 .ToArray();
             string signature = $"{type.QualifiedName}.{method.Name}({string.Join(',', parameterTypeNames)})";
+            IReadOnlyList<ScriptInputActionBindingDeclaration> inputActions =
+                LowerInputActions(method, methodSymbol, parameterTypeNames, diagnostics);
+            IReadOnlyList<ScriptDelegateBindingDeclaration> delegateBindings =
+                LowerDelegateBindings(method, methodSymbol, diagnostics);
+            IReadOnlyList<ScriptInterfaceFunctionDeclaration> interfaceFunctions =
+                LowerInterfaceFunctions(method, methodSymbol, diagnostics);
+            bool blueprintEvent = methodSymbol is not null
+                ? FindAttribute(methodSymbol, UnrealBlueprintEventAttributeName) is not null
+                : method.Attributes?.Any(static attribute =>
+                    attribute.Name == "UnrealBlueprintEvent") == true;
             functions.Add(new ScriptFunctionDeclaration(
                 method.Id,
                 method.Name,
@@ -361,20 +387,276 @@ internal sealed class CSharpScriptAssetLowerer
                 types[descriptor.ReturnTypeId].MetadataName,
                 method.IsStatic,
                 method.IsPublic,
-                method.Attributes?.Any(static attribute =>
+                delegateBindings.Count != 0 || method.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealEvent") == true,
                 parameters,
                 LowerFunctionValueType(
                     compilation,
                     types[descriptor.ReturnTypeId].MetadataName),
-                method.Attributes?.Any(static attribute =>
-                    attribute.Name == "UnrealBlueprintEvent") == true
+                blueprintEvent
                     ? new ScriptBlueprintEventDeclaration(
                         ScriptBlueprintEventSuperMode.Explicit)
-                    : null));
+                    : null,
+                inputActions,
+                delegateBindings,
+                interfaceFunctions));
         }
 
         return functions;
+    }
+
+    private static IMethodSymbol? FindMethodSymbol(
+        INamedTypeSymbol typeSymbol,
+        HirMethodDeclaration method,
+        IReadOnlyList<string> parameterTypeNames)
+    {
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null;
+             current = current.BaseType)
+        {
+            IMethodSymbol[] matches = current.GetMembers(method.Name)
+                .OfType<IMethodSymbol>()
+                .Where(candidate => candidate.IsStatic == method.IsStatic &&
+                    candidate.Parameters.Length == parameterTypeNames.Count &&
+                    candidate.Parameters.Select(static parameter =>
+                            parameter.Type.ToDisplayString(TypeMetadataFormat))
+                        .SequenceEqual(parameterTypeNames, StringComparer.Ordinal))
+                .ToArray();
+            if (matches.Length == 1)
+            {
+                return matches[0];
+            }
+        }
+        return null;
+    }
+
+    private static IReadOnlyList<ScriptInputActionBindingDeclaration> LowerInputActions(
+        HirMethodDeclaration method,
+        IMethodSymbol? methodSymbol,
+        IReadOnlyList<string> parameterTypeNames,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        if (methodSymbol is null)
+        {
+            return [];
+        }
+        AttributeData[] attributes = FindAttributes(
+            methodSymbol,
+            UnrealInputActionAttributeName).ToArray();
+        if (attributes.Length == 0)
+        {
+            return [];
+        }
+
+        var bindings = new List<ScriptInputActionBindingDeclaration>(attributes.Length);
+        foreach (AttributeData attribute in attributes)
+        {
+            string actionPath = attribute.ConstructorArguments.FirstOrDefault().Value as string ??
+                string.Empty;
+            int triggerValue = ReadNamedEnumValue(
+                attribute,
+                "TriggerEvent",
+                3);
+            int valueTypeValue = ReadNamedEnumValue(
+                attribute,
+                "ValueType",
+                1);
+            bool consumeInput = ReadNamedBoolean(
+                attribute,
+                "ConsumeInput");
+            ScriptInputTriggerEvent? trigger = triggerValue switch
+            {
+                1 => ScriptInputTriggerEvent.Started,
+                2 => ScriptInputTriggerEvent.Ongoing,
+                3 => ScriptInputTriggerEvent.Triggered,
+                4 => ScriptInputTriggerEvent.Completed,
+                5 => ScriptInputTriggerEvent.Canceled,
+                _ => null,
+            };
+            ScriptInputValueType? valueType = valueTypeValue switch
+            {
+                1 => ScriptInputValueType.Boolean,
+                2 => ScriptInputValueType.Axis1D,
+                3 => ScriptInputValueType.Axis2D,
+                4 => ScriptInputValueType.Axis3D,
+                _ => null,
+            };
+            bool parameterMatches = valueType switch
+            {
+                ScriptInputValueType.Boolean => parameterTypeNames is ["System.Boolean"],
+                ScriptInputValueType.Axis1D => parameterTypeNames is ["System.Single"],
+                ScriptInputValueType.Axis2D or ScriptInputValueType.Axis3D =>
+                    parameterTypeNames is ["UnifiedScript.Unreal.UnrealVector"],
+                _ => false,
+            };
+            if (!method.IsPublic || method.IsStatic ||
+                methodSymbol.ReturnType.SpecialType != SpecialType.System_Void ||
+                string.IsNullOrWhiteSpace(actionPath) || trigger is null ||
+                valueType is null || !parameterMatches)
+            {
+                diagnostics.Add(InvalidGameplayBindingDiagnostic(
+                    methodSymbol,
+                    $"Enhanced Input handler '{methodSymbol.ToDisplayString()}' must be a public instance void method with one parameter matching its reviewed ValueType and an exact action path."));
+                continue;
+            }
+
+            bindings.Add(new ScriptInputActionBindingDeclaration(
+                CSharpSemanticIds.ForSymbol(
+                    "input-action",
+                    $"{method.Id.Value}|{actionPath}|{trigger}"),
+                actionPath,
+                trigger.Value,
+                valueType.Value,
+                consumeInput));
+        }
+        return bindings;
+    }
+
+    private static IReadOnlyList<ScriptDelegateBindingDeclaration> LowerDelegateBindings(
+        HirMethodDeclaration method,
+        IMethodSymbol? methodSymbol,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        if (methodSymbol is null)
+        {
+            return [];
+        }
+        var bindings = new List<ScriptDelegateBindingDeclaration>();
+        foreach (AttributeData attribute in FindAttributes(
+                     methodSymbol,
+                     UnrealEventAttributeName))
+        {
+            INamedTypeSymbol? sourceType = attribute.ConstructorArguments.ElementAtOrDefault(0).Value
+                as INamedTypeSymbol;
+            string eventPath = attribute.ConstructorArguments.ElementAtOrDefault(1).Value as string ??
+                string.Empty;
+            string sourceTypePath = ReadUnrealTypePath(sourceType);
+            if (sourceTypePath.Length == 0)
+            {
+                int separator = eventPath.LastIndexOf(':');
+                sourceTypePath = separator > 0 ? eventPath[..separator] : string.Empty;
+            }
+            int sourceValue = ReadNamedEnumValue(
+                attribute,
+                "Source",
+                0);
+            ScriptDelegateSource? source = sourceValue switch
+            {
+                0 => ScriptDelegateSource.Target,
+                1 => ScriptDelegateSource.Host,
+                _ => null,
+            };
+            string? sourceMember = ReadNamedString(
+                attribute,
+                "SourceMember");
+            if (method.IsStatic || source is null ||
+                string.IsNullOrWhiteSpace(sourceTypePath) ||
+                string.IsNullOrWhiteSpace(eventPath) ||
+                sourceMember is not null && string.IsNullOrWhiteSpace(sourceMember))
+            {
+                diagnostics.Add(InvalidGameplayBindingDiagnostic(
+                    methodSymbol,
+                    $"Delegate handler '{methodSymbol.ToDisplayString()}' has an invalid source, event path, or source member."));
+                continue;
+            }
+            bindings.Add(new ScriptDelegateBindingDeclaration(
+                CSharpSemanticIds.ForSymbol(
+                    "delegate-binding",
+                    $"{method.Id.Value}|{sourceTypePath}|{eventPath}|{source}|{sourceMember}"),
+                sourceTypePath,
+                eventPath,
+                source.Value,
+                sourceMember));
+        }
+        return bindings;
+    }
+
+    private static IReadOnlyList<ScriptInterfaceFunctionDeclaration> LowerInterfaceFunctions(
+        HirMethodDeclaration method,
+        IMethodSymbol? methodSymbol,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        if (methodSymbol is null)
+        {
+            return [];
+        }
+        var bindings = new List<ScriptInterfaceFunctionDeclaration>();
+        foreach (AttributeData attribute in FindAttributes(
+                     methodSymbol,
+                     UnrealInterfaceFunctionAttributeName))
+        {
+            string interfacePath = attribute.ConstructorArguments.ElementAtOrDefault(0).Value as string ??
+                string.Empty;
+            string functionName = attribute.ConstructorArguments.ElementAtOrDefault(1).Value as string ??
+                string.Empty;
+            if (!method.IsPublic || method.IsStatic ||
+                string.IsNullOrWhiteSpace(interfacePath) ||
+                string.IsNullOrWhiteSpace(functionName))
+            {
+                diagnostics.Add(InvalidGameplayBindingDiagnostic(
+                    methodSymbol,
+                    $"Interface implementation '{methodSymbol.ToDisplayString()}' must be a public instance method with exact interface and function paths."));
+                continue;
+            }
+            bindings.Add(new ScriptInterfaceFunctionDeclaration(
+                CSharpSemanticIds.ForSymbol(
+                    "interface-function",
+                    $"{method.Id.Value}|{interfacePath}|{functionName}"),
+                interfacePath,
+                functionName));
+        }
+        return bindings;
+    }
+
+    private static UnifiedDiagnostic InvalidGameplayBindingDiagnostic(
+        IMethodSymbol method,
+        string message)
+    {
+        SyntaxNode? syntax = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+        string path = syntax?.SyntaxTree.FilePath ??
+            method.Locations.FirstOrDefault()?.SourceTree?.FilePath ?? "<compilation>";
+        return new UnifiedDiagnostic(
+            DeclarationDiagnosticCodes.InvalidGameplayBinding,
+            UnifiedDiagnosticSeverity.Error,
+            message,
+            syntax is null
+                ? SourceSpan.Unknown(path)
+                : RoslynSourceSpan.FromNode(syntax, path));
+    }
+
+    private static int ReadNamedEnumValue(
+        AttributeData attribute,
+        string name,
+        int defaultValue)
+    {
+        TypedConstant value = attribute.NamedArguments
+            .Where(argument => argument.Key == name)
+            .Select(static argument => argument.Value)
+            .FirstOrDefault();
+        return value.Value is null
+            ? defaultValue
+            : Convert.ToInt32(value.Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool ReadNamedBoolean(AttributeData attribute, string name) =>
+        attribute.NamedArguments
+            .Where(argument => argument.Key == name)
+            .Select(static argument => argument.Value.Value)
+            .OfType<bool>()
+            .FirstOrDefault();
+
+    private static string? ReadNamedString(AttributeData attribute, string name) =>
+        attribute.NamedArguments
+            .Where(argument => argument.Key == name)
+            .Select(static argument => argument.Value.Value as string)
+            .FirstOrDefault();
+
+    private static string ReadUnrealTypePath(INamedTypeSymbol? type)
+    {
+        AttributeData? attribute = type is null
+            ? null
+            : FindAttribute(type, UnrealTypeAttributeName);
+        return attribute?.ConstructorArguments.FirstOrDefault().Value as string ?? string.Empty;
     }
 
     private static IReadOnlyList<ScriptLifecycleHookDeclaration> LowerLifecycleHooks(
@@ -638,6 +920,15 @@ internal sealed class CSharpScriptAssetLowerer
     private static AttributeData? FindAttribute(ISymbol symbol, string metadataName) => symbol
         .GetAttributes()
         .SingleOrDefault(attribute => string.Equals(
+            attribute.AttributeClass?.ToDisplayString(TypeMetadataFormat),
+            metadataName,
+            StringComparison.Ordinal));
+
+    private static IEnumerable<AttributeData> FindAttributes(
+        ISymbol symbol,
+        string metadataName) => symbol
+        .GetAttributes()
+        .Where(attribute => string.Equals(
             attribute.AttributeClass?.ToDisplayString(TypeMetadataFormat),
             metadataName,
             StringComparison.Ordinal));

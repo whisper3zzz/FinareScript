@@ -66,6 +66,33 @@ public sealed class UnrealManagedFunctionDispatchTests
             argumentCount: 0);
         Assert.Equal(UnrealManagedFunctionValueKindV1.Int32, blueprintEvent.Kind);
         Assert.Equal(17UL, blueprintEvent.Payload);
+
+        Span<UnrealManagedFunctionValueV1> inputArguments =
+        [
+            UnrealManagedFunctionValueV1.FromSingle(2.5f),
+        ];
+        fixed (UnrealManagedFunctionValueV1* pointer = inputArguments)
+        {
+            UnrealManagedFunctionValueV1 result = instance.InvokeFunction(
+                nameof(ManagedFunctionDispatchScript.OnMove),
+                (nint)pointer,
+                inputArguments.Length);
+            Assert.Equal(UnrealManagedFunctionValueKindV1.Void, result.Kind);
+        }
+
+        Span<UnrealManagedFunctionValueV1> interfaceArguments =
+        [
+            UnrealManagedFunctionValueV1.FromInt32(14),
+        ];
+        fixed (UnrealManagedFunctionValueV1* pointer = interfaceArguments)
+        {
+            UnrealManagedFunctionValueV1 result = instance.InvokeFunction(
+                nameof(ManagedFunctionDispatchScript.TransformManagedValue),
+                (nint)pointer,
+                interfaceArguments.Length);
+            Assert.Equal(UnrealManagedFunctionValueKindV1.Int32, result.Kind);
+            Assert.Equal(42UL, result.Payload);
+        }
     }
 
     [Fact]
@@ -318,6 +345,22 @@ public sealed class ManagedFunctionDispatchScript : IUnrealManagedScript
 
     [UnrealBlueprintEvent]
     public int BlueprintEventOnly() => 17;
+
+    [UnrealInputAction(
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+        ValueType = UnrealInputValueType.Axis1D)]
+    public void OnMove(float value)
+    {
+        if (value != 2.5f)
+        {
+            throw new InvalidOperationException("Enhanced Input value did not reach managed dispatch.");
+        }
+    }
+
+    [UnrealInterfaceFunction(
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+        "TransformManagedValue")]
+    public int TransformManagedValue(int value) => value * 3;
 
     [Visual]
     public string UnsupportedString(string value) => value;

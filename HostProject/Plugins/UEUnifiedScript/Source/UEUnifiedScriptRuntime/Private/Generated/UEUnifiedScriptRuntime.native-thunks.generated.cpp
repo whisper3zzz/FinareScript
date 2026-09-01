@@ -698,6 +698,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0xC2B2365ACCA0171Cull:
         OutResultCount = 0;
         return true;
+    case 0x06AB7EA4B32096BBull:
+        OutResultCount = 1;
+        return true;
     case 0x5005CC3042360722ull:
         OutResultCount = 1;
         return true;
@@ -984,6 +987,16 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         }
     case 0xC2B2365ACCA0171Cull:
         return false;
+    case 0x06AB7EA4B32096BBull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Int32;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
     case 0x5005CC3042360722ull:
         switch (ResultIndex)
         {
@@ -3036,6 +3049,33 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x06AB7EA4B32096BBull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        if (Target == nullptr || !Target->GetClass()->ImplementsInterface(UUnifiedScriptInteropContract::StaticClass()))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' does not implement generated thunk interface '%s'."), *GetNameSafe(Target), TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract")));
+        }
+        OutOutputValues.Reset();
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue' received an incompatible value."));
+        }
+        int32 ReturnValue = IUnifiedScriptInteropContract::Execute_TransformManagedValue(Target, Argument0);
+        OutReturnValue = FUnifiedScriptValue::FromInt32(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x5005CC3042360722ull:
     {
         if (!RequireArgumentCount(Arguments, 2, OutResult))
@@ -4610,6 +4650,38 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
                 TEXT("Generated fixed thunk result descriptor is incompatible."));
         }
         TypedTarget->StopScript();
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x06AB7EA4B32096BBull:
+    {
+        if (Arguments.Num() != 1)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 1 arguments."));
+        }
+        if (Target == nullptr || !Target->GetClass()->ImplementsInterface(UUnifiedScriptInteropContract::StaticClass()))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' does not implement generated thunk interface '%s'."), *GetNameSafe(Target), TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract")));
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        if (Arguments[0].Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        int32 Argument0 = static_cast<int32>(Arguments[0].Payload0);
+        int32 ReturnValue = IUnifiedScriptInteropContract::Execute_TransformManagedValue(Target, Argument0);
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        (*OutReturnValue).Payload0 = static_cast<uint64>(ReturnValue);
         Succeed(OutResult);
         return true;
     }

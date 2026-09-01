@@ -82,6 +82,12 @@
       ]
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+      "members": [
+        "TransformManagedValue"
+      ]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "members": [
         "AddInt64",

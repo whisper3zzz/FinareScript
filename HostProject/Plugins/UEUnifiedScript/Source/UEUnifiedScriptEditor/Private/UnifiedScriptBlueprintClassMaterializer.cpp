@@ -95,6 +95,8 @@ struct FFunctionDeclaration
     bool bHasReturnValue = false;
     bool bIsStatic = false;
     bool bBlueprintEvent = false;
+    bool bInterfaceFunction = false;
+    TArray<FString> InterfacePaths;
     EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
         EUnifiedScriptBlueprintEventSuperMode::Explicit;
     TArray<FFunctionParameterDeclaration> Parameters;
@@ -106,6 +108,38 @@ struct FLifecycleDeclaration
         EUnifiedScriptManagedLifecycleHookKind::BeginPlay;
     FName ManagedName;
     FGuid Id;
+};
+
+struct FInputActionDeclaration
+{
+    FName ManagedName;
+    FGuid BindingId;
+    FString ActionPath;
+    EUnifiedScriptManagedInputTriggerEvent TriggerEvent =
+        EUnifiedScriptManagedInputTriggerEvent::Triggered;
+    EUnifiedScriptManagedInputValueType ValueType =
+        EUnifiedScriptManagedInputValueType::Boolean;
+    bool bConsumeInput = false;
+};
+
+struct FDelegateBindingDeclaration
+{
+    FName ManagedName;
+    FGuid BindingId;
+    FString SourceTypePath;
+    FString EventPath;
+    EUnifiedScriptManagedDelegateSource Source =
+        EUnifiedScriptManagedDelegateSource::Target;
+    FString SourceMember;
+};
+
+struct FInterfaceFunctionDeclaration
+{
+    FString InterfacePath;
+    FName FunctionName;
+    FName ManagedName;
+    FGuid BindingId;
+    FGuid FunctionId;
 };
 
 struct FPlannedFunction
@@ -123,7 +157,13 @@ struct FSyncPlan
     TArray<FGuid> StaleGeneratedFunctionIds;
     TMap<EUnifiedScriptManagedLifecycleHookKind, FUnifiedScriptManagedLifecycleBinding>
         LifecycleBindings;
+    TArray<FUnifiedScriptManagedInputActionBinding> InputBindings;
+    TArray<FUnifiedScriptManagedDelegateBinding> DelegateBindings;
+    TArray<FUnifiedScriptManagedInterfaceFunctionBinding> InterfaceBindings;
+    TArray<FString> InterfacePathsToRemove;
+    TArray<FString> InterfacePathsToAdd;
     bool bLifecycleBindingsChanged = false;
+    bool bGameplayBindingsChanged = false;
 };
 
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
@@ -327,7 +367,7 @@ FName MakeManagedFunctionInternalName(const FGuid& Id)
         *Id.ToString(EGuidFormats::Digits).ToLower()));
 }
 
-bool IsManagedFunctionGraph(const UEdGraph& Graph)
+bool HasManagedFunctionGraphMetadata(const UEdGraph& Graph)
 {
     const FKismetUserDeclaredFunctionMetadata* Metadata =
         FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
@@ -335,23 +375,120 @@ bool IsManagedFunctionGraph(const UEdGraph& Graph)
         Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true");
 }
 
-bool TryReadManagedFunctionGraphId(const UEdGraph& Graph, FGuid& OutId)
+const FUnifiedScriptManagedFunctionBinding* FindPersistedManagedFunctionBinding(
+    const UBlueprint& Blueprint,
+    const UEdGraph& Graph)
+{
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+    const FUnifiedScriptManagedFunctionBinding* Binding = GeneratedClass != nullptr
+        ? GeneratedClass->ManagedFunctionBindings.Find(Graph.GetFName())
+        : nullptr;
+    if (Binding == nullptr || !Binding->FunctionId.IsValid())
+    {
+        return nullptr;
+    }
+
+    // Interface implementation graphs are reconstructed by Kismet during
+    // package load, and UE does not retain their entry-node metadata. The
+    // product GeneratedClass binding is the durable ownership record for that
+    // special graph kind. Ordinary function graphs additionally retain their
+    // semantic GraphGuid so a stale binding cannot claim a user graph by name.
+    return Binding->bInterfaceFunction || Graph.GraphGuid == Binding->FunctionId
+        ? Binding
+        : nullptr;
+}
+
+bool IsManagedFunctionGraph(
+    const UBlueprint& Blueprint,
+    const UEdGraph& Graph)
+{
+    return HasManagedFunctionGraphMetadata(Graph) ||
+        FindPersistedManagedFunctionBinding(Blueprint, Graph) != nullptr;
+}
+
+bool TryReadManagedFunctionGraphId(
+    const UBlueprint& Blueprint,
+    const UEdGraph& Graph,
+    FGuid& OutId)
 {
     const FKismetUserDeclaredFunctionMetadata* Metadata =
         FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
-    return Metadata != nullptr && Metadata->HasMetaData(FunctionIdKey) &&
-        ParseSemanticId(Metadata->GetMetaData(FunctionIdKey), OutId);
+    if (HasManagedFunctionGraphMetadata(Graph))
+    {
+        return Metadata != nullptr && Metadata->HasMetaData(FunctionIdKey) &&
+            ParseSemanticId(Metadata->GetMetaData(FunctionIdKey), OutId);
+    }
+    if (const FUnifiedScriptManagedFunctionBinding* Binding =
+            FindPersistedManagedFunctionBinding(Blueprint, Graph))
+    {
+        OutId = Binding->FunctionId;
+        return true;
+    }
+    return false;
 }
 
 UEdGraph* FindManagedFunctionGraphById(UBlueprint& Blueprint, const FGuid& Id)
 {
+    TArray<UEdGraph*> Graphs;
+    Graphs.Reserve(Blueprint.FunctionGraphs.Num() + Blueprint.ImplementedInterfaces.Num() * 4);
     for (UEdGraph* Graph : Blueprint.FunctionGraphs)
     {
+        Graphs.AddUnique(Graph);
+    }
+    for (const FBPInterfaceDescription& Interface : Blueprint.ImplementedInterfaces)
+    {
+        for (UEdGraph* Graph : Interface.Graphs)
+        {
+            Graphs.AddUnique(Graph);
+        }
+    }
+    for (UEdGraph* Graph : Graphs)
+    {
         FGuid CandidateId;
-        if (Graph != nullptr && IsManagedFunctionGraph(*Graph) &&
-            TryReadManagedFunctionGraphId(*Graph, CandidateId) && CandidateId == Id)
+        if (Graph != nullptr && IsManagedFunctionGraph(Blueprint, *Graph) &&
+            TryReadManagedFunctionGraphId(Blueprint, *Graph, CandidateId) &&
+            CandidateId == Id)
         {
             return Graph;
+        }
+    }
+    return nullptr;
+}
+
+bool IsInterfaceGraph(const UBlueprint& Blueprint, const UEdGraph* Candidate)
+{
+    if (Candidate == nullptr)
+    {
+        return false;
+    }
+    for (const FBPInterfaceDescription& Interface : Blueprint.ImplementedInterfaces)
+    {
+        if (Interface.Graphs.Contains(Candidate))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+UEdGraph* FindFunctionGraphByName(const UBlueprint& Blueprint, FName Name)
+{
+    for (UEdGraph* Graph : Blueprint.FunctionGraphs)
+    {
+        if (Graph != nullptr && Graph->GetFName() == Name)
+        {
+            return Graph;
+        }
+    }
+    for (const FBPInterfaceDescription& Interface : Blueprint.ImplementedInterfaces)
+    {
+        for (UEdGraph* Graph : Interface.Graphs)
+        {
+            if (Graph != nullptr && Graph->GetFName() == Name)
+            {
+                return Graph;
+            }
         }
     }
     return nullptr;
@@ -427,7 +564,57 @@ bool FunctionGraphSignatureMatches(
     return true;
 }
 
+bool RuntimeValueTypeBindingMatches(
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    const FFunctionValueTypeDeclaration& Declaration)
+{
+    if (Binding.UnrealTypePath != Declaration.UnrealTypePath ||
+        Binding.StructFields.Num() != Declaration.StructFieldPaths.Num())
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Binding.StructFields.Num(); ++Index)
+    {
+        if (Binding.StructFields[Index].Segments !=
+            Declaration.StructFieldPaths[Index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool RuntimeFunctionBindingMatches(
+    const FUnifiedScriptManagedFunctionBinding& Binding,
+    const FFunctionDeclaration& Declaration)
+{
+    if (Binding.ManagedName != Declaration.ManagedName.ToString() ||
+        Binding.FunctionId != Declaration.Id || Binding.AbiVersion != 2 ||
+        Binding.bStatic != Declaration.bIsStatic ||
+        Binding.bBlueprintEvent != Declaration.bBlueprintEvent ||
+        Binding.bInterfaceFunction != Declaration.bInterfaceFunction ||
+        Binding.BlueprintEventSuperMode != Declaration.BlueprintEventSuperMode ||
+        Binding.ParameterTypes.Num() != Declaration.Parameters.Num() ||
+        !RuntimeValueTypeBindingMatches(
+            Binding.ReturnType,
+            Declaration.ReturnValueType))
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Binding.ParameterTypes.Num(); ++Index)
+    {
+        if (!RuntimeValueTypeBindingMatches(
+                Binding.ParameterTypes[Index],
+                Declaration.Parameters[Index].ValueType))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool FunctionGraphMatches(
+    const UBlueprint& Blueprint,
     const UEdGraph& Graph,
     const FFunctionDeclaration& Declaration)
 {
@@ -437,7 +624,8 @@ bool FunctionGraphMatches(
     }
     const FKismetUserDeclaredFunctionMetadata* Metadata =
         FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
-    return Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
+    const bool bMetadataMatches =
+        Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
         Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true") &&
         Metadata->HasMetaData(FunctionIdKey) &&
         Metadata->GetMetaData(FunctionIdKey) == Declaration.SemanticId &&
@@ -457,6 +645,110 @@ bool FunctionGraphMatches(
          (Metadata->HasMetaData(TEXT("WorldContext")) &&
           Metadata->GetMetaData(TEXT("WorldContext")) ==
               WorldContextObjectName.ToString()));
+    if (bMetadataMatches)
+    {
+        return true;
+    }
+
+    // UE reconstructs interface graphs from the native interface on load and
+    // drops their user-declared function metadata. The serialized generated
+    // class binding carries the same semantic identity and complete ABI shape,
+    // so it is the no-change authority for this graph kind.
+    const FUnifiedScriptManagedFunctionBinding* PersistedBinding =
+        FindPersistedManagedFunctionBinding(Blueprint, Graph);
+    return Declaration.bInterfaceFunction && PersistedBinding != nullptr &&
+        RuntimeFunctionBindingMatches(*PersistedBinding, Declaration);
+}
+
+bool ValidateInterfaceFunctionSignature(
+    const FFunctionDeclaration& Declaration,
+    FString& OutError)
+{
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    for (const FString& InterfacePath : Declaration.InterfacePaths)
+    {
+        UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePath);
+        UFunction* Function = InterfaceClass != nullptr
+            ? InterfaceClass->FindFunctionByName(
+                Declaration.InternalName,
+                EIncludeSuperFlag::IncludeSuper)
+            : nullptr;
+        if (InterfaceClass == nullptr ||
+            !InterfaceClass->HasAnyClassFlags(CLASS_Interface) ||
+            Function == nullptr ||
+            !Function->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed interface function '%s' cannot resolve Blueprint event '%s:%s'."),
+                *Declaration.ManagedName.ToString(),
+                *InterfacePath,
+                *Declaration.InternalName.ToString());
+            return false;
+        }
+
+        TArray<const FProperty*> NativeParameters;
+        for (TFieldIterator<FProperty> It(Function, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            const FProperty* Property = *It;
+            if (Property->HasAnyPropertyFlags(CPF_Parm) &&
+                !Property->HasAnyPropertyFlags(CPF_ReturnParm))
+            {
+                NativeParameters.Add(Property);
+            }
+        }
+        if (NativeParameters.Num() != Declaration.Parameters.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Managed interface function '%s' has %d parameters; native '%s:%s' has %d."),
+                *Declaration.ManagedName.ToString(),
+                Declaration.Parameters.Num(),
+                *InterfacePath,
+                *Declaration.InternalName.ToString(),
+                NativeParameters.Num());
+            return false;
+        }
+        for (int32 Index = 0; Index < NativeParameters.Num(); ++Index)
+        {
+            FEdGraphPinType NativePinType;
+            if (!Schema->ConvertPropertyToPinType(NativeParameters[Index], NativePinType) ||
+                NativePinType != Declaration.Parameters[Index].PinType)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed interface function '%s' parameter %d does not match native '%s:%s'."),
+                    *Declaration.ManagedName.ToString(),
+                    Index,
+                    *InterfacePath,
+                    *Declaration.InternalName.ToString());
+                return false;
+            }
+        }
+
+        const FProperty* NativeReturn = Function->GetReturnProperty();
+        if (Declaration.bHasReturnValue != (NativeReturn != nullptr))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed interface function '%s' return shape does not match native '%s:%s'."),
+                *Declaration.ManagedName.ToString(),
+                *InterfacePath,
+                *Declaration.InternalName.ToString());
+            return false;
+        }
+        if (NativeReturn != nullptr)
+        {
+            FEdGraphPinType NativeReturnType;
+            if (!Schema->ConvertPropertyToPinType(NativeReturn, NativeReturnType) ||
+                NativeReturnType != Declaration.ReturnPinType)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed interface function '%s' return type does not match native '%s:%s'."),
+                    *Declaration.ManagedName.ToString(),
+                    *InterfacePath,
+                    *Declaration.InternalName.ToString());
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool ReadCanonicalDefault(
@@ -697,12 +989,336 @@ FUnifiedScriptManagedValueTypeBinding MakeRuntimeValueTypeBinding(
     return Result;
 }
 
+bool ParseGameplayBindings(
+    EUnifiedScriptClassKind ClassKind,
+    const TArray<TSharedPtr<FJsonValue>>& Functions,
+    TArray<FInputActionDeclaration>& OutInputBindings,
+    TArray<FDelegateBindingDeclaration>& OutDelegateBindings,
+    TArray<FInterfaceFunctionDeclaration>& OutInterfaceBindings,
+    TMap<FGuid, FName>& OutInterfaceFunctionNames,
+    FString& OutError)
+{
+    OutInputBindings.Reset();
+    OutDelegateBindings.Reset();
+    OutInterfaceBindings.Reset();
+    OutInterfaceFunctionNames.Reset();
+    const bool bGameplayClass = ClassKind == EUnifiedScriptClassKind::Actor ||
+        ClassKind == EUnifiedScriptClassKind::ActorComponent;
+    TSet<FGuid> SeenBindingIds;
+    TSet<FString> SeenRoutes;
+
+    for (const TSharedPtr<FJsonValue>& FunctionValue : Functions)
+    {
+        const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+            ? FunctionValue->AsObject()
+            : nullptr;
+        FString FunctionIdText;
+        FString ManagedNameText;
+        bool bIsStatic = false;
+        bool bIsPublic = false;
+        bool bIsEvent = false;
+        if (!ReadRequiredString(Function, TEXT("id"), FunctionIdText, OutError) ||
+            !ReadRequiredString(Function, TEXT("name"), ManagedNameText, OutError) ||
+            !Function->TryGetBoolField(TEXT("isStatic"), bIsStatic) ||
+            !Function->TryGetBoolField(TEXT("isPublic"), bIsPublic) ||
+            !Function->TryGetBoolField(TEXT("isEvent"), bIsEvent))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Gameplay bindings require complete function identity and flags.");
+            }
+            return false;
+        }
+        FGuid FunctionId;
+        const FName ManagedName(*ManagedNameText);
+        if (!ParseSemanticId(FunctionIdText, FunctionId) || ManagedName.IsNone())
+        {
+            OutError = FString::Printf(
+                TEXT("Gameplay binding function '%s' has an invalid stable identity."),
+                *ManagedNameText);
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* InputActions = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* DelegateBindings = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* InterfaceFunctions = nullptr;
+        if ((Function->HasField(TEXT("inputActions")) &&
+             (!Function->TryGetArrayField(TEXT("inputActions"), InputActions) ||
+              InputActions == nullptr)) ||
+            (Function->HasField(TEXT("delegateBindings")) &&
+             (!Function->TryGetArrayField(TEXT("delegateBindings"), DelegateBindings) ||
+              DelegateBindings == nullptr)) ||
+            (Function->HasField(TEXT("interfaceFunctions")) &&
+             (!Function->TryGetArrayField(TEXT("interfaceFunctions"), InterfaceFunctions) ||
+              InterfaceFunctions == nullptr)))
+        {
+            OutError = FString::Printf(
+                TEXT("Gameplay binding arrays for '%s' are invalid."),
+                *ManagedNameText);
+            return false;
+        }
+        const bool bHasBindings =
+            (InputActions != nullptr && !InputActions->IsEmpty()) ||
+            (DelegateBindings != nullptr && !DelegateBindings->IsEmpty()) ||
+            (InterfaceFunctions != nullptr && !InterfaceFunctions->IsEmpty());
+        if (bHasBindings && !bGameplayClass)
+        {
+            OutError = FString::Printf(
+                TEXT("Only Actor and ActorComponent Script Classes can bind gameplay method '%s'."),
+                *ManagedNameText);
+            return false;
+        }
+
+        if (InputActions != nullptr)
+        {
+            if (!InputActions->IsEmpty() && (!bIsPublic || bIsStatic || bIsEvent))
+            {
+                OutError = FString::Printf(
+                    TEXT("Enhanced Input handler '%s' must be a public instance non-delegate method."),
+                    *ManagedNameText);
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& BindingValue : *InputActions)
+            {
+                const TSharedPtr<FJsonObject> Binding = BindingValue.IsValid()
+                    ? BindingValue->AsObject()
+                    : nullptr;
+                FString BindingIdText;
+                FString ActionPath;
+                FString TriggerEvent;
+                FString ValueType;
+                bool bConsumeInput = false;
+                if (!ReadRequiredString(Binding, TEXT("id"), BindingIdText, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("actionPath"), ActionPath, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("triggerEvent"), TriggerEvent, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("valueType"), ValueType, OutError) ||
+                    !Binding->TryGetBoolField(TEXT("consumeInput"), bConsumeInput))
+                {
+                    return false;
+                }
+                FInputActionDeclaration Declaration;
+                Declaration.ManagedName = ManagedName;
+                Declaration.ActionPath = ActionPath;
+                Declaration.bConsumeInput = bConsumeInput;
+                if (TriggerEvent == TEXT("started"))
+                {
+                    Declaration.TriggerEvent = EUnifiedScriptManagedInputTriggerEvent::Started;
+                }
+                else if (TriggerEvent == TEXT("ongoing"))
+                {
+                    Declaration.TriggerEvent = EUnifiedScriptManagedInputTriggerEvent::Ongoing;
+                }
+                else if (TriggerEvent == TEXT("triggered"))
+                {
+                    Declaration.TriggerEvent = EUnifiedScriptManagedInputTriggerEvent::Triggered;
+                }
+                else if (TriggerEvent == TEXT("completed"))
+                {
+                    Declaration.TriggerEvent = EUnifiedScriptManagedInputTriggerEvent::Completed;
+                }
+                else if (TriggerEvent == TEXT("canceled"))
+                {
+                    Declaration.TriggerEvent = EUnifiedScriptManagedInputTriggerEvent::Canceled;
+                }
+                else
+                {
+                    OutError = FString::Printf(
+                        TEXT("Enhanced Input handler '%s' has unsupported trigger '%s'."),
+                        *ManagedNameText,
+                        *TriggerEvent);
+                    return false;
+                }
+                if (ValueType == TEXT("boolean"))
+                {
+                    Declaration.ValueType = EUnifiedScriptManagedInputValueType::Boolean;
+                }
+                else if (ValueType == TEXT("axis1D"))
+                {
+                    Declaration.ValueType = EUnifiedScriptManagedInputValueType::Axis1D;
+                }
+                else if (ValueType == TEXT("axis2D"))
+                {
+                    Declaration.ValueType = EUnifiedScriptManagedInputValueType::Axis2D;
+                }
+                else if (ValueType == TEXT("axis3D"))
+                {
+                    Declaration.ValueType = EUnifiedScriptManagedInputValueType::Axis3D;
+                }
+                else
+                {
+                    OutError = FString::Printf(
+                        TEXT("Enhanced Input handler '%s' has unsupported value type '%s'."),
+                        *ManagedNameText,
+                        *ValueType);
+                    return false;
+                }
+                const FString Route = FString::Printf(
+                    TEXT("input|%s|%s|%s"),
+                    *ManagedNameText,
+                    *ActionPath,
+                    *TriggerEvent);
+                if (!ParseSemanticId(BindingIdText, Declaration.BindingId) ||
+                    ActionPath.IsEmpty() || SeenBindingIds.Contains(Declaration.BindingId) ||
+                    SeenRoutes.Contains(Route))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Enhanced Input handler '%s' has an invalid or duplicate binding."),
+                        *ManagedNameText);
+                    return false;
+                }
+                SeenBindingIds.Add(Declaration.BindingId);
+                SeenRoutes.Add(Route);
+                OutInputBindings.Add(MoveTemp(Declaration));
+            }
+        }
+
+        if (DelegateBindings != nullptr)
+        {
+            if (!DelegateBindings->IsEmpty() && (bIsStatic || !bIsEvent))
+            {
+                OutError = FString::Printf(
+                    TEXT("Delegate handler '%s' must be an instance native-event method."),
+                    *ManagedNameText);
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& BindingValue : *DelegateBindings)
+            {
+                const TSharedPtr<FJsonObject> Binding = BindingValue.IsValid()
+                    ? BindingValue->AsObject()
+                    : nullptr;
+                FString BindingIdText;
+                FString SourceTypePath;
+                FString EventPath;
+                FString Source;
+                if (!ReadRequiredString(Binding, TEXT("id"), BindingIdText, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("sourceTypePath"), SourceTypePath, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("eventPath"), EventPath, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("source"), Source, OutError))
+                {
+                    return false;
+                }
+                FDelegateBindingDeclaration Declaration;
+                Declaration.ManagedName = ManagedName;
+                Declaration.SourceTypePath = SourceTypePath;
+                Declaration.EventPath = EventPath;
+                if (Source == TEXT("target"))
+                {
+                    Declaration.Source = EUnifiedScriptManagedDelegateSource::Target;
+                }
+                else if (Source == TEXT("host"))
+                {
+                    Declaration.Source = EUnifiedScriptManagedDelegateSource::Host;
+                }
+                else
+                {
+                    OutError = FString::Printf(
+                        TEXT("Delegate handler '%s' has unsupported source '%s'."),
+                        *ManagedNameText,
+                        *Source);
+                    return false;
+                }
+                const TSharedPtr<FJsonValue> SourceMember =
+                    Binding->TryGetField(TEXT("sourceMember"));
+                if (SourceMember.IsValid() && !SourceMember->IsNull() &&
+                    !SourceMember->TryGetString(Declaration.SourceMember))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Delegate handler '%s' sourceMember must be a string or null."),
+                        *ManagedNameText);
+                    return false;
+                }
+                const FString Route = FString::Printf(
+                    TEXT("delegate|%s|%s|%s|%s"),
+                    *ManagedNameText,
+                    *SourceTypePath,
+                    *EventPath,
+                    *Source);
+                if (!ParseSemanticId(BindingIdText, Declaration.BindingId) ||
+                    SourceTypePath.IsEmpty() || EventPath.IsEmpty() ||
+                    SeenBindingIds.Contains(Declaration.BindingId) ||
+                    SeenRoutes.Contains(Route))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Delegate handler '%s' has an invalid or duplicate binding."),
+                        *ManagedNameText);
+                    return false;
+                }
+                SeenBindingIds.Add(Declaration.BindingId);
+                SeenRoutes.Add(Route);
+                OutDelegateBindings.Add(MoveTemp(Declaration));
+            }
+        }
+
+        if (InterfaceFunctions != nullptr)
+        {
+            if (!InterfaceFunctions->IsEmpty() && (!bIsPublic || bIsStatic || bIsEvent))
+            {
+                OutError = FString::Printf(
+                    TEXT("Interface implementation '%s' must be a public instance non-delegate method."),
+                    *ManagedNameText);
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& BindingValue : *InterfaceFunctions)
+            {
+                const TSharedPtr<FJsonObject> Binding = BindingValue.IsValid()
+                    ? BindingValue->AsObject()
+                    : nullptr;
+                FString BindingIdText;
+                FString InterfacePath;
+                FString FunctionNameText;
+                if (!ReadRequiredString(Binding, TEXT("id"), BindingIdText, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("interfacePath"), InterfacePath, OutError) ||
+                    !ReadRequiredString(Binding, TEXT("functionName"), FunctionNameText, OutError))
+                {
+                    return false;
+                }
+                FInterfaceFunctionDeclaration Declaration;
+                Declaration.InterfacePath = InterfacePath;
+                Declaration.FunctionName = FName(*FunctionNameText);
+                Declaration.ManagedName = ManagedName;
+                Declaration.FunctionId = FunctionId;
+                const FString Route = FString::Printf(
+                    TEXT("interface|%s|%s"),
+                    *InterfacePath,
+                    *FunctionNameText);
+                if (!ParseSemanticId(BindingIdText, Declaration.BindingId) ||
+                    !InterfacePath.StartsWith(TEXT("/Script/")) ||
+                    Declaration.FunctionName.IsNone() ||
+                    SeenBindingIds.Contains(Declaration.BindingId) ||
+                    SeenRoutes.Contains(Route))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Interface implementation '%s' has an invalid or duplicate binding."),
+                        *ManagedNameText);
+                    return false;
+                }
+                if (const FName* ExistingName = OutInterfaceFunctionNames.Find(FunctionId);
+                    ExistingName != nullptr && *ExistingName != Declaration.FunctionName)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Managed method '%s' cannot implement differently named native interface functions."),
+                        *ManagedNameText);
+                    return false;
+                }
+                OutInterfaceFunctionNames.Add(FunctionId, Declaration.FunctionName);
+                SeenBindingIds.Add(Declaration.BindingId);
+                SeenRoutes.Add(Route);
+                OutInterfaceBindings.Add(MoveTemp(Declaration));
+            }
+        }
+    }
+    return true;
+}
+
 bool ParseDeclaration(
     UUnifiedScriptAsset& ScriptAsset,
     const FString& DeclarationJson,
     TArray<FStateDeclaration>& OutStates,
     TArray<FFunctionDeclaration>& OutFunctions,
     TArray<FLifecycleDeclaration>& OutLifecycleHooks,
+    TArray<FInputActionDeclaration>& OutInputBindings,
+    TArray<FDelegateBindingDeclaration>& OutDelegateBindings,
+    TArray<FInterfaceFunctionDeclaration>& OutInterfaceBindings,
     FString& OutError)
 {
     TSharedPtr<FJsonObject> Root;
@@ -788,6 +1404,19 @@ bool ParseDeclaration(
         !States->IsEmpty())
     {
         OutError = TEXT("BlueprintFunctionLibrary Script Classes cannot declare instance state.");
+        return false;
+    }
+
+    TMap<FGuid, FName> InterfaceFunctionNames;
+    if (!ParseGameplayBindings(
+            ScriptAsset.ScriptClassKind,
+            *Functions,
+            OutInputBindings,
+            OutDelegateBindings,
+            OutInterfaceBindings,
+            InterfaceFunctionNames,
+            OutError))
+    {
         return false;
     }
 
@@ -1088,7 +1717,23 @@ bool ParseDeclaration(
                 *SemanticId);
             return false;
         }
-        Declaration.InternalName = MakeManagedFunctionInternalName(Declaration.Id);
+        if (const FName* InterfaceFunctionName =
+                InterfaceFunctionNames.Find(Declaration.Id))
+        {
+            Declaration.bInterfaceFunction = true;
+            Declaration.InternalName = *InterfaceFunctionName;
+            for (const FInterfaceFunctionDeclaration& Interface : OutInterfaceBindings)
+            {
+                if (Interface.FunctionId == Declaration.Id)
+                {
+                    Declaration.InterfacePaths.AddUnique(Interface.InterfacePath);
+                }
+            }
+        }
+        else
+        {
+            Declaration.InternalName = MakeManagedFunctionInternalName(Declaration.Id);
+        }
         if (!ParseFunctionValueType(
                 Function,
                 TEXT("returnUnrealType"),
@@ -1440,14 +2085,29 @@ bool BuildFunctionPlan(
     }
 
     TMap<FGuid, UEdGraph*> ExistingById;
+    TArray<UEdGraph*> ExistingGraphs;
+    ExistingGraphs.Reserve(
+        Blueprint.FunctionGraphs.Num() + Blueprint.ImplementedInterfaces.Num() * 4);
     for (UEdGraph* Graph : Blueprint.FunctionGraphs)
     {
-        if (Graph == nullptr || !IsManagedFunctionGraph(*Graph))
+        ExistingGraphs.AddUnique(Graph);
+    }
+    for (const FBPInterfaceDescription& Interface : Blueprint.ImplementedInterfaces)
+    {
+        for (UEdGraph* Graph : Interface.Graphs)
+        {
+            ExistingGraphs.AddUnique(Graph);
+        }
+    }
+    for (UEdGraph* Graph : ExistingGraphs)
+    {
+        if (Graph == nullptr || !IsManagedFunctionGraph(Blueprint, *Graph))
         {
             continue;
         }
         FGuid Id;
-        if (!TryReadManagedFunctionGraphId(*Graph, Id) || ExistingById.Contains(Id))
+        if (!TryReadManagedFunctionGraphId(Blueprint, *Graph, Id) ||
+            ExistingById.Contains(Id))
         {
             OutError = FString::Printf(
                 TEXT("Generated Blueprint function graph '%s' has duplicate or invalid UnifiedScript.FunctionId metadata."),
@@ -1455,7 +2115,7 @@ bool BuildFunctionPlan(
             return false;
         }
         ExistingById.Add(Id, Graph);
-        if (!DesiredIds.Contains(Id))
+        if (!DesiredIds.Contains(Id) && !IsInterfaceGraph(Blueprint, Graph))
         {
             OutPlan.StaleGeneratedFunctionIds.Add(Id);
         }
@@ -1463,18 +2123,18 @@ bool BuildFunctionPlan(
 
     for (const FFunctionDeclaration& Declaration : Declarations)
     {
+        if (Declaration.bInterfaceFunction &&
+            !ValidateInterfaceFunctionSignature(Declaration, OutError))
+        {
+            return false;
+        }
         UEdGraph* const* Existing = ExistingById.Find(Declaration.Id);
-        const TObjectPtr<UEdGraph>* NameOwnerEntry = Blueprint.FunctionGraphs.FindByPredicate(
-            [&Declaration](const UEdGraph* Graph)
-            {
-                return Graph != nullptr && Graph->GetFName() == Declaration.InternalName;
-            });
-        UEdGraph* NameOwner = NameOwnerEntry != nullptr
-            ? NameOwnerEntry->Get()
-            : nullptr;
+        UEdGraph* NameOwner = FindFunctionGraphByName(
+            Blueprint,
+            Declaration.InternalName);
         if (NameOwner != nullptr &&
             (Existing == nullptr || NameOwner != *Existing) &&
-            !IsManagedFunctionGraph(*NameOwner))
+            !IsManagedFunctionGraph(Blueprint, *NameOwner))
         {
             OutError = FString::Printf(
                 TEXT("Managed function '%s' collides with user-owned Blueprint graph '%s'."),
@@ -1482,7 +2142,7 @@ bool BuildFunctionPlan(
                 *NameOwner->GetName());
             return false;
         }
-        if (Blueprint.ParentClass != nullptr &&
+        if (!Declaration.bInterfaceFunction && Blueprint.ParentClass != nullptr &&
             Blueprint.ParentClass->FindFunctionByName(
                 Declaration.InternalName,
                 EIncludeSuperFlag::IncludeSuper) != nullptr)
@@ -1498,7 +2158,7 @@ bool BuildFunctionPlan(
         Planned.Declaration = Declaration;
         Planned.bExisting = Existing != nullptr;
         Planned.bNeedsUpdate = Existing == nullptr ||
-            !FunctionGraphMatches(**Existing, Declaration);
+            !FunctionGraphMatches(Blueprint, **Existing, Declaration);
         if (!Planned.bExisting)
         {
             ++OutResult.AddedFunctionCount;
@@ -1568,6 +2228,257 @@ bool BuildLifecyclePlan(
     OutResult.DeclaredLifecycleHookCount = Declarations.Num();
     OutResult.UpdatedLifecycleHookCount = bMatches ? 0 : Declarations.Num();
     OutResult.bChanged |= !bMatches;
+    return true;
+}
+
+bool InputBindingMatches(
+    const FUnifiedScriptManagedInputActionBinding& Left,
+    const FUnifiedScriptManagedInputActionBinding& Right)
+{
+    return Left.ManagedName == Right.ManagedName &&
+        Left.BindingId == Right.BindingId &&
+        Left.ActionPath == Right.ActionPath &&
+        Left.TriggerEvent == Right.TriggerEvent &&
+        Left.ValueType == Right.ValueType &&
+        Left.bConsumeInput == Right.bConsumeInput;
+}
+
+bool DelegateBindingMatches(
+    const FUnifiedScriptManagedDelegateBinding& Left,
+    const FUnifiedScriptManagedDelegateBinding& Right)
+{
+    return Left.ManagedName == Right.ManagedName &&
+        Left.BindingId == Right.BindingId &&
+        Left.SourceTypePath == Right.SourceTypePath &&
+        Left.EventPath == Right.EventPath &&
+        Left.Source == Right.Source &&
+        Left.SourceMember == Right.SourceMember;
+}
+
+bool InterfaceBindingMatches(
+    const FUnifiedScriptManagedInterfaceFunctionBinding& Left,
+    const FUnifiedScriptManagedInterfaceFunctionBinding& Right)
+{
+    return Left.InterfacePath == Right.InterfacePath &&
+        Left.FunctionName == Right.FunctionName &&
+        Left.ManagedName == Right.ManagedName &&
+        Left.BindingId == Right.BindingId &&
+        Left.FunctionId == Right.FunctionId;
+}
+
+template <typename BindingType, typename PredicateType>
+bool BindingArraysMatch(
+    const TArray<BindingType>& Left,
+    const TArray<BindingType>& Right,
+    PredicateType&& Predicate)
+{
+    if (Left.Num() != Right.Num())
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Left.Num(); ++Index)
+    {
+        if (!Predicate(Left[Index], Right[Index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+TArray<FUnifiedScriptManagedInterfaceFunctionBinding> BindingsForInterface(
+    const TArray<FUnifiedScriptManagedInterfaceFunctionBinding>& Bindings,
+    const FString& InterfacePath)
+{
+    TArray<FUnifiedScriptManagedInterfaceFunctionBinding> Result;
+    for (const FUnifiedScriptManagedInterfaceFunctionBinding& Binding : Bindings)
+    {
+        if (Binding.InterfacePath == InterfacePath)
+        {
+            Result.Add(Binding);
+        }
+    }
+    return Result;
+}
+
+bool BuildGameplayBindingPlan(
+    const UBlueprint& Blueprint,
+    TConstArrayView<FInputActionDeclaration> InputDeclarations,
+    TConstArrayView<FDelegateBindingDeclaration> DelegateDeclarations,
+    TConstArrayView<FInterfaceFunctionDeclaration> InterfaceDeclarations,
+    FSyncPlan& OutPlan,
+    FUnifiedScriptBlueprintClassSyncResult& OutResult,
+    FString& OutError)
+{
+    OutPlan.InputBindings.Reset();
+    OutPlan.InputBindings.Reserve(InputDeclarations.Num());
+    for (const FInputActionDeclaration& Declaration : InputDeclarations)
+    {
+        FUnifiedScriptManagedInputActionBinding& Binding =
+            OutPlan.InputBindings.AddDefaulted_GetRef();
+        Binding.ManagedName = Declaration.ManagedName;
+        Binding.BindingId = Declaration.BindingId;
+        Binding.ActionPath = Declaration.ActionPath;
+        Binding.TriggerEvent = Declaration.TriggerEvent;
+        Binding.ValueType = Declaration.ValueType;
+        Binding.bConsumeInput = Declaration.bConsumeInput;
+    }
+
+    OutPlan.DelegateBindings.Reset();
+    OutPlan.DelegateBindings.Reserve(DelegateDeclarations.Num());
+    for (const FDelegateBindingDeclaration& Declaration : DelegateDeclarations)
+    {
+        FUnifiedScriptManagedDelegateBinding& Binding =
+            OutPlan.DelegateBindings.AddDefaulted_GetRef();
+        Binding.ManagedName = Declaration.ManagedName;
+        Binding.BindingId = Declaration.BindingId;
+        Binding.SourceTypePath = Declaration.SourceTypePath;
+        Binding.EventPath = Declaration.EventPath;
+        Binding.Source = Declaration.Source;
+        Binding.SourceMember = Declaration.SourceMember;
+    }
+
+    OutPlan.InterfaceBindings.Reset();
+    OutPlan.InterfaceBindings.Reserve(InterfaceDeclarations.Num());
+    for (const FInterfaceFunctionDeclaration& Declaration : InterfaceDeclarations)
+    {
+        FUnifiedScriptManagedInterfaceFunctionBinding& Binding =
+            OutPlan.InterfaceBindings.AddDefaulted_GetRef();
+        Binding.InterfacePath = Declaration.InterfacePath;
+        Binding.FunctionName = Declaration.FunctionName;
+        Binding.ManagedName = Declaration.ManagedName;
+        Binding.BindingId = Declaration.BindingId;
+        Binding.FunctionId = Declaration.FunctionId;
+    }
+
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+    if ((!InputDeclarations.IsEmpty() || !DelegateDeclarations.IsEmpty() ||
+         !InterfaceDeclarations.IsEmpty()) && GeneratedClass == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Generated Blueprint '%s' cannot persist managed gameplay bindings."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+
+    const TArray<FUnifiedScriptManagedInputActionBinding> EmptyInputs;
+    const TArray<FUnifiedScriptManagedDelegateBinding> EmptyDelegates;
+    const TArray<FUnifiedScriptManagedInterfaceFunctionBinding> EmptyInterfaces;
+    const TArray<FUnifiedScriptManagedInputActionBinding>& PreviousInputs =
+        GeneratedClass != nullptr
+        ? GeneratedClass->ManagedInputActionBindings
+        : EmptyInputs;
+    const TArray<FUnifiedScriptManagedDelegateBinding>& PreviousDelegates =
+        GeneratedClass != nullptr
+        ? GeneratedClass->ManagedDelegateBindings
+        : EmptyDelegates;
+    const TArray<FUnifiedScriptManagedInterfaceFunctionBinding>& PreviousInterfaces =
+        GeneratedClass != nullptr
+        ? GeneratedClass->ManagedInterfaceBindings
+        : EmptyInterfaces;
+
+    const bool bInputsMatch = BindingArraysMatch(
+        PreviousInputs,
+        OutPlan.InputBindings,
+        InputBindingMatches);
+    const bool bDelegatesMatch = BindingArraysMatch(
+        PreviousDelegates,
+        OutPlan.DelegateBindings,
+        DelegateBindingMatches);
+    const bool bInterfacesMatch = BindingArraysMatch(
+        PreviousInterfaces,
+        OutPlan.InterfaceBindings,
+        InterfaceBindingMatches);
+
+    TSet<FString> ExistingInterfacePaths;
+    for (const FBPInterfaceDescription& Existing : Blueprint.ImplementedInterfaces)
+    {
+        if (const UClass* InterfaceClass = Existing.Interface.Get())
+        {
+            ExistingInterfacePaths.Add(InterfaceClass->GetPathName());
+        }
+    }
+    TSet<FString> PreviousInterfacePaths;
+    for (const FUnifiedScriptManagedInterfaceFunctionBinding& Binding : PreviousInterfaces)
+    {
+        PreviousInterfacePaths.Add(Binding.InterfacePath);
+    }
+    TSet<FString> ExpectedInterfacePaths;
+    for (const FUnifiedScriptManagedInterfaceFunctionBinding& Binding :
+         OutPlan.InterfaceBindings)
+    {
+        ExpectedInterfacePaths.Add(Binding.InterfacePath);
+    }
+
+    TSet<FString> AllManagedInterfacePaths = PreviousInterfacePaths;
+    AllManagedInterfacePaths.Append(ExpectedInterfacePaths);
+    for (const FString& InterfacePath : AllManagedInterfacePaths)
+    {
+        const bool bWasGenerated = PreviousInterfacePaths.Contains(InterfacePath);
+        const bool bExpected = ExpectedInterfacePaths.Contains(InterfacePath);
+        const bool bExists = ExistingInterfacePaths.Contains(InterfacePath);
+        if (bExpected && !bWasGenerated && bExists)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed interface '%s' collides with a user-owned Blueprint interface on '%s'."),
+                *InterfacePath,
+                *Blueprint.GetPathName());
+            return false;
+        }
+
+        const TArray<FUnifiedScriptManagedInterfaceFunctionBinding> PreviousForPath =
+            BindingsForInterface(PreviousInterfaces, InterfacePath);
+        const TArray<FUnifiedScriptManagedInterfaceFunctionBinding> ExpectedForPath =
+            BindingsForInterface(OutPlan.InterfaceBindings, InterfacePath);
+        const bool bRouteMatches = BindingArraysMatch(
+            PreviousForPath,
+            ExpectedForPath,
+            InterfaceBindingMatches);
+        const bool bRefreshOwnedInterface =
+            bWasGenerated && bExpected && !bRouteMatches;
+        if (bExists && (bRefreshOwnedInterface || (bWasGenerated && !bExpected)))
+        {
+            OutPlan.InterfacePathsToRemove.Add(InterfacePath);
+        }
+        if (bExpected && (!bExists || bRefreshOwnedInterface))
+        {
+            OutPlan.InterfacePathsToAdd.Add(InterfacePath);
+        }
+    }
+    OutPlan.InterfacePathsToRemove.Sort();
+    OutPlan.InterfacePathsToAdd.Sort();
+
+    OutPlan.bGameplayBindingsChanged = !bInputsMatch || !bDelegatesMatch ||
+        !bInterfacesMatch || !OutPlan.InterfacePathsToRemove.IsEmpty() ||
+        !OutPlan.InterfacePathsToAdd.IsEmpty();
+    OutResult.DeclaredInputBindingCount = InputDeclarations.Num();
+    OutResult.UpdatedInputBindingCount = bInputsMatch ? 0 : InputDeclarations.Num();
+    OutResult.DeclaredDelegateBindingCount = DelegateDeclarations.Num();
+    OutResult.UpdatedDelegateBindingCount =
+        bDelegatesMatch ? 0 : DelegateDeclarations.Num();
+    OutResult.DeclaredInterfaceBindingCount = InterfaceDeclarations.Num();
+    OutResult.UpdatedInterfaceBindingCount =
+        bInterfacesMatch ? 0 : InterfaceDeclarations.Num();
+    for (FPlannedFunction& Planned : OutPlan.Functions)
+    {
+        if (!Planned.Declaration.bInterfaceFunction || Planned.bNeedsUpdate)
+        {
+            continue;
+        }
+        const bool bInterfaceWillBeRecreated =
+            Planned.Declaration.InterfacePaths.ContainsByPredicate(
+                [&OutPlan](const FString& InterfacePath)
+                {
+                    return OutPlan.InterfacePathsToAdd.Contains(InterfacePath);
+                });
+        if (bInterfaceWillBeRecreated)
+        {
+            Planned.bNeedsUpdate = true;
+            ++OutResult.UpdatedFunctionCount;
+        }
+    }
+    OutResult.bChanged |= OutPlan.bGameplayBindingsChanged;
     return true;
 }
 
@@ -1777,6 +2688,45 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
         }
     }
 
+    for (const FString& InterfacePath : Plan.InterfacePathsToRemove)
+    {
+        UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePath);
+        if (InterfaceClass == nullptr ||
+            !InterfaceClass->HasAnyClassFlags(CLASS_Interface))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot remove generated interface '%s' because its native class is unavailable."),
+                *InterfacePath);
+            return false;
+        }
+        FBlueprintEditorUtils::RemoveInterface(
+            &Blueprint,
+            InterfaceClass->GetClassPathName(),
+            false);
+    }
+    for (const FString& InterfacePath : Plan.InterfacePathsToAdd)
+    {
+        UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePath);
+        if (InterfaceClass == nullptr ||
+            !InterfaceClass->HasAnyClassFlags(CLASS_Interface))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot implement generated interface '%s' because its native class is unavailable."),
+                *InterfacePath);
+            return false;
+        }
+        if (!FBlueprintEditorUtils::ImplementNewInterface(
+                &Blueprint,
+                InterfaceClass->GetClassPathName()))
+        {
+            OutError = FString::Printf(
+                TEXT("Unreal could not implement generated interface '%s' on '%s'."),
+                *InterfacePath,
+                *Blueprint.GetPathName());
+            return false;
+        }
+    }
+
     TMap<FGuid, FName> TemporaryNames;
     for (const FPlannedState& Planned : Plan.States)
     {
@@ -1893,10 +2843,13 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
         {
             continue;
         }
-        UEdGraph* Graph = Planned.bExisting
-            ? FindManagedFunctionGraphById(Blueprint, Planned.Declaration.Id)
-            : nullptr;
-        if (Planned.bExisting && Graph == nullptr)
+        UEdGraph* Graph = Planned.Declaration.bInterfaceFunction
+            ? FindFunctionGraphByName(Blueprint, Planned.Declaration.InternalName)
+            : (Planned.bExisting
+                ? FindManagedFunctionGraphById(Blueprint, Planned.Declaration.Id)
+                : nullptr);
+        if ((Planned.bExisting || Planned.Declaration.bInterfaceFunction) &&
+            Graph == nullptr)
         {
             OutError = FString::Printf(
                 TEXT("Generated Blueprint function '%s' disappeared before materialization."),
@@ -1924,7 +2877,9 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
     }
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
-    if ((!Plan.Functions.IsEmpty() || !Plan.LifecycleBindings.IsEmpty()) &&
+    if ((!Plan.Functions.IsEmpty() || !Plan.LifecycleBindings.IsEmpty() ||
+         !Plan.InputBindings.IsEmpty() || !Plan.DelegateBindings.IsEmpty() ||
+         !Plan.InterfaceBindings.IsEmpty()) &&
         GeneratedClass == nullptr)
     {
         if (Blueprint.GetOuter() == GetTransientPackage())
@@ -1948,6 +2903,9 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             ? UnifiedBlueprint->ScriptAsset
             : nullptr;
         GeneratedClass->ManagedLifecycleBindings = Plan.LifecycleBindings;
+        GeneratedClass->ManagedInputActionBindings = Plan.InputBindings;
+        GeneratedClass->ManagedDelegateBindings = Plan.DelegateBindings;
+        GeneratedClass->ManagedInterfaceBindings = Plan.InterfaceBindings;
         GeneratedClass->ManagedFunctionBindings.Reset();
         for (const FPlannedFunction& Planned : Plan.Functions)
         {
@@ -1957,6 +2915,8 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Binding.AbiVersion = 2;
             Binding.bStatic = Planned.Declaration.bIsStatic;
             Binding.bBlueprintEvent = Planned.Declaration.bBlueprintEvent;
+            Binding.bInterfaceFunction =
+                Planned.Declaration.bInterfaceFunction;
             Binding.BlueprintEventSuperMode =
                 Planned.Declaration.BlueprintEventSuperMode;
             Binding.ReturnType = MakeRuntimeValueTypeBinding(
@@ -2122,12 +3082,18 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
     TArray<FStateDeclaration> StateDeclarations;
     TArray<FFunctionDeclaration> FunctionDeclarations;
     TArray<FLifecycleDeclaration> LifecycleDeclarations;
+    TArray<FInputActionDeclaration> InputDeclarations;
+    TArray<FDelegateBindingDeclaration> DelegateDeclarations;
+    TArray<FInterfaceFunctionDeclaration> InterfaceDeclarations;
     if (!ParseDeclaration(
             ScriptAsset,
             DeclarationJson,
             StateDeclarations,
             FunctionDeclarations,
             LifecycleDeclarations,
+            InputDeclarations,
+            DelegateDeclarations,
+            InterfaceDeclarations,
             OutError))
     {
         return false;
@@ -2144,6 +3110,14 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         !BuildLifecyclePlan(
             Blueprint,
             LifecycleDeclarations,
+            Plan,
+            OutResult,
+            OutError) ||
+        !BuildGameplayBindingPlan(
+            Blueprint,
+            InputDeclarations,
+            DelegateDeclarations,
+            InterfaceDeclarations,
             Plan,
             OutResult,
             OutError) ||

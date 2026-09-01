@@ -724,7 +724,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        }");
             if (!function.Traits.Static)
             {
-                EmitResolveTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, 8);
             }
             source.AppendLine("        OutOutputValues.Reset();");
             if (outputCount > 0)
@@ -755,9 +755,7 @@ public sealed class UnrealNativeThunkGenerator
 
             string arguments = string.Join(", ", Enumerable.Range(0, function.Parameters.Count)
                 .Select(static index => $"Argument{index}"));
-            string invocation = function.Traits.Static
-                ? $"{type.NativeName}::{function.Name}({arguments})"
-                : $"TypedTarget->{function.Name}({arguments})";
+            string invocation = FunctionInvocation(type, function, arguments);
             if (function.ReturnType.Kind == UnrealValueKind.Void)
             {
                 source.Append("        ").Append(invocation).AppendLine(";");
@@ -832,11 +830,11 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("    {");
             if (!function.Traits.Static)
             {
-                EmitResolveTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, 8);
             }
             source.Append("        OutReturnValue = ")
-                .Append(function.Traits.Static ? type.NativeName + "::" : "TypedTarget->")
-                .Append(function.Name).AppendLine("(Argument0, Argument1);");
+                .Append(FunctionInvocation(type, function, "Argument0, Argument1"))
+                .AppendLine(";");
             source.AppendLine("        Succeed(OutResult);");
             source.AppendLine("        return true;");
             source.AppendLine("    }");
@@ -894,7 +892,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        }");
             if (!function.Traits.Static)
             {
-                EmitResolveTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, 8);
             }
             EmitFixedResultValidation(source, function.ReturnType);
             for (int index = 0; index < function.Parameters.Count; index++)
@@ -908,9 +906,7 @@ public sealed class UnrealNativeThunkGenerator
             }
             string arguments = string.Join(", ", Enumerable.Range(0, function.Parameters.Count)
                 .Select(static index => $"Argument{index}"));
-            string invocation = function.Traits.Static
-                ? $"{type.NativeName}::{function.Name}({arguments})"
-                : $"TypedTarget->{function.Name}({arguments})";
+            string invocation = FunctionInvocation(type, function, arguments);
             if (function.ReturnType.Kind == UnrealValueKind.Void)
             {
                 source.Append("        ").Append(invocation).AppendLine(";");
@@ -1097,6 +1093,52 @@ public sealed class UnrealNativeThunkGenerator
         source.Append(padding).AppendLine("{");
         source.Append(padding).AppendLine("    return false;");
         source.Append(padding).AppendLine("}");
+    }
+
+    private static void EmitResolveFunctionTarget(
+        StringBuilder source,
+        UnrealReflectedType type,
+        int indent)
+    {
+        if (!type.Traits.Interface)
+        {
+            EmitResolveTarget(source, type, indent);
+            return;
+        }
+
+        string padding = new(' ', indent);
+        source.Append(padding).Append("if (Target == nullptr || !Target->GetClass()->ImplementsInterface(")
+            .Append(type.NativeName).AppendLine("::StaticClass()))");
+        source.Append(padding).AppendLine("{");
+        source.Append(padding).AppendLine("    return Fail(");
+        source.Append(padding).AppendLine("        OutResult,");
+        source.Append(padding).AppendLine("        EUnifiedScriptInvocationError::TargetTypeMismatch,");
+        source.Append(padding).Append("        FString::Printf(TEXT(\"Object '%s' does not implement generated thunk interface '%s'.\"), *GetNameSafe(Target), TEXT(")
+            .Append(CppStringLiteral(type.Path)).AppendLine(")));");
+        source.Append(padding).AppendLine("}");
+    }
+
+    private static string FunctionInvocation(
+        UnrealReflectedType type,
+        UnrealReflectedFunction function,
+        string arguments)
+    {
+        if (function.Traits.Static)
+        {
+            return $"{type.NativeName}::{function.Name}({arguments})";
+        }
+        if (!type.Traits.Interface)
+        {
+            return $"TypedTarget->{function.Name}({arguments})";
+        }
+
+        string interfaceName = type.NativeName.Length > 1 && type.NativeName[0] == 'U'
+            ? $"I{type.NativeName[1..]}"
+            : $"I{type.NativeName}";
+        string forwardedArguments = string.IsNullOrEmpty(arguments)
+            ? "Target"
+            : $"Target, {arguments}";
+        return $"{interfaceName}::Execute_{function.Name}({forwardedArguments})";
     }
 
     private static void EmitValueRead(

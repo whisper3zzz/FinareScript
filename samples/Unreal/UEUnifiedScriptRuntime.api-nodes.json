@@ -5993,9 +5993,133 @@
       "managedTypeName": "UnifiedScriptInteropContract",
       "category": "Unreal API|UnifiedScriptInteropContract",
       "properties": [],
-      "functions": [],
+      "functions": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue",
+          "name": "TransformManagedValue",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Transform Managed Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Reviewed native interface route used by generated managed Script Classes.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
       "delegates": [],
-      "nodes": []
+      "nodes": [
+        {
+          "id": "ue.call|UnifiedScriptInteropContract|TransformManagedValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue",
+          "memberId": "0x06AB7EA4B32096BB",
+          "kind": "function",
+          "title": "Transform Managed Value",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Reviewed native interface route used by generated managed Script Classes.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropContract*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",

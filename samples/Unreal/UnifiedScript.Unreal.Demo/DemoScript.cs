@@ -51,6 +51,24 @@ public sealed class DemoScript : IUnrealManagedScript
         }
     }
 
+    [UnrealInputAction(
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+        TriggerEvent = UnrealInputTriggerEvent.Triggered,
+        ValueType = UnrealInputValueType.Axis1D,
+        ConsumeInput = true)]
+    public void OnManagedMove(float value)
+    {
+        _component.ManagedState = value == 0f ? "Input:0" : "Input:nonzero";
+    }
+
+    [UnrealInterfaceFunction(
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+        "TransformManagedValue")]
+    public int TransformManagedValue(int value)
+    {
+        return value * 2;
+    }
+
     [Visual]
     public int UEApiPreview(UnifiedScriptComponent component, int left, int right)
     {
@@ -135,7 +153,8 @@ public sealed class DemoScript : IUnrealManagedScript
     [Visual]
     [UnrealEvent(
         typeof(UnifiedScriptComponent),
-        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")]
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+        Source = UnrealEventSource.Host)]
     private void OnManagedSignal(int value, UnrealObjectHandle signalContext)
     {
         _component.ManagedState += "|Event:" + value;

@@ -1670,6 +1670,32 @@
 			]
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+			"name": "UnifiedScriptInputActionFixture",
+			"nativeName": "UUnifiedScriptInputActionFixture",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptInteropFixture.h",
+			"kind": "class",
+			"baseTypePath": "/Script/EnhancedInput.InputAction",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Input Action Fixture",
+				"tooltip": "Cook-safe Enhanced Input action used by the Script Class product smoke.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
 			"name": "UnifiedScriptInteropContract",
 			"nativeName": "UUnifiedScriptInteropContract",
@@ -1693,7 +1719,42 @@
 			"enumValues": [],
 			"properties": [],
 			"delegates": [],
-			"functions": []
+			"functions": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue",
+					"name": "TransformManagedValue",
+					"returnType":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Transform Managed Value",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Reviewed native interface route used by generated managed Script Classes.",
+						"deprecated": false
+					}
+				}
+			]
 		},
 		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",

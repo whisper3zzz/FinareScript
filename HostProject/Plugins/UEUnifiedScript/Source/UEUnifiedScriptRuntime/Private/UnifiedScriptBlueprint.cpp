@@ -740,7 +740,20 @@ void UUnifiedScriptBlueprintGeneratedClass::PostInitInstance(
     // gameplay instance is constructed on the game thread; re-apply the table
     // there in case a cooked UFunction::Bind ran after the class/CDO hooks and
     // restored ProcessInternal.
-    if (IsInGameThread() && !bManagedFunctionsBound)
+    bool bNeedsManagedFunctionRebind = !bManagedFunctionsBound;
+    if (IsInGameThread() && !bNeedsManagedFunctionRebind)
+    {
+        for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+             ManagedFunctionBindings)
+        {
+            if (!IsManagedFunctionBound(Pair.Key))
+            {
+                bNeedsManagedFunctionRebind = true;
+                break;
+            }
+        }
+    }
+    if (IsInGameThread() && bNeedsManagedFunctionRebind)
     {
         BindManagedFunctions();
     }
@@ -768,7 +781,9 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
         // any later UFunction::Bind pass tries to resolve it.
         Function->FunctionFlags |= FUNC_Native;
         Function->FunctionFlags |= FUNC_Public | FUNC_BlueprintCallable;
-        if (Pair.Value.bBlueprintEvent)
+        const bool bManagedEventEntry = Pair.Value.bBlueprintEvent ||
+            Pair.Value.bInterfaceFunction;
+        if (bManagedEventEntry)
         {
             Function->FunctionFlags |= FUNC_Event | FUNC_BlueprintEvent;
         }
@@ -779,13 +794,14 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
         Function->SetNativeFunc(
             &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction);
 #if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
-        if (Pair.Value.bBlueprintEvent)
+        if (bManagedEventEntry)
         {
-            // The empty generated base graph is only a durable signature. Cook
-            // may patch it as an ubergraph fast-call stub, which would bypass
-            // the native managed implementation installed above. Child
-            // Blueprint overrides own separate functions and keep their normal
-            // fast-call path; only the managed base implementation is cleared.
+            // The empty generated base graph is only a durable signature for
+            // managed Blueprint events and interface implementations. Cook or
+            // package reload may patch it as an ubergraph fast-call stub, which
+            // would bypass the native managed implementation installed above.
+            // Child Blueprint overrides own separate functions and keep their
+            // normal fast-call path; only the managed base entry is cleared.
             Function->EventGraphFunction = nullptr;
             Function->EventGraphCallOffset = INDEX_NONE;
         }
@@ -832,13 +848,26 @@ void UUnifiedScriptBlueprintGeneratedClass::RegisterManagedNativeFunctions()
 bool UUnifiedScriptBlueprintGeneratedClass::IsManagedFunctionBound(
     FName FunctionName) const
 {
+    const FUnifiedScriptManagedFunctionBinding* Binding =
+        ManagedFunctionBindings.Find(FunctionName);
     const UFunction* Function = FindFunctionByName(
         FunctionName,
         EIncludeSuperFlag::ExcludeSuper);
-    return Function != nullptr &&
-        Function->HasAnyFunctionFlags(FUNC_Native) &&
-        Function->GetNativeFunc() ==
-            &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction;
+    if (Binding == nullptr || Function == nullptr ||
+        !Function->HasAnyFunctionFlags(FUNC_Native) ||
+        Function->GetNativeFunc() !=
+            &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction)
+    {
+        return false;
+    }
+#if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
+    if ((Binding->bBlueprintEvent || Binding->bInterfaceFunction) &&
+        Function->EventGraphFunction != nullptr)
+    {
+        return false;
+    }
+#endif
+    return true;
 }
 
 DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction)

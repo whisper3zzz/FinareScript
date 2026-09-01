@@ -729,6 +729,35 @@ container before invoking the same World-owned managed instance used by direct
 and the packaged Actor/Component Golden Path pass; evidence is under
 `artifacts/m13-3b3a/`.
 
+## Phase B.30 managed gameplay contracts
+
+`[UnrealInputAction]` binds a managed method to one exact `UInputAction` object
+path plus a trigger phase, value shape, and consume policy. Production code
+should use an exact project asset path such as
+`/Game/Input/IA_Move.IA_Move`; `/Script/...` fixture paths are reserved for
+native contract tests. `[UnrealEvent]` continues to identify delegates by their
+canonical owner/member path and host or target source. `[UnrealInterfaceFunction]`
+identifies one exact native `UInterface` path and function name; its generated
+native thunk invokes the interface `Execute_` path instead of assuming a concrete
+receiver implementation.
+
+The product GeneratedClass persists input, delegate, and interface binding
+records beside lifecycle and function metadata. Its World-owned component binds
+input and delegates only after the managed generation starts, routes interface
+calls to that same per-World instance, and tears every binding down before the
+generation unloads. Compatible reload therefore replaces rather than stacks
+subscriptions. Native interface graphs do not retain
+`FKismetUserDeclaredFunctionMetadata`, so ValidateOnly idempotency recognizes an
+existing graph only when the persistent binding identity and exact reflected ABI
+also match; incompatible user-owned functions still reject before mutation.
+
+The .NET suite passes 678/678, repository validation passes 130/130,
+deterministic generation passes 9/9, UE 5.8.1 Editor and Game builds, and the
+29/29 CMD Automation suite passes. The full Cook/Package Golden Path proves
+packaged input, exactly-once delegate delivery, native-to-managed interface
+return dispatch, compatible reload without duplicate bindings, and deterministic
+teardown. Evidence is under `artifacts/m13-3b3b/`.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

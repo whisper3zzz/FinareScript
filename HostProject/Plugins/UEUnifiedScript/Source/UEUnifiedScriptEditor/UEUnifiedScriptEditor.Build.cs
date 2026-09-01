@@ -18,6 +18,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "DesktopPlatform",
             "Engine",
             "EngineAssetDefinitions",
+            "EnhancedInput",
             "GraphEditor",
             "HTTP",
             "Json",

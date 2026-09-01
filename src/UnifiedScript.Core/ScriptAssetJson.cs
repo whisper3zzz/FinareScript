@@ -176,11 +176,14 @@ public static class ScriptAssetJson
         if (function.BlueprintEvent is not null)
         {
             if (!function.IsPublic || function.IsStatic || function.IsEvent ||
-                !Enum.IsDefined(function.BlueprintEvent.SuperMode))
+                !Enum.IsDefined(function.BlueprintEvent.SuperMode) ||
+                (function.InputActions?.Count ?? 0) != 0 ||
+                (function.DelegateBindings?.Count ?? 0) != 0 ||
+                (function.InterfaceFunctions?.Count ?? 0) != 0)
             {
                 throw new JsonException(
                     $"Blueprint event '{function.QualifiedName}' must be a public instance method " +
-                    "with a valid Super policy and cannot also be a native delegate handler.");
+                    "with a valid Super policy and cannot own another gameplay binding.");
             }
         }
 
@@ -198,6 +201,130 @@ public static class ScriptAssetJson
                 throw new JsonException($"Script function '{function.QualifiedName}' has an invalid parameter.");
             }
             ValidateFunctionValueType(parameter.UnrealType, parameter.TypeMetadataName, 0);
+        }
+
+        ValidateInputActions(function);
+        ValidateDelegateBindings(function);
+        ValidateInterfaceFunctions(function);
+    }
+
+    private static void ValidateInputActions(ScriptFunctionDeclaration function)
+    {
+        IReadOnlyList<ScriptInputActionBindingDeclaration> bindings =
+            function.InputActions ?? [];
+        if (bindings.Count == 0)
+        {
+            return;
+        }
+        if (!function.IsPublic || function.IsStatic || function.IsEvent ||
+            function.BlueprintEvent is not null ||
+            function.ReturnTypeMetadataName != "System.Void" ||
+            function.Parameters.Count != 1)
+        {
+            throw new JsonException(
+                $"Input handler '{function.QualifiedName}' must be a public instance void " +
+                "method with exactly one reviewed value parameter.");
+        }
+
+        var ids = new HashSet<SemanticId>();
+        var routes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ScriptInputActionBindingDeclaration? binding in bindings)
+        {
+            string parameterType = function.Parameters[0].TypeMetadataName;
+            bool typeMatches = binding?.ValueType switch
+            {
+                ScriptInputValueType.Boolean => parameterType == "System.Boolean",
+                ScriptInputValueType.Axis1D => parameterType == "System.Single",
+                ScriptInputValueType.Axis2D or ScriptInputValueType.Axis3D =>
+                    parameterType == "UnifiedScript.Unreal.UnrealVector",
+                _ => false,
+            };
+            string route = binding is null
+                ? string.Empty
+                : $"{binding.ActionPath}|{binding.TriggerEvent}";
+            if (binding is null || binding.Id.IsEmpty ||
+                !IsUnrealObjectPath(binding.ActionPath) ||
+                !Enum.IsDefined(binding.TriggerEvent) ||
+                !Enum.IsDefined(binding.ValueType) || !typeMatches ||
+                !ids.Add(binding.Id) || !routes.Add(route))
+            {
+                throw new JsonException(
+                    $"Input handler '{function.QualifiedName}' has an invalid, duplicate, " +
+                    "or type-incompatible Enhanced Input binding.");
+            }
+        }
+    }
+
+    private static void ValidateDelegateBindings(ScriptFunctionDeclaration function)
+    {
+        IReadOnlyList<ScriptDelegateBindingDeclaration> bindings =
+            function.DelegateBindings ?? [];
+        if (bindings.Count == 0)
+        {
+            return;
+        }
+        if (!function.IsEvent || function.IsStatic || function.BlueprintEvent is not null ||
+            (function.InputActions?.Count ?? 0) != 0 ||
+            (function.InterfaceFunctions?.Count ?? 0) != 0)
+        {
+            throw new JsonException(
+                $"Delegate handler '{function.QualifiedName}' has an incompatible gameplay binding.");
+        }
+
+        var ids = new HashSet<SemanticId>();
+        var routes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ScriptDelegateBindingDeclaration? binding in bindings)
+        {
+            string route = binding is null
+                ? string.Empty
+                : $"{binding.SourceTypePath}|{binding.EventPath}|{binding.Source}|{binding.SourceMember}";
+            if (binding is null || binding.Id.IsEmpty ||
+                !IsScriptTypePath(binding.SourceTypePath) ||
+                !IsMemberPath(binding.EventPath) ||
+                !Enum.IsDefined(binding.Source) ||
+                binding.SourceMember is not null &&
+                    string.IsNullOrWhiteSpace(binding.SourceMember) ||
+                !ids.Add(binding.Id) || !routes.Add(route))
+            {
+                throw new JsonException(
+                    $"Delegate handler '{function.QualifiedName}' has an invalid or duplicate binding.");
+            }
+        }
+    }
+
+    private static void ValidateInterfaceFunctions(ScriptFunctionDeclaration function)
+    {
+        IReadOnlyList<ScriptInterfaceFunctionDeclaration> bindings =
+            function.InterfaceFunctions ?? [];
+        if (bindings.Count == 0)
+        {
+            return;
+        }
+        if (!function.IsPublic || function.IsStatic || function.IsEvent ||
+            function.BlueprintEvent is not null ||
+            (function.InputActions?.Count ?? 0) != 0 ||
+            (function.DelegateBindings?.Count ?? 0) != 0)
+        {
+            throw new JsonException(
+                $"Interface implementation '{function.QualifiedName}' must be a public " +
+                "instance method with no competing gameplay binding.");
+        }
+
+        var ids = new HashSet<SemanticId>();
+        var routes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ScriptInterfaceFunctionDeclaration? binding in bindings)
+        {
+            string route = binding is null
+                ? string.Empty
+                : $"{binding.InterfacePath}|{binding.FunctionName}";
+            if (binding is null || binding.Id.IsEmpty ||
+                !IsScriptTypePath(binding.InterfacePath) ||
+                !IsIdentifier(binding.FunctionName) ||
+                !ids.Add(binding.Id) || !routes.Add(route))
+            {
+                throw new JsonException(
+                    $"Interface implementation '{function.QualifiedName}' has an invalid or duplicate binding.");
+            }
         }
     }
 
@@ -282,6 +409,21 @@ public static class ScriptAssetJson
             .Select(static function => function with
             {
                 Parameters = function.Parameters.ToArray(),
+                InputActions = (function.InputActions ?? [])
+                    .OrderBy(static binding => binding.ActionPath, StringComparer.Ordinal)
+                    .ThenBy(static binding => binding.TriggerEvent)
+                    .ThenBy(static binding => binding.Id.Value, StringComparer.Ordinal)
+                    .ToArray(),
+                DelegateBindings = (function.DelegateBindings ?? [])
+                    .OrderBy(static binding => binding.EventPath, StringComparer.Ordinal)
+                    .ThenBy(static binding => binding.SourceTypePath, StringComparer.Ordinal)
+                    .ThenBy(static binding => binding.Id.Value, StringComparer.Ordinal)
+                    .ToArray(),
+                InterfaceFunctions = (function.InterfaceFunctions ?? [])
+                    .OrderBy(static binding => binding.InterfacePath, StringComparer.Ordinal)
+                    .ThenBy(static binding => binding.FunctionName, StringComparer.Ordinal)
+                    .ThenBy(static binding => binding.Id.Value, StringComparer.Ordinal)
+                    .ToArray(),
             })
             .ToArray(),
         LifecycleHooks = (asset.LifecycleHooks ?? [])
@@ -297,6 +439,30 @@ public static class ScriptAssetJson
         !path.Contains("//", StringComparison.Ordinal) &&
         !path.Split('/').Any(static segment => string.IsNullOrWhiteSpace(segment) ||
             segment is "." or "..");
+
+    private static bool IsUnrealObjectPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && path.StartsWith("/", StringComparison.Ordinal) &&
+        !path.Contains(' ') && !path.EndsWith("/", StringComparison.Ordinal);
+
+    private static bool IsScriptTypePath(string? path) =>
+        IsUnrealObjectPath(path) && path!.StartsWith("/Script/", StringComparison.Ordinal) &&
+        path.Contains('.') && !path.Contains(':');
+
+    private static bool IsMemberPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+        int separator = path.LastIndexOf(':');
+        return separator > 0 && separator + 1 < path.Length &&
+            IsScriptTypePath(path[..separator]) && IsIdentifier(path[(separator + 1)..]);
+    }
+
+    private static bool IsIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        (char.IsLetter(value[0]) || value[0] == '_') &&
+        value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
 
     private static bool IsValidSpan(SourceSpan? span)
     {

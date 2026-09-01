@@ -321,6 +321,10 @@ public sealed partial class UnifiedScriptInteropContract : global::UnifiedScript
         : base(handle, bridge)
     {
     }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Transform Managed Value", Category = "UnifiedScript|Interop", Tooltip = "Reviewed native interface route used by generated managed Script Classes.")]
+    public int TransformManagedValue(int value)
+        => Invoke<int, int>(0x06AB7EA4B32096BBUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:TransformManagedValue", value);
 }
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Interop Fixture", Tooltip = "Public interop fixture used to keep generated common-type bindings executable.")]

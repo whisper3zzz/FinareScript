@@ -8,10 +8,15 @@
 #include "UnifiedScriptComponent.generated.h"
 
 class UUnifiedScriptAsset;
+class UEnhancedInputComponent;
+class UInputAction;
 class AActor;
+class APlayerController;
 struct FPropertyChangedChainEvent;
+struct FInputActionInstance;
 struct FUnifiedScriptStateMigrationReport;
 struct FUnifiedScriptNativeCallFrameV3;
+enum class EUnifiedScriptManagedInputValueType : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     FUnifiedScriptManagedSignal,
@@ -270,6 +275,12 @@ public:
 
     bool ConsumeReloadRequest();
 
+    /** Exact number of Enhanced Input handles owned by this live generation. */
+    int32 GetManagedInputBindingCount() const
+    {
+        return ManagedInputBindingHandles.Num();
+    }
+
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void TickComponent(
@@ -318,6 +329,12 @@ private:
     void BindManagedActorEvents();
     void UnbindManagedActorEvents();
     void DispatchManagedActorEvent(int32 EventKind, AActor* OtherActor);
+    bool BindManagedInputActions(FString& OutError);
+    void UnbindManagedInputActions();
+    void HandleManagedInputAction(
+        const FInputActionInstance& ActionInstance,
+        FName ManagedName,
+        EUnifiedScriptManagedInputValueType ValueType);
 
     bool ResolveScriptConfiguration(
         FString& OutAssemblyPath,
@@ -358,6 +375,15 @@ private:
     TWeakObjectPtr<UObject> ActiveLifecycleHostObject;
     bool bReloadRequested = false;
     bool bActorEventsBound = false;
+    bool bManagedCreatedInputComponent = false;
+    bool bStopRequestedByInputFailure = false;
+    TWeakObjectPtr<UEnhancedInputComponent> ManagedEnhancedInputComponent;
+    TWeakObjectPtr<APlayerController> ManagedInputPlayerController;
+    TArray<uint32> ManagedInputBindingHandles;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UInputAction>> ManagedInputActions;
+
     uint64 ManagedScriptInstanceId = 0;
     uint64 ManagedHostHandle = 0;
     uint64 ManagedTargetHandle = 0;

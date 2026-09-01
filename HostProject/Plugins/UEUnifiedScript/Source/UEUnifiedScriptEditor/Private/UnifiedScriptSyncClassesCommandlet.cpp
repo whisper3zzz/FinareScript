@@ -106,6 +106,12 @@ void Accumulate(
     Total.RemovedFunctionCount += Result.RemovedFunctionCount;
     Total.DeclaredLifecycleHookCount += Result.DeclaredLifecycleHookCount;
     Total.UpdatedLifecycleHookCount += Result.UpdatedLifecycleHookCount;
+    Total.DeclaredInputBindingCount += Result.DeclaredInputBindingCount;
+    Total.UpdatedInputBindingCount += Result.UpdatedInputBindingCount;
+    Total.DeclaredDelegateBindingCount += Result.DeclaredDelegateBindingCount;
+    Total.UpdatedDelegateBindingCount += Result.UpdatedDelegateBindingCount;
+    Total.DeclaredInterfaceBindingCount += Result.DeclaredInterfaceBindingCount;
+    Total.UpdatedInterfaceBindingCount += Result.UpdatedInterfaceBindingCount;
     Total.bChanged |= Result.bChanged;
 }
 } // namespace UE::UnifiedScript::SyncClasses::Private
