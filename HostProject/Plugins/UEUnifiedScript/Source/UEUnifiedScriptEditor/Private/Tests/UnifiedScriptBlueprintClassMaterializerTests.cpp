@@ -3,19 +3,26 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
 #include "EdGraphSchema_K2.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/PackageName.h"
+#include "Misc/ScopeExit.h"
+#include "PackageTools.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -81,17 +88,21 @@ FString State(
 FString Parameter(
     const TCHAR* Id,
     const TCHAR* Name,
-    const TCHAR* MetadataType)
+    const TCHAR* MetadataType,
+    const FString& UnrealType = FString())
 {
     return FString::Printf(
         TEXT(R"JSON({
         "id": "us_%s",
         "name": "%s",
-        "typeMetadataName": "%s"
+        "typeMetadataName": "%s"%s
       })JSON"),
         Id,
         Name,
-        MetadataType);
+        MetadataType,
+        UnrealType.IsEmpty()
+            ? TEXT("")
+            : *FString::Printf(TEXT(",\n        \"unrealType\": %s"), *UnrealType));
 }
 
 FString Function(
@@ -101,14 +112,15 @@ FString Function(
     const FString& Parameters,
     bool bIsStatic = false,
     bool bIsPublic = true,
-    bool bIsEvent = false)
+    bool bIsEvent = false,
+    const FString& ReturnUnrealType = FString())
 {
     return FString::Printf(
         TEXT(R"JSON({
       "id": "us_%s",
       "name": "%s",
       "qualifiedName": "Tests.StateActor.%s()",
-      "returnTypeMetadataName": "%s",
+      "returnTypeMetadataName": "%s"%s,
       "isStatic": %s,
       "isPublic": %s,
       "isEvent": %s,
@@ -118,10 +130,53 @@ FString Function(
         Name,
         Name,
         ReturnType,
+        ReturnUnrealType.IsEmpty()
+            ? TEXT("")
+            : *FString::Printf(
+                TEXT(",\n      \"returnUnrealType\": %s"),
+                *ReturnUnrealType),
         bIsStatic ? TEXT("true") : TEXT("false"),
         bIsPublic ? TEXT("true") : TEXT("false"),
         bIsEvent ? TEXT("true") : TEXT("false"),
         *Parameters);
+}
+
+FString InteropModeType()
+{
+    return TEXT(R"JSON({
+      "kind": "enum",
+      "unrealTypePath": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
+      "unrealNativeName": "EUnifiedScriptInteropMode",
+      "fields": []
+    })JSON");
+}
+
+FString HitResultType()
+{
+    return TEXT(R"JSON({
+      "kind": "struct",
+      "unrealTypePath": "/Script/Engine.HitResult",
+      "unrealNativeName": "FHitResult",
+      "fields": [
+        { "index": 0, "nativeName": "BoneName", "typeMetadataName": "UnifiedScript.Unreal.UnrealName" },
+        { "index": 1, "nativeName": "Distance", "typeMetadataName": "System.Single" },
+        { "index": 2, "nativeName": "ElementIndex", "typeMetadataName": "System.Byte" },
+        { "index": 3, "nativeName": "FaceIndex", "typeMetadataName": "System.Int32" },
+        { "index": 4, "nativeName": "ImpactNormal", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 5, "nativeName": "ImpactPoint", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 6, "nativeName": "Item", "typeMetadataName": "System.Int32" },
+        { "index": 7, "nativeName": "Location", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 8, "nativeName": "MyBoneName", "typeMetadataName": "UnifiedScript.Unreal.UnrealName" },
+        { "index": 9, "nativeName": "MyItem", "typeMetadataName": "System.Int32" },
+        { "index": 10, "nativeName": "Normal", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 11, "nativeName": "PenetrationDepth", "typeMetadataName": "System.Single" },
+        { "index": 12, "nativeName": "Time", "typeMetadataName": "System.Single" },
+        { "index": 13, "nativeName": "TraceEnd", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 14, "nativeName": "TraceStart", "typeMetadataName": "UnifiedScript.Unreal.UnrealVector" },
+        { "index": 15, "nativeName": "bBlockingHit", "typeMetadataName": "System.Boolean" },
+        { "index": 16, "nativeName": "bStartPenetrating", "typeMetadataName": "System.Boolean" }
+      ]
+    })JSON");
 }
 
 FString InitialFunctions()
@@ -797,7 +852,21 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
 
     const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
     const FString AssetName = TEXT("BP_UnifiedScriptStaticDispatch_") + Suffix;
-    UPackage* Package = CreatePackage(*(TEXT("/Engine/Transient/") + AssetName));
+    const FString PackageName = TEXT("/Game/UnifiedScriptTests/") + AssetName;
+    const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+        PackageName,
+        FPackageName::GetAssetPackageExtension());
+    ON_SCOPE_EXIT
+    {
+        if (UPackage* ExistingPackage = FindPackage(nullptr, *PackageName))
+        {
+            ExistingPackage->SetDirtyFlag(false);
+            TArray<UPackage*> PackagesToUnload{ExistingPackage};
+            UPackageTools::UnloadPackages(PackagesToUnload);
+        }
+        IFileManager::Get().Delete(*PackageFilename, false, true, true);
+    };
+    UPackage* Package = CreatePackage(*PackageName);
     UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
         FKismetEditorUtilities::CreateBlueprint(
             UUnifiedScriptBlueprintFunctionLibrary::StaticClass(),
@@ -822,6 +891,8 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     constexpr const TCHAR* DescribeId = TEXT("10101010101010101010101010101010");
     constexpr const TCHAR* EchoObjectId = TEXT("20202020202020202020202020202020");
     constexpr const TCHAR* OffsetVectorId = TEXT("30303030303030303030303030303030");
+    constexpr const TCHAR* EchoModeId = TEXT("40404040404040404040404040404040");
+    constexpr const TCHAR* EchoHitResultId = TEXT("50505050505050505050505050505050");
 
     const FString DescribeParameters = FString::Join(
         TArray<FString>{
@@ -847,6 +918,18 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         TEXT("33333333333333333333333333333330"),
         TEXT("value"),
         TEXT("UnifiedScript.Unreal.UnrealVector"));
+    const FString ModeValueType = InteropModeType();
+    const FString ModeParameters = Parameter(
+        TEXT("44444444444444444444444444444440"),
+        TEXT("value"),
+        TEXT("UnifiedScript.Unreal.Generated.EUnifiedScriptInteropMode"),
+        ModeValueType);
+    const FString HitValueType = HitResultType();
+    const FString HitParameters = Parameter(
+        TEXT("55555555555555555555555555555550"),
+        TEXT("value"),
+        TEXT("UnifiedScript.Unreal.Generated.HitResult"),
+        HitValueType);
     const FString Functions = FString::Join(
         TArray<FString>{
             Function(
@@ -867,6 +950,24 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 TEXT("UnifiedScript.Unreal.UnrealVector"),
                 VectorParameters,
                 true),
+            Function(
+                EchoModeId,
+                TEXT("EchoMode"),
+                TEXT("UnifiedScript.Unreal.Generated.EUnifiedScriptInteropMode"),
+                ModeParameters,
+                true,
+                true,
+                false,
+                ModeValueType),
+            Function(
+                EchoHitResultId,
+                TEXT("EchoHitResult"),
+                TEXT("UnifiedScript.Unreal.Generated.HitResult"),
+                HitParameters,
+                true,
+                true,
+                false,
+                HitValueType),
         },
         TEXT(","));
 
@@ -905,8 +1006,42 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         return false;
     }
-    TestEqual(TEXT("Three static functions are materialized"),
-        SyncResult.DeclaredFunctionCount, 3);
+    FSavePackageArgs SaveArguments;
+    SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArguments.SaveFlags = SAVE_None;
+    if (!TestTrue(
+            TEXT("Persistent typed FunctionLibrary package saves"),
+            UPackage::SavePackage(
+                Package,
+                Blueprint,
+                *PackageFilename,
+                SaveArguments)))
+    {
+        return false;
+    }
+    Blueprint = nullptr;
+    ScriptAsset = nullptr;
+    Package->SetDirtyFlag(false);
+    TArray<UPackage*> PackagesToUnload{Package};
+    if (!TestTrue(
+            TEXT("Persistent typed FunctionLibrary package unloads"),
+            UPackageTools::UnloadPackages(PackagesToUnload)))
+    {
+        return false;
+    }
+    Package = LoadPackage(nullptr, *PackageName, LOAD_None);
+    Blueprint = Package != nullptr
+        ? FindObject<UUnifiedScriptBlueprint>(Package, *AssetName)
+        : nullptr;
+    ScriptAsset = Blueprint != nullptr ? Blueprint->ScriptAsset.Get() : nullptr;
+    if (!TestNotNull(TEXT("Persistent typed FunctionLibrary package reloads"), Package) ||
+        !TestNotNull(TEXT("Persistent typed FunctionLibrary Blueprint reloads"), Blueprint) ||
+        !TestNotNull(TEXT("Persistent typed FunctionLibrary Script Asset reloads"), ScriptAsset))
+    {
+        return false;
+    }
+    TestEqual(TEXT("Five static functions are materialized"),
+        SyncResult.DeclaredFunctionCount, 5);
 
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
@@ -934,19 +1069,52 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     UFunction* OffsetVectorFunction = GeneratedClass->FindFunctionByName(
         OffsetVectorInternalName,
         EIncludeSuperFlag::ExcludeSuper);
+    const FName EchoModeInternalName(
+        *FString::Printf(TEXT("USF_%s"), EchoModeId));
+    UFunction* EchoModeFunction = GeneratedClass->FindFunctionByName(
+        EchoModeInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    const FName EchoHitResultInternalName(
+        *FString::Printf(TEXT("USF_%s"), EchoHitResultId));
+    UFunction* EchoHitResultFunction = GeneratedClass->FindFunctionByName(
+        EchoHitResultInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
     const FUnifiedScriptManagedFunctionBinding* DescribeBinding =
         GeneratedClass->ManagedFunctionBindings.Find(DescribeInternalName);
+    const FUnifiedScriptManagedFunctionBinding* EchoModeBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(EchoModeInternalName);
+    const FUnifiedScriptManagedFunctionBinding* EchoHitResultBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(EchoHitResultInternalName);
     if (!TestNotNull(TEXT("Static Describe UFunction exists"), DescribeFunction) ||
         !TestNotNull(TEXT("Static EchoObject UFunction exists"), EchoObjectFunction) ||
         !TestNotNull(TEXT("Static OffsetVector UFunction exists"), OffsetVectorFunction) ||
-        !TestNotNull(TEXT("Static Describe binding exists"), DescribeBinding))
+        !TestNotNull(TEXT("Static EchoMode UFunction exists"), EchoModeFunction) ||
+        !TestNotNull(TEXT("Static EchoHitResult UFunction exists"), EchoHitResultFunction) ||
+        !TestNotNull(TEXT("Static Describe binding exists"), DescribeBinding) ||
+        !TestNotNull(TEXT("Static EchoMode binding exists"), EchoModeBinding) ||
+        !TestNotNull(TEXT("Static EchoHitResult binding exists"), EchoHitResultBinding))
     {
         return false;
     }
     TestTrue(TEXT("Generated FunctionLibrary UFunction is static"),
         DescribeFunction->HasAnyFunctionFlags(FUNC_Static));
+    TestTrue(
+        TEXT("Persistent FunctionLibrary restores native managed dispatch"),
+        GeneratedClass->IsManagedFunctionBound(DescribeInternalName));
     TestEqual(TEXT("Static binding selects ABI v2"), DescribeBinding->AbiVersion, 2);
     TestTrue(TEXT("Static binding owns library routing"), DescribeBinding->bStatic);
+    TestEqual(
+        TEXT("Typed enum binding retains one argument contract"),
+        EchoModeBinding->ParameterTypes.Num(),
+        1);
+    TestEqual(
+        TEXT("Typed enum return retains exact Unreal path"),
+        EchoModeBinding->ReturnType.UnrealTypePath,
+        FString(TEXT("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode")));
+    TestEqual(
+        TEXT("General struct binding retains stable generated field order"),
+        EchoHitResultBinding->ReturnType.StructFields.Num(),
+        17);
     TestNotNull(
         TEXT("Static call persists a hidden WorldContextObject"),
         FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject")));
@@ -960,6 +1128,32 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     TestTrue(TEXT("UnrealVector parameter becomes FVector"),
         LocationProperty != nullptr &&
             LocationProperty->Struct == TBaseStructure<FVector>::Get());
+    const FProperty* ModeProperty =
+        FindFProperty<FProperty>(EchoModeFunction, TEXT("value"));
+    const FProperty* ModeReturnProperty = EchoModeFunction->GetReturnProperty();
+    const FStructProperty* HitProperty =
+        FindFProperty<FStructProperty>(EchoHitResultFunction, TEXT("value"));
+    const FStructProperty* HitReturnProperty = CastField<FStructProperty>(
+        EchoHitResultFunction->GetReturnProperty());
+    TestTrue(
+        TEXT("Typed enum parameter uses the exact UEnum pin"),
+        (CastField<FEnumProperty>(ModeProperty) != nullptr &&
+         CastField<FEnumProperty>(ModeProperty)->GetEnum() == StaticEnum<EUnifiedScriptInteropMode>()) ||
+        (CastField<FByteProperty>(ModeProperty) != nullptr &&
+         CastField<FByteProperty>(ModeProperty)->Enum == StaticEnum<EUnifiedScriptInteropMode>()));
+    TestTrue(
+        TEXT("Typed enum return uses the exact UEnum pin"),
+        (CastField<FEnumProperty>(ModeReturnProperty) != nullptr &&
+         CastField<FEnumProperty>(ModeReturnProperty)->GetEnum() == StaticEnum<EUnifiedScriptInteropMode>()) ||
+        (CastField<FByteProperty>(ModeReturnProperty) != nullptr &&
+         CastField<FByteProperty>(ModeReturnProperty)->Enum == StaticEnum<EUnifiedScriptInteropMode>()));
+    TestTrue(
+        TEXT("General struct parameter uses the exact FHitResult pin"),
+        HitProperty != nullptr && HitProperty->Struct == FHitResult::StaticStruct());
+    TestTrue(
+        TEXT("General struct return uses the exact FHitResult pin"),
+        HitReturnProperty != nullptr &&
+            HitReturnProperty->Struct == FHitResult::StaticStruct());
 
     const int32 InitialManagedWorldCount =
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
@@ -1048,6 +1242,96 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 TEXT("Static FVector return stays inline in the native value cell"),
                 *VectorReturnProperty->ContainerPtrToValuePtr<FVector>(Memory),
                 Expected);
+        }
+
+        const FObjectPropertyBase* ModeContextProperty =
+            FindFProperty<FObjectPropertyBase>(EchoModeFunction, TEXT("WorldContextObject"));
+        auto SetEnumValue = [](const FProperty& Property, void* Container, int64 Value)
+        {
+            void* Address = Property.ContainerPtrToValuePtr<void>(Container);
+            if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
+            {
+                EnumProperty->GetUnderlyingProperty()->SetIntPropertyValue(Address, Value);
+                return true;
+            }
+            if (const FByteProperty* ByteProperty = CastField<FByteProperty>(&Property))
+            {
+                ByteProperty->SetPropertyValue(Address, static_cast<uint8>(Value));
+                return ByteProperty->Enum != nullptr;
+            }
+            return false;
+        };
+        auto GetEnumValue = [](const FProperty& Property, const void* Container, int64& OutValue)
+        {
+            const void* Address = Property.ContainerPtrToValuePtr<void>(Container);
+            if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
+            {
+                OutValue = EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(Address);
+                return true;
+            }
+            if (const FByteProperty* ByteProperty = CastField<FByteProperty>(&Property))
+            {
+                OutValue = ByteProperty->GetPropertyValue(Address);
+                return ByteProperty->Enum != nullptr;
+            }
+            return false;
+        };
+        if (TestNotNull(TEXT("Static EchoMode context property exists"), ModeContextProperty) &&
+            TestNotNull(TEXT("Static EchoMode input property exists"), ModeProperty) &&
+            TestNotNull(TEXT("Static EchoMode return property exists"), ModeReturnProperty))
+        {
+            FStructOnScope Call(EchoModeFunction);
+            uint8* Memory = Call.GetStructMemory();
+            ModeContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            const int64 Expected = static_cast<int64>(EUnifiedScriptInteropMode::Suspended);
+            TestTrue(TEXT("Writes the typed enum input"),
+                SetEnumValue(*ModeProperty, Memory, Expected));
+            LibraryObject->ProcessEvent(EchoModeFunction, Memory);
+            int64 Actual = -1;
+            TestTrue(TEXT("Reads the typed enum return"),
+                GetEnumValue(*ModeReturnProperty, Memory, Actual));
+            TestEqual(
+                TEXT("Static typed UEnum crosses the managed ABI"),
+                Actual,
+                Expected);
+        }
+
+        const FObjectPropertyBase* HitContextProperty =
+            FindFProperty<FObjectPropertyBase>(EchoHitResultFunction, TEXT("WorldContextObject"));
+        if (TestNotNull(TEXT("Static EchoHitResult context property exists"), HitContextProperty) &&
+            TestNotNull(TEXT("Static EchoHitResult input property exists"), HitProperty) &&
+            TestNotNull(TEXT("Static EchoHitResult return property exists"), HitReturnProperty))
+        {
+            FStructOnScope Call(EchoHitResultFunction);
+            uint8* Memory = Call.GetStructMemory();
+            HitContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            FHitResult Expected;
+            Expected.bBlockingHit = true;
+            Expected.bStartPenetrating = true;
+            Expected.BoneName = TEXT("spine_03");
+            Expected.MyBoneName = TEXT("root");
+            Expected.Distance = 123.5f;
+            Expected.FaceIndex = 17;
+            Expected.Item = 8;
+            Expected.Location = FVector(11.0, 22.0, 33.0);
+            Expected.ImpactPoint = FVector(44.0, 55.0, 66.0);
+            Expected.Normal = FVector(0.0, 0.0, 1.0);
+            *HitProperty->ContainerPtrToValuePtr<FHitResult>(Memory) = Expected;
+            LibraryObject->ProcessEvent(EchoHitResultFunction, Memory);
+            const FHitResult& Actual =
+                *HitReturnProperty->ContainerPtrToValuePtr<FHitResult>(Memory);
+            TestEqual(TEXT("General UStruct preserves bBlockingHit"),
+                Actual.bBlockingHit, Expected.bBlockingHit);
+            TestEqual(TEXT("General UStruct preserves bStartPenetrating"),
+                Actual.bStartPenetrating, Expected.bStartPenetrating);
+            TestEqual(TEXT("General UStruct preserves BoneName"),
+                Actual.BoneName, Expected.BoneName);
+            TestEqual(TEXT("General UStruct preserves Distance"),
+                Actual.Distance, Expected.Distance);
+            TestEqual(TEXT("General UStruct preserves Location"),
+                Actual.Location, Expected.Location);
+            TestEqual(TEXT("General UStruct preserves ImpactPoint"),
+                Actual.ImpactPoint, Expected.ImpactPoint);
         }
     }
 

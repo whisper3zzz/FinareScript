@@ -818,7 +818,8 @@ public sealed class UnrealApiSourceDependencyScanner
             UnrealValueKind.Class => actualName == "UnrealClassHandle",
             UnrealValueKind.SoftObject => actualName == "UnrealSoftObjectHandle",
             UnrealValueKind.SoftClass => actualName == "UnrealSoftClassHandle",
-            UnrealValueKind.Enum => actualName == "UnrealEnumValue",
+            UnrealValueKind.Enum => actualName == "UnrealEnumValue" ||
+                actualName == ManagedNameFromNative(expected.NativeName),
             UnrealValueKind.Struct when expected.TypePath == "/Script/CoreUObject.Vector" =>
                 actualName == "UnrealVector",
             UnrealValueKind.Struct when expected.TypePath == "/Script/CoreUObject.Rotator" =>

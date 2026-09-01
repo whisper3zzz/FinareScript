@@ -8,31 +8,35 @@ namespace UnifiedScript.Unreal.Generated;
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct HitResult(
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0)] global::UnifiedScript.Unreal.UnrealName BoneName,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1)] float Distance,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(2)] byte ElementIndex,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(3)] int FaceIndex,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(4)] global::UnifiedScript.Unreal.UnrealVector ImpactNormal,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(5)] global::UnifiedScript.Unreal.UnrealVector ImpactPoint,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(6)] int Item,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(7)] global::UnifiedScript.Unreal.UnrealVector Location,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(8)] global::UnifiedScript.Unreal.UnrealName MyBoneName,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(9)] int MyItem,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(10)] global::UnifiedScript.Unreal.UnrealVector Normal,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(11)] float PenetrationDepth,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(12)] float Time,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(13)] global::UnifiedScript.Unreal.UnrealVector TraceEnd,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(14)] global::UnifiedScript.Unreal.UnrealVector TraceStart,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(15)] bool bBlockingHit,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(16)] bool bStartPenetrating);
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0, "BoneName")] global::UnifiedScript.Unreal.UnrealName BoneName,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1, "Distance")] float Distance,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(2, "ElementIndex")] byte ElementIndex,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(3, "FaceIndex")] int FaceIndex,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(4, "ImpactNormal")] global::UnifiedScript.Unreal.UnrealVector ImpactNormal,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(5, "ImpactPoint")] global::UnifiedScript.Unreal.UnrealVector ImpactPoint,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(6, "Item")] int Item,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(7, "Location")] global::UnifiedScript.Unreal.UnrealVector Location,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(8, "MyBoneName")] global::UnifiedScript.Unreal.UnrealName MyBoneName,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(9, "MyItem")] int MyItem,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(10, "Normal")] global::UnifiedScript.Unreal.UnrealVector Normal,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(11, "PenetrationDepth")] float PenetrationDepth,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(12, "Time")] float Time,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(13, "TraceEnd")] global::UnifiedScript.Unreal.UnrealVector TraceEnd,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(14, "TraceStart")] global::UnifiedScript.Unreal.UnrealVector TraceStart,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(15, "bBlockingHit")] bool bBlockingHit,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(16, "bStartPenetrating")] bool bStartPenetrating);
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EUnified Script Interop Mode", Tooltip = "EUnified Script Interop Mode")]
-public static class EUnifiedScriptInteropMode
+[global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", "EUnifiedScriptInteropMode")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct EUnifiedScriptInteropMode(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
 {
-    public static global::UnifiedScript.Unreal.UnrealEnumValue Idle { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 0);
-    public static global::UnifiedScript.Unreal.UnrealEnumValue Active { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 1);
-    public static global::UnifiedScript.Unreal.UnrealEnumValue Suspended { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 2);
-    public static global::UnifiedScript.Unreal.UnrealEnumValue EUnifiedScriptInteropMode_MAX { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 3);
+    public static EUnifiedScriptInteropMode Idle { get; } = new(0);
+    public static EUnifiedScriptInteropMode Active { get; } = new(1);
+    public static EUnifiedScriptInteropMode Suspended { get; } = new(2);
+    public static EUnifiedScriptInteropMode EUnifiedScriptInteropMode_MAX { get; } = new(3);
+
+    public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", Value);
 }
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Actor", Tooltip = "Placeable Actor whose gameplay behavior is supplied by a managed\nUnrealActorScript. The native class remains the stable Blueprint/UObject\nidentity while managed generations can be reloaded independently.")]
@@ -395,9 +399,9 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     }
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mode", Category = "UnifiedScript|Interop")]
-    public global::UnifiedScript.Unreal.UnrealEnumValue Mode
+    public EUnifiedScriptInteropMode Mode
     {
-        get => ReadProperty<global::UnifiedScript.Unreal.UnrealEnumValue>(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");
+        get => ReadProperty<EUnifiedScriptInteropMode>(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");
         set => WriteProperty(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode", value);
     }
 

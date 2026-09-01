@@ -542,8 +542,15 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 checked((int)frame->ByteCount),
                 out T decoded))
         {
+            string detail = (uint)index < frame->ArgumentCount
+                ? UnrealNativeValueCodecV3.DescribeDecodeFailure(
+                    typeof(T),
+                    in arguments[index],
+                    arena,
+                    checked((int)frame->ByteCount))
+                : "the argument index is outside the call frame";
             throw new ArgumentException(
-                $"Managed Blueprint function argument {index} cannot decode as '{typeof(T).FullName}'.",
+                $"Managed Blueprint function argument {index} cannot decode as '{typeof(T).FullName}': {detail}",
                 nameof(frameAddress));
         }
         return decoded;

@@ -169,4 +169,16 @@ public static class DemoLibrary
     {
         return value;
     }
+
+    [Visual]
+    public static EUnifiedScriptInteropMode EchoMode(EUnifiedScriptInteropMode value)
+    {
+        return value;
+    }
+
+    [Visual]
+    public static HitResult EchoHitResult(HitResult value)
+    {
+        return value;
+    }
 }

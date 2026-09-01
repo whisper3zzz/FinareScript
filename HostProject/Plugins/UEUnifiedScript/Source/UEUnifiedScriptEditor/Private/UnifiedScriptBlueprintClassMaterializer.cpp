@@ -57,12 +57,28 @@ struct FPlannedState
     bool bPreserveDefaultOverride = false;
 };
 
+enum class EFunctionValueTypeKind : uint8
+{
+    None,
+    Enum,
+    Struct,
+};
+
+struct FFunctionValueTypeDeclaration
+{
+    EFunctionValueTypeKind Kind = EFunctionValueTypeKind::None;
+    FString UnrealTypePath;
+    FString UnrealNativeName;
+    TArray<TArray<FName>> StructFieldPaths;
+};
+
 struct FFunctionParameterDeclaration
 {
     FGuid Id;
     FName Name;
     FString TypeMetadataName;
     FEdGraphPinType PinType;
+    FFunctionValueTypeDeclaration ValueType;
 };
 
 struct FFunctionDeclaration
@@ -73,6 +89,7 @@ struct FFunctionDeclaration
     FName InternalName;
     FString ReturnTypeMetadataName;
     FEdGraphPinType ReturnPinType;
+    FFunctionValueTypeDeclaration ReturnValueType;
     bool bHasReturnValue = false;
     bool bIsStatic = false;
     TArray<FFunctionParameterDeclaration> Parameters;
@@ -182,6 +199,7 @@ bool ResolvePinType(
 
 bool ResolveFunctionPinType(
     const FString& MetadataName,
+    const FFunctionValueTypeDeclaration& ValueType,
     bool bAllowVoid,
     FEdGraphPinType& OutType,
     bool& bOutHasValue)
@@ -191,6 +209,51 @@ bool ResolveFunctionPinType(
     {
         OutType = FEdGraphPinType();
         return bAllowVoid;
+    }
+    if (ValueType.Kind == EFunctionValueTypeKind::Enum)
+    {
+        UEnum* Enum = LoadObject<UEnum>(nullptr, *ValueType.UnrealTypePath);
+        if (Enum == nullptr || Enum->GetName() != ValueType.UnrealNativeName)
+        {
+            return false;
+        }
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+        OutType.PinSubCategoryObject = Enum;
+        return true;
+    }
+    if (ValueType.Kind == EFunctionValueTypeKind::Struct)
+    {
+        UScriptStruct* Struct = LoadObject<UScriptStruct>(nullptr, *ValueType.UnrealTypePath);
+        if (Struct == nullptr)
+        {
+            return false;
+        }
+        for (const TArray<FName>& FieldPath : ValueType.StructFieldPaths)
+        {
+            const UStruct* Owner = Struct;
+            for (int32 Index = 0; Index < FieldPath.Num(); ++Index)
+            {
+                const FProperty* Field = FindFProperty<FProperty>(Owner, FieldPath[Index]);
+                if (Field == nullptr)
+                {
+                    return false;
+                }
+                if (Index + 1 < FieldPath.Num())
+                {
+                    const FStructProperty* Nested = CastField<FStructProperty>(Field);
+                    if (Nested == nullptr)
+                    {
+                        return false;
+                    }
+                    Owner = Nested->Struct;
+                }
+            }
+        }
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        OutType.PinSubCategoryObject = Struct;
+        return true;
     }
     FString TypeKind;
     if (MetadataName == TEXT("System.Boolean"))
@@ -478,6 +541,127 @@ bool ReadRequiredString(
         return false;
     }
     return true;
+}
+
+bool AppendFunctionValueType(
+    const TSharedPtr<FJsonObject>& Object,
+    bool bTopLevel,
+    TArray<FName>& Prefix,
+    FFunctionValueTypeDeclaration& OutType,
+    FString& OutError)
+{
+    FString Kind;
+    FString UnrealTypePath;
+    FString UnrealNativeName;
+    const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+    if (!ReadRequiredString(Object, TEXT("kind"), Kind, OutError) ||
+        !ReadRequiredString(Object, TEXT("unrealTypePath"), UnrealTypePath, OutError) ||
+        !ReadRequiredString(Object, TEXT("unrealNativeName"), UnrealNativeName, OutError) ||
+        !Object->TryGetArrayField(TEXT("fields"), Fields) || Fields == nullptr)
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("Function Unreal value type requires a fields array.");
+        }
+        return false;
+    }
+
+    const EFunctionValueTypeKind ParsedKind = Kind == TEXT("enum")
+        ? EFunctionValueTypeKind::Enum
+        : Kind == TEXT("struct")
+            ? EFunctionValueTypeKind::Struct
+            : EFunctionValueTypeKind::None;
+    if (ParsedKind == EFunctionValueTypeKind::None ||
+        !UnrealTypePath.StartsWith(TEXT("/Script/")) ||
+        (ParsedKind == EFunctionValueTypeKind::Enum && !Fields->IsEmpty()))
+    {
+        OutError = FString::Printf(
+            TEXT("Function Unreal value type '%s' has an invalid kind, path, or field contract."),
+            *UnrealTypePath);
+        return false;
+    }
+    if (bTopLevel)
+    {
+        OutType.Kind = ParsedKind;
+        OutType.UnrealTypePath = UnrealTypePath;
+        OutType.UnrealNativeName = UnrealNativeName;
+    }
+
+    if (ParsedKind == EFunctionValueTypeKind::Enum)
+    {
+        return true;
+    }
+    for (int32 Index = 0; Index < Fields->Num(); ++Index)
+    {
+        const TSharedPtr<FJsonObject> Field = (*Fields)[Index].IsValid()
+            ? (*Fields)[Index]->AsObject()
+            : nullptr;
+        FString NativeName;
+        double DeclaredIndex = -1.0;
+        if (!ReadRequiredString(Field, TEXT("nativeName"), NativeName, OutError) ||
+            !Field->TryGetNumberField(TEXT("index"), DeclaredIndex) ||
+            DeclaredIndex != static_cast<double>(Index))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = FString::Printf(
+                    TEXT("Function struct '%s' has invalid field identity at index %d."),
+                    *UnrealTypePath,
+                    Index);
+            }
+            return false;
+        }
+        Prefix.Add(FName(*NativeName));
+        OutType.StructFieldPaths.Add(Prefix);
+        const TSharedPtr<FJsonObject>* Nested = nullptr;
+        if (Field->HasField(TEXT("unrealType")))
+        {
+            if (!Field->TryGetObjectField(TEXT("unrealType"), Nested) ||
+                Nested == nullptr || !Nested->IsValid() ||
+                !AppendFunctionValueType(*Nested, false, Prefix, OutType, OutError))
+            {
+                Prefix.Pop();
+                return false;
+            }
+        }
+        Prefix.Pop();
+    }
+    return true;
+}
+
+bool ParseFunctionValueType(
+    const TSharedPtr<FJsonObject>& Owner,
+    const TCHAR* Field,
+    FFunctionValueTypeDeclaration& OutType,
+    FString& OutError)
+{
+    OutType = FFunctionValueTypeDeclaration();
+    if (!Owner.IsValid() || !Owner->HasField(Field))
+    {
+        return true;
+    }
+    const TSharedPtr<FJsonObject>* Object = nullptr;
+    if (!Owner->TryGetObjectField(Field, Object) || Object == nullptr || !Object->IsValid())
+    {
+        OutError = FString::Printf(TEXT("Function value type field '%s' must be an object."), Field);
+        return false;
+    }
+    TArray<FName> Prefix;
+    return AppendFunctionValueType(*Object, true, Prefix, OutType, OutError);
+}
+
+FUnifiedScriptManagedValueTypeBinding MakeRuntimeValueTypeBinding(
+    const FFunctionValueTypeDeclaration& Declaration)
+{
+    FUnifiedScriptManagedValueTypeBinding Result;
+    Result.UnrealTypePath = Declaration.UnrealTypePath;
+    Result.StructFields.Reserve(Declaration.StructFieldPaths.Num());
+    for (const TArray<FName>& Path : Declaration.StructFieldPaths)
+    {
+        FUnifiedScriptManagedStructFieldPath& Field = Result.StructFields.AddDefaulted_GetRef();
+        Field.Segments = Path;
+    }
+    return Result;
 }
 
 bool ParseDeclaration(
@@ -768,8 +952,14 @@ bool ParseDeclaration(
             return false;
         }
         Declaration.InternalName = MakeManagedFunctionInternalName(Declaration.Id);
-        if (!ResolveFunctionPinType(
+        if (!ParseFunctionValueType(
+                Function,
+                TEXT("returnUnrealType"),
+                Declaration.ReturnValueType,
+                OutError) ||
+            !ResolveFunctionPinType(
                 ReturnType,
+                Declaration.ReturnValueType,
                 true,
                 Declaration.ReturnPinType,
                 Declaration.bHasReturnValue))
@@ -810,8 +1000,14 @@ bool ParseDeclaration(
                 ParameterDeclaration.Name.IsNone() ||
                 SeenParameterIds.Contains(ParameterDeclaration.Id) ||
                 SeenParameterNames.Contains(ParameterDeclaration.Name) ||
+                !ParseFunctionValueType(
+                    Parameter,
+                    TEXT("unrealType"),
+                    ParameterDeclaration.ValueType,
+                    OutError) ||
                 !ResolveFunctionPinType(
                     ParameterType,
+                    ParameterDeclaration.ValueType,
                     false,
                     ParameterDeclaration.PinType,
                     bHasParameterValue) ||
@@ -1557,6 +1753,15 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Binding.FunctionId = Planned.Declaration.Id;
             Binding.AbiVersion = 2;
             Binding.bStatic = Planned.Declaration.bIsStatic;
+            Binding.ReturnType = MakeRuntimeValueTypeBinding(
+                Planned.Declaration.ReturnValueType);
+            Binding.ParameterTypes.Reserve(Planned.Declaration.Parameters.Num());
+            for (const FFunctionParameterDeclaration& Parameter :
+                 Planned.Declaration.Parameters)
+            {
+                Binding.ParameterTypes.Add(
+                    MakeRuntimeValueTypeBinding(Parameter.ValueType));
+            }
             GeneratedClass->ManagedFunctionBindings.Add(
                 Planned.Declaration.InternalName,
                 MoveTemp(Binding));

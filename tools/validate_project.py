@@ -4244,9 +4244,12 @@ def main() -> int:
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
             "/Script/Engine.ActorInstanceHandle",
@@ -7352,6 +7355,43 @@ def main() -> int:
     )
     checks.append(
         "M13.3B-2b-1 dispatches static and inherited common-value Blueprint functions"
+    )
+    unreal_core_types = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealCoreTypes.cs"
+    ).read_text(encoding="utf-8")
+    script_asset_model = (
+        ROOT / "src" / "UnifiedScript.Core" / "ScriptAssetModel.cs"
+    ).read_text(encoding="utf-8")
+    native_host_source = (
+        ROOT
+        / "HostProject"
+        / "Source"
+        / "UEUnifiedScriptHost"
+        / "Private"
+        / "UEUnifiedScriptHostModule.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "UnrealEnumAttribute" in unreal_core_types
+        and "IUnrealEnumValue" in unreal_core_types
+        and "ScriptFunctionValueTypeDeclaration" in script_asset_model
+        and "ReturnUnrealType" in script_asset_model
+        and "MakeRuntimeValueTypeBinding" in blueprint_class_materializer_source
+        and "StructFields" in native_blueprint_header
+        and "EchoHitResult" in blueprint_class_materializer_tests
+        and "Persistent FunctionLibrary restores native managed dispatch"
+        in blueprint_class_materializer_tests
+        and "PostLoadDefaultObject" in native_blueprint_header
+        and "PostLoadDefaultObject" in native_blueprint_source
+        and "$compiledDeclaration" in onboarding_script
+        and "compiledDeclarations" in onboarding_script
+        and "UnifiedScriptScriptClassSmoke" in native_host_source
+        and "UNIFIEDSCRIPT_SCRIPT_CLASS_PACKAGED_SMOKE" in native_host_source
+        and "[x] **M13.3B-2b-2 — enum/UStruct persistence closure:**"
+        in roadmap_document,
+        "M13.3B-2b-2 typed enum/UStruct dispatch, persistent reload, Declaration IR staging, or packaged smoke proof is incomplete",
+    )
+    checks.append(
+        "M13.3B-2b-2 persists typed enum and UStruct Blueprint calls through reload/cook"
     )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"

@@ -318,6 +318,58 @@
 			"functions": []
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
+			"name": "UnifiedScriptBlueprintFunctionLibrary",
+			"nativeName": "UUnifiedScriptBlueprintFunctionLibrary",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptClassBases.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintFunctionLibrary",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint Function Library",
+				"tooltip": "Stable native parent for generated managed Blueprint Function Libraries.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
+			"name": "UnifiedScriptBlueprintGeneratedClass",
+			"nativeName": "UUnifiedScriptBlueprintGeneratedClass",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptBlueprint.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintGeneratedClass",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint Generated Class",
+				"tooltip": "Generated-class carrier for persistent managed function bindings.\n\nBlueprint graphs own the durable typed signature and call-node identity;\nthis class rebinds their implementation to one generic native dispatcher\nafter load, so cooked assets do not require one handwritten thunk per method.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
 			"name": "UnifiedScriptComponent",
 			"nativeName": "UUnifiedScriptComponent",
@@ -3079,6 +3131,32 @@
 					}
 				}
 			]
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
+			"name": "UnifiedScriptObject",
+			"nativeName": "UUnifiedScriptObject",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptClassBases.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Object",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Object",
+				"tooltip": "Stable native UObject parent for generated managed UObject classes.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
 		},
 		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",

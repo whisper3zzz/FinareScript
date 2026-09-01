@@ -15,7 +15,10 @@ public sealed class UnrealWorldServiceGenerationTests
         Assert.Empty(managed.Diagnostics);
         Assert.Empty(native.Diagnostics);
         Assert.Contains("readonly record struct HitResult(", managed.Source, StringComparison.Ordinal);
-        Assert.Contains("UnrealStructFieldAttribute(0)", managed.Source, StringComparison.Ordinal);
+        Assert.Contains(
+            "UnrealStructFieldAttribute(0, \"",
+            managed.Source,
+            StringComparison.Ordinal);
         Assert.Contains("UnrealStaticService", managed.Source, StringComparison.Ordinal);
         Assert.Contains("out HitResult outHit", managed.Source, StringComparison.Ordinal);
         Assert.Contains("UFixtureWorldLibrary::LineTraceSingle(", native.Source, StringComparison.Ordinal);

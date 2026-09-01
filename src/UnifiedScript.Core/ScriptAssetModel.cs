@@ -30,10 +30,29 @@ public sealed record ScriptStateDeclaration(
     SourceSpan Span,
     ScriptExposure Exposure);
 
+public enum ScriptFunctionValueTypeKind
+{
+    Enum,
+    Struct,
+}
+
+public sealed record ScriptFunctionStructFieldDeclaration(
+    int Index,
+    string NativeName,
+    string TypeMetadataName,
+    ScriptFunctionValueTypeDeclaration? UnrealType = null);
+
+public sealed record ScriptFunctionValueTypeDeclaration(
+    ScriptFunctionValueTypeKind Kind,
+    string UnrealTypePath,
+    string UnrealNativeName,
+    IReadOnlyList<ScriptFunctionStructFieldDeclaration> Fields);
+
 public sealed record ScriptParameterDeclaration(
     SemanticId Id,
     string Name,
-    string TypeMetadataName);
+    string TypeMetadataName,
+    ScriptFunctionValueTypeDeclaration? UnrealType = null);
 
 public sealed record ScriptFunctionDeclaration(
     SemanticId Id,
@@ -43,7 +62,8 @@ public sealed record ScriptFunctionDeclaration(
     bool IsStatic,
     bool IsPublic,
     bool IsEvent,
-    IReadOnlyList<ScriptParameterDeclaration> Parameters);
+    IReadOnlyList<ScriptParameterDeclaration> Parameters,
+    ScriptFunctionValueTypeDeclaration? ReturnUnrealType = null);
 
 public sealed record ScriptAssetDeclaration(
     SemanticId Id,

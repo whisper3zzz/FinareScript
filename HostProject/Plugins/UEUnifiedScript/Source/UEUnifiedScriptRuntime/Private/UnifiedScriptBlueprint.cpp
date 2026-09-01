@@ -163,15 +163,102 @@ double BitsDouble(uint64 Bits)
     return Value;
 }
 
+uint64 TypeIdFromPath(const FString& Path)
+{
+    constexpr uint64 OffsetBasis = 14695981039346656037ull;
+    constexpr uint64 Prime = 1099511628211ull;
+    if (Path.IsEmpty())
+    {
+        return 0;
+    }
+    uint64 Hash = OffsetBasis;
+    for (const TCHAR Character : Path)
+    {
+        if (Character > 0x7f)
+        {
+            return 0;
+        }
+        Hash ^= static_cast<uint8>(Character);
+        Hash *= Prime;
+    }
+    return Hash;
+}
+
+bool PathStartsWith(TConstArrayView<FName> Path, TConstArrayView<FName> Prefix)
+{
+    if (Path.Num() < Prefix.Num())
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Prefix.Num(); ++Index)
+    {
+        if (Path[Index] != Prefix[Index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void CollectDirectStructFields(
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    TConstArrayView<FName> Prefix,
+    TArray<FName, TInlineAllocator<32>>& OutNames)
+{
+    OutNames.Reset();
+    for (const FUnifiedScriptManagedStructFieldPath& Field : Binding.StructFields)
+    {
+        if (Field.Segments.Num() == Prefix.Num() + 1 &&
+            PathStartsWith(Field.Segments, Prefix))
+        {
+            OutNames.Add(Field.Segments.Last());
+        }
+    }
+}
+
 bool PackValueV2(
     const FProperty& Property,
     const void* Container,
     UUnifiedScriptWorldSubsystem& Host,
     TArray<uint8, TInlineAllocator<512>>& Arena,
+    const FUnifiedScriptManagedValueTypeBinding* TypeBinding,
+    TConstArrayView<FName> StructPrefix,
     FUnifiedScriptNativeValueV3& OutValue,
     FString& OutError)
 {
     const void* Value = Property.ContainerPtrToValuePtr<void>(Container);
+    const UEnum* Enum = nullptr;
+    int64 EnumValue = 0;
+    if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
+    {
+        Enum = EnumProperty->GetEnum();
+        EnumValue = EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(Value);
+    }
+    else if (const FByteProperty* ByteEnumProperty = CastField<FByteProperty>(&Property);
+             ByteEnumProperty != nullptr && ByteEnumProperty->Enum != nullptr)
+    {
+        Enum = ByteEnumProperty->Enum;
+        EnumValue = ByteEnumProperty->GetPropertyValue(Value);
+    }
+    if (Enum != nullptr)
+    {
+        const FString TypePath = Enum->GetPathName();
+        if (StructPrefix.IsEmpty() && TypeBinding != nullptr &&
+            !TypeBinding->UnrealTypePath.IsEmpty() &&
+            TypeBinding->UnrealTypePath != TypePath)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint enum parameter '%s' resolved '%s', expected '%s'."),
+                *Property.GetName(),
+                *TypePath,
+                *TypeBinding->UnrealTypePath);
+            return false;
+        }
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Enum;
+        OutValue.TypeId = TypeIdFromPath(TypePath);
+        OutValue.Payload0 = static_cast<uint64>(EnumValue);
+        return OutValue.TypeId != 0;
+    }
     if (const FBoolProperty* Typed = CastField<FBoolProperty>(&Property))
     {
         OutValue.Kind = EUnifiedScriptNativeValueKindV3::Boolean;
@@ -236,6 +323,30 @@ bool PackValueV2(
         OutValue.Payload1 = static_cast<uint64>(Utf8.Length());
         return true;
     }
+    if (const FNameProperty* Typed = CastField<FNameProperty>(&Property))
+    {
+        const FString String = Typed->GetPropertyValue(Value).ToString();
+        const FTCHARToUTF8 Utf8(*String);
+        if (Utf8.Length() > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint name parameter '%s' exceeds the %d-byte managed call arena."),
+                *Property.GetName(),
+                MaximumManagedFunctionArenaBytes);
+            return false;
+        }
+        const int32 Offset = Arena.Num();
+        if (Utf8.Length() > 0)
+        {
+            const int32 AddedOffset = Arena.AddUninitialized(Utf8.Length());
+            FMemory::Memcpy(Arena.GetData() + AddedOffset, Utf8.Get(), Utf8.Length());
+        }
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Name;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.Payload0 = static_cast<uint64>(Offset);
+        OutValue.Payload1 = static_cast<uint64>(Utf8.Length());
+        return true;
+    }
     if (const FObjectPropertyBase* Typed = CastField<FObjectPropertyBase>(&Property))
     {
         UObject* Object = Typed->GetObjectPropertyValue(Value);
@@ -256,7 +367,7 @@ bool PackValueV2(
         return true;
     }
     if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
-        Typed != nullptr && Typed->Struct == TBaseStructure<FVector>::Get())
+        Typed != nullptr && Typed->Struct->IsChildOf(TBaseStructure<FVector>::Get()))
     {
         const FVector& Vector = *static_cast<const FVector*>(Value);
         OutValue.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
@@ -264,6 +375,81 @@ bool PackValueV2(
         OutValue.Payload1 = DoubleBits(Vector.Y);
         OutValue.Payload2 = DoubleBits(Vector.Z);
         return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property))
+    {
+        if (TypeBinding == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint struct parameter '%s' has no persistent managed field contract."),
+                *Property.GetName());
+            return false;
+        }
+        const FString TypePath = Typed->Struct->GetPathName();
+        if (StructPrefix.IsEmpty() && !TypeBinding->UnrealTypePath.IsEmpty() &&
+            TypeBinding->UnrealTypePath != TypePath)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint struct parameter '%s' resolved '%s', expected '%s'."),
+                *Property.GetName(),
+                *TypePath,
+                *TypeBinding->UnrealTypePath);
+            return false;
+        }
+        TArray<FName, TInlineAllocator<32>> FieldNames;
+        CollectDirectStructFields(*TypeBinding, StructPrefix, FieldNames);
+        const int64 DescriptorBytes =
+            static_cast<int64>(FieldNames.Num()) * sizeof(FUnifiedScriptNativeValueV3);
+        if (DescriptorBytes > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint struct parameter '%s' exceeds the %d-byte managed call arena."),
+                *Property.GetName(),
+                MaximumManagedFunctionArenaBytes);
+            return false;
+        }
+        const int32 DescriptorOffset = Arena.AddZeroed(static_cast<int32>(DescriptorBytes));
+        for (int32 Index = 0; Index < FieldNames.Num(); ++Index)
+        {
+            const FProperty* Field = FindFProperty<FProperty>(Typed->Struct, FieldNames[Index]);
+            if (Field == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint struct '%s' no longer contains managed field '%s'."),
+                    *TypePath,
+                    *FieldNames[Index].ToString());
+                return false;
+            }
+            TArray<FName, TInlineAllocator<8>> ChildPrefix;
+            ChildPrefix.Append(StructPrefix.GetData(), StructPrefix.Num());
+            ChildPrefix.Add(FieldNames[Index]);
+            FUnifiedScriptNativeValueV3 Cell;
+            if (!PackValueV2(
+                    *Field,
+                    Value,
+                    Host,
+                    Arena,
+                    TypeBinding,
+                    ChildPrefix,
+                    Cell,
+                    OutError))
+            {
+                return false;
+            }
+            FMemory::Memcpy(
+                Arena.GetData() + DescriptorOffset +
+                    Index * sizeof(FUnifiedScriptNativeValueV3),
+                &Cell,
+                sizeof(Cell));
+        }
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Struct;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.TypeId = TypeIdFromPath(TypePath);
+        OutValue.Payload0 = DescriptorOffset;
+        OutValue.Payload1 = DescriptorBytes;
+        OutValue.Payload2 = FieldNames.Num();
+        OutValue.Payload3 = sizeof(FUnifiedScriptNativeValueV3);
+        return OutValue.TypeId != 0;
     }
     OutError = FString::Printf(
         TEXT("Blueprint parameter '%s' uses unsupported ABI v2 property '%s'."),
@@ -278,9 +464,43 @@ bool UnpackReturnValueV2(
     TConstArrayView<uint8> Arena,
     uint32 ByteCount,
     UUnifiedScriptWorldSubsystem& Host,
+    const FUnifiedScriptManagedValueTypeBinding* TypeBinding,
+    TConstArrayView<FName> StructPrefix,
     void* Result,
     FString& OutError)
 {
+    const UEnum* Enum = nullptr;
+    FNumericProperty* EnumStorage = nullptr;
+    if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
+    {
+        Enum = EnumProperty->GetEnum();
+        EnumStorage = EnumProperty->GetUnderlyingProperty();
+    }
+    else if (FByteProperty* ByteEnumProperty = const_cast<FByteProperty*>(
+                 CastField<FByteProperty>(&Property));
+             ByteEnumProperty != nullptr && ByteEnumProperty->Enum != nullptr)
+    {
+        Enum = ByteEnumProperty->Enum;
+        EnumStorage = ByteEnumProperty;
+    }
+    if (Enum != nullptr)
+    {
+        const FString TypePath = Enum->GetPathName();
+        if (Value.Kind != EUnifiedScriptNativeValueKindV3::Enum ||
+            Value.Flags != EUnifiedScriptNativeValueFlagsV3::None ||
+            Value.TypeId != TypeIdFromPath(TypePath) ||
+            (StructPrefix.IsEmpty() && TypeBinding != nullptr &&
+             !TypeBinding->UnrealTypePath.IsEmpty() &&
+             TypeBinding->UnrealTypePath != TypePath))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed enum result does not match Blueprint enum '%s'."),
+                *TypePath);
+            return false;
+        }
+        EnumStorage->SetIntPropertyValue(Result, static_cast<int64>(Value.Payload0));
+        return true;
+    }
     if (const FBoolProperty* Typed = CastField<FBoolProperty>(&Property);
         Typed != nullptr && Value.Kind == EUnifiedScriptNativeValueKindV3::Boolean &&
         Value.Payload0 <= 1)
@@ -335,6 +555,21 @@ bool UnpackReturnValueV2(
         Typed->SetPropertyValue(Result, FString(Converted.Length(), Converted.Get()));
         return true;
     }
+    if (const FNameProperty* Typed = CastField<FNameProperty>(&Property);
+        Typed != nullptr && Value.Kind == EUnifiedScriptNativeValueKindV3::Name &&
+        Value.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+        Value.Payload0 <= ByteCount && Value.Payload1 <= ByteCount - Value.Payload0)
+    {
+        const int32 Offset = static_cast<int32>(Value.Payload0);
+        const int32 Length = static_cast<int32>(Value.Payload1);
+        const FUTF8ToTCHAR Converted(
+            reinterpret_cast<const ANSICHAR*>(Arena.GetData() + Offset),
+            Length);
+        Typed->SetPropertyValue(
+            Result,
+            FName(FString(Converted.Length(), Converted.Get())));
+        return true;
+    }
     if (const FObjectPropertyBase* Typed = CastField<FObjectPropertyBase>(&Property);
         Typed != nullptr && Value.Kind == EUnifiedScriptNativeValueKindV3::Object)
     {
@@ -360,13 +595,80 @@ bool UnpackReturnValueV2(
         return true;
     }
     if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
-        Typed != nullptr && Typed->Struct == TBaseStructure<FVector>::Get() &&
+        Typed != nullptr && Typed->Struct->IsChildOf(TBaseStructure<FVector>::Get()) &&
         Value.Kind == EUnifiedScriptNativeValueKindV3::Vector3)
     {
         *static_cast<FVector*>(Result) = FVector(
             BitsDouble(Value.Payload0),
             BitsDouble(Value.Payload1),
             BitsDouble(Value.Payload2));
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property))
+    {
+        if (TypeBinding == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint struct result '%s' has no persistent managed field contract."),
+                *Property.GetName());
+            return false;
+        }
+        const FString TypePath = Typed->Struct->GetPathName();
+        TArray<FName, TInlineAllocator<32>> FieldNames;
+        CollectDirectStructFields(*TypeBinding, StructPrefix, FieldNames);
+        const uint64 DescriptorBytes =
+            static_cast<uint64>(FieldNames.Num()) * sizeof(FUnifiedScriptNativeValueV3);
+        if (Value.Kind != EUnifiedScriptNativeValueKindV3::Struct ||
+            Value.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+            Value.TypeId != TypeIdFromPath(TypePath) ||
+            Value.Payload1 != DescriptorBytes ||
+            Value.Payload2 != static_cast<uint64>(FieldNames.Num()) ||
+            Value.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||
+            Value.Payload0 > ByteCount || Value.Payload1 > ByteCount - Value.Payload0 ||
+            (StructPrefix.IsEmpty() && !TypeBinding->UnrealTypePath.IsEmpty() &&
+             TypeBinding->UnrealTypePath != TypePath))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed struct result does not match Blueprint struct '%s'."),
+                *TypePath);
+            return false;
+        }
+        const int32 DescriptorOffset = static_cast<int32>(Value.Payload0);
+        for (int32 Index = 0; Index < FieldNames.Num(); ++Index)
+        {
+            const FProperty* Field = FindFProperty<FProperty>(Typed->Struct, FieldNames[Index]);
+            if (Field == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint struct '%s' no longer contains managed field '%s'."),
+                    *TypePath,
+                    *FieldNames[Index].ToString());
+                return false;
+            }
+            FUnifiedScriptNativeValueV3 Cell;
+            FMemory::Memcpy(
+                &Cell,
+                Arena.GetData() + DescriptorOffset +
+                    Index * sizeof(FUnifiedScriptNativeValueV3),
+                sizeof(Cell));
+            TArray<FName, TInlineAllocator<8>> ChildPrefix;
+            ChildPrefix.Append(StructPrefix.GetData(), StructPrefix.Num());
+            ChildPrefix.Add(FieldNames[Index]);
+            void* FieldValue = Field->ContainerPtrToValuePtr<void>(Result);
+            if (!UnpackReturnValueV2(
+                    *Field,
+                    Cell,
+                    Arena,
+                    ByteCount,
+                    Host,
+                    TypeBinding,
+                    ChildPrefix,
+                    FieldValue,
+                    OutError))
+            {
+                return false;
+            }
+        }
         return true;
     }
     OutError = FString::Printf(
@@ -377,15 +679,29 @@ bool UnpackReturnValueV2(
 }
 }
 
+#if WITH_EDITOR
 UClass* UUnifiedScriptBlueprint::GetBlueprintClass() const
 {
     return UUnifiedScriptBlueprintGeneratedClass::StaticClass();
 }
+#endif
 
 void UUnifiedScriptBlueprintGeneratedClass::PostLoad()
 {
     Super::PostLoad();
     BindManagedFunctions();
+}
+
+void UUnifiedScriptBlueprintGeneratedClass::PostLoadDefaultObject(UObject* Object)
+{
+    Super::PostLoadDefaultObject(Object);
+    if (Object == GetDefaultObject(false))
+    {
+        // UFunction::Bind may run after the generated class PostLoad and restore
+        // Blueprint bytecode dispatch. The CDO is loaded only after every owned
+        // function has linked, so this is the durable post-load rebind point.
+        BindManagedFunctions();
+    }
 }
 
 void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
@@ -480,6 +796,7 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
         TArray<uint8, TInlineAllocator<512>> Arena;
         Arena.Reserve(MaximumManagedFunctionArenaBytes);
         FString MarshalError;
+        int32 ManagedParameterIndex = 0;
         for (TFieldIterator<FProperty> It(Function, EFieldIteratorFlags::ExcludeSuper); It; ++It)
         {
             const FProperty* Parameter = *It;
@@ -492,8 +809,20 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                 continue;
             }
             FUnifiedScriptNativeValueV3& Value = ArgumentsV2.AddDefaulted_GetRef();
+            const FUnifiedScriptManagedValueTypeBinding* ParameterType =
+                Binding->ParameterTypes.IsValidIndex(ManagedParameterIndex)
+                    ? &Binding->ParameterTypes[ManagedParameterIndex]
+                    : nullptr;
             if (ArgumentsV2.Num() > 4 ||
-                !PackValueV2(*Parameter, Stack.Locals, *Host, Arena, Value, MarshalError))
+                !PackValueV2(
+                    *Parameter,
+                    Stack.Locals,
+                    *Host,
+                    Arena,
+                    ParameterType,
+                    {},
+                    Value,
+                    MarshalError))
             {
                 UE_LOG(
                     LogTemp,
@@ -504,6 +833,7 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                     MarshalError.IsEmpty() ? TEXT("unsupported call shape") : *MarshalError);
                 return;
             }
+            ++ManagedParameterIndex;
         }
 
         const uint32 InputByteCount = static_cast<uint32>(Arena.Num());
@@ -584,9 +914,11 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                  *ReturnProperty,
                  ResultV2,
                  Arena,
-                 Frame.ByteCount,
-                 *Host,
-                 RESULT_PARAM,
+                  Frame.ByteCount,
+                  *Host,
+                  &Binding->ReturnType,
+                  {},
+                  RESULT_PARAM,
                  Error)))
         {
             UE_LOG(

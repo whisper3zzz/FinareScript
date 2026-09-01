@@ -400,6 +400,63 @@ public sealed class CSharpScriptAssetLowererTests
             function.Name is "Hidden" or "StaticBase");
     }
 
+    [Fact]
+    public void GeneratedEnumAndStructSignaturesRetainExactUnrealFieldIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game.Generated;
+
+            [UnrealEnum("/Script/FixtureRuntime.EFixtureMode", "EFixtureMode")]
+            [UnrealValue]
+            public readonly record struct FixtureMode(long Value) : IUnrealEnumValue;
+
+            [UnrealStruct("/Script/FixtureRuntime.FixturePayload", "FFixturePayload")]
+            [UnrealValue]
+            public readonly record struct FixturePayload(
+                [property: UnrealStructField(0, "Count")] int Count,
+                [property: UnrealStructField(1, "Mode")] FixtureMode Mode);
+
+            [ScriptAsset("Game/TypedLibrary", ClassId = "us_00000000000000000000000000000006")]
+            [UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+            public static class TypedLibrary
+            {
+                [Visual]
+                public static FixturePayload Echo(FixturePayload value) { return value; }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "GeneratedFunctionValueTypes",
+            [new CSharpSourceDocument("Game/TypedLibrary.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptFunctionDeclaration function = Assert.Single(result.ScriptAssets!.Assets
+            .Single(static asset => asset.QualifiedName == "Game.Generated.TypedLibrary")
+            .Functions);
+        ScriptFunctionValueTypeDeclaration returnType = Assert.IsType<
+            ScriptFunctionValueTypeDeclaration>(function.ReturnUnrealType);
+        Assert.Equal(ScriptFunctionValueTypeKind.Struct, returnType.Kind);
+        Assert.Equal("/Script/FixtureRuntime.FixturePayload", returnType.UnrealTypePath);
+        Assert.Equal(["Count", "Mode"],
+            returnType.Fields.Select(static field => field.NativeName));
+        ScriptFunctionValueTypeDeclaration nestedEnum = Assert.IsType<
+            ScriptFunctionValueTypeDeclaration>(returnType.Fields[1].UnrealType);
+        Assert.Equal(ScriptFunctionValueTypeKind.Enum, nestedEnum.Kind);
+        Assert.Equal("/Script/FixtureRuntime.EFixtureMode", nestedEnum.UnrealTypePath);
+        ScriptFunctionValueTypeDeclaration parameterType = Assert.IsType<
+            ScriptFunctionValueTypeDeclaration>(Assert.Single(function.Parameters).UnrealType);
+        Assert.Equal(returnType.Kind, parameterType.Kind);
+        Assert.Equal(returnType.UnrealTypePath, parameterType.UnrealTypePath);
+        Assert.Equal(
+            returnType.Fields.Select(static field => field.NativeName),
+            parameterType.Fields.Select(static field => field.NativeName));
+    }
+
     [Theory]
     [InlineData("us_0123456789ABCDEF0123456789ABCDEF")]
     [InlineData("0123456789abcdef0123456789abcdef")]

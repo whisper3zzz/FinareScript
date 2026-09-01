@@ -405,7 +405,7 @@ public sealed class UnrealBindingGenerator
         {
             var field = fields[index];
             source.Append("    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(")
-                .Append(index).Append(")] ")
+                .Append(index).Append(", ").Append(Literal(field.Property.Name)).Append(")] ")
                 .Append(field.ManagedType).Append(' ').Append(field.Name)
                 .AppendLine(index + 1 == fields.Count ? ");" : ",");
         }
@@ -419,16 +419,23 @@ public sealed class UnrealBindingGenerator
     private static void EmitEnum(StringBuilder source, UnrealReflectedType type, string enumName)
     {
         EmitBlueprintMetadata(source, type.Metadata, string.Empty);
-        source.Append("public static class ").Append(enumName).AppendLine();
+        source.Append("[global::UnifiedScript.Unreal.UnrealEnumAttribute(")
+            .Append(Literal(type.Path)).Append(", ").Append(Literal(type.NativeName)).AppendLine(")]");
+        source.AppendLine("[global::UnifiedScript.Unreal.UnrealValueAttribute]");
+        source.Append("public readonly record struct ").Append(enumName)
+            .AppendLine("(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue");
         source.AppendLine("{");
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (UnrealEnumValueDefinition value in type.EnumValues)
         {
             string name = MakeUniqueMemberName(ToIdentifier(value.Name), $"{type.Path}:{value.Name}", names);
-            source.Append("    public static global::UnifiedScript.Unreal.UnrealEnumValue ")
+            source.Append("    public static ").Append(enumName).Append(' ')
                 .Append(name).Append(" { get; } = new(")
-                .Append(Literal(type.Path)).Append(", ").Append(value.Value).AppendLine(");");
+                .Append(value.Value).AppendLine(");");
         }
+        source.AppendLine();
+        source.Append("    public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new(")
+            .Append(Literal(type.Path)).AppendLine(", Value);");
         source.AppendLine("}");
         source.AppendLine();
     }
@@ -602,6 +609,12 @@ public sealed class UnrealBindingGenerator
             UnrealValueKind.SoftClass =>
                 $"new global::UnifiedScript.Unreal.UnrealSoftClassHandle({Literal(value)})",
             UnrealValueKind.Object or UnrealValueKind.Class when value is "None" or "null" => "default",
+            UnrealValueKind.Enum when parameter.Type.TypePath is not null &&
+                managedTypeNames.TryGetValue(parameter.Type.TypePath, out string? enumName) &&
+                long.TryParse(value,
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out _) =>
+                $"new {enumName}({value})",
             UnrealValueKind.Enum when long.TryParse(value,
                 System.Globalization.NumberStyles.Integer,
                 System.Globalization.CultureInfo.InvariantCulture, out _) =>
@@ -734,6 +747,8 @@ public sealed class UnrealBindingGenerator
                 "global::UnifiedScript.Unreal.UnrealSoftObjectHandle",
             UnrealValueKind.SoftClass =>
                 "global::UnifiedScript.Unreal.UnrealSoftClassHandle",
+            UnrealValueKind.Enum when type.TypePath is not null &&
+                managedTypeNames.TryGetValue(type.TypePath, out string? enumName) => enumName,
             UnrealValueKind.Enum => "global::UnifiedScript.Unreal.UnrealEnumValue",
             UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
                 "global::UnifiedScript.Unreal.UnrealVector",

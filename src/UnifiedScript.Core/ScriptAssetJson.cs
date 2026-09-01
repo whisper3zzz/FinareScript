@@ -166,6 +166,8 @@ public static class ScriptAssetJson
             throw new JsonException($"Duplicate script function ID '{function.Id}'.");
         }
 
+        ValidateFunctionValueType(function.ReturnUnrealType, function.ReturnTypeMetadataName, 0);
+
         var parameterIds = new HashSet<SemanticId>();
         var parameterNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (ScriptParameterDeclaration? parameter in function.Parameters)
@@ -177,6 +179,44 @@ public static class ScriptAssetJson
             {
                 throw new JsonException($"Script function '{function.QualifiedName}' has an invalid parameter.");
             }
+            ValidateFunctionValueType(parameter.UnrealType, parameter.TypeMetadataName, 0);
+        }
+    }
+
+    private static void ValidateFunctionValueType(
+        ScriptFunctionValueTypeDeclaration? type,
+        string metadataName,
+        int depth)
+    {
+        if (type is null)
+        {
+            return;
+        }
+        if (depth > 16 || !Enum.IsDefined(type.Kind) ||
+            string.IsNullOrWhiteSpace(type.UnrealTypePath) ||
+            !type.UnrealTypePath.StartsWith("/Script/", StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(type.UnrealNativeName) ||
+            type.Fields is null ||
+            string.IsNullOrWhiteSpace(metadataName))
+        {
+            throw new JsonException($"Function value type '{metadataName}' has invalid Unreal identity.");
+        }
+        if (type.Kind == ScriptFunctionValueTypeKind.Enum && type.Fields.Count != 0)
+        {
+            throw new JsonException($"Enum value type '{metadataName}' cannot declare struct fields.");
+        }
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < type.Fields.Count; ++index)
+        {
+            ScriptFunctionStructFieldDeclaration? field = type.Fields[index];
+            if (type.Kind != ScriptFunctionValueTypeKind.Struct || field is null ||
+                field.Index != index || string.IsNullOrWhiteSpace(field.NativeName) ||
+                string.IsNullOrWhiteSpace(field.TypeMetadataName) ||
+                !names.Add(field.NativeName))
+            {
+                throw new JsonException($"Struct value type '{metadataName}' has invalid field identity.");
+            }
+            ValidateFunctionValueType(field.UnrealType, field.TypeMetadataName, depth + 1);
         }
     }
 

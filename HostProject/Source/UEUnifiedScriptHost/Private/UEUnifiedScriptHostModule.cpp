@@ -8,8 +8,263 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
+#include "UnifiedScriptActor.h"
+#include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptWorldSubsystem.h"
+
+namespace UE::UnifiedScript::PackagedScriptClassSmoke::Private
+{
+bool ReadArgument(const TCHAR* Name, FString& OutValue)
+{
+    if (!FParse::Value(FCommandLine::Get(), Name, OutValue))
+    {
+        return false;
+    }
+    OutValue.TrimQuotesInline();
+    return !OutValue.IsEmpty();
+}
+
+void Finish(bool bSuccess, const FString& Detail)
+{
+    FString ResultPath;
+    ReadArgument(TEXT("UnifiedScriptScriptClassSmokeResult="), ResultPath);
+    const FString Result = FString::Printf(
+        TEXT("%s\n%s\n"),
+        bSuccess ? TEXT("PASS") : TEXT("FAIL"),
+        *Detail);
+    if (!ResultPath.IsEmpty())
+    {
+        FFileHelper::SaveStringToFile(
+            Result,
+            *ResultPath,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+    }
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UNIFIEDSCRIPT_SCRIPT_CLASS_PACKAGED_SMOKE %s %s"),
+        bSuccess ? TEXT("PASS") : TEXT("FAIL"),
+        *Detail.ReplaceCharWithEscapedChar());
+    FPlatformMisc::RequestExitWithStatus(
+        false,
+        bSuccess ? 0 : 1,
+        TEXT("UnifiedScriptScriptClassPackagedSmoke"));
+}
+
+void Run()
+{
+    FString ActorClassPath;
+    FString ComponentClassPath;
+    if (!ReadArgument(TEXT("UnifiedScriptActorClass="), ActorClassPath) ||
+        !ReadArgument(TEXT("UnifiedScriptComponentClass="), ComponentClassPath))
+    {
+        Finish(false, TEXT("Required Actor or Component class path is missing."));
+        return;
+    }
+
+    UClass* ActorClass = LoadClass<AUnifiedScriptActor>(nullptr, *ActorClassPath);
+    UClass* ComponentClass = LoadClass<UUnifiedScriptComponent>(
+        nullptr,
+        *ComponentClassPath);
+    if (ActorClass == nullptr || ComponentClass == nullptr)
+    {
+        Finish(
+            false,
+            FString::Printf(
+                TEXT("Packaged class load failed; actor=%s; component=%s"),
+                ActorClass != nullptr ? TEXT("loaded") : TEXT("missing"),
+                ComponentClass != nullptr ? TEXT("loaded") : TEXT("missing")));
+        return;
+    }
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (World == nullptr)
+    {
+        Finish(false, TEXT("Unable to create the packaged smoke World."));
+        return;
+    }
+    World->AddToRoot();
+
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    AUnifiedScriptActor* ScriptActor = World->SpawnActor<AUnifiedScriptActor>(
+        ActorClass);
+    AActor* ComponentOwner = World->SpawnActor<AActor>();
+    UUnifiedScriptComponent* AttachedComponent = ComponentOwner != nullptr
+        ? NewObject<UUnifiedScriptComponent>(ComponentOwner, ComponentClass)
+        : nullptr;
+    if (ComponentOwner != nullptr && AttachedComponent != nullptr)
+    {
+        ComponentOwner->AddInstanceComponent(AttachedComponent);
+        AttachedComponent->RegisterComponentWithWorld(World);
+    }
+
+    UUnifiedScriptComponent* ActorComponent = ScriptActor != nullptr
+        ? ScriptActor->ScriptComponent
+        : nullptr;
+    FString Failure;
+    FString ActorIdentityError;
+    FString ComponentIdentityError;
+    const bool bObjectsReady = Host != nullptr && ScriptActor != nullptr &&
+        ComponentOwner != nullptr && AttachedComponent != nullptr &&
+        ActorComponent != nullptr && ActorComponent->ScriptAsset != nullptr &&
+        AttachedComponent->ScriptAsset != nullptr;
+    if (!bObjectsReady)
+    {
+        Failure = TEXT(
+            "Packaged Actor/Component instances or Script Assets are unavailable.");
+    }
+
+    const bool bActorIdentity = bObjectsReady &&
+        ActorComponent->ScriptAsset->ValidateGeneratedClassIdentity(
+            ActorComponent,
+            ScriptActor,
+            ActorIdentityError);
+    const bool bComponentIdentity = bObjectsReady &&
+        AttachedComponent->ScriptAsset->ValidateGeneratedClassIdentity(
+            AttachedComponent,
+            ComponentOwner,
+            ComponentIdentityError);
+    if (Failure.IsEmpty() && (!bActorIdentity || !bComponentIdentity))
+    {
+        Failure = FString::Printf(
+            TEXT("Generated-class identity failed; actor=%s; component=%s"),
+            *ActorIdentityError,
+            *ComponentIdentityError);
+    }
+
+    if (Failure.IsEmpty())
+    {
+        ActorComponent->BeginPlay();
+        AttachedComponent->BeginPlay();
+    }
+    const bool bActorStarted = ActorComponent != nullptr &&
+        ActorComponent->bScriptRunning && ActorComponent->LastScriptError.IsEmpty();
+    const bool bComponentStarted = AttachedComponent != nullptr &&
+        AttachedComponent->bScriptRunning &&
+        AttachedComponent->LastScriptError.IsEmpty();
+    const int32 LiveManagedScriptCount = Host != nullptr
+        ? Host->GetManagedScriptCount()
+        : -1;
+    const int32 LiveLifecycleClaimCount = Host != nullptr
+        ? Host->GetGameplayLifecycleClaimCount()
+        : -1;
+    if (Failure.IsEmpty() &&
+        (!bActorStarted || !bComponentStarted ||
+         LiveManagedScriptCount != 2 || LiveLifecycleClaimCount != 2))
+    {
+        Failure = FString::Printf(
+            TEXT("Managed BeginPlay failed; actor=%s (%s); component=%s (%s); scripts=%d; claims=%d"),
+            bActorStarted ? TEXT("true") : TEXT("false"),
+            ActorComponent != nullptr
+                ? *ActorComponent->LastScriptError
+                : TEXT("missing"),
+            bComponentStarted ? TEXT("true") : TEXT("false"),
+            AttachedComponent != nullptr
+                ? *AttachedComponent->LastScriptError
+                : TEXT("missing"),
+            LiveManagedScriptCount,
+            LiveLifecycleClaimCount);
+    }
+
+    if (Failure.IsEmpty())
+    {
+        Host->EndManagedFrame();
+        Host->BeginManagedFrame();
+        ActorComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+        AttachedComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    }
+    const bool bActorTicked = bActorStarted && ActorComponent != nullptr &&
+        ActorComponent->bScriptRunning && ActorComponent->LastScriptError.IsEmpty();
+    const bool bComponentTicked = bComponentStarted &&
+        AttachedComponent != nullptr && AttachedComponent->bScriptRunning &&
+        AttachedComponent->LastScriptError.IsEmpty();
+    if (Failure.IsEmpty() && (!bActorTicked || !bComponentTicked))
+    {
+        Failure = TEXT("Managed Actor or Component Tick failed.");
+    }
+
+    const FString ActorProgram = ActorComponent != nullptr
+        ? ActorComponent->GetActiveProgramPath()
+        : FString();
+    const FString ComponentProgram = AttachedComponent != nullptr
+        ? AttachedComponent->GetActiveProgramPath()
+        : FString();
+    const FString HostFxrPath = FUnifiedScriptCoreClrHost::Get().GetHostFxrPath();
+    const bool bCompiledChunks = ActorProgram.EndsWith(TEXT(".uschunk")) &&
+        ComponentProgram.EndsWith(TEXT(".uschunk"));
+    const bool bPluginLocalRuntime = HostFxrPath.Contains(
+        TEXT("UEUnifiedScript/Binaries/ThirdParty/DotNet/10.0"));
+    if (Failure.IsEmpty() && (!bCompiledChunks || !bPluginLocalRuntime))
+    {
+        Failure = FString::Printf(
+            TEXT("Packaged runtime closure failed; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
+            *ActorProgram,
+            *ComponentProgram,
+            *HostFxrPath);
+    }
+
+    if (ActorComponent != nullptr && ActorComponent->bScriptRunning)
+    {
+        ActorComponent->EndPlay(EEndPlayReason::Quit);
+    }
+    if (AttachedComponent != nullptr && AttachedComponent->bScriptRunning)
+    {
+        AttachedComponent->EndPlay(EEndPlayReason::Quit);
+    }
+    const int32 FinalManagedScriptCount = Host != nullptr
+        ? Host->GetManagedScriptCount()
+        : -1;
+    const int32 FinalLifecycleClaimCount = Host != nullptr
+        ? Host->GetGameplayLifecycleClaimCount()
+        : -1;
+    if (AttachedComponent != nullptr)
+    {
+        AttachedComponent->UnregisterComponent();
+    }
+    if (ScriptActor != nullptr)
+    {
+        ScriptActor->Destroy();
+    }
+    if (ComponentOwner != nullptr)
+    {
+        ComponentOwner->Destroy();
+    }
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    const int32 FinalManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    if (Failure.IsEmpty() &&
+        (FinalManagedScriptCount != 0 || FinalLifecycleClaimCount != 0 ||
+         FinalManagedWorldCount != InitialManagedWorldCount))
+    {
+        Failure = FString::Printf(
+            TEXT("Packaged teardown leaked state; scripts=%d; claims=%d; worldsBefore=%d; worldsAfter=%d"),
+            FinalManagedScriptCount,
+            FinalLifecycleClaimCount,
+            InitialManagedWorldCount,
+            FinalManagedWorldCount);
+    }
+
+    Finish(
+        Failure.IsEmpty(),
+        Failure.IsEmpty()
+            ? FString::Printf(
+                TEXT("actorClass=%s; componentClass=%s; actorStarted=true; componentStarted=true; actorTicked=true; componentTicked=true; managedScriptCount=2; lifecycleClaimCount=2; finalManagedScriptCount=0; finalLifecycleClaimCount=0; managedWorldCountBefore=%d; managedWorldCountAfter=%d; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
+                *ActorClassPath,
+                *ComponentClassPath,
+                InitialManagedWorldCount,
+                FinalManagedWorldCount,
+                *ActorProgram,
+                *ComponentProgram,
+                *HostFxrPath)
+            : Failure);
+}
+}
 
 namespace UE::UnifiedScript::HostFixture::Private
 {
@@ -112,6 +367,14 @@ public:
         }
         if (FParse::Param(
                 FCommandLine::Get(),
+                TEXT("UnifiedScriptScriptClassSmoke")))
+        {
+            ScriptClassSmokeDelegateHandle =
+                FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
+                    &UE::UnifiedScript::PackagedScriptClassSmoke::Private::Run);
+        }
+        if (FParse::Param(
+                FCommandLine::Get(),
                 TEXT("UnifiedScriptFrameWorkload")))
         {
             FrameBenchmarkInitHandle =
@@ -127,6 +390,12 @@ public:
         {
             FCoreDelegates::OnFEngineLoopInitComplete.Remove(SmokeDelegateHandle);
             SmokeDelegateHandle.Reset();
+        }
+        if (ScriptClassSmokeDelegateHandle.IsValid())
+        {
+            FCoreDelegates::OnFEngineLoopInitComplete.Remove(
+                ScriptClassSmokeDelegateHandle);
+            ScriptClassSmokeDelegateHandle.Reset();
         }
         if (FrameBenchmarkInitHandle.IsValid())
         {
@@ -486,6 +755,7 @@ private:
     }
 
     FDelegateHandle SmokeDelegateHandle;
+    FDelegateHandle ScriptClassSmokeDelegateHandle;
     FDelegateHandle FrameBenchmarkInitHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkStartTickerHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkTickerHandle;

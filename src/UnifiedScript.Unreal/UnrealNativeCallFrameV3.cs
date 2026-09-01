@@ -327,6 +327,15 @@ internal static class UnrealNativeValueCodecV3
             encoded.Payload1 = TransformByteSize;
             return true;
         }
+        if (TryGetEnumShape(typeof(T), out UnrealEnumShape enumShape) &&
+            value is IUnrealEnumValue typedEnum)
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Enums;
+            encoded.Kind = UnrealNativeValueKindV3.Enum;
+            encoded.TypeId = UnrealTypeIdV3.FromPath(enumShape.Attribute.Path);
+            encoded.Payload0 = unchecked((ulong)typedEnum.Value);
+            return encoded.TypeId != 0;
+        }
         if (TryGetStructShape(typeof(T), out UnrealStructShape structShape))
         {
             return TryEncodeStruct(
@@ -454,6 +463,12 @@ internal static class UnrealNativeValueCodecV3
             descriptor.Payload1 = TransformByteSize;
             requiredCapability = UnrealNativeCapabilitiesV3.Transform;
         }
+        else if (TryGetEnumShape(type, out UnrealEnumShape enumShape))
+        {
+            descriptor.Kind = UnrealNativeValueKindV3.Enum;
+            descriptor.TypeId = UnrealTypeIdV3.FromPath(enumShape.Attribute.Path);
+            requiredCapability = UnrealNativeCapabilitiesV3.Enums;
+        }
         else if (TryGetStructShape(type, out UnrealStructShape structShape))
         {
             descriptor.Kind = UnrealNativeValueKindV3.Struct;
@@ -546,6 +561,11 @@ internal static class UnrealNativeValueCodecV3
                 BitsDouble(value.Payload0),
                 BitsDouble(value.Payload1),
                 BitsDouble(value.Payload2)), out decoded);
+        if (TryDecodeEnum(typeof(T), value, out object? enumValue))
+        {
+            decoded = (T)enumValue!;
+            return true;
+        }
         if (typeof(T) == typeof(UnrealTransform) &&
             value.Kind == UnrealNativeValueKindV3.Transform &&
             value.Flags == UnrealNativeValueFlagsV3.ArenaBacked &&
@@ -658,6 +678,8 @@ internal static class UnrealNativeValueCodecV3
                 BitsDouble(value.Payload0),
                 BitsDouble(value.Payload1),
                 BitsDouble(value.Payload2));
+        else if (TryDecodeEnum(type, value, out object? enumValue))
+            decoded = enumValue;
         else if (type == typeof(UnrealTransform) &&
                  value.Kind == UnrealNativeValueKindV3.Transform &&
                  value.Flags == UnrealNativeValueFlagsV3.ArenaBacked &&
@@ -700,6 +722,61 @@ internal static class UnrealNativeValueCodecV3
         return true;
     }
 
+    public static string DescribeDecodeFailure(
+        Type type,
+        in UnrealNativeValueV3 value,
+        ReadOnlySpan<byte> arena,
+        int byteCount)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        if (TryGetEnumShape(type, out UnrealEnumShape enumShape))
+        {
+            return $"expected enum path '{enumShape.Attribute.Path}' " +
+                $"(typeId=0x{UnrealTypeIdV3.FromPath(enumShape.Attribute.Path):X16}), " +
+                $"received kind={value.Kind}, flags={value.Flags}, typeId=0x{value.TypeId:X16}.";
+        }
+        if (!TryGetStructShape(type, out UnrealStructShape structShape))
+        {
+            return $"received kind={value.Kind}, flags={value.Flags}, typeId=0x{value.TypeId:X16}.";
+        }
+        ulong expectedTypeId = UnrealTypeIdV3.FromPath(structShape.Attribute.Path);
+        if (value.Kind != UnrealNativeValueKindV3.Struct ||
+            value.Flags != UnrealNativeValueFlagsV3.ArenaBacked ||
+            value.TypeId != expectedTypeId ||
+            value.Payload2 != (ulong)structShape.Fields.Length ||
+            value.Payload3 != UnrealNativeAbiV3.ValueSize)
+        {
+            return $"expected struct path '{structShape.Attribute.Path}' with " +
+                $"{structShape.Fields.Length} fields (typeId=0x{expectedTypeId:X16}), " +
+                $"received kind={value.Kind}, flags={value.Flags}, typeId=0x{value.TypeId:X16}, " +
+                $"fields={value.Payload2}, stride={value.Payload3}.";
+        }
+        int descriptorBytes = checked(structShape.Fields.Length * UnrealNativeAbiV3.ValueSize);
+        if (byteCount < 0 || byteCount > arena.Length || value.Payload0 > (ulong)byteCount ||
+            value.Payload1 != (ulong)descriptorBytes ||
+            value.Payload1 > (ulong)byteCount - value.Payload0)
+        {
+            return $"struct descriptor range offset={value.Payload0}, bytes={value.Payload1}, " +
+                $"expectedBytes={descriptorBytes}, arenaBytes={byteCount} is invalid.";
+        }
+        int descriptorOffset = checked((int)value.Payload0);
+        for (int index = 0; index < structShape.Fields.Length; ++index)
+        {
+            UnrealNativeValueV3 cell = ReadCell(arena, descriptorOffset, index);
+            Type fieldType = structShape.Fields[index].PropertyType;
+            if (!TryDecodeNested(fieldType, cell, arena, byteCount, 1, out _))
+            {
+                UnrealStructFieldAttribute? field = structShape.Fields[index]
+                    .GetCustomAttribute<UnrealStructFieldAttribute>();
+                return $"struct field {index} '{field?.NativeName ?? structShape.Fields[index].Name}' " +
+                    $"cannot decode as '{fieldType.FullName}': kind={cell.Kind}, " +
+                    $"flags={cell.Flags}, typeId=0x{cell.TypeId:X16}, " +
+                    $"payload0={cell.Payload0}, payload1={cell.Payload1}.";
+            }
+        }
+        return "the value matches its top-level type contract but failed during construction.";
+    }
+
     private static bool TryEncodeUtf8(
         string value,
         UnrealNativeValueKindV3 kind,
@@ -720,6 +797,41 @@ internal static class UnrealNativeValueCodecV3
         encoded.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
         encoded.Payload0 = (ulong)offset;
         encoded.Payload1 = (ulong)written;
+        return true;
+    }
+
+    private sealed record UnrealEnumShape(
+        UnrealEnumAttribute Attribute,
+        ConstructorInfo Constructor);
+
+    private static bool TryGetEnumShape(Type type, out UnrealEnumShape shape)
+    {
+        shape = null!;
+        UnrealEnumAttribute? attribute = type.GetCustomAttribute<UnrealEnumAttribute>();
+        ConstructorInfo? constructor = type.GetConstructor([typeof(long)]);
+        if (attribute is null || !type.IsValueType ||
+            !typeof(IUnrealEnumValue).IsAssignableFrom(type) || constructor is null)
+        {
+            return false;
+        }
+        shape = new UnrealEnumShape(attribute, constructor);
+        return true;
+    }
+
+    private static bool TryDecodeEnum(
+        Type type,
+        in UnrealNativeValueV3 value,
+        out object? decoded)
+    {
+        decoded = null;
+        if (!TryGetEnumShape(type, out UnrealEnumShape shape) ||
+            value.Kind != UnrealNativeValueKindV3.Enum ||
+            value.Flags != UnrealNativeValueFlagsV3.None ||
+            value.TypeId != UnrealTypeIdV3.FromPath(shape.Attribute.Path))
+        {
+            return false;
+        }
+        decoded = shape.Constructor.Invoke([unchecked((long)value.Payload0)]);
         return true;
     }
 
@@ -1112,6 +1224,15 @@ internal static class UnrealNativeValueCodecV3
             encoded.Kind = UnrealNativeValueKindV3.Enum;
             encoded.TypeId = UnrealTypeIdV3.FromPath(enumValue.TypePath);
             encoded.Payload0 = unchecked((ulong)enumValue.Value);
+            return encoded.TypeId != 0;
+        }
+        if (TryGetEnumShape(type, out UnrealEnumShape enumShape) &&
+            value is IUnrealEnumValue typedEnum)
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Enums;
+            encoded.Kind = UnrealNativeValueKindV3.Enum;
+            encoded.TypeId = UnrealTypeIdV3.FromPath(enumShape.Attribute.Path);
+            encoded.Payload0 = unchecked((ulong)typedEnum.Value);
             return encoded.TypeId != 0;
         }
         if (type == typeof(UnrealVector) && value is UnrealVector vector)

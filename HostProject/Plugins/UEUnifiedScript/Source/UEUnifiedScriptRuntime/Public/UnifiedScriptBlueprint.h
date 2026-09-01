@@ -8,6 +8,30 @@
 class UUnifiedScriptAsset;
 
 USTRUCT()
+struct FUnifiedScriptManagedStructFieldPath
+{
+    GENERATED_BODY()
+
+    /** Native reflected property path from the top-level generated UStruct. */
+    UPROPERTY()
+    TArray<FName> Segments;
+};
+
+USTRUCT()
+struct FUnifiedScriptManagedValueTypeBinding
+{
+    GENERATED_BODY()
+
+    /** Exact reflected UEnum or UScriptStruct path; empty for built-in values. */
+    UPROPERTY()
+    FString UnrealTypePath;
+
+    /** Stable generated field order, flattened depth-first for recursive structs. */
+    UPROPERTY()
+    TArray<FUnifiedScriptManagedStructFieldPath> StructFields;
+};
+
+USTRUCT()
 struct FUnifiedScriptManagedFunctionBinding
 {
     GENERATED_BODY()
@@ -27,6 +51,14 @@ struct FUnifiedScriptManagedFunctionBinding
     /** Static libraries resolve their managed program from the generated-class sidecar. */
     UPROPERTY()
     bool bStatic = false;
+
+    /** One type contract per managed argument, excluding injected World context. */
+    UPROPERTY()
+    TArray<FUnifiedScriptManagedValueTypeBinding> ParameterTypes;
+
+    /** Exact return value contract; empty for void and built-in values. */
+    UPROPERTY()
+    FUnifiedScriptManagedValueTypeBinding ReturnType;
 };
 
 /**
@@ -54,6 +86,7 @@ public:
     bool IsManagedFunctionBound(FName FunctionName) const;
 
     virtual void PostLoad() override;
+    virtual void PostLoadDefaultObject(UObject* Object) override;
 
 private:
     DECLARE_FUNCTION(execDispatchManagedFunction);
@@ -77,5 +110,7 @@ public:
     TObjectPtr<UUnifiedScriptAsset> ScriptAsset;
 
     /** Keep the product-owned binding carrier for every Blueprint parent kind. */
+#if WITH_EDITOR
     virtual UClass* GetBlueprintClass() const override;
+#endif
 };

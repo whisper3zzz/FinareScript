@@ -223,6 +223,56 @@ public sealed class UnrealManagedFunctionDispatchTests
         }
     }
 
+    [Fact]
+    public unsafe void V2DispatchesStrongEnumAndRecursiveStructValues()
+    {
+        UnrealManagedFunctionDispatcherV2 library =
+            UnrealManagedFunctionDispatcherV2.Create(
+                typeof(TypedManagedFunctionLibrary),
+                staticOnly: true);
+        var expected = new ManagedFunctionPayload(
+            17,
+            ManagedFunctionMode.Suspended,
+            new UnrealVector(1.0, 2.0, 3.0));
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
+        Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
+        Span<byte> arena = stackalloc byte[2048];
+        int inputBytes = 0;
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            expected,
+            arena,
+            ref inputBytes,
+            out arguments[0],
+            out UnrealNativeCapabilitiesV3 required));
+        Assert.True(required.HasFlag(UnrealNativeCapabilitiesV3.Enums));
+        Assert.True(required.HasFlag(UnrealNativeCapabilitiesV3.Structs));
+
+        fixed (UnrealNativeValueV3* argumentPointer = arguments)
+        fixed (UnrealNativeValueV3* resultPointer = results)
+        fixed (byte* arenaPointer = arena)
+        {
+            var frame = new UnrealNativeCallFrameV3
+            {
+                Arguments = (nint)argumentPointer,
+                ArgumentCount = 1,
+                Results = (nint)resultPointer,
+                ResultCapacity = 1,
+                ByteBuffer = (nint)arenaPointer,
+                ByteCapacity = (uint)arena.Length,
+                ByteCount = (uint)inputBytes,
+            };
+            library.Invoke(null, nameof(TypedManagedFunctionLibrary.Echo), (nint)(&frame));
+
+            Assert.Equal(UnrealNativeCallStatusV3.Success, frame.Status);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[0],
+                arena,
+                checked((int)frame.ByteCount),
+                out ManagedFunctionPayload actual));
+            Assert.Equal(expected, actual);
+        }
+    }
+
     private sealed class FunctionTransport : IUnrealNativeInvocationTransport
     {
         public UnrealInvocationResponse ReadProperty(
@@ -304,6 +354,26 @@ public static class ManagedFunctionLibrary
         UnrealVector vector,
         string label) =>
         $"{label}:{handle.SlotIndex}:{vector.X:0.0},{vector.Y:0.0},{vector.Z:0.0}";
+}
+
+[UnrealEnum("/Script/FixtureRuntime.EManagedFunctionMode", "EManagedFunctionMode")]
+[UnrealValue]
+public readonly record struct ManagedFunctionMode(long Value) : IUnrealEnumValue
+{
+    public static ManagedFunctionMode Suspended { get; } = new(2);
+}
+
+[UnrealStruct("/Script/FixtureRuntime.ManagedFunctionPayload", "FManagedFunctionPayload")]
+[UnrealValue]
+public readonly record struct ManagedFunctionPayload(
+    [property: UnrealStructField(0, "Count")] int Count,
+    [property: UnrealStructField(1, "Mode")] ManagedFunctionMode Mode,
+    [property: UnrealStructField(2, "Location")] UnrealVector Location);
+
+public static class TypedManagedFunctionLibrary
+{
+    [Visual]
+    public static ManagedFunctionPayload Echo(ManagedFunctionPayload value) => value;
 }
 
 public abstract class InheritedManagedFunctionBase : IUnrealManagedScript

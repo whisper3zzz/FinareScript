@@ -17,6 +17,10 @@ internal sealed class CSharpScriptAssetLowerer
 {
     private const string ScriptAssetAttributeName = "UnifiedScript.ScriptAssetAttribute";
     private const string ExposeAttributeName = "UnifiedScript.ExposeAttribute";
+    private const string UnrealEnumAttributeName = "UnifiedScript.Unreal.UnrealEnumAttribute";
+    private const string UnrealStructAttributeName = "UnifiedScript.Unreal.UnrealStructAttribute";
+    private const string UnrealStructFieldAttributeName =
+        "UnifiedScript.Unreal.UnrealStructFieldAttribute";
 
     private static readonly SymbolDisplayFormat TypeMetadataFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
@@ -93,6 +97,7 @@ internal sealed class CSharpScriptAssetLowerer
                 IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
                     ? []
                     : LowerFunctions(
+                        compilation,
                         typeSymbol,
                         hirType,
                         hirTypes,
@@ -295,6 +300,7 @@ internal sealed class CSharpScriptAssetLowerer
     }
 
     private static IReadOnlyList<ScriptFunctionDeclaration> LowerFunctions(
+        CSharpCompilation compilation,
         INamedTypeSymbol typeSymbol,
         HirTypeDeclaration type,
         IReadOnlyDictionary<string, HirTypeDeclaration> hirTypes,
@@ -339,7 +345,8 @@ internal sealed class CSharpScriptAssetLowerer
                 .Select((parameter, index) => new ScriptParameterDeclaration(
                     parameter.Id,
                     parameter.Name,
-                    parameterTypeNames[index]))
+                    parameterTypeNames[index],
+                    LowerFunctionValueType(compilation, parameterTypeNames[index])))
                 .ToArray();
             string signature = $"{type.QualifiedName}.{method.Name}({string.Join(',', parameterTypeNames)})";
             functions.Add(new ScriptFunctionDeclaration(
@@ -351,10 +358,87 @@ internal sealed class CSharpScriptAssetLowerer
                 method.IsPublic,
                 method.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealEvent") == true,
-                parameters));
+                parameters,
+                LowerFunctionValueType(
+                    compilation,
+                    types[descriptor.ReturnTypeId].MetadataName)));
         }
 
         return functions;
+    }
+
+    private static ScriptFunctionValueTypeDeclaration? LowerFunctionValueType(
+        CSharpCompilation compilation,
+        string metadataName,
+        int depth = 0)
+    {
+        string normalizedName = metadataName.EndsWith("?", StringComparison.Ordinal)
+            ? metadataName[..^1]
+            : metadataName;
+        INamedTypeSymbol? type = compilation.GetTypeByMetadataName(normalizedName);
+        if (type is null)
+        {
+            return null;
+        }
+
+        AttributeData? enumAttribute = FindAttribute(type, UnrealEnumAttributeName);
+        if (TryReadUnrealTypeIdentity(
+                enumAttribute,
+                out string enumPath,
+                out string enumNativeName))
+        {
+            return new ScriptFunctionValueTypeDeclaration(
+                ScriptFunctionValueTypeKind.Enum,
+                enumPath,
+                enumNativeName,
+                []);
+        }
+
+        AttributeData? structAttribute = FindAttribute(type, UnrealStructAttributeName);
+        if (!TryReadUnrealTypeIdentity(
+                structAttribute,
+                out string structPath,
+                out string structNativeName))
+        {
+            return null;
+        }
+
+        ScriptFunctionStructFieldDeclaration[] fields = depth >= 16
+            ? []
+            : type.GetMembers()
+            .OfType<IPropertySymbol>()
+            .Select(property => (
+                Property: property,
+                Attribute: FindAttribute(property, UnrealStructFieldAttributeName)))
+            .Where(static pair => pair.Attribute is not null &&
+                pair.Attribute.ConstructorArguments.Length == 2 &&
+                pair.Attribute.ConstructorArguments[0].Value is int &&
+                pair.Attribute.ConstructorArguments[1].Value is string)
+            .Select(pair => new ScriptFunctionStructFieldDeclaration(
+                (int)pair.Attribute!.ConstructorArguments[0].Value!,
+                (string)pair.Attribute.ConstructorArguments[1].Value!,
+                pair.Property.Type.ToDisplayString(TypeMetadataFormat),
+                LowerFunctionValueType(
+                    compilation,
+                    pair.Property.Type.ToDisplayString(TypeMetadataFormat),
+                    depth + 1)))
+            .OrderBy(static field => field.Index)
+            .ToArray();
+        return new ScriptFunctionValueTypeDeclaration(
+            ScriptFunctionValueTypeKind.Struct,
+            structPath,
+            structNativeName,
+            fields);
+    }
+
+    private static bool TryReadUnrealTypeIdentity(
+        AttributeData? attribute,
+        out string path,
+        out string nativeName)
+    {
+        path = attribute?.ConstructorArguments.ElementAtOrDefault(0).Value as string ?? string.Empty;
+        nativeName = attribute?.ConstructorArguments.ElementAtOrDefault(1).Value as string ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(path) && !string.IsNullOrWhiteSpace(nativeName);
     }
 
     private static bool TryGetAutoPropertySyntax(

@@ -56,13 +56,13 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-09-01**
 
 - Active milestone: **M13.3 in progress — Managed Script Class and Blueprint parity**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical; M13.3B-2a instance scalar Blueprint function dispatch; M13.3B-2b-1 static/common-value Blueprint function dispatch**
-- Current tranche: **M13.3B-2b-2 — enum/UStruct and persistent reload/cook closure**
-- Current implementation state: **M13.3B-2b-1 is closed. Reviewed static `[Visual]` methods on a managed BlueprintFunctionLibrary now materialize as ordinary static Blueprint-callable `UFunction`s and route through an explicit World-owned collectible library rather than a fake component instance. ABI v2 reuses the fixed ABI v3 value cell and borrowed byte arena for scalar, `String`, `ObjectHandle`, and `FVector` arguments/returns while retaining the zero-to-four parameter cap, generation-local compiled delegates, and no JSON or per-call `MethodInfo.Invoke`. The router filters both explicit and Kismet-injected World-context parameters, resolves packaged runtime paths through the Script Asset, and releases static library contexts on World teardown. Declaration lowering now includes public inherited `[Visual]` instance methods without stealing protected/static members or changing their semantic IDs. The remaining B-2b gap is reflected enum/general UStruct generation plus persistent class reload and cook/package proof**
-- Current verification state: **M13.3B-2b-1 passes the .NET 10 managed suite at 673/673, repository validation at 128/128, UE 5.8.1 Editor build, and the complete `UnifiedScript.Unreal` CMD Automation suite at 29/29. CMD Automation executes real `Describe`, `EchoObject`, and `OffsetVector` Blueprint `ProcessEvent` calls across String/ObjectHandle/FVector, including World-registry object resolution and inline vector return. Identity-aware project emit preserves the Demo sidecar across chunk rebuilds and advanced it transactionally to generation 3. Evidence is under `artifacts/m13-3b2b/automation/`, with the complete run in `unifiedscript-unreal-full-first.log`**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical; M13.3B-2a instance scalar Blueprint function dispatch; M13.3B-2b-1 static/common-value Blueprint function dispatch; M13.3B-2b-2 enum/UStruct persistence closure**
+- Current tranche: **M13.3B-3a — lifecycle and Blueprint event contract**
+- Current implementation state: **M13.3B-2b-2 is closed. Reflection generation emits strongly typed enum wrappers with exact `/Script/...` identity and reflected UStruct records with exact native field names/order. Recursive value-type descriptors are lowered into Declaration IR, embedded in the compiled chunk, staged atomically with its readable `.asset.json`, and materialized as exact enum/UStruct Blueprint pins. The GeneratedClass persists every runtime type/field binding, restores the generic native dispatch pointer during CDO post-load, and the ABI v2 router marshals enum plus nested `FHitResult` values without JSON, handwritten per-function thunks, or per-call reflection. Static FunctionLibrary calls survive package reload, cook, and execution from the packaged `.uschunk`**
+- Current verification state: **M13.3B-2b-2 passes the .NET 10 managed suite at 675/675, repository validation at 129/129, UE 5.8.1 Editor and Game builds, the complete `UnifiedScript.Unreal` CMD Automation suite at 29/29, and the persistent typed-value focused test. The clean Golden Path regenerated two Script Classes, reloaded and validated them, cooked four proxy/sidecar assets, archived Win64, and executed Actor plus ActorComponent `BeginPlay`/`Tick`/`EndPlay` from packaged chunks with two live managed instances/claims and unchanged World count after teardown. Evidence is under `artifacts/m13-3b2b2/`, with the final report at `golden-path-4/script-class-golden-path-report.json`**
 - Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
-- Next acceptance: **reviewed enums and generated UStruct values appear as ordinary typed Blueprint pins on instance/static/inherited methods, preserve stable field/type identities, and the same persistent Script Class survives compatible reload plus clean cook/package without handwritten native members**
-- Next user-visible slice: **write one C# enum/UStruct gameplay helper, call it from Blueprint, edit it compatibly, reload it, then replay the same call from a clean packaged build**
+- Next acceptance: **reviewed lifecycle and Blueprint event declarations become ordinary generated overrides/events with stable source IDs, correct per-World instance ownership, explicit `Super` behavior, and the same result across compatible reload and packaged execution**
+- Next user-visible slice: **write a managed Actor that handles lifecycle plus one Blueprint event, call and override it from Blueprint, edit/reload it, and replay the behavior from a packaged CMD demo**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -171,6 +171,8 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.3A four-kind proxy identity | Actor, ActorComponent, UObject, and BlueprintFunctionLibrary factories create exact product-owned Blueprint/UClass shapes, a universal ScriptAsset sidecar, matching managed declaration kinds, and lifecycle-safe first-Play behavior. The .NET suite passes 664/664, repository validation passes 125/125, UE 5.8.1 builds, and CMD Automation passes 26/26. Evidence is under `artifacts/m13-3a/automation/` |
 | M13.3B-1 reflected state/defaults | Seven reviewed scalar state types compile into exact proxy fields with semantic GUIDs, exposure/default metadata, override preservation, weak-key managed synchronization, and pre-mutation collision/type rejection. The .NET suite passes 667/667, repository validation passes 126/126, UE 5.8.1 builds, and CMD Automation passes 27/27. Evidence is under `artifacts/m13-3b/automation/` |
 | M13.3B-2a instance scalar functions | Public non-event `[Visual]` instance methods compile into stable typed Blueprint UFunctions and dispatch through one fixed scalar ABI and generation-local compiled delegate. A real `ProcessEvent` call returns `DemoScript.RewirePreview(21, true) == 42`; the .NET suite passes 670/670, repository validation passes 127/127, UE 5.8.1 builds, and CMD Automation passes 28/28. Evidence is under `artifacts/m13-3b2/automation/` |
+| M13.3B-2b-1 static/common-value functions | World-owned collectible FunctionLibrary contexts, public inherited declarations, and String/ObjectHandle/FVector ABI v2 values execute through real Blueprint `ProcessEvent`. The .NET suite passes 673/673, repository validation passes 128/128, UE 5.8.1 builds, and CMD Automation passes 29/29. Evidence is under `artifacts/m13-3b2b/automation/` |
+| M13.3B-2b-2 enum/UStruct persistence | Exact enum and recursive reflected-UStruct descriptors generate typed Blueprint pins and ABI v2 codecs; GeneratedClass bindings restore after package reload; chunk plus Declaration IR staging, Cook/Archive, and packaged Actor/Component lifecycle all pass. The .NET suite passes 675/675, repository validation passes 129/129, UE 5.8.1 Editor/Game builds, and CMD Automation passes 29/29. Evidence is under `artifacts/m13-3b2b2/`; final Golden Path report at `golden-path-4/script-class-golden-path-report.json` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -2984,7 +2986,7 @@ instead of requiring a pre-authored host Component for each use case.
     GUIDs, preserve intentional class-default overrides, synchronize managed
     state at lifecycle boundaries through cached typed accessors, and run the
     exact class reconciliation after Script Asset deployment
-  - [ ] **M13.3B-2 — reflected function/dispatch vertical:** generate reviewed
+  - [x] **M13.3B-2 — reflected function/dispatch vertical:** generate reviewed
     instance/static Blueprint functions and typed pins from Declaration IR,
     route invocation to the correct managed Script Class instance or library,
     and preserve function/parameter identity across source edits
@@ -2992,7 +2994,7 @@ instead of requiring a pre-authored host Component for each use case.
       non-event instance functions with stable IDs, typed scalar pins and
       zero-to-four arguments; route one ordinary UFunction through a single
       native/CoreCLR ABI to a running managed instance and return the result
-    - [ ] **M13.3B-2b — static/richer call vertical:** bind static FunctionLibrary
+    - [x] **M13.3B-2b — static/richer call vertical:** bind static FunctionLibrary
       ownership, String/ObjectHandle/FVector/enum/struct values, inherited
       declarations, and persistent reload/cook behavior without per-function
       handwritten native members
@@ -3001,12 +3003,22 @@ instead of requiring a pre-authored host Component for each use case.
         cell and borrowed arena for String/ObjectHandle/FVector; include public
         inherited declarations; preserve identity-aware project emission; and
         execute all three value families through real Blueprint `ProcessEvent`
-      - [ ] **M13.3B-2b-2 — enum/UStruct persistence closure:** generate typed
+      - [x] **M13.3B-2b-2 — enum/UStruct persistence closure:** generate typed
         enum and general reflected UStruct pins/codecs with stable field/type
         identity, then prove compatible persistent reload and clean cook/package
-- [ ] support constructor/default state, Blueprint-visible properties and
-  functions, lifecycle hooks, Blueprint events, Enhanced Input actions,
-  delegates, interfaces, and `Super` dispatch with stable managed/source IDs
+  - [ ] **M13.3B-3 — gameplay behavior authoring vertical:** project lifecycle,
+    event, input, delegate, interface, and `Super` contracts onto the generated
+    class without requiring a handwritten host or parallel Blueprint behavior
+    - [ ] **M13.3B-3a — lifecycle and Blueprint event contract:** generate stable
+      lifecycle/event bindings for Actor and ActorComponent, route one reviewed
+      Blueprint event through the existing per-World managed instance, make
+      `Super` behavior explicit, and prove compatible reload plus packaged CMD
+      execution
+    - [ ] **M13.3B-3b — input/delegate/interface closure:** bind Enhanced Input
+      actions, delegates, interfaces, and remaining event shapes with stable
+      managed/source identity and deterministic teardown
+- [ ] support constructor/default state and remaining Blueprint-visible
+  property/function shapes with stable managed/source IDs
 - [ ] provide an explicit managed extension/mixin-equivalent contract for
   BlueprintNativeEvent and BlueprintImplementableEvent without runtime prototype
   mutation or ambiguous multiple ownership
@@ -3091,6 +3103,25 @@ generation beside the compiled chunk before staging it. The .NET suite passes
 673/673, repository validation passes 128/128, UE 5.8.1 Editor build passes, and
 the complete CMD Automation suite passes 29/29. The cursor advances to B-2b-2
 enum/general-UStruct generation and persistent reload/cook proof.
+
+Progress (2026-09-01, M13.3B-2b-2): generated enum wrappers now retain the
+exact reflected `/Script/...` identity and numeric value, while generated
+UStruct records retain exact native field names and recursive field order.
+Roslyn lowering writes those descriptors into Declaration IR; the compiler
+embeds the same IR in `.uschunk`, and project setup stages the readable
+`.asset.json` atomically beside it. The materializer resolves exact `UEnum` and
+`UScriptStruct` pins and persists field-path/type bindings on the product
+GeneratedClass. Native ABI v2 marshals enum and nested `FHitResult` values using
+those bindings; `PostLoadDefaultObject` restores dispatch after package reload.
+The repository Host fixture now carries the same packaged Script Class smoke
+hook as a newly adopted project. The .NET suite passes 675/675, repository
+validation passes 129/129, UE 5.8.1 Editor and Game targets build, focused
+persistent dispatch and the refreshed 29/29 CMD Automation suite pass. The
+clean Golden Path under `artifacts/m13-3b2b2/golden-path-4/` regenerates and
+reloads two classes, cooks four class/sidecar assets, archives Win64, and runs
+both Actor and ActorComponent from packaged chunks with zero retained managed
+scripts, lifecycle claims, or Worlds. The cursor advances to M13.3B-3a
+lifecycle and Blueprint event authoring.
 
 ### M13.4 — External real-project proof and production gameplay domains
 

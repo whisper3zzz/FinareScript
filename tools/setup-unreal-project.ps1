@@ -1472,6 +1472,10 @@ try {
                     "bin\$($resolved.managedConfiguration)"
             })
         }
+        $managedChunkOutputs = @($resolved.managedChunks | ForEach-Object {
+            $_.stagePath
+            [IO.Path]::ChangeExtension($_.stagePath, '.asset.json')
+        })
         $editorTargetReceipt = Join-Path $projectDirectory `
             "Binaries\$($resolved.platform)\$($resolved.editorTarget).target"
         $gameTargetReceipt = Join-Path $projectDirectory `
@@ -1745,7 +1749,7 @@ try {
                     generator = @($cliAssembly)
                 }) `
                 -Dependencies @('managed-gameplay-build') `
-                -OutputPaths @($resolved.managedChunks.stagePath) `
+                -OutputPaths $managedChunkOutputs `
                 -Action {
                 for ($index = 0; $index -lt $resolved.managedChunks.Count; ++$index) {
                     $chunk = $resolved.managedChunks[$index]
@@ -1773,6 +1777,13 @@ try {
                         -Path $compiledChunk `
                         -Label 'Compiled managed chunk' `
                         -Code 'USONB2303'
+                    $compiledDeclaration = [IO.Path]::ChangeExtension(
+                        $compiledChunk,
+                        '.asset.json')
+                    Assert-RequiredPath `
+                        -Path $compiledDeclaration `
+                        -Label 'Compiled managed Declaration IR' `
+                        -Code 'USONB2303'
                     Invoke-LoggedCommand `
                         -FilePath $resolved.dotnet `
                         -Arguments @($cliAssembly, 'chunk-inspect', $compiledChunk) `
@@ -1799,6 +1810,36 @@ try {
                     } finally {
                         if (Test-Path -LiteralPath $temporaryStagePath) {
                             Remove-Item -LiteralPath $temporaryStagePath -Force
+                        }
+                    }
+
+                    # The Editor materializer deliberately consumes the readable
+                    # Declaration IR sidecar while runtime execution consumes the
+                    # verified chunk. Publish both products from the same emit so
+                    # a dynamically created Script Class cannot observe the stale
+                    # source-tree JSON staged by an earlier MSBuild target.
+                    $declarationStagePath = [IO.Path]::ChangeExtension(
+                        $chunk.stagePath,
+                        '.asset.json')
+                    $temporaryDeclarationStagePath = Join-Path `
+                        $stageDirectory `
+                        (".{0}.{1}.tmp" -f
+                            ([IO.Path]::GetFileName($declarationStagePath)),
+                            [Guid]::NewGuid().ToString('N'))
+                    try {
+                        Copy-Item `
+                            -LiteralPath $compiledDeclaration `
+                            -Destination $temporaryDeclarationStagePath `
+                            -Force
+                        Move-Item `
+                            -LiteralPath $temporaryDeclarationStagePath `
+                            -Destination $declarationStagePath `
+                            -Force
+                    } finally {
+                        if (Test-Path -LiteralPath $temporaryDeclarationStagePath) {
+                            Remove-Item `
+                                -LiteralPath $temporaryDeclarationStagePath `
+                                -Force
                         }
                     }
                 }
@@ -2199,6 +2240,9 @@ try {
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage
         compiledChunks = @($resolved.managedChunks.stagePath)
+        compiledDeclarations = @($resolved.managedChunks | ForEach-Object {
+            [IO.Path]::ChangeExtension($_.stagePath, '.asset.json')
+        })
         buildGraph = $script:BuildGraphReport
         runDirectory = $script:RunDirectory
         automation = [ordered]@{

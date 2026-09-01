@@ -39,9 +39,9 @@ public sealed partial class FixtureDerived : global::UnifiedScript.Unreal.Unreal
         set => WriteProperty(0xB7F421BF0120AEFFUL, "/Script/BindingMatrix.FixtureDerived:MapValue", value);
     }
 
-    public global::UnifiedScript.Unreal.UnrealEnumValue Mode
+    public FixtureMode Mode
     {
-        get => ReadProperty<global::UnifiedScript.Unreal.UnrealEnumValue>(0x319AB3BF0098B5FBUL, "/Script/BindingMatrix.FixtureDerived:Mode");
+        get => ReadProperty<FixtureMode>(0x319AB3BF0098B5FBUL, "/Script/BindingMatrix.FixtureDerived:Mode");
         set => WriteProperty(0x319AB3BF0098B5FBUL, "/Script/BindingMatrix.FixtureDerived:Mode", value);
     }
 
@@ -123,21 +123,25 @@ public sealed partial class FixtureInterface : global::UnifiedScript.Unreal.Unre
 }
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixture Mode")]
-public static class FixtureMode
+[global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/BindingMatrix.FixtureMode", "EFixtureMode")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct FixtureMode(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
 {
-    public static global::UnifiedScript.Unreal.UnrealEnumValue Idle { get; } = new("/Script/BindingMatrix.FixtureMode", 0);
-    public static global::UnifiedScript.Unreal.UnrealEnumValue Active { get; } = new("/Script/BindingMatrix.FixtureMode", 1);
+    public static FixtureMode Idle { get; } = new(0);
+    public static FixtureMode Active { get; } = new(1);
+
+    public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/BindingMatrix.FixtureMode", Value);
 }
 
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/BindingMatrix.InnerData", "FInnerData")]
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct InnerData(
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0)] int Value);
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0, "Value")] int Value);
 
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/BindingMatrix.OuterData", "FOuterData")]
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct OuterData(
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0)] InnerData Inner,
-    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1)] global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealEnumValue> Modes);
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0, "Inner")] InnerData Inner,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1, "Modes")] global::System.Collections.Generic.IReadOnlyList<FixtureMode> Modes);

@@ -774,8 +774,15 @@ calls backed by a World-scoped collectible context. The current ABI supports
 zero-to-four scalar, `String`, `ObjectHandle`, and `FVector` parameters and
 returns without JSON or per-call reflection. The native CMD gate executes the
 Demo library's `Describe`, `EchoObject`, and `OffsetVector` functions through
-real Blueprint `ProcessEvent`. Enum/general-UStruct pins and persistent
-reload/cook coverage are the next Roadmap slice.
+real Blueprint `ProcessEvent`. Strong enum wrappers and recursive reflected
+UStruct records now retain exact native type/field identity in Declaration IR,
+materialize as ordinary typed Blueprint pins, and marshal through the same ABI
+v2 path; the Demo also executes enum and `FHitResult` round trips. Generated
+type bindings survive package reload through the product GeneratedClass, while
+the compiler/setup path stages chunk plus readable Declaration IR atomically.
+The clean UE 5.8.1 CMD Golden Path passes reload, Cook/Archive, and packaged
+Actor/ActorComponent lifecycle execution. Lifecycle and Blueprint event
+authoring is the next Roadmap slice.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded

@@ -754,8 +754,16 @@ or handwritten native thunk appears on the call path. `UnrealObjectScript`
 functions hydrate/flush reflected state at the call boundary, while World
 teardown disposes every static library context. Public inherited `[Visual]`
 instance declarations share the same path and retain their base semantic IDs.
-Enum and general reflected-UStruct values remain the next ABI/materialization
-slice.
+Generated enum wrappers carry the exact reflected `/Script/...` path and raw
+numeric value. Generated UStruct records carry exact native field names and
+recursive field order. Roslyn lowers both shapes into Declaration IR, which is
+embedded in the compiled chunk and staged atomically with the readable
+`.asset.json`. The materializer resolves exact `UEnum`/`UScriptStruct` pins and
+persists the recursive runtime type and field-path binding on the product
+GeneratedClass. `PostLoadDefaultObject` restores the generic dispatch pointer
+after package load. ABI v2 then marshals enums and nested reflected structures,
+including `FHitResult` and vector-derived fields, from the persisted binding
+without JSON, per-call reflection, or handwritten per-function native thunks.
 
 The control plane handles resources, uncommon signatures, properties,
 functions, delegates, and complex values. The data plane publishes borrowed
@@ -777,8 +785,8 @@ closure and pass packaged lifecycle smoke.
 The remaining boundary work is:
 
 - arbitrary control-wire authoring beyond structured block operations;
-- generated enum/general-UStruct Blueprint pins plus persistent reload/cook
-  proof for the static and inherited function paths;
+- generated lifecycle, Blueprint event, Enhanced Input, delegate, interface,
+  and explicit `Super` authoring contracts on the per-World managed instance;
 - native debug traps, deeper locals, expression evaluation, and remote framing;
 - additional shared-memory gameplay snapshot and batch schemas;
 - platform-specific CoreCLR packaging beyond Win64.

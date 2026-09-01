@@ -47,13 +47,50 @@ public sealed class UnrealStructAttribute(string path, string nativeName) : Attr
         : nativeName;
 }
 
+/// <summary>Identifies a generated, strongly typed UEnum value.</summary>
+[AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealEnumAttribute(string path, string nativeName) : Attribute
+{
+    public string Path { get; } = string.IsNullOrWhiteSpace(path)
+        ? throw new ArgumentException("A canonical Unreal enum path is required.", nameof(path))
+        : path;
+
+    public string NativeName { get; } = string.IsNullOrWhiteSpace(nativeName)
+        ? throw new ArgumentException("A native Unreal enum name is required.", nameof(nativeName))
+        : nativeName;
+}
+
+/// <summary>Common value contract implemented by generated strongly typed UEnum wrappers.</summary>
+public interface IUnrealEnumValue
+{
+    long Value { get; }
+}
+
 /// <summary>Preserves the canonical reflected field order used by ABI v3.</summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-public sealed class UnrealStructFieldAttribute(int index) : Attribute
+public sealed class UnrealStructFieldAttribute : Attribute
 {
-    public int Index { get; } = index >= 0
-        ? index
-        : throw new ArgumentOutOfRangeException(nameof(index));
+    public UnrealStructFieldAttribute(int index)
+    {
+        Index = index >= 0
+            ? index
+            : throw new ArgumentOutOfRangeException(nameof(index));
+        NativeName = string.Empty;
+    }
+
+    public UnrealStructFieldAttribute(int index, string nativeName)
+    {
+        Index = index >= 0
+            ? index
+            : throw new ArgumentOutOfRangeException(nameof(index));
+        NativeName = string.IsNullOrWhiteSpace(nativeName)
+            ? throw new ArgumentException("A native Unreal field name is required.", nameof(nativeName))
+            : nativeName;
+    }
+
+    public int Index { get; }
+
+    public string NativeName { get; }
 }
 
 /// <summary>Strongly typed FName value used by generated Unreal bindings.</summary>

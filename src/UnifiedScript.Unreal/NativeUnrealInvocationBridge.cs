@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
@@ -1746,6 +1747,8 @@ public sealed class NativeUnrealInvocationBridge
                 UnrealInvocationValue.FromObjectHandle(classHandle.ObjectHandle, isClass: true),
             UnrealEnumValue enumValue when !string.IsNullOrWhiteSpace(enumValue.TypePath) =>
                 UnrealInvocationValue.FromEnum(enumValue),
+            IUnrealEnumValue enumValue when TryGetEnumPath(typeof(T), out string enumPath) =>
+                UnrealInvocationValue.FromEnum(new UnrealEnumValue(enumPath, enumValue.Value)),
             UnrealVector vectorValue => UnrealInvocationValue.FromVector(vectorValue),
             UnrealRotator rotatorValue => UnrealInvocationValue.FromRotator(rotatorValue),
             UnrealTransform transformValue => UnrealInvocationValue.FromTransform(transformValue),
@@ -1756,6 +1759,16 @@ public sealed class NativeUnrealInvocationBridge
         UnrealInvocationValue value,
         string memberPath)
     {
+        if (value.Kind == UnrealInvocationValueKind.Enum &&
+            !string.IsNullOrWhiteSpace(value.StringValue) &&
+            TryCreateTypedEnum(
+                typeof(T),
+                value.StringValue ?? string.Empty,
+                value.SignedIntegerValue,
+                out object? typedEnum))
+        {
+            return (T)typedEnum!;
+        }
         object? converted = value.Kind switch
         {
             UnrealInvocationValueKind.Boolean when typeof(T) == typeof(bool) =>
@@ -1815,6 +1828,35 @@ public sealed class NativeUnrealInvocationBridge
                 $"Native member '{memberPath}' returned {value.Kind}, not {typeof(T).FullName}.");
         }
         return (T)converted;
+    }
+
+    private static bool TryGetEnumPath(Type type, out string path)
+    {
+        UnrealEnumAttribute? attribute = type.GetCustomAttribute<UnrealEnumAttribute>();
+        path = attribute?.Path ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(path) &&
+            typeof(IUnrealEnumValue).IsAssignableFrom(type);
+    }
+
+    private static bool TryCreateTypedEnum(
+        Type type,
+        string typePath,
+        long value,
+        out object? result)
+    {
+        result = null;
+        if (!TryGetEnumPath(type, out string expectedPath) ||
+            !string.Equals(typePath, expectedPath, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        ConstructorInfo? constructor = type.GetConstructor([typeof(long)]);
+        if (constructor is null)
+        {
+            return false;
+        }
+        result = constructor.Invoke([value]);
+        return true;
     }
 
     private static UnrealInvocationValue RequireSuccess(
