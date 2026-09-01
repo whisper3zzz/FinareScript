@@ -549,6 +549,52 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int InvokeScriptFunctionV2(
+        ulong worldId,
+        ulong instanceId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength,
+        nint functionNameData,
+        int functionNameLength,
+        nint frameAddress)
+    {
+        ClearBoundaryFailure(worldId);
+        bool staticCall = instanceId == 0;
+        if (functionNameData == 0 || functionNameLength is <= 0 or > 1024 ||
+            frameAddress == 0 ||
+            (staticCall && (assemblyPathData == 0 || assemblyPathLength is <= 0 or > 32768 ||
+                typeNameData == 0 || typeNameLength is <= 0 or > 4096)))
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            string functionName = ReadUtf8(functionNameData, functionNameLength);
+            return (int)(staticCall
+                ? entry.InvokeStaticFunctionV2(
+                    ReadUtf8(assemblyPathData, assemblyPathLength),
+                    ReadUtf8(typeNameData, typeNameLength),
+                    functionName,
+                    frameAddress)
+                : entry.InvokeFunctionV2(
+                    instanceId,
+                    functionName,
+                    frameAddress));
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(InvokeScriptFunctionV2), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int ReloadScript(
         ulong worldId,
         ulong instanceId,
@@ -848,6 +894,8 @@ public static class UnrealWorldManagedEntryPoint
         private readonly ulong _worldId;
         private readonly InProcessUnrealNativeInvocationTransport _transport;
         private readonly Dictionary<ulong, ManagedScriptInstance> _scripts = [];
+        private readonly Dictionary<string, ManagedStaticLibrary> _staticLibraries =
+            new(StringComparer.Ordinal);
         private bool _disposed;
 
         public WorldEntry(ulong worldId, nint context, nint transportTable)
@@ -1119,6 +1167,47 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        internal UnrealWorldManagedEntryStatus InvokeFunctionV2(
+            ulong instanceId,
+            string functionName,
+            nint frameAddress)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.InvokeFunctionV2(functionName, frameAddress);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        internal UnrealWorldManagedEntryStatus InvokeStaticFunctionV2(
+            string assemblyPath,
+            string typeName,
+            string functionName,
+            nint frameAddress)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                string fullAssemblyPath = Path.GetFullPath(assemblyPath);
+                string key = fullAssemblyPath + "\0" + typeName;
+                if (!_staticLibraries.TryGetValue(key, out ManagedStaticLibrary? library))
+                {
+                    library = ManagedStaticLibrary.Create(
+                        _worldId,
+                        fullAssemblyPath,
+                        typeName);
+                    _staticLibraries.Add(key, library);
+                }
+                library.Invoke(functionName, frameAddress);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
         public int ReloadScript(
             ulong instanceId,
             string assemblyPath,
@@ -1227,6 +1316,18 @@ public static class UnrealWorldManagedEntryPoint
                     }
                 }
                 _scripts.Clear();
+                foreach (ManagedStaticLibrary library in _staticLibraries.Values)
+                {
+                    try
+                    {
+                        library.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        (failures ??= []).Add(exception);
+                    }
+                }
+                _staticLibraries.Clear();
                 Bridge.SetProfilerEnabled(false);
                 _transport.Dispose();
                 if (failures is not null)
@@ -1413,6 +1514,23 @@ public static class UnrealWorldManagedEntryPoint
                 functionName,
                 arguments,
                 argumentCount);
+        }
+
+        internal void InvokeFunctionV2(string functionName, nint frameAddress)
+        {
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "The managed script is inside a two-phase reload transaction.");
+            }
+            if (!_started)
+            {
+                throw new InvalidOperationException("The managed script is not started.");
+            }
+            _current.FunctionsV2.Invoke(
+                _current.Script,
+                functionName,
+                frameAddress);
         }
 
         public int Reload(string assemblyPath, string typeName)
@@ -2015,6 +2133,8 @@ public static class UnrealWorldManagedEntryPoint
                 var generationBridge = new UnrealGenerationInvocationBridge(_bridge);
                 UnrealManagedFunctionDispatcher functions =
                     UnrealManagedFunctionDispatcher.Create(type);
+                UnrealManagedFunctionDispatcherV2 functionsV2 =
+                    UnrealManagedFunctionDispatcherV2.Create(type, staticOnly: false);
                 CoreClrGenerationPrewarmOperation prewarm =
                     CoreClrGenerationPrewarmOperation.Create(
                         type,
@@ -2037,6 +2157,7 @@ public static class UnrealWorldManagedEntryPoint
                     script,
                     generationBridge,
                     functions,
+                    functionsV2,
                     prewarm);
             }
             catch
@@ -2059,12 +2180,78 @@ public static class UnrealWorldManagedEntryPoint
                 : CoreClrGenerationPrewarmOptions.Default;
     }
 
+    private sealed class ManagedStaticLibrary : IDisposable
+    {
+        private readonly ScriptAssemblyLoadContext _loadContext;
+        private readonly UnrealManagedFunctionDispatcherV2 _functions;
+        private bool _disposed;
+
+        private ManagedStaticLibrary(
+            ScriptAssemblyLoadContext loadContext,
+            UnrealManagedFunctionDispatcherV2 functions)
+        {
+            _loadContext = loadContext;
+            _functions = functions;
+        }
+
+        public static ManagedStaticLibrary Create(
+            ulong worldId,
+            string assemblyPath,
+            string typeName)
+        {
+            var loadContext = new ScriptAssemblyLoadContext(
+                worldId,
+                instanceId: 0,
+                generation: 1,
+                assemblyPath);
+            try
+            {
+                Assembly assembly = loadContext.LoadMainAssembly();
+                Type type = assembly.GetType(typeName, throwOnError: true)!;
+                UnrealScriptClassAttribute? scriptClass =
+                    type.GetCustomAttribute<UnrealScriptClassAttribute>(inherit: false);
+                if (!type.IsAbstract || !type.IsSealed ||
+                    scriptClass?.Kind != UnrealScriptClassKind.BlueprintFunctionLibrary)
+                {
+                    throw new InvalidOperationException(
+                        $"Managed static library '{typeName}' must be a static class marked " +
+                        $"[{nameof(UnrealScriptClassAttribute)}({nameof(UnrealScriptClassKind.BlueprintFunctionLibrary)})].");
+                }
+                return new ManagedStaticLibrary(
+                    loadContext,
+                    UnrealManagedFunctionDispatcherV2.Create(type, staticOnly: true));
+            }
+            catch
+            {
+                RetireLoadContext(loadContext);
+                throw;
+            }
+        }
+
+        public void Invoke(string functionName, nint frameAddress)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _functions.Invoke(target: null, functionName, frameAddress);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            RetireLoadContext(_loadContext);
+        }
+    }
+
     private sealed record ScriptGeneration(
         int Generation,
         ScriptAssemblyLoadContext LoadContext,
         IUnrealManagedScript Script,
         UnrealGenerationInvocationBridge Bridge,
         UnrealManagedFunctionDispatcher Functions,
+        UnrealManagedFunctionDispatcherV2 FunctionsV2,
         CoreClrGenerationPrewarmOperation Prewarm) : IDisposable
     {
         private bool _disposed;

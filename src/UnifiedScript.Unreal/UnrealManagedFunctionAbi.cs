@@ -323,3 +323,267 @@ internal sealed class UnrealManagedFunctionDispatcher
     private static UnrealManagedFunctionValueV1 PackDouble(double value) =>
         UnrealManagedFunctionValueV1.FromDouble(value);
 }
+
+/// <summary>
+/// Version-two Blueprint call dispatcher. It reuses the published ABI v3
+/// value cell and borrowed byte arena so strings, handles, vectors, and later
+/// generated structs share one wire contract with reflected Unreal calls.
+/// Every delegate is compiled once per collectible generation; no MethodInfo
+/// invocation occurs on the call path.
+/// </summary>
+internal sealed class UnrealManagedFunctionDispatcherV2
+{
+    public const int MaximumArgumentCount = 4;
+
+    private readonly string _typeName;
+    private readonly bool _staticOnly;
+    private readonly IReadOnlyDictionary<string, FunctionContract> _functions;
+
+    private UnrealManagedFunctionDispatcherV2(
+        Type scriptType,
+        bool staticOnly,
+        IReadOnlyDictionary<string, FunctionContract> functions)
+    {
+        _typeName = scriptType.FullName ?? scriptType.Name;
+        _staticOnly = staticOnly;
+        _functions = functions;
+    }
+
+    public static UnrealManagedFunctionDispatcherV2 Create(
+        Type scriptType,
+        bool staticOnly)
+    {
+        ArgumentNullException.ThrowIfNull(scriptType);
+        var functions = new Dictionary<string, FunctionContract>(StringComparer.Ordinal);
+        BindingFlags flags = BindingFlags.Public | BindingFlags.FlattenHierarchy |
+            (staticOnly ? BindingFlags.Static : BindingFlags.Instance);
+        foreach (MethodInfo method in scriptType.GetMethods(flags))
+        {
+            if (method.IsStatic != staticOnly ||
+                method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is null ||
+                method.GetCustomAttributes<UnrealEventAttribute>(inherit: false).Any())
+            {
+                continue;
+            }
+            if (!FunctionContract.TryCreate(method, out FunctionContract? contract) ||
+                contract is null)
+            {
+                continue;
+            }
+            if (!functions.TryAdd(method.Name, contract))
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint-callable managed methods cannot overload '{scriptType.FullName}.{method.Name}'. " +
+                    "Use distinct method names so one stable Unreal UFunction owns each call contract.");
+            }
+        }
+        return new UnrealManagedFunctionDispatcherV2(scriptType, staticOnly, functions);
+    }
+
+    public void Invoke(object? target, string functionName, nint frameAddress)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(functionName);
+        if (_staticOnly ? target is not null : target is null)
+        {
+            throw new ArgumentException(
+                _staticOnly
+                    ? $"Static managed library '{_typeName}' cannot receive an instance target."
+                    : $"Managed Script Class '{_typeName}' requires an instance target.",
+                nameof(target));
+        }
+        if (!_functions.TryGetValue(functionName, out FunctionContract? contract))
+        {
+            throw new MissingMethodException(
+                $"Managed Script Class '{_typeName}' has no reviewed Blueprint-callable function '{functionName}'.");
+        }
+        ValidateFrame(frameAddress, contract.ArgumentCount, contract.HasReturnValue);
+
+        if (target is UnrealObjectScript objectScript)
+        {
+            objectScript.BeginGeneratedFunctionCall();
+            try
+            {
+                contract.Invoke(target, frameAddress);
+            }
+            finally
+            {
+                objectScript.EndGeneratedFunctionCall();
+            }
+            return;
+        }
+        contract.Invoke(target, frameAddress);
+    }
+
+    private delegate void InvokeFunction(object? target, nint frame);
+
+    private sealed record FunctionContract(
+        int ArgumentCount,
+        bool HasReturnValue,
+        InvokeFunction Invoke)
+    {
+        public static bool TryCreate(MethodInfo method, out FunctionContract? contract)
+        {
+            contract = null;
+            ParameterInfo[] parameters = method.GetParameters();
+            if (method.ContainsGenericParameters ||
+                parameters.Length > MaximumArgumentCount ||
+                (method.ReturnType != typeof(void) && !IsSupported(method.ReturnType)))
+            {
+                return false;
+            }
+
+            var target = Expression.Parameter(typeof(object), "target");
+            var frame = Expression.Parameter(typeof(nint), "frame");
+            var callArguments = new Expression[parameters.Length];
+            for (int index = 0; index < parameters.Length; ++index)
+            {
+                Type parameterType = parameters[index].ParameterType;
+                if (parameterType.IsByRef || !IsSupported(parameterType))
+                {
+                    return false;
+                }
+                callArguments[index] = Expression.Call(
+                    GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(parameterType),
+                    frame,
+                    Expression.Constant(index));
+            }
+
+            MethodCallExpression call = method.IsStatic
+                ? Expression.Call(method, callArguments)
+                : Expression.Call(
+                    Expression.Convert(
+                        target,
+                        method.DeclaringType ?? throw new InvalidOperationException(
+                            $"Managed function '{method.Name}' has no declaring type.")),
+                    method,
+                    callArguments);
+            Expression body = method.ReturnType == typeof(void)
+                ? Expression.Block(
+                    call,
+                    Expression.Call(GetHelper(nameof(WriteVoidResult)), frame))
+                : Expression.Call(
+                    GetGenericHelper(nameof(WriteResult)).MakeGenericMethod(method.ReturnType),
+                    call,
+                    frame);
+            contract = new FunctionContract(
+                parameters.Length,
+                method.ReturnType != typeof(void),
+                Expression.Lambda<InvokeFunction>(body, target, frame).Compile());
+            return true;
+        }
+    }
+
+    private static bool IsSupported(Type type) =>
+        UnrealNativeValueCodecV3.TryCreateResultDescriptor(type, out _, out _);
+
+    private static MethodInfo GetHelper(string name) =>
+        typeof(UnrealManagedFunctionDispatcherV2).GetMethod(
+            name,
+            BindingFlags.Static | BindingFlags.NonPublic) ??
+        throw new MissingMethodException(typeof(UnrealManagedFunctionDispatcherV2).FullName, name);
+
+    private static MethodInfo GetGenericHelper(string name) => GetHelper(name);
+
+    private static unsafe void ValidateFrame(
+        nint frameAddress,
+        int argumentCount,
+        bool hasReturnValue)
+    {
+        if (frameAddress == 0)
+        {
+            throw new ArgumentNullException(nameof(frameAddress));
+        }
+        UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
+        int requiredResults = hasReturnValue ? 1 : 0;
+        if (frame->Flags != 0 || frame->Reserved8 != 0 || frame->Reserved32 != 0 ||
+            frame->ArgumentCount != argumentCount ||
+            argumentCount is < 0 or > MaximumArgumentCount ||
+            (argumentCount > 0 && frame->Arguments == 0) ||
+            frame->ResultCapacity < requiredResults ||
+            (requiredResults > 0 && frame->Results == 0) ||
+            frame->ByteCount > frame->ByteCapacity ||
+            (frame->ByteCapacity > 0 && frame->ByteBuffer == 0))
+        {
+            frame->Status = UnrealNativeCallStatusV3.InvalidFrame;
+            throw new ArgumentException(
+                "The managed Blueprint function call frame is malformed: " +
+                $"arguments={frame->ArgumentCount}/{argumentCount}, " +
+                $"argumentPointer={(frame->Arguments != 0 ? "set" : "null")}, " +
+                $"results={frame->ResultCapacity}/{requiredResults}, " +
+                $"resultPointer={(frame->Results != 0 ? "set" : "null")}, " +
+                $"bytes={frame->ByteCount}/{frame->ByteCapacity}, " +
+                $"bytePointer={(frame->ByteBuffer != 0 ? "set" : "null")}, " +
+                $"flags={frame->Flags}, reserved8={frame->Reserved8}, reserved32={frame->Reserved32}.",
+                nameof(frameAddress));
+        }
+        frame->ResultCount = 0;
+        frame->RequiredResultCapacity = (uint)requiredResults;
+        frame->RequiredByteCapacity = frame->ByteCount;
+        frame->InvocationError = 0;
+        frame->HandleError = 0;
+        frame->Status = UnrealNativeCallStatusV3.Uninitialized;
+        frame->ErrorMessageOffset = 0;
+        frame->ErrorMessageLength = 0;
+    }
+
+    private static unsafe T ReadArgument<T>(nint frameAddress, int index)
+    {
+        UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
+        var arguments = new ReadOnlySpan<UnrealNativeValueV3>(
+            (void*)frame->Arguments,
+            checked((int)frame->ArgumentCount));
+        ReadOnlySpan<byte> arena = frame->ByteCount == 0
+            ? ReadOnlySpan<byte>.Empty
+            : new ReadOnlySpan<byte>((void*)frame->ByteBuffer, checked((int)frame->ByteCount));
+        if ((uint)index >= frame->ArgumentCount ||
+            !UnrealNativeValueCodecV3.TryDecode(
+                in arguments[index],
+                arena,
+                checked((int)frame->ByteCount),
+                out T decoded))
+        {
+            throw new ArgumentException(
+                $"Managed Blueprint function argument {index} cannot decode as '{typeof(T).FullName}'.",
+                nameof(frameAddress));
+        }
+        return decoded;
+    }
+
+    private static unsafe void WriteResult<T>(T value, nint frameAddress)
+    {
+        UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
+        Span<byte> arena = frame->ByteCapacity == 0
+            ? Span<byte>.Empty
+            : new Span<byte>((void*)frame->ByteBuffer, checked((int)frame->ByteCapacity));
+        int byteCount = checked((int)frame->ByteCount);
+        if (!UnrealNativeValueCodecV3.TryEncode(
+                value,
+                arena,
+                ref byteCount,
+                out UnrealNativeValueV3 encoded,
+                out _))
+        {
+            frame->Status = UnrealNativeCallStatusV3.BufferTooSmall;
+            frame->RequiredByteCapacity = frame->ByteCapacity == uint.MaxValue
+                ? uint.MaxValue
+                : frame->ByteCapacity + 1;
+            throw new ArgumentException(
+                $"Managed Blueprint function result '{typeof(T).FullName}' does not fit its borrowed arena.",
+                nameof(frameAddress));
+        }
+        ((UnrealNativeValueV3*)frame->Results)[0] = encoded;
+        frame->ResultCount = 1;
+        frame->ByteCount = checked((uint)byteCount);
+        frame->RequiredByteCapacity = frame->ByteCount;
+        frame->Status = UnrealNativeCallStatusV3.Success;
+    }
+
+    private static unsafe void WriteVoidResult(nint frameAddress)
+    {
+        UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
+        frame->ResultCount = 0;
+        frame->RequiredResultCapacity = 0;
+        frame->RequiredByteCapacity = frame->ByteCount;
+        frame->Status = UnrealNativeCallStatusV3.Success;
+    }
+}

@@ -19,6 +19,14 @@ struct FUnifiedScriptManagedFunctionBinding
     /** Stable declaration identity retained across source-level method renames. */
     UPROPERTY()
     FGuid FunctionId;
+
+    /** Versioned call contract. Zero and one retain the scalar v1 compatibility path. */
+    UPROPERTY()
+    int32 AbiVersion = 1;
+
+    /** Static libraries resolve their managed program from the generated-class sidecar. */
+    UPROPERTY()
+    bool bStatic = false;
 };
 
 /**
@@ -37,6 +45,10 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptBlueprintGeneratedClass
 public:
     UPROPERTY()
     TMap<FName, FUnifiedScriptManagedFunctionBinding> ManagedFunctionBindings;
+
+    /** Cook-retained program identity used by generated static FunctionLibrary calls. */
+    UPROPERTY()
+    TObjectPtr<UUnifiedScriptAsset> ManagedScriptAsset;
 
     void BindManagedFunctions();
     bool IsManagedFunctionBound(FName FunctionName) const;

@@ -4,6 +4,7 @@
 
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Paths.h"
 #include "UObject/UObjectGlobals.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -68,6 +69,18 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         TEXT("Loose compatibility selection resolves the assembly"),
         AssemblyPath,
         FString(TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll")));
+    TestTrue(
+        TEXT("Runtime configuration expands deployment placeholders"),
+        Asset->ResolveRuntimeConfiguration(true, AssemblyPath, TypeName, Error));
+    TestFalse(TEXT("Runtime program path is absolute"), FPaths::IsRelative(AssemblyPath));
+    TestFalse(
+        TEXT("Runtime program path contains no plugin placeholder"),
+        AssemblyPath.Contains(TEXT("{PluginDir}"), ESearchCase::IgnoreCase));
+    TestTrue(
+        TEXT("Runtime configuration keeps the selected compiled chunk"),
+        AssemblyPath.EndsWith(
+            TEXT("Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk"),
+            ESearchCase::IgnoreCase));
 
     FString DeclarationPath;
     FString DeclarationAssetPath;

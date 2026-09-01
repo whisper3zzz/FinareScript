@@ -90,6 +90,13 @@ public:
         FString& OutTypeName,
         FString& OutError) const;
 
+    /** Resolves the selected program to an absolute runtime path, expanding deployment placeholders. */
+    bool ResolveRuntimeConfiguration(
+        bool bPreferCompiledChunk,
+        FString& OutAssemblyPath,
+        FString& OutTypeName,
+        FString& OutError) const;
+
     /** Validates the concrete component target against RequiredTargetClass without starting CoreCLR. */
     bool ValidateTarget(const UObject* Target, FString& OutError) const;
 

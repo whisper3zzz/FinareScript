@@ -1,5 +1,46 @@
 #include "UnifiedScriptAsset.h"
 
+#include "HAL/PlatformProcess.h"
+#include "HAL/PlatformProperties.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/Paths.h"
+
+namespace UE::UnifiedScript::Asset::Private
+{
+FString ResolveRuntimePath(const FString& ConfiguredPath)
+{
+    FString Result = ConfiguredPath;
+    FString ProjectDir = FPlatformProperties::RequiresCookedData()
+        ? FPaths::Combine(FPlatformProcess::BaseDir(), TEXT("../.."))
+        : FPaths::ProjectDir();
+    ProjectDir = FPaths::ConvertRelativePathToFull(ProjectDir);
+    FPaths::NormalizeDirectoryName(ProjectDir);
+
+    const TSharedPtr<IPlugin> Plugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (Plugin.IsValid())
+    {
+        const FString PluginBaseDir =
+            FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
+        Result.ReplaceInline(
+            TEXT("{PluginDir}"),
+            *PluginBaseDir,
+            ESearchCase::IgnoreCase);
+    }
+    Result.ReplaceInline(
+        TEXT("{ProjectDir}"),
+        *ProjectDir,
+        ESearchCase::IgnoreCase);
+    if (FPaths::IsRelative(Result))
+    {
+        Result = FPaths::Combine(ProjectDir, Result);
+    }
+    Result = FPaths::ConvertRelativePathToFull(Result);
+    FPaths::NormalizeFilename(Result);
+    return Result;
+}
+}
+
 bool UUnifiedScriptAsset::ResolveConfiguration(
     FString& OutAssemblyPath,
     FString& OutTypeName,
@@ -40,6 +81,27 @@ bool UUnifiedScriptAsset::ResolveConfiguration(
         return false;
     }
 
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptAsset::ResolveRuntimeConfiguration(
+    bool bPreferCompiledChunk,
+    FString& OutAssemblyPath,
+    FString& OutTypeName,
+    FString& OutError) const
+{
+    if (!ResolveConfiguration(
+            bPreferCompiledChunk,
+            OutAssemblyPath,
+            OutTypeName,
+            OutError))
+    {
+        return false;
+    }
+
+    OutAssemblyPath =
+        UE::UnifiedScript::Asset::Private::ResolveRuntimePath(OutAssemblyPath);
     OutError.Reset();
     return true;
 }

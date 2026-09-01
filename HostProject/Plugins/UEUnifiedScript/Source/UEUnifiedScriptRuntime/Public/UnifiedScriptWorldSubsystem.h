@@ -198,6 +198,10 @@ public:
         UObject* Object,
         FUnifiedScriptObjectHandleResult& OutResult);
 
+    UObject* ResolveObject(
+        FUnifiedScriptObjectHandle Handle,
+        FUnifiedScriptObjectHandleResult& OutResult);
+
     /** Keeps a synchronously loaded asset alive for the lifetime of this World host. */
     void RetainLoadedResource(UObject* Resource);
 
@@ -253,6 +257,14 @@ public:
         const FString& FunctionName,
         TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
         FUnifiedScriptManagedFunctionValueV1& OutResult,
+        FString& OutError);
+
+    bool InvokeManagedScriptFunctionV2(
+        uint64 InstanceId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        const FString& FunctionName,
+        FUnifiedScriptNativeCallFrameV3& Frame,
         FString& OutError);
 
     bool ReloadManagedScript(

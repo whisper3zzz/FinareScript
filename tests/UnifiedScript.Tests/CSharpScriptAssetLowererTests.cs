@@ -330,7 +330,74 @@ public sealed class CSharpScriptAssetLowererTests
             "AddOne",
             Assert.Single(result.ScriptAssets.Assets
                 .Single(static asset => asset.QualifiedName == "Game.ObjectBehavior")
-                .Functions).Name);
+            .Functions).Name);
+    }
+
+    [Fact]
+    public void PublicVisualBaseMethodsLowerIntoTheDerivedScriptClass()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            public abstract class SharedBehavior
+            {
+                [Visual]
+                public UnrealVector Offset(UnrealVector value)
+                {
+                    return value;
+                }
+
+                [Visual]
+                protected int Hidden(int value)
+                {
+                    return value;
+                }
+
+                [Visual]
+                public static int StaticBase(int value)
+                {
+                    return value;
+                }
+            }
+
+            [ScriptAsset("Game/Derived", ClassId = "us_00000000000000000000000000000005")]
+            [UnrealScriptClass(UnrealScriptClassKind.Object)]
+            public sealed class DerivedBehavior : SharedBehavior
+            {
+                [Visual]
+                public int Own(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "InheritedScriptClassFunctions",
+            [new CSharpSourceDocument("Game/Inherited.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDeclaration baseAsset = result.ScriptAssets!.Assets.Single(
+            static asset => asset.QualifiedName == "Game.SharedBehavior");
+        ScriptAssetDeclaration derivedAsset = result.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.DerivedBehavior");
+        Assert.Equal(["Offset", "Own"],
+            derivedAsset.Functions.Select(static function => function.Name).Order());
+        ScriptFunctionDeclaration inherited = derivedAsset.Functions.Single(
+            static function => function.Name == "Offset");
+        Assert.Equal(
+            baseAsset.Functions.Single(static function => function.Name == "Offset").Id,
+            inherited.Id);
+        Assert.Equal(
+            "Game.DerivedBehavior.Offset(UnifiedScript.Unreal.UnrealVector)",
+            inherited.QualifiedName);
+        Assert.DoesNotContain(derivedAsset.Functions, static function =>
+            function.Name is "Hidden" or "StaticBase");
     }
 
     [Theory]

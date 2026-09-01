@@ -7304,6 +7304,55 @@ def main() -> int:
     checks.append(
         "M13.3B-2a dispatches stable scalar Blueprint functions to managed instances"
     )
+    native_blueprint_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptBlueprint.cpp"
+    ).read_text(encoding="utf-8")
+    lowerer_tests = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "CSharpScriptAssetLowererTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "class UnrealManagedFunctionDispatcherV2" in managed_function_abi
+        and "UnrealNativeCallFrameV3" in managed_function_abi
+        and "BindingFlags.FlattenHierarchy" in managed_function_abi
+        and "InvokeScriptFunctionV2" in managed_world_entry
+        and "ManagedStaticLibrary" in managed_world_entry
+        and "_staticLibraries" in managed_world_entry
+        and "BlueprintFunctionLibrary" in blueprint_class_materializer_source
+        and "Binding.AbiVersion = 2" in blueprint_class_materializer_source
+        and "Binding.bStatic = Planned.Declaration.bIsStatic"
+        in blueprint_class_materializer_source
+        and "KismetWorldContextName" in native_blueprint_source
+        and "ResolveRuntimeConfiguration" in native_blueprint_source
+        and "BlueprintManagedStaticFunctionDispatch"
+        in blueprint_class_materializer_tests
+        and "Static String/ObjectHandle/FVector call reaches CoreCLR"
+        in blueprint_class_materializer_tests
+        and "Static ObjectHandle return resolves through the World registry"
+        in blueprint_class_materializer_tests
+        and "Static FVector return stays inline in the native value cell"
+        in blueprint_class_materializer_tests
+        and "PublicVisualBaseMethodsLowerIntoTheDerivedScriptClass" in lowerer_tests
+        and "IdentityBelongsToProjectSource" in cli_source
+        and "--identity $identityPath" in unreal_chunk_stage
+        and "EmitProject_ReconcilesPortableIdentityPathAgainstPhysicalSource"
+        in project_loader_test
+        and "[x] **M13.3B-2b-1 — static/common-value call vertical:**"
+        in roadmap_document,
+        "M13.3B-2b-1 static library ownership, common gameplay values, inherited declarations, stable identity emission, or live ProcessEvent proof is incomplete",
+    )
+    checks.append(
+        "M13.3B-2b-1 dispatches static and inherited common-value Blueprint functions"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

@@ -767,6 +767,16 @@ managed code through generated native thunks, retains it on Reload, and can
 reset either one field or the whole instance to current C# defaults. The
 component's direct assembly/type fields remain an advanced compatibility fallback.
 
+Managed Script Class functions now cover both instance and static library
+ownership. Public inherited `[Visual]` methods retain their semantic identity;
+managed `BlueprintFunctionLibrary` methods become ordinary static Blueprint
+calls backed by a World-scoped collectible context. The current ABI supports
+zero-to-four scalar, `String`, `ObjectHandle`, and `FVector` parameters and
+returns without JSON or per-call reflection. The native CMD gate executes the
+Demo library's `Describe`, `EchoObject`, and `OffsetVector` functions through
+real Blueprint `ProcessEvent`. Enum/general-UStruct pins and persistent
+reload/cook coverage are the next Roadmap slice.
+
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
 indexed and synchronous disposal-aware enumerable `foreach`, `break`, `continue`,

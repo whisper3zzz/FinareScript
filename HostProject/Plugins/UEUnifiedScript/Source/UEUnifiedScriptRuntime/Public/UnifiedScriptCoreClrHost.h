@@ -5,6 +5,7 @@
 
 class FUnifiedScriptNativeBridgeContext;
 struct FUnifiedScriptNativeTransportV2;
+struct FUnifiedScriptNativeCallFrameV3;
 
 enum class EUnifiedScriptCoreClrHostState : uint8
 {
@@ -103,6 +104,14 @@ public:
         TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
         FUnifiedScriptManagedFunctionValueV1& OutResult,
         FString& OutError);
+    bool InvokeManagedScriptFunctionV2(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        const FString& FunctionName,
+        FUnifiedScriptNativeCallFrameV3& Frame,
+        FString& OutError);
     bool ReloadManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -175,6 +184,7 @@ private:
     void* IsScriptDebugActiveEntryPoint = nullptr;
     void* DispatchEventEntryPoint = nullptr;
     void* InvokeScriptFunctionEntryPoint = nullptr;
+    void* InvokeScriptFunctionV2EntryPoint = nullptr;
     void* ReloadScriptEntryPoint = nullptr;
     void* PrepareScriptReloadEntryPoint = nullptr;
     void* CommitScriptReloadEntryPoint = nullptr;

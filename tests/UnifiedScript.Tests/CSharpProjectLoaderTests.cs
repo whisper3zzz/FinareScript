@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis.CSharp;
 using UnifiedScript.CSharp;
+using UnifiedScript.Core;
 using UnifiedScript.Runtime;
 
 namespace UnifiedScript.Tests;
@@ -82,7 +83,84 @@ public sealed class CSharpProjectLoaderTests
         Assert.Equal(first.Request.RuntimeReferencePaths, second.Request.RuntimeReferencePaths);
     }
 
+    [Fact]
+    public void EmitProject_ReconcilesPortableIdentityPathAgainstPhysicalSource()
+    {
+        string projectPath = GetSampleProjectPath();
+        CSharpProjectLoadResult loaded = new CSharpProjectLoader().Load(
+            projectPath,
+            options: new CSharpProjectLoadOptions(Restore: false, Build: false));
+        CSharpProjectSource projectSource = Assert.Single(
+            loaded.Sources,
+            static source => source.LogicalPath == "ProjectLoadingDemo.cs");
+        string repositoryRoot = FindRepositoryRoot();
+        string portablePath = Path.GetRelativePath(repositoryRoot, projectSource.Path)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        CSharpSourceDocument source = Assert.Single(
+            loaded.Request.Sources,
+            static source => source.LogicalPath == "ProjectLoadingDemo.cs");
+        CSharpAnalysisResult initialized = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                loaded.Request.AssemblyName,
+                [new CSharpSourceDocument(
+                    portablePath,
+                    source.Source,
+                    IdentitySidecarDocument.CreateEmpty(portablePath))],
+                loaded.Request.ReferencePaths,
+                settings: loaded.Request.Settings,
+                runtimeReferencePaths: loaded.Request.RuntimeReferencePaths,
+                includeDefaultReferences: loaded.Request.IncludeDefaultReferences));
+        IdentitySidecarDocument identity = Assert.Single(initialized.IdentitySidecars);
+        string temporaryDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "UnifiedScript.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryDirectory);
+        try
+        {
+            string identityPath = Path.Combine(temporaryDirectory, "ProjectLoadingDemo.cs.usids");
+            string outputPath = Path.Combine(temporaryDirectory, "out");
+            File.WriteAllText(identityPath, IdentitySidecarJson.Serialize(identity) + "\n");
+
+            int exitCode = UnifiedScript.Cli.Program.Main([
+                "emit",
+                projectPath,
+                "--out",
+                outputPath,
+                "--identity",
+                identityPath,
+                "--no-restore",
+                "--no-build",
+            ]);
+
+            Assert.Equal(0, exitCode);
+            string emittedIdentityPath = Assert.Single(
+                Directory.GetFiles(outputPath, "*.usids", SearchOption.TopDirectoryOnly));
+            IdentitySidecarDocument emitted = IdentitySidecarJson.Deserialize(
+                File.ReadAllText(emittedIdentityPath));
+            Assert.Equal(portablePath, emitted.SourcePath);
+            Assert.Equal(identity.SourceDigest, emitted.SourceDigest);
+            Assert.Equal(
+                identity.Entries.Select(static entry => entry.Id),
+                emitted.Entries.Select(static entry => entry.Id));
+        }
+        finally
+        {
+            Directory.Delete(temporaryDirectory, recursive: true);
+        }
+    }
+
     private static string GetSampleProjectPath()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        return Path.Combine(
+            repositoryRoot,
+            "samples",
+            "ProjectLoading",
+            "ProjectLoadingDemo.csproj");
+    }
+
+    private static string FindRepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "UnifiedScript.slnx")))
@@ -90,10 +168,6 @@ public sealed class CSharpProjectLoaderTests
             directory = directory.Parent;
         }
         Assert.NotNull(directory);
-        return Path.Combine(
-            directory.FullName,
-            "samples",
-            "ProjectLoading",
-            "ProjectLoadingDemo.csproj");
+        return directory.FullName;
     }
 }

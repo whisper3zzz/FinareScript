@@ -11,6 +11,7 @@
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptWorldSubsystem.h"
@@ -782,6 +783,285 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
     return bRuntimeObjectsReady && !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintManagedStaticFunctionDispatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
+    const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::Tests;
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString AssetName = TEXT("BP_UnifiedScriptStaticDispatch_") + Suffix;
+    UPackage* Package = CreatePackage(*(TEXT("/Engine/Transient/") + AssetName));
+    UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
+        FKismetEditorUtilities::CreateBlueprint(
+            UUnifiedScriptBlueprintFunctionLibrary::StaticClass(),
+            Package,
+            FName(*AssetName),
+            BPTYPE_FunctionLibrary,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptBlueprintManagedStaticFunctionDispatch"))));
+    if (!TestNotNull(TEXT("Creates a managed static FunctionLibrary Blueprint"), Blueprint) ||
+        !TestNotNull(
+            TEXT("Static FunctionLibrary Blueprint has a generated class"),
+            Blueprint != nullptr ? Blueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+
+    constexpr const TCHAR* LibraryClassId = TEXT("0fdbad6aa2af414e8d8f073115cf03ab");
+    constexpr const TCHAR* LibraryQualifiedName =
+        TEXT("UnifiedScript.Unreal.Demo.DemoLibrary");
+    constexpr const TCHAR* LibraryAssetPath = TEXT("Unreal/DemoLibrary");
+    constexpr const TCHAR* DescribeId = TEXT("10101010101010101010101010101010");
+    constexpr const TCHAR* EchoObjectId = TEXT("20202020202020202020202020202020");
+    constexpr const TCHAR* OffsetVectorId = TEXT("30303030303030303030303030303030");
+
+    const FString DescribeParameters = FString::Join(
+        TArray<FString>{
+            Parameter(
+                TEXT("11111111111111111111111111111110"),
+                TEXT("value"),
+                TEXT("UnifiedScript.Unreal.UnrealObjectHandle")),
+            Parameter(
+                TEXT("11111111111111111111111111111120"),
+                TEXT("location"),
+                TEXT("UnifiedScript.Unreal.UnrealVector")),
+            Parameter(
+                TEXT("11111111111111111111111111111130"),
+                TEXT("label"),
+                TEXT("System.String")),
+        },
+        TEXT(","));
+    const FString EchoParameters = Parameter(
+        TEXT("22222222222222222222222222222220"),
+        TEXT("value"),
+        TEXT("UnifiedScript.Unreal.UnrealObjectHandle"));
+    const FString VectorParameters = Parameter(
+        TEXT("33333333333333333333333333333330"),
+        TEXT("value"),
+        TEXT("UnifiedScript.Unreal.UnrealVector"));
+    const FString Functions = FString::Join(
+        TArray<FString>{
+            Function(
+                DescribeId,
+                TEXT("Describe"),
+                TEXT("System.String"),
+                DescribeParameters,
+                true),
+            Function(
+                EchoObjectId,
+                TEXT("EchoObject"),
+                TEXT("UnifiedScript.Unreal.UnrealObjectHandle"),
+                EchoParameters,
+                true),
+            Function(
+                OffsetVectorId,
+                TEXT("OffsetVector"),
+                TEXT("UnifiedScript.Unreal.UnrealVector"),
+                VectorParameters,
+                true),
+        },
+        TEXT(","));
+
+    UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
+    ScriptAsset->ScriptClassId = Guid(LibraryClassId);
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::BlueprintFunctionLibrary;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    ScriptAsset->ScriptTypeName = LibraryQualifiedName;
+    ScriptAsset->DeclarationAssetPath = LibraryAssetPath;
+    ScriptAsset->CompiledChunkPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
+    ScriptAsset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Blueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    FString Error;
+    const bool bSynchronized =
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            Document(
+                FString(),
+                Functions,
+                LibraryClassId,
+                LibraryQualifiedName,
+                LibraryAssetPath),
+            false,
+            SyncResult,
+            Error);
+    if (!TestTrue(
+            *FString::Printf(
+                TEXT("Materializes the static managed FunctionLibrary: %s"),
+                *Error),
+            bSynchronized))
+    {
+        return false;
+    }
+    TestEqual(TEXT("Three static functions are materialized"),
+        SyncResult.DeclaredFunctionCount, 3);
+
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Static proxy retains the product GeneratedClass"), GeneratedClass))
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("GeneratedClass retains the static Script Asset through cook/load"),
+        GeneratedClass->ManagedScriptAsset.Get(),
+        ScriptAsset);
+
+    const FName DescribeInternalName(
+        *FString::Printf(TEXT("USF_%s"), DescribeId));
+    UFunction* DescribeFunction = GeneratedClass->FindFunctionByName(
+        DescribeInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    const FName EchoObjectInternalName(
+        *FString::Printf(TEXT("USF_%s"), EchoObjectId));
+    UFunction* EchoObjectFunction = GeneratedClass->FindFunctionByName(
+        EchoObjectInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    const FName OffsetVectorInternalName(
+        *FString::Printf(TEXT("USF_%s"), OffsetVectorId));
+    UFunction* OffsetVectorFunction = GeneratedClass->FindFunctionByName(
+        OffsetVectorInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    const FUnifiedScriptManagedFunctionBinding* DescribeBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(DescribeInternalName);
+    if (!TestNotNull(TEXT("Static Describe UFunction exists"), DescribeFunction) ||
+        !TestNotNull(TEXT("Static EchoObject UFunction exists"), EchoObjectFunction) ||
+        !TestNotNull(TEXT("Static OffsetVector UFunction exists"), OffsetVectorFunction) ||
+        !TestNotNull(TEXT("Static Describe binding exists"), DescribeBinding))
+    {
+        return false;
+    }
+    TestTrue(TEXT("Generated FunctionLibrary UFunction is static"),
+        DescribeFunction->HasAnyFunctionFlags(FUNC_Static));
+    TestEqual(TEXT("Static binding selects ABI v2"), DescribeBinding->AbiVersion, 2);
+    TestTrue(TEXT("Static binding owns library routing"), DescribeBinding->bStatic);
+    TestNotNull(
+        TEXT("Static call persists a hidden WorldContextObject"),
+        FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject")));
+    TestNotNull(TEXT("String parameter becomes FString"),
+        FindFProperty<FStrProperty>(DescribeFunction, TEXT("label")));
+    TestNotNull(
+        TEXT("FunctionLibrary compiler owns its separate Kismet World context"),
+        FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("__WorldContext")));
+    const FStructProperty* LocationProperty =
+        FindFProperty<FStructProperty>(DescribeFunction, TEXT("location"));
+    TestTrue(TEXT("UnrealVector parameter becomes FVector"),
+        LocationProperty != nullptr &&
+            LocationProperty->Struct == TBaseStructure<FVector>::Get());
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Creates a gameplay World for static dispatch"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    UUnifiedScriptComponent* WorldContext =
+        NewObject<UUnifiedScriptComponent>(World);
+    const bool bRuntimeReady =
+        TestNotNull(TEXT("Static dispatch World has a managed host"), Host) &&
+        TestNotNull(TEXT("Static dispatch has a World context object"), WorldContext);
+    if (bRuntimeReady)
+    {
+        WorldContext->RegisterComponentWithWorld(World);
+        UObject* LibraryObject = GeneratedClass->GetDefaultObject();
+        const FObjectPropertyBase* ContextProperty =
+            FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject"));
+        const FObjectPropertyBase* ValueProperty =
+            FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("value"));
+        const FStrProperty* LabelProperty =
+            FindFProperty<FStrProperty>(DescribeFunction, TEXT("label"));
+        const FStrProperty* ReturnProperty =
+            CastField<FStrProperty>(DescribeFunction->GetReturnProperty());
+        if (TestNotNull(TEXT("Static Describe context property exists"), ContextProperty) &&
+            TestNotNull(TEXT("Static Describe object property exists"), ValueProperty) &&
+            TestNotNull(TEXT("Static Describe label property exists"), LabelProperty) &&
+            TestNotNull(TEXT("Static Describe return property exists"), ReturnProperty))
+        {
+            FStructOnScope Call(DescribeFunction);
+            uint8* Memory = Call.GetStructMemory();
+            ContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            ValueProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            *LocationProperty->ContainerPtrToValuePtr<FVector>(Memory) =
+                FVector(1.0, 2.0, 3.0);
+            LabelProperty->SetPropertyValue_InContainer(Memory, TEXT("demo"));
+            LibraryObject->ProcessEvent(DescribeFunction, Memory);
+            TestEqual(
+                TEXT("Static String/ObjectHandle/FVector call reaches CoreCLR"),
+                ReturnProperty->GetPropertyValue_InContainer(Memory),
+                FString(TEXT("demo")));
+        }
+
+        const FObjectPropertyBase* EchoContextProperty =
+            FindFProperty<FObjectPropertyBase>(EchoObjectFunction, TEXT("WorldContextObject"));
+        const FObjectPropertyBase* EchoValueProperty =
+            FindFProperty<FObjectPropertyBase>(EchoObjectFunction, TEXT("value"));
+        const FObjectPropertyBase* EchoReturnProperty = CastField<FObjectPropertyBase>(
+            EchoObjectFunction->GetReturnProperty());
+        if (TestNotNull(TEXT("Static EchoObject context property exists"), EchoContextProperty) &&
+            TestNotNull(TEXT("Static EchoObject input property exists"), EchoValueProperty) &&
+            TestNotNull(TEXT("Static EchoObject return property exists"), EchoReturnProperty))
+        {
+            FStructOnScope Call(EchoObjectFunction);
+            uint8* Memory = Call.GetStructMemory();
+            EchoContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            EchoValueProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            LibraryObject->ProcessEvent(EchoObjectFunction, Memory);
+            TestEqual(
+                TEXT("Static ObjectHandle return resolves through the World registry"),
+                EchoReturnProperty->GetObjectPropertyValue_InContainer(Memory),
+                static_cast<UObject*>(WorldContext));
+        }
+
+        const FObjectPropertyBase* VectorContextProperty =
+            FindFProperty<FObjectPropertyBase>(OffsetVectorFunction, TEXT("WorldContextObject"));
+        const FStructProperty* VectorValueProperty =
+            FindFProperty<FStructProperty>(OffsetVectorFunction, TEXT("value"));
+        const FStructProperty* VectorReturnProperty = CastField<FStructProperty>(
+            OffsetVectorFunction->GetReturnProperty());
+        if (TestNotNull(TEXT("Static OffsetVector context property exists"), VectorContextProperty) &&
+            TestNotNull(TEXT("Static OffsetVector input property exists"), VectorValueProperty) &&
+            TestNotNull(TEXT("Static OffsetVector return property exists"), VectorReturnProperty))
+        {
+            FStructOnScope Call(OffsetVectorFunction);
+            uint8* Memory = Call.GetStructMemory();
+            const FVector Expected(4.0, 5.0, 6.0);
+            VectorContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            *VectorValueProperty->ContainerPtrToValuePtr<FVector>(Memory) = Expected;
+            LibraryObject->ProcessEvent(OffsetVectorFunction, Memory);
+            TestEqual(
+                TEXT("Static FVector return stays inline in the native value cell"),
+                *VectorReturnProperty->ContainerPtrToValuePtr<FVector>(Memory),
+                Expected);
+        }
+    }
+
+    if (WorldContext != nullptr)
+    {
+        WorldContext->UnregisterComponent();
+    }
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(
+        TEXT("Static library collectible context retires with its World"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount);
+    return bRuntimeReady && !HasAnyErrors();
 }
 
 #endif

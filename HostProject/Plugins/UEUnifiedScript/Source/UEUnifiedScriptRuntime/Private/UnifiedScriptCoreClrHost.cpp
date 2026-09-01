@@ -103,6 +103,16 @@ using FInvokeScriptFunctionEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     const FUnifiedScriptManagedFunctionValueV1* Arguments,
     int32 ArgumentCount,
     FUnifiedScriptManagedFunctionValueV1* OutResult);
+using FInvokeScriptFunctionV2EntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength,
+    const uint8* FunctionNameData,
+    int32 FunctionNameLength,
+    FUnifiedScriptNativeCallFrameV3* Frame);
 using FReloadScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -393,6 +403,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     InvokeScriptFunctionEntryPoint = nullptr;
+    InvokeScriptFunctionV2EntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     PrepareScriptReloadEntryPoint = nullptr;
     CommitScriptReloadEntryPoint = nullptr;
@@ -1041,6 +1052,86 @@ bool FUnifiedScriptCoreClrHost::InvokeManagedScriptFunction(
     return true;
 }
 
+bool FUnifiedScriptCoreClrHost::InvokeManagedScriptFunctionV2(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    const FString& FunctionName,
+    FUnifiedScriptNativeCallFrameV3& Frame,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FInvokeScriptFunctionV2EntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            InvokeScriptFunctionV2EntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed function ABI v2 entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FInvokeScriptFunctionV2EntryPoint>(
+            InvokeScriptFunctionV2EntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+
+    FString TrimmedFunctionName = FunctionName;
+    TrimmedFunctionName.TrimStartAndEndInline();
+    FString TrimmedAssemblyPath = AssemblyPath;
+    TrimmedAssemblyPath.TrimStartAndEndInline();
+    FString TrimmedTypeName = TypeName;
+    TrimmedTypeName.TrimStartAndEndInline();
+    const bool bStaticCall = InstanceId == 0;
+    if (TrimmedFunctionName.IsEmpty() ||
+        (bStaticCall && (TrimmedAssemblyPath.IsEmpty() || TrimmedTypeName.IsEmpty())))
+    {
+        OutError = TEXT("A managed function ABI v2 call requires a name and static calls require an assembly and type.");
+        return false;
+    }
+    if (bStaticCall && !IFileManager::Get().FileExists(*TrimmedAssemblyPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The managed static library does not exist: '%s'."),
+            *TrimmedAssemblyPath);
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*TrimmedAssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TrimmedTypeName);
+    const FTCHARToUTF8 FunctionNameUtf8(*TrimmedFunctionName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        bStaticCall
+            ? reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get())
+            : nullptr,
+        bStaticCall ? AssemblyPathUtf8.Length() : 0,
+        bStaticCall
+            ? reinterpret_cast<const uint8*>(TypeNameUtf8.Get())
+            : nullptr,
+        bStaticCall ? TypeNameUtf8.Length() : 0,
+        reinterpret_cast<const uint8*>(FunctionNameUtf8.Get()),
+        FunctionNameUtf8.Length(),
+        &Frame);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            bStaticCall
+                ? TEXT("Managed static library function dispatch")
+                : TEXT("Managed script function ABI v2 dispatch"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
 bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -1539,6 +1630,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
     const int32 InvokeFunctionResult = LoadEntryPoint(
         TEXT("InvokeScriptFunction"), &InvokeScriptFunctionEntryPoint);
+    const int32 InvokeFunctionV2Result = LoadEntryPoint(
+        TEXT("InvokeScriptFunctionV2"), &InvokeScriptFunctionV2EntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
     const int32 PrepareReloadResult = LoadEntryPoint(
         TEXT("PrepareScriptReload"), &PrepareScriptReloadEntryPoint);
@@ -1582,6 +1675,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
     const int32 InvokeFunctionResult = LoadEntryPoint(
         "InvokeScriptFunction", &InvokeScriptFunctionEntryPoint);
+    const int32 InvokeFunctionV2Result = LoadEntryPoint(
+        "InvokeScriptFunctionV2", &InvokeScriptFunctionV2EntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
     const int32 PrepareReloadResult = LoadEntryPoint(
         "PrepareScriptReload", &PrepareScriptReloadEntryPoint);
@@ -1599,6 +1694,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
         InvokeFunctionResult != 0 ||
+        InvokeFunctionV2Result != 0 ||
         ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
         ReloadStateResult != 0 || ProfilerControlResult != 0 || ProfilerTraceResult != 0 ||
         DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
@@ -1624,6 +1720,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         IsScriptDebugActiveEntryPoint == nullptr ||
         DispatchEventEntryPoint == nullptr ||
         InvokeScriptFunctionEntryPoint == nullptr ||
+        InvokeScriptFunctionV2EntryPoint == nullptr ||
         ReloadScriptEntryPoint == nullptr ||
         PrepareScriptReloadEntryPoint == nullptr ||
         CommitScriptReloadEntryPoint == nullptr ||
@@ -1698,6 +1795,7 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     InvokeScriptFunctionEntryPoint = nullptr;
+    InvokeScriptFunctionV2EntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     PrepareScriptReloadEntryPoint = nullptr;
     CommitScriptReloadEntryPoint = nullptr;

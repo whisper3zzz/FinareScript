@@ -92,7 +92,12 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics);
                 IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
                     ? []
-                    : LowerFunctions(hirType, semanticTypes, semanticMethods);
+                    : LowerFunctions(
+                        typeSymbol,
+                        hirType,
+                        hirTypes,
+                        semanticTypes,
+                        semanticMethods);
                 SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
                 if (assetAttribute is not null &&
                     TryReadNamedString(
@@ -290,12 +295,41 @@ internal sealed class CSharpScriptAssetLowerer
     }
 
     private static IReadOnlyList<ScriptFunctionDeclaration> LowerFunctions(
+        INamedTypeSymbol typeSymbol,
         HirTypeDeclaration type,
+        IReadOnlyDictionary<string, HirTypeDeclaration> hirTypes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods)
     {
-        var functions = new List<ScriptFunctionDeclaration>(type.Methods.Count);
-        foreach (HirMethodDeclaration method in type.Methods)
+        var declarations = new List<HirMethodDeclaration>(type.Methods.Count);
+        var shadowedNames = new HashSet<string>(StringComparer.Ordinal);
+        INamedTypeSymbol? currentSymbol = typeSymbol;
+        bool inherited = false;
+        while (currentSymbol is not null)
+        {
+            string currentName = GetMetadataName(currentSymbol);
+            if (hirTypes.TryGetValue(currentName, out HirTypeDeclaration? currentType))
+            {
+                foreach (HirMethodDeclaration method in currentType.Methods)
+                {
+                    if (!inherited ||
+                        (method.IsPublic && !method.IsStatic && !shadowedNames.Contains(method.Name)))
+                    {
+                        declarations.Add(method);
+                    }
+                }
+            }
+
+            foreach (IMethodSymbol declaredMethod in currentSymbol.GetMembers().OfType<IMethodSymbol>())
+            {
+                shadowedNames.Add(declaredMethod.Name);
+            }
+            currentSymbol = currentSymbol.BaseType;
+            inherited = true;
+        }
+
+        var functions = new List<ScriptFunctionDeclaration>(declarations.Count);
+        foreach (HirMethodDeclaration method in declarations)
         {
             MethodDescriptor descriptor = methods[method.Id];
             string[] parameterTypeNames = descriptor.Parameters

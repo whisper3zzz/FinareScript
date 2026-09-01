@@ -12,6 +12,9 @@ $managedProject = Join-Path `
     $repoRoot `
     'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
 $cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$identityPath = Join-Path `
+    $repoRoot `
+    'samples\Unreal\UnifiedScript.Unreal.Demo\DemoScript.cs.usids'
 $cliAssembly = Join-Path `
     $repoRoot `
     'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
@@ -38,7 +41,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
 $dotnetExe = Join-Path `
     $EngineRoot `
     'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
-foreach ($requiredPath in @($dotnetExe, $managedProject, $cliProject)) {
+foreach ($requiredPath in @($dotnetExe, $managedProject, $cliProject, $identityPath)) {
     if (!(Test-Path -LiteralPath $requiredPath)) {
         throw "Required chunk compiler input is missing: $requiredPath"
     }
@@ -77,12 +80,21 @@ New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
     -- `
     emit $managedProject `
     --out $outputDirectory `
+    --identity $identityPath `
     --configuration $Configuration `
     --no-restore `
     --no-build
 if ($LASTEXITCODE -ne 0) {
     throw "UnifiedScript chunk emission failed with exit code $LASTEXITCODE."
 }
+
+$reconciledIdentities = @(
+    Get-ChildItem -LiteralPath $outputDirectory -Filter '*.usids' -File
+)
+if ($reconciledIdentities.Count -ne 1) {
+    throw "Chunk emission must produce exactly one reconciled Demo identity sidecar."
+}
+Copy-Item -LiteralPath $reconciledIdentities[0].FullName -Destination $identityPath -Force
 
 $chunkName = 'UnifiedScript.Unreal.Demo.uschunk'
 $compiledChunk = Join-Path $outputDirectory $chunkName

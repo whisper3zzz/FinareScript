@@ -742,16 +742,20 @@ kind, including types without a construction script. After compile or load, one
 generic execution pointer replaces the generated function body without setting
 `FUNC_Native`, avoiding a fictitious per-method native registration.
 
-The first dispatch ABI is deliberately narrow and non-allocating: one 16-byte
-tagged scalar carries `bool`, `byte`, `int`, `long`, `float`, or `double`, with
-zero-to-four ordered arguments and a scalar/void return. The router resolves the
-owning Script Component, follows its World-scoped instance ID into CoreCLR, and
-calls a strongly typed expression delegate compiled once per collectible
-generation. No JSON, `MethodInfo.Invoke`, or handwritten native thunk appears on
-the call path. `UnrealObjectScript` functions hydrate/flush reflected state at
-the call boundary. Static FunctionLibrary ownership and richer
-String/ObjectHandle/FVector/enum/struct values remain later ABI revisions rather
-than weakening this first contract.
+The first dispatch ABI remains frozen as one 16-byte tagged scalar carrying
+`bool`, `byte`, `int`, `long`, `float`, or `double`. ABI v2 keeps its
+zero-to-four argument contract but reuses the published 48-byte ABI v3 value
+cell and 72-byte borrowed-arena call frame for `String`, `ObjectHandle`, and
+`FVector`. Instance calls resolve their Script Component and World-scoped
+instance ID; static BlueprintFunctionLibrary calls resolve their Script Asset
+and a World-owned collectible library context. Both paths invoke strongly typed
+expression delegates compiled once per generation. No JSON, `MethodInfo.Invoke`,
+or handwritten native thunk appears on the call path. `UnrealObjectScript`
+functions hydrate/flush reflected state at the call boundary, while World
+teardown disposes every static library context. Public inherited `[Visual]`
+instance declarations share the same path and retain their base semantic IDs.
+Enum and general reflected-UStruct values remain the next ABI/materialization
+slice.
 
 The control plane handles resources, uncommon signatures, properties,
 functions, delegates, and complex values. The data plane publishes borrowed
@@ -773,8 +777,8 @@ closure and pass packaged lifecycle smoke.
 The remaining boundary work is:
 
 - arbitrary control-wire authoring beyond structured block operations;
-- generated static Blueprint FunctionLibrary dispatch and richer gameplay-value
-  function contracts;
+- generated enum/general-UStruct Blueprint pins plus persistent reload/cook
+  proof for the static and inherited function paths;
 - native debug traps, deeper locals, expression evaluation, and remote framing;
 - additional shared-memory gameplay snapshot and batch schemas;
 - platform-specific CoreCLR packaging beyond Win64.

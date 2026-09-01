@@ -126,6 +126,103 @@ public sealed class UnrealManagedFunctionDispatchTests
         Assert.Contains("cannot overload", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public unsafe void V2DispatchesStaticStringHandleVectorAndInheritedFunctions()
+    {
+        UnrealManagedFunctionDispatcherV2 library =
+            UnrealManagedFunctionDispatcherV2.Create(
+                typeof(ManagedFunctionLibrary),
+                staticOnly: true);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
+        Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
+        Span<byte> arena = stackalloc byte[1024];
+        int inputBytes = 0;
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            UnrealObjectHandle.Create(3, 2),
+            arena,
+            ref inputBytes,
+            out arguments[0],
+            out _));
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            new UnrealVector(1.5, 2.5, 3.5),
+            arena,
+            ref inputBytes,
+            out arguments[1],
+            out _));
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            "bridge",
+            arena,
+            ref inputBytes,
+            out arguments[2],
+            out _));
+
+        fixed (UnrealNativeValueV3* argumentPointer = arguments)
+        fixed (UnrealNativeValueV3* resultPointer = results)
+        fixed (byte* arenaPointer = arena)
+        {
+            var frame = new UnrealNativeCallFrameV3
+            {
+                Arguments = (nint)argumentPointer,
+                ArgumentCount = (uint)arguments.Length,
+                Results = (nint)resultPointer,
+                ResultCapacity = (uint)results.Length,
+                ByteBuffer = (nint)arenaPointer,
+                ByteCapacity = (uint)arena.Length,
+                ByteCount = (uint)inputBytes,
+            };
+            library.Invoke(
+                target: null,
+                nameof(ManagedFunctionLibrary.Describe),
+                (nint)(&frame));
+
+            Assert.Equal(UnrealNativeCallStatusV3.Success, frame.Status);
+            Assert.Equal(1U, frame.ResultCount);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[0],
+                arena,
+                checked((int)frame.ByteCount),
+                out string description));
+            Assert.Equal("bridge:3:1.5,2.5,3.5", description);
+        }
+
+        var inheritedTarget = new InheritedManagedFunctionScript();
+        UnrealManagedFunctionDispatcherV2 inherited =
+            UnrealManagedFunctionDispatcherV2.Create(
+                typeof(InheritedManagedFunctionScript),
+                staticOnly: false);
+        arguments = stackalloc UnrealNativeValueV3[1];
+        results = stackalloc UnrealNativeValueV3[1];
+        inputBytes = 0;
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            new UnrealVector(4.0, 5.0, 6.0),
+            Span<byte>.Empty,
+            ref inputBytes,
+            out arguments[0],
+            out _));
+        fixed (UnrealNativeValueV3* argumentPointer = arguments)
+        fixed (UnrealNativeValueV3* resultPointer = results)
+        {
+            var frame = new UnrealNativeCallFrameV3
+            {
+                Arguments = (nint)argumentPointer,
+                ArgumentCount = 1,
+                Results = (nint)resultPointer,
+                ResultCapacity = 1,
+            };
+            inherited.Invoke(
+                inheritedTarget,
+                nameof(InheritedManagedFunctionBase.Offset),
+                (nint)(&frame));
+            Assert.Equal(UnrealNativeCallStatusV3.Success, frame.Status);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[0],
+                ReadOnlySpan<byte>.Empty,
+                0,
+                out UnrealVector offset));
+            Assert.Equal(new UnrealVector(5.0, 7.0, 9.0), offset);
+        }
+    }
+
     private sealed class FunctionTransport : IUnrealNativeInvocationTransport
     {
         public UnrealInvocationResponse ReadProperty(
@@ -197,4 +294,37 @@ public sealed class OverloadedManagedFunctionScript : IUnrealManagedScript
     public void OnStop()
     {
     }
+}
+
+public static class ManagedFunctionLibrary
+{
+    [Visual]
+    public static string Describe(
+        UnrealObjectHandle handle,
+        UnrealVector vector,
+        string label) =>
+        $"{label}:{handle.SlotIndex}:{vector.X:0.0},{vector.Y:0.0},{vector.Z:0.0}";
+}
+
+public abstract class InheritedManagedFunctionBase : IUnrealManagedScript
+{
+    [Visual]
+    public UnrealVector Offset(UnrealVector value) =>
+        new(value.X + 1.0, value.Y + 2.0, value.Z + 3.0);
+
+    public void OnStart(UnrealScriptContext context)
+    {
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+    }
+
+    public void OnStop()
+    {
+    }
+}
+
+public sealed class InheritedManagedFunctionScript : InheritedManagedFunctionBase
+{
 }

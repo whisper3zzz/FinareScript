@@ -1,8 +1,8 @@
 {
   "schemaVersion": "unifiedscript.identity/v0.1",
   "sourcePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
-  "sourceDigest": "sha256:c3340406ab9cb6db723989a9b180df16426f2f3b5c1e5f9dc244c7aae3f051ad",
-  "generation": 2,
+  "sourceDigest": "sha256:09205ee39d444e832a36bc6dc24655999c9a6d92d3d7b8f4d04e1f59ef377889",
+  "generation": 3,
   "entries": [
     {
       "id": "us_01ed46673b81fff436b39bb5bb4cf0a8",
@@ -149,6 +149,22 @@
       "generation": 1
     },
     {
+      "id": "us_0b7ce8382288ae124e12829f6b59ce77",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.EchoObject(UnrealObjectHandle)",
+      "role": "body",
+      "fingerprint": "sha256:4cc4f4499db4e6311533991168c87fb7294eda3745eea6ef76f3bc43c2c7e699",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:59f4ca6d5965cdee59a09ae377d48aee4fd466af47591527e63eaf97ffeba6f4",
+      "anchor": {
+        "start": 4828,
+        "length": 29
+      },
+      "contextBefore": "sha256:7376313d2b66dbed15731b964c38288fea1c2a88837f9ebe2f09f082c2aabf90",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
       "id": "us_0c1e1a557dd41304eca7a9cd225e90d3",
       "kind": "literal",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedSignal(int,UnrealObjectHandle)",
@@ -195,6 +211,22 @@
       "contextBefore": "sha256:bb847eadde0832a279f210d2f0039c06c6738459145a16614968d1e7d334c931",
       "contextAfter": "sha256:917f11ce1c01663323d23c49d4a0f235761962ef8b2c7c10917477db3df74fc4",
       "generation": 1
+    },
+    {
+      "id": "us_15c05cc6d35c3ef8bf50717e865e1ec8",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "parameter",
+      "fingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
+      "shapeFingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
+      "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
+      "anchor": {
+        "start": 4623,
+        "length": 24
+      },
+      "contextBefore": "sha256:4dfd3d85ec25b85fe8e92ec6a38ce5d9dd309b2150b1744f445da398ece97a54",
+      "contextAfter": "sha256:ac8297116b0181a176a9b9887b9406ca5802c8d7fd29ed3a3f22a2a0cbe7ce59",
+      "generation": 3
     },
     {
       "id": "us_1604852504c777090ced5eee16bf9ee8",
@@ -517,6 +549,22 @@
       "generation": 1
     },
     {
+      "id": "us_4d431417048170521f7894eab0d4eeb6",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.EchoObject(UnrealObjectHandle)",
+      "role": "returnValue",
+      "fingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 4845,
+        "length": 5
+      },
+      "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
+      "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
+      "generation": 3
+    },
+    {
       "id": "us_4e11b83af6862d727609e33ee87dd1fd",
       "kind": "return",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.UEApiPreview(UnifiedScriptComponent,int,int)",
@@ -629,6 +677,22 @@
       "generation": 2
     },
     {
+      "id": "us_595b7b863fe6f160def46eeb3e5728de",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.OffsetVector(UnrealVector)",
+      "role": "parameter",
+      "fingerprint": "sha256:0438883a824a9a7bad0650e183c5664d7803af5b866dad03739c062e060a13a9",
+      "shapeFingerprint": "sha256:0438883a824a9a7bad0650e183c5664d7803af5b866dad03739c062e060a13a9",
+      "parentFingerprint": "sha256:fc31b5c456c3a987a5b4ca2df952e19209df7f8a57608f0c2f083c247d912139",
+      "anchor": {
+        "start": 4916,
+        "length": 18
+      },
+      "contextBefore": "sha256:43c1821bc1e95e69c6991e2fef700cfe22407e099eeee62b1d6d3e43017d03de",
+      "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
+      "generation": 3
+    },
+    {
       "id": "us_5b4cd649eb6f35a7a92f11cc2c678c4c",
       "kind": "block",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.UEApiPreview(UnifiedScriptComponent,int,int)",
@@ -675,6 +739,38 @@
       "contextBefore": "sha256:44f5cbb6d8413d2265dd970ae4ec0994651f6d92828c227936cad2ff0f8f858b",
       "contextAfter": "sha256:fdae42c89600312a6dd6489324baf66c856bd693d59c8c51aed6ab4c326280b5",
       "generation": 1
+    },
+    {
+      "id": "us_63a3784aa2de308021efe1d0ba061ca5",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "body",
+      "fingerprint": "sha256:3fa4034ba974c3c799d275f007e08a9f4e86615c16c6b46726314865938c9afc",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
+      "anchor": {
+        "start": 4706,
+        "length": 29
+      },
+      "contextBefore": "sha256:b0450a3048d76c411736f5e999de74cb1b755dd47ea1fdcc71a20b555509036a",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
+      "id": "us_65a5ce5c06e01e247da78f10dc730122",
+      "kind": "return",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.EchoObject(UnrealObjectHandle)",
+      "role": "statement",
+      "fingerprint": "sha256:376f899193a974e50b8f6c29811cbe84be9ebbd28042438928b1da243887a0c0",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 4838,
+        "length": 13
+      },
+      "contextBefore": "sha256:2d1de7cde2f3526a8ee78d8d6a3d33daa11997089451c96c9ac427de054b806f",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 3
     },
     {
       "id": "us_6baaeb0b1ae86bc1c46aac7aedfd36f9",
@@ -789,6 +885,22 @@
       "generation": 1
     },
     {
+      "id": "us_777ebac089ea7700dea7e255f9fd47d4",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.EchoObject(UnrealObjectHandle)",
+      "role": "parameter",
+      "fingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
+      "shapeFingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
+      "parentFingerprint": "sha256:59f4ca6d5965cdee59a09ae377d48aee4fd466af47591527e63eaf97ffeba6f4",
+      "anchor": {
+        "start": 4798,
+        "length": 24
+      },
+      "contextBefore": "sha256:eaa21f2573022b35ee643d8cbb7ff2ef923b1558fe10c68558769a4b910e9e0d",
+      "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
+      "generation": 3
+    },
+    {
       "id": "us_7a5d5e66061e177b20268319a1377c57",
       "kind": "identifier",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.ResolveInitialValue(int)",
@@ -821,6 +933,22 @@
       "generation": 1
     },
     {
+      "id": "us_833ed2e8c46648394c32f0de01972a36",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "returnValue",
+      "fingerprint": "sha256:fbf353726be6ac547f87e526fcaced575e078e190abea46ec3689718154a74a7",
+      "shapeFingerprint": "sha256:fbf353726be6ac547f87e526fcaced575e078e190abea46ec3689718154a74a7",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 4723,
+        "length": 5
+      },
+      "contextBefore": "sha256:9aa6e045145f2ba3fe2fb3d29ce925507a321d497a687c595b4f7c1c4f8d1559",
+      "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
+      "generation": 3
+    },
+    {
       "id": "us_88175c7c9288e0f7e78b9e71bbe3f765",
       "kind": "literal",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.NormalizeTickDelta(float)",
@@ -835,6 +963,22 @@
       "contextBefore": "sha256:64d8cf64b141d1ddeddcde3dd4e031a425dc52ce204b5f198570e0176678de6e",
       "contextAfter": "sha256:bb5c13a6889b82615a08b96c866b0c45d32e25fc1e4855ee962bccc3ee793d4b",
       "generation": 2
+    },
+    {
+      "id": "us_92a6e639d0fd770e188d956fc3a79804",
+      "kind": "return",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.OffsetVector(UnrealVector)",
+      "role": "statement",
+      "fingerprint": "sha256:376f899193a974e50b8f6c29811cbe84be9ebbd28042438928b1da243887a0c0",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 4950,
+        "length": 13
+      },
+      "contextBefore": "sha256:42091f66d38afa7d22ede210e483511b9163bb4b796aa15f83f9f47077b2d3f8",
+      "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
+      "generation": 3
     },
     {
       "id": "us_93ed647f78393aa32885ccd273e61bda",
@@ -1125,6 +1269,22 @@
       "generation": 2
     },
     {
+      "id": "us_c551dbece27d48b33fb39d4e3c819230",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "parameter",
+      "fingerprint": "sha256:c036c26b726a92ff0771dc948473da2add6edf60b722e576685ba747b6dcfc63",
+      "shapeFingerprint": "sha256:c036c26b726a92ff0771dc948473da2add6edf60b722e576685ba747b6dcfc63",
+      "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
+      "anchor": {
+        "start": 4657,
+        "length": 21
+      },
+      "contextBefore": "sha256:8aa5f2f9edcc3da96ee872136c6d1cb021df2398354cb0b602c8592c4c0c2aee",
+      "contextAfter": "sha256:b0450a3048d76c411736f5e999de74cb1b755dd47ea1fdcc71a20b555509036a",
+      "generation": 3
+    },
+    {
       "id": "us_c7cd9dec02458944f376dbd5f13cb040",
       "kind": "literal",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.ResolveInitialValue(int)",
@@ -1139,6 +1299,22 @@
       "contextBefore": "sha256:17a1b7c7f453154daf1209e58b40f9e305387aa4b34eaa2d87ef5053cf50b0e2",
       "contextAfter": "sha256:54ca410d497c9a633a5e60bc747bbefd7e514ec68d3fdbec64fd19e865d7cc76",
       "generation": 1
+    },
+    {
+      "id": "us_cc71203c374b31796daa202a3a8c7b0a",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "parameter",
+      "fingerprint": "sha256:76f25b1aa8ac831eda0d691b1564155ab5bde25807103a4dd4eb40cd11767a88",
+      "shapeFingerprint": "sha256:76f25b1aa8ac831eda0d691b1564155ab5bde25807103a4dd4eb40cd11767a88",
+      "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
+      "anchor": {
+        "start": 4688,
+        "length": 12
+      },
+      "contextBefore": "sha256:ac8297116b0181a176a9b9887b9406ca5802c8d7fd29ed3a3f22a2a0cbe7ce59",
+      "contextAfter": "sha256:284a894022732c1c82f3c1b2af7c33b03cb3a1856af9fa3b681b71afb7ed1cec",
+      "generation": 3
     },
     {
       "id": "us_cd084b6f2d4697c3eb1767f444d71bd1",
@@ -1219,6 +1395,38 @@
       "contextBefore": "sha256:c36545af0682f32271b999000a096d1008cd9a0514e5801be231cafeffa3716b",
       "contextAfter": "sha256:e0656776b364e8052fd67c2a891b140f8096ffdbdc65c5f90ea5f03b0391f484",
       "generation": 1
+    },
+    {
+      "id": "us_d81f39620fb12e2bed3982a487618e27",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.OffsetVector(UnrealVector)",
+      "role": "returnValue",
+      "fingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 4957,
+        "length": 5
+      },
+      "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 3
+    },
+    {
+      "id": "us_d897fe2f2cdc7dc32db347a0a0124d94",
+      "kind": "return",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
+      "role": "statement",
+      "fingerprint": "sha256:fcce66871c7abdb7328ab0d9b5349471be05e7a390f26b7af1bc99065cda5fd9",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 4716,
+        "length": 13
+      },
+      "contextBefore": "sha256:a9de603ed095341a88fe6af50d8ef4e6fac334dcb7713691903b984da4ae42b3",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 3
     },
     {
       "id": "us_d95b2f7185bb90055f267d74f62438cd",
@@ -1315,6 +1523,22 @@
       "contextBefore": "sha256:d7e2de28ed52062f5ed423f55badd4c609103930c9fe473bc7d61a2dfa0643d1",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
       "generation": 1
+    },
+    {
+      "id": "us_ee00fe50aa4e477d1197c762a4370db9",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.OffsetVector(UnrealVector)",
+      "role": "body",
+      "fingerprint": "sha256:4cc4f4499db4e6311533991168c87fb7294eda3745eea6ef76f3bc43c2c7e699",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:fc31b5c456c3a987a5b4ca2df952e19209df7f8a57608f0c2f083c247d912139",
+      "anchor": {
+        "start": 4940,
+        "length": 29
+      },
+      "contextBefore": "sha256:ef133470f881d37536729a03e10322577095d558807b5caa038c7fa2a58ed58c",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 3
     },
     {
       "id": "us_f0b46cf93927dccc24dc0ca79f97a35c",

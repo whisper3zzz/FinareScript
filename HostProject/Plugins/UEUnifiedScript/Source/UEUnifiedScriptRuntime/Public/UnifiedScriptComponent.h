@@ -11,6 +11,7 @@ class UUnifiedScriptAsset;
 class AActor;
 struct FPropertyChangedChainEvent;
 struct FUnifiedScriptStateMigrationReport;
+struct FUnifiedScriptNativeCallFrameV3;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     FUnifiedScriptManagedSignal,
@@ -141,6 +142,11 @@ public:
         const FString& FunctionName,
         TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
         FUnifiedScriptManagedFunctionValueV1& OutResult,
+        FString& OutError);
+
+    bool InvokeManagedScriptFunctionV2(
+        const FString& FunctionName,
+        FUnifiedScriptNativeCallFrameV3& Frame,
         FString& OutError);
 
     /** Extends an authoring publication transaction through the live World swap. */

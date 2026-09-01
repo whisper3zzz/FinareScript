@@ -142,3 +142,31 @@ public sealed class DemoScript : IUnrealManagedScript
         _component!.ManagedState = "Stopped";
     }
 }
+
+[ScriptAsset(
+    "Unreal/DemoLibrary",
+    ClassId = "us_0fdbad6aa2af414e8d8f073115cf03ab")]
+[UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+public static class DemoLibrary
+{
+    [Visual]
+    public static string Describe(
+        UnrealObjectHandle value,
+        UnrealVector location,
+        string label)
+    {
+        return label;
+    }
+
+    [Visual]
+    public static UnrealObjectHandle EchoObject(UnrealObjectHandle value)
+    {
+        return value;
+    }
+
+    [Visual]
+    public static UnrealVector OffsetVector(UnrealVector value)
+    {
+        return value;
+    }
+}

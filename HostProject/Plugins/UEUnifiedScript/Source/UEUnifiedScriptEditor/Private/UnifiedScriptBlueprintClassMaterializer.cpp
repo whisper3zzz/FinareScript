@@ -34,6 +34,7 @@ const FName DeclarationDefaultKey(TEXT("UnifiedScript.DeclarationDefault"));
 const FName ManagedFunctionKey(TEXT("UnifiedScript.ManagedFunction"));
 const FName FunctionIdKey(TEXT("UnifiedScript.FunctionId"));
 const FName ManagedFunctionNameKey(TEXT("UnifiedScript.ManagedName"));
+const FName WorldContextObjectName(TEXT("WorldContextObject"));
 
 struct FStateDeclaration
 {
@@ -73,6 +74,7 @@ struct FFunctionDeclaration
     FString ReturnTypeMetadataName;
     FEdGraphPinType ReturnPinType;
     bool bHasReturnValue = false;
+    bool bIsStatic = false;
     TArray<FFunctionParameterDeclaration> Parameters;
 };
 
@@ -206,11 +208,37 @@ bool ResolveFunctionPinType(
     {
         TypeKind = TEXT("floatingPoint");
     }
+    else if (MetadataName == TEXT("System.String"))
+    {
+        TypeKind = TEXT("string");
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Object;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        OutType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+        return true;
+    }
     else
     {
         return false;
     }
     return ResolvePinType(TypeKind, MetadataName, OutType);
+}
+
+FEdGraphPinType MakeWorldContextPinType()
+{
+    FEdGraphPinType Result;
+    Result.PinCategory = UEdGraphSchema_K2::PC_Object;
+    Result.PinSubCategoryObject = UObject::StaticClass();
+    return Result;
 }
 
 FName MakeManagedFunctionInternalName(const FGuid& Id)
@@ -263,16 +291,31 @@ bool FunctionGraphSignatureMatches(
     TArray<UK2Node_FunctionResult*> ResultNodes;
     Graph.GetNodesOfClass(EntryNodes);
     Graph.GetNodesOfClass(ResultNodes);
+    const int32 ParameterOffset = Declaration.bIsStatic ? 1 : 0;
     if (EntryNodes.Num() != 1 || ResultNodes.Num() != 1 ||
-        EntryNodes[0]->UserDefinedPins.Num() != Declaration.Parameters.Num() ||
+        EntryNodes[0]->UserDefinedPins.Num() !=
+            Declaration.Parameters.Num() + ParameterOffset ||
         ResultNodes[0]->UserDefinedPins.Num() !=
             (Declaration.bHasReturnValue ? 1 : 0))
     {
         return false;
     }
+    if (Declaration.bIsStatic)
+    {
+        const TSharedPtr<FUserPinInfo>& WorldContextPin =
+            EntryNodes[0]->UserDefinedPins[0];
+        if (!WorldContextPin.IsValid() ||
+            WorldContextPin->PinName != WorldContextObjectName ||
+            WorldContextPin->PinType != MakeWorldContextPinType() ||
+            WorldContextPin->DesiredPinDirection != EGPD_Output)
+        {
+            return false;
+        }
+    }
     for (int32 Index = 0; Index < Declaration.Parameters.Num(); ++Index)
     {
-        const TSharedPtr<FUserPinInfo>& Pin = EntryNodes[0]->UserDefinedPins[Index];
+        const TSharedPtr<FUserPinInfo>& Pin =
+            EntryNodes[0]->UserDefinedPins[Index + ParameterOffset];
         const FFunctionParameterDeclaration& Parameter = Declaration.Parameters[Index];
         if (!Pin.IsValid() || Pin->PinName != Parameter.Name ||
             Pin->PinType != Parameter.PinType ||
@@ -313,7 +356,11 @@ bool FunctionGraphMatches(
             Declaration.ManagedName.ToString() &&
         Metadata->HasMetaData(TEXT("DisplayName")) &&
         Metadata->GetMetaData(TEXT("DisplayName")) ==
-            Declaration.ManagedName.ToString();
+            Declaration.ManagedName.ToString() &&
+        (!Declaration.bIsStatic ||
+         (Metadata->HasMetaData(TEXT("WorldContext")) &&
+          Metadata->GetMetaData(TEXT("WorldContext")) ==
+              WorldContextObjectName.ToString()));
 }
 
 bool ReadCanonicalDefault(
@@ -635,8 +682,11 @@ bool ParseDeclaration(
     }
 
     OutFunctions.Reset();
+    const bool bStaticLibrary =
+        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary;
     if (ScriptAsset.ScriptClassKind != EUnifiedScriptClassKind::Actor &&
-        ScriptAsset.ScriptClassKind != EUnifiedScriptClassKind::ActorComponent)
+        ScriptAsset.ScriptClassKind != EUnifiedScriptClassKind::ActorComponent &&
+        !bStaticLibrary)
     {
         return true;
     }
@@ -681,11 +731,15 @@ bool ParseDeclaration(
         {
             continue;
         }
-        if (bIsStatic)
+        if (bIsStatic != bStaticLibrary)
         {
-            OutError = FString::Printf(
-                TEXT("Function '%s' is static. M13.3B-2 instance dispatch currently supports Actor and ActorComponent methods; BlueprintFunctionLibrary hosting is the next reviewed ownership tranche."),
-                *Name);
+            OutError = bStaticLibrary
+                ? FString::Printf(
+                    TEXT("Function '%s' is not static. BlueprintFunctionLibrary Script Classes own only static managed methods."),
+                    *Name)
+                : FString::Printf(
+                    TEXT("Function '%s' is static. Actor and ActorComponent Script Classes expose instance managed methods; create a BlueprintFunctionLibrary Script Class for static calls."),
+                    *Name);
             return false;
         }
         if (Parameters->Num() > 4)
@@ -701,6 +755,7 @@ bool ParseDeclaration(
         Declaration.SemanticId = SemanticId;
         Declaration.ManagedName = FName(*Name);
         Declaration.ReturnTypeMetadataName = ReturnType;
+        Declaration.bIsStatic = bIsStatic;
         if (!ParseSemanticId(SemanticId, Declaration.Id) ||
             Declaration.ManagedName.IsNone() ||
             SeenFunctionIds.Contains(Declaration.Id) ||
@@ -720,7 +775,7 @@ bool ParseDeclaration(
                 Declaration.bHasReturnValue))
         {
             OutError = FString::Printf(
-                TEXT("Function '%s' has unsupported return type '%s'. Managed function ABI v1 supports void, bool, byte, int, long, float, and double."),
+                TEXT("Function '%s' has unsupported return type '%s'. Managed function ABI v2 supports void, bool, byte, int, long, float, double, string, ObjectHandle, and FVector."),
                 *Name,
                 *ReturnType);
             return false;
@@ -763,7 +818,7 @@ bool ParseDeclaration(
                 !bHasParameterValue)
             {
                 OutError = FString::Printf(
-                    TEXT("Function '%s' has duplicate, invalid, or unsupported parameter '%s' of type '%s'. Managed function ABI v1 supports bool, byte, int, long, float, and double."),
+                    TEXT("Function '%s' has duplicate, invalid, or unsupported parameter '%s' of type '%s'. Managed function ABI v2 supports bool, byte, int, long, float, double, string, ObjectHandle, and FVector."),
                     *Name,
                     *ParameterName,
                     *ParameterType);
@@ -1202,7 +1257,9 @@ bool ConfigureFunctionGraph(
     Entry->Modify();
     Result->Modify();
     Entry->CustomGeneratedFunctionName = Declaration.InternalName;
-    Entry->SetExtraFlags(FUNC_Public | FUNC_BlueprintCallable);
+    Entry->SetExtraFlags(
+        FUNC_Public | FUNC_BlueprintCallable |
+        (Declaration.bIsStatic ? FUNC_Static : FUNC_None));
     Entry->MetaData.Category = FText::FromString(DefaultCategory);
     Entry->MetaData.ToolTip = FText::FromString(FString::Printf(
         TEXT("Managed Script Class method %s"),
@@ -1215,6 +1272,20 @@ bool ConfigureFunctionGraph(
     Entry->MetaData.SetMetaData(
         TEXT("DisplayName"),
         FString(Declaration.ManagedName.ToString()));
+    if (Declaration.bIsStatic)
+    {
+        Entry->MetaData.SetMetaData(
+            TEXT("WorldContext"),
+            FString(WorldContextObjectName.ToString()));
+        Entry->MetaData.SetMetaData(
+            TEXT("DefaultToSelf"),
+            FString(WorldContextObjectName.ToString()));
+    }
+    else
+    {
+        Entry->MetaData.RemoveMetaData(TEXT("WorldContext"));
+        Entry->MetaData.RemoveMetaData(TEXT("DefaultToSelf"));
+    }
 
     if (!bCreated && FunctionGraphSignatureMatches(*InOutGraph, Declaration))
     {
@@ -1230,6 +1301,18 @@ bool ConfigureFunctionGraph(
     for (const TSharedPtr<FUserPinInfo>& Pin : PreviousResultPins)
     {
         Result->RemoveUserDefinedPin(Pin);
+    }
+    if (Declaration.bIsStatic &&
+        Entry->CreateUserDefinedPin(
+            WorldContextObjectName,
+            MakeWorldContextPinType(),
+            EGPD_Output,
+            false) == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Unreal could not create WorldContextObject for managed static function '%s'."),
+            *Declaration.ManagedName.ToString());
+        return false;
     }
     for (const FFunctionParameterDeclaration& Parameter : Declaration.Parameters)
     {
@@ -1461,12 +1544,19 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
     if (GeneratedClass != nullptr)
     {
         GeneratedClass->Modify();
+        const UUnifiedScriptBlueprint* UnifiedBlueprint =
+            Cast<UUnifiedScriptBlueprint>(&Blueprint);
+        GeneratedClass->ManagedScriptAsset = UnifiedBlueprint != nullptr
+            ? UnifiedBlueprint->ScriptAsset
+            : nullptr;
         GeneratedClass->ManagedFunctionBindings.Reset();
         for (const FPlannedFunction& Planned : Plan.Functions)
         {
             FUnifiedScriptManagedFunctionBinding Binding;
             Binding.ManagedName = Planned.Declaration.ManagedName.ToString();
             Binding.FunctionId = Planned.Declaration.Id;
+            Binding.AbiVersion = 2;
+            Binding.bStatic = Planned.Declaration.bIsStatic;
             GeneratedClass->ManagedFunctionBindings.Add(
                 Planned.Declaration.InternalName,
                 MoveTemp(Binding));

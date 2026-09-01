@@ -562,6 +562,18 @@ FUnifiedScriptObjectHandle UUnifiedScriptWorldSubsystem::RegisterObject(
     return ObjectRegistry->RegisterObject(Object, OutResult);
 }
 
+UObject* UUnifiedScriptWorldSubsystem::ResolveObject(
+    FUnifiedScriptObjectHandle Handle,
+    FUnifiedScriptObjectHandleResult& OutResult)
+{
+    if (!IsNativeRuntimeReady())
+    {
+        UE::UnifiedScript::WorldHost::Private::FailUnavailable(OutResult);
+        return nullptr;
+    }
+    return ObjectRegistry->ResolveObject(Handle, OutResult);
+}
+
 void UUnifiedScriptWorldSubsystem::RetainLoadedResource(UObject* Resource)
 {
     check(IsInGameThread());
@@ -768,6 +780,29 @@ bool UUnifiedScriptWorldSubsystem::InvokeManagedScriptFunction(
         FunctionName,
         Arguments,
         OutResult,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::InvokeManagedScriptFunctionV2(
+    uint64 InstanceId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    const FString& FunctionName,
+    FUnifiedScriptNativeCallFrameV3& Frame,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().InvokeManagedScriptFunctionV2(
+        WorldHostId,
+        InstanceId,
+        AssemblyPath,
+        TypeName,
+        FunctionName,
+        Frame,
         OutError);
 }
 

@@ -3582,6 +3582,7 @@ internal static class Program
                 options.Build));
         CSharpSourceDocument[] projectSources = AttachIdentitySidecars(
             loaded.Request.Sources,
+            loaded.Sources,
             options.IdentityPaths);
         string[] compileReferences = loaded.Request.ReferencePaths
             .Concat(options.ReferencePaths.Select(Path.GetFullPath))
@@ -3603,36 +3604,106 @@ internal static class Program
 
     private static CSharpSourceDocument[] AttachIdentitySidecars(
         IReadOnlyList<CSharpSourceDocument> sources,
+        IReadOnlyList<CSharpProjectSource> projectSources,
         IReadOnlyList<string> identityPaths)
     {
-        var identities = new Dictionary<string, IdentitySidecarDocument>(StringComparer.Ordinal);
+        var identities = new List<ProjectIdentityInput>(identityPaths.Count);
+        var identitySourcePaths = new HashSet<string>(StringComparer.Ordinal);
         foreach (string identityPath in identityPaths)
         {
             IdentitySidecarDocument sidecar = LoadIdentitySidecar(identityPath);
-            if (!identities.TryAdd(sidecar.SourcePath, sidecar))
+            if (!identitySourcePaths.Add(sidecar.SourcePath))
             {
                 throw new ArgumentException(
                     $"More than one identity sidecar was supplied for '{sidecar.SourcePath}'.");
             }
+
+            identities.Add(new ProjectIdentityInput(Path.GetFullPath(identityPath), sidecar));
         }
+
+        Dictionary<string, CSharpProjectSource> physicalSources = projectSources
+            .ToDictionary(static source => source.LogicalPath, StringComparer.Ordinal);
+        var assigned = new Dictionary<string, ProjectIdentityInput>(StringComparer.Ordinal);
+        foreach (ProjectIdentityInput identity in identities)
+        {
+            CSharpSourceDocument[] exactMatches = sources
+                .Where(source => string.Equals(
+                    source.LogicalPath,
+                    identity.Sidecar.SourcePath,
+                    StringComparison.Ordinal))
+                .ToArray();
+            CSharpSourceDocument[] matches = exactMatches.Length > 0
+                ? exactMatches
+                : sources
+                    .Where(source =>
+                        physicalSources.TryGetValue(
+                            source.LogicalPath,
+                            out CSharpProjectSource? projectSource) &&
+                        IdentityBelongsToProjectSource(identity, projectSource.Path))
+                    .ToArray();
+            if (matches.Length != 1)
+            {
+                string reason = matches.Length == 0 ? "does not match" : "ambiguously matches";
+                throw new ArgumentException(
+                    $"Identity sidecar '{identity.Sidecar.SourcePath}' {reason} a project source.");
+            }
+            if (!assigned.TryAdd(matches[0].LogicalPath, identity))
+            {
+                throw new ArgumentException(
+                    $"More than one identity sidecar matched project source '{matches[0].LogicalPath}'.");
+            }
+        }
+
         CSharpSourceDocument[] attached = sources
             .Select(source =>
             {
-                identities.Remove(source.LogicalPath, out IdentitySidecarDocument? sidecar);
+                assigned.TryGetValue(source.LogicalPath, out ProjectIdentityInput? identity);
                 return new CSharpSourceDocument(
-                    source.LogicalPath,
+                    identity?.Sidecar.SourcePath ?? source.LogicalPath,
                     source.Source,
-                    sidecar,
+                    identity?.Sidecar,
                     source.IdentityPins);
             })
             .ToArray();
-        if (identities.Count > 0)
-        {
-            throw new ArgumentException(
-                $"Identity sidecar '{identities.Values.First().SourcePath}' does not match any project source.");
-        }
+
         return attached;
     }
+
+    private static bool IdentityBelongsToProjectSource(
+        ProjectIdentityInput identity,
+        string physicalSourcePath)
+    {
+        string fullSourcePath = Path.GetFullPath(physicalSourcePath);
+        if (identity.Path.EndsWith(".usids", StringComparison.OrdinalIgnoreCase))
+        {
+            string adjacentSourcePath = Path.GetFullPath(
+                identity.Path[..^".usids".Length]);
+            if (string.Equals(
+                adjacentSourcePath,
+                fullSourcePath,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        string sidecarSourcePath = identity.Sidecar.SourcePath.Replace('\\', '/');
+        if (Path.IsPathRooted(identity.Sidecar.SourcePath))
+        {
+            return string.Equals(
+                Path.GetFullPath(identity.Sidecar.SourcePath),
+                fullSourcePath,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        string normalizedSourcePath = fullSourcePath.Replace('\\', '/');
+        string normalizedSuffix = "/" + sidecarSourcePath.TrimStart('/');
+        return normalizedSourcePath.EndsWith(normalizedSuffix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed record ProjectIdentityInput(
+        string Path,
+        IdentitySidecarDocument Sidecar);
 
     private static IdentitySidecarDocument LoadIdentitySidecar(string path)
     {
