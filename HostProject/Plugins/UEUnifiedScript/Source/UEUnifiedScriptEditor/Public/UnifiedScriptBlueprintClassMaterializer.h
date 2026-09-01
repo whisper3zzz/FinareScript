@@ -14,11 +14,15 @@ struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptBlueprintClassSyncResult
     int32 RenamedPropertyCount = 0;
     int32 RemovedPropertyCount = 0;
     int32 PreservedDefaultOverrideCount = 0;
+    int32 DeclaredFunctionCount = 0;
+    int32 AddedFunctionCount = 0;
+    int32 UpdatedFunctionCount = 0;
+    int32 RemovedFunctionCount = 0;
     bool bChanged = false;
 };
 
 /**
- * Materializes reviewed managed state as ordinary Blueprint properties.
+ * Materializes reviewed managed state and functions as ordinary Blueprint members.
  *
  * Semantic state IDs become Blueprint variable GUIDs, so source renames retain
  * reflection identity. Product metadata distinguishes generated variables from

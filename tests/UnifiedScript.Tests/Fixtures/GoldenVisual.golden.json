@@ -4,8 +4,8 @@
   "artifacts": {
     "hir": {
       "schemaVersion": "unifiedscript.hir/v0.9",
-      "sha256": "3c05d0f9cbbf96d505bc1450712e44196c97006e211ad8aa224effe41568cbf1",
-      "utf8Bytes": 5453
+      "sha256": "f7f6b026201f928033ffd81e32283e2bbb1f2ef3f363104475560773aefee753",
+      "utf8Bytes": 5484
     },
     "semantics": {
       "schemaVersion": "unifiedscript.semantics/v0.6",

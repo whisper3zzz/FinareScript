@@ -91,6 +91,7 @@ public sealed class CSharpToHirLowerer
             method.Identifier.ValueText,
             method.ReturnType.ToString(),
             true,
+            method.Modifiers.Any(SyntaxKind.PublicKeyword),
             method.Modifiers.Any(SyntaxKind.StaticKeyword),
             method.Modifiers.Any(SyntaxKind.AsyncKeyword),
             parameters,

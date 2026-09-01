@@ -732,6 +732,27 @@ existing invocation bridge, preserving the fast path without retaining a
 collectible hot-reload generation. ActorComponent classes use the component host
 handle; Actor/Object classes use the target handle.
 
+Reviewed public non-event `[Visual]` instance methods also project onto that
+exact Blueprint as stable `USF_<semantic-id>` UFunctions. Their managed name is
+display/binding metadata, so source rename preserves graph identity while stale
+generated graphs can be removed independently of user graphs. A product-owned
+Blueprint GeneratedClass stores the binding table; a dedicated Kismet compiler
+keeps that carrier across initial compile and recompile for every proxy parent
+kind, including types without a construction script. After compile or load, one
+generic execution pointer replaces the generated function body without setting
+`FUNC_Native`, avoiding a fictitious per-method native registration.
+
+The first dispatch ABI is deliberately narrow and non-allocating: one 16-byte
+tagged scalar carries `bool`, `byte`, `int`, `long`, `float`, or `double`, with
+zero-to-four ordered arguments and a scalar/void return. The router resolves the
+owning Script Component, follows its World-scoped instance ID into CoreCLR, and
+calls a strongly typed expression delegate compiled once per collectible
+generation. No JSON, `MethodInfo.Invoke`, or handwritten native thunk appears on
+the call path. `UnrealObjectScript` functions hydrate/flush reflected state at
+the call boundary. Static FunctionLibrary ownership and richer
+String/ObjectHandle/FVector/enum/struct values remain later ABI revisions rather
+than weakening this first contract.
+
 The control plane handles resources, uncommon signatures, properties,
 functions, delegates, and complex values. The data plane publishes borrowed
 Transform snapshots and runs a per-World pre/managed/post scheduler: managed
@@ -752,7 +773,8 @@ closure and pass packaged lifecycle smoke.
 The remaining boundary work is:
 
 - arbitrary control-wire authoring beyond structured block operations;
-- generated Blueprint UFunctions and managed instance/static dispatch;
+- generated static Blueprint FunctionLibrary dispatch and richer gameplay-value
+  function contracts;
 - native debug traps, deeper locals, expression evaluation, and remote framing;
 - additional shared-memory gameplay snapshot and batch schemas;
 - platform-specific CoreCLR packaging beyond Win64.

@@ -117,6 +117,24 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         _stateSession?.Flush();
     }
 
+    internal void BeginGeneratedFunctionCall()
+    {
+        if (!_running)
+        {
+            throw new InvalidOperationException("The Unreal script instance is not running.");
+        }
+        _stateSession?.Hydrate();
+    }
+
+    internal void EndGeneratedFunctionCall()
+    {
+        if (!_running)
+        {
+            throw new InvalidOperationException("The Unreal script instance is not running.");
+        }
+        _stateSession?.Flush();
+    }
+
     void IUnrealManagedScript.OnStop()
     {
         if (!_running)

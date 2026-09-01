@@ -946,7 +946,7 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         Name,
         BlueprintType,
         UUnifiedScriptBlueprint::StaticClass(),
-        UBlueprintGeneratedClass::StaticClass(),
+        UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
         CallingContext);
     if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
     {

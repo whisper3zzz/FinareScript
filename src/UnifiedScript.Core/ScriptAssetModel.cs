@@ -41,6 +41,8 @@ public sealed record ScriptFunctionDeclaration(
     string QualifiedName,
     string ReturnTypeMetadataName,
     bool IsStatic,
+    bool IsPublic,
+    bool IsEvent,
     IReadOnlyList<ScriptParameterDeclaration> Parameters);
 
 public sealed record ScriptAssetDeclaration(

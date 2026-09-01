@@ -804,6 +804,36 @@ bool UUnifiedScriptComponent::ReloadScript()
     return ReloadScriptWithTransaction(FString());
 }
 
+bool UUnifiedScriptComponent::InvokeManagedScriptFunction(
+    const FString& FunctionName,
+    TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
+    FUnifiedScriptManagedFunctionValueV1& OutResult,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    OutResult = {};
+    if (!bScriptRunning || ManagedScriptInstanceId == 0)
+    {
+        OutError = TEXT("The UnifiedScript component has no running managed Script Class instance.");
+        return false;
+    }
+    UWorld* World = GetWorld();
+    UUnifiedScriptWorldSubsystem* Host = World != nullptr
+        ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript managed World host is unavailable.");
+        return false;
+    }
+    return Host->InvokeManagedScriptFunction(
+        ManagedScriptInstanceId,
+        FunctionName,
+        Arguments,
+        OutResult,
+        OutError);
+}
+
 bool UUnifiedScriptComponent::PreflightScriptReloadWithTransaction(
     const FString& PublicationTransactionJson,
     FString& OutPreflightTransactionJson) const

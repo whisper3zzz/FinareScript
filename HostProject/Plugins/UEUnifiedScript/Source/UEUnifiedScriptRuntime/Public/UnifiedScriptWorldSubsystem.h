@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptManagedFunctionAbi.h"
 #include "UnifiedScriptObjectRegistry.h"
 #include "UnifiedScriptDataPlaneExtension.h"
 #include "UObject/ObjectKey.h"
@@ -245,6 +246,13 @@ public:
         int32 EventKind,
         FUnifiedScriptObjectHandle Source,
         FUnifiedScriptObjectHandle Argument,
+        FString& OutError);
+
+    bool InvokeManagedScriptFunction(
+        uint64 InstanceId,
+        const FString& FunctionName,
+        TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
+        FUnifiedScriptManagedFunctionValueV1& OutResult,
         FString& OutError);
 
     bool ReloadManagedScript(

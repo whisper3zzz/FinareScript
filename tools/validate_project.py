@@ -7242,6 +7242,68 @@ def main() -> int:
     checks.append(
         "M13.3B-1 materializes reviewed managed state as stable Blueprint properties"
     )
+    managed_function_abi = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealManagedFunctionAbi.cs"
+    ).read_text(encoding="utf-8")
+    managed_world_entry = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldManagedEntryPoint.cs"
+    ).read_text(encoding="utf-8")
+    native_function_abi = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptManagedFunctionAbi.h"
+    ).read_text(encoding="utf-8")
+    native_blueprint_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptBlueprint.h"
+    ).read_text(encoding="utf-8")
+    editor_module_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UEUnifiedScriptEditorModule.cpp"
+    ).read_text(encoding="utf-8")
+    managed_function_tests = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealManagedFunctionDispatchTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "class UnrealManagedFunctionDispatcher" in managed_function_abi
+        and "MaximumArgumentCount = 4" in managed_function_abi
+        and "Expression.Lambda<InvokeFunction>" in managed_function_abi
+        and "InvokeScriptFunction" in managed_world_entry
+        and "FUnifiedScriptManagedFunctionValueV1" in native_function_abi
+        and "execDispatchManagedFunction" in native_blueprint_header
+        and 'TEXT("USF_%s")' in blueprint_class_materializer_source
+        and "BlueprintManagedFunctionDispatch" in blueprint_class_materializer_tests
+        and "RewirePreview" in blueprint_class_materializer_tests
+        and "RegisterCompilerForBP" in editor_module_source
+        and "ScalarDispatchUsesFixedAbiWithoutReflectionInvokeOrBoxing"
+        in managed_function_tests
+        and "[x] **M13.3B-2a — instance scalar call vertical:**"
+        in roadmap_document,
+        "M13.3B-2a Blueprint function identity, scalar ABI, compiled managed dispatch, product GeneratedClass, or live ProcessEvent proof is incomplete",
+    )
+    checks.append(
+        "M13.3B-2a dispatches stable scalar Blueprint functions to managed instances"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

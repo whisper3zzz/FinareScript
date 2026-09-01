@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "StructUtils/PropertyBag.h"
+#include "UnifiedScriptManagedFunctionAbi.h"
 #include "UnifiedScriptRuntimeDiagnostic.h"
 #include "UnifiedScriptComponent.generated.h"
 
@@ -134,6 +135,13 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript")
     bool ReloadScript();
+
+    /** Routes a generated Blueprint function through the owning managed instance. */
+    bool InvokeManagedScriptFunction(
+        const FString& FunctionName,
+        TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
+        FUnifiedScriptManagedFunctionValueV1& OutResult,
+        FString& OutError);
 
     /** Extends an authoring publication transaction through the live World swap. */
     bool ReloadScriptWithTransaction(const FString& PublicationTransactionJson);

@@ -749,6 +749,28 @@ bool UUnifiedScriptWorldSubsystem::DispatchManagedEvent(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::InvokeManagedScriptFunction(
+    uint64 InstanceId,
+    const FString& FunctionName,
+    TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
+    FUnifiedScriptManagedFunctionValueV1& OutResult,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutResult = {};
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().InvokeManagedScriptFunction(
+        WorldHostId,
+        InstanceId,
+        FunctionName,
+        Arguments,
+        OutResult,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::ReloadManagedScript(
     uint64 InstanceId,
     const FString& AssemblyPath,

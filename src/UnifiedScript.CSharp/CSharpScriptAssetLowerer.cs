@@ -314,6 +314,9 @@ internal sealed class CSharpScriptAssetLowerer
                 signature,
                 types[descriptor.ReturnTypeId].MetadataName,
                 method.IsStatic,
+                method.IsPublic,
+                method.Attributes?.Any(static attribute =>
+                    attribute.Name == "UnrealEvent") == true,
                 parameters));
         }
 

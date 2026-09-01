@@ -21,6 +21,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "GraphEditor",
             "HTTP",
             "Json",
+            "KismetCompiler",
             "MessageLog",
             "InputCore",
             "Projects",

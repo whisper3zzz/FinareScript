@@ -78,6 +78,8 @@ public sealed class CSharpScriptAssetLowererTests
         ScriptFunctionDeclaration function = Assert.Single(asset.Functions);
         Assert.Equal("ApplyDamage", function.Name);
         Assert.Equal("System.Single", function.ReturnTypeMetadataName);
+        Assert.True(function.IsPublic);
+        Assert.False(function.IsEvent);
         Assert.Equal(
             "Game.Combat.DamagePolicy.ApplyDamage(System.Single,System.Boolean)",
             function.QualifiedName);
@@ -286,6 +288,12 @@ public sealed class CSharpScriptAssetLowererTests
             [UnrealScriptClass(UnrealScriptClassKind.ActorComponent)]
             public sealed class ComponentBehavior : UnrealActorComponentScript
             {
+                [Visual]
+                [UnrealEvent(
+                    typeof(UnrealObject),
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")]
+                private void OnSignal(int value, UnrealObjectHandle context) { }
+
                 protected override void OnBeginPlay() { }
                 protected override void OnTick(float deltaSeconds) { }
             }
@@ -310,7 +318,14 @@ public sealed class CSharpScriptAssetLowererTests
         ScriptAssetDeclaration library = result.ScriptAssets.Assets.Single(
             static asset => asset.QualifiedName == "Game.FunctionLibrary");
         Assert.True(Assert.Single(library.Functions).IsStatic);
+        Assert.True(Assert.Single(library.Functions).IsPublic);
+        Assert.False(Assert.Single(library.Functions).IsEvent);
         Assert.Empty(library.States);
+        ScriptFunctionDeclaration eventFunction = Assert.Single(
+            result.ScriptAssets.Assets.Single(
+                static asset => asset.QualifiedName == "Game.ComponentBehavior").Functions);
+        Assert.False(eventFunction.IsPublic);
+        Assert.True(eventFunction.IsEvent);
         Assert.Equal(
             "AddOne",
             Assert.Single(result.ScriptAssets.Assets

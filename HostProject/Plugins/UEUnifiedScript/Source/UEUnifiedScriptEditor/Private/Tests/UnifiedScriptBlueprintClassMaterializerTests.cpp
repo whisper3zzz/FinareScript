@@ -4,13 +4,18 @@
 
 #include "EdGraphSchema_K2.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptComponent.h"
+#include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::UnifiedScript::BlueprintClass::Tests
@@ -72,7 +77,109 @@ FString State(
         Category);
 }
 
-FString Document(const FString& States)
+FString Parameter(
+    const TCHAR* Id,
+    const TCHAR* Name,
+    const TCHAR* MetadataType)
+{
+    return FString::Printf(
+        TEXT(R"JSON({
+        "id": "us_%s",
+        "name": "%s",
+        "typeMetadataName": "%s"
+      })JSON"),
+        Id,
+        Name,
+        MetadataType);
+}
+
+FString Function(
+    const TCHAR* Id,
+    const TCHAR* Name,
+    const TCHAR* ReturnType,
+    const FString& Parameters,
+    bool bIsStatic = false,
+    bool bIsPublic = true,
+    bool bIsEvent = false)
+{
+    return FString::Printf(
+        TEXT(R"JSON({
+      "id": "us_%s",
+      "name": "%s",
+      "qualifiedName": "Tests.StateActor.%s()",
+      "returnTypeMetadataName": "%s",
+      "isStatic": %s,
+      "isPublic": %s,
+      "isEvent": %s,
+      "parameters": [%s]
+    })JSON"),
+        Id,
+        Name,
+        Name,
+        ReturnType,
+        bIsStatic ? TEXT("true") : TEXT("false"),
+        bIsPublic ? TEXT("true") : TEXT("false"),
+        bIsEvent ? TEXT("true") : TEXT("false"),
+        *Parameters);
+}
+
+FString InitialFunctions()
+{
+    const FString MixParameters = FString::Join(
+        TArray<FString>{
+            Parameter(TEXT("a1111111111111111111111111111111"), TEXT("value"), TEXT("System.Int32")),
+            Parameter(TEXT("a2222222222222222222222222222222"), TEXT("doubleValue"), TEXT("System.Boolean")),
+            Parameter(TEXT("a3333333333333333333333333333333"), TEXT("increment"), TEXT("System.Byte")),
+            Parameter(TEXT("a4444444444444444444444444444444"), TEXT("bias"), TEXT("System.Int64")),
+        },
+        TEXT(","));
+    return FString::Join(
+        TArray<FString>{
+            Function(
+                TEXT("88888888888888888888888888888888"),
+                TEXT("Mix"),
+                TEXT("System.Int64"),
+                MixParameters),
+            Function(
+                TEXT("99999999999999999999999999999999"),
+                TEXT("ResetValue"),
+                TEXT("System.Void"),
+                FString()),
+            Function(
+                TEXT("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+                TEXT("InternalEvent"),
+                TEXT("System.Void"),
+                FString(),
+                false,
+                false,
+                true),
+        },
+        TEXT(","));
+}
+
+FString ReloadedFunctions()
+{
+    const FString MixParameters = FString::Join(
+        TArray<FString>{
+            Parameter(TEXT("a1111111111111111111111111111111"), TEXT("value"), TEXT("System.Int32")),
+            Parameter(TEXT("a2222222222222222222222222222222"), TEXT("doubleValue"), TEXT("System.Boolean")),
+            Parameter(TEXT("a3333333333333333333333333333333"), TEXT("increment"), TEXT("System.Byte")),
+            Parameter(TEXT("a4444444444444444444444444444444"), TEXT("bias"), TEXT("System.Int64")),
+        },
+        TEXT(","));
+    return Function(
+        TEXT("88888888888888888888888888888888"),
+        TEXT("Combine"),
+        TEXT("System.Int64"),
+        MixParameters);
+}
+
+FString Document(
+    const FString& States,
+    const FString& Functions = FString(),
+    const TCHAR* AssetId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    const TCHAR* QualifiedName = TEXT("Tests.StateActor"),
+    const TCHAR* AssetPath = TEXT("Tests/StateActor"))
 {
     return FString::Printf(
         TEXT(R"JSON(
@@ -81,9 +188,9 @@ FString Document(const FString& States)
   "sourceCompilationId": "us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "semanticConfigurationId": "us_cccccccccccccccccccccccccccccccc",
   "assets": [{
-    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "qualifiedName": "Tests.StateActor",
-    "assetPath": "Tests/StateActor",
+    "id": "us_%s",
+    "qualifiedName": "%s",
+    "assetPath": "%s",
     "span": {
       "filePath": "Managed/StateActor.cs",
       "start": { "line": 1, "column": 1 },
@@ -91,11 +198,15 @@ FString Document(const FString& States)
     },
     "states": [%s
     ],
-    "functions": []
+    "functions": [%s]
   }]
 }
 )JSON"),
-        *States);
+        AssetId,
+        QualifiedName,
+        AssetPath,
+        *States,
+        *Functions);
 }
 
 FString InitialStates()
@@ -233,7 +344,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
             FName(*AssetName),
             BPTYPE_Normal,
             UUnifiedScriptBlueprint::StaticClass(),
-            UBlueprintGeneratedClass::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
             FName(TEXT("UnifiedScriptBlueprintStateMaterialization"))));
     if (!TestNotNull(TEXT("Creates a transient UnifiedScript Blueprint"), Blueprint) ||
         !TestNotNull(TEXT("Blueprint compiles an initial generated class"), Blueprint->GeneratedClass.Get()))
@@ -254,7 +365,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     const bool bInitial = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(InitialStates()),
+        Document(InitialStates(), InitialFunctions()),
         false,
         Result,
         Error);
@@ -266,9 +377,61 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     TestTrue(TEXT("Initial materialization changes the proxy"), Result.bChanged);
     TestEqual(TEXT("Seven reviewed types become properties"), Result.AddedPropertyCount, 7);
     TestEqual(TEXT("Seven states are declared"), Result.DeclaredStateCount, 7);
+    TestEqual(TEXT("Two public non-event functions are declared"), Result.DeclaredFunctionCount, 2);
+    TestEqual(TEXT("Two callable functions become graphs"), Result.AddedFunctionCount, 2);
     TestEqual(TEXT("Blueprint remains compiled"), Blueprint->Status, BS_UpToDate);
 
     UClass* GeneratedClass = Blueprint->GeneratedClass;
+    UUnifiedScriptBlueprintGeneratedClass* ManagedGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(GeneratedClass);
+    TestNotNull(TEXT("Proxy uses the managed-function generated class"), ManagedGeneratedClass);
+    const FName MixInternalName(TEXT("USF_88888888888888888888888888888888"));
+    const UFunction* MixFunction = GeneratedClass->FindFunctionByName(
+        MixInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    TestNotNull(TEXT("Managed function becomes reflected UFunction"), MixFunction);
+    if (MixFunction != nullptr)
+    {
+        TestTrue(TEXT("Managed UFunction is Blueprint callable"),
+            MixFunction->HasAnyFunctionFlags(FUNC_BlueprintCallable));
+        TestTrue(TEXT("Managed UFunction avoids unresolved native registration"),
+            !MixFunction->HasAnyFunctionFlags(FUNC_Native));
+        TestTrue(TEXT("Managed UFunction is bound to generic direct dispatch"),
+            ManagedGeneratedClass != nullptr &&
+                ManagedGeneratedClass->IsManagedFunctionBound(MixInternalName));
+        const FInt64Property* ReturnProperty =
+            CastField<FInt64Property>(MixFunction->GetReturnProperty());
+        TestNotNull(TEXT("Managed long return becomes int64"), ReturnProperty);
+        TArray<const FProperty*> ReflectedParameters;
+        for (TFieldIterator<FProperty> It(MixFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            if (It->HasAnyPropertyFlags(CPF_Parm) &&
+                !It->HasAnyPropertyFlags(CPF_ReturnParm))
+            {
+                ReflectedParameters.Add(*It);
+            }
+        }
+        TestEqual(TEXT("Four managed arguments become typed pins"), ReflectedParameters.Num(), 4);
+        if (ReflectedParameters.Num() == 4)
+        {
+            TestNotNull(TEXT("Argument 0 is int32"), CastField<FIntProperty>(ReflectedParameters[0]));
+            TestNotNull(TEXT("Argument 1 is bool"), CastField<FBoolProperty>(ReflectedParameters[1]));
+            TestNotNull(TEXT("Argument 2 is byte"), CastField<FByteProperty>(ReflectedParameters[2]));
+            TestNotNull(TEXT("Argument 3 is int64"), CastField<FInt64Property>(ReflectedParameters[3]));
+        }
+    }
+    if (ManagedGeneratedClass != nullptr)
+    {
+        const FUnifiedScriptManagedFunctionBinding* Binding =
+            ManagedGeneratedClass->ManagedFunctionBindings.Find(MixInternalName);
+        TestTrue(TEXT("Generated class persists the managed function binding"), Binding != nullptr);
+        if (Binding != nullptr)
+        {
+            TestEqual(TEXT("Binding targets the exact managed name"), Binding->ManagedName, FString(TEXT("Mix")));
+            TestEqual(TEXT("Binding persists stable semantic identity"), Binding->FunctionId,
+                Guid(TEXT("88888888888888888888888888888888")));
+        }
+    }
     const FBoolProperty* Enabled = FindFProperty<FBoolProperty>(GeneratedClass, TEXT("Enabled"));
     const FByteProperty* ByteValue = FindFProperty<FByteProperty>(GeneratedClass, TEXT("ByteValue"));
     const FIntProperty* Count = FindFProperty<FIntProperty>(GeneratedClass, TEXT("Count"));
@@ -321,7 +484,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     const bool bReloaded = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(ReloadedStates()),
+        Document(ReloadedStates(), ReloadedFunctions()),
         false,
         Result,
         Error);
@@ -332,6 +495,8 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     }
     TestEqual(TEXT("One stable state is renamed"), Result.RenamedPropertyCount, 1);
     TestEqual(TEXT("One stale generated state is removed"), Result.RemovedPropertyCount, 1);
+    TestEqual(TEXT("Stable function rename updates one binding"), Result.UpdatedFunctionCount, 1);
+    TestEqual(TEXT("One stale generated function is removed"), Result.RemovedFunctionCount, 1);
     TestEqual(TEXT("One Blueprint default override is preserved"), Result.PreservedDefaultOverrideCount, 1);
     TestNull(TEXT("Old generated name leaves reflection"), FindFProperty<FProperty>(Blueprint->GeneratedClass, TEXT("Count")));
     TestNull(TEXT("Removed generated state leaves reflection"), FindFProperty<FProperty>(Blueprint->GeneratedClass, TEXT("Enabled")));
@@ -360,11 +525,26 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         TEXT("Renamed property retains stable GUID"),
         FBlueprintEditorUtils::FindMemberVariableGuidByName(Blueprint, TEXT("Score")),
         Guid(TEXT("33333333333333333333333333333333")));
+    const UFunction* RenamedFunction = Blueprint->GeneratedClass->FindFunctionByName(
+        MixInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    TestNotNull(TEXT("Source rename preserves the reflected internal function"), RenamedFunction);
+    ManagedGeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    if (ManagedGeneratedClass != nullptr)
+    {
+        const FUnifiedScriptManagedFunctionBinding* Binding =
+            ManagedGeneratedClass->ManagedFunctionBindings.Find(MixInternalName);
+        TestTrue(TEXT("Renamed managed binding remains present"), Binding != nullptr);
+        if (Binding != nullptr)
+        {
+            TestEqual(TEXT("Stable binding follows the source rename"), Binding->ManagedName, FString(TEXT("Combine")));
+        }
+    }
 
     const bool bNoChange = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(ReloadedStates()),
+        Document(ReloadedStates(), ReloadedFunctions()),
         true,
         Result,
         Error);
@@ -383,7 +563,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(TypeChange),
+            Document(TypeChange, ReloadedFunctions()),
             false,
             Result,
             Error));
@@ -402,7 +582,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(Collision),
+            Document(Collision, ReloadedFunctions()),
             false,
             Result,
             Error));
@@ -420,13 +600,188 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(Unsupported),
+            Document(Unsupported, ReloadedFunctions()),
             false,
             Result,
             Error));
     TestTrue(TEXT("Unsupported-type rejection lists reviewed types"), Error.Contains(TEXT("Reviewed types")));
     TestEqual(TEXT("Rejected plans leave six generated plus one user property"), Blueprint->NewVariables.Num(), 7);
     return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintManagedFunctionDispatchTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintManagedFunctionDispatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
+    const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::Tests;
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString AssetName = TEXT("BP_UnifiedScriptFunctionDispatch_") + Suffix;
+    UPackage* Package = CreatePackage(*(TEXT("/Engine/Transient/") + AssetName));
+    UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
+        FKismetEditorUtilities::CreateBlueprint(
+            UUnifiedScriptComponent::StaticClass(),
+            Package,
+            FName(*AssetName),
+            BPTYPE_Normal,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptBlueprintManagedFunctionDispatch"))));
+    if (!TestNotNull(TEXT("Creates the managed dispatch Blueprint"), Blueprint) ||
+        !TestNotNull(
+            TEXT("Managed dispatch Blueprint has a generated class"),
+            Blueprint != nullptr ? Blueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+
+    constexpr const TCHAR* DemoClassId = TEXT("cefc9ee5805e3ed5610154145ea986dd");
+    constexpr const TCHAR* DemoQualifiedName =
+        TEXT("UnifiedScript.Unreal.Demo.DemoScript");
+    constexpr const TCHAR* DemoAssetPath = TEXT("Unreal/Demo");
+    constexpr const TCHAR* FunctionId = TEXT("4b2b9a44f72edea2e4f0cdf31376c2d1");
+    const FString RewireParameters = FString::Join(
+        TArray<FString>{
+            Parameter(
+                TEXT("9d7059e580b913b0ecc7e7a77b140414"),
+                TEXT("value"),
+                TEXT("System.Int32")),
+            Parameter(
+                TEXT("d422d800eeeed7faab2f376492a09420"),
+                TEXT("doubleValue"),
+                TEXT("System.Boolean")),
+        },
+        TEXT(","));
+    const FString RewireFunction = Function(
+        FunctionId,
+        TEXT("RewirePreview"),
+        TEXT("System.Int32"),
+        RewireParameters);
+    const FString InitialValueState = State(
+        TEXT("d4463d57397c77264a0e282ca6c29432"),
+        TEXT("InitialValue"),
+        TEXT("int"),
+        TEXT("System.Int32"),
+        TEXT("integer"),
+        TEXT("10"),
+        true,
+        true,
+        false,
+        TEXT("Demo"));
+
+    UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
+    ScriptAsset->ScriptClassId = Guid(DemoClassId);
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::ActorComponent;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    ScriptAsset->ScriptTypeName = DemoQualifiedName;
+    ScriptAsset->DeclarationAssetPath = DemoAssetPath;
+    ScriptAsset->CompiledChunkPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
+    ScriptAsset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Blueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    FString Error;
+    const bool bSynchronized =
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            Document(
+                InitialValueState,
+                RewireFunction,
+                DemoClassId,
+                DemoQualifiedName,
+                DemoAssetPath),
+            false,
+            SyncResult,
+            Error);
+    if (!TestTrue(
+            *FString::Printf(TEXT("Materializes the live managed function: %s"), *Error),
+            bSynchronized))
+    {
+        return false;
+    }
+
+    const FName InternalName(
+        *FString::Printf(TEXT("USF_%s"), FunctionId));
+    UFunction* ManagedFunction = Blueprint->GeneratedClass->FindFunctionByName(
+        InternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    const FIntProperty* ValueProperty = ManagedFunction != nullptr
+        ? FindFProperty<FIntProperty>(ManagedFunction, TEXT("value"))
+        : nullptr;
+    const FBoolProperty* DoubleValueProperty = ManagedFunction != nullptr
+        ? FindFProperty<FBoolProperty>(ManagedFunction, TEXT("doubleValue"))
+        : nullptr;
+    const FIntProperty* ReturnProperty = ManagedFunction != nullptr
+        ? CastField<FIntProperty>(ManagedFunction->GetReturnProperty())
+        : nullptr;
+    if (!TestNotNull(TEXT("Live dispatch UFunction exists"), ManagedFunction) ||
+        !TestNotNull(TEXT("Live dispatch int argument exists"), ValueProperty) ||
+        !TestNotNull(TEXT("Live dispatch bool argument exists"), DoubleValueProperty) ||
+        !TestNotNull(TEXT("Live dispatch int return exists"), ReturnProperty))
+    {
+        return false;
+    }
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Creates a gameplay World for managed dispatch"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    UUnifiedScriptComponent* Component =
+        NewObject<UUnifiedScriptComponent>(World, Blueprint->GeneratedClass);
+    const bool bRuntimeObjectsReady =
+        TestNotNull(TEXT("Managed dispatch World has a host"), Host) &&
+        TestNotNull(TEXT("Creates the generated managed component"), Component);
+    if (bRuntimeObjectsReady)
+    {
+        Component->ScriptAsset = ScriptAsset;
+        Component->RegisterComponentWithWorld(World);
+        Component->BeginPlay();
+        TestTrue(
+            *FString::Printf(TEXT("Starts the real managed DemoScript: %s"),
+                *Component->LastScriptError),
+            Component->bScriptRunning);
+
+        if (Component->bScriptRunning)
+        {
+            FStructOnScope FunctionParameters(ManagedFunction);
+            uint8* ParameterMemory = FunctionParameters.GetStructMemory();
+            ValueProperty->SetPropertyValue_InContainer(ParameterMemory, 21);
+            DoubleValueProperty->SetPropertyValue_InContainer(ParameterMemory, true);
+            Component->ProcessEvent(ManagedFunction, ParameterMemory);
+            TestEqual(
+                TEXT("Blueprint UFunction reaches CoreCLR and returns managed result"),
+                ReturnProperty->GetPropertyValue_InContainer(ParameterMemory),
+                42);
+            Component->EndPlay(EEndPlayReason::Destroyed);
+            TestFalse(TEXT("Managed dispatch instance stops cleanly"),
+                Component->bScriptRunning);
+        }
+    }
+
+    if (Component != nullptr)
+    {
+        Component->UnregisterComponent();
+    }
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(
+        TEXT("Managed dispatch World releases its collectible context"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount);
+    return bRuntimeObjectsReady && !HasAnyErrors();
 }
 
 #endif

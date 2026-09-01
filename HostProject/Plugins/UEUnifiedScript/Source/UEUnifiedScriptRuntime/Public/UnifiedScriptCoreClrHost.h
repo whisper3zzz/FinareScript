@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UnifiedScriptManagedFunctionAbi.h"
 
 class FUnifiedScriptNativeBridgeContext;
 struct FUnifiedScriptNativeTransportV2;
@@ -95,6 +96,13 @@ public:
         uint64 Source,
         uint64 Argument,
         FString& OutError);
+    bool InvokeManagedScriptFunction(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        const FString& FunctionName,
+        TConstArrayView<FUnifiedScriptManagedFunctionValueV1> Arguments,
+        FUnifiedScriptManagedFunctionValueV1& OutResult,
+        FString& OutError);
     bool ReloadManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -166,6 +174,7 @@ private:
     void* DisableScriptDebugEntryPoint = nullptr;
     void* IsScriptDebugActiveEntryPoint = nullptr;
     void* DispatchEventEntryPoint = nullptr;
+    void* InvokeScriptFunctionEntryPoint = nullptr;
     void* ReloadScriptEntryPoint = nullptr;
     void* PrepareScriptReloadEntryPoint = nullptr;
     void* CommitScriptReloadEntryPoint = nullptr;

@@ -509,6 +509,46 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static unsafe int InvokeScriptFunction(
+        ulong worldId,
+        ulong instanceId,
+        nint functionNameData,
+        int functionNameLength,
+        nint arguments,
+        int argumentCount,
+        nint resultData)
+    {
+        ClearBoundaryFailure(worldId);
+        if (instanceId == 0 || functionNameData == 0 ||
+            functionNameLength is <= 0 or > 1024 ||
+            argumentCount is < 0 or > UnrealManagedFunctionDispatcher.MaximumArgumentCount ||
+            (argumentCount > 0 && arguments == 0) || resultData == 0)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            UnrealWorldManagedEntryStatus status = entry.InvokeFunction(
+                instanceId,
+                ReadUtf8(functionNameData, functionNameLength),
+                arguments,
+                argumentCount,
+                out UnrealManagedFunctionValueV1 result);
+            *(UnrealManagedFunctionValueV1*)resultData = result;
+            return (int)status;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(InvokeScriptFunction), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int ReloadScript(
         ulong worldId,
         ulong instanceId,
@@ -1059,6 +1099,26 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        internal UnrealWorldManagedEntryStatus InvokeFunction(
+            ulong instanceId,
+            string functionName,
+            nint arguments,
+            int argumentCount,
+            out UnrealManagedFunctionValueV1 result)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                result = default;
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                result = script.InvokeFunction(functionName, arguments, argumentCount);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
         public int ReloadScript(
             ulong instanceId,
             string assemblyPath,
@@ -1332,6 +1392,27 @@ public static class UnrealWorldManagedEntryPoint
             {
                 sink.OnUnrealEvent(scriptEvent);
             }
+        }
+
+        internal UnrealManagedFunctionValueV1 InvokeFunction(
+            string functionName,
+            nint arguments,
+            int argumentCount)
+        {
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "The managed script is inside a two-phase reload transaction.");
+            }
+            if (!_started)
+            {
+                throw new InvalidOperationException("The managed script is not started.");
+            }
+            return _current.Functions.Invoke(
+                _current.Script,
+                functionName,
+                arguments,
+                argumentCount);
         }
 
         public int Reload(string assemblyPath, string typeName)
@@ -1932,6 +2013,8 @@ public static class UnrealWorldManagedEntryPoint
                 long activationTicks = Stopwatch.GetTimestamp() - phaseStarted;
                 phaseStarted = Stopwatch.GetTimestamp();
                 var generationBridge = new UnrealGenerationInvocationBridge(_bridge);
+                UnrealManagedFunctionDispatcher functions =
+                    UnrealManagedFunctionDispatcher.Create(type);
                 CoreClrGenerationPrewarmOperation prewarm =
                     CoreClrGenerationPrewarmOperation.Create(
                         type,
@@ -1953,6 +2036,7 @@ public static class UnrealWorldManagedEntryPoint
                     loadContext,
                     script,
                     generationBridge,
+                    functions,
                     prewarm);
             }
             catch
@@ -1980,6 +2064,7 @@ public static class UnrealWorldManagedEntryPoint
         ScriptAssemblyLoadContext LoadContext,
         IUnrealManagedScript Script,
         UnrealGenerationInvocationBridge Bridge,
+        UnrealManagedFunctionDispatcher Functions,
         CoreClrGenerationPrewarmOperation Prewarm) : IDisposable
     {
         private bool _disposed;

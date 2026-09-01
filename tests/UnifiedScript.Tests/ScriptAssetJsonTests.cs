@@ -26,6 +26,8 @@ public sealed class ScriptAssetJsonTests
                     "Game.DamagePolicy.Zeta(System.Int32)",
                     "System.Int32",
                     false,
+                    true,
+                    false,
                     [new ScriptParameterDeclaration(
                         SemanticId.FromKey("parameter:value"),
                         "value",
@@ -35,6 +37,8 @@ public sealed class ScriptAssetJsonTests
                     "Alpha",
                     "Game.DamagePolicy.Alpha()",
                     "System.Void",
+                    false,
+                    true,
                     false,
                     []),
             ]);
@@ -51,6 +55,8 @@ public sealed class ScriptAssetJsonTests
         Assert.Equal(
             ["Game.DamagePolicy.Alpha()", "Game.DamagePolicy.Zeta(System.Int32)"],
             normalized.Functions.Select(static function => function.QualifiedName));
+        Assert.All(normalized.Functions, static function => Assert.True(function.IsPublic));
+        Assert.All(normalized.Functions, static function => Assert.False(function.IsEvent));
         Assert.Equal(3, normalized.States[0].DefaultValue.GetInt32());
         Assert.Equal(ScriptAssetDocument.CurrentSchemaVersion, roundTripped.SchemaVersion);
     }

@@ -1,9 +1,13 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
 #include "Dom/JsonObject.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/Blueprint.h"
 #include "Interfaces/IPluginManager.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
@@ -27,6 +31,9 @@ const FName ManagedStateKey(TEXT("UnifiedScript.ManagedState"));
 const FName StateIdKey(TEXT("UnifiedScript.StateId"));
 const FName TypeMetadataNameKey(TEXT("UnifiedScript.TypeMetadataName"));
 const FName DeclarationDefaultKey(TEXT("UnifiedScript.DeclarationDefault"));
+const FName ManagedFunctionKey(TEXT("UnifiedScript.ManagedFunction"));
+const FName FunctionIdKey(TEXT("UnifiedScript.FunctionId"));
+const FName ManagedFunctionNameKey(TEXT("UnifiedScript.ManagedName"));
 
 struct FStateDeclaration
 {
@@ -49,10 +56,39 @@ struct FPlannedState
     bool bPreserveDefaultOverride = false;
 };
 
+struct FFunctionParameterDeclaration
+{
+    FGuid Id;
+    FName Name;
+    FString TypeMetadataName;
+    FEdGraphPinType PinType;
+};
+
+struct FFunctionDeclaration
+{
+    FGuid Id;
+    FString SemanticId;
+    FName ManagedName;
+    FName InternalName;
+    FString ReturnTypeMetadataName;
+    FEdGraphPinType ReturnPinType;
+    bool bHasReturnValue = false;
+    TArray<FFunctionParameterDeclaration> Parameters;
+};
+
+struct FPlannedFunction
+{
+    FFunctionDeclaration Declaration;
+    bool bExisting = false;
+    bool bNeedsUpdate = false;
+};
+
 struct FSyncPlan
 {
     TArray<FPlannedState> States;
     TArray<FName> StaleGeneratedVariables;
+    TArray<FPlannedFunction> Functions;
+    TArray<FGuid> StaleGeneratedFunctionIds;
 };
 
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
@@ -140,6 +176,144 @@ bool ResolvePinType(
         return true;
     }
     return false;
+}
+
+bool ResolveFunctionPinType(
+    const FString& MetadataName,
+    bool bAllowVoid,
+    FEdGraphPinType& OutType,
+    bool& bOutHasValue)
+{
+    bOutHasValue = MetadataName != TEXT("System.Void");
+    if (!bOutHasValue)
+    {
+        OutType = FEdGraphPinType();
+        return bAllowVoid;
+    }
+    FString TypeKind;
+    if (MetadataName == TEXT("System.Boolean"))
+    {
+        TypeKind = TEXT("boolean");
+    }
+    else if (MetadataName == TEXT("System.Byte") ||
+             MetadataName == TEXT("System.Int32") ||
+             MetadataName == TEXT("System.Int64"))
+    {
+        TypeKind = TEXT("integer");
+    }
+    else if (MetadataName == TEXT("System.Single") ||
+             MetadataName == TEXT("System.Double"))
+    {
+        TypeKind = TEXT("floatingPoint");
+    }
+    else
+    {
+        return false;
+    }
+    return ResolvePinType(TypeKind, MetadataName, OutType);
+}
+
+FName MakeManagedFunctionInternalName(const FGuid& Id)
+{
+    return FName(*FString::Printf(
+        TEXT("USF_%s"),
+        *Id.ToString(EGuidFormats::Digits).ToLower()));
+}
+
+bool IsManagedFunctionGraph(const UEdGraph& Graph)
+{
+    const FKismetUserDeclaredFunctionMetadata* Metadata =
+        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+    return Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
+        Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true");
+}
+
+bool TryReadManagedFunctionGraphId(const UEdGraph& Graph, FGuid& OutId)
+{
+    const FKismetUserDeclaredFunctionMetadata* Metadata =
+        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+    return Metadata != nullptr && Metadata->HasMetaData(FunctionIdKey) &&
+        ParseSemanticId(Metadata->GetMetaData(FunctionIdKey), OutId);
+}
+
+UEdGraph* FindManagedFunctionGraphById(UBlueprint& Blueprint, const FGuid& Id)
+{
+    for (UEdGraph* Graph : Blueprint.FunctionGraphs)
+    {
+        FGuid CandidateId;
+        if (Graph != nullptr && IsManagedFunctionGraph(*Graph) &&
+            TryReadManagedFunctionGraphId(*Graph, CandidateId) && CandidateId == Id)
+        {
+            return Graph;
+        }
+    }
+    return nullptr;
+}
+
+bool FunctionGraphSignatureMatches(
+    const UEdGraph& Graph,
+    const FFunctionDeclaration& Declaration)
+{
+    if (Graph.GetFName() != Declaration.InternalName ||
+        Graph.GraphGuid != Declaration.Id)
+    {
+        return false;
+    }
+    TArray<UK2Node_FunctionEntry*> EntryNodes;
+    TArray<UK2Node_FunctionResult*> ResultNodes;
+    Graph.GetNodesOfClass(EntryNodes);
+    Graph.GetNodesOfClass(ResultNodes);
+    if (EntryNodes.Num() != 1 || ResultNodes.Num() != 1 ||
+        EntryNodes[0]->UserDefinedPins.Num() != Declaration.Parameters.Num() ||
+        ResultNodes[0]->UserDefinedPins.Num() !=
+            (Declaration.bHasReturnValue ? 1 : 0))
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Declaration.Parameters.Num(); ++Index)
+    {
+        const TSharedPtr<FUserPinInfo>& Pin = EntryNodes[0]->UserDefinedPins[Index];
+        const FFunctionParameterDeclaration& Parameter = Declaration.Parameters[Index];
+        if (!Pin.IsValid() || Pin->PinName != Parameter.Name ||
+            Pin->PinType != Parameter.PinType ||
+            Pin->DesiredPinDirection != EGPD_Output)
+        {
+            return false;
+        }
+    }
+    if (Declaration.bHasReturnValue)
+    {
+        const TSharedPtr<FUserPinInfo>& Pin = ResultNodes[0]->UserDefinedPins[0];
+        if (!Pin.IsValid() || Pin->PinName != UEdGraphSchema_K2::PN_ReturnValue ||
+            Pin->PinType != Declaration.ReturnPinType ||
+            Pin->DesiredPinDirection != EGPD_Input)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool FunctionGraphMatches(
+    const UEdGraph& Graph,
+    const FFunctionDeclaration& Declaration)
+{
+    if (!FunctionGraphSignatureMatches(Graph, Declaration))
+    {
+        return false;
+    }
+    const FKismetUserDeclaredFunctionMetadata* Metadata =
+        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+    return Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
+        Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true") &&
+        Metadata->HasMetaData(FunctionIdKey) &&
+        Metadata->GetMetaData(FunctionIdKey) == Declaration.SemanticId &&
+        Metadata->HasMetaData(ManagedFunctionNameKey) &&
+        Metadata->GetMetaData(ManagedFunctionNameKey) ==
+            Declaration.ManagedName.ToString() &&
+        Metadata->HasMetaData(TEXT("DisplayName")) &&
+        Metadata->GetMetaData(TEXT("DisplayName")) ==
+            Declaration.ManagedName.ToString();
 }
 
 bool ReadCanonicalDefault(
@@ -263,6 +437,7 @@ bool ParseDeclaration(
     UUnifiedScriptAsset& ScriptAsset,
     const FString& DeclarationJson,
     TArray<FStateDeclaration>& OutStates,
+    TArray<FFunctionDeclaration>& OutFunctions,
     FString& OutError)
 {
     TSharedPtr<FJsonObject> Root;
@@ -457,6 +632,151 @@ bool ParseDeclaration(
         SeenIds.Add(Declaration.Id);
         SeenNames.Add(Declaration.Name);
         OutStates.Add(MoveTemp(Declaration));
+    }
+
+    OutFunctions.Reset();
+    if (ScriptAsset.ScriptClassKind != EUnifiedScriptClassKind::Actor &&
+        ScriptAsset.ScriptClassKind != EUnifiedScriptClassKind::ActorComponent)
+    {
+        return true;
+    }
+
+    TSet<FGuid> SeenFunctionIds;
+    TSet<FName> SeenFunctionNames;
+    OutFunctions.Reserve(Functions->Num());
+    for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+    {
+        const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+            ? FunctionValue->AsObject()
+            : nullptr;
+        FString SemanticId;
+        FString Name;
+        FString ReturnType;
+        bool bIsStatic = false;
+        bool bIsPublic = false;
+        bool bIsEvent = false;
+        const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+        if (!ReadRequiredString(Function, TEXT("id"), SemanticId, OutError) ||
+            !ReadRequiredString(Function, TEXT("name"), Name, OutError) ||
+            !ReadRequiredString(
+                Function,
+                TEXT("returnTypeMetadataName"),
+                ReturnType,
+                OutError) ||
+            !Function->TryGetBoolField(TEXT("isStatic"), bIsStatic) ||
+            !Function->TryGetBoolField(TEXT("isPublic"), bIsPublic) ||
+            !Function->TryGetBoolField(TEXT("isEvent"), bIsEvent) ||
+            !Function->TryGetArrayField(TEXT("parameters"), Parameters) ||
+            Parameters == nullptr)
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = FString::Printf(
+                    TEXT("Function '%s' requires isStatic, isPublic, isEvent, and parameters. Rebuild its Declaration IR with the current SDK."),
+                    *Name);
+            }
+            return false;
+        }
+        if (!bIsPublic || bIsEvent)
+        {
+            continue;
+        }
+        if (bIsStatic)
+        {
+            OutError = FString::Printf(
+                TEXT("Function '%s' is static. M13.3B-2 instance dispatch currently supports Actor and ActorComponent methods; BlueprintFunctionLibrary hosting is the next reviewed ownership tranche."),
+                *Name);
+            return false;
+        }
+        if (Parameters->Num() > 4)
+        {
+            OutError = FString::Printf(
+                TEXT("Function '%s' has %d parameters; the fixed managed function ABI v1 supports at most four."),
+                *Name,
+                Parameters->Num());
+            return false;
+        }
+
+        FFunctionDeclaration Declaration;
+        Declaration.SemanticId = SemanticId;
+        Declaration.ManagedName = FName(*Name);
+        Declaration.ReturnTypeMetadataName = ReturnType;
+        if (!ParseSemanticId(SemanticId, Declaration.Id) ||
+            Declaration.ManagedName.IsNone() ||
+            SeenFunctionIds.Contains(Declaration.Id) ||
+            SeenFunctionNames.Contains(Declaration.ManagedName))
+        {
+            OutError = FString::Printf(
+                TEXT("Script Class declaration has duplicate, overloaded, or invalid callable function '%s' (%s). Blueprint-callable managed overloads require distinct names."),
+                *Name,
+                *SemanticId);
+            return false;
+        }
+        Declaration.InternalName = MakeManagedFunctionInternalName(Declaration.Id);
+        if (!ResolveFunctionPinType(
+                ReturnType,
+                true,
+                Declaration.ReturnPinType,
+                Declaration.bHasReturnValue))
+        {
+            OutError = FString::Printf(
+                TEXT("Function '%s' has unsupported return type '%s'. Managed function ABI v1 supports void, bool, byte, int, long, float, and double."),
+                *Name,
+                *ReturnType);
+            return false;
+        }
+
+        TSet<FGuid> SeenParameterIds;
+        TSet<FName> SeenParameterNames;
+        Declaration.Parameters.Reserve(Parameters->Num());
+        for (const TSharedPtr<FJsonValue>& ParameterValue : *Parameters)
+        {
+            const TSharedPtr<FJsonObject> Parameter = ParameterValue.IsValid()
+                ? ParameterValue->AsObject()
+                : nullptr;
+            FString ParameterId;
+            FString ParameterName;
+            FString ParameterType;
+            if (!ReadRequiredString(Parameter, TEXT("id"), ParameterId, OutError) ||
+                !ReadRequiredString(Parameter, TEXT("name"), ParameterName, OutError) ||
+                !ReadRequiredString(
+                    Parameter,
+                    TEXT("typeMetadataName"),
+                    ParameterType,
+                    OutError))
+            {
+                return false;
+            }
+            FFunctionParameterDeclaration ParameterDeclaration;
+            ParameterDeclaration.Name = FName(*ParameterName);
+            ParameterDeclaration.TypeMetadataName = ParameterType;
+            bool bHasParameterValue = false;
+            if (!ParseSemanticId(ParameterId, ParameterDeclaration.Id) ||
+                ParameterDeclaration.Name.IsNone() ||
+                SeenParameterIds.Contains(ParameterDeclaration.Id) ||
+                SeenParameterNames.Contains(ParameterDeclaration.Name) ||
+                !ResolveFunctionPinType(
+                    ParameterType,
+                    false,
+                    ParameterDeclaration.PinType,
+                    bHasParameterValue) ||
+                !bHasParameterValue)
+            {
+                OutError = FString::Printf(
+                    TEXT("Function '%s' has duplicate, invalid, or unsupported parameter '%s' of type '%s'. Managed function ABI v1 supports bool, byte, int, long, float, and double."),
+                    *Name,
+                    *ParameterName,
+                    *ParameterType);
+                return false;
+            }
+            SeenParameterIds.Add(ParameterDeclaration.Id);
+            SeenParameterNames.Add(ParameterDeclaration.Name);
+            Declaration.Parameters.Add(MoveTemp(ParameterDeclaration));
+        }
+
+        SeenFunctionIds.Add(Declaration.Id);
+        SeenFunctionNames.Add(Declaration.ManagedName);
+        OutFunctions.Add(MoveTemp(Declaration));
     }
     return true;
 }
@@ -718,6 +1038,96 @@ bool BuildPlan(
     return true;
 }
 
+bool BuildFunctionPlan(
+    const UBlueprint& Blueprint,
+    TConstArrayView<FFunctionDeclaration> Declarations,
+    FSyncPlan& OutPlan,
+    FUnifiedScriptBlueprintClassSyncResult& OutResult,
+    FString& OutError)
+{
+    TSet<FGuid> DesiredIds;
+    for (const FFunctionDeclaration& Declaration : Declarations)
+    {
+        DesiredIds.Add(Declaration.Id);
+    }
+
+    TMap<FGuid, UEdGraph*> ExistingById;
+    for (UEdGraph* Graph : Blueprint.FunctionGraphs)
+    {
+        if (Graph == nullptr || !IsManagedFunctionGraph(*Graph))
+        {
+            continue;
+        }
+        FGuid Id;
+        if (!TryReadManagedFunctionGraphId(*Graph, Id) || ExistingById.Contains(Id))
+        {
+            OutError = FString::Printf(
+                TEXT("Generated Blueprint function graph '%s' has duplicate or invalid UnifiedScript.FunctionId metadata."),
+                *GetPathNameSafe(Graph));
+            return false;
+        }
+        ExistingById.Add(Id, Graph);
+        if (!DesiredIds.Contains(Id))
+        {
+            OutPlan.StaleGeneratedFunctionIds.Add(Id);
+        }
+    }
+
+    for (const FFunctionDeclaration& Declaration : Declarations)
+    {
+        UEdGraph* const* Existing = ExistingById.Find(Declaration.Id);
+        const TObjectPtr<UEdGraph>* NameOwnerEntry = Blueprint.FunctionGraphs.FindByPredicate(
+            [&Declaration](const UEdGraph* Graph)
+            {
+                return Graph != nullptr && Graph->GetFName() == Declaration.InternalName;
+            });
+        UEdGraph* NameOwner = NameOwnerEntry != nullptr
+            ? NameOwnerEntry->Get()
+            : nullptr;
+        if (NameOwner != nullptr &&
+            (Existing == nullptr || NameOwner != *Existing) &&
+            !IsManagedFunctionGraph(*NameOwner))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed function '%s' collides with user-owned Blueprint graph '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *NameOwner->GetName());
+            return false;
+        }
+        if (Blueprint.ParentClass != nullptr &&
+            Blueprint.ParentClass->FindFunctionByName(
+                Declaration.InternalName,
+                EIncludeSuperFlag::IncludeSuper) != nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed function '%s' collides with parent function '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *Declaration.InternalName.ToString());
+            return false;
+        }
+
+        FPlannedFunction& Planned = OutPlan.Functions.AddDefaulted_GetRef();
+        Planned.Declaration = Declaration;
+        Planned.bExisting = Existing != nullptr;
+        Planned.bNeedsUpdate = Existing == nullptr ||
+            !FunctionGraphMatches(**Existing, Declaration);
+        if (!Planned.bExisting)
+        {
+            ++OutResult.AddedFunctionCount;
+        }
+        else if (Planned.bNeedsUpdate)
+        {
+            ++OutResult.UpdatedFunctionCount;
+        }
+        OutResult.bChanged |= Planned.bNeedsUpdate;
+    }
+
+    OutResult.DeclaredFunctionCount = Declarations.Num();
+    OutResult.RemovedFunctionCount = OutPlan.StaleGeneratedFunctionIds.Num();
+    OutResult.bChanged |= !OutPlan.StaleGeneratedFunctionIds.IsEmpty();
+    return true;
+}
+
 FName MakeTemporaryName(const UBlueprint& Blueprint, const FGuid& Id)
 {
     FString Base = FString::Printf(
@@ -737,12 +1147,154 @@ FName MakeTemporaryName(const UBlueprint& Blueprint, const FGuid& Id)
     return Candidate;
 }
 
+bool ConfigureFunctionGraph(
+    UBlueprint& Blueprint,
+    const FFunctionDeclaration& Declaration,
+    UEdGraph*& InOutGraph,
+    FString& OutError)
+{
+    const bool bCreated = InOutGraph == nullptr;
+    if (InOutGraph == nullptr)
+    {
+        InOutGraph = FBlueprintEditorUtils::CreateNewGraph(
+            &Blueprint,
+            Declaration.InternalName,
+            UEdGraph::StaticClass(),
+            UEdGraphSchema_K2::StaticClass());
+        if (InOutGraph == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Unreal could not create generated Blueprint function '%s'."),
+                *Declaration.ManagedName.ToString());
+            return false;
+        }
+        FBlueprintEditorUtils::AddFunctionGraph<UFunction>(
+            &Blueprint,
+            InOutGraph,
+            true,
+            nullptr);
+    }
+
+    InOutGraph->Modify();
+    InOutGraph->GraphGuid = Declaration.Id;
+    TArray<UK2Node_FunctionEntry*> EntryNodes;
+    TArray<UK2Node_FunctionResult*> ResultNodes;
+    InOutGraph->GetNodesOfClass(EntryNodes);
+    InOutGraph->GetNodesOfClass(ResultNodes);
+    if (EntryNodes.Num() == 1 && ResultNodes.IsEmpty())
+    {
+        if (UK2Node_FunctionResult* CreatedResult =
+                FBlueprintEditorUtils::FindOrCreateFunctionResultNode(EntryNodes[0]))
+        {
+            ResultNodes.Add(CreatedResult);
+        }
+    }
+    if (EntryNodes.Num() != 1 || ResultNodes.Num() != 1)
+    {
+        OutError = FString::Printf(
+            TEXT("Generated Blueprint function '%s' requires one entry and one result node."),
+            *Declaration.ManagedName.ToString());
+        return false;
+    }
+
+    UK2Node_FunctionEntry* Entry = EntryNodes[0];
+    UK2Node_FunctionResult* Result = ResultNodes[0];
+    Entry->Modify();
+    Result->Modify();
+    Entry->CustomGeneratedFunctionName = Declaration.InternalName;
+    Entry->SetExtraFlags(FUNC_Public | FUNC_BlueprintCallable);
+    Entry->MetaData.Category = FText::FromString(DefaultCategory);
+    Entry->MetaData.ToolTip = FText::FromString(FString::Printf(
+        TEXT("Managed Script Class method %s"),
+        *Declaration.ManagedName.ToString()));
+    Entry->MetaData.SetMetaData(ManagedFunctionKey, FString(TEXT("true")));
+    Entry->MetaData.SetMetaData(FunctionIdKey, FString(Declaration.SemanticId));
+    Entry->MetaData.SetMetaData(
+        ManagedFunctionNameKey,
+        FString(Declaration.ManagedName.ToString()));
+    Entry->MetaData.SetMetaData(
+        TEXT("DisplayName"),
+        FString(Declaration.ManagedName.ToString()));
+
+    if (!bCreated && FunctionGraphSignatureMatches(*InOutGraph, Declaration))
+    {
+        return true;
+    }
+
+    const TArray<TSharedPtr<FUserPinInfo>> PreviousEntryPins = Entry->UserDefinedPins;
+    for (const TSharedPtr<FUserPinInfo>& Pin : PreviousEntryPins)
+    {
+        Entry->RemoveUserDefinedPin(Pin);
+    }
+    const TArray<TSharedPtr<FUserPinInfo>> PreviousResultPins = Result->UserDefinedPins;
+    for (const TSharedPtr<FUserPinInfo>& Pin : PreviousResultPins)
+    {
+        Result->RemoveUserDefinedPin(Pin);
+    }
+    for (const FFunctionParameterDeclaration& Parameter : Declaration.Parameters)
+    {
+        if (Entry->CreateUserDefinedPin(
+                Parameter.Name,
+                Parameter.PinType,
+                EGPD_Output,
+                false) == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Unreal could not create parameter '%s' for managed function '%s'."),
+                *Parameter.Name.ToString(),
+                *Declaration.ManagedName.ToString());
+            return false;
+        }
+    }
+    if (Declaration.bHasReturnValue &&
+        Result->CreateUserDefinedPin(
+            UEdGraphSchema_K2::PN_ReturnValue,
+            Declaration.ReturnPinType,
+            EGPD_Input,
+            false) == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Unreal could not create the return pin for managed function '%s'."),
+            *Declaration.ManagedName.ToString());
+        return false;
+    }
+    Entry->ReconstructNode();
+    Result->ReconstructNode();
+    Entry->BreakAllNodeLinks();
+    Result->BreakAllNodeLinks();
+    UEdGraphPin* ThenPin = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* ExecutePin = Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    if (ThenPin == nullptr || ExecutePin == nullptr ||
+        !Schema->TryCreateConnection(ThenPin, ExecutePin))
+    {
+        OutError = FString::Printf(
+            TEXT("Unreal could not connect generated function '%s' entry to its result."),
+            *Declaration.ManagedName.ToString());
+        return false;
+    }
+    return true;
+}
+
 bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
 {
     Blueprint.Modify();
     for (const FName& StaleName : Plan.StaleGeneratedVariables)
     {
         FBlueprintEditorUtils::RemoveMemberVariable(&Blueprint, StaleName);
+    }
+    for (const FGuid& StaleFunctionId : Plan.StaleGeneratedFunctionIds)
+    {
+        UEdGraph* StaleGraph = FindManagedFunctionGraphById(
+            Blueprint,
+            StaleFunctionId);
+        if (StaleGraph != nullptr)
+        {
+            FBlueprintEditorUtils::RemoveGraph(
+                &Blueprint,
+                StaleGraph,
+                EGraphRemoveFlags::MarkTransient);
+        }
     }
 
     TMap<FGuid, FName> TemporaryNames;
@@ -855,6 +1407,32 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
         }
     }
 
+    for (const FPlannedFunction& Planned : Plan.Functions)
+    {
+        if (!Planned.bNeedsUpdate)
+        {
+            continue;
+        }
+        UEdGraph* Graph = Planned.bExisting
+            ? FindManagedFunctionGraphById(Blueprint, Planned.Declaration.Id)
+            : nullptr;
+        if (Planned.bExisting && Graph == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Generated Blueprint function '%s' disappeared before materialization."),
+                *Planned.Declaration.ManagedName.ToString());
+            return false;
+        }
+        if (!ConfigureFunctionGraph(
+                Blueprint,
+                Planned.Declaration,
+                Graph,
+                OutError))
+        {
+            return false;
+        }
+    }
+
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
     FKismetEditorUtilities::CompileBlueprint(&Blueprint);
     if (Blueprint.Status == BS_Error)
@@ -863,6 +1441,48 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             TEXT("Generated Blueprint '%s' failed to compile after state materialization."),
             *Blueprint.GetPathName());
         return false;
+    }
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+    if (!Plan.Functions.IsEmpty() && GeneratedClass == nullptr)
+    {
+        if (Blueprint.GetOuter() == GetTransientPackage())
+        {
+            // StaticDuplicateObject uses the stock generated-class type for the
+            // disposable preflight copy. Its graph compile is the required
+            // validation; persistent binding is applied to the exact proxy.
+            return true;
+        }
+        OutError = FString::Printf(
+            TEXT("Generated Blueprint '%s' predates the managed-function class carrier. Recreate or migrate the Script Class proxy before exposing managed functions."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+    if (GeneratedClass != nullptr)
+    {
+        GeneratedClass->Modify();
+        GeneratedClass->ManagedFunctionBindings.Reset();
+        for (const FPlannedFunction& Planned : Plan.Functions)
+        {
+            FUnifiedScriptManagedFunctionBinding Binding;
+            Binding.ManagedName = Planned.Declaration.ManagedName.ToString();
+            Binding.FunctionId = Planned.Declaration.Id;
+            GeneratedClass->ManagedFunctionBindings.Add(
+                Planned.Declaration.InternalName,
+                MoveTemp(Binding));
+        }
+        GeneratedClass->BindManagedFunctions();
+        for (const FPlannedFunction& Planned : Plan.Functions)
+        {
+            if (!GeneratedClass->IsManagedFunctionBound(
+                    Planned.Declaration.InternalName))
+            {
+                OutError = FString::Printf(
+                    TEXT("Generated Blueprint function '%s' did not bind its native managed dispatcher."),
+                    *Planned.Declaration.ManagedName.ToString());
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -998,14 +1618,26 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         return false;
     }
 
-    TArray<FStateDeclaration> Declarations;
-    if (!ParseDeclaration(ScriptAsset, DeclarationJson, Declarations, OutError))
+    TArray<FStateDeclaration> StateDeclarations;
+    TArray<FFunctionDeclaration> FunctionDeclarations;
+    if (!ParseDeclaration(
+            ScriptAsset,
+            DeclarationJson,
+            StateDeclarations,
+            FunctionDeclarations,
+            OutError))
     {
         return false;
     }
 
     FSyncPlan Plan;
-    if (!BuildPlan(Blueprint, Declarations, Plan, OutResult, OutError) ||
+    if (!BuildPlan(Blueprint, StateDeclarations, Plan, OutResult, OutError) ||
+        !BuildFunctionPlan(
+            Blueprint,
+            FunctionDeclarations,
+            Plan,
+            OutResult,
+            OutError) ||
         bValidateOnly || !OutResult.bChanged)
     {
         return OutError.IsEmpty();

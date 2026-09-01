@@ -25,6 +25,7 @@ public sealed record HirMethodDeclaration(
     string Name,
     string ReturnType,
     bool IsVisual,
+    bool IsPublic,
     bool IsStatic,
     bool IsAsync,
     IReadOnlyList<HirParameter> Parameters,

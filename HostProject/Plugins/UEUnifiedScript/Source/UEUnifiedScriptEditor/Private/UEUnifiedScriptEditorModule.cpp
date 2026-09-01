@@ -13,6 +13,9 @@
 #include "HAL/PlatformProcess.h"
 #include "Interfaces/IPluginManager.h"
 #include "IPIEAuthorizer.h"
+#include "KismetCompiler.h"
+#include "KismetCompilerModule.h"
+#include "Kismet2/KismetReinstanceUtilities.h"
 #include "KismetPins/SGraphPinExec.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -80,6 +83,70 @@ namespace UE::UnifiedScript::Editor::Private
 {
 const FName AuthoringSurfaceTabName(TEXT("UnifiedScriptAuthoringSurface"));
 const FName ProjectSetupTabName(TEXT("UnifiedScriptProjectSetup"));
+
+class FUnifiedScriptBlueprintCompilerContext final : public FKismetCompilerContext
+{
+public:
+    FUnifiedScriptBlueprintCompilerContext(
+        UBlueprint* SourceBlueprint,
+        FCompilerResultsLog& MessageLog,
+        const FKismetCompilerOptions& CompilerOptions)
+        : FKismetCompilerContext(SourceBlueprint, MessageLog, CompilerOptions)
+    {
+    }
+
+protected:
+    virtual void EnsureProperGeneratedClass(UClass*& InTargetClass) override
+    {
+        if (InTargetClass != nullptr &&
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(InTargetClass) == nullptr)
+        {
+            FKismetCompilerUtilities::ConsignToOblivion(
+                InTargetClass,
+                Blueprint->bIsRegeneratingOnLoad);
+            InTargetClass = nullptr;
+        }
+    }
+
+    virtual void SpawnNewClass(const FString& NewClassName) override
+    {
+        ManagedClass = FindObject<UUnifiedScriptBlueprintGeneratedClass>(
+            Blueprint->GetOutermost(),
+            *NewClassName);
+        if (ManagedClass == nullptr)
+        {
+            ManagedClass = NewObject<UUnifiedScriptBlueprintGeneratedClass>(
+                Blueprint->GetOutermost(),
+                FName(*NewClassName),
+                RF_Public | RF_Transactional);
+        }
+        else
+        {
+            ManagedClass->ClassGeneratedBy = Blueprint;
+            FBlueprintCompileReinstancer::Create(ManagedClass);
+        }
+        NewClass = ManagedClass;
+    }
+
+    virtual void OnNewClassSet(UBlueprintGeneratedClass* ClassToUse) override
+    {
+        ManagedClass = CastChecked<UUnifiedScriptBlueprintGeneratedClass>(ClassToUse);
+    }
+
+private:
+    UUnifiedScriptBlueprintGeneratedClass* ManagedClass = nullptr;
+};
+
+TSharedPtr<FKismetCompilerContext> CreateUnifiedScriptBlueprintCompiler(
+    UBlueprint* Blueprint,
+    FCompilerResultsLog& MessageLog,
+    const FKismetCompilerOptions& CompilerOptions)
+{
+    return MakeShared<FUnifiedScriptBlueprintCompilerContext>(
+        Blueprint,
+        MessageLog,
+        CompilerOptions);
+}
 
 class FUnifiedScriptGraphPanelNodeFactory final : public FGraphPanelNodeFactory
 {
@@ -181,6 +248,15 @@ public:
     virtual void StartupModule() override
     {
         using namespace UE::UnifiedScript::Editor::Private;
+        IKismetCompilerInterface& KismetCompiler =
+            FModuleManager::LoadModuleChecked<IKismetCompilerInterface>(
+                KISMET_COMPILER_MODULENAME);
+        KismetCompiler.OverrideBPGCTypeForBPType(
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass());
+        FKismetCompilerContext::RegisterCompilerForBP(
+            UUnifiedScriptBlueprint::StaticClass(),
+            &CreateUnifiedScriptBlueprintCompiler);
         FUnifiedScriptClassAssetRecoveryResult Recovery;
         if (!FUnifiedScriptClassAssetOperations::RecoverPendingTransactions(Recovery))
         {
