@@ -356,6 +356,19 @@ FString RenderManagedSource(
     const TCHAR* UpdateHook = Kind == EUnifiedScriptClassKind::Object
         ? TEXT("OnUpdate")
         : TEXT("OnTick");
+    const TCHAR* BlueprintEventBlock = Kind == EUnifiedScriptClassKind::Object
+        ? TEXT("")
+        : TEXT("    [UnrealBlueprintEvent]\n")
+          TEXT("    public void OnManagedActivated(int amount)\n")
+          TEXT("    {\n")
+          TEXT("        StartValue += amount;\n")
+          TEXT("    }\n\n");
+    const TCHAR* EndPlayBlock = Kind == EUnifiedScriptClassKind::Object
+        ? TEXT("")
+        : TEXT("\n")
+          TEXT("    protected override void OnEndPlay()\n")
+          TEXT("    {\n")
+          TEXT("    }\n");
     return FString::Printf(
         TEXT("using UnifiedScript;\n")
         TEXT("using UnifiedScript.Unreal;\n\n")
@@ -371,6 +384,7 @@ FString RenderManagedSource(
         TEXT("    {\n")
         TEXT("        return value + 1;\n")
         TEXT("    }\n\n")
+        TEXT("%s")
         TEXT("    protected override void %s()\n")
         TEXT("    {\n")
         TEXT("        StartValue = AddOne(StartValue);\n")
@@ -378,6 +392,7 @@ FString RenderManagedSource(
         TEXT("    protected override void %s(float deltaSeconds)\n")
         TEXT("    {\n")
         TEXT("    }\n")
+        TEXT("%s")
         TEXT("}\n"),
         *ManagedNamespace,
         *DeclarationAssetPath,
@@ -386,8 +401,10 @@ FString RenderManagedSource(
         *GeneratedClassPath,
         *TypeName,
         BaseType,
+        BlueprintEventBlock,
         InitializeHook,
-        UpdateHook);
+        UpdateHook,
+        EndPlayBlock);
 }
 
 bool WriteTextAtomically(const FString& Path, const FString& Text, FString& OutError)

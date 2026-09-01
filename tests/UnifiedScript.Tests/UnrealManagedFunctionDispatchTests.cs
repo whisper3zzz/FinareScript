@@ -59,6 +59,13 @@ public sealed class UnrealManagedFunctionDispatchTests
             argumentCount: 0);
         Assert.Equal(UnrealManagedFunctionValueKindV1.Boolean, inverted.Kind);
         Assert.Equal(1UL, inverted.Payload);
+
+        UnrealManagedFunctionValueV1 blueprintEvent = instance.InvokeFunction(
+            nameof(ManagedFunctionDispatchScript.BlueprintEventOnly),
+            arguments: 0,
+            argumentCount: 0);
+        Assert.Equal(UnrealManagedFunctionValueKindV1.Int32, blueprintEvent.Kind);
+        Assert.Equal(17UL, blueprintEvent.Payload);
     }
 
     [Fact]
@@ -308,6 +315,9 @@ public sealed class ManagedFunctionDispatchScript : IUnrealManagedScript
 
     [Visual]
     public bool AlwaysTrue() => true;
+
+    [UnrealBlueprintEvent]
+    public int BlueprintEventOnly() => 17;
 
     [Visual]
     public string UnsupportedString(string value) => value;

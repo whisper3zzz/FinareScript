@@ -301,6 +301,9 @@ bool CreateAndVerify(
                 Source.Contains(TEXT(": UnrealObjectScript")) &&
                     Source.Contains(TEXT("OnInitialized")) &&
                     Source.Contains(TEXT("OnUpdate")));
+            Test.TestFalse(
+                TEXT("Managed Object does not advertise gameplay Blueprint events"),
+                Source.Contains(TEXT("[UnrealBlueprintEvent]")));
         }
         else
         {
@@ -312,6 +315,11 @@ bool CreateAndVerify(
                 Source.Contains(FString::Printf(TEXT(": %s"), ExpectedBase)));
             Test.TestTrue(TEXT("Managed source includes BeginPlay"), Source.Contains(TEXT("OnBeginPlay")));
             Test.TestTrue(TEXT("Managed source includes Tick"), Source.Contains(TEXT("OnTick")));
+            Test.TestTrue(TEXT("Managed source includes EndPlay"), Source.Contains(TEXT("OnEndPlay")));
+            Test.TestTrue(
+                TEXT("Managed source includes an explicit-Super Blueprint event"),
+                Source.Contains(TEXT("[UnrealBlueprintEvent]")) &&
+                    Source.Contains(TEXT("OnManagedActivated(int amount)")));
         }
     }
 

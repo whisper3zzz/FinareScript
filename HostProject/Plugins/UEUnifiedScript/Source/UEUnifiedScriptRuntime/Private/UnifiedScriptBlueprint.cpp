@@ -6,6 +6,7 @@
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(UnifiedScriptBlueprint)
@@ -686,16 +687,42 @@ UClass* UUnifiedScriptBlueprint::GetBlueprintClass() const
 }
 #endif
 
+void UUnifiedScriptBlueprintGeneratedClass::Bind()
+{
+    // UClass::Bind binds every owned UFunction. Register first so Blueprint
+    // compiler REINST classes and package-load relinks can resolve the dynamic
+    // native functions without a handwritten UHT registration table.
+    RegisterManagedNativeFunctions();
+    Super::Bind();
+    bManagedFunctionsBound = false;
+    if (IsInGameThread())
+    {
+        BindManagedFunctions();
+    }
+}
+
+void UUnifiedScriptBlueprintGeneratedClass::PurgeClass(bool bRecompilingOnLoad)
+{
+    Super::PurgeClass(bRecompilingOnLoad);
+    bManagedFunctionsBound = false;
+    RegisteredManagedNativeFunctions.Reset();
+}
+
 void UUnifiedScriptBlueprintGeneratedClass::PostLoad()
 {
+    bManagedFunctionsBound = false;
+    RegisteredManagedNativeFunctions.Reset();
     Super::PostLoad();
-    BindManagedFunctions();
+    if (IsInGameThread())
+    {
+        BindManagedFunctions();
+    }
 }
 
 void UUnifiedScriptBlueprintGeneratedClass::PostLoadDefaultObject(UObject* Object)
 {
     Super::PostLoadDefaultObject(Object);
-    if (Object == GetDefaultObject(false))
+    if (Object == GetDefaultObject(false) && IsInGameThread())
     {
         // UFunction::Bind may run after the generated class PostLoad and restore
         // Blueprint bytecode dispatch. The CDO is loaded only after every owned
@@ -704,9 +731,26 @@ void UUnifiedScriptBlueprintGeneratedClass::PostLoadDefaultObject(UObject* Objec
     }
 }
 
+void UUnifiedScriptBlueprintGeneratedClass::PostInitInstance(
+    UObject* InObj,
+    FObjectInstancingGraph* InstanceGraph)
+{
+    Super::PostInitInstance(InObj, InstanceGraph);
+    // CDO construction may happen on the async loading thread. The first
+    // gameplay instance is constructed on the game thread; re-apply the table
+    // there in case a cooked UFunction::Bind ran after the class/CDO hooks and
+    // restored ProcessInternal.
+    if (IsInGameThread() && !bManagedFunctionsBound)
+    {
+        BindManagedFunctions();
+    }
+}
+
 void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
 {
     check(IsInGameThread());
+    RegisterManagedNativeFunctions();
+    bool bAllFunctionsBound = true;
     for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
          ManagedFunctionBindings)
     {
@@ -715,16 +759,73 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
             EIncludeSuperFlag::ExcludeSuper);
         if (Function == nullptr)
         {
+            bAllFunctionsBound = false;
             continue;
         }
-        // Keep the Blueprint bytecode marker so ProcessEvent enters the
-        // function, but replace its execution pointer after compile/load. A
-        // dynamic per-declaration FUNC_Native would make UClass::Bind search a
-        // nonexistent handwritten native registration on every recompile.
-        Function->FunctionFlags &= ~FUNC_Native;
+        // Blueprint VM calls, including an explicit Call Parent Function from a
+        // child override, only invoke the installed dispatcher for a native
+        // UFunction. Register the generic thunk on this generated class before
+        // any later UFunction::Bind pass tries to resolve it.
+        Function->FunctionFlags |= FUNC_Native;
         Function->FunctionFlags |= FUNC_Public | FUNC_BlueprintCallable;
+        if (Pair.Value.bBlueprintEvent)
+        {
+            Function->FunctionFlags |= FUNC_Event | FUNC_BlueprintEvent;
+        }
+        else
+        {
+            Function->FunctionFlags &= ~(FUNC_Event | FUNC_BlueprintEvent);
+        }
         Function->SetNativeFunc(
             &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction);
+#if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
+        if (Pair.Value.bBlueprintEvent)
+        {
+            // The empty generated base graph is only a durable signature. Cook
+            // may patch it as an ubergraph fast-call stub, which would bypass
+            // the native managed implementation installed above. Child
+            // Blueprint overrides own separate functions and keep their normal
+            // fast-call path; only the managed base implementation is cleared.
+            Function->EventGraphFunction = nullptr;
+            Function->EventGraphCallOffset = INDEX_NONE;
+        }
+#endif
+    }
+    bManagedFunctionsBound = bAllFunctionsBound;
+}
+
+void UUnifiedScriptBlueprintGeneratedClass::PrepareManagedFunctionsForRecompile()
+{
+    check(IsInGameThread());
+    // FBlueprintCompileReinstancer duplicates the old class before its native
+    // lookup table is rebuilt. Keep the transition copy on ordinary Blueprint
+    // bytecode until its generated-class Bind pass installs the dynamic table.
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         ManagedFunctionBindings)
+    {
+        if (UFunction* Function = FindFunctionByName(
+                Pair.Key,
+                EIncludeSuperFlag::ExcludeSuper))
+        {
+            Function->FunctionFlags &= ~FUNC_Native;
+        }
+    }
+    bManagedFunctionsBound = false;
+}
+
+void UUnifiedScriptBlueprintGeneratedClass::RegisterManagedNativeFunctions()
+{
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         ManagedFunctionBindings)
+    {
+        if (RegisteredManagedNativeFunctions.Contains(Pair.Key))
+        {
+            continue;
+        }
+        AddNativeFunction(
+            *Pair.Key.ToString(),
+            &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction);
+        RegisteredManagedNativeFunctions.Add(Pair.Key);
     }
 }
 
@@ -735,6 +836,7 @@ bool UUnifiedScriptBlueprintGeneratedClass::IsManagedFunctionBound(
         FunctionName,
         EIncludeSuperFlag::ExcludeSuper);
     return Function != nullptr &&
+        Function->HasAnyFunctionFlags(FUNC_Native) &&
         Function->GetNativeFunc() ==
             &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction;
 }
@@ -742,7 +844,40 @@ bool UUnifiedScriptBlueprintGeneratedClass::IsManagedFunctionBound(
 DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction)
 {
     using namespace UE::UnifiedScript::Blueprint::Private;
-    UFunction* Function = Stack.Node;
+    // Stack.Node is the frame that owns the currently executing bytecode. For
+    // an explicit Blueprint Call Parent Function that is the child ubergraph,
+    // not the managed parent UFunction selected by EX_FinalFunction.
+    UFunction* Function = Stack.CurrentNativeFunction;
+
+    // ProcessEvent supplies an already materialized parameter frame, while a
+    // call emitted by the Blueprint VM leaves its arguments in the caller's
+    // bytecode stream. A generic dynamic thunk must consume that stream before
+    // it can return, including on later dispatch errors, otherwise the caller
+    // resumes in the middle of its argument list.
+    TUniquePtr<FStructOnScope> DecodedParameters;
+    void* ParameterContainer = Stack.Locals;
+    if (Function != nullptr && Stack.Node != Function)
+    {
+        DecodedParameters = MakeUnique<FStructOnScope>(Function);
+        ParameterContainer = DecodedParameters->GetStructMemory();
+        for (TFieldIterator<FProperty> It(
+                 Function,
+                 EFieldIteratorFlags::ExcludeSuper);
+             It;
+             ++It)
+        {
+            FProperty* Parameter = *It;
+            if (!Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+                Parameter->HasAnyPropertyFlags(CPF_ReturnParm))
+            {
+                continue;
+            }
+            Stack.Step(
+                Stack.Object,
+                Parameter->ContainerPtrToValuePtr<void>(ParameterContainer));
+        }
+        P_FINISH;
+    }
     const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass = Function != nullptr
         ? Cast<UUnifiedScriptBlueprintGeneratedClass>(Function->GetOuter())
         : nullptr;
@@ -758,10 +893,23 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
     }
     if (Function == nullptr || Binding == nullptr || Binding->ManagedName.IsEmpty())
     {
-        UE_LOG(LogTemp, Error, TEXT("UnifiedScript managed function binding is missing."));
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("UnifiedScript managed function binding is missing: function='%s', owner='%s', ownerType='%s', flags=0x%08x, super='%s'."),
+            Function != nullptr ? *Function->GetPathName() : TEXT("<null>"),
+            Function != nullptr && Function->GetOuter() != nullptr
+                ? *Function->GetOuter()->GetPathName()
+                : TEXT("<null>"),
+            Function != nullptr && Function->GetOuter() != nullptr
+                ? *Function->GetOuter()->GetClass()->GetName()
+                : TEXT("<null>"),
+            Function != nullptr ? static_cast<uint32>(Function->FunctionFlags) : 0u,
+            Function != nullptr && Function->GetSuperFunction() != nullptr
+                ? *Function->GetSuperFunction()->GetPathName()
+                : TEXT("<null>"));
         return;
     }
-
     if (Binding->AbiVersion >= ManagedFunctionAbiV2)
     {
         UUnifiedScriptComponent* Component = nullptr;
@@ -771,7 +919,8 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             const FObjectPropertyBase* WorldContextProperty =
                 FindFProperty<FObjectPropertyBase>(Function, WorldContextObjectName);
             UObject* WorldContextObject = WorldContextProperty != nullptr
-                ? WorldContextProperty->GetObjectPropertyValue_InContainer(Stack.Locals)
+                ? WorldContextProperty->GetObjectPropertyValue_InContainer(
+                    ParameterContainer)
                 : nullptr;
             Host = ResolveWorldHost(WorldContextObject);
         }
@@ -816,7 +965,7 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             if (ArgumentsV2.Num() > 4 ||
                 !PackValueV2(
                     *Parameter,
-                    Stack.Locals,
+                    ParameterContainer,
                     *Host,
                     Arena,
                     ParameterType,
@@ -835,7 +984,6 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             }
             ++ManagedParameterIndex;
         }
-
         const uint32 InputByteCount = static_cast<uint32>(Arena.Num());
         Arena.SetNumUninitialized(MaximumManagedFunctionArenaBytes, EAllowShrinking::No);
         FUnifiedScriptNativeValueV3 ResultV2;
@@ -941,7 +1089,8 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             continue;
         }
         FUnifiedScriptManagedFunctionValueV1& Value = Arguments.AddDefaulted_GetRef();
-        if (Arguments.Num() > 4 || !PackValue(*Parameter, Stack.Locals, Value))
+        if (Arguments.Num() > 4 ||
+            !PackValue(*Parameter, ParameterContainer, Value))
         {
             UE_LOG(
                 LogTemp,

@@ -18,6 +18,8 @@ struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptBlueprintClassSyncResult
     int32 AddedFunctionCount = 0;
     int32 UpdatedFunctionCount = 0;
     int32 RemovedFunctionCount = 0;
+    int32 DeclaredLifecycleHookCount = 0;
+    int32 UpdatedLifecycleHookCount = 0;
     bool bChanged = false;
 };
 

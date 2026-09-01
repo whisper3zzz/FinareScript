@@ -1,8 +1,8 @@
 {
   "schemaVersion": "unifiedscript.identity/v0.1",
   "sourcePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
-  "sourceDigest": "sha256:032cb0499c94687f258b54c5d8d0c0271f42493f1d6ac867620b1fb21f2a31e9",
-  "generation": 4,
+  "sourceDigest": "sha256:e3fef76bc7c07e263dc4710b98976304dce70e0d684b686fdc17f03cc9e649e4",
+  "generation": 6,
   "entries": [
     {
       "id": "us_01ed46673b81fff436b39bb5bb4cf0a8",
@@ -13,12 +13,12 @@
       "shapeFingerprint": "sha256:f1141fa6844a738b0e432f3f05503969d0a47a8560bdf12bd37ab5077dc548e9",
       "parentFingerprint": "sha256:7d6f489f438b86951e3093e53af3abb58b7b6f33ab45137e34131b07f355ab8d",
       "anchor": {
-        "start": 963,
+        "start": 1283,
         "length": 9
       },
       "contextBefore": "sha256:44cb775d5f9be481eba426424f53130e37708beb89e0c63b54fb422e6e925d9e",
       "contextAfter": "sha256:04d6aa5eae6d995257de800244afd12d3e64dd315aef49ea0a18f4cf1dc9bce8",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_03cca5ced3d9986f5984a0db88be6c65",
@@ -45,12 +45,12 @@
       "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 3964,
+        "start": 4284,
         "length": 45
       },
       "contextBefore": "sha256:191a60bb79fd9396926d3305b3106e2a4024aab763920fb3edf59b8bb5c4109d",
       "contextAfter": "sha256:e8bc5934c60fec1ff410a41a97ad48cf1edfa0ed0feb4a2a33020fd96bb13532",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_0446755f34e89759afa02c4fc1aebc9d",
@@ -61,12 +61,12 @@
       "shapeFingerprint": "sha256:98587750b646c620f108495fe734a403118231773a0842ca912f10a433465426",
       "parentFingerprint": "sha256:39a27ffb33062ff258d5d4ee1f76f17a80f4b319a6a6d3bc1c9988374d0bea66",
       "anchor": {
-        "start": 1132,
+        "start": 1452,
         "length": 7
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:dff15833fcc6c27226f8a2b09a7f04572dfd1095b92d25da97024d2951ed8e5c",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_0467d815b0d65b4914b9d97313d311bc",
@@ -77,12 +77,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1531,
+        "start": 1851,
         "length": 16
       },
       "contextBefore": "sha256:67bce1f862a66ccf8348b387bd34c02b111dd00fa3209a2297d6ccfc3b3e8efc",
       "contextAfter": "sha256:d4a97bb6d154af7e3684fbb347170d5f9a6b2dd3d6c0a405e394286fd8114d8c",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_04a40187b5f6033771dd75cbd9531821",
@@ -117,6 +117,22 @@
       "generation": 1
     },
     {
+      "id": "us_09639aa23010b7639744971cde7cae8d",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "parameter",
+      "fingerprint": "sha256:bf4a6cd41dad070740423772779e5ac1504b4834b80302ef55707ebd495180b5",
+      "shapeFingerprint": "sha256:bf4a6cd41dad070740423772779e5ac1504b4834b80302ef55707ebd495180b5",
+      "parentFingerprint": "sha256:4939a2714c728c8aa50c6a1115142e9f52ff420569b53fad8fab13b2e709723b",
+      "anchor": {
+        "start": 905,
+        "length": 10
+      },
+      "contextBefore": "sha256:f7683ee0bf8bec809dc34a17d9d740d8027e80a43d24342f1515c1e8a879322b",
+      "contextAfter": "sha256:e4c59199fff2a6ec679bf0f80bbe1f94e123a859c371312655898b6b18836fc5",
+      "generation": 5
+    },
+    {
       "id": "us_09803b44444cd647b91d05e67b5a46bd",
       "kind": "block",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.RewirePreview(int,bool)",
@@ -129,8 +145,8 @@
         "length": 179
       },
       "contextBefore": "sha256:0c155e68fc2a8b50f8d7b53ce5162e41f2c2e42187d7171f29314a07afa6b25c",
-      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 1
+      "contextAfter": "sha256:126889fb8183da02c3814faa7393456b1cbbd7218babeeb7645e200b3a3b9fd2",
+      "generation": 5
     },
     {
       "id": "us_09932f279cb7be5256df59ac086e6708",
@@ -157,12 +173,28 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:59f4ca6d5965cdee59a09ae377d48aee4fd466af47591527e63eaf97ffeba6f4",
       "anchor": {
-        "start": 4828,
+        "start": 5148,
         "length": 29
       },
       "contextBefore": "sha256:7376313d2b66dbed15731b964c38288fea1c2a88837f9ebe2f09f082c2aabf90",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 3
+      "generation": 6
+    },
+    {
+      "id": "us_0c05b730218b41247404391273942bcf",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "else",
+      "fingerprint": "sha256:5a534070c5f5ee54d1f1c3b047734fb4cd3e317f3510d3139d6da0a1defd478f",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
+      "anchor": {
+        "start": 1082,
+        "length": 73
+      },
+      "contextBefore": "sha256:c7399758b8b2bfe8c231dd7c45ecb5e39f4857ebad0c26fdc4c56bd096c0da5a",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 6
     },
     {
       "id": "us_0c1e1a557dd41304eca7a9cd225e90d3",
@@ -173,12 +205,12 @@
       "shapeFingerprint": "sha256:d35f508d895e81cab8f68eae0d596705ac276f45c81926fe487973b4adbbd2b4",
       "parentFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "anchor": {
-        "start": 3991,
+        "start": 4311,
         "length": 9
       },
       "contextBefore": "sha256:b6ff518bf98c8f1391ece5cbcdd73d3ef86f39e55df42fb09c9298326fb7452d",
       "contextAfter": "sha256:f95936f22eca134211d54beccf93820676d4c0e16f7a8e1dd42c67b63289bca3",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_0e83ff5432db96a457a167aa07be48d0",
@@ -213,6 +245,22 @@
       "generation": 1
     },
     {
+      "id": "us_13c6f6d8c180995fa89d1bd90aeabd88",
+      "kind": "memberAccess",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "target",
+      "fingerprint": "sha256:0b779a898a45408b9f03268f41691f8b1e32e045d5b9402b40cc3ddc44272f82",
+      "shapeFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 1009,
+        "length": 23
+      },
+      "contextBefore": "sha256:ea9707d646ecd0a98ae5c4f4d5868caea16774293dea68a4b56929dbe6fa77ec",
+      "contextAfter": "sha256:2a0f76251c0c6a91e866dec7030e541609750bfa27e965630a8d058d16ecf7e8",
+      "generation": 6
+    },
+    {
       "id": "us_15c05cc6d35c3ef8bf50717e865e1ec8",
       "kind": "parameter",
       "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
@@ -221,12 +269,12 @@
       "shapeFingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
       "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
       "anchor": {
-        "start": 4623,
+        "start": 4943,
         "length": 24
       },
       "contextBefore": "sha256:4dfd3d85ec25b85fe8e92ec6a38ce5d9dd309b2150b1744f445da398ece97a54",
       "contextAfter": "sha256:ac8297116b0181a176a9b9887b9406ca5802c8d7fd29ed3a3f22a2a0cbe7ce59",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_1604852504c777090ced5eee16bf9ee8",
@@ -237,12 +285,12 @@
       "shapeFingerprint": "sha256:745cf0ea949d2ecac52f838d89d0b0eb02f13c26a3db41b5cc149b4ad364613d",
       "parentFingerprint": "sha256:efaf9363fe8964fa80af43a072a89df79d3d2d41399fbfc1f058623bf0f16f4c",
       "anchor": {
-        "start": 1063,
+        "start": 1383,
         "length": 35
       },
       "contextBefore": "sha256:b9e2a7a67d07a19311603bf518d73b6bdf3c4dd40f0c9389f0968f3dd5fd9ff7",
       "contextAfter": "sha256:611373af2e01be5cc5a689f4e592195b85f7363629683f3ab018776f146515cc",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_18c9dca3cf963cceb891967b75b16b80",
@@ -253,12 +301,28 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 5191,
+        "start": 5511,
         "length": 13
       },
       "contextBefore": "sha256:64015ca2dea52e8702e419fe9f3f0fb97f3575c7e199e30a0a04185cb55e0077",
       "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
-      "generation": 4
+      "generation": 6
+    },
+    {
+      "id": "us_19374c840264c540a43b5868cb3dd248",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "target",
+      "fingerprint": "sha256:db8e5747c00debe2e91f8b721bdddae0cfb686b3c90feb0c555a112fe2ddfaf8",
+      "shapeFingerprint": "sha256:db8e5747c00debe2e91f8b721bdddae0cfb686b3c90feb0c555a112fe2ddfaf8",
+      "parentFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
+      "anchor": {
+        "start": 931,
+        "length": 12
+      },
+      "contextBefore": "sha256:18a945b38ace8ed0d97b9e04082601181edbf932d8a0d5ff55e8b462d5d0f1c2",
+      "contextAfter": "sha256:b4aa1c310bd7dc04eb664a27d6e3f5e2490f1d25efcfddcb6ecc68b0aa5a7127",
+      "generation": 6
     },
     {
       "id": "us_1a9f2e66a2271e01012d204756d01c06",
@@ -285,12 +349,12 @@
       "shapeFingerprint": "sha256:de72b6e56f90396992343a3b37b69966fbc40374811e98cebfb71719f3505f34",
       "parentFingerprint": "sha256:6f6ebee6e1b59cee4d5c7f69602b9c8d49c8c15f5831ed1404918d1e9ad7e696",
       "anchor": {
-        "start": 963,
+        "start": 1283,
         "length": 26
       },
       "contextBefore": "sha256:44cb775d5f9be481eba426424f53130e37708beb89e0c63b54fb422e6e925d9e",
       "contextAfter": "sha256:7e830104a9d494aa542eb5ddd4c2f69813b68d4e69682bc0763a7b74a8982f25",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_1eafde8b7b40867906a1491051070f86",
@@ -301,12 +365,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:ac35388939cad0c386abb04b064d7e556b95e117c6a36e41b185487cb21ebf83",
       "anchor": {
-        "start": 1241,
+        "start": 1561,
         "length": 91
       },
       "contextBefore": "sha256:2edae2e1a2baa6f13bf254c0ee886115e292baa8f1e656171a517991b34bf24a",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_1ebe0117a3276000f8fb6de036221189",
@@ -317,12 +381,12 @@
       "shapeFingerprint": "sha256:ada4daedb74f43075dcff44051b68328b4ff63f73e23841ba4bc9ea2402e6eea",
       "parentFingerprint": "sha256:3a64b55af6070898f39b355c19a09f637b9c91a03432454bc6fa2f74c2f51384",
       "anchor": {
-        "start": 1434,
+        "start": 1754,
         "length": 12
       },
       "contextBefore": "sha256:9830c6965629bbf22785b77b4e988c112f497cabea662d3320c1af039a38eee6",
       "contextAfter": "sha256:d81da1640d16c95a8465265838caa098ce22b3cd5be55cfde75a2cc0b0a6c56f",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_24190586197222e3fc7c0d8481fc1aa5",
@@ -333,12 +397,12 @@
       "shapeFingerprint": "sha256:ada4daedb74f43075dcff44051b68328b4ff63f73e23841ba4bc9ea2402e6eea",
       "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "anchor": {
-        "start": 1287,
+        "start": 1607,
         "length": 12
       },
       "contextBefore": "sha256:2740fd967fd3e5cfda604ead46d5a88ea86ee085c16578e59968d4c60eaa92c1",
       "contextAfter": "sha256:9fb95eeffb3b60db8a9f16b4b5c498e30835bd521108bf616f1a9c6ebdd47971",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_2469fcf6391d6ff503d7658f697e9bab",
@@ -381,12 +445,28 @@
       "shapeFingerprint": "sha256:3a64b55af6070898f39b355c19a09f637b9c91a03432454bc6fa2f74c2f51384",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1417,
+        "start": 1737,
         "length": 30
       },
       "contextBefore": "sha256:d214bb929b24df79d7f69c619290680e226b65566e316c2dbad046cc3a8685c6",
       "contextAfter": "sha256:64d8cf64b141d1ddeddcde3dd4e031a425dc52ce204b5f198570e0176678de6e",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_2733c1de53ddc59f195775f9ac2acb0f",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "body",
+      "fingerprint": "sha256:2249144b3bf8c051570607a7506426287cc0a781fbf66ffa909aae295ce1b59e",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:4939a2714c728c8aa50c6a1115142e9f52ff420569b53fad8fab13b2e709723b",
+      "anchor": {
+        "start": 921,
+        "length": 240
+      },
+      "contextBefore": "sha256:d492197f8111d4f26c989420bca1c357b1536f0dc5dc93e1c1fbef93456c8b25",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 6
     },
     {
       "id": "us_274456cbd7ee1319c606b262fbd03508",
@@ -397,12 +477,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "anchor": {
-        "start": 1155,
+        "start": 1475,
         "length": 5
       },
       "contextBefore": "sha256:e058a6e4345010375b32ee0835fc425227fa17cf664501275d684faa54f90f5d",
       "contextAfter": "sha256:80e74d2189697ce95cb4bae4f3477ffc23dbe59d8f80b0d1cfd67e1e15ff10a1",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_2fecf5a2f51d62629cf4b99a698a93fc",
@@ -413,12 +493,12 @@
       "shapeFingerprint": "sha256:fa41d79f7bb44872e47e11079c01d7969cbc395299779854d06dcf90087048f4",
       "parentFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
       "anchor": {
-        "start": 1460,
+        "start": 1780,
         "length": 13
       },
       "contextBefore": "sha256:240b3d4bbca7c8e3c80a62537788edeb78e50fb985219ccda3301ec644c5c458",
       "contextAfter": "sha256:bb5c13a6889b82615a08b96c866b0c45d32e25fc1e4855ee962bccc3ee793d4b",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_31045f47d1cc6ffa7e3e0a42a755cde2",
@@ -429,12 +509,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "anchor": {
-        "start": 4003,
+        "start": 4323,
         "length": 5
       },
       "contextBefore": "sha256:a461839c5067076f66d2fc400c707ac0318b96678169fa338e54745a6b94342d",
       "contextAfter": "sha256:1cd5e2f6a111033b212a70d86a46c187cf55d275fc85f4f6fd83ee9819ba7ad8",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_31e6fe1ce93e2440aaa1ef3da2ee53bf",
@@ -445,12 +525,12 @@
       "shapeFingerprint": "sha256:5ac8b18b6572d67a7d3e1e19854f40d40875ffcc10ce0b0ffea8a2be434cde5e",
       "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
       "anchor": {
-        "start": 1497,
+        "start": 1817,
         "length": 8
       },
       "contextBefore": "sha256:0b27ab86cbcf52991d851b3c466f4e67247cab2af0211160c7b4837c7ee6cb69",
       "contextAfter": "sha256:67bce1f862a66ccf8348b387bd34c02b111dd00fa3209a2297d6ccfc3b3e8efc",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_34c8d7e2fb10736b35b35bd174c0d2f9",
@@ -461,12 +541,12 @@
       "shapeFingerprint": "sha256:a097091d895df0dc64aa49ec4a7a7bb6845b1323e0fe8a382a25b96498af3d84",
       "parentFingerprint": "sha256:36d8d96bcd3295bf6d4ff7373e171dbf9c98dee1d1c016f27762d13217a3b06b",
       "anchor": {
-        "start": 928,
+        "start": 1248,
         "length": 9
       },
       "contextBefore": "sha256:b0b05f69c05bfea3eb7bc7ce4bc654a433e094a9f7890495216cc635cf31d71e",
       "contextAfter": "sha256:ca8e65995b1911ae1a6c952e3bc71781a6a0c3e9c95720856d8e473d801e3a5d",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_39c37edaa09222c4d9ca5ede9ee7c3c9",
@@ -493,12 +573,12 @@
       "shapeFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
       "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
       "anchor": {
-        "start": 3964,
+        "start": 4284,
         "length": 44
       },
       "contextBefore": "sha256:191a60bb79fd9396926d3305b3106e2a4024aab763920fb3edf59b8bb5c4109d",
       "contextAfter": "sha256:1cd5e2f6a111033b212a70d86a46c187cf55d275fc85f4f6fd83ee9819ba7ad8",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_3b4d621de6a54805d505b29ac60d7a26",
@@ -509,12 +589,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
       "anchor": {
-        "start": 1483,
+        "start": 1803,
         "length": 38
       },
       "contextBefore": "sha256:510388a19536d78c6203740f4ea6cdd4616f2f9a8ce8998270a6dd37ab14d526",
       "contextAfter": "sha256:df7efe6fbda701bf9d002ea9360ac36312119b56f1f613559cb78066f2903cc4",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_3e31927a08cbabc6e8258b4a591119f8",
@@ -525,12 +605,12 @@
       "shapeFingerprint": "sha256:9dc0d81c054c563e5a515913ba3e4b2cfc3fe34cfd156d4619857dfb5fbcfe10",
       "parentFingerprint": "sha256:36d8d96bcd3295bf6d4ff7373e171dbf9c98dee1d1c016f27762d13217a3b06b",
       "anchor": {
-        "start": 884,
+        "start": 1204,
         "length": 32
       },
       "contextBefore": "sha256:b6e3274d867f63cb8efa1919901ddd658d73c923dcc757f3dbb62a845e20a89e",
       "contextAfter": "sha256:b0b05f69c05bfea3eb7bc7ce4bc654a433e094a9f7890495216cc635cf31d71e",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_40d604291e22ae4b49fda5b0eb7c117d",
@@ -541,12 +621,12 @@
       "shapeFingerprint": "sha256:86f7a1825882ae19ded4653940a1a22fd2f4a412bef7d5f66c96d51cdf81c289",
       "parentFingerprint": "sha256:85d8cc4fc534afe72b16936a0422dc7cd4bf2c75d16f57ff8f046bd4853e2f65",
       "anchor": {
-        "start": 5037,
+        "start": 5357,
         "length": 31
       },
       "contextBefore": "sha256:c55ab55402a49e3ac026fc5bef4e17f681f4fa807ac29b5cab71a1b12b4e1119",
       "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_456885402c59440e3c453dbbf316574f",
@@ -557,12 +637,12 @@
       "shapeFingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
       "parentFingerprint": "sha256:efaf9363fe8964fa80af43a072a89df79d3d2d41399fbfc1f058623bf0f16f4c",
       "anchor": {
-        "start": 1100,
+        "start": 1420,
         "length": 9
       },
       "contextBefore": "sha256:58371e3fbc9f2702c266c51c53c77cf46d30c495eabc2ae89cba76ba7e8ea005",
       "contextAfter": "sha256:839e526546dd2b99c7ea023a985272fd61c3f7925176881d58126a149f14e8b8",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_47c30b5db37aa298bcfffff023296093",
@@ -589,12 +669,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 4845,
+        "start": 5165,
         "length": 5
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_4e11b83af6862d727609e33ee87dd1fd",
@@ -605,12 +685,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 999,
+        "start": 1319,
         "length": 11
       },
       "contextBefore": "sha256:d4a6a93c4e51724e48576ce8fb7c559821464e21e2abc086f179df6d8b7e71be",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_4ea9bc6d7b5173225babe174c0f6c171",
@@ -653,12 +733,12 @@
       "shapeFingerprint": "sha256:a8c7a2dff212fa90f5a155f8c74badf30fb04d261feeaaeb7a7d9fc73d848a4a",
       "parentFingerprint": "sha256:f765fba6e6426db05cc7e74e613795cb88b46bb23741668e2cab6e59107b6a84",
       "anchor": {
-        "start": 3916,
+        "start": 4236,
         "length": 32
       },
       "contextBefore": "sha256:d5862708122e2e21dd2e865aaffe5cf3781fd6ffa9f1240cd1ab2640206c8973",
       "contextAfter": "sha256:d054dcd19901fa1b8c0a5062df9d44d3e367adb1f1048d2c2a17fc682d646467",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_5545dec5482c5963196a54623a081505",
@@ -673,8 +753,8 @@
         "length": 19
       },
       "contextBefore": "sha256:a50db51a5419ec483499d366c76e31eb106fb6b7b91fcebb8aae8d1d5a8a12e8",
-      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 1
+      "contextAfter": "sha256:fe501d77abfe66899d3d58db097389c2fb107ca5e1b18a8742d6bfdcf248bf96",
+      "generation": 5
     },
     {
       "id": "us_557d722283073a06454899b150c83b80",
@@ -685,12 +765,12 @@
       "shapeFingerprint": "sha256:6f6ebee6e1b59cee4d5c7f69602b9c8d49c8c15f5831ed1404918d1e9ad7e696",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 953,
+        "start": 1273,
         "length": 37
       },
       "contextBefore": "sha256:1b252c9b94b6f9c016194ad98045b346c435ce79ec3ae1cb8a0b8c6a8a9562df",
       "contextAfter": "sha256:fa778740cda110b484dbc5f0a81a045150db48532ed8576e4aeeec9f2fbc8aef",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_58ddcb2d278bb2111e4e99c1985ba9d1",
@@ -701,12 +781,12 @@
       "shapeFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "parentFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
       "anchor": {
-        "start": 3991,
+        "start": 4311,
         "length": 17
       },
       "contextBefore": "sha256:b6ff518bf98c8f1391ece5cbcdd73d3ef86f39e55df42fb09c9298326fb7452d",
       "contextAfter": "sha256:1cd5e2f6a111033b212a70d86a46c187cf55d275fc85f4f6fd83ee9819ba7ad8",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_595b7b863fe6f160def46eeb3e5728de",
@@ -717,12 +797,12 @@
       "shapeFingerprint": "sha256:0438883a824a9a7bad0650e183c5664d7803af5b866dad03739c062e060a13a9",
       "parentFingerprint": "sha256:fc31b5c456c3a987a5b4ca2df952e19209df7f8a57608f0c2f083c247d912139",
       "anchor": {
-        "start": 4916,
+        "start": 5236,
         "length": 18
       },
       "contextBefore": "sha256:43c1821bc1e95e69c6991e2fef700cfe22407e099eeee62b1d6d3e43017d03de",
       "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_5b4cd649eb6f35a7a92f11cc2c678c4c",
@@ -733,12 +813,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:36d8d96bcd3295bf6d4ff7373e171dbf9c98dee1d1c016f27762d13217a3b06b",
       "anchor": {
-        "start": 943,
+        "start": 1263,
         "length": 73
       },
       "contextBefore": "sha256:fdae42c89600312a6dd6489324baf66c856bd693d59c8c51aed6ab4c326280b5",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_5b577a2a62ee0d133438733180567ef0",
@@ -749,12 +829,44 @@
       "shapeFingerprint": "sha256:33c3fa4cde072b6118705151c98e93bcc82388675e7707095dd2a69200e811b3",
       "parentFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
       "anchor": {
-        "start": 3964,
+        "start": 4284,
         "length": 10
       },
       "contextBefore": "sha256:191a60bb79fd9396926d3305b3106e2a4024aab763920fb3edf59b8bb5c4109d",
       "contextAfter": "sha256:6164c8868c90e315678e52d5c72342e5fbac2f07e2a18d4aaca31b77059d2474",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_5ca7006c478bea936d07e3803088b944",
+      "kind": "if",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "statement",
+      "fingerprint": "sha256:cfd53c7b99ee9cad69d507c923671416bb0c440e7fbaa95b69984df8573b2dae",
+      "shapeFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 963,
+        "length": 192
+      },
+      "contextBefore": "sha256:682ecfce0eb94d76f79bb6ede5f49a25b226615ee72887a18654c15b1e1048bb",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 6
+    },
+    {
+      "id": "us_5fa2de73b5487d067cc7d44a34d2eda8",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:6c0125cd8f5a46488ce72588f4065bef869c8974f056484330828cfd81f48686",
+      "shapeFingerprint": "sha256:6c0125cd8f5a46488ce72588f4065bef869c8974f056484330828cfd81f48686",
+      "parentFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
+      "anchor": {
+        "start": 947,
+        "length": 6
+      },
+      "contextBefore": "sha256:e4c59199fff2a6ec679bf0f80bbe1f94e123a859c371312655898b6b18836fc5",
+      "contextAfter": "sha256:fed9a358ddaa6f0190cfbbf3db01872afeb38e5aeddffa04f7a278f9faba62e4",
+      "generation": 6
     },
     {
       "id": "us_5fb1c8a78460cc4a043beead6880bd7a",
@@ -765,12 +877,28 @@
       "shapeFingerprint": "sha256:f3b94c3a0cff4c8d624d6200c6fa272cc4ccd6576bce35a824bad0e592ccf185",
       "parentFingerprint": "sha256:36d8d96bcd3295bf6d4ff7373e171dbf9c98dee1d1c016f27762d13217a3b06b",
       "anchor": {
-        "start": 918,
+        "start": 1238,
         "length": 8
       },
       "contextBefore": "sha256:44f5cbb6d8413d2265dd970ae4ec0994651f6d92828c227936cad2ff0f8f858b",
       "contextAfter": "sha256:fdae42c89600312a6dd6489324baf66c856bd693d59c8c51aed6ab4c326280b5",
-      "generation": 1
+      "generation": 6
+    },
+    {
+      "id": "us_637a30ae7f515fcd59d883e35a9a1ce1",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "target",
+      "fingerprint": "sha256:33c3fa4cde072b6118705151c98e93bcc82388675e7707095dd2a69200e811b3",
+      "shapeFingerprint": "sha256:33c3fa4cde072b6118705151c98e93bcc82388675e7707095dd2a69200e811b3",
+      "parentFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
+      "anchor": {
+        "start": 1096,
+        "length": 10
+      },
+      "contextBefore": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "contextAfter": "sha256:bf25fdac5773bf002667fa6374b26a5446ef193701feed1e8f9e0e6e6d0397da",
+      "generation": 6
     },
     {
       "id": "us_63a3784aa2de308021efe1d0ba061ca5",
@@ -781,12 +909,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
       "anchor": {
-        "start": 4706,
+        "start": 5026,
         "length": 29
       },
       "contextBefore": "sha256:b0450a3048d76c411736f5e999de74cb1b755dd47ea1fdcc71a20b555509036a",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_65a5ce5c06e01e247da78f10dc730122",
@@ -797,12 +925,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 4838,
+        "start": 5158,
         "length": 13
       },
       "contextBefore": "sha256:2d1de7cde2f3526a8ee78d8d6a3d33daa11997089451c96c9ac427de054b806f",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_6baaeb0b1ae86bc1c46aac7aedfd36f9",
@@ -813,12 +941,12 @@
       "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1497,
+        "start": 1817,
         "length": 14
       },
       "contextBefore": "sha256:0b27ab86cbcf52991d851b3c466f4e67247cab2af0211160c7b4837c7ee6cb69",
       "contextAfter": "sha256:bffd977e66dc04ff2b85e61d5fc7170cc89e34259019c88386be5097fa30f292",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_6d73433103fcc334b51fdf70a1092b28",
@@ -845,12 +973,12 @@
       "shapeFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1456,
+        "start": 1776,
         "length": 65
       },
       "contextBefore": "sha256:07f8ff563788f26c7161a59783b1da083b86f879fc7adfced11132d51ff8e288",
       "contextAfter": "sha256:df7efe6fbda701bf9d002ea9360ac36312119b56f1f613559cb78066f2903cc4",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_6f74e227cbc49184d5bcf11f06b5db51",
@@ -877,12 +1005,12 @@
       "shapeFingerprint": "sha256:5ac8b18b6572d67a7d3e1e19854f40d40875ffcc10ce0b0ffea8a2be434cde5e",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 1538,
+        "start": 1858,
         "length": 8
       },
       "contextBefore": "sha256:332cac5b74d15a4a218dd7b4e6503a80a9324442a035ad130e03ae62d2778c58",
       "contextAfter": "sha256:1cd5e2f6a111033b212a70d86a46c187cf55d275fc85f4f6fd83ee9819ba7ad8",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_72ce362f118f0c17216a140de2f65c9b",
@@ -917,6 +1045,38 @@
       "generation": 1
     },
     {
+      "id": "us_7437498d2a11993c59ddd9ce71e36f79",
+      "kind": "assignment",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "expression",
+      "fingerprint": "sha256:4e21c1e95bcba49ea059072e97e910167c96063751f6b02ef78c108d3ba31c9b",
+      "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 1009,
+        "length": 40
+      },
+      "contextBefore": "sha256:ea9707d646ecd0a98ae5c4f4d5868caea16774293dea68a4b56929dbe6fa77ec",
+      "contextAfter": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "generation": 6
+    },
+    {
+      "id": "us_74e43d18bfeb42a01988f5111bb1e62c",
+      "kind": "assignment",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "expression",
+      "fingerprint": "sha256:389b2e093c6076e1ee1127f9162b991969c386ca7392ba84740254c212dfd146",
+      "shapeFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 931,
+        "length": 22
+      },
+      "contextBefore": "sha256:18a945b38ace8ed0d97b9e04082601181edbf932d8a0d5ff55e8b462d5d0f1c2",
+      "contextAfter": "sha256:fed9a358ddaa6f0190cfbbf3db01872afeb38e5aeddffa04f7a278f9faba62e4",
+      "generation": 6
+    },
+    {
       "id": "us_777ebac089ea7700dea7e255f9fd47d4",
       "kind": "parameter",
       "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.EchoObject(UnrealObjectHandle)",
@@ -925,12 +1085,12 @@
       "shapeFingerprint": "sha256:ed7536eaa9682d22c20269fb032489365bb600ee0bb606b60368f3536c981a0d",
       "parentFingerprint": "sha256:59f4ca6d5965cdee59a09ae377d48aee4fd466af47591527e63eaf97ffeba6f4",
       "anchor": {
-        "start": 4798,
+        "start": 5118,
         "length": 24
       },
       "contextBefore": "sha256:eaa21f2573022b35ee643d8cbb7ff2ef923b1558fe10c68558769a4b910e9e0d",
       "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_7a5d5e66061e177b20268319a1377c57",
@@ -947,6 +1107,22 @@
       "contextBefore": "sha256:8d0219417ff66396e1afc61096a2eba0295e9baefc52f5478db943b63b169d91",
       "contextAfter": "sha256:80f79760d02615252ad41aada13c91238fabc6c15d4d7da8608f5b588726ef9c",
       "generation": 1
+    },
+    {
+      "id": "us_7da2a4590fa6865dfe2ee40751724cd5",
+      "kind": "block",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "then",
+      "fingerprint": "sha256:7f8deaf0065d239724de06d9a7d92e3dc2eb44ae78204b1bfc8dd8466fd78425",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
+      "anchor": {
+        "start": 995,
+        "length": 65
+      },
+      "contextBefore": "sha256:b2884e7724b20209a5b0100003066e17cc1cc5ca8d4f1e6eb9bc393e02dd7e79",
+      "contextAfter": "sha256:bdb5ed2834ad4bb3868725a341bbe27680fa98b152c836161342e95f249f035c",
+      "generation": 6
     },
     {
       "id": "us_7e39bd949ca6c5b5c65151f20616aff0",
@@ -973,12 +1149,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:bb761f8ceb20d57c4849fa0c9d493fef8d9ee4ca35ae479f335afeeb2d9ac4e2",
       "anchor": {
-        "start": 5181,
+        "start": 5501,
         "length": 29
       },
       "contextBefore": "sha256:3cbef0e8ecee9fc883c6f6a8a8396fac32b6750fb7a51a8e9c9a895187748c5b",
       "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_833ed2e8c46648394c32f0de01972a36",
@@ -989,12 +1165,12 @@
       "shapeFingerprint": "sha256:fbf353726be6ac547f87e526fcaced575e078e190abea46ec3689718154a74a7",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 4723,
+        "start": 5043,
         "length": 5
       },
       "contextBefore": "sha256:9aa6e045145f2ba3fe2fb3d29ce925507a321d497a687c595b4f7c1c4f8d1559",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_843bfba0a7fee96d1b1879ba0c61ed8f",
@@ -1005,12 +1181,28 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 5198,
+        "start": 5518,
         "length": 5
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
-      "generation": 4
+      "generation": 6
+    },
+    {
+      "id": "us_870b9565c060f5b585e22fb112dad2c0",
+      "kind": "expressionStatement",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "statement",
+      "fingerprint": "sha256:3f9c370f9b35ce08b500820c7ddc266a2d7a4b426af3c1393c9396a07a760fbb",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 1009,
+        "length": 41
+      },
+      "contextBefore": "sha256:ea9707d646ecd0a98ae5c4f4d5868caea16774293dea68a4b56929dbe6fa77ec",
+      "contextAfter": "sha256:4b73c4e3ea96c6005bd125c866b62dec280164394d10c1c4ba1d6cd026ecd045",
+      "generation": 6
     },
     {
       "id": "us_88092934c68c17ba75d44d7494931159",
@@ -1021,12 +1213,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:85d8cc4fc534afe72b16936a0422dc7cd4bf2c75d16f57ff8f046bd4853e2f65",
       "anchor": {
-        "start": 5074,
+        "start": 5394,
         "length": 29
       },
       "contextBefore": "sha256:4048a54b6ec5ae3ea8ed7e8769100307af654e549b98d4ff731740202f2740c7",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_88175c7c9288e0f7e78b9e71bbe3f765",
@@ -1037,12 +1229,28 @@
       "shapeFingerprint": "sha256:e4a21f1dafbcc2496aac9b28b604a412b15be43fe1ae3f699d61258fccf64667",
       "parentFingerprint": "sha256:fa41d79f7bb44872e47e11079c01d7969cbc395299779854d06dcf90087048f4",
       "anchor": {
-        "start": 1471,
+        "start": 1791,
         "length": 2
       },
       "contextBefore": "sha256:64d8cf64b141d1ddeddcde3dd4e031a425dc52ce204b5f198570e0176678de6e",
       "contextAfter": "sha256:bb5c13a6889b82615a08b96c866b0c45d32e25fc1e4855ee962bccc3ee793d4b",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_885e1227dca2abd46d54ef85c15b7976",
+      "kind": "literal",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "right",
+      "fingerprint": "sha256:14e29d4993e570d1019280afa79511226ad5f37a43782a14b454f845a3eb8a4e",
+      "shapeFingerprint": "sha256:14e29d4993e570d1019280afa79511226ad5f37a43782a14b454f845a3eb8a4e",
+      "parentFingerprint": "sha256:a5401b7261c8a5a1b398b4cc8ef4661dc964e8d3c76c244057d4ed7e20717bfa",
+      "anchor": {
+        "start": 983,
+        "length": 2
+      },
+      "contextBefore": "sha256:3a006c7478e23fe1538835e7de5ccdccf6db5558ebcda979e6c3d76931bcf488",
+      "contextAfter": "sha256:d054dcd19901fa1b8c0a5062df9d44d3e367adb1f1048d2c2a17fc682d646467",
+      "generation": 6
     },
     {
       "id": "us_92a6e639d0fd770e188d956fc3a79804",
@@ -1053,12 +1261,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 4950,
+        "start": 5270,
         "length": 13
       },
       "contextBefore": "sha256:42091f66d38afa7d22ede210e483511b9163bb4b796aa15f83f9f47077b2d3f8",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_93ed647f78393aa32885ccd273e61bda",
@@ -1085,12 +1293,28 @@
       "shapeFingerprint": "sha256:8b1a663fda63469e55b59a346480578e386e828c366978ec3eebfe4078794227",
       "parentFingerprint": "sha256:ac35388939cad0c386abb04b064d7e556b95e117c6a36e41b185487cb21ebf83",
       "anchor": {
-        "start": 1217,
+        "start": 1537,
         "length": 18
       },
       "contextBefore": "sha256:be2fea4924f4331d3be0374158fc62722d49d576d973e70669c8705328800630",
       "contextAfter": "sha256:310d99a73c29cc77478a19d5eaf7b038d0e9e567efa2a5aaa0f76bbfce0c7195",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_9720d17f3df00b4a030074487a330590",
+      "kind": "expressionStatement",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "statement",
+      "fingerprint": "sha256:e68cd91920a6c71db55a677515387589bc6883c5df5d8919fd5e295e82ea963b",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 931,
+        "length": 23
+      },
+      "contextBefore": "sha256:18a945b38ace8ed0d97b9e04082601181edbf932d8a0d5ff55e8b462d5d0f1c2",
+      "contextAfter": "sha256:3a006c7478e23fe1538835e7de5ccdccf6db5558ebcda979e6c3d76931bcf488",
+      "generation": 6
     },
     {
       "id": "us_9b40c0e9bc6e461edea33af40819d29c",
@@ -1101,12 +1325,12 @@
       "shapeFingerprint": "sha256:7d6f489f438b86951e3093e53af3abb58b7b6f33ab45137e34131b07f355ab8d",
       "parentFingerprint": "sha256:de72b6e56f90396992343a3b37b69966fbc40374811e98cebfb71719f3505f34",
       "anchor": {
-        "start": 963,
+        "start": 1283,
         "length": 13
       },
       "contextBefore": "sha256:44cb775d5f9be481eba426424f53130e37708beb89e0c63b54fb422e6e925d9e",
       "contextAfter": "sha256:a77c7b444843b83bb95558836ee44dab7f3d9079212f2c455b2eca51c6b13f21",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_9bdb0dc822ab90f74a2c4e7ea47f1efb",
@@ -1117,12 +1341,12 @@
       "shapeFingerprint": "sha256:39a27ffb33062ff258d5d4ee1f76f17a80f4b319a6a6d3bc1c9988374d0bea66",
       "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "anchor": {
-        "start": 1132,
+        "start": 1452,
         "length": 22
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:3d6cc5ad6abb4bef9c1280b278d40727afbbe33219e51c7254ec4cf21e929fc2",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_a109187df5752fb40b79406c8b099da3",
@@ -1133,12 +1357,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 5091,
+        "start": 5411,
         "length": 5
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_a189f9241824cfbb113ae27fbfa8f625",
@@ -1149,12 +1373,28 @@
       "shapeFingerprint": "sha256:5ac8b18b6572d67a7d3e1e19854f40d40875ffcc10ce0b0ffea8a2be434cde5e",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 1317,
+        "start": 1637,
         "length": 8
       },
       "contextBefore": "sha256:1a5107b1e3b9fb9b57ed96f191b8de0e8193c9d10d1a4eacc514c2aee470be71",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_a68acadce20a3dc5aab0d01c63b5812a",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "target",
+      "fingerprint": "sha256:33c3fa4cde072b6118705151c98e93bcc82388675e7707095dd2a69200e811b3",
+      "shapeFingerprint": "sha256:33c3fa4cde072b6118705151c98e93bcc82388675e7707095dd2a69200e811b3",
+      "parentFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
+      "anchor": {
+        "start": 1009,
+        "length": 10
+      },
+      "contextBefore": "sha256:ea9707d646ecd0a98ae5c4f4d5868caea16774293dea68a4b56929dbe6fa77ec",
+      "contextAfter": "sha256:a37e9a666bce1f25bd99663c0f8e4272db5340ce6491a283660b5d3a8cc40505",
+      "generation": 6
     },
     {
       "id": "us_a753c6f378d5357dc67f7f9812e0af7a",
@@ -1181,12 +1421,28 @@
       "shapeFingerprint": "sha256:5ac8b18b6572d67a7d3e1e19854f40d40875ffcc10ce0b0ffea8a2be434cde5e",
       "parentFingerprint": "sha256:fa41d79f7bb44872e47e11079c01d7969cbc395299779854d06dcf90087048f4",
       "anchor": {
-        "start": 1460,
+        "start": 1780,
         "length": 8
       },
       "contextBefore": "sha256:240b3d4bbca7c8e3c80a62537788edeb78e50fb985219ccda3301ec644c5c458",
       "contextAfter": "sha256:0b27ab86cbcf52991d851b3c466f4e67247cab2af0211160c7b4837c7ee6cb69",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_b3c428e9df33b2de0163f7da44b86260",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "left",
+      "fingerprint": "sha256:db8e5747c00debe2e91f8b721bdddae0cfb686b3c90feb0c555a112fe2ddfaf8",
+      "shapeFingerprint": "sha256:db8e5747c00debe2e91f8b721bdddae0cfb686b3c90feb0c555a112fe2ddfaf8",
+      "parentFingerprint": "sha256:a5401b7261c8a5a1b398b4cc8ef4661dc964e8d3c76c244057d4ed7e20717bfa",
+      "anchor": {
+        "start": 967,
+        "length": 12
+      },
+      "contextBefore": "sha256:40da689f1a20cf5f3f749b083909cca5a4077ba83c7f2c43a6f1e7caecfb63a1",
+      "contextAfter": "sha256:ea9707d646ecd0a98ae5c4f4d5868caea16774293dea68a4b56929dbe6fa77ec",
+      "generation": 6
     },
     {
       "id": "us_b3cce4e07c05d682c985d071d7e7e4c3",
@@ -1201,8 +1457,8 @@
         "length": 11
       },
       "contextBefore": "sha256:49f08467e2bc5734df83ff98457d5529faf8aff3c6ba50a0beea0e1d79e7c10d",
-      "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 1
+      "contextAfter": "sha256:f814b2bc3c6b0cd52b91159e9ddbd8862cb5eabdd0eb887bc022a6efd49d16dc",
+      "generation": 5
     },
     {
       "id": "us_b437fb12fb4ca77f7b23f98976b64c69",
@@ -1229,12 +1485,12 @@
       "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
       "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
       "anchor": {
-        "start": 1497,
+        "start": 1817,
         "length": 13
       },
       "contextBefore": "sha256:0b27ab86cbcf52991d851b3c466f4e67247cab2af0211160c7b4837c7ee6cb69",
       "contextAfter": "sha256:6c0d736cd07ad6df38bef981b8dc410c716a7c2cec22f6b1e964c0c9bf076f9f",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_b90754713be49fa5cf35f990e286b176",
@@ -1261,12 +1517,12 @@
       "shapeFingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
       "parentFingerprint": "sha256:f765fba6e6426db05cc7e74e613795cb88b46bb23741668e2cab6e59107b6a84",
       "anchor": {
-        "start": 3905,
+        "start": 4225,
         "length": 9
       },
       "contextBefore": "sha256:3b6c43bd49b067f86b79c081125a30ab8129e3bd4fa275330b56b96b283d6a59",
       "contextAfter": "sha256:0755bed545cd7b3ae3bd5dac251d21ea2a18e591a81cb27a4ec6f48b4cea602e",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_bc8ff44462f2c3f3f7cbdeafbdc1694c",
@@ -1293,12 +1549,12 @@
       "shapeFingerprint": "sha256:e4a21f1dafbcc2496aac9b28b604a412b15be43fe1ae3f699d61258fccf64667",
       "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
       "anchor": {
-        "start": 1508,
+        "start": 1828,
         "length": 2
       },
       "contextBefore": "sha256:bb5c13a6889b82615a08b96c866b0c45d32e25fc1e4855ee962bccc3ee793d4b",
       "contextAfter": "sha256:6c0d736cd07ad6df38bef981b8dc410c716a7c2cec22f6b1e964c0c9bf076f9f",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_bf3f62033b1134cdb72e9c8acef1d5e3",
@@ -1309,12 +1565,12 @@
       "shapeFingerprint": "sha256:8f8ab90d301d8fefebb7b98bacaae528f0efe7be9ad82f54185d89d693d2e3b7",
       "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "anchor": {
-        "start": 1268,
+        "start": 1588,
         "length": 18
       },
       "contextBefore": "sha256:9830c6965629bbf22785b77b4e988c112f497cabea662d3320c1af039a38eee6",
       "contextAfter": "sha256:5d14f4e6f57bb75d57d92b42da726e0cef2a9935ec8ca9ca4888ab47bc8790d1",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_c0112796b7e4eb46b7035bf099cdadb4",
@@ -1341,12 +1597,12 @@
       "shapeFingerprint": "sha256:d799862c549662a4cc61b3f03eb1b50eb167f8444b9bb4b879d8b7e1b5de6716",
       "parentFingerprint": "sha256:bb761f8ceb20d57c4849fa0c9d493fef8d9ee4ca35ae479f335afeeb2d9ac4e2",
       "anchor": {
-        "start": 5160,
+        "start": 5480,
         "length": 15
       },
       "contextBefore": "sha256:aec0e46afdb93d61943c6761ebc1399fbac75b290a3792bb02cd98b4b1703fd2",
       "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_c0c0c5e4018dca215fd70e85cc030fcd",
@@ -1373,12 +1629,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 5084,
+        "start": 5404,
         "length": 13
       },
       "contextBefore": "sha256:dedc817b2fbb1260146cfc3637665b4a8e333e5a3fa45bbf5e43193055d51290",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_c3e0ef1591a863e8dda6d45e71a7b872",
@@ -1389,12 +1645,12 @@
       "shapeFingerprint": "sha256:8b1a663fda63469e55b59a346480578e386e828c366978ec3eebfe4078794227",
       "parentFingerprint": "sha256:7358a0e4efa61319a23f597c7b56f68d6cbdaab578ef62de94da9c144fdcedb6",
       "anchor": {
-        "start": 1383,
+        "start": 1703,
         "length": 18
       },
       "contextBefore": "sha256:cfd9364456223323528e75c3c03d880b910461324eb79ec965d74936526ac162",
       "contextAfter": "sha256:310d99a73c29cc77478a19d5eaf7b038d0e9e567efa2a5aaa0f76bbfce0c7195",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_c551dbece27d48b33fb39d4e3c819230",
@@ -1405,12 +1661,12 @@
       "shapeFingerprint": "sha256:c036c26b726a92ff0771dc948473da2add6edf60b722e576685ba747b6dcfc63",
       "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
       "anchor": {
-        "start": 4657,
+        "start": 4977,
         "length": 21
       },
       "contextBefore": "sha256:8aa5f2f9edcc3da96ee872136c6d1cb021df2398354cb0b602c8592c4c0c2aee",
       "contextAfter": "sha256:b0450a3048d76c411736f5e999de74cb1b755dd47ea1fdcc71a20b555509036a",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_c7cd9dec02458944f376dbd5f13cb040",
@@ -1429,6 +1685,22 @@
       "generation": 1
     },
     {
+      "id": "us_cbb5ca3a2bf98e2183ffe98d2859a7d0",
+      "kind": "literal",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:61b9be3cabbb9d304f7967e586dca90b7d2289b156a1624ada48b36a06b8f079",
+      "shapeFingerprint": "sha256:61b9be3cabbb9d304f7967e586dca90b7d2289b156a1624ada48b36a06b8f079",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 1122,
+        "length": 22
+      },
+      "contextBefore": "sha256:323507cd870e66aa2126d2e51b17d89c0c91b0329b9c42ba95616b4aafadb89d",
+      "contextAfter": "sha256:e00a22a93f7e627e64673816adda28a78b3f9f8c5bdce3c933ae351fda079027",
+      "generation": 6
+    },
+    {
       "id": "us_cc71203c374b31796daa202a3a8c7b0a",
       "kind": "parameter",
       "owner": "UnifiedScript.Unreal.Demo.DemoLibrary.Describe(UnrealObjectHandle,UnrealVector,string)",
@@ -1437,12 +1709,12 @@
       "shapeFingerprint": "sha256:76f25b1aa8ac831eda0d691b1564155ab5bde25807103a4dd4eb40cd11767a88",
       "parentFingerprint": "sha256:36d00f6340cd0e670022a62e548df74e2cd3cd60e06aaf9613e5db56009bcfbb",
       "anchor": {
-        "start": 4688,
+        "start": 5008,
         "length": 12
       },
       "contextBefore": "sha256:ac8297116b0181a176a9b9887b9406ca5802c8d7fd29ed3a3f22a2a0cbe7ce59",
       "contextAfter": "sha256:284a894022732c1c82f3c1b2af7c33b03cb3a1856af9fa3b681b71afb7ed1cec",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_cd084b6f2d4697c3eb1767f444d71bd1",
@@ -1453,12 +1725,28 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:f765fba6e6426db05cc7e74e613795cb88b46bb23741668e2cab6e59107b6a84",
       "anchor": {
-        "start": 3954,
+        "start": 4274,
         "length": 61
       },
       "contextBefore": "sha256:0755bed545cd7b3ae3bd5dac251d21ea2a18e591a81cb27a4ec6f48b4cea602e",
       "contextAfter": "sha256:d8c9d79829b1fa347cae5be9c6d2dece20ab674b2faad61d65f57d88f164580b",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_d0a8c66bbd018b16470586b710a384da",
+      "kind": "binary",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "condition",
+      "fingerprint": "sha256:a42f863f4e74581fcbe738ac3f2bfda635b4027531989fae1db9cdecd129869b",
+      "shapeFingerprint": "sha256:a5401b7261c8a5a1b398b4cc8ef4661dc964e8d3c76c244057d4ed7e20717bfa",
+      "parentFingerprint": "sha256:935f68319d4f227e02bfd54a0ddf85b8a242e42a4277aa5ef5eaab691710924e",
+      "anchor": {
+        "start": 967,
+        "length": 18
+      },
+      "contextBefore": "sha256:40da689f1a20cf5f3f749b083909cca5a4077ba83c7f2c43a6f1e7caecfb63a1",
+      "contextAfter": "sha256:d054dcd19901fa1b8c0a5062df9d44d3e367adb1f1048d2c2a17fc682d646467",
+      "generation": 6
     },
     {
       "id": "us_d270c4bdaec93251407790f18bc883a9",
@@ -1469,12 +1757,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1125,
+        "start": 1445,
         "length": 37
       },
       "contextBefore": "sha256:f20474240e265b99c6e3d429b017e3100d94193a112f6d409b45892cfc945bfc",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_d4463d57397c77264a0e282ca6c29432",
@@ -1501,12 +1789,12 @@
       "shapeFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
       "parentFingerprint": "sha256:d47e3c6b3397002d5bb51c3a74e7f219c519f3a5dd0fd7e7790c4040756e56d1",
       "anchor": {
-        "start": 3964,
+        "start": 4284,
         "length": 23
       },
       "contextBefore": "sha256:191a60bb79fd9396926d3305b3106e2a4024aab763920fb3edf59b8bb5c4109d",
       "contextAfter": "sha256:187e41f5b8c90e24479ed707e669098dce70787cfb43bae50a9aedef8d71e11e",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_d5a014521bb3176710775f623cbe7262",
@@ -1533,12 +1821,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 4957,
+        "start": 5277,
         "length": 5
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_d897fe2f2cdc7dc32db347a0a0124d94",
@@ -1549,12 +1837,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 4716,
+        "start": 5036,
         "length": 13
       },
       "contextBefore": "sha256:a9de603ed095341a88fe6af50d8ef4e6fac334dcb7713691903b984da4ae42b3",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 3
+      "generation": 6
     },
     {
       "id": "us_d95b2f7185bb90055f267d74f62438cd",
@@ -1581,12 +1869,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:efaf9363fe8964fa80af43a072a89df79d3d2d41399fbfc1f058623bf0f16f4c",
       "anchor": {
-        "start": 1115,
+        "start": 1435,
         "length": 53
       },
       "contextBefore": "sha256:611373af2e01be5cc5a689f4e592195b85f7363629683f3ab018776f146515cc",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_e08b5c7e3d0158670b3b0216382dea4c",
@@ -1597,12 +1885,28 @@
       "shapeFingerprint": "sha256:422ed75104eaca7561d2b66a65061a5e256f74abaa7cc8512f4f6234a34cf1ec",
       "parentFingerprint": "sha256:de72b6e56f90396992343a3b37b69966fbc40374811e98cebfb71719f3505f34",
       "anchor": {
-        "start": 983,
+        "start": 1303,
         "length": 5
       },
       "contextBefore": "sha256:1fbc964757e70fd2a5e360051d1c9f55a471381a0d9a5b3bbb4a1abcfd8af9a7",
       "contextAfter": "sha256:6fe224f592025a83f382f6ca91f1c86e838809ef4c86a17ff2fe7e51ac6114ba",
-      "generation": 1
+      "generation": 6
+    },
+    {
+      "id": "us_e4afbb9ca19e731caa85b56d212a8df0",
+      "kind": "literal",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:34bb157072d7321d6fbe45023e2d91b3fca9408ad430a356f9f2ca0268ee0951",
+      "shapeFingerprint": "sha256:34bb157072d7321d6fbe45023e2d91b3fca9408ad430a356f9f2ca0268ee0951",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 1035,
+        "length": 14
+      },
+      "contextBefore": "sha256:323507cd870e66aa2126d2e51b17d89c0c91b0329b9c42ba95616b4aafadb89d",
+      "contextAfter": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "generation": 6
     },
     {
       "id": "us_e6c52c579ad6ba889825d0300a0006c1",
@@ -1613,12 +1917,12 @@
       "shapeFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "parentFingerprint": "sha256:3a64b55af6070898f39b355c19a09f637b9c91a03432454bc6fa2f74c2f51384",
       "anchor": {
-        "start": 1268,
+        "start": 1588,
         "length": 32
       },
       "contextBefore": "sha256:9830c6965629bbf22785b77b4e988c112f497cabea662d3320c1af039a38eee6",
       "contextAfter": "sha256:1f3de3c288662a607f3aa95533d968388c9f6862406195b66314106ceff8ae44",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_ebaf42f6fd52d30bc70ad38ee7f23313",
@@ -1629,12 +1933,12 @@
       "shapeFingerprint": "sha256:3a64b55af6070898f39b355c19a09f637b9c91a03432454bc6fa2f74c2f51384",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1251,
+        "start": 1571,
         "length": 50
       },
       "contextBefore": "sha256:d214bb929b24df79d7f69c619290680e226b65566e316c2dbad046cc3a8685c6",
       "contextAfter": "sha256:df7efe6fbda701bf9d002ea9360ac36312119b56f1f613559cb78066f2903cc4",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_ebdf4ce4811a6d51668f86b705741ac5",
@@ -1661,12 +1965,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:fc31b5c456c3a987a5b4ca2df952e19209df7f8a57608f0c2f083c247d912139",
       "anchor": {
-        "start": 4940,
+        "start": 5260,
         "length": 29
       },
       "contextBefore": "sha256:ef133470f881d37536729a03e10322577095d558807b5caa038c7fa2a58ed58c",
       "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
-      "generation": 4
+      "generation": 6
     },
     {
       "id": "us_f0b46cf93927dccc24dc0ca79f97a35c",
@@ -1677,12 +1981,12 @@
       "shapeFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 1132,
+        "start": 1452,
         "length": 29
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_f2233f3de553e9332470dfcaffaebed6",
@@ -1693,12 +1997,12 @@
       "shapeFingerprint": "sha256:db3d426c584a630062eda17f65762854f095ce90864287b1a41b0a99094f08be",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 1006,
+        "start": 1326,
         "length": 3
       },
       "contextBefore": "sha256:33214f3ebd4410f3ec7e8b4b4e42e04d6b6cb551e3ce0a9e683013b6c37ca47c",
       "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
-      "generation": 1
+      "generation": 6
     },
     {
       "id": "us_f41317ad5ed5e5bbee1d74a1a4fc205e",
@@ -1717,6 +2021,22 @@
       "generation": 1
     },
     {
+      "id": "us_f59cc0f732aca4853fe3a788a92aa476",
+      "kind": "assignment",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "expression",
+      "fingerprint": "sha256:544e9ffcbac39759b0c6143ab8b240612ba78e0e8b2e865607f46602ba6e42ec",
+      "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 1096,
+        "length": 48
+      },
+      "contextBefore": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "contextAfter": "sha256:e00a22a93f7e627e64673816adda28a78b3f9f8c5bdce3c933ae351fda079027",
+      "generation": 6
+    },
+    {
       "id": "us_f9e76b30b4a50634bf24977f0b892f35",
       "kind": "block",
       "owner": "UnifiedScript.Unreal.Demo.DemoScript.NormalizeTickDelta(float)",
@@ -1725,12 +2045,44 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:7358a0e4efa61319a23f597c7b56f68d6cbdaab578ef62de94da9c144fdcedb6",
       "anchor": {
-        "start": 1407,
+        "start": 1727,
         "length": 146
       },
       "contextBefore": "sha256:2edae2e1a2baa6f13bf254c0ee886115e292baa8f1e656171a517991b34bf24a",
       "contextAfter": "sha256:e2356977769676b915743368725a3a9aadc3fa301cecf9b4273717521919648a",
-      "generation": 2
+      "generation": 6
+    },
+    {
+      "id": "us_faf9f2247ae1e008821014d667b5cb2e",
+      "kind": "memberAccess",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "target",
+      "fingerprint": "sha256:0b779a898a45408b9f03268f41691f8b1e32e045d5b9402b40cc3ddc44272f82",
+      "shapeFingerprint": "sha256:c22aed910a844bc749c7ff3d101cce794a947dffbc84d2ccb4372e640e3cfd08",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 1096,
+        "length": 23
+      },
+      "contextBefore": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "contextAfter": "sha256:5e9d714ae2e9262b483c4e320674275e4cc6b38d53d44461d1c1c163ead46f5f",
+      "generation": 6
+    },
+    {
+      "id": "us_fbbc9e09e7368c03abc9e4c8f57e43be",
+      "kind": "expressionStatement",
+      "owner": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedActivated(int)",
+      "role": "statement",
+      "fingerprint": "sha256:defdaf41e55e8f51866b7d3d062d89d84a8ebe3fda77b7d4d845cbc52bda4c7c",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 1096,
+        "length": 49
+      },
+      "contextBefore": "sha256:eba38fcbc23db595cb7ced67e63d0f0e725e680f5b135311d1013b3d6bd264c2",
+      "contextAfter": "sha256:9faed01c6dd156125a53a259b93b50d26e59abdb8a5c514de7f5e54a5f959218",
+      "generation": 6
     },
     {
       "id": "us_fd3b605ce7aa12f75c0f7a3b17295c7c",
@@ -1757,12 +2109,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 1310,
+        "start": 1630,
         "length": 16
       },
       "contextBefore": "sha256:5d14f4e6f57bb75d57d92b42da726e0cef2a9935ec8ca9ca4888ab47bc8790d1",
       "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
-      "generation": 2
+      "generation": 6
     },
     {
       "id": "us_ffb624046f948797488b04011c9f12f4",
@@ -1773,12 +2125,12 @@
       "shapeFingerprint": "sha256:74031a1c7941ca3d96d31b81f22d962d78702e4723aac7860e7c8ed8f6ad8fed",
       "parentFingerprint": "sha256:de72b6e56f90396992343a3b37b69966fbc40374811e98cebfb71719f3505f34",
       "anchor": {
-        "start": 977,
+        "start": 1297,
         "length": 4
       },
       "contextBefore": "sha256:6fc6e315dba0be0b5d055705f86c86bb9dbfa83a5d499d69d4019b3bbc2dac58",
       "contextAfter": "sha256:d4a6a93c4e51724e48576ce8fb7c559821464e21e2abc086f179df6d8b7e71be",
-      "generation": 1
+      "generation": 6
     }
   ],
   "tombstones": []

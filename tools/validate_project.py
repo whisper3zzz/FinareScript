@@ -7393,6 +7393,31 @@ def main() -> int:
     checks.append(
         "M13.3B-2b-2 persists typed enum and UStruct Blueprint calls through reload/cook"
     )
+    require(
+        "ScriptBlueprintEventSuperMode" in script_asset_model
+        and "ScriptLifecycleHookDeclaration" in script_asset_model
+        and "UnrealBlueprintEventAttribute" in managed_script_class_model
+        and "LowerLifecycleHooks" in script_asset_lowerer
+        and "ScriptBlueprintEventSuperMode.Explicit" in script_asset_lowerer
+        and "ManagedLifecycleBindings" in native_blueprint_header
+        and "BlueprintEventSuperMode" in native_blueprint_header
+        and "FUNC_Event | FUNC_BlueprintEvent" in blueprint_class_materializer_source
+        and "Stack.CurrentNativeFunction" in native_blueprint_source
+        and "Stack.Step(" in native_blueprint_source
+        and "PrepareManagedFunctionsForRecompile" in native_blueprint_source
+        and "Child override owns Blueprint bytecode"
+        in blueprint_class_materializer_tests
+        and "Child Call Parent executes C# with the Blueprint argument"
+        in blueprint_class_materializer_tests
+        and "OnManagedActivated" in unreal_demo_source
+        and "actorEvent=true" in native_host_source
+        and "componentEvent=true" in native_host_source
+        and "actorBlueprintEvent" in script_class_golden_path,
+        "M13.3B-3a lifecycle identity, Blueprint event reflection, explicit Super VM dispatch, or packaged proof is incomplete",
+    )
+    checks.append(
+        "M13.3B-3a binds lifecycle and explicit-Super Blueprint events to managed instances"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

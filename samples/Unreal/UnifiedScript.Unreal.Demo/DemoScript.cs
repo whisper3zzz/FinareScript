@@ -37,6 +37,20 @@ public sealed class DemoScript : IUnrealManagedScript
         return incremented;
     }
 
+    [UnrealBlueprintEvent]
+    public void OnManagedActivated(int amount)
+    {
+        InitialValue += amount;
+        if (InitialValue == 15)
+        {
+            _component.ManagedState = "Activated:15";
+        }
+        else
+        {
+            _component.ManagedState = "Activated:unexpected";
+        }
+    }
+
     [Visual]
     public int UEApiPreview(UnifiedScriptComponent component, int left, int right)
     {

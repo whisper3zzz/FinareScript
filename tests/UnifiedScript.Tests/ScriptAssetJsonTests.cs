@@ -41,6 +41,18 @@ public sealed class ScriptAssetJsonTests
                     true,
                     false,
                     []),
+            ],
+            [
+                new ScriptLifecycleHookDeclaration(
+                    SemanticId.FromKey("lifecycle:tick"),
+                    ScriptLifecycleHookKind.Tick,
+                    "OnTick",
+                    SourceSpan.Unknown("DamagePolicy.cs")),
+                new ScriptLifecycleHookDeclaration(
+                    SemanticId.FromKey("lifecycle:begin"),
+                    ScriptLifecycleHookKind.BeginPlay,
+                    "OnBeginPlay",
+                    SourceSpan.Unknown("DamagePolicy.cs")),
             ]);
         ScriptAssetDocument document = ScriptAssetDocument.Create(
             compilationId,
@@ -57,6 +69,9 @@ public sealed class ScriptAssetJsonTests
             normalized.Functions.Select(static function => function.QualifiedName));
         Assert.All(normalized.Functions, static function => Assert.True(function.IsPublic));
         Assert.All(normalized.Functions, static function => Assert.False(function.IsEvent));
+        Assert.Equal(
+            [ScriptLifecycleHookKind.BeginPlay, ScriptLifecycleHookKind.Tick],
+            normalized.LifecycleHooks!.Select(static hook => hook.Kind));
         Assert.Equal(3, normalized.States[0].DefaultValue.GetInt32());
         Assert.Equal(ScriptAssetDocument.CurrentSchemaVersion, roundTripped.SchemaVersion);
     }

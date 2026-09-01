@@ -54,6 +54,27 @@ public sealed record ScriptParameterDeclaration(
     string TypeMetadataName,
     ScriptFunctionValueTypeDeclaration? UnrealType = null);
 
+public enum ScriptBlueprintEventSuperMode
+{
+    Explicit,
+}
+
+public sealed record ScriptBlueprintEventDeclaration(
+    ScriptBlueprintEventSuperMode SuperMode);
+
+public enum ScriptLifecycleHookKind
+{
+    BeginPlay,
+    Tick,
+    EndPlay,
+}
+
+public sealed record ScriptLifecycleHookDeclaration(
+    SemanticId Id,
+    ScriptLifecycleHookKind Kind,
+    string ManagedName,
+    SourceSpan Span);
+
 public sealed record ScriptFunctionDeclaration(
     SemanticId Id,
     string Name,
@@ -63,7 +84,8 @@ public sealed record ScriptFunctionDeclaration(
     bool IsPublic,
     bool IsEvent,
     IReadOnlyList<ScriptParameterDeclaration> Parameters,
-    ScriptFunctionValueTypeDeclaration? ReturnUnrealType = null);
+    ScriptFunctionValueTypeDeclaration? ReturnUnrealType = null,
+    ScriptBlueprintEventDeclaration? BlueprintEvent = null);
 
 public sealed record ScriptAssetDeclaration(
     SemanticId Id,
@@ -71,7 +93,8 @@ public sealed record ScriptAssetDeclaration(
     string AssetPath,
     SourceSpan Span,
     IReadOnlyList<ScriptStateDeclaration> States,
-    IReadOnlyList<ScriptFunctionDeclaration> Functions);
+    IReadOnlyList<ScriptFunctionDeclaration> Functions,
+    IReadOnlyList<ScriptLifecycleHookDeclaration>? LifecycleHooks = null);
 
 public sealed record ScriptAssetDocument(
     string SchemaVersion,

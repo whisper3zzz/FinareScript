@@ -28,3 +28,22 @@ public sealed class UnrealScriptClassAttribute(UnrealScriptClassKind kind) : Att
     /// </summary>
     public string? GeneratedClassPath { get; set; }
 }
+
+/// <summary>
+/// Exposes a reviewed managed instance method as an overridable Blueprint event.
+/// A Blueprint override replaces the managed default unless it explicitly uses
+/// Call Parent Function, matching Unreal's BlueprintNativeEvent behavior.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealBlueprintEventAttribute : Attribute
+{
+    public UnrealBlueprintEventSuperMode SuperMode { get; init; } =
+        UnrealBlueprintEventSuperMode.Explicit;
+}
+
+/// <summary>Controls how a Blueprint override reaches its managed default implementation.</summary>
+public enum UnrealBlueprintEventSuperMode
+{
+    /// <summary>The Blueprint graph must use Call Parent Function explicitly.</summary>
+    Explicit = 1,
+}

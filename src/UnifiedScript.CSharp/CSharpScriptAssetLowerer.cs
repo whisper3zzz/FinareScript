@@ -21,6 +21,8 @@ internal sealed class CSharpScriptAssetLowerer
     private const string UnrealStructAttributeName = "UnifiedScript.Unreal.UnrealStructAttribute";
     private const string UnrealStructFieldAttributeName =
         "UnifiedScript.Unreal.UnrealStructFieldAttribute";
+    private const string UnrealScriptClassAttributeName =
+        "UnifiedScript.Unreal.UnrealScriptClassAttribute";
 
     private static readonly SymbolDisplayFormat TypeMetadataFormat = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
@@ -103,6 +105,8 @@ internal sealed class CSharpScriptAssetLowerer
                         hirTypes,
                         semanticTypes,
                         semanticMethods);
+                IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
+                    LowerLifecycleHooks(typeSymbol);
                 SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
                 if (assetAttribute is not null &&
                     TryReadNamedString(
@@ -126,7 +130,8 @@ internal sealed class CSharpScriptAssetLowerer
                     assetPath,
                     typeSpan,
                     states,
-                    functions));
+                    functions,
+                    lifecycleHooks));
             }
         }
 
@@ -361,10 +366,81 @@ internal sealed class CSharpScriptAssetLowerer
                 parameters,
                 LowerFunctionValueType(
                     compilation,
-                    types[descriptor.ReturnTypeId].MetadataName)));
+                    types[descriptor.ReturnTypeId].MetadataName),
+                method.Attributes?.Any(static attribute =>
+                    attribute.Name == "UnrealBlueprintEvent") == true
+                    ? new ScriptBlueprintEventDeclaration(
+                        ScriptBlueprintEventSuperMode.Explicit)
+                    : null));
         }
 
         return functions;
+    }
+
+    private static IReadOnlyList<ScriptLifecycleHookDeclaration> LowerLifecycleHooks(
+        INamedTypeSymbol typeSymbol)
+    {
+        AttributeData? classAttribute = FindAttribute(
+            typeSymbol,
+            UnrealScriptClassAttributeName);
+        int classKind = classAttribute?.ConstructorArguments.FirstOrDefault().Value as int? ?? 0;
+        bool gameplayBase = false;
+        for (INamedTypeSymbol? baseType = typeSymbol.BaseType;
+             baseType is not null;
+             baseType = baseType.BaseType)
+        {
+            string baseName = GetMetadataName(baseType);
+            if (baseName is "UnifiedScript.Unreal.UnrealActorScript" or
+                "UnifiedScript.Unreal.UnrealActorComponentScript")
+            {
+                gameplayBase = true;
+                break;
+            }
+        }
+        if (classKind is not (1 or 2) && !gameplayBase)
+        {
+            return [];
+        }
+
+        var hooks = new List<ScriptLifecycleHookDeclaration>(3);
+        foreach (IMethodSymbol method in typeSymbol.GetMembers().OfType<IMethodSymbol>())
+        {
+            ScriptLifecycleHookKind? kind = TryGetLifecycleHookKind(method);
+            SyntaxNode? syntax = method.DeclaringSyntaxReferences
+                .Select(static reference => reference.GetSyntax())
+                .SingleOrDefault();
+            if (kind is null || syntax is null)
+            {
+                continue;
+            }
+
+            hooks.Add(new ScriptLifecycleHookDeclaration(
+                CSharpSemanticIds.ForRoslynSymbol(method),
+                kind.Value,
+                method.Name,
+                RoslynSourceSpan.FromNode(syntax, syntax.SyntaxTree.FilePath)));
+        }
+        return hooks;
+    }
+
+    private static ScriptLifecycleHookKind? TryGetLifecycleHookKind(IMethodSymbol method)
+    {
+        if (!method.IsOverride || method.IsStatic || !method.ReturnsVoid)
+        {
+            return null;
+        }
+        if (method.Name == "OnBeginPlay" && method.Parameters.Length == 0)
+        {
+            return ScriptLifecycleHookKind.BeginPlay;
+        }
+        if (method.Name == "OnTick" && method.Parameters.Length == 1 &&
+            method.Parameters[0].Type.SpecialType == SpecialType.System_Single)
+        {
+            return ScriptLifecycleHookKind.Tick;
+        }
+        return method.Name == "OnEndPlay" && method.Parameters.Length == 0
+            ? ScriptLifecycleHookKind.EndPlay
+            : null;
     }
 
     private static ScriptFunctionValueTypeDeclaration? LowerFunctionValueType(

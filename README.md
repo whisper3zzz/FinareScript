@@ -781,8 +781,14 @@ v2 path; the Demo also executes enum and `FHitResult` round trips. Generated
 type bindings survive package reload through the product GeneratedClass, while
 the compiler/setup path stages chunk plus readable Declaration IR atomically.
 The clean UE 5.8.1 CMD Golden Path passes reload, Cook/Archive, and packaged
-Actor/ActorComponent lifecycle execution. Lifecycle and Blueprint event
-authoring is the next Roadmap slice.
+Actor/ActorComponent lifecycle execution. Stable lifecycle IDs and reviewed
+`[UnrealBlueprintEvent]` declarations now materialize on the same generated
+class, preserve explicit `Super` policy, and reuse the per-World managed
+instance. A Blueprint child remains ordinary Kismet bytecode: its override
+replaces the managed default unless it contains `Call Parent Function`. The
+live CMD test and packaged Host smoke prove that explicit parent call reaches
+C# with decoded arguments. Enhanced Input, delegates, interfaces, and remaining
+event shapes are the next Roadmap slice.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded

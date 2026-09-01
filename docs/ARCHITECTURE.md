@@ -739,8 +739,11 @@ generated graphs can be removed independently of user graphs. A product-owned
 Blueprint GeneratedClass stores the binding table; a dedicated Kismet compiler
 keeps that carrier across initial compile and recompile for every proxy parent
 kind, including types without a construction script. After compile or load, one
-generic execution pointer replaces the generated function body without setting
-`FUNC_Native`, avoiding a fictitious per-method native registration.
+generic native thunk serves every managed function rather than generating a
+handwritten C++ thunk per function. The GeneratedClass persists the semantic
+binding table, rebuilds its transient native function map during bind, load,
+default-object load, and instance initialization, and prepares those functions
+for safe Blueprint recompilation before the old generated class is replaced.
 
 The first dispatch ABI remains frozen as one 16-byte tagged scalar carrying
 `bool`, `byte`, `int`, `long`, `float`, or `double`. ABI v2 keeps its
@@ -765,6 +768,20 @@ after package load. ABI v2 then marshals enums and nested reflected structures,
 including `FHitResult` and vector-derived fields, from the persisted binding
 without JSON, per-call reflection, or handwritten per-function native thunks.
 
+Roslyn also lowers stable Actor and ActorComponent lifecycle hooks
+(`OnBeginPlay`, `OnTick`, and `OnEndPlay`) plus reviewed
+`[UnrealBlueprintEvent]` methods with an explicit `Super` policy. The
+materializer persists their lifecycle/event bindings and marks managed event
+functions with `FUNC_Event | FUNC_BlueprintEvent`. A child Blueprint override
+replaces the managed default unless its ordinary Kismet graph contains an
+explicit `Call Parent Function`. That parent call stays in the child ubergraph;
+the generic dispatcher resolves the invoked base function through
+`Stack.CurrentNativeFunction`, decodes Blueprint bytecode arguments with
+`Stack.Step` into an `FStructOnScope`, and then uses the same ABI and per-World
+managed instance as direct `ProcessEvent` dispatch. Compatible reload and World
+teardown therefore preserve one ownership model for lifecycle, direct calls,
+and Blueprint-event calls.
+
 The control plane handles resources, uncommon signatures, properties,
 functions, delegates, and complex values. The data plane publishes borrowed
 Transform snapshots and runs a per-World pre/managed/post scheduler: managed
@@ -785,8 +802,8 @@ closure and pass packaged lifecycle smoke.
 The remaining boundary work is:
 
 - arbitrary control-wire authoring beyond structured block operations;
-- generated lifecycle, Blueprint event, Enhanced Input, delegate, interface,
-  and explicit `Super` authoring contracts on the per-World managed instance;
+- Enhanced Input, delegate, interface, and remaining event-shape authoring
+  contracts on the per-World managed instance;
 - native debug traps, deeper locals, expression evaluation, and remote framing;
 - additional shared-memory gameplay snapshot and batch schemas;
 - platform-specific CoreCLR packaging beyond Win64.

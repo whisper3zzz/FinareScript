@@ -95,6 +95,13 @@ public static class ScriptAssetJson
         {
             ValidateFunction(asset, function, functionIds);
         }
+
+        var lifecycleIds = new HashSet<SemanticId>();
+        var lifecycleKinds = new HashSet<ScriptLifecycleHookKind>();
+        foreach (ScriptLifecycleHookDeclaration? hook in asset.LifecycleHooks ?? [])
+        {
+            ValidateLifecycleHook(asset, hook, lifecycleIds, lifecycleKinds);
+        }
     }
 
     private static void ValidateState(
@@ -166,6 +173,17 @@ public static class ScriptAssetJson
             throw new JsonException($"Duplicate script function ID '{function.Id}'.");
         }
 
+        if (function.BlueprintEvent is not null)
+        {
+            if (!function.IsPublic || function.IsStatic || function.IsEvent ||
+                !Enum.IsDefined(function.BlueprintEvent.SuperMode))
+            {
+                throw new JsonException(
+                    $"Blueprint event '{function.QualifiedName}' must be a public instance method " +
+                    "with a valid Super policy and cannot also be a native delegate handler.");
+            }
+        }
+
         ValidateFunctionValueType(function.ReturnUnrealType, function.ReturnTypeMetadataName, 0);
 
         var parameterIds = new HashSet<SemanticId>();
@@ -180,6 +198,34 @@ public static class ScriptAssetJson
                 throw new JsonException($"Script function '{function.QualifiedName}' has an invalid parameter.");
             }
             ValidateFunctionValueType(parameter.UnrealType, parameter.TypeMetadataName, 0);
+        }
+    }
+
+    private static void ValidateLifecycleHook(
+        ScriptAssetDeclaration asset,
+        ScriptLifecycleHookDeclaration? hook,
+        ISet<SemanticId> hookIds,
+        ISet<ScriptLifecycleHookKind> hookKinds)
+    {
+        if (hook is null || hook.Id.IsEmpty || !Enum.IsDefined(hook.Kind) ||
+            string.IsNullOrWhiteSpace(hook.ManagedName) || !IsValidSpan(hook.Span) ||
+            !hookIds.Add(hook.Id) || !hookKinds.Add(hook.Kind))
+        {
+            throw new JsonException(
+                $"Script asset '{asset.AssetPath}' has an invalid or duplicate lifecycle hook.");
+        }
+
+        string expectedName = hook.Kind switch
+        {
+            ScriptLifecycleHookKind.BeginPlay => "OnBeginPlay",
+            ScriptLifecycleHookKind.Tick => "OnTick",
+            ScriptLifecycleHookKind.EndPlay => "OnEndPlay",
+            _ => string.Empty,
+        };
+        if (hook.ManagedName != expectedName)
+        {
+            throw new JsonException(
+                $"Lifecycle hook '{hook.Kind}' must bind the reviewed managed method '{expectedName}'.");
         }
     }
 
@@ -237,6 +283,10 @@ public static class ScriptAssetJson
             {
                 Parameters = function.Parameters.ToArray(),
             })
+            .ToArray(),
+        LifecycleHooks = (asset.LifecycleHooks ?? [])
+            .OrderBy(static hook => hook.Kind)
+            .ThenBy(static hook => hook.Id.Value, StringComparer.Ordinal)
             .ToArray(),
     };
 

@@ -7,6 +7,34 @@
 
 class UUnifiedScriptAsset;
 
+UENUM()
+enum class EUnifiedScriptBlueprintEventSuperMode : uint8
+{
+    Explicit = 1,
+};
+
+UENUM()
+enum class EUnifiedScriptManagedLifecycleHookKind : uint8
+{
+    BeginPlay = 1,
+    Tick = 2,
+    EndPlay = 3,
+};
+
+USTRUCT()
+struct FUnifiedScriptManagedLifecycleBinding
+{
+    GENERATED_BODY()
+
+    /** Exact managed lifecycle override discovered from reviewed source. */
+    UPROPERTY()
+    FName ManagedName;
+
+    /** Stable Roslyn declaration identity, independent from method-body edits. */
+    UPROPERTY()
+    FGuid HookId;
+};
+
 USTRUCT()
 struct FUnifiedScriptManagedStructFieldPath
 {
@@ -52,6 +80,15 @@ struct FUnifiedScriptManagedFunctionBinding
     UPROPERTY()
     bool bStatic = false;
 
+    /** Makes the generated base function an ordinary overridable Blueprint event. */
+    UPROPERTY()
+    bool bBlueprintEvent = false;
+
+    /** Blueprint overrides reach the managed default only through Call Parent Function. */
+    UPROPERTY()
+    EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
+        EUnifiedScriptBlueprintEventSuperMode::Explicit;
+
     /** One type contract per managed argument, excluding injected World context. */
     UPROPERTY()
     TArray<FUnifiedScriptManagedValueTypeBinding> ParameterTypes;
@@ -78,17 +115,36 @@ public:
     UPROPERTY()
     TMap<FName, FUnifiedScriptManagedFunctionBinding> ManagedFunctionBindings;
 
+    /** Reviewed Actor/ActorComponent lifecycle identities retained across reload/cook. */
+    UPROPERTY()
+    TMap<EUnifiedScriptManagedLifecycleHookKind, FUnifiedScriptManagedLifecycleBinding>
+        ManagedLifecycleBindings;
+
     /** Cook-retained program identity used by generated static FunctionLibrary calls. */
     UPROPERTY()
     TObjectPtr<UUnifiedScriptAsset> ManagedScriptAsset;
 
     void BindManagedFunctions();
+    void PrepareManagedFunctionsForRecompile();
     bool IsManagedFunctionBound(FName FunctionName) const;
 
+    virtual void Bind() override;
+    virtual void PurgeClass(bool bRecompilingOnLoad) override;
     virtual void PostLoad() override;
     virtual void PostLoadDefaultObject(UObject* Object) override;
+    virtual void PostInitInstance(
+        UObject* InObj,
+        FObjectInstancingGraph* InstanceGraph) override;
 
 private:
+    void RegisterManagedNativeFunctions();
+
+    /** Runtime-only guard; persistent bindings remain the serialized source of truth. */
+    bool bManagedFunctionsBound = false;
+
+    /** Prevent duplicate entries in UClass's transient native lookup table. */
+    TSet<FName> RegisteredManagedNativeFunctions;
+
     DECLARE_FUNCTION(execDispatchManagedFunction);
 };
 

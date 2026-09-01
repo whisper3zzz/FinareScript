@@ -100,6 +100,12 @@ void Accumulate(
     Total.RenamedPropertyCount += Result.RenamedPropertyCount;
     Total.RemovedPropertyCount += Result.RemovedPropertyCount;
     Total.PreservedDefaultOverrideCount += Result.PreservedDefaultOverrideCount;
+    Total.DeclaredFunctionCount += Result.DeclaredFunctionCount;
+    Total.AddedFunctionCount += Result.AddedFunctionCount;
+    Total.UpdatedFunctionCount += Result.UpdatedFunctionCount;
+    Total.RemovedFunctionCount += Result.RemovedFunctionCount;
+    Total.DeclaredLifecycleHookCount += Result.DeclaredLifecycleHookCount;
+    Total.UpdatedLifecycleHookCount += Result.UpdatedLifecycleHookCount;
     Total.bChanged |= Result.bChanged;
 }
 } // namespace UE::UnifiedScript::SyncClasses::Private

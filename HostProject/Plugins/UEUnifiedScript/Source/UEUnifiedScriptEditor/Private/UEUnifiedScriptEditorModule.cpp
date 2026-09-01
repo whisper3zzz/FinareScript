@@ -123,6 +123,7 @@ protected:
         else
         {
             ManagedClass->ClassGeneratedBy = Blueprint;
+            ManagedClass->PrepareManagedFunctionsForRecompile();
             FBlueprintCompileReinstancer::Create(ManagedClass);
         }
         NewClass = ManagedClass;
@@ -131,6 +132,19 @@ protected:
     virtual void OnNewClassSet(UBlueprintGeneratedClass* ClassToUse) override
     {
         ManagedClass = CastChecked<UUnifiedScriptBlueprintGeneratedClass>(ClassToUse);
+    }
+
+    virtual void FinishCompilingClass(UClass* Class) override
+    {
+        FKismetCompilerContext::FinishCompilingClass(Class);
+        if (UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+                Cast<UUnifiedScriptBlueprintGeneratedClass>(Class))
+        {
+            // Direct Editor compiles must restore the same native contract as
+            // declaration-driven materialization; users should not need a
+            // second Build action after pressing Compile.
+            GeneratedClass->BindManagedFunctions();
+        }
     }
 
 private:

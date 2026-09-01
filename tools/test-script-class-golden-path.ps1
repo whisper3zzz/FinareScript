@@ -468,6 +468,8 @@ try {
             $smokeText -notmatch 'componentStarted=true' -or
             $smokeText -notmatch 'actorTicked=true' -or
             $smokeText -notmatch 'componentTicked=true' -or
+            $smokeText -notmatch 'actorEvent=true' -or
+            $smokeText -notmatch 'componentEvent=true' -or
             $smokeText -notmatch 'managedScriptCount=2' -or
             $smokeText -notmatch 'lifecycleClaimCount=2' -or
             $smokeText -notmatch 'finalManagedScriptCount=0' -or
@@ -491,6 +493,8 @@ try {
             componentClass = $componentClassPath
             actorLifecycle = 'BeginPlay/Tick/EndPlay passed'
             componentLifecycle = 'BeginPlay/Tick/EndPlay passed'
+            actorBlueprintEvent = 'managed default passed'
+            componentBlueprintEvent = 'managed default passed'
             managedScriptsAtPeak = 2
             lifecycleClaimsAtPeak = 2
             managedWorldCountBefore = [int]$smokeWorlds.Groups[1].Value
@@ -548,6 +552,8 @@ try {
         lifecycle = [ordered]@{
             actor = 'BeginPlay/Tick/EndPlay passed'
             actorComponent = 'BeginPlay/Tick/EndPlay passed'
+            actorBlueprintEvent = 'explicit-Super managed default passed'
+            actorComponentBlueprintEvent = 'explicit-Super managed default passed'
             worldTeardown = 'passed'
         }
         firstPlay = [ordered]@{

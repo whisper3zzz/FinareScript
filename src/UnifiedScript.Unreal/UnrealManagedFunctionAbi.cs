@@ -81,7 +81,7 @@ internal sealed class UnrealManagedFunctionDispatcher
                      BindingFlags.Public |
                      BindingFlags.DeclaredOnly))
         {
-            if (method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is null ||
+            if (!IsReviewedBlueprintCallable(method) ||
                 method.GetCustomAttributes<UnrealEventAttribute>(inherit: false).Any())
             {
                 continue;
@@ -100,6 +100,10 @@ internal sealed class UnrealManagedFunctionDispatcher
         }
         return new UnrealManagedFunctionDispatcher(functions);
     }
+
+    private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
+        method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
+        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null;
 
     public unsafe UnrealManagedFunctionValueV1 Invoke(
         object target,
@@ -360,7 +364,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
         foreach (MethodInfo method in scriptType.GetMethods(flags))
         {
             if (method.IsStatic != staticOnly ||
-                method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is null ||
+                !IsReviewedBlueprintCallable(method) ||
                 method.GetCustomAttributes<UnrealEventAttribute>(inherit: false).Any())
             {
                 continue;
@@ -379,6 +383,10 @@ internal sealed class UnrealManagedFunctionDispatcherV2
         }
         return new UnrealManagedFunctionDispatcherV2(scriptType, staticOnly, functions);
     }
+
+    private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
+        method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
+        method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null;
 
     public void Invoke(object? target, string functionName, nint frameAddress)
     {

@@ -65,7 +65,8 @@ public sealed class VisualProfileValidator
             _ => name.ToString().Split('.').Last(),
         };
 
-        return shortName is "Visual" or "VisualAttribute";
+        return shortName is "Visual" or "VisualAttribute" or
+            "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute";
     }
 
     private static void ValidateMethodDeclaration(

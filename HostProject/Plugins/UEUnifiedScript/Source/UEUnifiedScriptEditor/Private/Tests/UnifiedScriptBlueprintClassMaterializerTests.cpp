@@ -7,6 +7,8 @@
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "K2Node_CallParentFunction.h"
+#include "K2Node_Event.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "HAL/FileManager.h"
@@ -113,7 +115,8 @@ FString Function(
     bool bIsStatic = false,
     bool bIsPublic = true,
     bool bIsEvent = false,
-    const FString& ReturnUnrealType = FString())
+    const FString& ReturnUnrealType = FString(),
+    bool bBlueprintEvent = false)
 {
     return FString::Printf(
         TEXT(R"JSON({
@@ -123,7 +126,7 @@ FString Function(
       "returnTypeMetadataName": "%s"%s,
       "isStatic": %s,
       "isPublic": %s,
-      "isEvent": %s,
+      "isEvent": %s%s,
       "parameters": [%s]
     })JSON"),
         Id,
@@ -138,7 +141,33 @@ FString Function(
         bIsStatic ? TEXT("true") : TEXT("false"),
         bIsPublic ? TEXT("true") : TEXT("false"),
         bIsEvent ? TEXT("true") : TEXT("false"),
+        bBlueprintEvent
+            ? TEXT(",\n      \"blueprintEvent\": { \"superMode\": \"explicit\" }")
+            : TEXT(""),
         *Parameters);
+}
+
+FString LifecycleHooks()
+{
+    return TEXT(R"JSON(
+      {
+        "id": "us_11111111111111111111111111111110",
+        "kind": "beginPlay",
+        "managedName": "OnBeginPlay",
+        "span": { "filePath": "Managed/StateActor.cs", "start": { "line": 1, "column": 1 }, "end": { "line": 1, "column": 2 } }
+      },
+      {
+        "id": "us_22222222222222222222222222222220",
+        "kind": "tick",
+        "managedName": "OnTick",
+        "span": { "filePath": "Managed/StateActor.cs", "start": { "line": 2, "column": 1 }, "end": { "line": 2, "column": 2 } }
+      },
+      {
+        "id": "us_33333333333333333333333333333330",
+        "kind": "endPlay",
+        "managedName": "OnEndPlay",
+        "span": { "filePath": "Managed/StateActor.cs", "start": { "line": 3, "column": 1 }, "end": { "line": 3, "column": 2 } }
+      })JSON");
 }
 
 FString InteropModeType()
@@ -202,6 +231,19 @@ FString InitialFunctions()
                 TEXT("System.Void"),
                 FString()),
             Function(
+                TEXT("dddddddddddddddddddddddddddddddd"),
+                TEXT("Activate"),
+                TEXT("System.Void"),
+                Parameter(
+                    TEXT("d1111111111111111111111111111111"),
+                    TEXT("amount"),
+                    TEXT("System.Int32")),
+                false,
+                true,
+                false,
+                FString(),
+                true),
+            Function(
                 TEXT("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
                 TEXT("InternalEvent"),
                 TEXT("System.Void"),
@@ -223,11 +265,28 @@ FString ReloadedFunctions()
             Parameter(TEXT("a4444444444444444444444444444444"), TEXT("bias"), TEXT("System.Int64")),
         },
         TEXT(","));
-    return Function(
-        TEXT("88888888888888888888888888888888"),
-        TEXT("Combine"),
-        TEXT("System.Int64"),
-        MixParameters);
+    return FString::Join(
+        TArray<FString>{
+            Function(
+                TEXT("88888888888888888888888888888888"),
+                TEXT("Combine"),
+                TEXT("System.Int64"),
+                MixParameters),
+            Function(
+                TEXT("dddddddddddddddddddddddddddddddd"),
+                TEXT("Activate"),
+                TEXT("System.Void"),
+                Parameter(
+                    TEXT("d1111111111111111111111111111111"),
+                    TEXT("amount"),
+                    TEXT("System.Int32")),
+                false,
+                true,
+                false,
+                FString(),
+                true),
+        },
+        TEXT(","));
 }
 
 FString Document(
@@ -235,7 +294,8 @@ FString Document(
     const FString& Functions = FString(),
     const TCHAR* AssetId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
     const TCHAR* QualifiedName = TEXT("Tests.StateActor"),
-    const TCHAR* AssetPath = TEXT("Tests/StateActor"))
+    const TCHAR* AssetPath = TEXT("Tests/StateActor"),
+    const FString& Lifecycle = FString())
 {
     return FString::Printf(
         TEXT(R"JSON(
@@ -254,7 +314,8 @@ FString Document(
     },
     "states": [%s
     ],
-    "functions": [%s]
+    "functions": [%s],
+    "lifecycleHooks": [%s]
   }]
 }
 )JSON"),
@@ -262,7 +323,19 @@ FString Document(
         QualifiedName,
         AssetPath,
         *States,
-        *Functions);
+        *Functions,
+        *Lifecycle);
+}
+
+FString ActorDocument(const FString& States, const FString& Functions)
+{
+    return Document(
+        States,
+        Functions,
+        TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        TEXT("Tests.StateActor"),
+        TEXT("Tests/StateActor"),
+        LifecycleHooks());
 }
 
 FString InitialStates()
@@ -421,7 +494,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     const bool bInitial = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(InitialStates(), InitialFunctions()),
+        ActorDocument(InitialStates(), InitialFunctions()),
         false,
         Result,
         Error);
@@ -433,8 +506,10 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     TestTrue(TEXT("Initial materialization changes the proxy"), Result.bChanged);
     TestEqual(TEXT("Seven reviewed types become properties"), Result.AddedPropertyCount, 7);
     TestEqual(TEXT("Seven states are declared"), Result.DeclaredStateCount, 7);
-    TestEqual(TEXT("Two public non-event functions are declared"), Result.DeclaredFunctionCount, 2);
-    TestEqual(TEXT("Two callable functions become graphs"), Result.AddedFunctionCount, 2);
+    TestEqual(TEXT("Three public managed functions are declared"), Result.DeclaredFunctionCount, 3);
+    TestEqual(TEXT("Three callable functions become graphs"), Result.AddedFunctionCount, 3);
+    TestEqual(TEXT("Three lifecycle hooks are declared"), Result.DeclaredLifecycleHookCount, 3);
+    TestEqual(TEXT("Initial lifecycle identities are persisted"), Result.UpdatedLifecycleHookCount, 3);
     TestEqual(TEXT("Blueprint remains compiled"), Blueprint->Status, BS_UpToDate);
 
     UClass* GeneratedClass = Blueprint->GeneratedClass;
@@ -442,6 +517,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         Cast<UUnifiedScriptBlueprintGeneratedClass>(GeneratedClass);
     TestNotNull(TEXT("Proxy uses the managed-function generated class"), ManagedGeneratedClass);
     const FName MixInternalName(TEXT("USF_88888888888888888888888888888888"));
+    const FName ActivateInternalName(TEXT("USF_dddddddddddddddddddddddddddddddd"));
     const UFunction* MixFunction = GeneratedClass->FindFunctionByName(
         MixInternalName,
         EIncludeSuperFlag::ExcludeSuper);
@@ -450,8 +526,8 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     {
         TestTrue(TEXT("Managed UFunction is Blueprint callable"),
             MixFunction->HasAnyFunctionFlags(FUNC_BlueprintCallable));
-        TestTrue(TEXT("Managed UFunction avoids unresolved native registration"),
-            !MixFunction->HasAnyFunctionFlags(FUNC_Native));
+        TestTrue(TEXT("Managed UFunction is registered for Blueprint VM dispatch"),
+            MixFunction->HasAnyFunctionFlags(FUNC_Native));
         TestTrue(TEXT("Managed UFunction is bound to generic direct dispatch"),
             ManagedGeneratedClass != nullptr &&
                 ManagedGeneratedClass->IsManagedFunctionBound(MixInternalName));
@@ -486,6 +562,111 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
             TestEqual(TEXT("Binding targets the exact managed name"), Binding->ManagedName, FString(TEXT("Mix")));
             TestEqual(TEXT("Binding persists stable semantic identity"), Binding->FunctionId,
                 Guid(TEXT("88888888888888888888888888888888")));
+        }
+
+        const FUnifiedScriptManagedFunctionBinding* EventBinding =
+            ManagedGeneratedClass->ManagedFunctionBindings.Find(ActivateInternalName);
+        TestTrue(TEXT("Generated class persists the Blueprint event binding"),
+            EventBinding != nullptr);
+        if (EventBinding != nullptr)
+        {
+            TestTrue(TEXT("Binding retains Blueprint event behavior"),
+                EventBinding->bBlueprintEvent);
+            TestEqual(TEXT("Binding retains explicit Super behavior"),
+                EventBinding->BlueprintEventSuperMode,
+                EUnifiedScriptBlueprintEventSuperMode::Explicit);
+        }
+        TestEqual(TEXT("Generated class persists three lifecycle bindings"),
+            ManagedGeneratedClass->ManagedLifecycleBindings.Num(), 3);
+        const FUnifiedScriptManagedLifecycleBinding* TickBinding =
+            ManagedGeneratedClass->ManagedLifecycleBindings.Find(
+                EUnifiedScriptManagedLifecycleHookKind::Tick);
+        TestTrue(TEXT("Tick lifecycle binding exists"), TickBinding != nullptr);
+        if (TickBinding != nullptr)
+        {
+            TestEqual(TEXT("Tick binding retains exact managed method"),
+                TickBinding->ManagedName, FName(TEXT("OnTick")));
+            TestEqual(TEXT("Tick binding retains stable source ID"),
+                TickBinding->HookId,
+                Guid(TEXT("22222222222222222222222222222220")));
+        }
+    }
+    UFunction* ActivateFunction = GeneratedClass->FindFunctionByName(
+        ActivateInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
+    if (TestNotNull(TEXT("Managed Blueprint event becomes a reflected UFunction"),
+            ActivateFunction))
+    {
+        TestTrue(TEXT("Managed event is an ordinary Blueprint event"),
+            ActivateFunction->HasAllFunctionFlags(FUNC_Event | FUNC_BlueprintEvent));
+        TestTrue(TEXT("Managed event remains Blueprint callable"),
+            ActivateFunction->HasAnyFunctionFlags(FUNC_BlueprintCallable));
+        TestTrue(TEXT("Managed event uses the native parent-dispatch contract"),
+            ActivateFunction->HasAnyFunctionFlags(FUNC_Native));
+        TestTrue(TEXT("Blueprint schema exposes the event as overridable"),
+            UEdGraphSchema_K2::CanKismetOverrideFunction(ActivateFunction));
+    }
+    if (ActivateFunction != nullptr)
+    {
+        const FString ChildName = TEXT("BP_UnifiedScriptEventOverride_") + Suffix;
+        UPackage* ChildPackage = CreatePackage(
+            *(TEXT("/Engine/Transient/") + ChildName));
+        UBlueprint* ChildBlueprint = FKismetEditorUtilities::CreateBlueprint(
+            GeneratedClass,
+            ChildPackage,
+            FName(*ChildName),
+            BPTYPE_Normal,
+            UBlueprint::StaticClass(),
+            UBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptBlueprintEventOverride")));
+        UEdGraph* EventGraph = ChildBlueprint != nullptr &&
+                !ChildBlueprint->UbergraphPages.IsEmpty()
+            ? ChildBlueprint->UbergraphPages[0]
+            : nullptr;
+        int32 NodePositionY = 0;
+        UK2Node_Event* OverrideEvent = EventGraph != nullptr
+            ? FKismetEditorUtilities::AddDefaultEventNode(
+                ChildBlueprint,
+                EventGraph,
+                ActivateInternalName,
+                GeneratedClass,
+                NodePositionY)
+            : nullptr;
+        UK2Node_CallParentFunction* ParentCall = nullptr;
+        if (OverrideEvent != nullptr)
+        {
+            FGraphNodeCreator<UK2Node_CallParentFunction> Creator(*EventGraph);
+            ParentCall = Creator.CreateNode();
+            ParentCall->SetFromFunction(ActivateFunction);
+            ParentCall->AllocateDefaultPins();
+            Creator.Finalize();
+            const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+            UEdGraphPin* EventThen = OverrideEvent->FindPin(
+                UEdGraphSchema_K2::PN_Then,
+                EGPD_Output);
+            UEdGraphPin* ParentExec = ParentCall->GetExecPin();
+            UEdGraphPin* EventAmount = OverrideEvent->FindPin(
+                TEXT("amount"),
+                EGPD_Output);
+            UEdGraphPin* ParentAmount = ParentCall->FindPin(
+                TEXT("amount"),
+                EGPD_Input);
+            TestTrue(TEXT("Explicit Super exec path connects"),
+                EventThen != nullptr && ParentExec != nullptr &&
+                Schema->TryCreateConnection(EventThen, ParentExec));
+            TestTrue(TEXT("Explicit Super parameter path connects"),
+                EventAmount != nullptr && ParentAmount != nullptr &&
+                Schema->TryCreateConnection(EventAmount, ParentAmount));
+        }
+        TestNotNull(TEXT("Child Blueprint creates the managed event override"),
+            OverrideEvent);
+        TestNotNull(TEXT("Child override creates an explicit Call Parent Function"),
+            ParentCall);
+        if (ChildBlueprint != nullptr && OverrideEvent != nullptr && ParentCall != nullptr)
+        {
+            FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+            TestEqual(TEXT("Child Blueprint event override compiles"),
+                ChildBlueprint->Status, BS_UpToDate);
         }
     }
     const FBoolProperty* Enabled = FindFProperty<FBoolProperty>(GeneratedClass, TEXT("Enabled"));
@@ -533,6 +714,11 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     {
         return false;
     }
+    ManagedGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    TestTrue(TEXT("Direct Blueprint compile restores managed native dispatch"),
+        ManagedGeneratedClass != nullptr &&
+            ManagedGeneratedClass->IsManagedFunctionBound(MixInternalName));
     UObject* Cdo = Blueprint->GeneratedClass->GetDefaultObject();
     Cdo->Modify();
     Count->SetPropertyValue_InContainer(Cdo, 77);
@@ -540,7 +726,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     const bool bReloaded = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(ReloadedStates(), ReloadedFunctions()),
+        ActorDocument(ReloadedStates(), ReloadedFunctions()),
         false,
         Result,
         Error);
@@ -553,6 +739,8 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     TestEqual(TEXT("One stale generated state is removed"), Result.RemovedPropertyCount, 1);
     TestEqual(TEXT("Stable function rename updates one binding"), Result.UpdatedFunctionCount, 1);
     TestEqual(TEXT("One stale generated function is removed"), Result.RemovedFunctionCount, 1);
+    TestEqual(TEXT("Compatible reload retains lifecycle identities without churn"),
+        Result.UpdatedLifecycleHookCount, 0);
     TestEqual(TEXT("One Blueprint default override is preserved"), Result.PreservedDefaultOverrideCount, 1);
     TestNull(TEXT("Old generated name leaves reflection"), FindFProperty<FProperty>(Blueprint->GeneratedClass, TEXT("Count")));
     TestNull(TEXT("Removed generated state leaves reflection"), FindFProperty<FProperty>(Blueprint->GeneratedClass, TEXT("Enabled")));
@@ -595,12 +783,18 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         {
             TestEqual(TEXT("Stable binding follows the source rename"), Binding->ManagedName, FString(TEXT("Combine")));
         }
+        const FUnifiedScriptManagedFunctionBinding* ReloadedEvent =
+            ManagedGeneratedClass->ManagedFunctionBindings.Find(ActivateInternalName);
+        TestTrue(TEXT("Compatible reload retains the Blueprint event binding"),
+            ReloadedEvent != nullptr && ReloadedEvent->bBlueprintEvent);
+        TestEqual(TEXT("Compatible reload retains all lifecycle bindings"),
+            ManagedGeneratedClass->ManagedLifecycleBindings.Num(), 3);
     }
 
     const bool bNoChange = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         *ScriptAsset,
         *Blueprint,
-        Document(ReloadedStates(), ReloadedFunctions()),
+        ActorDocument(ReloadedStates(), ReloadedFunctions()),
         true,
         Result,
         Error);
@@ -619,7 +813,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(TypeChange, ReloadedFunctions()),
+            ActorDocument(TypeChange, ReloadedFunctions()),
             false,
             Result,
             Error));
@@ -638,7 +832,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(Collision, ReloadedFunctions()),
+            ActorDocument(Collision, ReloadedFunctions()),
             false,
             Result,
             Error));
@@ -656,7 +850,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             *ScriptAsset,
             *Blueprint,
-            Document(Unsupported, ReloadedFunctions()),
+            ActorDocument(Unsupported, ReloadedFunctions()),
             false,
             Result,
             Error));
@@ -700,6 +894,8 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
         TEXT("UnifiedScript.Unreal.Demo.DemoScript");
     constexpr const TCHAR* DemoAssetPath = TEXT("Unreal/Demo");
     constexpr const TCHAR* FunctionId = TEXT("4b2b9a44f72edea2e4f0cdf31376c2d1");
+    constexpr const TCHAR* ActivationFunctionId =
+        TEXT("6c4d746b47fc4fa8ae54f6d4e3ce1a01");
     const FString RewireParameters = FString::Join(
         TArray<FString>{
             Parameter(
@@ -716,7 +912,28 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
         FunctionId,
         TEXT("RewirePreview"),
         TEXT("System.Int32"),
-        RewireParameters);
+        RewireParameters,
+        false,
+        true,
+        false,
+        FString(),
+        true);
+    const FString ActivationFunction = Function(
+        ActivationFunctionId,
+        TEXT("OnManagedActivated"),
+        TEXT("System.Void"),
+        Parameter(
+            TEXT("51cce46fc53049898dddf7bd6139c5ee"),
+            TEXT("amount"),
+            TEXT("System.Int32")),
+        false,
+        true,
+        false,
+        FString(),
+        true);
+    const FString ManagedFunctions = FString::Join(
+        TArray<FString>{RewireFunction, ActivationFunction},
+        TEXT(","));
     const FString InitialValueState = State(
         TEXT("d4463d57397c77264a0e282ca6c29432"),
         TEXT("InitialValue"),
@@ -749,7 +966,7 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
             *Blueprint,
             Document(
                 InitialValueState,
-                RewireFunction,
+                ManagedFunctions,
                 DemoClassId,
                 DemoQualifiedName,
                 DemoAssetPath),
@@ -784,7 +1001,103 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
     {
         return false;
     }
+    TestTrue(TEXT("Live managed dispatch remains a Blueprint event"),
+        ManagedFunction->HasAllFunctionFlags(FUNC_Event | FUNC_BlueprintEvent));
+    const UUnifiedScriptBlueprintGeneratedClass* DispatchGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    const FUnifiedScriptManagedFunctionBinding* DispatchBinding =
+        DispatchGeneratedClass != nullptr
+            ? DispatchGeneratedClass->ManagedFunctionBindings.Find(InternalName)
+            : nullptr;
+    TestTrue(TEXT("Live event binding persists explicit Super semantics"),
+        DispatchBinding != nullptr && DispatchBinding->bBlueprintEvent &&
+        DispatchBinding->BlueprintEventSuperMode ==
+            EUnifiedScriptBlueprintEventSuperMode::Explicit);
 
+    const FName ActivationInternalName(
+        *FString::Printf(TEXT("USF_%s"), ActivationFunctionId));
+    UFunction* ActivationParentFunction =
+        Blueprint->GeneratedClass->FindFunctionByName(
+            ActivationInternalName,
+            EIncludeSuperFlag::ExcludeSuper);
+    const FString ChildName = TEXT("BP_UnifiedScriptManagedSuper_") + Suffix;
+    UPackage* ChildPackage = CreatePackage(
+        *(TEXT("/Engine/Transient/") + ChildName));
+    UBlueprint* ChildBlueprint = ActivationParentFunction != nullptr
+        ? FKismetEditorUtilities::CreateBlueprint(
+            Blueprint->GeneratedClass,
+            ChildPackage,
+            FName(*ChildName),
+            BPTYPE_Normal,
+            UBlueprint::StaticClass(),
+            UBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptBlueprintManagedSuperDispatch")))
+        : nullptr;
+    UEdGraph* ChildEventGraph = ChildBlueprint != nullptr &&
+            !ChildBlueprint->UbergraphPages.IsEmpty()
+        ? ChildBlueprint->UbergraphPages[0]
+        : nullptr;
+    int32 EventPositionY = 0;
+    UK2Node_Event* ActivationOverride = ChildEventGraph != nullptr
+        ? FKismetEditorUtilities::AddDefaultEventNode(
+            ChildBlueprint,
+            ChildEventGraph,
+            ActivationInternalName,
+            Blueprint->GeneratedClass,
+            EventPositionY)
+        : nullptr;
+    UK2Node_CallParentFunction* ActivationParentCall = nullptr;
+    if (ActivationOverride != nullptr)
+    {
+        FGraphNodeCreator<UK2Node_CallParentFunction> Creator(*ChildEventGraph);
+        ActivationParentCall = Creator.CreateNode();
+        ActivationParentCall->SetFromFunction(ActivationParentFunction);
+        ActivationParentCall->AllocateDefaultPins();
+        Creator.Finalize();
+        const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+        UEdGraphPin* EventThen = ActivationOverride->FindPin(
+            UEdGraphSchema_K2::PN_Then,
+            EGPD_Output);
+        UEdGraphPin* ParentExec = ActivationParentCall->GetExecPin();
+        UEdGraphPin* EventAmount = ActivationOverride->FindPin(
+            TEXT("amount"),
+            EGPD_Output);
+        UEdGraphPin* ParentAmount = ActivationParentCall->FindPin(
+            TEXT("amount"),
+            EGPD_Input);
+        TestTrue(TEXT("Live Super exec path connects"),
+            EventThen != nullptr && ParentExec != nullptr &&
+                Schema->TryCreateConnection(EventThen, ParentExec));
+        TestTrue(TEXT("Live Super argument path connects"),
+            EventAmount != nullptr && ParentAmount != nullptr &&
+                Schema->TryCreateConnection(EventAmount, ParentAmount));
+    }
+    if (!TestNotNull(TEXT("Live managed Blueprint event exists"),
+            ActivationParentFunction) ||
+        !TestNotNull(TEXT("Creates a live child Blueprint override"),
+            ActivationOverride) ||
+        !TestNotNull(TEXT("Creates a live explicit Call Parent node"),
+            ActivationParentCall))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    if (!TestEqual(TEXT("Live child Blueprint override compiles"),
+            ChildBlueprint->Status,
+            BS_UpToDate))
+    {
+        return false;
+    }
+    UFunction* CompiledChildOverride =
+        ChildBlueprint->GeneratedClass->FindFunctionByName(
+            ActivationInternalName,
+            EIncludeSuperFlag::ExcludeSuper);
+    if (!TestTrue(TEXT("Child override owns Blueprint bytecode"),
+            CompiledChildOverride != nullptr &&
+                !CompiledChildOverride->HasAnyFunctionFlags(FUNC_Native)))
+    {
+        return false;
+    }
     const int32 InitialManagedWorldCount =
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
@@ -796,7 +1109,7 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
     UUnifiedScriptWorldSubsystem* Host =
         World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
     UUnifiedScriptComponent* Component =
-        NewObject<UUnifiedScriptComponent>(World, Blueprint->GeneratedClass);
+        NewObject<UUnifiedScriptComponent>(World, ChildBlueprint->GeneratedClass);
     const bool bRuntimeObjectsReady =
         TestNotNull(TEXT("Managed dispatch World has a host"), Host) &&
         TestNotNull(TEXT("Creates the generated managed component"), Component);
@@ -821,6 +1134,31 @@ bool FUnifiedScriptBlueprintManagedFunctionDispatchTest::RunTest(
                 TEXT("Blueprint UFunction reaches CoreCLR and returns managed result"),
                 ReturnProperty->GetPropertyValue_InContainer(ParameterMemory),
                 42);
+
+            UFunction* ActivationOverrideFunction = Component->FindFunction(
+                ActivationInternalName);
+            const FIntProperty* AmountProperty = ActivationOverrideFunction != nullptr
+                ? FindFProperty<FIntProperty>(
+                    ActivationOverrideFunction,
+                    TEXT("amount"))
+                : nullptr;
+            if (TestNotNull(TEXT("Child override resolves at runtime"),
+                    ActivationOverrideFunction) &&
+                TestNotNull(TEXT("Child override retains its amount pin"),
+                    AmountProperty))
+            {
+                FStructOnScope ActivationParameters(ActivationOverrideFunction);
+                AmountProperty->SetPropertyValue_InContainer(
+                    ActivationParameters.GetStructMemory(),
+                    5);
+                Component->ProcessEvent(
+                    ActivationOverrideFunction,
+                    ActivationParameters.GetStructMemory());
+                TestEqual(
+                    TEXT("Child Call Parent executes C# with the Blueprint argument"),
+                    Component->ManagedState,
+                    FString(TEXT("Activated:15")));
+            }
             Component->EndPlay(EEndPlayReason::Destroyed);
             TestFalse(TEXT("Managed dispatch instance stops cleanly"),
                 Component->bScriptRunning);

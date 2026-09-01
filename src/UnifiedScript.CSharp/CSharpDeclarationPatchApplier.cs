@@ -262,6 +262,14 @@ public sealed class CSharpDeclarationPatchApplier
                     {
                         return TargetNotFound(addLifecycle.TargetAssetId, "script asset");
                     }
+                    if ((lifecycleAsset.LifecycleHooks ?? []).Any(hook =>
+                            MatchesLifecycle(hook, addLifecycle.Hook)))
+                    {
+                        return Failure(InvalidReplacement(
+                            $"Script asset '{lifecycleAsset.QualifiedName}' already declares the " +
+                            $"'{addLifecycle.Hook}' lifecycle hook.",
+                            lifecycleAsset.Span));
+                    }
                     lifecycleAdds.Add(new LifecycleAddPlan(lifecycleAsset, addLifecycle.Hook));
                     break;
                 case AddUnrealEventHandlerPatchOperation addEvent:
@@ -887,7 +895,6 @@ public sealed class CSharpDeclarationPatchApplier
             _ => throw new InvalidOperationException($"Unsupported lifecycle hook '{hook}'."),
         };
         MethodDeclarationSyntax method = SyntaxFactory.ParseMemberDeclaration(
-            "[global::UnifiedScript.Visual]\n" +
             $"protected override void {signature}\n{{\n}}") as MethodDeclarationSyntax ??
             throw new InvalidOperationException("A validated lifecycle hook did not parse as a method.");
         return NormalizeMethod(method, containingType);
@@ -952,17 +959,14 @@ public sealed class CSharpDeclarationPatchApplier
         };
         if (spec.IncludeActorLifecycle)
         {
-            lines.Add("    [global::UnifiedScript.Visual]");
             lines.Add("    protected override void OnBeginPlay()");
             lines.Add("    {");
             lines.Add("    }");
             lines.Add(string.Empty);
-            lines.Add("    [global::UnifiedScript.Visual]");
             lines.Add("    protected override void OnTick(float deltaSeconds)");
             lines.Add("    {");
             lines.Add("    }");
             lines.Add(string.Empty);
-            lines.Add("    [global::UnifiedScript.Visual]");
             lines.Add("    protected override void OnEndPlay()");
             lines.Add("    {");
             lines.Add("    }");
@@ -1363,8 +1367,8 @@ public sealed class CSharpDeclarationPatchApplier
                     if (!afterAssets.TryGetValue(
                             addLifecycle.TargetAssetId,
                             out ScriptAssetDeclaration? lifecycleAsset) ||
-                        lifecycleAsset.Functions.Count(function =>
-                            MatchesLifecycle(function, addLifecycle.Hook)) != 1)
+                        (lifecycleAsset.LifecycleHooks ?? []).Count(hook =>
+                            MatchesLifecycle(hook, addLifecycle.Hook)) != 1)
                     {
                         return PostconditionFailed(
                             addLifecycle.TargetAssetId,
@@ -1453,6 +1457,19 @@ public sealed class CSharpDeclarationPatchApplier
             "endPlay" => function.Name == "OnEndPlay" &&
                 function.ReturnTypeMetadataName == "System.Void" &&
                 function.Parameters.Count == 0,
+            _ => false,
+        };
+
+    private static bool MatchesLifecycle(
+        ScriptLifecycleHookDeclaration hook,
+        string expected) => expected switch
+        {
+            "beginPlay" => hook.Kind == ScriptLifecycleHookKind.BeginPlay &&
+                hook.ManagedName == "OnBeginPlay",
+            "tick" => hook.Kind == ScriptLifecycleHookKind.Tick &&
+                hook.ManagedName == "OnTick",
+            "endPlay" => hook.Kind == ScriptLifecycleHookKind.EndPlay &&
+                hook.ManagedName == "OnEndPlay",
             _ => false,
         };
 
@@ -1800,6 +1817,8 @@ public sealed class CSharpDeclarationPatchApplier
                         out FunctionUpdatePlan? update)
                     ? update.Replacement.Name
                     : function.Name)
+                .Concat((asset.LifecycleHooks ?? [])
+                    .Select(static hook => hook.ManagedName))
                 .Concat(functionAdds
                     .Where(add => add.Asset.Id == asset.Id)
                     .Select(static add => add.Function.Name))

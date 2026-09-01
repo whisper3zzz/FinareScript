@@ -280,8 +280,12 @@ public sealed class CSharpScriptAssetLowererTests
             [UnrealScriptClass(UnrealScriptClassKind.Actor)]
             public sealed class ActorBehavior : UnrealActorScript
             {
+                [UnrealBlueprintEvent]
+                public void Activate(int amount) { }
+
                 protected override void OnBeginPlay() { }
                 protected override void OnTick(float deltaSeconds) { }
+                protected override void OnEndPlay() { }
             }
 
             [ScriptAsset("Game/Component", ClassId = "us_00000000000000000000000000000003")]
@@ -296,6 +300,7 @@ public sealed class CSharpScriptAssetLowererTests
 
                 protected override void OnBeginPlay() { }
                 protected override void OnTick(float deltaSeconds) { }
+                protected override void OnEndPlay() { }
             }
 
             [ScriptAsset("Game/Library", ClassId = "us_00000000000000000000000000000004")]
@@ -321,6 +326,20 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.True(Assert.Single(library.Functions).IsPublic);
         Assert.False(Assert.Single(library.Functions).IsEvent);
         Assert.Empty(library.States);
+        ScriptAssetDeclaration actor = result.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.ActorBehavior");
+        ScriptFunctionDeclaration blueprintEvent = Assert.Single(actor.Functions);
+        Assert.Equal("Activate", blueprintEvent.Name);
+        Assert.Equal(
+            ScriptBlueprintEventSuperMode.Explicit,
+            Assert.IsType<ScriptBlueprintEventDeclaration>(blueprintEvent.BlueprintEvent).SuperMode);
+        Assert.Equal(
+            [ScriptLifecycleHookKind.BeginPlay, ScriptLifecycleHookKind.Tick,
+                ScriptLifecycleHookKind.EndPlay],
+            actor.LifecycleHooks!.Select(static hook => hook.Kind));
+        Assert.Equal(
+            ["OnBeginPlay", "OnTick", "OnEndPlay"],
+            actor.LifecycleHooks!.Select(static hook => hook.ManagedName));
         ScriptFunctionDeclaration eventFunction = Assert.Single(
             result.ScriptAssets.Assets.Single(
                 static asset => asset.QualifiedName == "Game.ComponentBehavior").Functions);
@@ -331,6 +350,57 @@ public sealed class CSharpScriptAssetLowererTests
             Assert.Single(result.ScriptAssets.Assets
                 .Single(static asset => asset.QualifiedName == "Game.ObjectBehavior")
             .Functions).Name);
+    }
+
+    [Fact]
+    public void GameplayLifecycleAndBlueprintEventIdsSurviveBodyEdits()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            [ScriptAsset("Game/LifecycleActor", ClassId = "us_00000000000000000000000000000007")]
+            [UnrealScriptClass(UnrealScriptClassKind.Actor)]
+            public sealed class LifecycleActor : UnrealActorScript
+            {
+                [Expose]
+                public int Value { get; set; } = 0;
+
+                [UnrealBlueprintEvent]
+                public void Activate(int amount) { Value = amount; }
+
+                protected override void OnBeginPlay() { Value = 1; }
+                protected override void OnTick(float deltaSeconds) { Value += 1; }
+                protected override void OnEndPlay() { Value = 0; }
+            }
+            """;
+        var firstRequest = new CSharpCompilationRequest(
+            "StableGameplayContract",
+            [new CSharpSourceDocument("Game/LifecycleActor.cs", source)],
+            [typeof(UnrealActorScript).Assembly.Location]);
+        var editedRequest = new CSharpCompilationRequest(
+            "StableGameplayContract",
+            [new CSharpSourceDocument(
+                "Game/LifecycleActor.cs",
+                source.Replace("Value += 1", "Value += 2", StringComparison.Ordinal)
+                    .Replace("Value = amount", "Value = amount + 1", StringComparison.Ordinal))],
+            [typeof(UnrealActorScript).Assembly.Location]);
+
+        CSharpAnalysisResult first = new CSharpSemanticPipeline().Analyze(firstRequest);
+        CSharpAnalysisResult edited = new CSharpSemanticPipeline().Analyze(editedRequest);
+
+        Assert.True(first.Succeeded, string.Join(Environment.NewLine, first.Diagnostics));
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        ScriptAssetDeclaration firstAsset = Assert.Single(first.ScriptAssets!.Assets);
+        ScriptAssetDeclaration editedAsset = Assert.Single(edited.ScriptAssets!.Assets);
+        Assert.Equal(
+            firstAsset.LifecycleHooks!.Select(static hook => (hook.Kind, hook.Id)),
+            editedAsset.LifecycleHooks!.Select(static hook => (hook.Kind, hook.Id)));
+        Assert.Equal(Assert.Single(firstAsset.Functions).Id, Assert.Single(editedAsset.Functions).Id);
+        Assert.Contains("\"blueprintEvent\"", ScriptAssetJson.Serialize(first.ScriptAssets));
+        Assert.Contains("\"lifecycleHooks\"", ScriptAssetJson.Serialize(first.ScriptAssets));
     }
 
     [Fact]

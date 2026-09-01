@@ -34,6 +34,8 @@ const FName DeclarationDefaultKey(TEXT("UnifiedScript.DeclarationDefault"));
 const FName ManagedFunctionKey(TEXT("UnifiedScript.ManagedFunction"));
 const FName FunctionIdKey(TEXT("UnifiedScript.FunctionId"));
 const FName ManagedFunctionNameKey(TEXT("UnifiedScript.ManagedName"));
+const FName BlueprintEventKey(TEXT("UnifiedScript.BlueprintEvent"));
+const FName BlueprintEventSuperModeKey(TEXT("UnifiedScript.SuperMode"));
 const FName WorldContextObjectName(TEXT("WorldContextObject"));
 
 struct FStateDeclaration
@@ -92,7 +94,18 @@ struct FFunctionDeclaration
     FFunctionValueTypeDeclaration ReturnValueType;
     bool bHasReturnValue = false;
     bool bIsStatic = false;
+    bool bBlueprintEvent = false;
+    EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
+        EUnifiedScriptBlueprintEventSuperMode::Explicit;
     TArray<FFunctionParameterDeclaration> Parameters;
+};
+
+struct FLifecycleDeclaration
+{
+    EUnifiedScriptManagedLifecycleHookKind Kind =
+        EUnifiedScriptManagedLifecycleHookKind::BeginPlay;
+    FName ManagedName;
+    FGuid Id;
 };
 
 struct FPlannedFunction
@@ -108,6 +121,9 @@ struct FSyncPlan
     TArray<FName> StaleGeneratedVariables;
     TArray<FPlannedFunction> Functions;
     TArray<FGuid> StaleGeneratedFunctionIds;
+    TMap<EUnifiedScriptManagedLifecycleHookKind, FUnifiedScriptManagedLifecycleBinding>
+        LifecycleBindings;
+    bool bLifecycleBindingsChanged = false;
 };
 
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
@@ -363,6 +379,17 @@ bool FunctionGraphSignatureMatches(
     {
         return false;
     }
+    const int32 RelevantFlags = FUNC_Public | FUNC_BlueprintCallable | FUNC_Static |
+        FUNC_Event | FUNC_BlueprintEvent;
+    const int32 ExpectedFlags = FUNC_Public | FUNC_BlueprintCallable |
+        (Declaration.bIsStatic ? FUNC_Static : FUNC_None) |
+        (Declaration.bBlueprintEvent
+            ? static_cast<int32>(FUNC_Event | FUNC_BlueprintEvent)
+            : FUNC_None);
+    if ((EntryNodes[0]->GetExtraFlags() & RelevantFlags) != ExpectedFlags)
+    {
+        return false;
+    }
     if (Declaration.bIsStatic)
     {
         const TSharedPtr<FUserPinInfo>& WorldContextPin =
@@ -420,6 +447,12 @@ bool FunctionGraphMatches(
         Metadata->HasMetaData(TEXT("DisplayName")) &&
         Metadata->GetMetaData(TEXT("DisplayName")) ==
             Declaration.ManagedName.ToString() &&
+        Metadata->HasMetaData(BlueprintEventKey) &&
+        Metadata->GetMetaData(BlueprintEventKey) ==
+            (Declaration.bBlueprintEvent ? TEXT("true") : TEXT("false")) &&
+        Metadata->HasMetaData(BlueprintEventSuperModeKey) &&
+        Metadata->GetMetaData(BlueprintEventSuperModeKey) ==
+            (Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none")) &&
         (!Declaration.bIsStatic ||
          (Metadata->HasMetaData(TEXT("WorldContext")) &&
           Metadata->GetMetaData(TEXT("WorldContext")) ==
@@ -669,6 +702,7 @@ bool ParseDeclaration(
     const FString& DeclarationJson,
     TArray<FStateDeclaration>& OutStates,
     TArray<FFunctionDeclaration>& OutFunctions,
+    TArray<FLifecycleDeclaration>& OutLifecycleHooks,
     FString& OutError)
 {
     TSharedPtr<FJsonObject> Root;
@@ -865,6 +899,85 @@ bool ParseDeclaration(
         OutStates.Add(MoveTemp(Declaration));
     }
 
+    OutLifecycleHooks.Reset();
+    const TArray<TSharedPtr<FJsonValue>>* LifecycleHooks = nullptr;
+    if (SelectedAsset->HasField(TEXT("lifecycleHooks")) &&
+        (!SelectedAsset->TryGetArrayField(TEXT("lifecycleHooks"), LifecycleHooks) ||
+         LifecycleHooks == nullptr))
+    {
+        OutError = TEXT("Script Class lifecycleHooks must be an array.");
+        return false;
+    }
+    const bool bGameplayLifecycle =
+        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::Actor ||
+        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::ActorComponent;
+    if (LifecycleHooks != nullptr && !LifecycleHooks->IsEmpty() && !bGameplayLifecycle)
+    {
+        OutError = TEXT("Only Actor and ActorComponent Script Classes can declare gameplay lifecycle hooks.");
+        return false;
+    }
+    TSet<FGuid> SeenLifecycleIds;
+    TSet<EUnifiedScriptManagedLifecycleHookKind> SeenLifecycleKinds;
+    if (LifecycleHooks != nullptr)
+    {
+        OutLifecycleHooks.Reserve(LifecycleHooks->Num());
+        for (const TSharedPtr<FJsonValue>& HookValue : *LifecycleHooks)
+        {
+            const TSharedPtr<FJsonObject> Hook = HookValue.IsValid()
+                ? HookValue->AsObject()
+                : nullptr;
+            FString SemanticId;
+            FString Kind;
+            FString ManagedName;
+            if (!ReadRequiredString(Hook, TEXT("id"), SemanticId, OutError) ||
+                !ReadRequiredString(Hook, TEXT("kind"), Kind, OutError) ||
+                !ReadRequiredString(Hook, TEXT("managedName"), ManagedName, OutError))
+            {
+                return false;
+            }
+
+            FLifecycleDeclaration Declaration;
+            FString ExpectedName;
+            if (Kind == TEXT("beginPlay"))
+            {
+                Declaration.Kind = EUnifiedScriptManagedLifecycleHookKind::BeginPlay;
+                ExpectedName = TEXT("OnBeginPlay");
+            }
+            else if (Kind == TEXT("tick"))
+            {
+                Declaration.Kind = EUnifiedScriptManagedLifecycleHookKind::Tick;
+                ExpectedName = TEXT("OnTick");
+            }
+            else if (Kind == TEXT("endPlay"))
+            {
+                Declaration.Kind = EUnifiedScriptManagedLifecycleHookKind::EndPlay;
+                ExpectedName = TEXT("OnEndPlay");
+            }
+            else
+            {
+                OutError = FString::Printf(
+                    TEXT("Lifecycle hook '%s' has an unsupported kind '%s'."),
+                    *ManagedName,
+                    *Kind);
+                return false;
+            }
+            Declaration.ManagedName = FName(*ManagedName);
+            if (!ParseSemanticId(SemanticId, Declaration.Id) ||
+                Declaration.ManagedName.IsNone() || ManagedName != ExpectedName ||
+                SeenLifecycleIds.Contains(Declaration.Id) ||
+                SeenLifecycleKinds.Contains(Declaration.Kind))
+            {
+                OutError = FString::Printf(
+                    TEXT("Lifecycle hook '%s' has an invalid, duplicate, or mismatched stable identity."),
+                    *ManagedName);
+                return false;
+            }
+            SeenLifecycleIds.Add(Declaration.Id);
+            SeenLifecycleKinds.Add(Declaration.Kind);
+            OutLifecycleHooks.Add(MoveTemp(Declaration));
+        }
+    }
+
     OutFunctions.Reset();
     const bool bStaticLibrary =
         ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary;
@@ -915,6 +1028,29 @@ bool ParseDeclaration(
         {
             continue;
         }
+
+        const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+        if (Function->HasField(TEXT("blueprintEvent")))
+        {
+            FString SuperMode;
+            if (!Function->TryGetObjectField(TEXT("blueprintEvent"), BlueprintEvent) ||
+                BlueprintEvent == nullptr || !BlueprintEvent->IsValid() ||
+                !ReadRequiredString(*BlueprintEvent, TEXT("superMode"), SuperMode, OutError) ||
+                SuperMode != TEXT("explicit"))
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint event '%s' requires superMode 'explicit'."),
+                    *Name);
+                return false;
+            }
+            if (!bGameplayLifecycle || bIsStatic)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint event '%s' must be an Actor or ActorComponent instance method."),
+                    *Name);
+                return false;
+            }
+        }
         if (bIsStatic != bStaticLibrary)
         {
             OutError = bStaticLibrary
@@ -940,6 +1076,7 @@ bool ParseDeclaration(
         Declaration.ManagedName = FName(*Name);
         Declaration.ReturnTypeMetadataName = ReturnType;
         Declaration.bIsStatic = bIsStatic;
+        Declaration.bBlueprintEvent = BlueprintEvent != nullptr;
         if (!ParseSemanticId(SemanticId, Declaration.Id) ||
             Declaration.ManagedName.IsNone() ||
             SeenFunctionIds.Contains(Declaration.Id) ||
@@ -1379,6 +1516,61 @@ bool BuildFunctionPlan(
     return true;
 }
 
+bool BuildLifecyclePlan(
+    const UBlueprint& Blueprint,
+    TConstArrayView<FLifecycleDeclaration> Declarations,
+    FSyncPlan& OutPlan,
+    FUnifiedScriptBlueprintClassSyncResult& OutResult,
+    FString& OutError)
+{
+    OutPlan.LifecycleBindings.Reset();
+    for (const FLifecycleDeclaration& Declaration : Declarations)
+    {
+        FUnifiedScriptManagedLifecycleBinding Binding;
+        Binding.ManagedName = Declaration.ManagedName;
+        Binding.HookId = Declaration.Id;
+        OutPlan.LifecycleBindings.Add(Declaration.Kind, MoveTemp(Binding));
+    }
+
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+    if (!Declarations.IsEmpty() && GeneratedClass == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Generated Blueprint '%s' cannot persist managed lifecycle identities."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+
+    bool bMatches = GeneratedClass != nullptr &&
+        GeneratedClass->ManagedLifecycleBindings.Num() ==
+            OutPlan.LifecycleBindings.Num();
+    if (bMatches)
+    {
+        for (const TPair<
+                 EUnifiedScriptManagedLifecycleHookKind,
+                 FUnifiedScriptManagedLifecycleBinding>& Pair :
+             OutPlan.LifecycleBindings)
+        {
+            const FUnifiedScriptManagedLifecycleBinding* Existing =
+                GeneratedClass->ManagedLifecycleBindings.Find(Pair.Key);
+            if (Existing == nullptr ||
+                Existing->ManagedName != Pair.Value.ManagedName ||
+                Existing->HookId != Pair.Value.HookId)
+            {
+                bMatches = false;
+                break;
+            }
+        }
+    }
+
+    OutPlan.bLifecycleBindingsChanged = !bMatches;
+    OutResult.DeclaredLifecycleHookCount = Declarations.Num();
+    OutResult.UpdatedLifecycleHookCount = bMatches ? 0 : Declarations.Num();
+    OutResult.bChanged |= !bMatches;
+    return true;
+}
+
 FName MakeTemporaryName(const UBlueprint& Blueprint, const FGuid& Id)
 {
     FString Base = FString::Printf(
@@ -1455,7 +1647,10 @@ bool ConfigureFunctionGraph(
     Entry->CustomGeneratedFunctionName = Declaration.InternalName;
     Entry->SetExtraFlags(
         FUNC_Public | FUNC_BlueprintCallable |
-        (Declaration.bIsStatic ? FUNC_Static : FUNC_None));
+        (Declaration.bIsStatic ? FUNC_Static : FUNC_None) |
+        (Declaration.bBlueprintEvent
+            ? static_cast<int32>(FUNC_Event | FUNC_BlueprintEvent)
+            : FUNC_None));
     Entry->MetaData.Category = FText::FromString(DefaultCategory);
     Entry->MetaData.ToolTip = FText::FromString(FString::Printf(
         TEXT("Managed Script Class method %s"),
@@ -1468,6 +1663,12 @@ bool ConfigureFunctionGraph(
     Entry->MetaData.SetMetaData(
         TEXT("DisplayName"),
         FString(Declaration.ManagedName.ToString()));
+    Entry->MetaData.SetMetaData(
+        BlueprintEventKey,
+        FString(Declaration.bBlueprintEvent ? TEXT("true") : TEXT("false")));
+    Entry->MetaData.SetMetaData(
+        BlueprintEventSuperModeKey,
+        FString(Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none")));
     if (Declaration.bIsStatic)
     {
         Entry->MetaData.SetMetaData(
@@ -1723,7 +1924,8 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
     }
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
-    if (!Plan.Functions.IsEmpty() && GeneratedClass == nullptr)
+    if ((!Plan.Functions.IsEmpty() || !Plan.LifecycleBindings.IsEmpty()) &&
+        GeneratedClass == nullptr)
     {
         if (Blueprint.GetOuter() == GetTransientPackage())
         {
@@ -1745,6 +1947,7 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
         GeneratedClass->ManagedScriptAsset = UnifiedBlueprint != nullptr
             ? UnifiedBlueprint->ScriptAsset
             : nullptr;
+        GeneratedClass->ManagedLifecycleBindings = Plan.LifecycleBindings;
         GeneratedClass->ManagedFunctionBindings.Reset();
         for (const FPlannedFunction& Planned : Plan.Functions)
         {
@@ -1753,6 +1956,9 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Binding.FunctionId = Planned.Declaration.Id;
             Binding.AbiVersion = 2;
             Binding.bStatic = Planned.Declaration.bIsStatic;
+            Binding.bBlueprintEvent = Planned.Declaration.bBlueprintEvent;
+            Binding.BlueprintEventSuperMode =
+                Planned.Declaration.BlueprintEventSuperMode;
             Binding.ReturnType = MakeRuntimeValueTypeBinding(
                 Planned.Declaration.ReturnValueType);
             Binding.ParameterTypes.Reserve(Planned.Declaration.Parameters.Num());
@@ -1915,11 +2121,13 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
 
     TArray<FStateDeclaration> StateDeclarations;
     TArray<FFunctionDeclaration> FunctionDeclarations;
+    TArray<FLifecycleDeclaration> LifecycleDeclarations;
     if (!ParseDeclaration(
             ScriptAsset,
             DeclarationJson,
             StateDeclarations,
             FunctionDeclarations,
+            LifecycleDeclarations,
             OutError))
     {
         return false;
@@ -1930,6 +2138,12 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         !BuildFunctionPlan(
             Blueprint,
             FunctionDeclarations,
+            Plan,
+            OutResult,
+            OutError) ||
+        !BuildLifecyclePlan(
+            Blueprint,
+            LifecycleDeclarations,
             Plan,
             OutResult,
             OutError) ||

@@ -10,9 +10,12 @@
 #include "Modules/ModuleManager.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "UObject/StructOnScope.h"
+#include "UObject/UnrealType.h"
 
 namespace UE::UnifiedScript::PackagedScriptClassSmoke::Private
 {
@@ -51,6 +54,105 @@ void Finish(bool bSuccess, const FString& Detail)
         false,
         bSuccess ? 0 : 1,
         TEXT("UnifiedScriptScriptClassPackagedSmoke"));
+}
+
+bool InvokeManagedBlueprintEvent(
+    UObject& Target,
+    UClass& GeneratedClass,
+    int32 Amount,
+    int32 ExpectedState,
+    FString& OutError)
+{
+    const UUnifiedScriptBlueprintGeneratedClass* ManagedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(&GeneratedClass);
+    if (ManagedClass == nullptr || ManagedClass->ManagedLifecycleBindings.Num() != 3)
+    {
+        OutError = TEXT("GeneratedClass did not retain all lifecycle identities.");
+        return false;
+    }
+
+    FName EventName = NAME_None;
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         ManagedClass->ManagedFunctionBindings)
+    {
+        if (Pair.Value.ManagedName == TEXT("OnManagedActivated"))
+        {
+            if (!Pair.Value.bBlueprintEvent ||
+                Pair.Value.BlueprintEventSuperMode !=
+                    EUnifiedScriptBlueprintEventSuperMode::Explicit)
+            {
+                OutError = TEXT("Packaged managed Event lost its explicit Super contract.");
+                return false;
+            }
+            EventName = Pair.Key;
+            break;
+        }
+    }
+    UFunction* EventFunction = EventName.IsNone()
+        ? nullptr
+        : GeneratedClass.FindFunctionByName(
+            EventName,
+            EIncludeSuperFlag::ExcludeSuper);
+    FIntProperty* AmountProperty = EventFunction != nullptr
+        ? FindFProperty<FIntProperty>(EventFunction, TEXT("amount"))
+        : nullptr;
+    FIntProperty* StateProperty = FindFProperty<FIntProperty>(
+        &GeneratedClass,
+        TEXT("StartValue"));
+    if (EventFunction == nullptr || AmountProperty == nullptr ||
+        StateProperty == nullptr ||
+        !EventFunction->HasAllFunctionFlags(FUNC_Event | FUNC_BlueprintEvent))
+    {
+        OutError = TEXT("Packaged managed Event reflection contract is incomplete.");
+        return false;
+    }
+    if (!ManagedClass->IsManagedFunctionBound(EventName))
+    {
+        OutError = TEXT("Packaged managed Event lost its native dispatcher.");
+        return false;
+    }
+#if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
+    if (EventFunction->EventGraphFunction != nullptr)
+    {
+        OutError = TEXT("Packaged managed Event still targets an empty fast-call graph.");
+        return false;
+    }
+#endif
+#if !WITH_EDITOR
+    if (!EventFunction->HasAnyFunctionFlags(FUNC_Native))
+    {
+        OutError = TEXT("Packaged managed Event lost its native dispatch flag.");
+        return false;
+    }
+#endif
+    const int32 EventCallspace = Target.GetFunctionCallspace(EventFunction, nullptr);
+    if ((EventCallspace & FunctionCallspace::Local) == 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Packaged managed Event is not locally callable (callspace=%d flags=0x%08X)."),
+            EventCallspace,
+            static_cast<uint32>(EventFunction->FunctionFlags));
+        return false;
+    }
+
+    FStructOnScope Parameters(EventFunction);
+    AmountProperty->SetPropertyValue_InContainer(
+        Parameters.GetStructMemory(),
+        Amount);
+    Target.ProcessEvent(EventFunction, Parameters.GetStructMemory());
+    const int32 State = StateProperty->GetPropertyValue_InContainer(&Target);
+    if (State != ExpectedState)
+    {
+        OutError = FString::Printf(
+            TEXT("Packaged managed Event returned state %d instead of %d (callspace=%d flags=0x%08X scriptBytes=%d)."),
+            State,
+            ExpectedState,
+            EventCallspace,
+            static_cast<uint32>(EventFunction->FunctionFlags),
+            EventFunction->Script.Num());
+        return false;
+    }
+    return true;
 }
 
 void Run()
@@ -102,6 +204,11 @@ void Run()
         ComponentOwner->AddInstanceComponent(AttachedComponent);
         AttachedComponent->RegisterComponentWithWorld(World);
     }
+    // AActor::ProcessEvent intentionally ignores gameplay events until its
+    // World has routed actor initialization. Keep this packaged smoke on the
+    // same execution path as a real game World instead of calling components
+    // manually inside an uninitialized test shell.
+    World->InitializeActorsForPlay(FURL());
 
     UUnifiedScriptComponent* ActorComponent = ScriptActor != nullptr
         ? ScriptActor->ScriptComponent
@@ -109,7 +216,8 @@ void Run()
     FString Failure;
     FString ActorIdentityError;
     FString ComponentIdentityError;
-    const bool bObjectsReady = Host != nullptr && ScriptActor != nullptr &&
+    const bool bObjectsReady = World->AreActorsInitialized() &&
+        Host != nullptr && ScriptActor != nullptr &&
         ComponentOwner != nullptr && AttachedComponent != nullptr &&
         ActorComponent != nullptr && ActorComponent->ScriptAsset != nullptr &&
         AttachedComponent->ScriptAsset != nullptr;
@@ -188,6 +296,36 @@ void Run()
         Failure = TEXT("Managed Actor or Component Tick failed.");
     }
 
+    bool bActorEvent = false;
+    bool bComponentEvent = false;
+    if (Failure.IsEmpty())
+    {
+        FString EventError;
+        bActorEvent = InvokeManagedBlueprintEvent(
+            *ScriptActor,
+            *ActorClass,
+            3,
+            5,
+            EventError);
+        if (!bActorEvent)
+        {
+            Failure = TEXT("Actor ") + EventError;
+        }
+        else
+        {
+            bComponentEvent = InvokeManagedBlueprintEvent(
+                *AttachedComponent,
+                *ComponentClass,
+                4,
+                6,
+                EventError);
+            if (!bComponentEvent)
+            {
+                Failure = TEXT("ActorComponent ") + EventError;
+            }
+        }
+    }
+
     const FString ActorProgram = ActorComponent != nullptr
         ? ActorComponent->GetActiveProgramPath()
         : FString();
@@ -254,7 +392,7 @@ void Run()
         Failure.IsEmpty(),
         Failure.IsEmpty()
             ? FString::Printf(
-                TEXT("actorClass=%s; componentClass=%s; actorStarted=true; componentStarted=true; actorTicked=true; componentTicked=true; managedScriptCount=2; lifecycleClaimCount=2; finalManagedScriptCount=0; finalLifecycleClaimCount=0; managedWorldCountBefore=%d; managedWorldCountAfter=%d; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
+                TEXT("actorClass=%s; componentClass=%s; actorStarted=true; componentStarted=true; actorTicked=true; componentTicked=true; actorEvent=true; componentEvent=true; managedScriptCount=2; lifecycleClaimCount=2; finalManagedScriptCount=0; finalLifecycleClaimCount=0; managedWorldCountBefore=%d; managedWorldCountAfter=%d; actorProgram=%s; componentProgram=%s; hostfxr=%s"),
                 *ActorClassPath,
                 *ComponentClassPath,
                 InitialManagedWorldCount,

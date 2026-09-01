@@ -704,6 +704,31 @@ old label and sibling identities in every request. Source text and visual wires
 remain compiler-owned until the Workbench accepts, rebuilds, and publishes the
 next Surface generation.
 
+## Phase B.29 managed Script Class lifecycle and Blueprint events
+
+Declaration IR and the compiled chunk now carry stable Actor/ActorComponent
+`OnBeginPlay`, `OnTick`, and `OnEndPlay` lifecycle bindings. Reviewed
+`[UnrealBlueprintEvent]` declarations carry a stable semantic function ID and
+`blueprintEvent.superMode = explicit`; ordinary body edits therefore preserve
+the generated event identity and its Blueprint references.
+
+The Script Class factory scaffolds the Actor and ActorComponent lifecycle
+overrides, while the materializer persists both lifecycle and event bindings on
+the product GeneratedClass. Generated managed functions share one generic
+native thunk. Their transient registrations are rebuilt during bind/load and
+instance initialization, and prepared explicitly before Blueprint recompile,
+so package reload does not depend on a handwritten facade or per-function C++
+member.
+
+A child Blueprint override remains ordinary Kismet bytecode and replaces the
+managed default unless it contains `Call Parent Function`. On that explicit
+parent route, the dispatcher uses `Stack.CurrentNativeFunction` and decodes the
+Blueprint VM argument stream with `Stack.Step` into a reflected parameter
+container before invoking the same World-owned managed instance used by direct
+`ProcessEvent`. The focused live-child test, the 29/29 CMD Automation suite,
+and the packaged Actor/Component Golden Path pass; evidence is under
+`artifacts/m13-3b3a/`.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

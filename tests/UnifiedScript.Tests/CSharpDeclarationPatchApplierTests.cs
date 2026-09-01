@@ -306,7 +306,7 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
-    public void ApplyCreatesRunnableActorScriptAssetWithVisualLifecycleHooks()
+    public void ApplyCreatesRunnableActorScriptAssetWithStableLifecycleHooks()
     {
         const string source = """
             namespace Game;
@@ -340,7 +340,9 @@ public sealed class CSharpDeclarationPatchApplierTests
         Assert.Equal("Gameplay/PlayerBehavior", asset.AssetPath);
         Assert.Equal(
             ["OnBeginPlay", "OnEndPlay", "OnTick"],
-            asset.Functions.Select(static function => function.Name).Order(StringComparer.Ordinal));
+            asset.LifecycleHooks!.Select(static hook => hook.ManagedName)
+                .Order(StringComparer.Ordinal));
+        Assert.Empty(asset.Functions);
         string patched = Assert.Single(result.PatchedRequest!.Sources).Source;
         Assert.Contains("public sealed class PlayerBehavior", patched, StringComparison.Ordinal);
         Assert.Contains("protected override void OnBeginPlay()", patched, StringComparison.Ordinal);
