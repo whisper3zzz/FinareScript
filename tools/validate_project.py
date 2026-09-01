@@ -96,6 +96,8 @@ DOCUMENTS = [
     ROOT / "docs" / "CI.md",
     ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md",
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
+    ROOT / "docs" / "UNREAL_FIRST_PROJECT.md",
+    ROOT / "docs" / "UNREAL_GAMEPLAY_RECIPES.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
     ROOT / "docs" / "ROADMAP.md",
@@ -962,7 +964,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 29
+        and len(release_documents) == 31
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -6903,6 +6905,63 @@ def main() -> int:
     )
     checks.append(
         "M13.2E-3 preserves identity, comments, source text, and layout bidirectionally"
+    )
+    product_guidance_source = (
+        ROOT / "src" / "UnifiedScript.Cli" / "ProductGuidance.cs"
+    ).read_text(encoding="utf-8")
+    product_guidance_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "ProductGuidanceTests.cs"
+    ).read_text(encoding="utf-8")
+    first_project_guide = (
+        ROOT / "docs" / "UNREAL_FIRST_PROJECT.md"
+    ).read_text(encoding="utf-8")
+    gameplay_recipes = (
+        ROOT / "docs" / "UNREAL_GAMEPLAY_RECIPES.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.product-guidance/v0.1" in product_guidance_source
+        and "first-project" in product_guidance_source
+        and "recipes" in product_guidance_source
+        and 'args[0] == "guide"' in cli_source
+        and "guide <index|first-project|recipes>" in cli_source
+        and "guide first-project" in first_project_guide
+        and "adopt $project --sdk-root $sdk --preview" in first_project_guide
+        and "setup-unreal-project.ps1" in first_project_guide
+        and "start-unifiedscript-authoring.ps1" in first_project_guide
+        and "no internal generator ordering or repository path was required"
+        in first_project_guide
+        and all(
+            heading in gameplay_recipes
+            for heading in (
+                "## Actor behavior",
+                "## Component behavior",
+                "## Blueprint event",
+                "## Asset load",
+                "## Spawn Actor",
+                "## Trace and FHitResult",
+                "## UI bridge",
+                "## Async work",
+                "## Packaging",
+            )
+        )
+        and "Unreal API Browser" in gameplay_recipes
+        and "Build, Restart & Continue" in gameplay_recipes
+        and "docs/UNREAL_FIRST_PROJECT.md" in release_document_paths
+        and "docs/UNREAL_GAMEPLAY_RECIPES.md" in release_document_paths
+        and "Documentation\\UNREAL_FIRST_PROJECT.md" in sdk_package
+        and "Documentation\\UNREAL_GAMEPLAY_RECIPES.md" in sdk_package
+        and "projectLocalGuidance" in packaged_adoption
+        and "UNREAL_FIRST_PROJECT.md" in packaged_adoption
+        and "UNREAL_GAMEPLAY_RECIPES.md" in packaged_adoption
+        and "CatalogResolvesPackagedAndProjectLocalDocumentation"
+        in product_guidance_tests
+        and "PackagedGuidanceOwnsTheGoldenPathAndEveryGameplayRecipe"
+        in product_guidance_tests
+        and "[x] **M13.2F — product guidance:**" in roadmap_document,
+        "M13.2F packaged first-project golden path, gameplay recipes, guide resolver, or contract proof is incomplete",
+    )
+    checks.append(
+        "M13.2F packages one discoverable first-project path and nine gameplay task recipes"
     )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"

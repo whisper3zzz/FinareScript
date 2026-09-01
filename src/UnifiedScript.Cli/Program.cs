@@ -138,6 +138,11 @@ internal static class Program
             return RunUnrealProjectDoctor(args);
         }
 
+        if (args.Count > 0 && args[0] == "guide")
+        {
+            return RunProductGuidance(args);
+        }
+
         if (args.Count > 0 && args[0] == "debug-serve")
         {
             return RunDebugServe(args);
@@ -239,6 +244,44 @@ internal static class Program
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunProductGuidance(IReadOnlyList<string> args)
+    {
+        if (args.Count < 2 || args.Count > 5 ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        string topic = args[1];
+        string? sdkRoot = null;
+        bool writeJson = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--json" && !writeJson)
+            {
+                writeJson = true;
+                continue;
+            }
+            if (option == "--sdk-root" && sdkRoot is null && index < args.Count &&
+                !args[index].StartsWith("--", StringComparison.Ordinal))
+            {
+                sdkRoot = args[index++];
+                continue;
+            }
+            PrintUsage();
+            return 64;
+        }
+
+        ProductGuidanceDocument document = ProductGuidanceCatalog.Resolve(topic, sdkRoot);
+        Console.WriteLine(writeJson
+            ? ProductGuidanceCatalog.Serialize(document)
+            : document.Path);
+        return 0;
     }
 
     private static int RunSemanticDiff(IReadOnlyList<string> args)
@@ -6074,6 +6117,7 @@ internal static class Program
         "  unifiedscript adopt <Game.uproject> [--preview|--apply] [--sdk-root <directory>] [--template <id>] [--script-name <name>] [--namespace <name>] [--report <plan.json>]\n" +
         "  unifiedscript adopt <Game.uproject> --rollback [--transaction <id>]\n" +
         "  unifiedscript doctor <Game.uproject> [--engine-root <directory>] [--report <doctor.json>]\n" +
+        "  unifiedscript guide <index|first-project|recipes> [--sdk-root <directory>] [--json]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +

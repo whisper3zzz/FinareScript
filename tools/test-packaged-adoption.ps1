@@ -75,6 +75,16 @@ function Invoke-AdoptionCli {
     }
 }
 
+function Invoke-AdoptionCliJson {
+    param([string]$Cli, [string[]]$Arguments)
+
+    $output = @(& $Cli @Arguments)
+    if ($LASTEXITCODE -ne 0) {
+        throw "UnifiedScript CLI failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
+    }
+    return (($output -join "`n") | ConvertFrom-Json)
+}
+
 function New-AdoptionFixture {
     param([string]$Name, [bool]$Native)
 
@@ -148,6 +158,8 @@ foreach ($fixture in @(
             'Plugins\UEUnifiedScript\Tools\run-unifiedscript-onboarding-after-process.ps1',
             'Plugins\UEUnifiedScript\Tools\start-unifiedscript-authoring.ps1',
             'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md',
+            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_FIRST_PROJECT.md',
+            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_GAMEPLAY_RECIPES.md',
             'Plugins\UEUnifiedScript\Authoring\Workbench\index.html',
             "Managed\$assemblyName\FirstScript.cs",
             "Managed\$assemblyName\$assemblyName.slnx",
@@ -192,6 +204,21 @@ foreach ($fixture in @(
 
     $projectPlugin = Join-Path $projectRoot 'Plugins\UEUnifiedScript'
     $projectCli = Join-Path $projectPlugin 'Tools\unifiedscript.cmd'
+    $firstProjectGuide = Invoke-AdoptionCliJson `
+        -Cli $projectCli `
+        -Arguments @('guide', 'first-project', '--json')
+    $gameplayRecipes = Invoke-AdoptionCliJson `
+        -Cli $projectCli `
+        -Arguments @('guide', 'recipes', '--json')
+    $installedDocumentation = Join-Path $projectPlugin 'Tools\Documentation'
+    if ($firstProjectGuide.schemaVersion -ne 'unifiedscript.product-guidance/v0.1' -or
+        $firstProjectGuide.path -ne
+            (Join-Path $installedDocumentation 'UNREAL_FIRST_PROJECT.md') -or
+        $gameplayRecipes.schemaVersion -ne 'unifiedscript.product-guidance/v0.1' -or
+        $gameplayRecipes.path -ne
+            (Join-Path $installedDocumentation 'UNREAL_GAMEPLAY_RECIPES.md')) {
+        throw "Project-local product guidance did not resolve installed documentation for $project"
+    }
     $doctorReportPath = Join-Path $projectRoot `
         'Saved\UnifiedScript\ProjectSetup\doctor-report.json'
     $doctorArguments = @('doctor', $project, '--report', $doctorReportPath)
@@ -289,6 +316,7 @@ foreach ($fixture in @(
         plannedChanges = [int]$preview.summary.changed
         previewFingerprint = [string]$preview.fingerprint
         projectLocalDoctor = [string]$doctor.status
+        projectLocalGuidance = 'passed'
         projectLocalRerunChanges = [int]$rerun.summary.changed
         managedBuild = 'deferredToPackagedNativeOnboarding'
         supportBundle = $supportBundlePath

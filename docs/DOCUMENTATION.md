@@ -9,7 +9,9 @@ unsafe, or outside `docs`.
 ## Start here
 
 - [SDK distribution and installation](UNREAL_SDK.md)
+- [First project golden path](UNREAL_FIRST_PROJECT.md)
 - [First script walkthrough](UNREAL_FIRST_SCRIPT.md)
+- [Gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md)
 - [Project onboarding](UNREAL_ONBOARDING.md)
 - [Script deployment](UNREAL_DEPLOYMENT.md)
 - [Executable sample matrix](UNREAL_SAMPLES.md)

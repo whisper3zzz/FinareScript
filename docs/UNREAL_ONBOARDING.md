@@ -8,6 +8,12 @@ inputs. `--preview` makes no project changes, identical Apply is a no-op, and
 later user edits. `unifiedscript doctor <Game.uproject>` diagnoses the resulting
 ownership, runtime, engine, generation, and cook-readiness state.
 
+New users should follow the packaged
+[first project golden path](UNREAL_FIRST_PROJECT.md) before using this reference.
+The [gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md) then keep Actor,
+Component, Blueprint event, resource, World, UI, async, and packaging work on
+the same project-local Build/Play graph.
+
 `tools/setup-unreal-project.ps1` is the build/onboarding stage used after
 adoption. It turns the managed build, Unreal build, reflection export, binding
 generation, source-driven development-surface expansion, Script Asset

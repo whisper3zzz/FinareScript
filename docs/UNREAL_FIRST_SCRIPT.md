@@ -7,6 +7,13 @@ does not copy source or generated files from HostProject or BlockBreaker, and it
 does not require hand-editing `.uproject`, Contract, deployment, or onboarding
 JSON.
 
+For the shortest packaged-SDK route, start with the
+[first project golden path](UNREAL_FIRST_PROJECT.md). This longer walkthrough
+explains the ownership and recovery details behind that path. Once first Play
+passes, use the [gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md) for Actor,
+Component, Blueprint event, asset load, spawn, trace, UI, async, and packaging
+work.
+
 ## 1. Adopt the existing project
 
 Extract the SDK and run the packaged CLI. `adopt` is Apply by default:

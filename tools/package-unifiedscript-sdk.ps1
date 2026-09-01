@@ -425,6 +425,8 @@ try {
         'Documentation\AUTHORING_SURFACE.md',
         'Documentation\AUTHORING_DIAGNOSTICS.md',
         'Documentation\UNREAL_ONBOARDING.md',
+        'Documentation\UNREAL_FIRST_PROJECT.md',
+        'Documentation\UNREAL_GAMEPLAY_RECIPES.md',
         'Documentation\DIAGNOSTICS_BUNDLES.md',
         'Documentation\RUNTIME_DIAGNOSTICS.md',
         'Documentation\PERFORMANCE_WORKLOAD_SUITE.md',

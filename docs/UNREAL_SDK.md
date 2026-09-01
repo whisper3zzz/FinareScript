@@ -103,6 +103,14 @@ path for both C++ and Blueprint-only projects:
 
 ```powershell
 $sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
+& "$sdk\Tools\unifiedscript.cmd" guide first-project --sdk-root $sdk
+```
+
+That command resolves the hash-manifested
+[first project golden path](UNREAL_FIRST_PROJECT.md). Use `guide recipes` after
+first Play to open the packaged [gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md).
+
+```powershell
 & "$sdk\Tools\unifiedscript.cmd" `
   adopt D:\Project\Game\Game.uproject --sdk-root $sdk
 ```

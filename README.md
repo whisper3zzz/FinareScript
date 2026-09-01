@@ -173,6 +173,9 @@ engine-specific native outputs. See [Unreal SDK distribution](docs/UNREAL_SDK.md
 To take a newly installed C++ project from no scripts to editor play, visual
 editing, hot reload, and packaged play, follow
 [First UnifiedScript in an Unreal project](docs/UNREAL_FIRST_SCRIPT.md).
+For the shorter product path use
+[First project golden path](docs/UNREAL_FIRST_PROJECT.md), then continue through
+the [Unreal gameplay task recipes](docs/UNREAL_GAMEPLAY_RECIPES.md).
 
 Run the complete repository alpha gate with:
 

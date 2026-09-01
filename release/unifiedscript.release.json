@@ -37,6 +37,18 @@
       "path": "docs/UNREAL_FIRST_SCRIPT.md"
     },
     {
+      "id": "first-project",
+      "category": "onboarding",
+      "title": "First project golden path",
+      "path": "docs/UNREAL_FIRST_PROJECT.md"
+    },
+    {
+      "id": "gameplay-recipes",
+      "category": "onboarding",
+      "title": "Gameplay task recipes",
+      "path": "docs/UNREAL_GAMEPLAY_RECIPES.md"
+    },
+    {
       "id": "onboarding",
       "category": "onboarding",
       "title": "Project onboarding",
