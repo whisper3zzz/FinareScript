@@ -821,6 +821,42 @@ bool ReplaceUniqueCapture(
     return true;
 }
 
+bool ReplaceOptionalUniqueCapture(
+    FString& Source,
+    const FRegexPattern& Pattern,
+    int32 CaptureIndex,
+    const FString& Expected,
+    const FString& Replacement,
+    const TCHAR* Description,
+    FString& OutError)
+{
+    FRegexMatcher Matcher(Pattern, Source);
+    if (!Matcher.FindNext())
+    {
+        return true;
+    }
+    if (Matcher.GetCaptureGroup(CaptureIndex) != Expected)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed source contains stale %s identity '%s'; expected '%s'."),
+            Description,
+            *Matcher.GetCaptureGroup(CaptureIndex),
+            *Expected);
+        return false;
+    }
+    const int32 Begin = Matcher.GetCaptureGroupBeginning(CaptureIndex);
+    const int32 End = Matcher.GetCaptureGroupEnding(CaptureIndex);
+    if (Matcher.FindNext())
+    {
+        OutError = FString::Printf(
+            TEXT("Managed source contains more than one %s identity."),
+            Description);
+        return false;
+    }
+    Source = Source.Left(Begin) + Replacement + Source.Mid(End);
+    return true;
+}
+
 bool TransformSourceText(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
@@ -846,6 +882,24 @@ bool TransformSourceText(
             Context.DeclarationAssetPath,
             Target.DeclarationAssetPath,
             TEXT("declaration asset path"),
+            OutError))
+    {
+        return false;
+    }
+
+    const FRegexPattern GeneratedClassPattern(TEXT(
+        R"REGEX(\[\s*UnrealScriptClass\s*\([^)]*GeneratedClassPath\s*=\s*"([^"]+)"[^)]*\)\s*\])REGEX"));
+    const FString ExistingBlueprintClassPath = FString::Printf(
+        TEXT("%s.%s_C"),
+        *Context.BlueprintPackagePath,
+        *Context.OldTypeName);
+    if (!ReplaceOptionalUniqueCapture(
+            Source,
+            GeneratedClassPattern,
+            1,
+            ExistingBlueprintClassPath,
+            Target.BlueprintClassPath,
+            TEXT("generated Blueprint class path"),
             OutError))
     {
         return false;

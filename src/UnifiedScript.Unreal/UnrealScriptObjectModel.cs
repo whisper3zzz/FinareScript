@@ -24,6 +24,7 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
 {
     private CancellationTokenSource? _lifetime;
     private UnrealAsyncScope? _asyncScope;
+    private UnrealScriptStateSynchronizer.StateSession? _stateSession;
     private bool _running;
 
     public UnrealScriptContext Context { get; private set; }
@@ -69,13 +70,17 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         _running = true;
         try
         {
+            _stateSession = UnrealScriptStateSynchronizer.Open(this, context);
+            _stateSession?.Hydrate();
             OnInitialized();
+            _stateSession?.Flush();
         }
         catch
         {
             _lifetime.Cancel();
             _asyncScope.Dispose();
             _asyncScope = null;
+            _stateSession = null;
             _lifetime.Dispose();
             _lifetime = null;
             _running = false;
@@ -91,7 +96,9 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
         _asyncScope!.Advance(deltaSeconds);
+        _stateSession?.Hydrate();
         OnUpdate(deltaSeconds);
+        _stateSession?.Flush();
     }
 
     void IUnrealManagedEventSink.OnUnrealEvent(UnrealScriptEvent scriptEvent)
@@ -105,7 +112,9 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         {
             throw new ArgumentException("A managed Unreal event contains an invalid object handle.", nameof(scriptEvent));
         }
+        _stateSession?.Hydrate();
         OnUnrealEvent(scriptEvent);
+        _stateSession?.Flush();
     }
 
     void IUnrealManagedScript.OnStop()
@@ -120,12 +129,15 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         _asyncScope!.Dispose();
         try
         {
+            _stateSession?.Hydrate();
             OnDestroyed();
+            _stateSession?.Flush();
         }
         finally
         {
             _running = false;
             _asyncScope = null;
+            _stateSession = null;
             _lifetime = null;
             Context = default;
             lifetime.Dispose();

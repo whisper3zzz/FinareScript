@@ -55,6 +55,14 @@ generated outputs, enforce binding coverage, and execute the configured managed
 startup gate without rewriting project source. See
 [Unreal project onboarding](docs/UNREAL_ONBOARDING.md).
 
+For persistent Script Classes, the same Setup run now follows Script Asset
+deployment with generated-class reconciliation. Reviewed managed scalar state
+is compiled as ordinary Blueprint properties with stable semantic GUIDs,
+exposure metadata, and class defaults; managed lifecycle callbacks synchronize
+those fields through cached typed accessors. `-ValidateOnly` also rejects stale
+class output, while user-owned Blueprint members and intentional default
+overrides are preserved.
+
 M7.2 adds generated World services plus the World-scoped Async Service ABI v5
 for Delay, async object/class loading, timeout, cancellation, reload ownership,
 and teardown safety. See [Async Service ABI v5](docs/UNREAL_ASYNC_SERVICE_ABI_V5.md).

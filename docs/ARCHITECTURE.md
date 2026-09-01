@@ -718,6 +718,20 @@ component and Actor hosts cover generated gameplay assembly loading,
 Start/Tick/Stop, reflected events, latent generation cancellation, collectible
 reload, and Declaration IR state materialization with stable-ID migration.
 
+For persistent Script Classes, the Editor's post-deployment class materializer
+also projects reviewed Declaration IR state onto the exact generated Blueprint.
+`bool`, `byte`, `int`, `long`, `float`, `double`, and non-null `string` become
+ordinary compiled `FProperty` fields; the semantic state ID becomes the
+Blueprint variable GUID, while generated-owner/type/previous-default metadata
+supports stable rename, stale-field removal, and preservation of intentional
+Blueprint class-default overrides. A complete preflight rejects user-owned name
+or GUID collisions, unsupported types, and unsafe overridden type changes before
+the real Blueprint is touched. Managed callbacks hydrate and flush those fields
+through strongly typed accessors cached by weak script-type identity and the
+existing invocation bridge, preserving the fast path without retaining a
+collectible hot-reload generation. ActorComponent classes use the component host
+handle; Actor/Object classes use the target handle.
+
 The control plane handles resources, uncommon signatures, properties,
 functions, delegates, and complex values. The data plane publishes borrowed
 Transform snapshots and runs a per-World pre/managed/post scheduler: managed
@@ -738,6 +752,7 @@ closure and pass packaged lifecycle smoke.
 The remaining boundary work is:
 
 - arbitrary control-wire authoring beyond structured block operations;
+- generated Blueprint UFunctions and managed instance/static dispatch;
 - native debug traps, deeper locals, expression evaluation, and remote framing;
 - additional shared-memory gameplay snapshot and batch schemas;
 - platform-specific CoreCLR packaging beyond Win64.

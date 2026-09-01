@@ -56,13 +56,13 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-09-01**
 
 - Active milestone: **M13.3 in progress — Managed Script Class and Blueprint parity**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate**
-- Current tranche: **M13.3B — generated Blueprint-visible properties, functions, and defaults**
-- Current implementation state: **M13.3A is closed. The installed workflow now creates reviewed Actor, ActorComponent, UObject, and BlueprintFunctionLibrary Script Classes with distinct native parents, stable numeric class-kind identity, one universal Blueprint-to-ScriptAsset sidecar, exact managed base/static shape, and lifecycle-only first-Play publication. The next product gap is materializing reviewed managed declarations as ordinary Blueprint-visible properties, functions, and class defaults instead of relying on the fixed native proxy surface**
-- Current verification state: **the M13.3A source passes the .NET 10 managed suite at 664/664, repository validation at 125/125, UE 5.8.1 Editor build, and the complete `UnifiedScript.Unreal` CMD Automation suite at 26/26. The four-kind focused factory contract creates, saves, and deletes all four proxy kinds while checking native parent/target, Blueprint type, sidecar, managed declaration, and first-Play isolation. Evidence is under `artifacts/m13-3a/automation/`; the earlier M13.2G packaged usability evidence remains under `artifacts/m13-2g/`**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical**
+- Current tranche: **M13.3B-2 — generated Blueprint functions and managed dispatch**
+- Current implementation state: **M13.3B-1 is closed. Build now materializes reviewed `bool/byte/int/long/float/double/string` managed state as ordinary Blueprint properties on the exact generated proxy, uses semantic state IDs as `VarGuid`, publishes exposure/category/default metadata, preserves intentional Blueprint class-default overrides, removes only stale generated fields, and rejects user-name collisions or unsafe overridden type changes before mutation. Managed lifecycle synchronization uses weak-key cached typed accessors and the exact generated-class member path, so the fast path does not retain collectible hot-reload generations; ActorComponent state targets its host while Actor/Object state targets the managed object. Class rename/duplicate rewrites that exact path transactionally. The remaining M13.3B gap is generating reflected UFunctions/call nodes and routing them to managed methods without handwritten thunks per declaration**
+- Current verification state: **M13.3B-1 passes the .NET 10 managed suite at 667/667, repository validation at 126/126, UE 5.8.1 Editor build, the focused three-test `UnifiedScript.Unreal.ScriptClass` CMD Automation family, and the complete `UnifiedScript.Unreal` CMD Automation suite at 27/27. The Blueprint state test compiles all seven reviewed property types, stable rename/removal, accepted unoverridden type change, preserved class-default override, user-field survival, idempotent ValidateOnly, and pre-mutation collision/unsupported-type rejection; the lifecycle stress gate also proves cached state contracts do not retain collectible load contexts. Final evidence is under `artifacts/m13-3b/automation/script-class-final-rerun.log`, `artifacts/m13-3b/automation/lifecycle-stress-weak-cache.log`, and `artifacts/m13-3b/automation/unifiedscript-unreal-full-final.log`**
 - Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
-- Next acceptance: **reviewed managed properties, functions, and default values appear on all applicable generated proxy classes with stable reflection identity and no handwritten native member per declaration**
-- Next user-visible slice: **edit a C# property/function/default, build once, and use the result directly from Blueprint Details and call nodes**
+- Next acceptance: **reviewed managed functions appear as ordinary Blueprint call nodes with stable semantic identity, typed pins, static/instance ownership, actionable unsupported-signature diagnostics, and no handwritten native member per declaration**
+- Next user-visible slice: **write a reviewed C# method, build once, and call it directly from a Blueprint graph on the same Script Class**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -2977,6 +2977,15 @@ instead of requiring a pre-authored host Component for each use case.
 - [ ] **M13.3B — reflected members and defaults:** materialize reviewed managed
   properties, functions, metadata, and class defaults on the applicable proxy
   UClass with stable reflection/source identity
+  - [x] **M13.3B-1 — reflected state/default vertical:** materialize reviewed
+    scalar state as compiled Blueprint properties; use semantic IDs as variable
+    GUIDs, preserve intentional class-default overrides, synchronize managed
+    state at lifecycle boundaries through cached typed accessors, and run the
+    exact class reconciliation after Script Asset deployment
+  - [ ] **M13.3B-2 — reflected function/dispatch vertical:** generate reviewed
+    instance/static Blueprint functions and typed pins from Declaration IR,
+    route invocation to the correct managed Script Class instance or library,
+    and preserve function/parameter identity across source edits
 - [ ] support constructor/default state, Blueprint-visible properties and
   functions, lifecycle hooks, Blueprint events, Enhanced Input actions,
   delegates, interfaces, and `Super` dispatch with stable managed/source IDs
@@ -3008,6 +3017,24 @@ passes 26/26, the managed suite passes 664/664, and repository validation passes
 `artifacts/m13-3a/automation/unifiedscript-unreal-full-commit.log` and
 `artifacts/m13-3a/automation/script-class-family-final.log`. The cursor
 advances to M13.3B reflected properties, functions, metadata, and defaults.
+
+Progress (2026-09-01, M13.3B-1): `UnifiedScriptSyncClasses` now runs after
+Script Asset deployment and reconciles each persistent Script Class against its
+selected Declaration IR. The first reviewed matrix maps `System.Boolean`,
+`Byte`, `Int32`, `Int64`, `Single`, `Double`, and non-null `String` to compiled
+Blueprint fields. Generated ownership metadata and semantic `VarGuid` identity
+allow safe rename/removal, source-default advancement, and preservation of an
+intentional Blueprint CDO override; user-owned name/GUID collisions,
+unsupported types, and overridden type changes fail during preflight. The
+factory pins the exact generated class path in managed source, and complete
+class rename/duplicate rewrites it in the existing transaction. Managed state
+hydrates and flushes around initialize/tick/event/destroy through weak-key cached
+typed delegates instead of per-frame `PropertyInfo` access, without retaining
+collectible hot-reload generations. The managed suite passes 667/667, repository
+validation passes 126/126, UE 5.8.1 Editor build passes, focused Script Class CMD
+Automation passes 3/3, and the complete `UnifiedScript.Unreal` CMD Automation
+suite passes 27/27. The cursor remains within M13.3B and advances to B-2
+reflected functions and dispatch.
 
 ### M13.4 — External real-project proof and production gameplay domains
 

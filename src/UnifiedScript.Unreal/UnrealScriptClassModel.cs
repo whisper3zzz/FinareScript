@@ -20,4 +20,11 @@ public sealed class UnrealScriptClassAttribute(UnrealScriptClassKind kind) : Att
 
     /// <summary>Optional exact Unreal base-class path for a future derived proxy.</summary>
     public string? BaseClassPath { get; set; }
+
+    /// <summary>
+    /// Exact generated Blueprint class path used by the managed state bridge.
+    /// Product factories always emit this value; handwritten declarations may
+    /// omit it until they are adopted as a persistent Script Class.
+    /// </summary>
+    public string? GeneratedClassPath { get; set; }
 }

@@ -269,8 +269,13 @@ bool CreateAndVerify(
     Test.TestTrue(
         TEXT("Managed source pins the reviewed proxy class kind"),
         Source.Contains(FString::Printf(
-            TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s)]"),
+            TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s,"),
             ManagedKind)));
+    Test.TestTrue(
+        TEXT("Managed source pins the exact generated Blueprint class path"),
+        Source.Contains(FString::Printf(
+            TEXT("GeneratedClassPath = \"%s\""),
+            *Blueprint->GeneratedClass->GetPathName())));
     Test.TestTrue(
         TEXT("Managed source emits a Visual-compatible block body"),
         Source.Contains(TEXT("AddOne(int value)\n    {\n        return value + 1;\n    }")));

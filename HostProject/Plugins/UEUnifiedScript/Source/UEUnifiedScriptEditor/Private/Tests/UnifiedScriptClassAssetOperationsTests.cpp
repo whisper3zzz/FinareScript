@@ -650,6 +650,12 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestFalse(
         TEXT("Rename removes the old class declaration"),
         RenamedSource.Contains(TEXT("class ") + OriginalName + TEXT(" ")));
+    TestTrue(
+        TEXT("Rename updates the managed generated-class bridge path"),
+        RenamedSource.Contains(FString::Printf(
+            TEXT("GeneratedClassPath = \"%s.%s_C\""),
+            *RenamedPackage,
+            *RenamedName)));
     FString RenamedReferenceSource;
     TestTrue(
         TEXT("Rename publishes the cross-file semantic reference"),
@@ -799,6 +805,12 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
             *DuplicateResult.ScriptAsset->ScriptClassId
                 .ToString(EGuidFormats::Digits)
                 .ToLower())));
+    TestTrue(
+        TEXT("Duplicate writes its independent generated-class bridge path"),
+        DuplicateSource.Contains(FString::Printf(
+            TEXT("GeneratedClassPath = \"%s.%s_C\""),
+            *DuplicatePackage,
+            *DuplicateName)));
 
     TArray<uint8> DeploymentBeforeFailure;
     TArray<uint8> RequestBeforeFailure;

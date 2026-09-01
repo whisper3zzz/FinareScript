@@ -129,6 +129,17 @@ into a level, or locate the Component and add it to an Actor Blueprint, then use
 the normal Play button. No reflection, binding, thunk, asset-sync, or native
 build command is exposed in this path.
 
+That build runs `UnifiedScriptSyncClasses` immediately after Script Asset
+deployment. Reviewed managed `bool`, `byte`, `int`, `long`, `float`, `double`,
+and non-null `string` properties then appear as ordinary fields on the generated
+Blueprint, including category, instance-editable, SaveGame, replicated, and
+class-default policy. Source renames keep the semantic variable GUID; deliberate
+Blueprint class-default edits survive later source-default changes.
+`-ValidateOnly` requires this generated surface to be current and reports stale
+class output without rewriting it. Unsupported state, a collision with a
+user-owned Blueprint variable, or a type change with an existing Blueprint
+override stops deployment with an actionable error before class mutation.
+
 ## Apply
 
 From the UnifiedScript repository, extracted SDK, or adopted project's plugin

@@ -7138,6 +7138,110 @@ def main() -> int:
     checks.append(
         "M13.3A creates exact four-kind Script Class proxy identities"
     )
+    blueprint_class_materializer_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptBlueprintClassMaterializer.h"
+    ).read_text(encoding="utf-8")
+    blueprint_class_materializer_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptBlueprintClassMaterializer.cpp"
+    ).read_text(encoding="utf-8")
+    blueprint_class_materializer_tests = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptBlueprintClassMaterializerTests.cpp"
+    ).read_text(encoding="utf-8")
+    sync_classes_commandlet = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptSyncClassesCommandlet.cpp"
+    ).read_text(encoding="utf-8")
+    managed_state_synchronizer = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealScriptStateSynchronizer.cs"
+    ).read_text(encoding="utf-8")
+    managed_state_tests = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealScriptObjectModelTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "FUnifiedScriptBlueprintClassSyncResult"
+        in blueprint_class_materializer_header
+        and "UnifiedScript.ManagedState" in blueprint_class_materializer_source
+        and "UnifiedScript.StateId" in blueprint_class_materializer_source
+        and "UnifiedScript.DeclarationDefault"
+        in blueprint_class_materializer_source
+        and "Variable.VarGuid = Planned.Declaration.Id"
+        in blueprint_class_materializer_source
+        and "PreservedDefaultOverrideCount"
+        in blueprint_class_materializer_source
+        and all(
+            metadata_name in blueprint_class_materializer_source
+            for metadata_name in (
+                "System.Boolean",
+                "System.Byte",
+                "System.Int32",
+                "System.Int64",
+                "System.Single",
+                "System.Double",
+                "System.String",
+            )
+        )
+        and "BlueprintStateMaterialization"
+        in blueprint_class_materializer_tests
+        and "Blueprint override survives source rename/default change"
+        in blueprint_class_materializer_tests
+        and "A managed state cannot claim a user-owned Blueprint name"
+        in blueprint_class_materializer_tests
+        and "UnifiedScript class proxies validated:" in sync_classes_commandlet
+        and "UnifiedScript class proxies synchronized:"
+        in sync_classes_commandlet
+        and "-run=UnifiedScriptSyncClasses" in onboarding_script
+        and "script-class-materialization.log" in onboarding_script
+        and "GeneratedClassPath" in managed_script_class_model
+        and "UnrealScriptStateSynchronizer.Open" in managed_script_object_model
+        and "context.Host" in managed_state_synchronizer
+        and "context.Target" in managed_state_synchronizer
+        and "ConditionalWeakTable<Type, StateContract>" in managed_state_synchronizer
+        and "reviewed Blueprint state matrix" in managed_state_synchronizer
+        and "UnsupportedScriptStateFailsBeforeManagedLifecycleStarts"
+        in managed_state_tests
+        and "Every retired collectible script context is reclaimed"
+        in unreal_lifecycle_stress_test
+        and "[x] **M13.3B-1 — reflected state/default vertical:**"
+        in roadmap_document,
+        "M13.3B-1 Blueprint reflection, state identity, default preservation, commandlet, or managed synchronization is incomplete",
+    )
+    checks.append(
+        "M13.3B-1 materializes reviewed managed state as stable Blueprint properties"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

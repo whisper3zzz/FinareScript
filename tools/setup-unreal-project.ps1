@@ -2000,6 +2000,39 @@ try {
                 -Code 'USONB2402' `
                 -Message "Deployment command did not publish '$expectedText'. Log=$log"
         }
+
+        $classArguments = @(
+            $script:ResolvedProjectPath,
+            '-run=UnifiedScriptSyncClasses',
+            "-Input=$($resolved.deployment)",
+            '-unattended',
+            '-nop4',
+            '-nosplash',
+            '-NullRHI'
+        )
+        if ($ValidateOnly) {
+            $classArguments += '-ValidateOnly'
+        }
+        $classLog = Join-Path $script:RunDirectory 'script-class-materialization.log'
+        Invoke-LoggedCommand `
+            -FilePath $resolved.editorCmd `
+            -Arguments $classArguments `
+            -LogPath $classLog `
+            -FailureCode 'USONB2403' `
+            -FailureMessage 'Script Class Blueprint materialization failed.'
+        $classText = Get-Content -LiteralPath $classLog -Raw
+        $expectedClassText = if ($ValidateOnly) {
+            'UnifiedScript class proxies validated:'
+        } else {
+            'UnifiedScript class proxies synchronized:'
+        }
+        if (-not $classText.Contains($expectedClassText)) {
+            Throw-OnboardingError `
+                -Code 'USONB2404' `
+                -Message (
+                    "Script Class command did not publish '$expectedClassText'. " +
+                    "Log=$classLog")
+        }
     }
 
     $determinismDependencies = if ($null -ne $script:BuildGraphContext) {

@@ -219,3 +219,13 @@ generated fingerprints. Doctor and a zero-change project-local Repair run before
 rollback; rollback must restore the original `.uproject`, `DefaultEngine.ini`,
 and an independent user-owned sentinel while removing the four generated host
 source files plus the installed transactional product surface.
+
+M13.3B-1 adds post-deployment Script Class reconciliation. The installed Setup
+flow runs `UnifiedScriptSyncClasses` after `UnifiedScriptSyncAssets`, compiles
+reviewed managed scalar state as ordinary Blueprint properties with stable
+semantic GUIDs and exposure metadata, and treats `-ValidateOnly` as a stale
+generated-class gate. Source-default updates preserve intentional Blueprint CDO
+overrides; user-member collisions, unsupported state, and overridden type
+changes fail before the real proxy is mutated. Complete-class rename and
+duplicate transactions also rewrite the exact generated-class path consumed by
+managed state synchronization.

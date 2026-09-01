@@ -304,6 +304,7 @@ FString RenderManagedSource(
     const FString& TypeName,
     const FString& DeclarationAssetPath,
     const FGuid& ClassId,
+    const FString& GeneratedClassPath,
     EUnifiedScriptClassKind Kind)
 {
     const FString SemanticId = FString::Printf(
@@ -331,7 +332,7 @@ FString RenderManagedSource(
             TEXT("using UnifiedScript.Unreal;\n\n")
             TEXT("namespace %s;\n\n")
             TEXT("[ScriptAsset(\"%s\", ClassId = \"%s\")]\n")
-            TEXT("[UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]\n")
+            TEXT("[UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary, GeneratedClassPath = \"%s\")]\n")
             TEXT("public static class %s\n")
             TEXT("{\n")
             TEXT("    [Visual]\n")
@@ -343,6 +344,7 @@ FString RenderManagedSource(
             *ManagedNamespace,
             *DeclarationAssetPath,
             *SemanticId,
+            *GeneratedClassPath,
             *TypeName);
     default:
         return FString();
@@ -359,7 +361,7 @@ FString RenderManagedSource(
         TEXT("using UnifiedScript.Unreal;\n\n")
         TEXT("namespace %s;\n\n")
         TEXT("[ScriptAsset(\"%s\", ClassId = \"%s\")]\n")
-        TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s)]\n")
+        TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s, GeneratedClassPath = \"%s\")]\n")
         TEXT("public sealed class %s : %s\n")
         TEXT("{\n")
         TEXT("    [Expose(InstanceEditable = true, Category = \"UnifiedScript\")]\n")
@@ -381,6 +383,7 @@ FString RenderManagedSource(
         *DeclarationAssetPath,
         *SemanticId,
         KindName,
+        *GeneratedClassPath,
         *TypeName,
         BaseType,
         InitializeHook,
@@ -815,6 +818,7 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         TypeName,
         DeclarationAssetPath,
         ClassId,
+        BlueprintClassPath,
         ScriptClassKind);
     TArray<UE::UnifiedScript::ClassOperationJournal::FSnapshot>
         RecoverySnapshots;
