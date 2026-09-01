@@ -10,7 +10,12 @@ public sealed class DemoScript : IUnrealManagedScript
     private UnifiedScriptComponent _component = null!;
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Demo")]
-    public int InitialValue { get; set; } = 10;
+    public int InitialValue { get; set; }
+
+    public DemoScript()
+    {
+        InitialValue = 10;
+    }
 
     [Visual]
     public int ResolveInitialValue(int bonus)

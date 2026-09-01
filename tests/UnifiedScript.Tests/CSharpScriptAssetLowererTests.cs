@@ -88,6 +88,115 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Fact]
+    public void ParameterlessConstructorAssignmentsBecomeCanonicalStateDefaults()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            public enum StartMode
+            {
+                Idle,
+                Active,
+            }
+
+            [ScriptAsset("Game/ConstructorDefaults")]
+            public sealed class ConstructorDefaults
+            {
+                [Expose(InstanceEditable = true)]
+                public int Count { get; set; }
+
+                public string Label { get; set; } = "Initializer";
+
+                public StartMode Mode { get; set; }
+
+                public ConstructorDefaults()
+                {
+                    Count = 7;
+                    this.Label = "Constructor";
+                    Mode = StartMode.Active;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "Game/ConstructorDefaults.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDeclaration asset = Assert.Single(result.ScriptAssets!.Assets);
+        Assert.Equal(7, asset.States.Single(static state => state.Name == "Count")
+            .DefaultValue.GetInt32());
+        Assert.Equal("Constructor", asset.States.Single(static state => state.Name == "Label")
+            .DefaultValue.GetString());
+        Assert.Equal("Active", asset.States.Single(static state => state.Name == "Mode")
+            .DefaultValue.GetString());
+    }
+
+    [Fact]
+    public void ConstructorDefaultBodyEditsPreserveStateIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            [ScriptAsset("Game/ConstructorIdentity")]
+            public sealed class ConstructorIdentity
+            {
+                public int Count { get; set; }
+
+                public ConstructorIdentity() => Count = 7;
+            }
+            """;
+
+        CSharpAnalysisResult first = new CSharpSemanticPipeline().Analyze(
+            source,
+            "Game/ConstructorIdentity.cs");
+        CSharpAnalysisResult edited = new CSharpSemanticPipeline().Analyze(
+            source.Replace("Count = 7", "Count = 11", StringComparison.Ordinal),
+            "Game/ConstructorIdentity.cs");
+
+        Assert.True(first.Succeeded, string.Join(Environment.NewLine, first.Diagnostics));
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        ScriptStateDeclaration firstState = Assert.Single(first.ScriptAssets!.Assets).States.Single();
+        ScriptStateDeclaration editedState = Assert.Single(edited.ScriptAssets!.Assets).States.Single();
+        Assert.Equal(firstState.Id, editedState.Id);
+        Assert.Equal(7, firstState.DefaultValue.GetInt32());
+        Assert.Equal(11, editedState.DefaultValue.GetInt32());
+    }
+
+    [Theory]
+    [InlineData("if (System.DateTime.UtcNow.Ticks > 0) { Count = 7; }")]
+    [InlineData("Count = System.Environment.TickCount;")]
+    [InlineData("void SetDefault() { Count = 7; } SetDefault();")]
+    public void NonDeterministicConstructorDefaultsAreRejected(string constructorBody)
+    {
+        string source = $$"""
+            using UnifiedScript;
+
+            [ScriptAsset("Game/InvalidConstructorDefault")]
+            public sealed class InvalidConstructorDefault
+            {
+                public int Count { get; set; }
+
+                public InvalidConstructorDefault()
+                {
+                    {{constructorBody}}
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "Game/InvalidConstructorDefault.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired);
+        Assert.Null(result.ScriptAssets);
+    }
+
+    [Fact]
     public void GraphStateReferencesCarryDeclarationIdentity()
     {
         CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(

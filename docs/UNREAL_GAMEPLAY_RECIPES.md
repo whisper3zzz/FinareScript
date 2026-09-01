@@ -39,7 +39,12 @@ Actor overlap callbacks:
 public sealed class PatrolActorScript : UnrealActorScript
 {
     [Expose(InstanceEditable = true, Category = "Patrol")]
-    public float Speed { get; set; } = 300.0f;
+    public float Speed { get; set; }
+
+    public PatrolActorScript()
+    {
+        Speed = 300.0f;
+    }
 
     protected override void OnBeginPlay()
     {
@@ -65,6 +70,13 @@ public sealed class PatrolActorScript : UnrealActorScript
     }
 }
 ```
+
+Script state defaults may use either a property initializer or direct constant
+assignments in the explicit parameterless constructor. Constructor assignments
+are applied in order and override the initializer. Keep them unconditional and
+top-level; branches, loops, compound assignments, runtime values, local
+functions, and lambdas are intentionally rejected so Blueprint CDO and packaged
+defaults remain deterministic.
 
 Attach the Script Asset to a `UnifiedScriptActor` or to a
 `UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,

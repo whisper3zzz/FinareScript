@@ -56,13 +56,13 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-09-01**
 
 - Active milestone: **M13.3 in progress — Managed Script Class and Blueprint parity**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical; M13.3B-2a instance scalar Blueprint function dispatch; M13.3B-2b-1 static/common-value Blueprint function dispatch; M13.3B-2b-2 enum/UStruct persistence closure; M13.3B-3a lifecycle and Blueprint event contract; M13.3B-3b input/delegate/interface closure**
-- Current tranche: **M13.3C-1 — constructor/default state and remaining Blueprint-visible shapes**
-- Current implementation state: **M13.3B-3b is closed. Roslyn lowering emits stable `[UnrealInputAction]`, `[UnrealEvent]`, and `[UnrealInterfaceFunction]` declarations. The product GeneratedClass persists the exact input, delegate, and interface binding contracts; the World-owned Script Class component binds them only after the managed generation starts, reuses the same per-World instance for native-to-managed dispatch, and releases every binding before generation teardown. Compatible reload restores exactly one input/delegate subscription, while native interface graphs retain ownership through persisted binding identity and ABI shape even though Kismet does not persist user-function metadata for those graphs**
-- Current verification state: **M13.3B-3b passes the .NET 10 managed suite at 678/678, repository validation at 130/130, deterministic generation at 9/9, UE 5.8.1 Editor and Game builds, and the complete `UnifiedScript.Unreal` CMD Automation suite at 29/29. A clean Golden Path regenerated and reloaded two Script Classes, cooked four proxy/sidecar assets, archived Win64, then proved packaged Actor/ActorComponent lifecycle, explicit-Super events, Enhanced Input, exactly-once delegate delivery, native interface return dispatch, compatible reload without duplicate bindings, plugin-local CoreCLR startup, and deterministic World teardown. Evidence is under `artifacts/m13-3b3b/`, with the final report at `golden-path-final/script-class-golden-path-report.json`**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical; M13.3B-2a instance scalar Blueprint function dispatch; M13.3B-2b-1 static/common-value Blueprint function dispatch; M13.3B-2b-2 enum/UStruct persistence closure; M13.3B-3a lifecycle and Blueprint event contract; M13.3B-3b input/delegate/interface closure; M13.3C-1a constructor-backed defaults**
+- Current tranche: **M13.3C-1b — remaining Blueprint-visible property shapes**
+- Current implementation state: **M13.3C-1a is closed. Script state can now declare its canonical default with either a property initializer or a direct constant assignment in the explicit parameterless constructor. Constructor assignments override initializers in execution order while branches, loops, compound writes, deferred local functions/lambdas, and runtime expressions fail with `UAD1003`. The ordinary Script Class factory now emits constructor-owned defaults, and Declaration IR still projects the same state Semantic ID into the generated property/CDO contract**
+- Current verification state: **M13.3C-1a passes 24/24 focused lowerer regressions, the .NET 10 managed suite at 683/683, repository validation at 130/130, deterministic generation at 9/9, UE 5.8.1 Editor/Game builds, and the complete `UnifiedScript.Unreal` CMD Automation suite at 29/29. The 350,607 ms Golden Path created and reloaded independent Actor/ActorComponent Script Classes, cooked four proxy/sidecar assets, archived Win64, then passed packaged constructor-default lifecycle, explicit-Super event, input, exactly-once delegate, interface return, compatible reload, plugin-local CoreCLR, and World-teardown smoke. Evidence is under `artifacts/m13-3c1/`, with the final report at `golden-path-final/script-class-golden-path-report.json`**
 - Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
-- Next acceptance: **constructor-backed defaults and the remaining reviewed Blueprint-visible property/function shapes project onto the generated class with stable managed/source IDs, preserve edited CDO values through compatible rebuild and reload, and replay from cooked packages without handwritten facade state**
-- Next user-visible slice: **author one managed Actor with constructor-backed defaults and the next reviewed property/function shapes, edit its defaults through the ordinary Blueprint CDO surface, reload without losing the override, and replay the same result from a packaged CMD demo**
+- Next acceptance: **the next reviewed Blueprint-visible property shapes project onto the generated class with stable managed/source IDs, preserve edited CDO values through compatible rebuild and reload, and replay from cooked packages without handwritten facade state**
+- Next user-visible slice: **add the next property-shape matrix to an ordinary managed Actor, edit those values through the Blueprint CDO surface, reload without losing compatible overrides, and replay the same state from a packaged CMD demo**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -175,6 +175,7 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.3B-2b-2 enum/UStruct persistence | Exact enum and recursive reflected-UStruct descriptors generate typed Blueprint pins and ABI v2 codecs; GeneratedClass bindings restore after package reload; chunk plus Declaration IR staging, Cook/Archive, and packaged Actor/Component lifecycle all pass. The .NET suite passes 675/675, repository validation passes 129/129, UE 5.8.1 Editor/Game builds, and CMD Automation passes 29/29. Evidence is under `artifacts/m13-3b2b2/`; final Golden Path report at `golden-path-4/script-class-golden-path-report.json` |
 | M13.3B-3a lifecycle and Blueprint events | Stable Actor/ActorComponent lifecycle hooks and reviewed managed Blueprint events persist on the product GeneratedClass. Blueprint overrides remain ordinary bytecode and invoke the managed default only through explicit `Call Parent Function`; the generic dispatcher decodes the Blueprint VM argument stream into the same per-World instance ABI. The .NET suite passes 676/676, repository validation passes 130/130, UE 5.8.1 Editor/Game builds, focused live-Super dispatch passes, and CMD Automation passes 29/29. Evidence is under `artifacts/m13-3b3a/`; final Golden Path report at `golden-path-final/script-class-golden-path-report.json` |
 | M13.3B-3b input/delegate/interface closure | Stable Enhanced Input, delegate, and native interface declarations persist on the product GeneratedClass and bind to the same World-owned managed instance only while its generation is active. Compatible reload restores exactly one subscription, teardown removes all native ownership, and native interface `Execute_` dispatch returns through the generated ABI. The .NET suite passes 678/678, repository validation passes 130/130, deterministic generation passes 9/9, UE 5.8.1 Editor/Game builds, and CMD Automation passes 29/29. Evidence is under `artifacts/m13-3b3b/`; full Cook/Package report at `golden-path-final/script-class-golden-path-report.json` |
+| M13.3C-1a constructor-backed defaults | Direct constant assignments in an explicit parameterless constructor become canonical Declaration IR defaults, override property initializers in execution order, retain state identity across body edits, and reject non-deterministic/deferred writes. The Script Class scaffold uses the same ordinary C# form. The .NET suite passes 683/683, repository validation 130/130, deterministic generation 9/9, UE Editor/Game builds, CMD Automation 29/29, and full Cook/Archive/packaged smoke. Evidence is under `artifacts/m13-3c1/`; final report at `golden-path-final/script-class-golden-path-report.json` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -3024,6 +3025,17 @@ instead of requiring a pre-authored host Component for each use case.
   - [ ] **M13.3C-1 — constructor/default and remaining shapes:** support
     constructor/default state and remaining Blueprint-visible property/function
     shapes with stable managed/source IDs
+    - [x] **M13.3C-1a — constructor-backed default vertical:** lower direct
+      constant assignments from an explicit parameterless constructor, make
+      constructor order authoritative over a property initializer, preserve
+      state identity across body edits, reject non-deterministic shapes, and
+      use the same form in the shipped Script Class scaffold
+    - [ ] **M13.3C-1b — remaining Blueprint-visible property shapes:** review and
+      materialize the next property matrix through Declaration IR, generated
+      class/CDO state, compatible reload, and package load
+    - [ ] **M13.3C-1c — remaining Blueprint-visible function shapes:** extend the
+      generated Blueprint ABI through the next reviewed parameter, return, and
+      direction matrix without handwritten facade functions
   - [ ] **M13.3C-2 — explicit extension contract:** provide a managed
     extension/mixin-equivalent contract for BlueprintNativeEvent and
     BlueprintImplementableEvent without runtime prototype mutation or ambiguous
@@ -3165,6 +3177,21 @@ Enhanced Input, exactly-once delegate delivery, native interface return dispatch
 compatible reload without duplicate bindings, plugin-local CoreCLR startup, and
 deterministic World teardown. The cursor advances to M13.3C-1 constructor/default
 state and remaining Blueprint-visible shapes.
+
+Progress (2026-09-01, M13.3C-1a): Declaration lowering now treats direct,
+unconditional simple assignments in an explicit parameterless constructor as
+canonical Script Asset defaults. The last direct assignment wins over earlier
+assignments and a property initializer, while branches, loops, compound or
+runtime writes, and deferred local-function/lambda writes fail transactionally
+with `UAD1003`. Changing the constructor body preserves the state Semantic ID.
+The shipped Actor/ActorComponent/Object Script Class scaffold and Demo use this
+ordinary C# form, and the native cross-process reload gate reads the resulting
+default after BeginPlay. The .NET suite passes 683/683, repository validation
+passes 130/130, deterministic generation passes 9/9, UE 5.8.1 Editor/Game
+builds and the refreshed 29/29 CMD Automation suite pass. The 350,607 ms Golden
+Path under `artifacts/m13-3c1/golden-path-final/` cooks four proxy/sidecar assets
+and passes packaged Actor/ActorComponent lifecycle plus the inherited gameplay
+contracts. The cursor advances to M13.3C-1b Blueprint-visible property shapes.
 
 ### M13.4 — External real-project proof and production gameplay domains
 

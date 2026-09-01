@@ -365,8 +365,17 @@ new contract. Parsing and managed generation swaps are transactional: a bad
 document or failed managed entry keeps the prior running generation, state bag,
 and override set. See [STATE_OVERRIDE_MIGRATION.md](STATE_OVERRIDE_MIGRATION.md).
 
+The same Declaration IR default may be authored as a property initializer or
+as a direct constant assignment in the explicit parameterless C# constructor.
+The latter is the default Script Class scaffold form. Constructor order is
+canonical, but only unconditional top-level simple assignments are projected;
+non-deterministic constructor shapes fail before native class mutation. This
+keeps generated CDO defaults, managed state hydration, compatible override
+migration, and packaged reload on one typed declaration contract.
+
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
-assembly, overrides `InitialValue` from 10 to 37, reads 37 in `OnStart`, retains
+assembly, obtains the declared value 10 from `DemoScript()`, overrides
+`InitialValue` to 37, reads 37 in `OnStart`, retains
 it across Reload, and currently reports `DeclarationState=37`, `FastCalls=20`,
 `CallFrameCalls=20`, `LegacyCalls=0`, and `ReflectedEvent=73`.
 

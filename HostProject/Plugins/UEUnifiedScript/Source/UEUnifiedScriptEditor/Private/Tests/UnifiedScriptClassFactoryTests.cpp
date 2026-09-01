@@ -298,6 +298,11 @@ bool CreateAndVerify(
         Test.TestTrue(
             TEXT("Managed instance source exposes editable state"),
             Source.Contains(TEXT("[Expose(")));
+        Test.TestTrue(
+            TEXT("Managed instance source owns its default in a normal C# constructor"),
+            Source.Contains(FString::Printf(
+                TEXT("public %s()\n    {\n        StartValue = 1;\n    }"),
+                *TypeName)));
         if (ExpectedKind == EUnifiedScriptClassKind::Object)
         {
             Test.TestTrue(

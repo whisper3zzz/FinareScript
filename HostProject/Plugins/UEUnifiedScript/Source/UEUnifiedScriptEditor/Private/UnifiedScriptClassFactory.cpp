@@ -378,7 +378,11 @@ FString RenderManagedSource(
         TEXT("public sealed class %s : %s\n")
         TEXT("{\n")
         TEXT("    [Expose(InstanceEditable = true, Category = \"UnifiedScript\")]\n")
-        TEXT("    public int StartValue { get; set; } = 1;\n\n")
+        TEXT("    public int StartValue { get; set; }\n\n")
+        TEXT("    public %s()\n")
+        TEXT("    {\n")
+        TEXT("        StartValue = 1;\n")
+        TEXT("    }\n\n")
         TEXT("    [Visual]\n")
         TEXT("    public int AddOne(int value)\n")
         TEXT("    {\n")
@@ -401,6 +405,7 @@ FString RenderManagedSource(
         *GeneratedClassPath,
         *TypeName,
         BaseType,
+        *TypeName,
         BlueprintEventBlock,
         InitializeHook,
         UpdateHook,

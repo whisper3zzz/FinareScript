@@ -254,30 +254,22 @@ internal sealed class CSharpScriptAssetLowerer
                 continue;
             }
 
-            if (stateSyntax.Initializer is null)
+            if (!TryResolveStateDefault(
+                    type,
+                    property,
+                    stateSyntax,
+                    compilation,
+                    out JsonElement defaultValue,
+                    out SyntaxNode defaultDiagnosticNode,
+                    out string defaultDiagnosticMessage))
             {
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.StateDefaultRequired,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Script state '{property.Name}' requires an explicit compile-time constant default.",
-                    RoslynSourceSpan.FromNode(stateSyntax, stateSyntax.SyntaxTree.FilePath)));
-                continue;
-            }
-
-            SemanticModel semanticModel = compilation.GetSemanticModel(stateSyntax.SyntaxTree);
-            Optional<object?> constant = semanticModel.GetConstantValue(stateSyntax.Initializer.Value);
-            if (!constant.HasValue || !TryCreateDefaultValue(
-                    property.Type,
-                    constant.Value,
-                    stateSyntax.Initializer.Value,
-                    semanticModel,
-                    out JsonElement defaultValue))
-            {
-                diagnostics.Add(new UnifiedDiagnostic(
-                    DeclarationDiagnosticCodes.StateDefaultRequired,
-                    UnifiedDiagnosticSeverity.Error,
-                    $"Script state '{property.Name}' requires a finite, JSON-representable compile-time constant default.",
-                    RoslynSourceSpan.FromNode(stateSyntax.Initializer.Value, stateSyntax.SyntaxTree.FilePath)));
+                    $"Script state '{property.Name}' {defaultDiagnosticMessage}",
+                    RoslynSourceSpan.FromNode(
+                        defaultDiagnosticNode,
+                        defaultDiagnosticNode.SyntaxTree.FilePath)));
                 continue;
             }
 
@@ -843,6 +835,137 @@ internal sealed class CSharpScriptAssetLowerer
             SpecialType.System_Int64 or SpecialType.System_UInt64 or
             SpecialType.System_Single or SpecialType.System_Double or SpecialType.System_Decimal or
             SpecialType.System_String || type.TypeKind == TypeKind.Enum;
+    }
+
+    private static bool TryResolveStateDefault(
+        INamedTypeSymbol containingType,
+        IPropertySymbol property,
+        PropertyDeclarationSyntax propertySyntax,
+        CSharpCompilation compilation,
+        out JsonElement value,
+        out SyntaxNode diagnosticNode,
+        out string diagnosticMessage)
+    {
+        ExpressionSyntax? expression = propertySyntax.Initializer?.Value;
+        SemanticModel? semanticModel = expression is null
+            ? null
+            : compilation.GetSemanticModel(expression.SyntaxTree);
+
+        IMethodSymbol? parameterlessConstructor = containingType.InstanceConstructors
+            .SingleOrDefault(static constructor =>
+                !constructor.IsImplicitlyDeclared &&
+                constructor.Parameters.Length == 0);
+        if (parameterlessConstructor is not null &&
+            parameterlessConstructor.DeclaringSyntaxReferences
+                .Select(static reference => reference.GetSyntax())
+                .OfType<ConstructorDeclarationSyntax>()
+                .SingleOrDefault() is ConstructorDeclarationSyntax constructorSyntax)
+        {
+            SemanticModel constructorModel = compilation.GetSemanticModel(
+                constructorSyntax.SyntaxTree);
+            var directAssignments = new List<AssignmentExpressionSyntax>();
+            foreach (AssignmentExpressionSyntax assignment in constructorSyntax
+                         .DescendantNodes()
+                         .OfType<AssignmentExpressionSyntax>())
+            {
+                if (!TargetsCurrentInstanceProperty(assignment.Left, property, constructorModel))
+                {
+                    continue;
+                }
+
+                if (IsDeferredConstructorAssignment(assignment, constructorSyntax))
+                {
+                    value = default;
+                    diagnosticNode = assignment;
+                    diagnosticMessage =
+                        "requires a deterministic default; deferred constructor assignments are not supported.";
+                    return false;
+                }
+
+                bool isDirectBodyStatement = assignment.Parent is ExpressionStatementSyntax statement &&
+                    statement.Parent == constructorSyntax.Body;
+                bool isDirectExpressionBody = constructorSyntax.ExpressionBody?.Expression == assignment;
+                if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
+                    (!isDirectBodyStatement && !isDirectExpressionBody))
+                {
+                    value = default;
+                    diagnosticNode = assignment;
+                    diagnosticMessage =
+                        "requires a deterministic default; constructor assignments must be unconditional top-level simple assignments.";
+                    return false;
+                }
+
+                directAssignments.Add(assignment);
+            }
+
+            if (directAssignments.Count != 0)
+            {
+                AssignmentExpressionSyntax finalAssignment = directAssignments[^1];
+                expression = finalAssignment.Right;
+                semanticModel = constructorModel;
+            }
+        }
+
+        if (expression is null || semanticModel is null)
+        {
+            value = default;
+            diagnosticNode = propertySyntax;
+            diagnosticMessage =
+                "requires an explicit compile-time constant property initializer or unconditional parameterless-constructor assignment.";
+            return false;
+        }
+
+        value = default;
+        Optional<object?> constant = semanticModel.GetConstantValue(expression);
+        if (!constant.HasValue || !TryCreateDefaultValue(
+                property.Type,
+                constant.Value,
+                expression,
+                semanticModel,
+                out value))
+        {
+            diagnosticNode = expression;
+            diagnosticMessage =
+                "requires a finite, JSON-representable compile-time constant default.";
+            return false;
+        }
+
+        diagnosticNode = expression;
+        diagnosticMessage = string.Empty;
+        return true;
+    }
+
+    private static bool IsDeferredConstructorAssignment(
+        AssignmentExpressionSyntax assignment,
+        ConstructorDeclarationSyntax constructor)
+    {
+        foreach (SyntaxNode ancestor in assignment.Ancestors())
+        {
+            if (ancestor == constructor)
+            {
+                return false;
+            }
+            if (ancestor is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    private static bool TargetsCurrentInstanceProperty(
+        ExpressionSyntax left,
+        IPropertySymbol property,
+        SemanticModel semanticModel)
+    {
+        ISymbol? target = semanticModel.GetSymbolInfo(left).Symbol;
+        if (!SymbolEqualityComparer.Default.Equals(target, property))
+        {
+            return false;
+        }
+
+        return left is IdentifierNameSyntax ||
+            left is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax };
     }
 
     private static bool TryCreateDefaultValue(

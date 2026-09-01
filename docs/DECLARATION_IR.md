@@ -44,9 +44,15 @@ pipeline.
 
 Declaration IR v0.1 accepts booleans, signed/unsigned integers, finite
 floating-point values, decimal, string, and enum state. Every state requires an
-explicit compile-time constant default. Enum defaults serialize by member name,
-not by underlying integer, so the artifact remains readable and rejects unnamed
-values.
+explicit compile-time constant default. The value may come from the property
+initializer or from a direct, unconditional simple assignment in the type's
+explicit parameterless constructor; an expression-bodied constructor is also
+accepted. Constructor assignments follow source execution order, so the last
+direct assignment overrides earlier assignments and the property initializer.
+Branches, loops, compound writes, runtime expressions, and writes deferred into
+local functions or lambdas are rejected with `UAD1003` rather than guessed.
+Enum defaults serialize by member name, not by underlying integer, so the
+artifact remains readable and rejects unnamed values.
 
 ## Document model
 
@@ -124,7 +130,7 @@ The Roslyn declaration lowering boundary emits stable codes:
 | --- | --- |
 | `UAD1001` | Asset path is empty, absolute, or contains invalid segments. |
 | `UAD1002` | State is not a supported instance auto-property. |
-| `UAD1003` | Default is absent, non-constant, non-finite, or not JSON-representable. |
+| `UAD1003` | Default is absent, non-constant, non-finite, not JSON-representable, or written through a non-deterministic constructor shape. |
 | `UAD1004` | State type is outside the scalar/enum v0.1 boundary. |
 | `UAD1005` | Two source types claim the same asset path. |
 | `UAD1006` | Exposure metadata contains a blank category. |
@@ -148,7 +154,8 @@ type/owner shape, neighboring token context, parent evidence, and anchor are
 used to preserve the same random Semantic ID across safe renames; ambiguous
 same-shape matches allocate a new ID rather than guessing. State entries use
 `kind: "state"` and participate in the same tombstone rules as executable HIR
-nodes.
+nodes. Editing only a constructor default changes the typed default value but
+does not replace that state identity.
 
 Unreal uses the resulting state ID as the Property Bag descriptor GUID and
 stores instance override membership separately from the values. This lets an
