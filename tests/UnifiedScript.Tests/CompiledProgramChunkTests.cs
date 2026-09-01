@@ -104,6 +104,54 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void DeclarationBinary_PreservesCommonUnrealStateShapesAndStructIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Tests/CommonState")]
+            public sealed class CommonState
+            {
+                public UnrealName RowName { get; set; } = new("Player");
+                public UnrealText Label { get; set; } = new("Ready");
+                public UnrealObjectHandle Target { get; set; } = default;
+                public UnrealClassHandle ActorClass { get; set; } = default;
+                public UnrealVector Offset { get; set; } = new(1.0, 2.0, 3.0);
+            }
+            """;
+        CSharpProgramImage image = EmitImage(
+            source,
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(image);
+
+        UnifiedScriptRuntimeDeclarationDocument declarations =
+            UnifiedScriptRuntimeDeclarationBinary.Decode(result.Chunk.GetRequiredSection(
+                UnifiedScriptChunkSectionKind.DeclarationData).Data.Span);
+
+        IReadOnlyDictionary<string, UnifiedScriptRuntimeStateDeclaration> states =
+            Assert.Single(declarations.Assets).States.ToDictionary(
+                static state => state.Name,
+                StringComparer.Ordinal);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Name, states["RowName"].DefaultValue.Kind);
+        Assert.Equal("Player", states["RowName"].DefaultValue.TextValue);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Text, states["Label"].DefaultValue.Kind);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Null, states["Target"].DefaultValue.Kind);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Null, states["ActorClass"].DefaultValue.Kind);
+        UnifiedScriptRuntimeStateDeclaration offset = states["Offset"];
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Vector, offset.DefaultValue.Kind);
+        Assert.Equal(1.0, offset.DefaultValue.VectorX);
+        Assert.Equal(2.0, offset.DefaultValue.VectorY);
+        Assert.Equal(3.0, offset.DefaultValue.VectorZ);
+        Assert.Equal("/Script/CoreUObject.Vector", offset.UnrealType?.UnrealTypePath);
+
+        ReadOnlySpan<byte> payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.Span;
+        Assert.Equal((byte)1, payload[10]);
+        Assert.Equal((byte)0, payload[11]);
+    }
+
+    [Fact]
     public void BindingAndDependencyPayloads_AreSortedAndStrictlyRoundTrip()
     {
         var bindings = new UnifiedScriptRuntimeBindingManifest(
@@ -534,12 +582,15 @@ public sealed class CompiledProgramChunkTests
         }
     }
 
-    private static CSharpProgramImage EmitImage()
+    private static CSharpProgramImage EmitImage(
+        string source = Source,
+        IReadOnlyList<string>? additionalReferences = null)
     {
         CSharpProgramEmitResult result = new CSharpProgramEmitter().Emit(
             new CSharpCompilationRequest(
                 "UnifiedScript.ChunkTests",
-                [new CSharpSourceDocument("ChunkPolicy.cs", Source)]));
+                [new CSharpSourceDocument("ChunkPolicy.cs", source)],
+                additionalReferences));
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         return Assert.IsType<CSharpProgramImage>(result.Image);
     }

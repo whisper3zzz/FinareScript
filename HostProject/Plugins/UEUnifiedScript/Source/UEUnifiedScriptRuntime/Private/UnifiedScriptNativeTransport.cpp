@@ -358,6 +358,27 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteAsyncService(
 
 namespace UE::UnifiedScript::NativeTransport::Private
 {
+constexpr int32 ObjectHandlePayloadSize = sizeof(uint64);
+constexpr int32 VectorPayloadSize = sizeof(uint64) * 3;
+
+void WriteUInt64LittleEndian(uint8* Destination, uint64 Value)
+{
+    for (int32 Index = 0; Index < sizeof(uint64); ++Index)
+    {
+        Destination[Index] = static_cast<uint8>(Value >> (Index * 8));
+    }
+}
+
+uint64 ReadUInt64LittleEndian(const uint8* Source)
+{
+    uint64 Value = 0;
+    for (int32 Index = 0; Index < sizeof(uint64); ++Index)
+    {
+        Value |= static_cast<uint64>(Source[Index]) << (Index * 8);
+    }
+    return Value;
+}
+
 bool TryDecodeUtf8(const uint8* Data, int32 Length, FString& OutValue)
 {
     if (Length < 0 || (Length > 0 && Data == nullptr))
@@ -406,14 +427,40 @@ void Complete(
     const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String ||
         Value.Kind == EUnifiedScriptValueKind::Name ||
         Value.Kind == EUnifiedScriptValueKind::Text;
+    uint8 BinaryPayload[VectorPayloadSize] = {};
+    const uint8* ValueData = bHasString
+        ? reinterpret_cast<const uint8*>(StringUtf8.Get())
+        : nullptr;
+    int32 ValueLength = bHasString ? StringUtf8.Length() : 0;
+    if (Value.Kind == EUnifiedScriptValueKind::Object ||
+        Value.Kind == EUnifiedScriptValueKind::Class)
+    {
+        WriteUInt64LittleEndian(BinaryPayload, Value.ObjectHandleValue.Value);
+        ValueData = BinaryPayload;
+        ValueLength = ObjectHandlePayloadSize;
+    }
+    else if (Value.Kind == EUnifiedScriptValueKind::Vector)
+    {
+        WriteUInt64LittleEndian(
+            BinaryPayload,
+            std::bit_cast<uint64>(Value.VectorValue.X));
+        WriteUInt64LittleEndian(
+            BinaryPayload + sizeof(uint64),
+            std::bit_cast<uint64>(Value.VectorValue.Y));
+        WriteUInt64LittleEndian(
+            BinaryPayload + sizeof(uint64) * 2,
+            std::bit_cast<uint64>(Value.VectorValue.Z));
+        ValueData = BinaryPayload;
+        ValueLength = VectorPayloadSize;
+    }
     Callback(
         UserData,
         Result.IsSuccess() ? 1 : 0,
         static_cast<uint8>(Value.Kind),
         Value.BooleanValue ? 1 : 0,
         Value.Int32Value,
-        bHasString ? reinterpret_cast<const uint8*>(StringUtf8.Get()) : nullptr,
-        bHasString ? StringUtf8.Length() : 0,
+        ValueData,
+        ValueLength,
         static_cast<uint8>(Result.Error),
         static_cast<uint8>(Result.HandleError),
         reinterpret_cast<const uint8*>(MessageUtf8.Get()),
@@ -543,6 +590,41 @@ bool DecodeValue(
             : FUnifiedScriptValue::FromText(FText::FromString(StringValue));
         return true;
     }
+    case EUnifiedScriptValueKind::Object:
+    case EUnifiedScriptValueKind::Class:
+        if (NativeValue.StringData == nullptr ||
+            NativeValue.StringLength != ObjectHandlePayloadSize)
+        {
+            CompleteFailure(
+                Callback,
+                UserData,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("The UnifiedScript native object handle payload is invalid."));
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromObjectHandle(
+            {ReadUInt64LittleEndian(NativeValue.StringData)},
+            static_cast<EUnifiedScriptValueKind>(NativeValue.Kind) ==
+                EUnifiedScriptValueKind::Class);
+        return true;
+    case EUnifiedScriptValueKind::Vector:
+        if (NativeValue.StringData == nullptr ||
+            NativeValue.StringLength != VectorPayloadSize)
+        {
+            CompleteFailure(
+                Callback,
+                UserData,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("The UnifiedScript native vector payload is invalid."));
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromVector(FVector(
+            std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData)),
+            std::bit_cast<double>(ReadUInt64LittleEndian(
+                NativeValue.StringData + sizeof(uint64))),
+            std::bit_cast<double>(ReadUInt64LittleEndian(
+                NativeValue.StringData + sizeof(uint64) * 2))));
+        return true;
     default:
         CompleteFailure(
             Callback,

@@ -54,7 +54,8 @@ FString State(
     bool bInstanceEditable = true,
     bool bSaveGame = false,
     bool bReplicated = false,
-    const TCHAR* Category = TEXT("State"))
+    const TCHAR* Category = TEXT("State"),
+    const FString& UnrealType = FString())
 {
     return FString::Printf(
         TEXT(R"JSON(
@@ -63,7 +64,7 @@ FString State(
         "name": "%s",
         "typeDisplayName": "%s",
         "typeMetadataName": "%s",
-        "typeKind": "%s",
+        "typeKind": "%s"%s,
         "defaultValue": %s,
         "span": {
           "filePath": "Managed/StateActor.cs",
@@ -82,11 +83,28 @@ FString State(
         DisplayType,
         MetadataType,
         TypeKind,
+        UnrealType.IsEmpty()
+            ? TEXT("")
+            : *FString::Printf(TEXT(",\n        \"unrealType\": %s"), *UnrealType),
         DefaultJson,
         bInstanceEditable ? TEXT("true") : TEXT("false"),
         bSaveGame ? TEXT("true") : TEXT("false"),
         bReplicated ? TEXT("true") : TEXT("false"),
         Category);
+}
+
+FString VectorType()
+{
+    return TEXT(R"JSON({
+      "kind": "struct",
+      "unrealTypePath": "/Script/CoreUObject.Vector",
+      "unrealNativeName": "Vector",
+      "fields": [
+        { "index": 0, "nativeName": "X", "typeMetadataName": "System.Double" },
+        { "index": 1, "nativeName": "Y", "typeMetadataName": "System.Double" },
+        { "index": 2, "nativeName": "Z", "typeMetadataName": "System.Double" }
+      ]
+    })JSON");
 }
 
 FString Parameter(
@@ -399,6 +417,46 @@ FString InitialStates()
             TEXT("string"),
             TEXT("\"Ready\""),
             false),
+        State(
+            TEXT("88888888888888888888888888888881"),
+            TEXT("RowName"),
+            TEXT("UnrealName"),
+            TEXT("UnifiedScript.Unreal.UnrealName"),
+            TEXT("name"),
+            TEXT("\"Player\"")),
+        State(
+            TEXT("88888888888888888888888888888882"),
+            TEXT("DisplayText"),
+            TEXT("UnrealText"),
+            TEXT("UnifiedScript.Unreal.UnrealText"),
+            TEXT("text"),
+            TEXT("\"Loaded\"")),
+        State(
+            TEXT("88888888888888888888888888888883"),
+            TEXT("Target"),
+            TEXT("UnrealObjectHandle"),
+            TEXT("UnifiedScript.Unreal.UnrealObjectHandle"),
+            TEXT("object"),
+            TEXT("null")),
+        State(
+            TEXT("88888888888888888888888888888884"),
+            TEXT("ActorClass"),
+            TEXT("UnrealClassHandle"),
+            TEXT("UnifiedScript.Unreal.UnrealClassHandle"),
+            TEXT("class"),
+            TEXT("null")),
+        State(
+            TEXT("88888888888888888888888888888885"),
+            TEXT("Offset"),
+            TEXT("UnrealVector"),
+            TEXT("UnifiedScript.Unreal.UnrealVector"),
+            TEXT("struct"),
+            TEXT("{ \"x\": 1.5, \"y\": 2.5, \"z\": 3.5 }"),
+            true,
+            false,
+            false,
+            TEXT("State"),
+            VectorType()),
     };
     return FString::Join(States, TEXT(","));
 }
@@ -453,6 +511,46 @@ FString ReloadedStates()
             TEXT("string"),
             TEXT("\"Ready\""),
             false),
+        State(
+            TEXT("88888888888888888888888888888881"),
+            TEXT("RowName"),
+            TEXT("UnrealName"),
+            TEXT("UnifiedScript.Unreal.UnrealName"),
+            TEXT("name"),
+            TEXT("\"Player\"")),
+        State(
+            TEXT("88888888888888888888888888888882"),
+            TEXT("DisplayText"),
+            TEXT("UnrealText"),
+            TEXT("UnifiedScript.Unreal.UnrealText"),
+            TEXT("text"),
+            TEXT("\"Loaded\"")),
+        State(
+            TEXT("88888888888888888888888888888883"),
+            TEXT("Target"),
+            TEXT("UnrealObjectHandle"),
+            TEXT("UnifiedScript.Unreal.UnrealObjectHandle"),
+            TEXT("object"),
+            TEXT("null")),
+        State(
+            TEXT("88888888888888888888888888888884"),
+            TEXT("ActorClass"),
+            TEXT("UnrealClassHandle"),
+            TEXT("UnifiedScript.Unreal.UnrealClassHandle"),
+            TEXT("class"),
+            TEXT("null")),
+        State(
+            TEXT("88888888888888888888888888888885"),
+            TEXT("Offset"),
+            TEXT("UnrealVector"),
+            TEXT("UnifiedScript.Unreal.UnrealVector"),
+            TEXT("struct"),
+            TEXT("{ \"x\": 1.5, \"y\": 2.5, \"z\": 3.5 }"),
+            true,
+            false,
+            false,
+            TEXT("State"),
+            VectorType()),
     };
     return FString::Join(States, TEXT(","));
 }
@@ -508,8 +606,8 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         return false;
     }
     TestTrue(TEXT("Initial materialization changes the proxy"), Result.bChanged);
-    TestEqual(TEXT("Seven reviewed types become properties"), Result.AddedPropertyCount, 7);
-    TestEqual(TEXT("Seven states are declared"), Result.DeclaredStateCount, 7);
+    TestEqual(TEXT("Twelve reviewed types become properties"), Result.AddedPropertyCount, 12);
+    TestEqual(TEXT("Twelve states are declared"), Result.DeclaredStateCount, 12);
     TestEqual(TEXT("Three public managed functions are declared"), Result.DeclaredFunctionCount, 3);
     TestEqual(TEXT("Three callable functions become graphs"), Result.AddedFunctionCount, 3);
     TestEqual(TEXT("Three lifecycle hooks are declared"), Result.DeclaredLifecycleHookCount, 3);
@@ -680,6 +778,14 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     const FFloatProperty* Ratio = FindFProperty<FFloatProperty>(GeneratedClass, TEXT("Ratio"));
     const FDoubleProperty* Precision = FindFProperty<FDoubleProperty>(GeneratedClass, TEXT("Precision"));
     const FStrProperty* Label = FindFProperty<FStrProperty>(GeneratedClass, TEXT("Label"));
+    const FNameProperty* RowName = FindFProperty<FNameProperty>(GeneratedClass, TEXT("RowName"));
+    const FTextProperty* DisplayText = FindFProperty<FTextProperty>(GeneratedClass, TEXT("DisplayText"));
+    const FObjectPropertyBase* Target =
+        FindFProperty<FObjectPropertyBase>(GeneratedClass, TEXT("Target"));
+    const FClassProperty* ActorClass =
+        FindFProperty<FClassProperty>(GeneratedClass, TEXT("ActorClass"));
+    const FStructProperty* Offset =
+        FindFProperty<FStructProperty>(GeneratedClass, TEXT("Offset"));
     TestNotNull(TEXT("bool becomes FBoolProperty"), Enabled);
     TestNotNull(TEXT("byte becomes FByteProperty"), ByteValue);
     TestNotNull(TEXT("int becomes FIntProperty"), Count);
@@ -687,7 +793,15 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
     TestNotNull(TEXT("float becomes FFloatProperty"), Ratio);
     TestNotNull(TEXT("double becomes FDoubleProperty"), Precision);
     TestNotNull(TEXT("string becomes FStrProperty"), Label);
-    if (Count == nullptr || Label == nullptr)
+    TestNotNull(TEXT("UnrealName becomes FNameProperty"), RowName);
+    TestNotNull(TEXT("UnrealText becomes FTextProperty"), DisplayText);
+    TestNotNull(TEXT("UnrealObjectHandle becomes FObjectProperty"), Target);
+    TestNotNull(TEXT("UnrealClassHandle becomes FClassProperty"), ActorClass);
+    TestTrue(TEXT("UnrealVector becomes FVector property"),
+        Offset != nullptr && Offset->Struct == TBaseStructure<FVector>::Get());
+    if (Count == nullptr || Label == nullptr || RowName == nullptr ||
+        DisplayText == nullptr || Target == nullptr || ActorClass == nullptr ||
+        Offset == nullptr)
     {
         return false;
     }
@@ -702,6 +816,24 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
         TEXT("String default reaches the generated CDO"),
         Label->GetPropertyValue_InContainer(GeneratedClass->GetDefaultObject()),
         FString(TEXT("Ready")));
+    TestEqual(
+        TEXT("FName default reaches the generated CDO"),
+        RowName->GetPropertyValue_InContainer(GeneratedClass->GetDefaultObject()),
+        FName(TEXT("Player")));
+    TestEqual(
+        TEXT("FText default reaches the generated CDO"),
+        DisplayText->GetPropertyValue_InContainer(GeneratedClass->GetDefaultObject()).ToString(),
+        FString(TEXT("Loaded")));
+    TestNull(
+        TEXT("UObject handle default reaches the generated CDO as null"),
+        Target->GetObjectPropertyValue_InContainer(GeneratedClass->GetDefaultObject()));
+    TestNull(
+        TEXT("UClass handle default reaches the generated CDO as null"),
+        ActorClass->GetObjectPropertyValue_InContainer(GeneratedClass->GetDefaultObject()));
+    TestEqual(
+        TEXT("FVector default reaches the generated CDO"),
+        *Offset->ContainerPtrToValuePtr<FVector>(GeneratedClass->GetDefaultObject()),
+        FVector(1.5, 2.5, 3.5));
     TestEqual(
         TEXT("State ID becomes the Blueprint variable GUID"),
         FBlueprintEditorUtils::FindMemberVariableGuidByName(Blueprint, TEXT("Count")),
@@ -859,7 +991,7 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
             Result,
             Error));
     TestTrue(TEXT("Unsupported-type rejection lists reviewed types"), Error.Contains(TEXT("Reviewed types")));
-    TestEqual(TEXT("Rejected plans leave six generated plus one user property"), Blueprint->NewVariables.Num(), 7);
+    TestEqual(TEXT("Rejected plans leave eleven generated plus one user property"), Blueprint->NewVariables.Num(), 12);
     return true;
 }
 

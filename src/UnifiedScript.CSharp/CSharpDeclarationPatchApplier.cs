@@ -1144,6 +1144,27 @@ public sealed class CSharpDeclarationPatchApplier
             return $"{spec.TypeName}.{spec.DefaultValue.GetString()}";
         }
 
+        if (spec.TypeKind is ScriptStateTypeKind.Name or ScriptStateTypeKind.Text)
+        {
+            string text = Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(
+                spec.DefaultValue.GetString()!,
+                quote: true);
+            return $"new {spec.TypeName}({text})";
+        }
+
+        if (spec.TypeKind is ScriptStateTypeKind.Object or ScriptStateTypeKind.Class)
+        {
+            return "default";
+        }
+
+        if (spec.TypeKind == ScriptStateTypeKind.Struct)
+        {
+            string x = spec.DefaultValue.GetProperty("x").GetRawText();
+            string y = spec.DefaultValue.GetProperty("y").GetRawText();
+            string z = spec.DefaultValue.GetProperty("z").GetRawText();
+            return $"new {spec.TypeName}({x}d, {y}d, {z}d)";
+        }
+
         string value = spec.DefaultValue.GetRawText();
         string type = spec.TypeName.Replace("global::", string.Empty, StringComparison.Ordinal).Trim();
         return type switch

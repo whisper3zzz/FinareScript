@@ -12,6 +12,7 @@
 #include "Containers/StringConv.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "Math/Vector.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -20,6 +21,14 @@
 namespace UE::UnifiedScript::Declaration::Private
 {
 constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
+
+struct FStateUnrealType
+{
+    bool bPresent = false;
+    uint8 Kind = 0;
+    FString Path;
+    FString NativeName;
+};
 
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
 {
@@ -34,8 +43,11 @@ bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
 bool ResolvePropertyType(
     const FString& Kind,
     const FString& MetadataName,
-    EPropertyBagPropertyType& OutType)
+    const FStateUnrealType& UnrealType,
+    EPropertyBagPropertyType& OutType,
+    const UObject*& OutTypeObject)
 {
+    OutTypeObject = nullptr;
     if (Kind == TEXT("boolean"))
     {
         OutType = EPropertyBagPropertyType::Bool;
@@ -81,6 +93,74 @@ bool ResolvePropertyType(
         OutType = EPropertyBagPropertyType::String;
         return true;
     }
+    if (Kind == TEXT("name") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealName"))
+    {
+        OutType = EPropertyBagPropertyType::Name;
+        return true;
+    }
+    if (Kind == TEXT("text") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealText"))
+    {
+        OutType = EPropertyBagPropertyType::Text;
+        return true;
+    }
+    if (Kind == TEXT("object") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle"))
+    {
+        OutType = EPropertyBagPropertyType::Object;
+        OutTypeObject = UObject::StaticClass();
+        return true;
+    }
+    if (Kind == TEXT("class") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle"))
+    {
+        OutType = EPropertyBagPropertyType::Class;
+        OutTypeObject = UObject::StaticClass();
+        return true;
+    }
+    if (Kind == TEXT("struct") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
+        UnrealType.bPresent && UnrealType.Kind == 1 &&
+        UnrealType.Path == TEXT("/Script/CoreUObject.Vector") &&
+        UnrealType.NativeName == TEXT("Vector"))
+    {
+        OutType = EPropertyBagPropertyType::Struct;
+        OutTypeObject = TBaseStructure<FVector>::Get();
+        return true;
+    }
+    return false;
+}
+
+bool ReadJsonUnrealType(
+    const TSharedPtr<FJsonObject>& State,
+    FStateUnrealType& OutType)
+{
+    OutType = {};
+    const TSharedPtr<FJsonObject>* TypeObject = nullptr;
+    if (!State->TryGetObjectField(TEXT("unrealType"), TypeObject) || TypeObject == nullptr)
+    {
+        return true;
+    }
+
+    FString Kind;
+    OutType.bPresent = true;
+    if (!(*TypeObject)->TryGetStringField(TEXT("kind"), Kind) ||
+        !(*TypeObject)->TryGetStringField(TEXT("unrealTypePath"), OutType.Path) ||
+        !(*TypeObject)->TryGetStringField(TEXT("unrealNativeName"), OutType.NativeName))
+    {
+        return false;
+    }
+    if (Kind == TEXT("enum"))
+    {
+        OutType.Kind = 0;
+        return true;
+    }
+    if (Kind == TEXT("struct"))
+    {
+        OutType.Kind = 1;
+        return true;
+    }
     return false;
 }
 
@@ -90,9 +170,18 @@ bool SetDefaultValue(
     const TSharedPtr<FJsonValue>& DefaultValue,
     FString& OutError)
 {
-    if (!DefaultValue.IsValid() || DefaultValue->IsNull())
+    if (!DefaultValue.IsValid())
     {
-        return true;
+        OutError = FString::Printf(
+            TEXT("State '%s' is missing its defaultValue."),
+            *Desc.Name.ToString());
+        return false;
+    }
+    if (DefaultValue->IsNull())
+    {
+        return Desc.ValueType == EPropertyBagPropertyType::String ||
+            Desc.ValueType == EPropertyBagPropertyType::Object ||
+            Desc.ValueType == EPropertyBagPropertyType::Class;
     }
 
     EPropertyBagResult Result = EPropertyBagResult::TypeMismatch;
@@ -142,6 +231,36 @@ bool SetDefaultValue(
         if (DefaultValue->Type == EJson::String)
         {
             Result = Bag.SetValueString(Desc.Name, DefaultValue->AsString());
+        }
+        break;
+    case EPropertyBagPropertyType::Name:
+        if (DefaultValue->Type == EJson::String)
+        {
+            Result = Bag.SetValueName(Desc.Name, FName(*DefaultValue->AsString()));
+        }
+        break;
+    case EPropertyBagPropertyType::Text:
+        if (DefaultValue->Type == EJson::String)
+        {
+            Result = Bag.SetValueText(Desc.Name, FText::FromString(DefaultValue->AsString()));
+        }
+        break;
+    case EPropertyBagPropertyType::Struct:
+        if (Desc.ValueTypeObject == TBaseStructure<FVector>::Get() &&
+            DefaultValue->Type == EJson::Object)
+        {
+            const TSharedPtr<FJsonObject> Object = DefaultValue->AsObject();
+            double X = 0.0;
+            double Y = 0.0;
+            double Z = 0.0;
+            if (Object.IsValid() &&
+                Object->TryGetNumberField(TEXT("x"), X) && FMath::IsFinite(X) &&
+                Object->TryGetNumberField(TEXT("y"), Y) && FMath::IsFinite(Y) &&
+                Object->TryGetNumberField(TEXT("z"), Z) && FMath::IsFinite(Z) &&
+                Object->Values.Num() == 3)
+            {
+                Result = Bag.SetValueStruct(Desc.Name, FVector(X, Y, Z));
+            }
         }
         break;
     default:
@@ -216,6 +335,9 @@ enum class EBinaryDefaultKind : uint8
     FloatingPoint = 4,
     String = 5,
     Enum = 6,
+    Name = 7,
+    Text = 8,
+    Vector = 9,
 };
 
 struct FBinaryDefault
@@ -226,6 +348,7 @@ struct FBinaryDefault
     uint64 UnsignedInteger = 0;
     double FloatingPoint = 0.0;
     FString Text;
+    FVector Vector = FVector::ZeroVector;
 };
 
 class FBinaryDeclarationReader
@@ -249,13 +372,16 @@ public:
         uint16 Minor = 0;
         uint32 Reserved = 0;
         if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-            Major != 1 || Minor != 0 || Reserved != 0)
+            Major != 1 || Minor > 1 || Reserved != 0)
         {
             OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
             return false;
         }
+        MinorVersion = Minor;
         return true;
     }
+
+    uint16 GetMinorVersion() const { return MinorVersion; }
 
     bool ReadByte(uint8& OutValue)
     {
@@ -346,7 +472,7 @@ public:
     bool ReadDefault(FBinaryDefault& OutDefault)
     {
         uint8 Kind = 0;
-        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Enum))
+        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Vector))
         {
             return false;
         }
@@ -389,10 +515,74 @@ public:
         }
         case EBinaryDefaultKind::String:
         case EBinaryDefaultKind::Enum:
+        case EBinaryDefaultKind::Name:
+        case EBinaryDefaultKind::Text:
             return ReadString(OutDefault.Text);
+        case EBinaryDefaultKind::Vector:
+        {
+            double Components[3] = {};
+            for (double& Component : Components)
+            {
+                uint64 Bits = 0;
+                if (!ReadUInt64(Bits))
+                {
+                    return false;
+                }
+                FMemory::Memcpy(&Component, &Bits, sizeof(double));
+                if (!FMath::IsFinite(Component))
+                {
+                    return false;
+                }
+            }
+            OutDefault.Vector = FVector(Components[0], Components[1], Components[2]);
+            return true;
+        }
         default:
             return false;
         }
+    }
+
+    bool ReadUnrealType(FStateUnrealType& OutType, int32 Depth = 0)
+    {
+        if (Depth > 16)
+        {
+            return false;
+        }
+        uint8 HasType = 0;
+        if (!ReadByte(HasType) || HasType > 1)
+        {
+            return false;
+        }
+        OutType = {};
+        if (HasType == 0)
+        {
+            return true;
+        }
+
+        OutType.bPresent = true;
+        uint32 FieldCount = 0;
+        if (!ReadByte(OutType.Kind) || OutType.Kind > 1 ||
+            !ReadString(OutType.Path) || OutType.Path.IsEmpty() ||
+            !ReadString(OutType.NativeName) || OutType.NativeName.IsEmpty() ||
+            !ReadCount(FieldCount))
+        {
+            return false;
+        }
+        for (uint32 FieldIndex = 0; FieldIndex < FieldCount; ++FieldIndex)
+        {
+            uint32 DeclaredIndex = 0;
+            FString NativeName;
+            FString MetadataName;
+            FStateUnrealType NestedType;
+            if (!ReadUInt32(DeclaredIndex) || DeclaredIndex != FieldIndex ||
+                !ReadString(NativeName) || NativeName.IsEmpty() ||
+                !ReadString(MetadataName) || MetadataName.IsEmpty() ||
+                !ReadUnrealType(NestedType, Depth + 1))
+            {
+                return false;
+            }
+        }
+        return OutType.Kind == 1 || FieldCount == 0;
     }
 
     bool IsAtEnd() const { return Offset == Data.Num(); }
@@ -406,25 +596,38 @@ private:
 
     TConstArrayView<uint8> Data;
     int32 Offset = 0;
+    uint16 MinorVersion = 0;
 };
 
 bool ResolveBinaryPropertyType(
     uint8 TypeKind,
     const FString& MetadataName,
-    EPropertyBagPropertyType& OutType)
+    const FStateUnrealType& UnrealType,
+    EPropertyBagPropertyType& OutType,
+    const UObject*& OutTypeObject)
 {
     switch (TypeKind)
     {
     case 0:
-        return ResolvePropertyType(TEXT("boolean"), MetadataName, OutType);
+        return ResolvePropertyType(TEXT("boolean"), MetadataName, UnrealType, OutType, OutTypeObject);
     case 1:
-        return ResolvePropertyType(TEXT("integer"), MetadataName, OutType);
+        return ResolvePropertyType(TEXT("integer"), MetadataName, UnrealType, OutType, OutTypeObject);
     case 2:
-        return ResolvePropertyType(TEXT("floatingPoint"), MetadataName, OutType);
+        return ResolvePropertyType(TEXT("floatingPoint"), MetadataName, UnrealType, OutType, OutTypeObject);
     case 3:
-        return ResolvePropertyType(TEXT("string"), MetadataName, OutType);
+        return ResolvePropertyType(TEXT("string"), MetadataName, UnrealType, OutType, OutTypeObject);
     case 4:
-        return ResolvePropertyType(TEXT("enum"), MetadataName, OutType);
+        return ResolvePropertyType(TEXT("enum"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 5:
+        return ResolvePropertyType(TEXT("name"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 6:
+        return ResolvePropertyType(TEXT("text"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 7:
+        return ResolvePropertyType(TEXT("object"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 8:
+        return ResolvePropertyType(TEXT("class"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 9:
+        return ResolvePropertyType(TEXT("struct"), MetadataName, UnrealType, OutType, OutTypeObject);
     default:
         return false;
     }
@@ -438,7 +641,9 @@ bool SetBinaryDefaultValue(
 {
     if (Default.Kind == EBinaryDefaultKind::Null)
     {
-        return Desc.ValueType == EPropertyBagPropertyType::String;
+        return Desc.ValueType == EPropertyBagPropertyType::String ||
+            Desc.ValueType == EPropertyBagPropertyType::Object ||
+            Desc.ValueType == EPropertyBagPropertyType::Class;
     }
 
     EPropertyBagResult Result = EPropertyBagResult::TypeMismatch;
@@ -490,6 +695,25 @@ bool SetBinaryDefaultValue(
             Default.Kind == EBinaryDefaultKind::Enum)
         {
             Result = Bag.SetValueString(Desc.Name, Default.Text);
+        }
+        break;
+    case EPropertyBagPropertyType::Name:
+        if (Default.Kind == EBinaryDefaultKind::Name)
+        {
+            Result = Bag.SetValueName(Desc.Name, FName(*Default.Text));
+        }
+        break;
+    case EPropertyBagPropertyType::Text:
+        if (Default.Kind == EBinaryDefaultKind::Text)
+        {
+            Result = Bag.SetValueText(Desc.Name, FText::FromString(Default.Text));
+        }
+        break;
+    case EPropertyBagPropertyType::Struct:
+        if (Default.Kind == EBinaryDefaultKind::Vector &&
+            Desc.ValueTypeObject == TBaseStructure<FVector>::Get())
+        {
+            Result = Bag.SetValueStruct(Desc.Name, Default.Vector);
         }
         break;
     default:
@@ -663,6 +887,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             FString MetadataName;
             FGuid StateId;
             uint8 TypeKind = 0;
+            FStateUnrealType UnrealType;
             FBinaryDefault Default;
             uint8 ExposureFlags = 0;
             FString Category;
@@ -671,7 +896,9 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
                 !Reader.ReadString(Name) || Name.IsEmpty() ||
                 !Reader.ReadString(TypeDisplayName) || TypeDisplayName.IsEmpty() ||
                 !Reader.ReadString(MetadataName) || MetadataName.IsEmpty() ||
-                !Reader.ReadByte(TypeKind) || !Reader.ReadDefault(Default) ||
+                !Reader.ReadByte(TypeKind) ||
+                (Reader.GetMinorVersion() >= 1 && !Reader.ReadUnrealType(UnrealType)) ||
+                !Reader.ReadDefault(Default) ||
                 !Reader.ReadByte(ExposureFlags) || (ExposureFlags & ~0x07) != 0 ||
                 !Reader.ReadNullableString(Category, bHasCategory))
             {
@@ -688,9 +915,15 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
 
             const FName PropertyName(Name);
             EPropertyBagPropertyType PropertyType = EPropertyBagPropertyType::None;
+            const UObject* PropertyTypeObject = nullptr;
             if (PropertyName.IsNone() || SeenStateIds.Contains(StateId) ||
                 SeenStateNames.Contains(PropertyName) ||
-                !ResolveBinaryPropertyType(TypeKind, MetadataName, PropertyType))
+                !ResolveBinaryPropertyType(
+                    TypeKind,
+                    MetadataName,
+                    UnrealType,
+                    PropertyType,
+                    PropertyTypeObject))
             {
                 OutError = FString::Printf(
                     TEXT("Compiled declaration contains invalid or duplicate state '%s'."),
@@ -715,7 +948,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
                 PropertyName,
                 EPropertyBagContainerType::None,
                 PropertyType,
-                nullptr,
+                PropertyTypeObject,
                 Flags);
             Desc.ID = StateId;
 #if WITH_EDITOR
@@ -940,7 +1173,9 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
 
         FGuid Id;
         const FName PropertyName(Name);
+        FStateUnrealType UnrealType;
         EPropertyBagPropertyType PropertyType = EPropertyBagPropertyType::None;
+        const UObject* PropertyTypeObject = nullptr;
         if (!ParseSemanticId(SemanticId, Id))
         {
             OutError = FString::Printf(TEXT("State '%s' has invalid semantic id '%s'."), *Name, *SemanticId);
@@ -956,7 +1191,13 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             OutError = FString::Printf(TEXT("Declaration contains duplicate state '%s' or semantic id."), *Name);
             return false;
         }
-        if (!ResolvePropertyType(TypeKind, MetadataName, PropertyType))
+        if (!ReadJsonUnrealType(State, UnrealType) ||
+            !ResolvePropertyType(
+                TypeKind,
+                MetadataName,
+                UnrealType,
+                PropertyType,
+                PropertyTypeObject))
         {
             OutError = FString::Printf(
                 TEXT("State '%s' uses unsupported declaration type '%s' (%s)."),
@@ -997,7 +1238,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             PropertyName,
             EPropertyBagContainerType::None,
             PropertyType,
-            nullptr,
+            PropertyTypeObject,
             Flags);
         Desc.ID = Id;
 #if WITH_EDITOR

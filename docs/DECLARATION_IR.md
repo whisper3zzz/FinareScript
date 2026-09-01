@@ -43,16 +43,26 @@ samples. An `[Expose]` member also opts its containing type into the declaration
 pipeline.
 
 Declaration IR v0.1 accepts booleans, signed/unsigned integers, finite
-floating-point values, decimal, string, and enum state. Every state requires an
-explicit compile-time constant default. The value may come from the property
-initializer or from a direct, unconditional simple assignment in the type's
-explicit parameterless constructor; an expression-bodied constructor is also
-accepted. Constructor assignments follow source execution order, so the last
-direct assignment overrides earlier assignments and the property initializer.
-Branches, loops, compound writes, runtime expressions, and writes deferred into
-local functions or lambdas are rejected with `UAD1003` rather than guessed.
-Enum defaults serialize by member name, not by underlying integer, so the
-artifact remains readable and rejects unnamed values.
+floating-point values, decimal, string, enum, `UnrealName`, `UnrealText`,
+`UnrealObjectHandle`, `UnrealClassHandle`, and the reviewed `UnrealVector`
+struct state. Every state requires an explicit deterministic default. The value
+may come from the property initializer or from a direct, unconditional simple
+assignment in the type's explicit parameterless constructor; an
+expression-bodied constructor is also accepted. Constructor assignments follow
+source execution order, so the last direct assignment overrides earlier
+assignments and the property initializer. Branches, loops, compound writes,
+runtime expressions, and writes deferred into local functions or lambdas are
+rejected with `UAD1003` rather than guessed.
+
+Common Unreal defaults use a bounded source form: `UnrealName` and `UnrealText`
+accept an empty/default value or one constant string; `UnrealVector` accepts
+default/`Zero` or three finite constant components. Object and class handles
+accept only their zero/null form because their nonzero values identify one
+native registry generation and are not durable asset references. Enum defaults
+serialize by member name, not by underlying integer, so the artifact remains
+readable and rejects unnamed values. Struct state carries its exact Unreal type
+path, native name, and field schema in `unrealType`; scalar and reference state
+cannot claim that extra identity.
 
 ## Document model
 
@@ -65,6 +75,7 @@ Each document carries:
 - source spans for assets and state declarations;
 - display and metadata type names;
 - typed JSON defaults;
+- exact reflected type identity for reviewed struct state;
 - `instanceEditable`, `saveGame`, `replicated`, and optional `category` policy;
 - Visual function signatures linked to existing HIR method and parameter IDs.
 
@@ -73,6 +84,13 @@ IDs, duplicate asset paths, duplicate state names/IDs, invalid source spans,
 blank categories, and defaults whose JSON kind conflicts with the declared
 state kind. Serialization normalizes asset, state, and function order before
 writing, so editor and CI artifacts do not depend on source-document order.
+
+The compiled declaration payload remains major version 1 and advances to binary
+minor version 1.1. It adds the optional reflected type descriptor plus typed
+`FName`, `FText`, and `FVector` defaults. The decoder continues to accept v1.0
+scalar documents; v1.1 readers validate nesting, field order, exact FVector
+identity, finite components, and the null-only object/class default contract
+before native state is mutated.
 
 ## Declaration patch v0.2
 
@@ -131,7 +149,7 @@ The Roslyn declaration lowering boundary emits stable codes:
 | `UAD1001` | Asset path is empty, absolute, or contains invalid segments. |
 | `UAD1002` | State is not a supported instance auto-property. |
 | `UAD1003` | Default is absent, non-constant, non-finite, not JSON-representable, or written through a non-deterministic constructor shape. |
-| `UAD1004` | State type is outside the scalar/enum v0.1 boundary. |
+| `UAD1004` | State type is outside the reviewed scalar/enum/common-Unreal property matrix. |
 | `UAD1005` | Two source types claim the same asset path. |
 | `UAD1006` | Exposure metadata contains a blank category. |
 | `UAD2001` | Patch source-compilation precondition is stale. |
@@ -162,6 +180,12 @@ stores instance override membership separately from the values. This lets an
 untouched instance inherit a changed declaration default while a compatible
 override survives a declaration/graph/source rename and CoreCLR Reload. See
 [STATE_OVERRIDE_MIGRATION.md](STATE_OVERRIDE_MIGRATION.md).
+
+For Unreal targets the reviewed common types materialize as real `FNameProperty`,
+`FTextProperty`, `FObjectProperty`, `FClassProperty`, and `FStructProperty`
+(`FVector`) fields on the generated Blueprint class. The same declaration
+default initializes the native Property Bag and generated CDO, while managed
+startup/reload hydrates and flushes the corresponding strongly typed C# value.
 
 ## CLI and prototype
 

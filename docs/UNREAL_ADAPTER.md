@@ -311,8 +311,12 @@ The checked-in runtime thunk file is generated from the checked-in live UE 5.8
 manifest, including `UUnifiedScriptInteropFixture`, and a golden test prevents
 it from drifting. UE Automation executes generated int64, enum, FVector, and
 FTransform property/function thunks against that fixture. ABI v1/v2 remain
-available for existing hosts; their narrow wire layout does not claim to carry
-the new values across CoreCLR.
+available for existing hosts. Without changing the frozen v1 table or value
+struct layout, the borrowed `StringData`/`StringLength` slice now carries
+Object/Class handles as one 8-byte little-endian unsigned integer and FVector as
+three little-endian IEEE-754 binary64 components. The callback owns neither
+slice and must copy it synchronously. Other compound/container shapes remain on
+ABI v3/v4.
 
 ABI v3 is frozen as an independent caller-owned synchronous call-frame contract
 in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,
@@ -350,10 +354,11 @@ and entry point is compatible.
 
 `UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
 asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
-`unifiedscript.script-asset/v0.1`, maps supported scalar state into a
-fixed-layout `FInstancedPropertyBag`, and applies C# defaults plus Details
-metadata and Edit/SaveGame/Net flags. The C# declaration remains authoritative;
-Blueprint does not own duplicate field declarations.
+`unifiedscript.script-asset/v0.1`, maps the reviewed scalar/enum plus `FName`,
+`FText`, `UObject`, `UClass`, and `FVector` state matrix into a fixed-layout
+`FInstancedPropertyBag`, and applies C# defaults plus Details metadata and
+Edit/SaveGame/Net flags. The C# declaration remains authoritative; Blueprint
+does not own duplicate field declarations.
 
 Each state semantic ID becomes the Property Bag descriptor GUID. M8.3 now
 serializes the exact override GUID set separately from the value bag. A
@@ -372,6 +377,18 @@ canonical, but only unconditional top-level simple assignments are projected;
 non-deterministic constructor shapes fail before native class mutation. This
 keeps generated CDO defaults, managed state hydration, compatible override
 migration, and packaged reload on one typed declaration contract.
+
+The compiled declaration payload is now v1.1. It preserves v1.0 scalar decoding
+and adds an exact optional Unreal type descriptor plus typed `FName`, `FText`,
+and `FVector` defaults. The generated class projects the new shapes to native
+`FNameProperty`, `FTextProperty`, `FObjectProperty`, `FClassProperty`, and
+`FStructProperty` fields; the FVector descriptor must resolve exactly to
+`/Script/CoreUObject.Vector`. Object/class source defaults must be null because
+nonzero managed handles belong to one native registry generation, while normal
+Blueprint CDO edits may still store real reflected object/class references.
+Managed instance startup and compatible reload hydrate/flush the same
+`UnrealName`, `UnrealText`, `UnrealObjectHandle`, `UnrealClassHandle`, and
+`UnrealVector` state without a facade field.
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, obtains the declared value 10 from `DemoScript()`, overrides

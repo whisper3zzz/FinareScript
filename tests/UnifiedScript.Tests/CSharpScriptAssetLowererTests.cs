@@ -165,6 +165,87 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(11, editedState.DefaultValue.GetInt32());
     }
 
+    [Fact]
+    public void CommonUnrealValueAndReferenceStatesLowerWithTypedDefaults()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/CommonState")]
+            public sealed class CommonState
+            {
+                public UnrealName RowName { get; set; } = new("Player");
+
+                public UnrealText Label { get; set; }
+
+                public UnrealObjectHandle Target { get; set; } = default;
+
+                public UnrealClassHandle ActorClass { get; set; } = new();
+
+                public UnrealVector Offset { get; set; } = UnrealVector.Zero;
+
+                public CommonState()
+                {
+                    Label = new UnrealText("Ready");
+                    Offset = new UnrealVector(1.5, 2.5, 3.5);
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "CommonUnrealState",
+            [new CSharpSourceDocument("Game/CommonState.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = Assert.Single(
+                result.ScriptAssets!.Assets)
+            .States.ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Assert.Equal(ScriptStateTypeKind.Name, states["RowName"].TypeKind);
+        Assert.Equal("Player", states["RowName"].DefaultValue.GetString());
+        Assert.Equal(ScriptStateTypeKind.Text, states["Label"].TypeKind);
+        Assert.Equal("Ready", states["Label"].DefaultValue.GetString());
+        Assert.Equal(ScriptStateTypeKind.Object, states["Target"].TypeKind);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, states["Target"].DefaultValue.ValueKind);
+        Assert.Equal(ScriptStateTypeKind.Class, states["ActorClass"].TypeKind);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, states["ActorClass"].DefaultValue.ValueKind);
+        ScriptStateDeclaration offset = states["Offset"];
+        Assert.Equal(ScriptStateTypeKind.Struct, offset.TypeKind);
+        Assert.Equal(1.5, offset.DefaultValue.GetProperty("x").GetDouble());
+        Assert.Equal(2.5, offset.DefaultValue.GetProperty("y").GetDouble());
+        Assert.Equal(3.5, offset.DefaultValue.GetProperty("z").GetDouble());
+        Assert.Equal("/Script/CoreUObject.Vector", offset.UnrealType?.UnrealTypePath);
+        Assert.Equal(["X", "Y", "Z"],
+            offset.UnrealType?.Fields.Select(static field => field.NativeName));
+    }
+
+    [Fact]
+    public void PersistentObjectStateRejectsProcessLocalHandleDefaults()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/InvalidHandleDefault")]
+            public sealed class InvalidHandleDefault
+            {
+                public UnrealObjectHandle Target { get; set; } = new(1);
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "InvalidHandleDefault",
+            [new CSharpSourceDocument("Game/InvalidHandleDefault.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired);
+    }
+
     [Theory]
     [InlineData("if (System.DateTime.UtcNow.Ticks > 0) { Count = 7; }")]
     [InlineData("Count = System.Environment.TickCount;")]

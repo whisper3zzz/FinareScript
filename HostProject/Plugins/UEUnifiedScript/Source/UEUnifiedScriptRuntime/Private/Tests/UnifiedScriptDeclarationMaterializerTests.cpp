@@ -56,6 +56,52 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
         "typeKind": "string",
         "defaultValue": "Ready",
         "exposure": { "instanceEditable": false }
+      },
+      {
+        "id": "us_44444444444444444444444444444444",
+        "name": "RowName",
+        "typeMetadataName": "UnifiedScript.Unreal.UnrealName",
+        "typeKind": "name",
+        "defaultValue": "Player",
+        "exposure": { "instanceEditable": true }
+      },
+      {
+        "id": "us_55555555555555555555555555555555",
+        "name": "DisplayText",
+        "typeMetadataName": "UnifiedScript.Unreal.UnrealText",
+        "typeKind": "text",
+        "defaultValue": "Loaded",
+        "exposure": { "instanceEditable": true }
+      },
+      {
+        "id": "us_66666666666666666666666666666666",
+        "name": "Target",
+        "typeMetadataName": "UnifiedScript.Unreal.UnrealObjectHandle",
+        "typeKind": "object",
+        "defaultValue": null,
+        "exposure": { "instanceEditable": true }
+      },
+      {
+        "id": "us_77777777777777777777777777777777",
+        "name": "ActorClass",
+        "typeMetadataName": "UnifiedScript.Unreal.UnrealClassHandle",
+        "typeKind": "class",
+        "defaultValue": null,
+        "exposure": { "instanceEditable": true }
+      },
+      {
+        "id": "us_88888888888888888888888888888888",
+        "name": "Offset",
+        "typeMetadataName": "UnifiedScript.Unreal.UnrealVector",
+        "typeKind": "struct",
+        "unrealType": {
+          "kind": "struct",
+          "unrealTypePath": "/Script/CoreUObject.Vector",
+          "unrealNativeName": "Vector",
+          "fields": []
+        },
+        "defaultValue": { "x": 1.5, "y": 2.5, "z": 3.5 },
+        "exposure": { "instanceEditable": true }
       }
     ]
   }]
@@ -98,16 +144,22 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
         TEXT("Selected managed type is reported"),
         InitialMigration.AssetQualifiedName,
         FString(TEXT("Tests.State")));
-    TestEqual(TEXT("Three states are materialized"), InitialState.GetNumPropertiesInBag(), 3);
-    TestEqual(TEXT("Initial values inherit declaration defaults"), InitialMigration.DefaultedStateCount, 3);
+    TestEqual(TEXT("Eight states are materialized"), InitialState.GetNumPropertiesInBag(), 8);
+    TestEqual(TEXT("Initial values inherit declaration defaults"), InitialMigration.DefaultedStateCount, 8);
     TestEqual(TEXT("Initial materialization has no overrides"), InitialOverrideIds.Num(), 0);
 
     const auto Damage = InitialState.GetValueInt32(TEXT("Damage"));
     const auto Scale = InitialState.GetValueFloat(TEXT("Scale"));
     const auto Label = InitialState.GetValueString(TEXT("Label"));
+    const auto RowName = InitialState.GetValueName(TEXT("RowName"));
+    const auto DisplayText = InitialState.GetValueText(TEXT("DisplayText"));
+    const auto Offset = InitialState.GetValueStruct<FVector>(TEXT("Offset"));
     TestTrue(TEXT("Int32 default is readable"), Damage.IsValid());
     TestTrue(TEXT("Float default is readable"), Scale.IsValid());
     TestTrue(TEXT("String default is readable"), Label.IsValid());
+    TestTrue(TEXT("FName default is readable"), RowName.IsValid());
+    TestTrue(TEXT("FText default is readable"), DisplayText.IsValid());
+    TestTrue(TEXT("FVector default is readable"), Offset.IsValid());
     if (Damage.IsValid())
     {
         TestEqual(TEXT("Int32 default is applied"), Damage.GetValue(), 20);
@@ -120,6 +172,29 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
     {
         TestEqual(TEXT("String default is applied"), Label.GetValue(), FString(TEXT("Ready")));
     }
+    if (RowName.IsValid())
+    {
+        TestEqual(TEXT("FName default is applied"), RowName.GetValue(), FName(TEXT("Player")));
+    }
+    if (DisplayText.IsValid())
+    {
+        TestEqual(TEXT("FText default is applied"), DisplayText.GetValue().ToString(), FString(TEXT("Loaded")));
+    }
+    if (Offset.IsValid())
+    {
+        TestEqual(TEXT("FVector default is applied"), *Offset.GetValue(), FVector(1.5, 2.5, 3.5));
+    }
+
+    const FPropertyBagPropertyDesc* TargetDesc =
+        InitialState.FindPropertyDescByName(TEXT("Target"));
+    const FPropertyBagPropertyDesc* ClassDesc =
+        InitialState.FindPropertyDescByName(TEXT("ActorClass"));
+    TestTrue(TEXT("Object handle becomes an UObject property"),
+        TargetDesc != nullptr && TargetDesc->ValueType == EPropertyBagPropertyType::Object &&
+        TargetDesc->ValueTypeObject == UObject::StaticClass());
+    TestTrue(TEXT("Class handle becomes a UClass property"),
+        ClassDesc != nullptr && ClassDesc->ValueType == EPropertyBagPropertyType::Class &&
+        ClassDesc->ValueTypeObject == UObject::StaticClass());
 
     const FPropertyBagPropertyDesc* DamageDesc =
         InitialState.FindPropertyDescByName(TEXT("Damage"));

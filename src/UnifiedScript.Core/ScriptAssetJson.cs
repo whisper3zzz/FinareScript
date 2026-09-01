@@ -132,6 +132,21 @@ public static class ScriptAssetJson
             throw new JsonException($"Script state '{state.Name}' has a blank exposure category.");
         }
 
+        ValidateFunctionValueType(state.UnrealType, state.TypeMetadataName, 0);
+        if (state.TypeKind == ScriptStateTypeKind.Struct)
+        {
+            if (state.UnrealType?.Kind != ScriptFunctionValueTypeKind.Struct)
+            {
+                throw new JsonException(
+                    $"Struct state '{state.Name}' requires an exact Unreal struct identity.");
+            }
+        }
+        else if (state.UnrealType is not null)
+        {
+            throw new JsonException(
+                $"Non-struct state '{state.Name}' cannot carry an Unreal struct identity.");
+        }
+
         bool validDefault = state.TypeKind switch
         {
             ScriptStateTypeKind.Boolean => state.DefaultValue.ValueKind == JsonValueKind.True ||
@@ -145,6 +160,11 @@ public static class ScriptAssetJson
             ScriptStateTypeKind.String =>
                 state.DefaultValue.ValueKind is JsonValueKind.String or JsonValueKind.Null,
             ScriptStateTypeKind.Enum => state.DefaultValue.ValueKind == JsonValueKind.String,
+            ScriptStateTypeKind.Name or ScriptStateTypeKind.Text =>
+                state.DefaultValue.ValueKind == JsonValueKind.String,
+            ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
+                state.DefaultValue.ValueKind == JsonValueKind.Null,
+            ScriptStateTypeKind.Struct => IsValidStructDefault(state),
             _ => false,
         };
         if (!validDefault)
@@ -152,6 +172,29 @@ public static class ScriptAssetJson
             throw new JsonException(
                 $"Script state '{state.Name}' has a default incompatible with '{state.TypeKind}'.");
         }
+    }
+
+    private static bool IsValidStructDefault(ScriptStateDeclaration state)
+    {
+        if (state.TypeMetadataName != "UnifiedScript.Unreal.UnrealVector" ||
+            state.UnrealType?.UnrealTypePath != "/Script/CoreUObject.Vector" ||
+            state.DefaultValue.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        return TryGetFiniteNumber(state.DefaultValue, "x", out _) &&
+            TryGetFiniteNumber(state.DefaultValue, "y", out _) &&
+            TryGetFiniteNumber(state.DefaultValue, "z", out _) &&
+            state.DefaultValue.EnumerateObject().Count() == 3;
+    }
+
+    private static bool TryGetFiniteNumber(JsonElement value, string name, out double number)
+    {
+        number = default;
+        return value.TryGetProperty(name, out JsonElement component) &&
+            component.ValueKind == JsonValueKind.Number &&
+            component.TryGetDouble(out number) && double.IsFinite(number);
     }
 
     private static void ValidateFunction(

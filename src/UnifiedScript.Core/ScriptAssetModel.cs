@@ -9,6 +9,11 @@ public enum ScriptStateTypeKind
     FloatingPoint,
     String,
     Enum,
+    Name,
+    Text,
+    Object,
+    Class,
+    Struct,
 }
 
 public sealed record ScriptExposure(
@@ -28,7 +33,8 @@ public sealed record ScriptStateDeclaration(
     ScriptStateTypeKind TypeKind,
     JsonElement DefaultValue,
     SourceSpan Span,
-    ScriptExposure Exposure);
+    ScriptExposure Exposure,
+    ScriptFunctionValueTypeDeclaration? UnrealType = null);
 
 public enum ScriptFunctionValueTypeKind
 {

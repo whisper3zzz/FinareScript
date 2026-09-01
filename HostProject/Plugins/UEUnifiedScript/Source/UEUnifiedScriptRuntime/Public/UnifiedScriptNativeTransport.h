@@ -13,7 +13,11 @@
 #include <atomic>
 #include <type_traits>
 
-/** Stable, standard-layout value passed into the version-one native ABI. */
+/**
+ * Stable, standard-layout value passed into the version-one native ABI.
+ * StringData is a borrowed UTF-8 slice for text kinds and a compact,
+ * kind-specific little-endian payload for object handles and FVector values.
+ */
 struct FUnifiedScriptNativeValueV1
 {
     uint8 Kind = 0;

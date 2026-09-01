@@ -385,6 +385,7 @@ public sealed class RoundTripEquivalenceVerifier
                     .Append(':').Append(state.Exposure.SaveGame)
                     .Append(':').Append(state.Exposure.Replicated)
                     .Append(':').Append(state.Exposure.Category);
+                AppendUnrealType(canonical, state.UnrealType);
             }
             foreach (ScriptFunctionDeclaration function in asset.Functions
                          .OrderBy(static function => function.Id.Value, StringComparer.Ordinal))
@@ -403,6 +404,27 @@ public sealed class RoundTripEquivalenceVerifier
             }
         }
         return Digest(canonical.ToString());
+    }
+
+    private static void AppendUnrealType(
+        StringBuilder canonical,
+        ScriptFunctionValueTypeDeclaration? type)
+    {
+        if (type is null)
+        {
+            canonical.Append(":u:none");
+            return;
+        }
+        canonical.Append(":u:").Append((int)type.Kind)
+            .Append(':').Append(type.UnrealTypePath)
+            .Append(':').Append(type.UnrealNativeName);
+        foreach (ScriptFunctionStructFieldDeclaration field in type.Fields)
+        {
+            canonical.Append(":f:").Append(field.Index)
+                .Append(':').Append(field.NativeName)
+                .Append(':').Append(field.TypeMetadataName);
+            AppendUnrealType(canonical, field.UnrealType);
+        }
     }
 
     private static string NormalizeExecutionResult(ExecutionResult result) => result.Outcome switch

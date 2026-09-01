@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -1825,9 +1826,50 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 UnrealInvocationValue.FromName(new UnrealName(ReadUtf8(stringData, stringLength))),
             UnrealInvocationValueKind.Text =>
                 UnrealInvocationValue.FromText(new UnrealText(ReadUtf8(stringData, stringLength))),
+            UnrealInvocationValueKind.Object =>
+                UnrealInvocationValue.FromObjectHandle(
+                    new UnrealObjectHandle(ReadUInt64Payload(stringData, stringLength))),
+            UnrealInvocationValueKind.Class =>
+                UnrealInvocationValue.FromObjectHandle(
+                    new UnrealObjectHandle(ReadUInt64Payload(stringData, stringLength)),
+                    isClass: true),
+            UnrealInvocationValueKind.Vector =>
+                UnrealInvocationValue.FromVector(ReadVectorPayload(stringData, stringLength)),
             _ => throw new InvalidOperationException(
                 $"The native Unreal transport returned unknown value kind {kind}."),
         };
+
+    private static ulong ReadUInt64Payload(nint data, int length)
+    {
+        byte[] payload = ReadPayload(data, length, sizeof(ulong));
+        return BinaryPrimitives.ReadUInt64LittleEndian(payload);
+    }
+
+    private static UnrealVector ReadVectorPayload(nint data, int length)
+    {
+        const int componentSize = sizeof(ulong);
+        byte[] payload = ReadPayload(data, length, componentSize * 3);
+        return new UnrealVector(
+            ReadDoubleLittleEndian(payload.AsSpan(0, componentSize)),
+            ReadDoubleLittleEndian(payload.AsSpan(componentSize, componentSize)),
+            ReadDoubleLittleEndian(payload.AsSpan(componentSize * 2, componentSize)));
+    }
+
+    private static double ReadDoubleLittleEndian(ReadOnlySpan<byte> payload) =>
+        BitConverter.Int64BitsToDouble(unchecked((long)
+            BinaryPrimitives.ReadUInt64LittleEndian(payload)));
+
+    private static byte[] ReadPayload(nint data, int length, int expectedLength)
+    {
+        if (length != expectedLength || data == nint.Zero)
+        {
+            throw new InvalidOperationException(
+                $"The native Unreal transport returned an invalid {expectedLength}-byte value payload.");
+        }
+        byte[] payload = new byte[length];
+        Marshal.Copy(data, payload, 0, length);
+        return payload;
+    }
 
     private static string ReadUtf8(nint data, int length)
     {
@@ -2063,6 +2105,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private sealed class NativeValueLease : IDisposable
     {
         private Utf8Buffer? _string;
+        private NativeByteBuffer? _payload;
 
         public NativeValueLease(UnrealInvocationValue value)
         {
@@ -2079,6 +2122,30 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 nativeValue.StringData = _string.Pointer;
                 nativeValue.StringLength = _string.Length;
             }
+            else if (value.Kind is UnrealInvocationValueKind.Object or
+                UnrealInvocationValueKind.Class)
+            {
+                byte[] payload = new byte[sizeof(ulong)];
+                BinaryPrimitives.WriteUInt64LittleEndian(payload, value.ObjectHandle.Value);
+                _payload = new NativeByteBuffer(payload);
+                nativeValue.StringData = _payload.Pointer;
+                nativeValue.StringLength = _payload.Length;
+            }
+            else if (value.Kind == UnrealInvocationValueKind.Vector)
+            {
+                const int componentSize = sizeof(ulong);
+                byte[] payload = new byte[componentSize * 3];
+                WriteDoubleLittleEndian(payload.AsSpan(0, componentSize), value.VectorValue.X);
+                WriteDoubleLittleEndian(
+                    payload.AsSpan(componentSize, componentSize),
+                    value.VectorValue.Y);
+                WriteDoubleLittleEndian(
+                    payload.AsSpan(componentSize * 2, componentSize),
+                    value.VectorValue.Z);
+                _payload = new NativeByteBuffer(payload);
+                nativeValue.StringData = _payload.Pointer;
+                nativeValue.StringLength = _payload.Length;
+            }
             Value = nativeValue;
         }
 
@@ -2088,6 +2155,40 @@ public sealed class InProcessUnrealNativeInvocationTransport
         {
             _string?.Dispose();
             _string = null;
+            _payload?.Dispose();
+            _payload = null;
+        }
+
+        private static void WriteDoubleLittleEndian(Span<byte> destination, double value) =>
+            BinaryPrimitives.WriteUInt64LittleEndian(
+                destination,
+                unchecked((ulong)BitConverter.DoubleToInt64Bits(value)));
+    }
+
+    private sealed class NativeByteBuffer : IDisposable
+    {
+        public NativeByteBuffer(byte[] value)
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            Length = value.Length;
+            Pointer = Marshal.AllocHGlobal(Math.Max(1, Length));
+            if (Length > 0)
+            {
+                Marshal.Copy(value, 0, Pointer, Length);
+            }
+        }
+
+        public nint Pointer { get; private set; }
+
+        public int Length { get; }
+
+        public void Dispose()
+        {
+            if (Pointer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(Pointer);
+                Pointer = nint.Zero;
+            }
         }
     }
 

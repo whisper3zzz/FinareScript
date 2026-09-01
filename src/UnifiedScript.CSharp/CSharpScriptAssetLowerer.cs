@@ -244,12 +244,16 @@ internal sealed class CSharpScriptAssetLowerer
 
             PropertyDeclarationSyntax stateSyntax = propertySyntax!;
 
-            if (!TryClassifyType(property.Type, out ScriptStateTypeKind typeKind))
+            if (!TryClassifyType(
+                    compilation,
+                    property.Type,
+                    out ScriptStateTypeKind typeKind,
+                    out ScriptFunctionValueTypeDeclaration? unrealType))
             {
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedStateType,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Script state '{property.Name}' uses '{property.Type.ToDisplayString()}', but Declaration IR v0.1 supports only scalar and enum state.",
+                    $"Script state '{property.Name}' uses '{property.Type.ToDisplayString()}', but the reviewed Blueprint state matrix supports scalar, enum, FName, FText, UObject/UClass handles, and FVector values.",
                     RoslynSourceSpan.FromNode(stateSyntax.Type, stateSyntax.SyntaxTree.FilePath)));
                 continue;
             }
@@ -301,7 +305,8 @@ internal sealed class CSharpScriptAssetLowerer
                 typeKind,
                 defaultValue,
                 RoslynSourceSpan.FromNode(stateSyntax, stateSyntax.SyntaxTree.FilePath),
-                exposure));
+                exposure,
+                unrealType));
         }
 
         return states;
@@ -813,8 +818,14 @@ internal sealed class CSharpScriptAssetLowerer
             setter is { Body: null, ExpressionBody: null };
     }
 
-    private static bool TryClassifyType(ITypeSymbol type, out ScriptStateTypeKind kind)
+    private static bool TryClassifyType(
+        CSharpCompilation compilation,
+        ITypeSymbol type,
+        out ScriptStateTypeKind kind,
+        out ScriptFunctionValueTypeDeclaration? unrealType)
     {
+        string metadataName = type.ToDisplayString(TypeMetadataFormat);
+        unrealType = null;
         kind = type.SpecialType switch
         {
             SpecialType.System_Boolean => ScriptStateTypeKind.Boolean,
@@ -826,15 +837,38 @@ internal sealed class CSharpScriptAssetLowerer
                 ScriptStateTypeKind.FloatingPoint,
             SpecialType.System_String => ScriptStateTypeKind.String,
             _ when type.TypeKind == TypeKind.Enum => ScriptStateTypeKind.Enum,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealName" => ScriptStateTypeKind.Name,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealText" => ScriptStateTypeKind.Text,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealObjectHandle" => ScriptStateTypeKind.Object,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealClassHandle" => ScriptStateTypeKind.Class,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealVector" => ScriptStateTypeKind.Struct,
             _ => default,
         };
-        return type.SpecialType is SpecialType.System_Boolean or
+        bool supported = type.SpecialType is SpecialType.System_Boolean or
             SpecialType.System_SByte or SpecialType.System_Byte or
             SpecialType.System_Int16 or SpecialType.System_UInt16 or
             SpecialType.System_Int32 or SpecialType.System_UInt32 or
             SpecialType.System_Int64 or SpecialType.System_UInt64 or
             SpecialType.System_Single or SpecialType.System_Double or SpecialType.System_Decimal or
-            SpecialType.System_String || type.TypeKind == TypeKind.Enum;
+            SpecialType.System_String || type.TypeKind == TypeKind.Enum ||
+            metadataName is "UnifiedScript.Unreal.UnrealName" or
+                "UnifiedScript.Unreal.UnrealText" or
+                "UnifiedScript.Unreal.UnrealObjectHandle" or
+                "UnifiedScript.Unreal.UnrealClassHandle" or
+                "UnifiedScript.Unreal.UnrealVector";
+        if (supported && kind == ScriptStateTypeKind.Struct)
+        {
+            unrealType = new ScriptFunctionValueTypeDeclaration(
+                ScriptFunctionValueTypeKind.Struct,
+                "/Script/CoreUObject.Vector",
+                "Vector",
+                [
+                    new ScriptFunctionStructFieldDeclaration(0, "X", "System.Double"),
+                    new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
+                    new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
+                ]);
+        }
+        return supported;
     }
 
     private static bool TryResolveStateDefault(
@@ -916,10 +950,8 @@ internal sealed class CSharpScriptAssetLowerer
         }
 
         value = default;
-        Optional<object?> constant = semanticModel.GetConstantValue(expression);
-        if (!constant.HasValue || !TryCreateDefaultValue(
+        if (!TryCreateDefaultValue(
                 property.Type,
-                constant.Value,
                 expression,
                 semanticModel,
                 out value))
@@ -970,11 +1002,109 @@ internal sealed class CSharpScriptAssetLowerer
 
     private static bool TryCreateDefaultValue(
         ITypeSymbol type,
-        object? constant,
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         out JsonElement value)
     {
+        string metadataName = type.ToDisplayString(TypeMetadataFormat);
+        if (metadataName is "UnifiedScript.Unreal.UnrealName" or
+            "UnifiedScript.Unreal.UnrealText")
+        {
+            if (IsDefaultValueExpression(expression))
+            {
+                value = JsonSerializer.SerializeToElement(string.Empty);
+                return true;
+            }
+            if (TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> arguments))
+            {
+                if (arguments.Count == 0)
+                {
+                    value = JsonSerializer.SerializeToElement(string.Empty);
+                    return true;
+                }
+                if (arguments.Count == 1 &&
+                    TryReadStringConstant(arguments[0], semanticModel, out string text))
+                {
+                    value = JsonSerializer.SerializeToElement(text);
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (metadataName == "UnifiedScript.Unreal.UnrealVector")
+        {
+            if (IsDefaultValueExpression(expression) || IsNamedStaticValue(
+                    type,
+                    expression,
+                    semanticModel,
+                    "Zero"))
+            {
+                value = JsonSerializer.SerializeToElement(new { x = 0.0, y = 0.0, z = 0.0 });
+                return true;
+            }
+            if (TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> arguments) &&
+                (arguments.Count == 0 || arguments.Count == 3))
+            {
+                if (arguments.Count == 0)
+                {
+                    value = JsonSerializer.SerializeToElement(new { x = 0.0, y = 0.0, z = 0.0 });
+                    return true;
+                }
+                if (TryReadFiniteNumber(arguments[0], semanticModel, out double x) &&
+                    TryReadFiniteNumber(arguments[1], semanticModel, out double y) &&
+                    TryReadFiniteNumber(arguments[2], semanticModel, out double z))
+                {
+                    value = JsonSerializer.SerializeToElement(new { x, y, z });
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (metadataName is "UnifiedScript.Unreal.UnrealObjectHandle" or
+            "UnifiedScript.Unreal.UnrealClassHandle")
+        {
+            bool isNull = IsDefaultValueExpression(expression);
+            if (!isNull && TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> arguments))
+            {
+                isNull = arguments.Count == 0 ||
+                    arguments.Count == 1 &&
+                    TryReadUnsignedInteger(arguments[0], semanticModel, out ulong raw) && raw == 0;
+            }
+            if (isNull)
+            {
+                value = JsonSerializer.SerializeToElement<object?>(null);
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+
+        Optional<object?> constantValue = semanticModel.GetConstantValue(expression);
+        if (!constantValue.HasValue)
+        {
+            value = default;
+            return false;
+        }
+        object? constant = constantValue.Value;
         if (constant is float floatValue && !float.IsFinite(floatValue) ||
             constant is double doubleValue && !double.IsFinite(doubleValue))
         {
@@ -1005,6 +1135,93 @@ internal sealed class CSharpScriptAssetLowerer
 
         value = JsonSerializer.SerializeToElement(constant, constant?.GetType() ?? typeof(object));
         return true;
+    }
+
+    private static bool IsDefaultValueExpression(ExpressionSyntax expression) =>
+        expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
+        expression is DefaultExpressionSyntax;
+
+    private static bool IsNamedStaticValue(
+        ITypeSymbol type,
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        string name) =>
+        semanticModel.GetSymbolInfo(expression).Symbol is IPropertySymbol property &&
+        property.IsStatic && property.Name == name &&
+        SymbolEqualityComparer.Default.Equals(property.ContainingType, type);
+
+    private static bool TryReadConstructorArguments(
+        ITypeSymbol type,
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out IReadOnlyList<ExpressionSyntax> arguments)
+    {
+        arguments = [];
+        if (!SymbolEqualityComparer.Default.Equals(semanticModel.GetTypeInfo(expression).Type, type))
+        {
+            return false;
+        }
+
+        BaseArgumentListSyntax? argumentList = expression switch
+        {
+            ObjectCreationExpressionSyntax creation => creation.ArgumentList,
+            ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList,
+            _ => null,
+        };
+        if (argumentList is null)
+        {
+            return false;
+        }
+        arguments = argumentList.Arguments.Select(static argument => argument.Expression).ToArray();
+        return true;
+    }
+
+    private static bool TryReadStringConstant(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out string value)
+    {
+        Optional<object?> constant = semanticModel.GetConstantValue(expression);
+        value = constant.HasValue ? constant.Value as string ?? string.Empty : string.Empty;
+        return constant.HasValue && constant.Value is string;
+    }
+
+    private static bool TryReadFiniteNumber(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out double value)
+    {
+        Optional<object?> constant = semanticModel.GetConstantValue(expression);
+        try
+        {
+            value = constant.HasValue && constant.Value is not null
+                ? Convert.ToDouble(constant.Value, System.Globalization.CultureInfo.InvariantCulture)
+                : double.NaN;
+        }
+        catch (Exception exception) when (exception is InvalidCastException or FormatException or OverflowException)
+        {
+            value = double.NaN;
+        }
+        return double.IsFinite(value);
+    }
+
+    private static bool TryReadUnsignedInteger(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out ulong value)
+    {
+        Optional<object?> constant = semanticModel.GetConstantValue(expression);
+        try
+        {
+            value = constant.HasValue && constant.Value is not null
+                ? Convert.ToUInt64(constant.Value, System.Globalization.CultureInfo.InvariantCulture)
+                : ulong.MaxValue;
+        }
+        catch (Exception exception) when (exception is InvalidCastException or FormatException or OverflowException)
+        {
+            value = ulong.MaxValue;
+        }
+        return constant.HasValue && value != ulong.MaxValue;
     }
 
     private static ScriptExposure GetExposure(AttributeData? attribute)

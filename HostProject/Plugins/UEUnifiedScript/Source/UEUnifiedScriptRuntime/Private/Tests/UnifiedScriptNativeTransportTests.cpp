@@ -13,6 +13,8 @@
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/UObjectGlobals.h"
 
+#include <bit>
+
 namespace UE::UnifiedScript::NativeTransport::Tests
 {
 struct FCapturedResult
@@ -23,6 +25,7 @@ struct FCapturedResult
     bool BooleanValue = false;
     int32 Int32Value = 0;
     FString StringValue;
+    TArray<uint8> ValuePayload;
     EUnifiedScriptInvocationError Error = EUnifiedScriptInvocationError::None;
     EUnifiedScriptObjectHandleError HandleError = EUnifiedScriptObjectHandleError::None;
     FString Message;
@@ -83,10 +86,44 @@ void Capture(
     Result.ValueKind = static_cast<EUnifiedScriptValueKind>(ValueKind);
     Result.BooleanValue = BooleanValue != 0;
     Result.Int32Value = Int32Value;
-    Result.StringValue = Decode(StringData, StringLength);
+    Result.ValuePayload.Reset();
+    if (StringData != nullptr && StringLength > 0)
+    {
+        Result.ValuePayload.Append(StringData, StringLength);
+    }
+    Result.StringValue = Result.ValueKind == EUnifiedScriptValueKind::String ||
+            Result.ValueKind == EUnifiedScriptValueKind::Name ||
+            Result.ValueKind == EUnifiedScriptValueKind::Text
+        ? Decode(StringData, StringLength)
+        : FString();
     Result.Error = static_cast<EUnifiedScriptInvocationError>(Error);
     Result.HandleError = static_cast<EUnifiedScriptObjectHandleError>(HandleError);
     Result.Message = Decode(MessageData, MessageLength);
+}
+
+void WriteUInt64LittleEndian(TArrayView<uint8> Destination, uint64 Value)
+{
+    check(Destination.Num() == sizeof(uint64));
+    for (int32 Index = 0; Index < Destination.Num(); ++Index)
+    {
+        Destination[Index] = static_cast<uint8>(Value >> (Index * 8));
+    }
+}
+
+uint64 ReadUInt64LittleEndian(TConstArrayView<uint8> Source)
+{
+    check(Source.Num() == sizeof(uint64));
+    uint64 Value = 0;
+    for (int32 Index = 0; Index < Source.Num(); ++Index)
+    {
+        Value |= static_cast<uint64>(Source[Index]) << (Index * 8);
+    }
+    return Value;
+}
+
+double ReadDoubleLittleEndian(TConstArrayView<uint8> Source)
+{
+    return std::bit_cast<double>(ReadUInt64LittleEndian(Source));
 }
 }
 
@@ -354,6 +391,158 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
             TEXT("String input is copied into UObject storage"),
             Component->ScriptAssetPath,
             FString(TEXT("/Game/Scripts/AbiFixture")));
+
+        UUnifiedScriptInteropFixture* InteropFixture =
+            NewObject<UUnifiedScriptInteropFixture>(World);
+        InteropFixture->ObjectValue = InteropFixture;
+        InteropFixture->ClassValue = UUnifiedScriptComponent::StaticClass();
+        const FUnifiedScriptObjectHandle CommonValueHandle =
+            Registry.RegisterObject(InteropFixture, HandleResult);
+        TestTrue(TEXT("Common-value fixture registration succeeds"), HandleResult.IsSuccess());
+
+        const FTCHARToUTF8 VectorPath(
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue"));
+        Captured = {};
+        Transport->ReadProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(VectorPath.Get()),
+            VectorPath.Length(),
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("FVector read succeeds through legacy ABI"), Captured.bSuccess);
+        TestEqual(TEXT("FVector payload has three binary64 cells"), Captured.ValuePayload.Num(), 24);
+        if (Captured.ValuePayload.Num() == 24)
+        {
+            TestEqual(
+                TEXT("FVector X crosses the little-endian payload"),
+                ReadDoubleLittleEndian(MakeArrayView(Captured.ValuePayload.GetData(), 8)),
+                1.0);
+            TestEqual(
+                TEXT("FVector Y crosses the little-endian payload"),
+                ReadDoubleLittleEndian(MakeArrayView(Captured.ValuePayload.GetData() + 8, 8)),
+                2.0);
+            TestEqual(
+                TEXT("FVector Z crosses the little-endian payload"),
+                ReadDoubleLittleEndian(MakeArrayView(Captured.ValuePayload.GetData() + 16, 8)),
+                3.0);
+        }
+
+        const FTCHARToUTF8 ObjectPath(
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue"));
+        Captured = {};
+        Transport->ReadProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(ObjectPath.Get()),
+            ObjectPath.Length(),
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("UObject handle read succeeds through legacy ABI"), Captured.bSuccess);
+        TestEqual(TEXT("UObject handle payload is fixed-width"), Captured.ValuePayload.Num(), 8);
+        uint64 ObjectHandleValue = 0;
+        if (Captured.ValuePayload.Num() == 8)
+        {
+            ObjectHandleValue = ReadUInt64LittleEndian(Captured.ValuePayload);
+            FUnifiedScriptObjectHandleResult ResolveResult;
+            TestEqual(
+                TEXT("UObject payload resolves through the registry"),
+                Registry.ResolveObject({ObjectHandleValue}, ResolveResult),
+                static_cast<UObject*>(InteropFixture));
+        }
+
+        const FTCHARToUTF8 ClassPath(
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue"));
+        Captured = {};
+        Transport->ReadProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(ClassPath.Get()),
+            ClassPath.Length(),
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("UClass handle read succeeds through legacy ABI"), Captured.bSuccess);
+        TestEqual(TEXT("UClass handle payload is fixed-width"), Captured.ValuePayload.Num(), 8);
+        uint64 ClassHandleValue = 0;
+        if (Captured.ValuePayload.Num() == 8)
+        {
+            ClassHandleValue = ReadUInt64LittleEndian(Captured.ValuePayload);
+            FUnifiedScriptObjectHandleResult ResolveResult;
+            TestEqual(
+                TEXT("UClass payload resolves through the registry"),
+                Registry.ResolveObject({ClassHandleValue}, ResolveResult),
+                static_cast<UObject*>(UUnifiedScriptComponent::StaticClass()));
+        }
+
+        uint8 VectorWritePayload[24] = {};
+        WriteUInt64LittleEndian(
+            MakeArrayView(VectorWritePayload, 8),
+            std::bit_cast<uint64>(4.5));
+        WriteUInt64LittleEndian(
+            MakeArrayView(VectorWritePayload + 8, 8),
+            std::bit_cast<uint64>(-5.25));
+        WriteUInt64LittleEndian(
+            MakeArrayView(VectorWritePayload + 16, 8),
+            std::bit_cast<uint64>(6.75));
+        FUnifiedScriptNativeValueV1 NativeVector;
+        NativeVector.Kind = static_cast<uint8>(EUnifiedScriptValueKind::Vector);
+        NativeVector.StringData = VectorWritePayload;
+        NativeVector.StringLength = sizeof(VectorWritePayload);
+        Captured = {};
+        Transport->WriteProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(VectorPath.Get()),
+            VectorPath.Length(),
+            &NativeVector,
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("FVector write succeeds through legacy ABI"), Captured.bSuccess);
+        TestTrue(
+            TEXT("FVector binary payload reaches UObject storage"),
+            InteropFixture->VectorValue.Equals(FVector(4.5, -5.25, 6.75)));
+
+        uint8 ObjectWritePayload[8] = {};
+        WriteUInt64LittleEndian(MakeArrayView(ObjectWritePayload), Handle.Value);
+        FUnifiedScriptNativeValueV1 NativeObject;
+        NativeObject.Kind = static_cast<uint8>(EUnifiedScriptValueKind::Object);
+        NativeObject.StringData = ObjectWritePayload;
+        NativeObject.StringLength = sizeof(ObjectWritePayload);
+        Captured = {};
+        Transport->WriteProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(ObjectPath.Get()),
+            ObjectPath.Length(),
+            &NativeObject,
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("UObject handle write succeeds through legacy ABI"), Captured.bSuccess);
+        TestEqual(
+            TEXT("UObject handle payload reaches UObject storage"),
+            InteropFixture->ObjectValue.Get(),
+            static_cast<UObject*>(Component));
+
+        uint8 ClassWritePayload[8] = {};
+        WriteUInt64LittleEndian(MakeArrayView(ClassWritePayload), ClassHandleValue);
+        FUnifiedScriptNativeValueV1 NativeClass;
+        NativeClass.Kind = static_cast<uint8>(EUnifiedScriptValueKind::Class);
+        NativeClass.StringData = ClassWritePayload;
+        NativeClass.StringLength = sizeof(ClassWritePayload);
+        Captured = {};
+        Transport->WriteProperty(
+            Context,
+            CommonValueHandle.Value,
+            reinterpret_cast<const uint8*>(ClassPath.Get()),
+            ClassPath.Length(),
+            &NativeClass,
+            &Capture,
+            &Captured);
+        TestTrue(TEXT("UClass handle write succeeds through legacy ABI"), Captured.bSuccess);
+        TestEqual(
+            TEXT("UClass handle payload reaches UObject storage"),
+            InteropFixture->ClassValue.Get(),
+            UUnifiedScriptComponent::StaticClass());
 
         const FTCHARToUTF8 AddPath(
             TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add"));

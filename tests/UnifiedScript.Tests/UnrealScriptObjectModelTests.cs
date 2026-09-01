@@ -120,6 +120,11 @@ public sealed class UnrealScriptObjectModelTests
         bridge.Set(target, StateActorPath + ":Ratio", 1.5f);
         bridge.Set(target, StateActorPath + ":Precision", 2.25d);
         bridge.Set(target, StateActorPath + ":Label", "Ready");
+        bridge.Set(target, StateActorPath + ":RowName", new UnrealName("Player"));
+        bridge.Set(target, StateActorPath + ":DisplayText", new UnrealText("Loaded"));
+        bridge.Set(target, StateActorPath + ":ObjectValue", UnrealObjectHandle.Create(20, 40));
+        bridge.Set(target, StateActorPath + ":ClassValue", UnrealClassHandle.Create(21, 41));
+        bridge.Set(target, StateActorPath + ":Offset", new UnrealVector(1.0, 2.0, 3.0));
 
         lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 71, 3));
 
@@ -130,6 +135,11 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Equal(3.0f, script.Ratio);
         Assert.Equal(2.75d, script.Precision);
         Assert.Equal("Ready!", script.Label);
+        Assert.Equal(new UnrealName("Player.Managed"), script.RowName);
+        Assert.Equal(new UnrealText("Loaded!"), script.DisplayText);
+        Assert.True(script.ObjectValue.IsNull);
+        Assert.Equal(UnrealClassHandle.Create(21, 41), script.ClassValue);
+        Assert.Equal(new UnrealVector(2.0, 4.0, 6.0), script.Offset);
         Assert.Equal(42, bridge.Get<int>(target, StateActorPath + ":Count"));
         Assert.False(bridge.Get<bool>(target, StateActorPath + ":Enabled"));
         Assert.Equal((byte)5, bridge.Get<byte>(target, StateActorPath + ":ByteValue"));
@@ -137,6 +147,15 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Equal(3.0f, bridge.Get<float>(target, StateActorPath + ":Ratio"));
         Assert.Equal(2.75d, bridge.Get<double>(target, StateActorPath + ":Precision"));
         Assert.Equal("Ready!", bridge.Get<string>(target, StateActorPath + ":Label"));
+        Assert.Equal(new UnrealName("Player.Managed"),
+            bridge.Get<UnrealName>(target, StateActorPath + ":RowName"));
+        Assert.Equal(new UnrealText("Loaded!"),
+            bridge.Get<UnrealText>(target, StateActorPath + ":DisplayText"));
+        Assert.True(bridge.Get<UnrealObjectHandle>(target, StateActorPath + ":ObjectValue").IsNull);
+        Assert.Equal(UnrealClassHandle.Create(21, 41),
+            bridge.Get<UnrealClassHandle>(target, StateActorPath + ":ClassValue"));
+        Assert.Equal(new UnrealVector(2.0, 4.0, 6.0),
+            bridge.Get<UnrealVector>(target, StateActorPath + ":Offset"));
 
         bridge.Set(target, StateActorPath + ":Count", 100);
         bridge.Set(target, StateActorPath + ":Enabled", true);
@@ -302,6 +321,21 @@ public sealed class UnrealScriptObjectModelTests
         [Expose]
         public string Label { get; set; } = string.Empty;
 
+        [Expose]
+        public UnrealName RowName { get; set; }
+
+        [Expose]
+        public UnrealText DisplayText { get; set; }
+
+        [Expose]
+        public UnrealObjectHandle ObjectValue { get; set; }
+
+        [Expose]
+        public UnrealClassHandle ClassValue { get; set; }
+
+        [Expose]
+        public UnrealVector Offset { get; set; }
+
         protected override void OnBeginPlay()
         {
             ++Count;
@@ -311,6 +345,10 @@ public sealed class UnrealScriptObjectModelTests
             Ratio *= 2;
             Precision += 0.5;
             Label += "!";
+            RowName = new UnrealName(RowName.Value + ".Managed");
+            DisplayText = new UnrealText(DisplayText.Value + "!");
+            ObjectValue = default;
+            Offset = new UnrealVector(Offset.X * 2, Offset.Y * 2, Offset.Z * 2);
         }
 
         protected override void OnTick(float deltaSeconds)

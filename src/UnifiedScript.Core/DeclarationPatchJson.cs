@@ -400,6 +400,11 @@ public static class DeclarationPatchJson
             ScriptStateTypeKind.String => value.ValueKind is JsonValueKind.String or JsonValueKind.Null,
             ScriptStateTypeKind.Enum => value.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(value.GetString()),
+            ScriptStateTypeKind.Name or ScriptStateTypeKind.Text =>
+                value.ValueKind == JsonValueKind.String,
+            ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
+                value.ValueKind == JsonValueKind.Null,
+            ScriptStateTypeKind.Struct => IsFiniteVectorValue(value),
             _ => false,
         };
         if (!valid)
@@ -408,6 +413,23 @@ public static class DeclarationPatchJson
                 $"The {role} default is incompatible with state kind '{typeKind}'.");
         }
     }
+
+    private static bool IsFiniteVectorValue(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object ||
+            value.EnumerateObject().Count() != 3)
+        {
+            return false;
+        }
+        return TryGetFiniteNumber(value, "x") &&
+            TryGetFiniteNumber(value, "y") &&
+            TryGetFiniteNumber(value, "z");
+    }
+
+    private static bool TryGetFiniteNumber(JsonElement value, string name) =>
+        value.TryGetProperty(name, out JsonElement component) &&
+        component.ValueKind == JsonValueKind.Number &&
+        component.TryGetDouble(out double number) && double.IsFinite(number);
 
     private static void ValidateExposure(ScriptExposure exposure, string role)
     {

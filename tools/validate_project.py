@@ -7443,6 +7443,84 @@ def main() -> int:
     checks.append(
         "M13.3B-3a binds lifecycle and explicit-Super Blueprint events to managed instances"
     )
+    compiled_program_chunk_source = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
+    ).read_text(encoding="utf-8")
+    declaration_materializer_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptDeclarationMaterializer.cpp"
+    ).read_text(encoding="utf-8")
+    native_transport_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptNativeTransport.cpp"
+    ).read_text(encoding="utf-8")
+    native_transport_tests = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptNativeTransportTests.cpp"
+    ).read_text(encoding="utf-8")
+    managed_native_transport_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "InProcessUnrealNativeInvocationTransport.cs"
+    ).read_text(encoding="utf-8")
+    managed_native_transport_tests = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "InProcessUnrealNativeInvocationTransportTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "UnifiedScript.Unreal.UnrealName" in script_asset_lowerer
+        and "UnifiedScript.Unreal.UnrealText" in script_asset_lowerer
+        and "UnifiedScript.Unreal.UnrealObjectHandle" in script_asset_lowerer
+        and "UnifiedScript.Unreal.UnrealClassHandle" in script_asset_lowerer
+        and "UnifiedScript.Unreal.UnrealVector" in script_asset_lowerer
+        and "minorVersion: 1" in compiled_program_chunk_source
+        and "EPropertyBagPropertyType::Name" in declaration_materializer_source
+        and "EPropertyBagPropertyType::Text" in declaration_materializer_source
+        and "TBaseStructure<FVector>::Get()" in declaration_materializer_source
+        and "UEdGraphSchema_K2::PC_Name" in blueprint_class_materializer_source
+        and "UEdGraphSchema_K2::PC_Text" in blueprint_class_materializer_source
+        and "FName default reaches the generated CDO"
+        in blueprint_class_materializer_tests
+        and "FVector default reaches the generated CDO"
+        in blueprint_class_materializer_tests
+        and "StateBinding<UnrealVector>.CreateTyped" in managed_state_synchronizer
+        and "public UnrealName StateTag" in script_class_factory_source
+        and "ReadUInt64Payload" in managed_native_transport_source
+        and "ReadVectorPayload" in managed_native_transport_source
+        and "LegacyValueSliceCarriesObjectClassAndVectorPayloads"
+        in managed_native_transport_tests
+        and "UObject handle write succeeds through legacy ABI"
+        in native_transport_tests
+        and "WriteUInt64LittleEndian" in native_transport_source
+        and "[x] **M13.3C-1b — remaining Blueprint-visible property shapes:**"
+        in roadmap_document,
+        "M13.3C-1b common Unreal state lowering, declaration chunk, Blueprint property, managed synchronization, legacy transport, or roadmap closure is incomplete",
+    )
+    checks.append(
+        "M13.3C-1b materializes common Unreal state through Blueprint and managed runtime"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

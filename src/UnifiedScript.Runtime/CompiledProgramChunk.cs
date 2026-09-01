@@ -55,6 +55,9 @@ public enum UnifiedScriptRuntimeStateValueKind : byte
     FloatingPoint = 4,
     String = 5,
     Enum = 6,
+    Name = 7,
+    Text = 8,
+    Vector = 9,
 }
 
 public sealed record UnifiedScriptRuntimeStateValue(
@@ -63,7 +66,10 @@ public sealed record UnifiedScriptRuntimeStateValue(
     long SignedIntegerValue = 0,
     ulong UnsignedIntegerValue = 0,
     double FloatingPointValue = 0,
-    string? TextValue = null);
+    string? TextValue = null,
+    double VectorX = 0,
+    double VectorY = 0,
+    double VectorZ = 0);
 
 public sealed record UnifiedScriptRuntimeStateDeclaration(
     SemanticId Id,
@@ -72,7 +78,8 @@ public sealed record UnifiedScriptRuntimeStateDeclaration(
     string TypeMetadataName,
     ScriptStateTypeKind TypeKind,
     UnifiedScriptRuntimeStateValue DefaultValue,
-    ScriptExposure Exposure);
+    ScriptExposure Exposure,
+    ScriptFunctionValueTypeDeclaration? UnrealType = null);
 
 public sealed record UnifiedScriptRuntimeAssetDeclaration(
     SemanticId Id,
@@ -300,7 +307,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
     public static byte[] Encode(UnifiedScriptRuntimeDeclarationDocument document)
     {
         UnifiedScriptRuntimeDeclarationDocument normalized = Normalize(document);
-        var writer = new ChunkPayloadWriter(Magic);
+        var writer = new ChunkPayloadWriter(Magic, minorVersion: 1);
         writer.WriteSemanticId(normalized.SourceCompilationId);
         writer.WriteSemanticId(normalized.SemanticConfigurationId);
         writer.WriteCount(normalized.Assets.Count);
@@ -317,6 +324,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 writer.WriteString(state.TypeDisplayName);
                 writer.WriteString(state.TypeMetadataName);
                 writer.WriteByte(checked((byte)state.TypeKind));
+                WriteUnrealType(writer, state.UnrealType, 0);
                 WriteDefault(writer, state.DefaultValue);
                 byte exposureFlags = 0;
                 if (state.Exposure.InstanceEditable) exposureFlags |= 1 << 0;
@@ -331,7 +339,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     public static UnifiedScriptRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 1);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -350,6 +358,9 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 string displayName = reader.ReadString();
                 string metadataName = reader.ReadString();
                 var typeKind = (ScriptStateTypeKind)reader.ReadByte();
+                ScriptFunctionValueTypeDeclaration? unrealType = reader.MinorVersion >= 1
+                    ? ReadUnrealType(ref reader, 0)
+                    : null;
                 UnifiedScriptRuntimeStateValue defaultValue = ReadDefault(ref reader);
                 byte exposureFlags = reader.ReadByte();
                 if ((exposureFlags & ~0x07) != 0)
@@ -369,7 +380,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                         (exposureFlags & (1 << 0)) != 0,
                         (exposureFlags & (1 << 1)) != 0,
                         (exposureFlags & (1 << 2)) != 0,
-                        category));
+                        category),
+                    unrealType);
             }
             assets[assetIndex] = new UnifiedScriptRuntimeAssetDeclaration(
                 assetId,
@@ -404,7 +416,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                             state.TypeMetadataName,
                             state.TypeKind,
                             ConvertDefault(state),
-                            state.Exposure)).ToArray())).ToArray()));
+                            state.Exposure,
+                            state.UnrealType)).ToArray())).ToArray()));
     }
 
     private static UnifiedScriptRuntimeStateValue ConvertDefault(ScriptStateDeclaration state) =>
@@ -432,9 +445,85 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             ScriptStateTypeKind.Enum => new UnifiedScriptRuntimeStateValue(
                 UnifiedScriptRuntimeStateValueKind.Enum,
                 TextValue: state.DefaultValue.GetString()),
+            ScriptStateTypeKind.Name => new UnifiedScriptRuntimeStateValue(
+                UnifiedScriptRuntimeStateValueKind.Name,
+                TextValue: state.DefaultValue.GetString()),
+            ScriptStateTypeKind.Text => new UnifiedScriptRuntimeStateValue(
+                UnifiedScriptRuntimeStateValueKind.Text,
+                TextValue: state.DefaultValue.GetString()),
+            ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
+                new UnifiedScriptRuntimeStateValue(UnifiedScriptRuntimeStateValueKind.Null),
+            ScriptStateTypeKind.Struct when
+                state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" =>
+                new UnifiedScriptRuntimeStateValue(
+                    UnifiedScriptRuntimeStateValueKind.Vector,
+                    VectorX: ReadVectorComponent(state.DefaultValue, "x"),
+                    VectorY: ReadVectorComponent(state.DefaultValue, "y"),
+                    VectorZ: ReadVectorComponent(state.DefaultValue, "z")),
             _ => throw new InvalidDataException(
                 $"Script state '{state.Name}' has an unsupported runtime default."),
         };
+
+    private static double ReadVectorComponent(JsonElement value, string name) =>
+        value.GetProperty(name).GetDouble();
+
+    private static void WriteUnrealType(
+        ChunkPayloadWriter writer,
+        ScriptFunctionValueTypeDeclaration? type,
+        int depth)
+    {
+        if (depth > 16)
+        {
+            throw new InvalidDataException("A runtime Unreal value type exceeds the nesting limit.");
+        }
+        writer.WriteBoolean(type is not null);
+        if (type is null)
+        {
+            return;
+        }
+        writer.WriteByte(checked((byte)type.Kind));
+        writer.WriteString(type.UnrealTypePath);
+        writer.WriteString(type.UnrealNativeName);
+        writer.WriteCount(type.Fields.Count);
+        foreach (ScriptFunctionStructFieldDeclaration field in type.Fields)
+        {
+            writer.WriteUInt32(checked((uint)field.Index));
+            writer.WriteString(field.NativeName);
+            writer.WriteString(field.TypeMetadataName);
+            WriteUnrealType(writer, field.UnrealType, depth + 1);
+        }
+    }
+
+    private static ScriptFunctionValueTypeDeclaration? ReadUnrealType(
+        ref ChunkPayloadReader reader,
+        int depth)
+    {
+        if (depth > 16)
+        {
+            throw new InvalidDataException("A runtime Unreal value type exceeds the nesting limit.");
+        }
+        if (!reader.ReadBoolean())
+        {
+            return null;
+        }
+        var kind = (ScriptFunctionValueTypeKind)reader.ReadByte();
+        string path = reader.ReadString();
+        string nativeName = reader.ReadString();
+        int fieldCount = reader.ReadCount();
+        var fields = new ScriptFunctionStructFieldDeclaration[fieldCount];
+        for (int index = 0; index < fields.Length; ++index)
+        {
+            int fieldIndex = checked((int)reader.ReadUInt32());
+            string fieldName = reader.ReadString();
+            string metadataName = reader.ReadString();
+            fields[index] = new ScriptFunctionStructFieldDeclaration(
+                fieldIndex,
+                fieldName,
+                metadataName,
+                ReadUnrealType(ref reader, depth + 1));
+        }
+        return new ScriptFunctionValueTypeDeclaration(kind, path, nativeName, fields);
+    }
 
     private static void WriteDefault(
         ChunkPayloadWriter writer,
@@ -459,8 +548,15 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 break;
             case UnifiedScriptRuntimeStateValueKind.String:
             case UnifiedScriptRuntimeStateValueKind.Enum:
+            case UnifiedScriptRuntimeStateValueKind.Name:
+            case UnifiedScriptRuntimeStateValueKind.Text:
                 writer.WriteString(value.TextValue ?? throw new InvalidDataException(
-                    "A runtime string/enum default requires text."));
+                    "A runtime textual default requires text."));
+                break;
+            case UnifiedScriptRuntimeStateValueKind.Vector:
+                writer.WriteDouble(value.VectorX);
+                writer.WriteDouble(value.VectorY);
+                writer.WriteDouble(value.VectorZ);
                 break;
             default:
                 throw new InvalidDataException($"Unsupported runtime state value '{value.Kind}'.");
@@ -486,9 +582,16 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 kind,
                 FloatingPointValue: reader.ReadDouble()),
             UnifiedScriptRuntimeStateValueKind.String or
-                UnifiedScriptRuntimeStateValueKind.Enum => new(
+                UnifiedScriptRuntimeStateValueKind.Enum or
+                UnifiedScriptRuntimeStateValueKind.Name or
+                UnifiedScriptRuntimeStateValueKind.Text => new(
                     kind,
                     TextValue: reader.ReadString()),
+            UnifiedScriptRuntimeStateValueKind.Vector => new(
+                kind,
+                VectorX: reader.ReadDouble(),
+                VectorY: reader.ReadDouble(),
+                VectorZ: reader.ReadDouble()),
             _ => throw new InvalidDataException($"Unsupported runtime state value '{kind}'."),
         };
     }
@@ -551,6 +654,15 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     private static void ValidateDefault(UnifiedScriptRuntimeStateDeclaration state)
     {
+        bool hasStructIdentity = state.UnrealType?.Kind == ScriptFunctionValueTypeKind.Struct &&
+            !string.IsNullOrWhiteSpace(state.UnrealType.UnrealTypePath) &&
+            !string.IsNullOrWhiteSpace(state.UnrealType.UnrealNativeName);
+        if (state.TypeKind == ScriptStateTypeKind.Struct != hasStructIdentity)
+        {
+            throw new InvalidDataException(
+                $"Runtime state '{state.Name}' has an incompatible Unreal type identity.");
+        }
+
         bool valid = state.TypeKind switch
         {
             ScriptStateTypeKind.Boolean =>
@@ -566,6 +678,21 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                     UnifiedScriptRuntimeStateValueKind.String,
             ScriptStateTypeKind.Enum =>
                 state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Enum,
+            ScriptStateTypeKind.Name =>
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Name &&
+                state.DefaultValue.TextValue is not null,
+            ScriptStateTypeKind.Text =>
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Text &&
+                state.DefaultValue.TextValue is not null,
+            ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Null,
+            ScriptStateTypeKind.Struct =>
+                state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" &&
+                state.UnrealType?.UnrealTypePath == "/Script/CoreUObject.Vector" &&
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Vector &&
+                double.IsFinite(state.DefaultValue.VectorX) &&
+                double.IsFinite(state.DefaultValue.VectorY) &&
+                double.IsFinite(state.DefaultValue.VectorZ),
             _ => false,
         };
         if (!valid)
@@ -700,7 +827,7 @@ internal sealed class ChunkPayloadWriter
 {
     private readonly MemoryStream stream = new();
 
-    public ChunkPayloadWriter(ReadOnlySpan<byte> magic)
+    public ChunkPayloadWriter(ReadOnlySpan<byte> magic, ushort minorVersion = 0)
     {
         if (magic.Length != 8)
         {
@@ -708,7 +835,7 @@ internal sealed class ChunkPayloadWriter
         }
         stream.Write(magic);
         WriteUInt16(1);
-        WriteUInt16(0);
+        WriteUInt16(minorVersion);
         WriteUInt32(0);
     }
 
@@ -796,7 +923,10 @@ internal ref struct ChunkPayloadReader
     private readonly ReadOnlySpan<byte> source;
     private int offset;
 
-    public ChunkPayloadReader(ReadOnlySpan<byte> source, ReadOnlySpan<byte> expectedMagic)
+    public ChunkPayloadReader(
+        ReadOnlySpan<byte> source,
+        ReadOnlySpan<byte> expectedMagic,
+        ushort maximumMinorVersion = 0)
     {
         if (source.Length < 16 || !source[..8].SequenceEqual(expectedMagic))
         {
@@ -805,14 +935,17 @@ internal ref struct ChunkPayloadReader
         ushort major = BinaryPrimitives.ReadUInt16LittleEndian(source[8..]);
         ushort minor = BinaryPrimitives.ReadUInt16LittleEndian(source[10..]);
         uint reserved = BinaryPrimitives.ReadUInt32LittleEndian(source[12..]);
-        if (major != 1 || minor != 0 || reserved != 0)
+        if (major != 1 || minor > maximumMinorVersion || reserved != 0)
         {
             throw new InvalidDataException(
                 $"Unsupported compiled chunk payload format {major}.{minor}.");
         }
         this.source = source;
         offset = 16;
+        MinorVersion = minor;
     }
+
+    public ushort MinorVersion { get; }
 
     public byte ReadByte()
     {

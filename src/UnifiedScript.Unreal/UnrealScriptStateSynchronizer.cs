@@ -173,6 +173,26 @@ internal static class UnrealScriptStateSynchronizer
             {
                 return StringStateBinding.CreateTyped(property, memberPath);
             }
+            if (type == typeof(UnrealName))
+            {
+                return StateBinding<UnrealName>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealText))
+            {
+                return StateBinding<UnrealText>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealObjectHandle))
+            {
+                return StateBinding<UnrealObjectHandle>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealClassHandle))
+            {
+                return StateBinding<UnrealClassHandle>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealVector))
+            {
+                return StateBinding<UnrealVector>.CreateTyped(property, memberPath);
+            }
 
             throw new NotSupportedException(
                 $"Script state '{property.DeclaringType?.FullName}.{property.Name}' uses " +

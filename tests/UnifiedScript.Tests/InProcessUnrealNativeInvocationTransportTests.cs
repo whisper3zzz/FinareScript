@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -15,6 +16,9 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
         "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent";
     private const string ScriptAssetPath = TypePath + ":ScriptAssetPath";
     private const string AddPath = TypePath + ":Add";
+    private const string ObjectPath = TypePath + ":ObjectValue";
+    private const string ClassPath = TypePath + ":ClassValue";
+    private const string VectorPath = TypePath + ":VectorValue";
 
     private readonly UnrealNativeReadPropertyV1 _read;
     private readonly UnrealNativeWritePropertyV1 _write;
@@ -26,6 +30,9 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
     private readonly UnrealNativeReleaseContextV1 _release;
     private nint _tablePointer;
     private string _scriptAsset = string.Empty;
+    private UnrealObjectHandle _objectValue = UnrealObjectHandle.Create(7, 11);
+    private UnrealObjectHandle _classValue = UnrealObjectHandle.Create(13, 17);
+    private UnrealVector _vectorValue = new(1.25, -2.5, 4096.75);
     private int _retainedContexts;
     private int _fastCalls;
     private int _callFrameCalls;
@@ -74,6 +81,49 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
             Assert.Equal(1, _retainedContexts);
         }
         Assert.Equal(0, _retainedContexts);
+    }
+
+    [Fact]
+    public void LegacyValueSliceCarriesObjectClassAndVectorPayloads()
+    {
+        using var transport = new InProcessUnrealNativeInvocationTransport(
+            context: new nint(0x1234),
+            _tablePointer);
+        UnrealObjectHandle target = UnrealObjectHandle.Create(4, 9);
+
+        UnrealInvocationResponse objectRead = transport.ReadProperty(target, ObjectPath);
+        UnrealInvocationResponse classRead = transport.ReadProperty(target, ClassPath);
+        UnrealInvocationResponse vectorRead = transport.ReadProperty(target, VectorPath);
+
+        Assert.True(objectRead.IsSuccess);
+        Assert.Equal(UnrealInvocationValueKind.Object, objectRead.Value.Kind);
+        Assert.Equal(_objectValue, objectRead.Value.ObjectHandle);
+        Assert.True(classRead.IsSuccess);
+        Assert.Equal(UnrealInvocationValueKind.Class, classRead.Value.Kind);
+        Assert.Equal(_classValue, classRead.Value.ObjectHandle);
+        Assert.True(vectorRead.IsSuccess);
+        Assert.Equal(UnrealInvocationValueKind.Vector, vectorRead.Value.Kind);
+        Assert.Equal(_vectorValue, vectorRead.Value.VectorValue);
+
+        UnrealObjectHandle nextObject = UnrealObjectHandle.Create(19, 23);
+        UnrealObjectHandle nextClass = UnrealObjectHandle.Create(29, 31);
+        UnrealVector nextVector = new(-10.5, 0.125, 999.0);
+        Assert.True(transport.WriteProperty(
+            target,
+            ObjectPath,
+            UnrealInvocationValue.FromObjectHandle(nextObject)).IsSuccess);
+        Assert.True(transport.WriteProperty(
+            target,
+            ClassPath,
+            UnrealInvocationValue.FromObjectHandle(nextClass, isClass: true)).IsSuccess);
+        Assert.True(transport.WriteProperty(
+            target,
+            VectorPath,
+            UnrealInvocationValue.FromVector(nextVector)).IsSuccess);
+
+        Assert.Equal(nextObject, _objectValue);
+        Assert.Equal(nextClass, _classValue);
+        Assert.Equal(nextVector, _vectorValue);
     }
 
     [Fact]
@@ -523,6 +573,36 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
                 stringValue: _scriptAsset);
             return;
         }
+        if (memberPath == ObjectPath)
+        {
+            InvokeCallback(
+                callback,
+                userData,
+                success: true,
+                valueKind: UnrealInvocationValueKind.Object,
+                valuePayload: EncodeHandlePayload(_objectValue));
+            return;
+        }
+        if (memberPath == ClassPath)
+        {
+            InvokeCallback(
+                callback,
+                userData,
+                success: true,
+                valueKind: UnrealInvocationValueKind.Class,
+                valuePayload: EncodeHandlePayload(_classValue));
+            return;
+        }
+        if (memberPath == VectorPath)
+        {
+            InvokeCallback(
+                callback,
+                userData,
+                success: true,
+                valueKind: UnrealInvocationValueKind.Vector,
+                valuePayload: EncodeVectorPayload(_vectorValue));
+            return;
+        }
         InvokeCallback(
             callback,
             userData,
@@ -545,6 +625,28 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
             value.Kind == (byte)UnrealInvocationValueKind.String)
         {
             _scriptAsset = ReadUtf8(value.StringData, value.StringLength);
+            InvokeCallback(callback, userData, success: true);
+            return;
+        }
+        string memberPath = ReadUtf8(path, pathLength);
+        if (memberPath == ObjectPath &&
+            value.Kind == (byte)UnrealInvocationValueKind.Object)
+        {
+            _objectValue = new UnrealObjectHandle(ReadHandlePayload(value));
+            InvokeCallback(callback, userData, success: true);
+            return;
+        }
+        if (memberPath == ClassPath &&
+            value.Kind == (byte)UnrealInvocationValueKind.Class)
+        {
+            _classValue = new UnrealObjectHandle(ReadHandlePayload(value));
+            InvokeCallback(callback, userData, success: true);
+            return;
+        }
+        if (memberPath == VectorPath &&
+            value.Kind == (byte)UnrealInvocationValueKind.Vector)
+        {
+            _vectorValue = ReadVectorPayload(value);
             InvokeCallback(callback, userData, success: true);
             return;
         }
@@ -764,11 +866,14 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
         bool booleanValue = false,
         int int32Value = 0,
         string stringValue = "",
+        byte[]? valuePayload = null,
         UnrealInvocationError error = UnrealInvocationError.None,
         UnrealObjectHandleError handleError = UnrealObjectHandleError.None,
         string message = "")
     {
-        using var valueBuffer = new TestUtf8Buffer(stringValue);
+        using var valueBuffer = valuePayload is null
+            ? new TestUtf8Buffer(stringValue)
+            : new TestUtf8Buffer(valuePayload);
         using var messageBuffer = new TestUtf8Buffer(message);
         callback(
             userData,
@@ -788,6 +893,50 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
         length == 0
             ? string.Empty
             : Marshal.PtrToStringUTF8(data, length)!;
+
+    private static byte[] EncodeHandlePayload(UnrealObjectHandle handle)
+    {
+        byte[] payload = new byte[sizeof(ulong)];
+        BinaryPrimitives.WriteUInt64LittleEndian(payload, handle.Value);
+        return payload;
+    }
+
+    private static byte[] EncodeVectorPayload(UnrealVector vector)
+    {
+        byte[] payload = new byte[sizeof(ulong) * 3];
+        WriteDoubleLittleEndian(payload.AsSpan(0, sizeof(ulong)), vector.X);
+        WriteDoubleLittleEndian(payload.AsSpan(sizeof(ulong), sizeof(ulong)), vector.Y);
+        WriteDoubleLittleEndian(payload.AsSpan(sizeof(ulong) * 2, sizeof(ulong)), vector.Z);
+        return payload;
+    }
+
+    private static ulong ReadHandlePayload(TestValue value)
+    {
+        Assert.Equal(sizeof(ulong), value.StringLength);
+        byte[] payload = new byte[value.StringLength];
+        Marshal.Copy(value.StringData, payload, 0, payload.Length);
+        return BinaryPrimitives.ReadUInt64LittleEndian(payload);
+    }
+
+    private static UnrealVector ReadVectorPayload(TestValue value)
+    {
+        Assert.Equal(sizeof(ulong) * 3, value.StringLength);
+        byte[] payload = new byte[value.StringLength];
+        Marshal.Copy(value.StringData, payload, 0, payload.Length);
+        return new UnrealVector(
+            ReadDoubleLittleEndian(payload.AsSpan(0, sizeof(ulong))),
+            ReadDoubleLittleEndian(payload.AsSpan(sizeof(ulong), sizeof(ulong))),
+            ReadDoubleLittleEndian(payload.AsSpan(sizeof(ulong) * 2, sizeof(ulong))));
+    }
+
+    private static void WriteDoubleLittleEndian(Span<byte> destination, double value) =>
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination,
+            unchecked((ulong)BitConverter.DoubleToInt64Bits(value)));
+
+    private static double ReadDoubleLittleEndian(ReadOnlySpan<byte> source) =>
+        BitConverter.Int64BitsToDouble(unchecked((long)
+            BinaryPrimitives.ReadUInt64LittleEndian(source)));
 
     [StructLayout(LayoutKind.Sequential)]
     private struct TestTable
@@ -874,8 +1023,12 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
     private sealed class TestUtf8Buffer : IDisposable
     {
         public TestUtf8Buffer(string value)
+            : this(Encoding.UTF8.GetBytes(value))
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(value);
+        }
+
+        public TestUtf8Buffer(byte[] bytes)
+        {
             Length = bytes.Length;
             Pointer = Marshal.AllocHGlobal(Math.Max(1, Length));
             if (Length > 0)

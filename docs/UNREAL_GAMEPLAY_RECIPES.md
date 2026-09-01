@@ -78,6 +78,33 @@ top-level; branches, loops, compound assignments, runtime values, local
 functions, and lambdas are intentionally rejected so Blueprint CDO and packaged
 defaults remain deterministic.
 
+The reviewed Blueprint-visible common state shapes can be authored directly in
+the same class:
+
+```csharp
+public UnrealName StateTag { get; set; }
+public UnrealText DisplayText { get; set; }
+public UnrealObjectHandle LinkedObject { get; set; }
+public UnrealClassHandle LinkedClass { get; set; }
+public UnrealVector SpawnOffset { get; set; }
+
+public MyActorScript()
+{
+    StateTag = new UnrealName("Demo");
+    DisplayText = new UnrealText("Ready");
+    LinkedObject = default;
+    LinkedClass = default;
+    SpawnOffset = new UnrealVector(100.0, 0.0, 0.0);
+}
+```
+
+These become native `FName`, `FText`, `UObject`, `UClass`, and `FVector`
+properties on the generated Blueprint class and use the same state Semantic ID
+for CDO reconciliation and managed hydrate/flush. Source defaults for object and
+class handles must remain null: a nonzero handle is valid only for its current
+World registry generation. Assign durable object/class references through the
+normal Blueprint CDO/instance property surface or resolve assets at runtime.
+
 Attach the Script Asset to a `UnifiedScriptActor` or to a
 `UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,
 Tick, overlap, EndPlay, level travel, and one Build & Reload. `TargetHandle` is

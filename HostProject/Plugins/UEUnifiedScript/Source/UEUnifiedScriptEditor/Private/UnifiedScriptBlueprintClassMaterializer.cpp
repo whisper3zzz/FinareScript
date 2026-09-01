@@ -203,7 +203,8 @@ int32 FindVariableByStateId(const UBlueprint& Blueprint, const FString& Semantic
 bool ResolvePinType(
     const FString& TypeKind,
     const FString& MetadataName,
-    FEdGraphPinType& OutType)
+    FEdGraphPinType& OutType,
+    const FFunctionValueTypeDeclaration* UnrealType = nullptr)
 {
     OutType = FEdGraphPinType();
     if (TypeKind == TEXT("boolean") && MetadataName == TEXT("System.Boolean"))
@@ -248,6 +249,48 @@ bool ResolvePinType(
     if (TypeKind == TEXT("string") && MetadataName == TEXT("System.String"))
     {
         OutType.PinCategory = UEdGraphSchema_K2::PC_String;
+        return true;
+    }
+    if (TypeKind == TEXT("name") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealName"))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Name;
+        return true;
+    }
+    if (TypeKind == TEXT("text") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealText"))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Text;
+        return true;
+    }
+    if (TypeKind == TEXT("object") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle"))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Object;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    if (TypeKind == TEXT("class") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle"))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Class;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    if (TypeKind == TEXT("struct") && UnrealType != nullptr &&
+        UnrealType->Kind == EFunctionValueTypeKind::Struct &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
+        UnrealType->UnrealTypePath == TEXT("/Script/CoreUObject.Vector"))
+    {
+        UScriptStruct* Struct = LoadObject<UScriptStruct>(
+            nullptr,
+            *UnrealType->UnrealTypePath);
+        if (Struct == nullptr || Struct->GetName() != UnrealType->UnrealNativeName)
+        {
+            return false;
+        }
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        OutType.PinSubCategoryObject = Struct;
         return true;
     }
     return false;
@@ -758,8 +801,23 @@ bool ReadCanonicalDefault(
     FString& OutDefault,
     FString& OutError)
 {
-    if (!Value.IsValid() || Value->IsNull())
+    if (!Value.IsValid())
     {
+        OutError = FString::Printf(
+            TEXT("State '%s' is missing its default for '%s'."),
+            *StateName,
+            *MetadataName);
+        return false;
+    }
+
+    if (Value->IsNull())
+    {
+        if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle"))
+        {
+            OutDefault = TEXT("None");
+            return true;
+        }
         OutError = FString::Printf(
             TEXT("State '%s' requires a non-null default for '%s'."),
             *StateName,
@@ -776,6 +834,33 @@ bool ReadCanonicalDefault(
     {
         OutDefault = Value->AsString();
         return true;
+    }
+    if ((MetadataName == TEXT("UnifiedScript.Unreal.UnrealName") ||
+         MetadataName == TEXT("UnifiedScript.Unreal.UnrealText")) &&
+        Value->Type == EJson::String)
+    {
+        OutDefault = Value->AsString();
+        return true;
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
+        Value->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        double X = 0.0;
+        double Y = 0.0;
+        double Z = 0.0;
+        if (Object.IsValid() && Object->Values.Num() == 3 &&
+            Object->TryGetNumberField(TEXT("x"), X) && FMath::IsFinite(X) &&
+            Object->TryGetNumberField(TEXT("y"), Y) && FMath::IsFinite(Y) &&
+            Object->TryGetNumberField(TEXT("z"), Z) && FMath::IsFinite(Z))
+        {
+            OutDefault = FString::Printf(
+                TEXT("(X=%s,Y=%s,Z=%s)"),
+                *LexToString(X),
+                *LexToString(Y),
+                *LexToString(Z));
+            return true;
+        }
     }
     if (Value->Type != EJson::Number)
     {
@@ -1445,6 +1530,7 @@ bool ParseDeclaration(
         Declaration.SemanticId = SemanticId;
         Declaration.Name = FName(*Name);
         Declaration.TypeMetadataName = MetadataName;
+        FFunctionValueTypeDeclaration StateUnrealType;
         if (!ParseSemanticId(SemanticId, Declaration.Id) ||
             Declaration.Name.IsNone() || SeenIds.Contains(Declaration.Id) ||
             SeenNames.Contains(Declaration.Name))
@@ -1455,10 +1541,19 @@ bool ParseDeclaration(
                 *SemanticId);
             return false;
         }
-        if (!ResolvePinType(TypeKind, MetadataName, Declaration.PinType))
+        if (!ParseFunctionValueType(
+                State,
+                TEXT("unrealType"),
+                StateUnrealType,
+                OutError) ||
+            !ResolvePinType(
+                TypeKind,
+                MetadataName,
+                Declaration.PinType,
+                &StateUnrealType))
         {
             OutError = FString::Printf(
-                TEXT("State '%s' uses unsupported Blueprint state type '%s' (%s). Reviewed types are bool, byte, int, long, float, double, and non-null string."),
+                TEXT("State '%s' uses unsupported Blueprint state type '%s' (%s). Reviewed types are bool, byte, int, long, float, double, string, FName, FText, UObject/UClass handles, and FVector."),
                 *Name,
                 *TypeKind,
                 *MetadataName);
@@ -1866,6 +1961,39 @@ bool CanonicalCurrentDefault(
     if (const FStrProperty* Typed = CastField<FStrProperty>(Property))
     {
         OutValue = Typed->GetPropertyValue_InContainer(Cdo);
+        return true;
+    }
+    if (const FNameProperty* Typed = CastField<FNameProperty>(Property))
+    {
+        OutValue = Typed->GetPropertyValue_InContainer(Cdo).ToString();
+        return true;
+    }
+    if (const FTextProperty* Typed = CastField<FTextProperty>(Property))
+    {
+        OutValue = Typed->GetPropertyValue_InContainer(Cdo).ToString();
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FVector>::Get())
+    {
+        const FVector& Vector = *Typed->ContainerPtrToValuePtr<FVector>(Cdo);
+        OutValue = FString::Printf(
+            TEXT("(X=%s,Y=%s,Z=%s)"),
+            *LexToString(Vector.X),
+            *LexToString(Vector.Y),
+            *LexToString(Vector.Z));
+        return true;
+    }
+    if (const FClassProperty* Typed = CastField<FClassProperty>(Property))
+    {
+        const UObject* Value = Typed->GetObjectPropertyValue_InContainer(Cdo);
+        OutValue = Value != nullptr ? Value->GetPathName() : TEXT("None");
+        return true;
+    }
+    if (const FObjectPropertyBase* Typed = CastField<FObjectPropertyBase>(Property))
+    {
+        const UObject* Value = Typed->GetObjectPropertyValue_InContainer(Cdo);
+        OutValue = Value != nullptr ? Value->GetPathName() : TEXT("None");
         return true;
     }
 

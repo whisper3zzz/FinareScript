@@ -125,6 +125,68 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyAddsCommonUnrealStateShapesWithOrdinaryCSharpDefaults()
+    {
+        var request = new CSharpCompilationRequest(
+            "CommonStatePatch",
+            [new CSharpSourceDocument(Path, Source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        var vector = new Dictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["x"] = 1.5,
+            ["y"] = 2.5,
+            ["z"] = 3.5,
+        };
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new AddScriptStatePatchOperation(asset.Id, Spec(
+                "RowName",
+                "global::UnifiedScript.Unreal.UnrealName",
+                ScriptStateTypeKind.Name,
+                "Player",
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, Spec(
+                "DisplayText",
+                "global::UnifiedScript.Unreal.UnrealText",
+                ScriptStateTypeKind.Text,
+                "Ready",
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, Spec<object?>(
+                "Target",
+                "global::UnifiedScript.Unreal.UnrealObjectHandle",
+                ScriptStateTypeKind.Object,
+                null,
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, Spec<object?>(
+                "ActorClass",
+                "global::UnifiedScript.Unreal.UnrealClassHandle",
+                ScriptStateTypeKind.Class,
+                null,
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, Spec(
+                "Offset",
+                "global::UnifiedScript.Unreal.UnrealVector",
+                ScriptStateTypeKind.Struct,
+                vector,
+                ScriptExposure.None)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string source = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("new global::UnifiedScript.Unreal.UnrealName(\"Player\")", source);
+        Assert.Contains("new global::UnifiedScript.Unreal.UnrealText(\"Ready\")", source);
+        Assert.Contains("UnrealObjectHandle Target { get; set; } = default;", source);
+        Assert.Contains("UnrealClassHandle ActorClass { get; set; } = default;", source);
+        Assert.Contains(
+            "new global::UnifiedScript.Unreal.UnrealVector(1.5d, 2.5d, 3.5d)",
+            source);
+        Assert.Equal(5, Assert.Single(result.Analysis!.ScriptAssets!.Assets).States.Count - 2);
+    }
+
+    [Fact]
     public void ApplyRejectsStaleSourceConfigurationAndStatePreconditions()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
