@@ -160,6 +160,7 @@ foreach ($fixture in @(
             'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md',
             'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_FIRST_PROJECT.md',
             'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_GAMEPLAY_RECIPES.md',
+            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_USABILITY.md',
             'Plugins\UEUnifiedScript\Authoring\Workbench\index.html',
             "Managed\$assemblyName\FirstScript.cs",
             "Managed\$assemblyName\$assemblyName.slnx",

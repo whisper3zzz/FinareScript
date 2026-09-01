@@ -56,6 +56,9 @@
     <None Include="../../benchmarks/unreal/performance-budgets.v1.1.0.json"
           Link="UnrealPerformance/performance-budgets.v1.1.0.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/usability-budgets.v0.1.json"
+          Link="UnrealPerformance/usability-budgets.v0.1.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
           CopyToOutputDirectory="PreserveNewest" />

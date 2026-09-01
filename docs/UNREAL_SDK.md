@@ -109,6 +109,9 @@ $sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
 That command resolves the hash-manifested
 [first project golden path](UNREAL_FIRST_PROJECT.md). Use `guide recipes` after
 first Play to open the packaged [gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md).
+CI can then assemble the packaged first-Play, daily reload, and Automation
+receipts with the [versioned usability budget gate](UNREAL_USABILITY.md); this
+CMD gate does not require an interactive Editor session.
 
 ```powershell
 & "$sdk\Tools\unifiedscript.cmd" `

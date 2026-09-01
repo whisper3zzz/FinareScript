@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "unifiedscript.unreal-usability-budgets/v0.1",
+  "budgetId": "unreal-daily-workflow-v0.1",
+  "scenarios": [
+    {
+      "id": "adopt-to-first-play",
+      "measurementScope": "conservativeEnclosingRun",
+      "maximumDeliberateActions": 8,
+      "maximumRestartActions": 1,
+      "maximumWallClockMs": 720000,
+      "deliberateActions": [
+        {
+          "id": "preview-adoption",
+          "label": "Choose the project and preview adoption",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "apply-adoption",
+          "label": "Apply the reviewed adoption transaction",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "run-doctor",
+          "label": "Run Doctor and accept the diagnosed surface",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "create-script-class",
+          "label": "Create or accept the first Script Class",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "build-restart-continue",
+          "label": "Build, Restart and Continue for first native setup",
+          "requiresEditorRestart": true
+        },
+        {
+          "id": "place-or-attach",
+          "label": "Place the Actor or attach the Component",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "play",
+          "label": "Press Play and inspect the running Script Class",
+          "requiresEditorRestart": false
+        }
+      ],
+      "requiredExecutedStages": [],
+      "requiredEvidenceMarkers": [],
+      "rationale": "The initial budget includes one explained native-build restart and treats the existing packaged acceptance duration as a conservative enclosing upper bound."
+    },
+    {
+      "id": "edit-to-reload",
+      "measurementScope": "exactDailyReceipt",
+      "maximumDeliberateActions": 3,
+      "maximumRestartActions": 0,
+      "maximumWallClockMs": 15000,
+      "deliberateActions": [
+        {
+          "id": "edit-and-save",
+          "label": "Edit and save one compatible C# or Graph change",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "review-and-accept",
+          "label": "Review and accept the semantic Diff",
+          "requiresEditorRestart": false
+        },
+        {
+          "id": "build-and-reload",
+          "label": "Build and Reload the accepted change",
+          "requiresEditorRestart": false
+        }
+      ],
+      "requiredExecutedStages": [
+        "managed-gameplay-build",
+        "compiled-chunks"
+      ],
+      "requiredEvidenceMarkers": [
+        "Test Completed. Result={Success} Name={ReloadBatchPreflight}",
+        "UnifiedScript demo completed: DeclarationState=37, ReflectedEvent=73"
+      ],
+      "rationale": "A body-compatible daily edit may rebuild managed gameplay and its compiled chunk only; native/schema invalidation or an Editor restart is a regression for this scenario."
+    }
+  ],
+  "revisionNotes": [
+    "v0.1 freezes the M13.2 action vocabulary and separates the enclosing first-Play run from the exact daily reload receipt.",
+    "Automation evidence is hash-bound and must prove the all-instance reload preflight plus preserved demo state."
+  ]
+}

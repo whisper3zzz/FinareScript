@@ -98,6 +98,7 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
     ROOT / "docs" / "UNREAL_FIRST_PROJECT.md",
     ROOT / "docs" / "UNREAL_GAMEPLAY_RECIPES.md",
+    ROOT / "docs" / "UNREAL_USABILITY.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
     ROOT / "docs" / "ROADMAP.md",
@@ -964,7 +965,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 31
+        and len(release_documents) == 32
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -1044,7 +1045,7 @@ def main() -> int:
         and "run-unifiedscript-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
-        and "Active milestone: **M13.2 in progress" in roadmap_document
+        and "Active milestone: **M13.3 in progress" in roadmap_document
         and "### M13.2 — Puerts-grade daily authoring" in roadmap_document
         and "M12 strict release acceptance" in roadmap_document
         and "Frozen RC1 acceptance" in release_readiness_document
@@ -6962,6 +6963,58 @@ def main() -> int:
     )
     checks.append(
         "M13.2F packages one discoverable first-project path and nine gameplay task recipes"
+    )
+    usability_source = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealUsabilityRegression.cs"
+    ).read_text(encoding="utf-8")
+    usability_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealUsabilityRegressionTests.cs"
+    ).read_text(encoding="utf-8")
+    usability_document = (
+        ROOT / "docs" / "UNREAL_USABILITY.md"
+    ).read_text(encoding="utf-8")
+    usability_budget_path = (
+        ROOT / "benchmarks" / "unreal" / "usability-budgets.v0.1.json"
+    )
+    with usability_budget_path.open("r", encoding="utf-8") as handle:
+        usability_budget = json.load(handle)
+    usability_scenarios = {
+        scenario["id"]: scenario for scenario in usability_budget["scenarios"]
+    }
+    first_play_budget = usability_scenarios["adopt-to-first-play"]
+    reload_budget = usability_scenarios["edit-to-reload"]
+    require(
+        usability_budget["schemaVersion"]
+        == "unifiedscript.unreal-usability-budgets/v0.1"
+        and set(usability_scenarios)
+        == {"adopt-to-first-play", "edit-to-reload"}
+        and first_play_budget["maximumDeliberateActions"] == 8
+        and first_play_budget["maximumRestartActions"] == 1
+        and first_play_budget["maximumWallClockMs"] == 720000
+        and reload_budget["maximumDeliberateActions"] == 3
+        and reload_budget["maximumRestartActions"] == 0
+        and reload_budget["maximumWallClockMs"] == 15000
+        and reload_budget["requiredExecutedStages"]
+        == ["managed-gameplay-build", "compiled-chunks"]
+        and "unifiedscript.unreal-usability-regression/v0.1" in usability_source
+        and "conservative enclosing packaged onboarding" in usability_source
+        and "--fail-on-regression" in cli_source
+        and 'args[0] == "ue-usability-budget"' in cli_source
+        and "usability-budgets.v0.1.json" in sdk_package
+        and "Documentation\\UNREAL_USABILITY.md" in sdk_package
+        and "docs/UNREAL_USABILITY.md" in release_document_paths
+        and "UNREAL_USABILITY.md" in product_documentation
+        and "This gate does not require an interactive Editor session"
+        in usability_document
+        and "CheckedInBudgetsProduceDeterministicPassingWorkflowReport"
+        in usability_tests
+        and "RegressionsAreReportedAndFailingCliStillWritesReceipt"
+        in usability_tests
+        and "[x] **M13.2G — usability regression gate:**" in roadmap_document,
+        "M13.2G versioned action/time budgets, CMD report gate, SDK payload, or failure proof is incomplete",
+    )
+    checks.append(
+        "M13.2G gates first-Play and compatible reload usability with versioned CMD evidence"
     )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"

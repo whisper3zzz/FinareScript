@@ -55,14 +55,14 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-09-01**
 
-- Active milestone: **M13.2 in progress — Puerts-grade daily authoring and one C#/Graph workflow**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A-1 canonical Script Asset entry; M13.2A-2a complete-class rename/duplicate transaction; M13.2A-2b1 guarded safe delete; M13.2A-2b2a Roslyn reference plan; M13.2A-2b2b persisted crash recovery; M13.2A-2b2c UE reference and generic duplicate closure; M13.2A-2b2d packaged lifecycle replay; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D-1 all-instance reload preflight; M13.2D-2 two-phase runtime swap; M13.2D-3a editor-attached daily Build & Reload; M13.2D-3b Graph/Play convergence; M13.2E-1 canonical snapshot dual projection; M13.2E-2 restricted transactional C# editing; M13.2E-3 identity/comment/layout round-trip; M13.2F packaged product guidance**
-- Current tranche: **M13.2G — usability regression gate**
-- Current implementation state: **an extracted SDK or adopted project now resolves `unifiedscript guide first-project|recipes` without repository knowledge. The hash-manifested golden path covers Preview, Apply, Doctor, first setup, Script Asset Play, one reviewed C#/Graph edit, Build & Reload, and recovery. The companion recipe index keeps Actor, Component, Blueprint event, asset load, spawn, trace/FHitResult, UI, async, and packaging work on the generated API Browser plus one shared Build/Play graph. The next product gap is measured action/time budgets for those workflows**
-- Current verification state: **the M13.2F resolver and documentation-contract tests pass, a real Release SDK package contains both guides in its payload hash manifest, and both native and Blueprint-only packaged-adoption fixtures resolve them through their project-local CLI. The full managed suite passes 657/657 and repository validation passes 123/123; M13.2E-3's unchanged UE 5.8.1 native/26-test baseline remains green. Evidence is at `artifacts/m13-2f/sdk-package-verified.log` and `artifacts/m13-2f/packaged-adoption-verified.log`**
-- Current UI finding: **the first exploratory interactive pass exposed the temporary `NewBlueprint` identity route, duplicate entries, focus stealing, and incomplete-creation cleanup risk. The P0 implementation defects are now repaired and covered by build/headless contracts; manual Editor timing is deliberately deferred to M13.2G usability measurement and is not an M13.1 correctness gate**
-- Next acceptance: **the packaged adopt-to-first-Play and compatible edit-to-reload paths publish reproducible action counts and phase timings, and regress when reviewed budgets are exceeded**
-- Next user-visible slice: **add the M13.2G CMD measurement harness and a versioned usability-budget report instead of relying on anecdotal ease claims**
+- Active milestone: **M13.3 in progress — Managed Script Class and Blueprint parity**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate**
+- Current tranche: **M13.3 — first reviewed UObject/Actor/ActorComponent/BlueprintFunctionLibrary proxy and UClass parity slice**
+- Current implementation state: **M13.2 is closed. The packaged workflow now includes one discoverable create/open/build/Play/reload path, transactional C#/Graph authoring, product guidance, and a versioned CMD usability gate. `ue-usability-budget` hash-binds packaged first-Play, exact daily-build, deployment/chunk, and runtime Automation evidence; it always writes a report and can fail CI on action, restart, time, stage, identity, or runtime-proof regressions. The next product gap is extending that usable workflow from the current Actor/Component foundation through the ordinary reviewed UE class model**
+- Current verification state: **the checked-in M13.2G evidence passes at 7/8 first-Play actions, 1/1 explained first native-build restart, 569,454/720,000 ms enclosing time, and 3/3 compatible-edit actions with zero restarts and 6,366/15,000 ms exact daily time. The packaged CLI reproduces the passing report; the full managed suite passes 660/660, repository validation passes 124/124, the 32-document/248-file Release SDK packages with SHA-256 `00f47ab4793f84756077628453cf768fa1bbdb4f01c58c36ccd96a0085d3fdfb`, and native plus Blueprint-only packaged adoption passes 2/2. M13.2E-3's unchanged UE 5.8.1 native/26-test baseline remains green. Evidence is under `artifacts/m13-2g/`**
+- Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
+- Next acceptance: **reviewed managed UObject, Actor, ActorComponent, and BlueprintFunctionLibrary declarations produce ordinary stable proxy/UClass assets without adding a handwritten host or facade per type**
+- Next user-visible slice: **expand Script Class creation and generation from the Actor/Component foundation to the first complete reviewed UE class-kind matrix**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -79,12 +79,12 @@ until the same capability is reachable through the shipped product workflow.
 | Workflow | Confirmed current state | Parity gate | Owner |
 | --- | --- | --- | --- |
 | Install and adopt | Packaged SDK adoption, project-local Setup/Doctor/Repair, deterministic no-change rerun, and rollback are verified | One documented plugin/SDK flow works outside this repository, reports every owned file, and never requires repository paths | M13.1A baseline; replayed by every release gate |
-| Create and first Play | Actor and ActorComponent Script Classes are persistent, selectable/attachable, connected to one `Build, Restart & Continue` action, and protected by a headless name-first/rollback contract | A clean installed-product command replay reaches first Play without invoking reflection, binding, thunk, asset-sync, or deployment commands | **M13.1C complete; UI action budget in M13.2G** |
+| Create and first Play | Actor and ActorComponent Script Classes are persistent, selectable/attachable, connected to one `Build, Restart & Continue` action, protected by a headless name-first/rollback contract, and held to the versioned 8-action/one-restart budget | A clean installed-product command replay reaches first Play without invoking reflection, binding, thunk, asset-sync, or deployment commands | **M13.1C and M13.2G complete** |
 | Edit and reload | Manual source builds, accepted Graph publications, and normal Play share one coalescing editor coordinator; every compatible receipt enters the same all-instance two-phase reload, while native/schema changes return one restart action before live mutation | Keep this path green through the packaged acceptance and future C#/Graph round-trip changes | **M13.2D complete** |
 | Diagnostics and recovery | Compile, generation, coverage, stale-surface, reload, runtime, setup, and package failures share one UE Message Log with source/member/graph/package actions, bounded Retry/Repair/Restart guidance, a privacy-safe bundle, and generated project-local IDE navigation/debug configuration | One UE-facing result links to source/member/graph/package, distinguishes repair from restart, exports one copyable diagnostic bundle, and the installed IDE workspace works without repository knowledge | **M13.2C complete** |
 | Unreal API use | First-use source discovery, exact Blueprint discovery, type-safe bindings, surface locks, and coverage reports are verified for the bounded matrix | Ordinary Blueprint-visible APIs used by a representative project generate automatically; unsupported shapes fail with actionable coverage diagnostics rather than handwritten facades | M13.3, M13.4, M13.5 |
 | Unreal class-model parity | Actor and ActorComponent creation plus one property/function/lifecycle path are verified | Reviewed UObject, Actor, ActorComponent, and BlueprintFunctionLibrary classes support defaults, events, input, delegates, interfaces, inheritance, and stable asset identity | M13.3 |
-| C# and visual authoring | Semantic C#/Graph round-trip and live semantic debugging foundations are verified separately | The same Script Class opens in C# or Graph, preserves IDs/comments, previews destructive semantic changes, and executes equivalently | M13.2 |
+| C# and visual authoring | The same Script Class opens as C# or Graph, preserves IDs/comments/layout, previews semantic changes, and enters the shared Build/Reload path | Keep the transactional dual projection green while M13.3 expands the class model | **M13.2 complete** |
 | IDE and debugging | Packaged adoption generates project-local references, typed navigation/documentation, Build/Validate tasks, and CoreCLR process-attach configuration without repository paths | The installed solution/workspace and documented attach path remain covered by release acceptance | **M13.2C complete** |
 | Package and ship | A fresh SDK consumer packages and executes exact Actor and Component generated classes from `.uschunk`; post-smoke ValidateOnly, Doctor, zero-change Repair, and exact user-file-preserving rollback pass | Actor and Component execute in the final packaged build; no-change rebuild, Doctor, and rollback remain clean | **M13.1C-1d complete** |
 | Migrate real gameplay | BlockBreaker has a complete UnifiedScript/Puerts evidence suite, but it is not yet a generic migration workflow | One external production-shaped slice reaches observable parity and removes its old runtime owner without project-specific facades | M13.4 |
@@ -102,9 +102,9 @@ product queue is:
    clean SDK, followed by no-change validation and user-file-preserving rollback.
 4. **M13.1C-1e (complete):** headless name-first, single-entry, focus-order, and
    transactional rollback contracts, followed by UE 5.8.1 full Automation.
-5. **M13.2 (current):** close the Puerts-grade daily workflow first: one editor-native
+5. **M13.2 (complete):** close the Puerts-grade daily workflow first: one editor-native
    create/open/build/Play/reload path, IDE setup, and default C#/Graph authoring.
-6. **M13.3:** expand the now-usable Script Class workflow through the reviewed UE
+6. **M13.3 (current):** expand the now-usable Script Class workflow through the reviewed UE
    class model, Blueprint inheritance/events, input, delegates, and stable asset
    operations.
 7. **M13.4 -> M13.6:** external migration proof, ecosystem/network closure,
@@ -113,8 +113,8 @@ product queue is:
 ### Puerts-grade workflow budgets
 
 "As easy as Puerts" is accepted through shipped workflow contracts, not backend
-feature count. Headless build/runtime gates remain mandatory. M13.2G may add
-human action/time budgets as a separate usability regression signal without
+feature count. Headless build/runtime gates remain mandatory. M13.2G adds
+action/time budgets as a separate usability regression signal without
 turning interactive Editor replay into a correctness prerequisite.
 
 | User journey | Initial budget | Hard failure condition |
@@ -166,6 +166,8 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.2E-1 canonical snapshot dual projection | Authoring workspace v0.5 now carries exact `SourceText` through the strict UE parser into the same Script Asset editor as its Graph/Surface projection. One Graph/C# switch keeps the native graph alive and displays the canonical revision read-only; a local Surface cannot masquerade as a Workbench source snapshot. UE 5.8.1 build, focused and refreshed 26/26 CMD Automation, 651/651 managed tests, BuildGraph regression, and 120/120 repository invariants pass. Evidence is at `artifacts/m13-2e1/automation/authoring-surface-focused-final.log` and `artifacts/m13-2e1/automation/unifiedscript-unreal-full-final.log` |
 | M13.2E-2 restricted transactional C# editing | The Script Asset C# projection owns a dirty/revert/apply buffer but never writes files directly. Source-text v0.1 binds one workspace source, its baseline SHA-256, the loaded revision, and a bounded candidate; compile and semantic/source Diff run before the mandatory preview token can publish the exact prepared snapshot. UE 5.8.1 build, focused and refreshed 26/26 CMD Automation, 655/655 managed tests, BuildGraph regression, and 121/121 repository invariants pass. Evidence is at `artifacts/m13-2e2/automation/authoring-surface-focused-final.log` and `artifacts/m13-2e2/automation/unifiedscript-unreal-full-final-3.log` |
 | M13.2E-3 identity/comment/layout round-trip | Preview v0.3 emits a visible preservation receipt and binds synchronized `.usgraph` bytes to the same token as source and identity. Both C# -> Graph -> C# and Graph -> C# -> Graph retain stable IDs, source comments, layout-only Graph comments, node and route layout, and exact untouched source; new nodes are unplaced, removed layout is orphaned, and concurrent layout writes reject with `UAW1015`. UE 5.8.1 build, focused and refreshed 26/26 CMD Automation, 655/655 managed tests, BuildGraph regression, and 122/122 repository invariants pass. Evidence is at `artifacts/m13-2e3/automation/authoring-surface-focused.log` and `artifacts/m13-2e3/automation/unifiedscript-unreal-full.log` |
+| M13.2F packaged product guidance | The Release SDK and adopted project-local CLI resolve one first-project golden path and nine gameplay recipes without repository paths. 657/657 managed tests, 123/123 repository invariants, actual SDK packaging, and 2/2 packaged-adoption fixtures pass. Evidence is at `artifacts/m13-2f/sdk-package-verified.log` and `artifacts/m13-2f/packaged-adoption-verified.log` |
+| M13.2G usability regression gate | Versioned CMD evidence passes adopt-to-first-Play at 7/8 actions, 1/1 restart, and 569,454/720,000 ms; compatible edit/reload passes at 3/3 actions, zero restarts, 6,366/15,000 ms, and exactly two managed/chunk stages. The packaged CLI reproduces the report; 660/660 managed tests, 124/124 repository invariants, a 32-document/248-file SDK, and 2/2 packaged-adoption fixtures pass. Evidence is under `artifacts/m13-2g/`; SDK SHA-256 `00f47ab4793f84756077628453cf768fa1bbdb4f01c58c36ccd96a0085d3fdfb` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -1907,8 +1909,8 @@ become three independently configured products.
 | M13.1B-2b — Blueprint discovery and surface lock | ordinary C# use discovers loaded Blueprint/generated classes by exact asset/class identity and freezes the generated development surface for team/CI use | loaded Blueprint fixture, asset-path identity, per-type localized regeneration, no-change lock, and stale-lock rejection pass | Complete |
 | M13.1C-0 — attachable Script Class foundation | **Create UnifiedScript Class** produces one ActorComponent and one Actor proxy with stable native, asset, managed, and semantic identity | both classes are selectable/attachable, receive `BeginPlay`/`Tick`, expose one property/function, survive reopen, and require no handwritten facade | Complete |
 | M13.1C-1 — first-Play golden path | the adopted clean project can create, compile, attach, Play, edit, reload, cook, and package the new Script Class through the installed product | the complete workflow replays headlessly from a packaged SDK with diagnostics, no manual generator command, and no source-checkout dependency | **Complete** |
-| M13.2 — Puerts-grade daily workflow | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable editor-native workflow | command-line contracts remain green; optional human action/time measurements expose UX regressions without replacing correctness gates | **Active** |
-| M13.3 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | Pending |
+| M13.2 — Puerts-grade daily workflow | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable editor-native workflow | command-line contracts remain green; versioned action/time measurements expose UX regressions without replacing correctness gates | **Complete** |
+| M13.3 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | **Active** |
 | M13.4 — external production pilot | a non-BlockBreaker project migrates a representative gameplay slice through the published golden path | exact old/new observables match and a second clean checkout reproduces adoption and packaging | Pending |
 | M13.5–M13.6 — ecosystem closure | native extensions, networking, platforms, distribution, and reproduced performance losses are covered | every advertised row has build, lifecycle, cook/package, smoke, upgrade/rollback, and workload evidence | Pending |
 
@@ -2579,7 +2581,7 @@ by M13.2G rather than the M13.1 correctness gate.
 Outcome: the common edit-Play-debug loop has one obvious entry point and does
 not expose generator ordering or runtime-generation bookkeeping.
 
-- [ ] **M13.2A — editor-native workflow:** provide one authoritative create/open
+- [x] **M13.2A — editor-native workflow:** provide one authoritative create/open
   entry, name-first transactional creation, normal double-click/open behavior,
   explicit cleanup/repair, and no duplicate or create-then-rename identity route
   - [x] **M13.2A-1 — canonical Script Asset entry:** register a native Asset
@@ -2587,14 +2589,14 @@ not expose generator ordering or runtime-generation bookkeeping.
     Surface; expose exact source, generated-class, and repair actions; reject bare
     asset rename/duplicate with actionable identity guidance; cover the contract
     through `UnrealEditor-Cmd` + NullRHI Automation
-  - [ ] **M13.2A-2 — transactional full-class operations:** make rename,
+  - [x] **M13.2A-2 — transactional full-class operations:** make rename,
     duplicate, delete, cleanup, redirect/reference repair, and failure rollback
     operate on the complete source/proxy/deployment/semantic artifact set
     - [x] **M13.2A-2a — rename and duplicate transaction:** provide explicit
       complete-class actions; preserve `ClassId` on rename, mint it on duplicate,
       update proxy/sidecar/source/deployment/first-Play identities, reject
       concurrent file edits, and roll back both UE assets and external bytes
-    - [ ] **M13.2A-2b — delete and recovery closure:** guard the generated
+    - [x] **M13.2A-2b — delete and recovery closure:** guard the generated
       Blueprint as well as the sidecar, delete the complete class safely, repair
       managed/UE references and redirectors, persist crash-recovery receipts,
       and replay all operations from the packaged SDK
@@ -2630,7 +2632,7 @@ not expose generator ordering or runtime-generation bookkeeping.
   package omissions in UE Message Log with source/graph/member navigation;
   generate IDE solution/project references, typed API navigation, autocomplete,
   documentation links, and debugger launch/attach configuration
-- [ ] **M13.2D — edit/reload:** reload changed Script Classes transactionally
+- [x] **M13.2D — edit/reload:** reload changed Script Classes transactionally
   during the supported editor states, preserve declared state when compatible,
   and explain restart-required native/schema changes before applying them
   - [x] **M13.2D-1 — all-instance preflight barrier:** collect the exact Script
@@ -2666,7 +2668,7 @@ not expose generator ordering or runtime-generation bookkeeping.
 - [x] **M13.2F — product guidance:** add a short first-project walkthrough and
   task-oriented recipes for Actor, Component, Blueprint event, asset load,
   spawn, trace, UI, async, and packaging
-- [ ] **M13.2G — usability regression gate:** record time/action counts for
+- [x] **M13.2G — usability regression gate:** record time/action counts for
   adopt-to-first-Play and edit-to-reload; use those measurements as regression
   budgets instead of claiming ease anecdotally
 
@@ -2942,6 +2944,24 @@ installed files through their project-local CLI. The full managed suite passes
 `artifacts/m13-2f/sdk-package-verified.log` and
 `artifacts/m13-2f/packaged-adoption-verified.log`. The cursor advances to M13.2G
 usability regression measurement.
+
+Progress (2026-09-01, M13.2G): the SDK now ships
+`usability-budgets.v0.1.json`, a dedicated guide, and the
+`ue-usability-budget` CMD gate. The versioned report separates the conservative
+packaged first-Play enclosing run from the exact `dailyEditor` receipt, records
+contracted actions/restarts, build phases, final project/type/asset/source
+identity, failures/repair actions, and SHA-256-bound build/runtime evidence.
+The checked-in evidence passes at 7/8 actions, 1/1 restart, and
+569,454/720,000 ms for first Play; compatible edit/reload passes at 3/3 actions,
+zero restarts, 6,366/15,000 ms, and exactly `managed-gameplay-build` plus
+`compiled-chunks`. Failure tests prove the report is still written before
+`--fail-on-regression` returns 65. The packaged CLI reproduces the passing
+report; the full managed suite passes 660/660, repository validation passes
+124/124, the 32-document/248-file SDK packages with SHA-256
+`00f47ab4793f84756077628453cf768fa1bbdb4f01c58c36ccd96a0085d3fdfb`,
+and native plus Blueprint-only packaged adoption passes 2/2. Evidence is under
+`artifacts/m13-2g/`. M13.2 is complete and the cursor advances to M13.3's first
+reviewed class-kind parity slice.
 
 ### M13.3 — Managed Script Class and Blueprint parity
 

@@ -371,6 +371,10 @@ try {
         -Destination (Join-Path $benchmarkDirectory 'generation-prewarm-probe.cs') `
         -Force
     Copy-Item `
+        -LiteralPath (Join-Path $repoRoot 'benchmarks\unreal\usability-budgets.v0.1.json') `
+        -Destination (Join-Path $benchmarkDirectory 'usability-budgets.v0.1.json') `
+        -Force
+    Copy-Item `
         -LiteralPath (Join-Path $repoRoot 'HostProject\Config\UnifiedScript.onboarding.json') `
         -Destination (Join-Path $templateDirectory 'UnifiedScript.onboarding.json') `
         -Force
@@ -416,6 +420,7 @@ try {
         'Schemas\compatibility-policy.v0.1.json',
         'Schemas\diagnostics-policy.v0.1.json',
         'benchmarks\unreal\generation-prewarm-probe.cs',
+        'benchmarks\unreal\usability-budgets.v0.1.json',
         'Managed\Runtime\UnifiedScript.Core.dll',
         'Managed\Runtime\UnifiedScript.Unreal.dll',
         'Managed\Runtime\UnifiedScript.Unreal.deps.json',
@@ -427,6 +432,7 @@ try {
         'Documentation\UNREAL_ONBOARDING.md',
         'Documentation\UNREAL_FIRST_PROJECT.md',
         'Documentation\UNREAL_GAMEPLAY_RECIPES.md',
+        'Documentation\UNREAL_USABILITY.md',
         'Documentation\DIAGNOSTICS_BUNDLES.md',
         'Documentation\RUNTIME_DIAGNOSTICS.md',
         'Documentation\PERFORMANCE_WORKLOAD_SUITE.md',

@@ -223,6 +223,11 @@ internal static class Program
             return RunUnrealWorkloadBudget(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-usability-budget")
+        {
+            return RunUnrealUsabilityBudget(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-workload-assemble")
         {
             return RunUnrealWorkloadAssembly(args);
@@ -2882,6 +2887,58 @@ internal static class Program
         }
     }
 
+    private static int RunUnrealUsabilityBudget(IReadOnlyList<string> args)
+    {
+        const long MaximumUsabilityInputBytes = 64L * 1024 * 1024;
+        if (!TryParseUnrealUsabilityBudgetArguments(
+                args,
+                out UnrealUsabilityBudgetOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without usability budget options.");
+        foreach (string input in new[]
+        {
+            options.PackagedFirstPlayPath,
+            options.DailyReloadPath,
+            options.AutomationEvidencePath,
+            options.BudgetPath,
+        })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine($"Usability budget input does not exist: {input}");
+                return 66;
+            }
+            if (new FileInfo(input).Length > MaximumUsabilityInputBytes)
+            {
+                Console.Error.WriteLine(
+                    $"Usability budget input exceeds 64 MiB: {input}");
+                return 65;
+            }
+        }
+
+        UnrealUsabilityBudgetManifest budgets =
+            UnrealUsabilityRegressionJson.DeserializeManifest(
+                File.ReadAllText(options.BudgetPath));
+        UnrealUsabilityRegressionReport report = UnrealUsabilityRegression.Evaluate(
+            budgets,
+            options.PackagedFirstPlayPath,
+            options.DailyReloadPath,
+            options.AutomationEvidencePath);
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        WriteAtomically(
+            outputPath,
+            UnrealUsabilityRegressionJson.SerializeReport(report) + "\n");
+        Console.WriteLine(outputPath);
+        Console.WriteLine(
+            $"Unreal usability budget: {report.Status.ToUpperInvariant()} " +
+            $"(scenarios={report.Scenarios.Count}, violations={report.Violations.Count})");
+        return options.FailOnRegression && report.Status != "passed" ? 65 : 0;
+    }
+
     private static int RunUnrealWorkloadAssembly(IReadOnlyList<string> args)
     {
         const long MaximumCaptureBytes = 4L * 1024 * 1024;
@@ -5266,6 +5323,71 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealUsabilityBudgetArguments(
+        IReadOnlyList<string> args,
+        out UnrealUsabilityBudgetOptions? options)
+    {
+        options = null;
+        if (args.Count is < 11 or > 12 || args[0] != "ue-usability-budget")
+        {
+            return false;
+        }
+        string? packagedFirstPlayPath = null;
+        string? dailyReloadPath = null;
+        string? automationEvidencePath = null;
+        string? budgetPath = null;
+        string? outputPath = null;
+        bool failOnRegression = false;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-regression" && !failOnRegression)
+            {
+                failOnRegression = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--packaged-first-play" when packagedFirstPlayPath is null:
+                    packagedFirstPlayPath = value;
+                    break;
+                case "--daily-reload" when dailyReloadPath is null:
+                    dailyReloadPath = value;
+                    break;
+                case "--automation-evidence" when automationEvidencePath is null:
+                    automationEvidencePath = value;
+                    break;
+                case "--budgets" when budgetPath is null:
+                    budgetPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (packagedFirstPlayPath is null || dailyReloadPath is null ||
+            automationEvidencePath is null || budgetPath is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealUsabilityBudgetOptions(
+            packagedFirstPlayPath,
+            dailyReloadPath,
+            automationEvidencePath,
+            budgetPath,
+            outputPath,
+            failOnRegression);
+        return true;
+    }
+
     private static bool TryParseUnrealWorkloadAssemblyArguments(
         IReadOnlyList<string> args,
         out UnrealWorkloadAssemblyOptions? options)
@@ -6149,6 +6271,7 @@ internal static class Program
         "  unifiedscript ue-workload-assemble --manifest <suite.json> --captures <directory> --engine <unifiedScript|puerts> --out <result.json>\n" +
         "  unifiedscript ue-workload-compare --manifest <suite.json> --unified <result.json> --puerts <result.json> --out <report.json>\n" +
         "  unifiedscript ue-workload-budget --manifest <suite.json> --comparison <report.json> --budgets <budgets.json> --out <budget-report.json>\n" +
+        "  unifiedscript ue-usability-budget --packaged-first-play <report.json> --daily-reload <report.json> --automation-evidence <log> --budgets <budgets.json> --out <report.json> [--fail-on-regression]\n" +
         "  unifiedscript verify-roundtrip <visual.cs> <code.cs> --requirements <requirements.json> --report <report.json> [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
@@ -6283,6 +6406,14 @@ internal static class Program
         string ComparisonPath,
         string BudgetPath,
         string OutputPath);
+
+    private sealed record UnrealUsabilityBudgetOptions(
+        string PackagedFirstPlayPath,
+        string DailyReloadPath,
+        string AutomationEvidencePath,
+        string BudgetPath,
+        string OutputPath,
+        bool FailOnRegression);
 
     private sealed record UnrealWorkloadAssemblyOptions(
         string ManifestPath,

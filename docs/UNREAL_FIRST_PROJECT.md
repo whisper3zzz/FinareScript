@@ -130,3 +130,6 @@ Next, open the recipe index directly from the adopted project:
 ```powershell
 & "$projectTools\unifiedscript.cmd" guide recipes
 ```
+
+For repeatable CMD measurement of this path and the compatible edit/reload
+loop, use the [versioned usability budget gate](UNREAL_USABILITY.md).
