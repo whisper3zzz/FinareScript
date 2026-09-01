@@ -349,6 +349,39 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyCreatesRunnableActorComponentScriptAssetWithLifecycleHooks()
+    {
+        const string source = "namespace Game; public static class ExistingSourceAnchor { }";
+        var request = new CSharpCompilationRequest(
+            "CreateComponentScriptAssetTests",
+            [new CSharpSourceDocument("Game/Scripts.cs", source)],
+            [typeof(UnrealActorComponentScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new AddScriptAssetPatchOperation(
+                "Game/Scripts.cs",
+                new ScriptAssetPatchSpec(
+                    "Game",
+                    "MovementComponentBehavior",
+                    "Gameplay/MovementComponentBehavior",
+                    "global::UnifiedScript.Unreal.UnrealActorComponentScript",
+                    IncludeActorLifecycle: true)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patched = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "public sealed class MovementComponentBehavior : global::UnifiedScript.Unreal.UnrealActorComponentScript",
+            patched,
+            StringComparison.Ordinal);
+        Assert.Contains("protected override void OnBeginPlay()", patched, StringComparison.Ordinal);
+        Assert.Contains("protected override void OnTick(float deltaSeconds)", patched, StringComparison.Ordinal);
+        Assert.Contains("protected override void OnEndPlay()", patched, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ApplyAuthorsUpdatesAndRemovesVisualFunctionAndAssetPath()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);

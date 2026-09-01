@@ -12,7 +12,7 @@ enum class EUnifiedScriptClassCreationFailurePoint : uint8
     AfterExternalPublication,
 };
 
-/** Shared implementation for the Actor and ActorComponent Script Class assets. */
+/** Shared implementation for reviewed UObject, Actor, component, and function-library proxies. */
 UCLASS(Abstract)
 class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptClassFactory : public UBlueprintFactory
 {
@@ -62,6 +62,19 @@ protected:
 #endif
 };
 
+/** Instantiable managed UObject class backed by UUnifiedScriptObject. */
+UCLASS()
+class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptObjectClassFactory final
+    : public UUnifiedScriptClassFactory
+{
+    GENERATED_BODY()
+
+public:
+    explicit UUnifiedScriptObjectClassFactory(const FObjectInitializer& ObjectInitializer);
+
+    virtual FText GetDisplayName() const override;
+};
+
 /** Placeable managed Actor class backed by AUnifiedScriptActor. */
 UCLASS()
 class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptActorClassFactory final
@@ -84,6 +97,20 @@ class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptActorComponentClassFactory final
 
 public:
     explicit UUnifiedScriptActorComponentClassFactory(const FObjectInitializer& ObjectInitializer);
+
+    virtual FText GetDisplayName() const override;
+};
+
+/** Static managed Blueprint-callable surface backed by a Blueprint Function Library. */
+UCLASS()
+class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptBlueprintFunctionLibraryClassFactory final
+    : public UUnifiedScriptClassFactory
+{
+    GENERATED_BODY()
+
+public:
+    explicit UUnifiedScriptBlueprintFunctionLibraryClassFactory(
+        const FObjectInitializer& ObjectInitializer);
 
     virtual FText GetDisplayName() const override;
 };

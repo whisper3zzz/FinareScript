@@ -10,6 +10,8 @@ enum class EUnifiedScriptClassKind : uint8
     None,
     Actor,
     ActorComponent,
+    Object,
+    BlueprintFunctionLibrary,
 };
 
 /**

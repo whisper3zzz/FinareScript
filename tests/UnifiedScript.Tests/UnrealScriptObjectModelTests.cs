@@ -66,6 +66,43 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Throws<InvalidOperationException>(() => _ = script.Lifetime);
     }
 
+    [Fact]
+    public void ActorComponentScriptMapsWorldOwnedContextToComponentLifecycle()
+    {
+        var script = new ProbeActorComponentScript();
+        IUnrealManagedScript lifecycle = script;
+        var host = UnrealObjectHandle.Create(7, 21);
+        var target = UnrealObjectHandle.Create(8, 22);
+
+        lifecycle.OnStart(new UnrealScriptContext(new RejectingBridge(), host, target, 31, 6));
+        lifecycle.OnTick(0.125f);
+        lifecycle.OnStop();
+
+        Assert.Equal(1, script.BeginPlayCount);
+        Assert.Equal(1, script.TickCount);
+        Assert.Equal(1, script.EndPlayCount);
+        Assert.Equal(0.125f, script.LastDeltaSeconds);
+        Assert.True(script.WasCanceledDuringEndPlay);
+    }
+
+    [Fact]
+    public void ScriptClassAttributePinsStableReviewedClassKinds()
+    {
+        Assert.Equal(1, (int)UnrealScriptClassKind.Actor);
+        Assert.Equal(2, (int)UnrealScriptClassKind.ActorComponent);
+        Assert.Equal(3, (int)UnrealScriptClassKind.Object);
+        Assert.Equal(4, (int)UnrealScriptClassKind.BlueprintFunctionLibrary);
+
+        UnrealScriptClassAttribute attribute = Assert.Single(
+            typeof(AnnotatedFunctionLibrary)
+                .GetCustomAttributes(typeof(UnrealScriptClassAttribute), inherit: false)
+                .Cast<UnrealScriptClassAttribute>());
+        Assert.Equal(UnrealScriptClassKind.BlueprintFunctionLibrary, attribute.Kind);
+        Assert.Equal(
+            "/Script/Engine.BlueprintFunctionLibrary",
+            attribute.BaseClassPath);
+    }
+
     private sealed class ProbeActorScript : UnrealActorScript
     {
         public int BeginPlayCount { get; private set; }
@@ -123,6 +160,40 @@ public sealed class UnrealScriptObjectModelTests
     private sealed class FailingActorScript : UnrealActorScript
     {
         protected override void OnBeginPlay() => throw new ExpectedFailureException();
+    }
+
+    private sealed class ProbeActorComponentScript : UnrealActorComponentScript
+    {
+        public int BeginPlayCount { get; private set; }
+
+        public int TickCount { get; private set; }
+
+        public int EndPlayCount { get; private set; }
+
+        public float LastDeltaSeconds { get; private set; }
+
+        public bool WasCanceledDuringEndPlay { get; private set; }
+
+        protected override void OnBeginPlay() => ++BeginPlayCount;
+
+        protected override void OnTick(float deltaSeconds)
+        {
+            ++TickCount;
+            LastDeltaSeconds = deltaSeconds;
+        }
+
+        protected override void OnEndPlay()
+        {
+            ++EndPlayCount;
+            WasCanceledDuringEndPlay = Lifetime.IsCancellationRequested;
+        }
+    }
+
+    [UnrealScriptClass(
+        UnrealScriptClassKind.BlueprintFunctionLibrary,
+        BaseClassPath = "/Script/Engine.BlueprintFunctionLibrary")]
+    private static class AnnotatedFunctionLibrary
+    {
     }
 
     private sealed class ExpectedFailureException : Exception

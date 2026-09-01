@@ -11,6 +11,8 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UnifiedScriptActor.h"
+#include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptProjectSetup.h"
@@ -80,6 +82,15 @@ bool CreateAndVerify(
     EUnifiedScriptClassKind ExpectedKind,
     FScopedCreatedClassCleanup* Cleanup)
 {
+    const bool bSupportsFirstPlay =
+        ExpectedKind == EUnifiedScriptClassKind::Actor ||
+        ExpectedKind == EUnifiedScriptClassKind::ActorComponent;
+    const FString FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
+        FPaths::ProjectDir());
+    TArray<uint8> FirstPlayBefore;
+    const bool bHadFirstPlayBefore = FFileHelper::LoadFileToArray(
+        FirstPlayBefore,
+        *FirstPlayRequestPath);
     const FString PackageName = FString::Printf(
         TEXT("/Game/UnifiedScriptAutomation/%s"),
         *TypeName);
@@ -99,7 +110,14 @@ bool CreateAndVerify(
         return false;
     }
 
-    UUnifiedScriptAsset* ScriptAsset = nullptr;
+    const UUnifiedScriptBlueprint* UnifiedBlueprint =
+        Cast<UUnifiedScriptBlueprint>(Blueprint);
+    Test.TestNotNull(
+        TEXT("Generated proxy uses the product-owned Blueprint asset class"),
+        UnifiedBlueprint);
+    UUnifiedScriptAsset* ScriptAsset = UnifiedBlueprint != nullptr
+        ? UnifiedBlueprint->ScriptAsset.Get()
+        : nullptr;
     if (ExpectedKind == EUnifiedScriptClassKind::Actor)
     {
         Test.TestTrue(
@@ -114,11 +132,12 @@ bool CreateAndVerify(
         const AUnifiedScriptActor* Defaults = Cast<AUnifiedScriptActor>(
             Blueprint->GeneratedClass->GetDefaultObject());
         Test.TestNotNull(TEXT("Actor proxy has the expected native parent"), Defaults);
-        ScriptAsset = Defaults != nullptr && Defaults->ScriptComponent != nullptr
-            ? Defaults->ScriptComponent->ScriptAsset.Get()
-            : nullptr;
+        Test.TestTrue(
+            TEXT("Actor CDO and Blueprint proxy retain the same sidecar"),
+            Defaults != nullptr && Defaults->ScriptComponent != nullptr &&
+                Defaults->ScriptComponent->ScriptAsset == ScriptAsset);
     }
-    else
+    else if (ExpectedKind == EUnifiedScriptClassKind::ActorComponent)
     {
         Test.TestTrue(
             TEXT("Generated Component is attachable as an ordinary ActorComponent class"),
@@ -132,7 +151,29 @@ bool CreateAndVerify(
         const UUnifiedScriptComponent* Defaults = Cast<UUnifiedScriptComponent>(
             Blueprint->GeneratedClass->GetDefaultObject());
         Test.TestNotNull(TEXT("Component proxy has the expected native parent"), Defaults);
-        ScriptAsset = Defaults != nullptr ? Defaults->ScriptAsset.Get() : nullptr;
+        Test.TestTrue(
+            TEXT("Component CDO and Blueprint proxy retain the same sidecar"),
+            Defaults != nullptr && Defaults->ScriptAsset == ScriptAsset);
+    }
+    else if (ExpectedKind == EUnifiedScriptClassKind::Object)
+    {
+        Test.TestTrue(
+            TEXT("Generated Object is instantiable as an ordinary UObject class"),
+            Blueprint->GeneratedClass->IsChildOf(UUnifiedScriptObject::StaticClass()));
+        Test.TestNotNull(
+            TEXT("Generated Object has the expected native CDO"),
+            Cast<UUnifiedScriptObject>(Blueprint->GeneratedClass->GetDefaultObject()));
+    }
+    else if (ExpectedKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+    {
+        Test.TestTrue(
+            TEXT("Generated library is an ordinary Blueprint Function Library class"),
+            Blueprint->GeneratedClass->IsChildOf(
+                UUnifiedScriptBlueprintFunctionLibrary::StaticClass()));
+        Test.TestEqual(
+            TEXT("Generated library uses the Function Library Blueprint kind"),
+            Blueprint->BlueprintType,
+            BPTYPE_FunctionLibrary);
     }
     Test.TestNotNull(TEXT("Generated proxy retains its Script Asset sidecar"), ScriptAsset);
     if (ScriptAsset == nullptr)
@@ -140,6 +181,18 @@ bool CreateAndVerify(
         return false;
     }
 
+    UClass* ExpectedTargetClass =
+        ExpectedKind == EUnifiedScriptClassKind::Actor
+        ? AUnifiedScriptActor::StaticClass()
+        : ExpectedKind == EUnifiedScriptClassKind::ActorComponent
+        ? AActor::StaticClass()
+        : ExpectedKind == EUnifiedScriptClassKind::Object
+        ? UUnifiedScriptObject::StaticClass()
+        : UUnifiedScriptBlueprintFunctionLibrary::StaticClass();
+    Test.TestEqual(
+        TEXT("Script Class pins the exact reviewed native target contract"),
+        ScriptAsset->RequiredTargetClass.Get(),
+        ExpectedTargetClass);
     Test.TestEqual(TEXT("Script Class kind is stable"), ScriptAsset->ScriptClassKind, ExpectedKind);
     Test.TestTrue(TEXT("Script Class ID is persistent"), ScriptAsset->ScriptClassId.IsValid());
     Test.TestEqual(
@@ -153,33 +206,48 @@ bool CreateAndVerify(
         TEXT("Declaration identity uses a stable project/class path"),
         ScriptAsset->DeclarationAssetPath.EndsWith(TEXT("/") + TypeName));
 
-    const FString FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
-        FPaths::ProjectDir());
-    FUnifiedScriptFirstPlayRequest FirstPlayRequest;
-    FString FirstPlayError;
-    Test.TestTrue(
-        TEXT("Script Class writes its first-Play handoff"),
-        FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
-            FirstPlayRequestPath,
-            FirstPlayRequest,
-            FirstPlayError));
-    Test.TestEqual(
-        TEXT("First-Play handoff pins the same semantic class ID"),
-        FirstPlayRequest.RequestId,
-        FString::Printf(
-            TEXT("us_%s"),
-            *ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower()));
-    Test.TestEqual(
-        TEXT("First-Play handoff pins the Blueprint proxy"),
-        FirstPlayRequest.BlueprintAssetPath,
-        Blueprint->GetPathName());
-    Test.TestEqual(
-        TEXT("First-Play handoff pins the Script Asset sidecar"),
-        FirstPlayRequest.ScriptAssetPath,
-        ScriptAsset->GetPathName());
-    Test.TestTrue(
-        TEXT("First-Play handoff waits for Build/Onboard"),
-        FirstPlayRequest.IsBuildRequired());
+    if (bSupportsFirstPlay)
+    {
+        FUnifiedScriptFirstPlayRequest FirstPlayRequest;
+        FString FirstPlayError;
+        Test.TestTrue(
+            TEXT("Lifecycle Script Class writes its first-Play handoff"),
+            FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
+                FirstPlayRequestPath,
+                FirstPlayRequest,
+                FirstPlayError));
+        Test.TestEqual(
+            TEXT("First-Play handoff pins the same semantic class ID"),
+            FirstPlayRequest.RequestId,
+            FString::Printf(
+                TEXT("us_%s"),
+                *ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower()));
+        Test.TestEqual(
+            TEXT("First-Play handoff pins the Blueprint proxy"),
+            FirstPlayRequest.BlueprintAssetPath,
+            Blueprint->GetPathName());
+        Test.TestEqual(
+            TEXT("First-Play handoff pins the Script Asset sidecar"),
+            FirstPlayRequest.ScriptAssetPath,
+            ScriptAsset->GetPathName());
+        Test.TestTrue(
+            TEXT("First-Play handoff waits for Build/Onboard"),
+            FirstPlayRequest.IsBuildRequired());
+    }
+    else
+    {
+        TArray<uint8> FirstPlayAfter;
+        const bool bHasFirstPlayAfter = FFileHelper::LoadFileToArray(
+            FirstPlayAfter,
+            *FirstPlayRequestPath);
+        Test.TestEqual(
+            TEXT("Non-lifecycle proxy preserves first-Play request existence"),
+            bHasFirstPlayAfter,
+            bHadFirstPlayBefore);
+        Test.TestTrue(
+            TEXT("Non-lifecycle proxy preserves first-Play request bytes"),
+            !bHadFirstPlayBefore || FirstPlayAfter == FirstPlayBefore);
+    }
 
     const FString SourcePath = ResolveConfiguredPath(ScriptAsset->SourcePath);
     if (Cleanup != nullptr)
@@ -193,12 +261,54 @@ bool CreateAndVerify(
         Source.Contains(FString::Printf(
             TEXT("ClassId = \"us_%s\""),
             *ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower())));
-    Test.TestTrue(TEXT("Managed source exposes editable state"), Source.Contains(TEXT("[Expose(")));
+    const TCHAR* ManagedKind =
+        ExpectedKind == EUnifiedScriptClassKind::Actor ? TEXT("Actor") :
+        ExpectedKind == EUnifiedScriptClassKind::ActorComponent ? TEXT("ActorComponent") :
+        ExpectedKind == EUnifiedScriptClassKind::Object ? TEXT("Object") :
+        TEXT("BlueprintFunctionLibrary");
+    Test.TestTrue(
+        TEXT("Managed source pins the reviewed proxy class kind"),
+        Source.Contains(FString::Printf(
+            TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s)]"),
+            ManagedKind)));
     Test.TestTrue(
         TEXT("Managed source emits a Visual-compatible block body"),
-        Source.Contains(TEXT("public int AddOne(int value)\n    {\n        return value + 1;\n    }")));
-    Test.TestTrue(TEXT("Managed source includes BeginPlay"), Source.Contains(TEXT("OnBeginPlay")));
-    Test.TestTrue(TEXT("Managed source includes Tick"), Source.Contains(TEXT("OnTick")));
+        Source.Contains(TEXT("AddOne(int value)\n    {\n        return value + 1;\n    }")));
+    if (ExpectedKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+    {
+        Test.TestTrue(
+            TEXT("Managed library emits a static class and function"),
+            Source.Contains(TEXT("public static class")) &&
+                Source.Contains(TEXT("public static int AddOne")));
+        Test.TestFalse(
+            TEXT("Managed library does not emit instance state"),
+            Source.Contains(TEXT("[Expose(")));
+    }
+    else
+    {
+        Test.TestTrue(
+            TEXT("Managed instance source exposes editable state"),
+            Source.Contains(TEXT("[Expose(")));
+        if (ExpectedKind == EUnifiedScriptClassKind::Object)
+        {
+            Test.TestTrue(
+                TEXT("Managed Object uses generic object lifecycle hooks"),
+                Source.Contains(TEXT(": UnrealObjectScript")) &&
+                    Source.Contains(TEXT("OnInitialized")) &&
+                    Source.Contains(TEXT("OnUpdate")));
+        }
+        else
+        {
+            const TCHAR* ExpectedBase = ExpectedKind == EUnifiedScriptClassKind::Actor
+                ? TEXT("UnrealActorScript")
+                : TEXT("UnrealActorComponentScript");
+            Test.TestTrue(
+                TEXT("Managed lifecycle source uses its exact reviewed base"),
+                Source.Contains(FString::Printf(TEXT(": %s"), ExpectedBase)));
+            Test.TestTrue(TEXT("Managed source includes BeginPlay"), Source.Contains(TEXT("OnBeginPlay")));
+            Test.TestTrue(TEXT("Managed source includes Tick"), Source.Contains(TEXT("OnTick")));
+        }
+    }
 
     const FString BlueprintFilename = FPackageName::LongPackageNameToFilename(
         PackageName,
@@ -299,12 +409,22 @@ bool FUnifiedScriptClassFactoryContractTest::RunTest(const FString& Parameters)
         GetDefault<UUnifiedScriptActorClassFactory>();
     const UUnifiedScriptActorComponentClassFactory* ComponentFactory =
         GetDefault<UUnifiedScriptActorComponentClassFactory>();
+    const UUnifiedScriptObjectClassFactory* ObjectFactory =
+        GetDefault<UUnifiedScriptObjectClassFactory>();
+    const UUnifiedScriptBlueprintFunctionLibraryClassFactory* LibraryFactory =
+        GetDefault<UUnifiedScriptBlueprintFunctionLibraryClassFactory>();
     TestFalse(
         TEXT("Actor Script Class is hidden from create-then-rename menus"),
         ActorFactory->ShouldShowInNewMenu());
     TestFalse(
         TEXT("Component Script Class is hidden from create-then-rename menus"),
         ComponentFactory->ShouldShowInNewMenu());
+    TestFalse(
+        TEXT("Object Script Class is hidden from create-then-rename menus"),
+        ObjectFactory->ShouldShowInNewMenu());
+    TestFalse(
+        TEXT("Function Library Script Class is hidden from create-then-rename menus"),
+        LibraryFactory->ShouldShowInNewMenu());
     FScopedCreatedClassCleanup Cleanup;
     Cleanup.DeploymentPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
         FPaths::ProjectDir(),
@@ -333,7 +453,18 @@ bool FUnifiedScriptClassFactoryContractTest::RunTest(const FString& Parameters)
         TEXT("M13Component_") + Suffix,
         EUnifiedScriptClassKind::ActorComponent,
         &Cleanup);
-    return bActor && bComponent;
+    const bool bObject = CreateAndVerify<UUnifiedScriptObjectClassFactory>(
+        *this,
+        TEXT("M13Object_") + Suffix,
+        EUnifiedScriptClassKind::Object,
+        &Cleanup);
+    const bool bLibrary =
+        CreateAndVerify<UUnifiedScriptBlueprintFunctionLibraryClassFactory>(
+            *this,
+            TEXT("M13Library_") + Suffix,
+            EUnifiedScriptClassKind::BlueprintFunctionLibrary,
+            &Cleanup);
+    return bActor && bComponent && bObject && bLibrary;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

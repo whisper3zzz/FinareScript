@@ -1539,10 +1539,11 @@ public sealed class CSharpDeclarationPatchApplier
             return false;
         }
         if (spec.IncludeActorLifecycle && spec.BaseTypeName is not null &&
-            !spec.BaseTypeName.EndsWith("UnrealActorScript", StringComparison.Ordinal))
+            !spec.BaseTypeName.EndsWith("UnrealActorScript", StringComparison.Ordinal) &&
+            !spec.BaseTypeName.EndsWith("UnrealActorComponentScript", StringComparison.Ordinal))
         {
             failure = InvalidReplacement(
-                "Actor lifecycle hooks require UnrealActorScript as the Script Asset base type.",
+                "Lifecycle hooks require UnrealActorScript or UnrealActorComponentScript as the Script Asset base type.",
                 span);
             return false;
         }

@@ -2,6 +2,7 @@ using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
@@ -248,6 +249,73 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(
             "us_0123456789abcdef0123456789abcdef",
             Assert.Single(result.ScriptAssets!.Assets).Id.Value);
+    }
+
+    [Fact]
+    public void ReviewedUnrealProxyClassSourcesCompileAndLowerTogether()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            [ScriptAsset("Game/Object", ClassId = "us_00000000000000000000000000000001")]
+            [UnrealScriptClass(UnrealScriptClassKind.Object)]
+            public sealed class ObjectBehavior : UnrealObjectScript
+            {
+                [Expose(InstanceEditable = true)]
+                public int StartValue { get; set; } = 1;
+
+                [Visual]
+                public int AddOne(int value) { return value + 1; }
+
+                protected override void OnInitialized() { }
+                protected override void OnUpdate(float deltaSeconds) { }
+            }
+
+            [ScriptAsset("Game/Actor", ClassId = "us_00000000000000000000000000000002")]
+            [UnrealScriptClass(UnrealScriptClassKind.Actor)]
+            public sealed class ActorBehavior : UnrealActorScript
+            {
+                protected override void OnBeginPlay() { }
+                protected override void OnTick(float deltaSeconds) { }
+            }
+
+            [ScriptAsset("Game/Component", ClassId = "us_00000000000000000000000000000003")]
+            [UnrealScriptClass(UnrealScriptClassKind.ActorComponent)]
+            public sealed class ComponentBehavior : UnrealActorComponentScript
+            {
+                protected override void OnBeginPlay() { }
+                protected override void OnTick(float deltaSeconds) { }
+            }
+
+            [ScriptAsset("Game/Library", ClassId = "us_00000000000000000000000000000004")]
+            [UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+            public static class FunctionLibrary
+            {
+                [Visual]
+                public static int AddOne(int value) { return value + 1; }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "ReviewedUnrealProxyClasses",
+            [new CSharpSourceDocument("Game/ReviewedClasses.cs", source)],
+            [typeof(UnrealActorScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(4, result.ScriptAssets!.Assets.Count);
+        ScriptAssetDeclaration library = result.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.FunctionLibrary");
+        Assert.True(Assert.Single(library.Functions).IsStatic);
+        Assert.Empty(library.States);
+        Assert.Equal(
+            "AddOne",
+            Assert.Single(result.ScriptAssets.Assets
+                .Single(static asset => asset.QualifiedName == "Game.ObjectBehavior")
+                .Functions).Name);
     }
 
     [Theory]

@@ -17,6 +17,7 @@
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassOperationJournal.h"
+#include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptProjectSetup.h"
 #include "UObject/Package.h"
@@ -39,6 +40,68 @@ struct FProjectClassSettings
     TSharedPtr<FJsonObject> DeploymentRoot;
     TSharedPtr<FJsonObject> BaselineDeployment;
 };
+
+struct FScriptClassDescriptor
+{
+    const TCHAR* KindToken = TEXT("");
+    const TCHAR* RequiredTargetClassPath = TEXT("");
+    UClass* ParentClass = nullptr;
+    UClass* RequiredTargetClass = nullptr;
+    EBlueprintType BlueprintType = BPTYPE_Normal;
+    bool bSupportsFirstPlay = false;
+};
+
+bool TryDescribeScriptClassKind(
+    EUnifiedScriptClassKind Kind,
+    FScriptClassDescriptor& OutDescriptor)
+{
+    switch (Kind)
+    {
+    case EUnifiedScriptClassKind::Actor:
+        OutDescriptor = {
+            TEXT("actor"),
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptActor"),
+            AUnifiedScriptActor::StaticClass(),
+            AUnifiedScriptActor::StaticClass(),
+            BPTYPE_Normal,
+            true,
+        };
+        return true;
+    case EUnifiedScriptClassKind::ActorComponent:
+        OutDescriptor = {
+            TEXT("actorComponent"),
+            TEXT("/Script/Engine.Actor"),
+            UUnifiedScriptComponent::StaticClass(),
+            AActor::StaticClass(),
+            BPTYPE_Normal,
+            true,
+        };
+        return true;
+    case EUnifiedScriptClassKind::Object:
+        OutDescriptor = {
+            TEXT("object"),
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptObject"),
+            UUnifiedScriptObject::StaticClass(),
+            UUnifiedScriptObject::StaticClass(),
+            BPTYPE_Normal,
+            false,
+        };
+        return true;
+    case EUnifiedScriptClassKind::BlueprintFunctionLibrary:
+        OutDescriptor = {
+            TEXT("blueprintFunctionLibrary"),
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary"),
+            UUnifiedScriptBlueprintFunctionLibrary::StaticClass(),
+            UUnifiedScriptBlueprintFunctionLibrary::StaticClass(),
+            BPTYPE_FunctionLibrary,
+            false,
+        };
+        return true;
+    default:
+        OutDescriptor = {};
+        return false;
+    }
+}
 
 bool ReadJsonFile(const FString& Path, TSharedPtr<FJsonObject>& OutRoot, FString& OutError)
 {
@@ -240,17 +303,64 @@ FString RenderManagedSource(
     const FString& ManagedNamespace,
     const FString& TypeName,
     const FString& DeclarationAssetPath,
-    const FGuid& ClassId)
+    const FGuid& ClassId,
+    EUnifiedScriptClassKind Kind)
 {
     const FString SemanticId = FString::Printf(
         TEXT("us_%s"),
         *ClassId.ToString(EGuidFormats::Digits).ToLower());
+    const TCHAR* KindName = TEXT("");
+    const TCHAR* BaseType = TEXT("");
+    switch (Kind)
+    {
+    case EUnifiedScriptClassKind::Actor:
+        KindName = TEXT("Actor");
+        BaseType = TEXT("UnrealActorScript");
+        break;
+    case EUnifiedScriptClassKind::ActorComponent:
+        KindName = TEXT("ActorComponent");
+        BaseType = TEXT("UnrealActorComponentScript");
+        break;
+    case EUnifiedScriptClassKind::Object:
+        KindName = TEXT("Object");
+        BaseType = TEXT("UnrealObjectScript");
+        break;
+    case EUnifiedScriptClassKind::BlueprintFunctionLibrary:
+        return FString::Printf(
+            TEXT("using UnifiedScript;\n")
+            TEXT("using UnifiedScript.Unreal;\n\n")
+            TEXT("namespace %s;\n\n")
+            TEXT("[ScriptAsset(\"%s\", ClassId = \"%s\")]\n")
+            TEXT("[UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]\n")
+            TEXT("public static class %s\n")
+            TEXT("{\n")
+            TEXT("    [Visual]\n")
+            TEXT("    public static int AddOne(int value)\n")
+            TEXT("    {\n")
+            TEXT("        return value + 1;\n")
+            TEXT("    }\n")
+            TEXT("}\n"),
+            *ManagedNamespace,
+            *DeclarationAssetPath,
+            *SemanticId,
+            *TypeName);
+    default:
+        return FString();
+    }
+
+    const TCHAR* InitializeHook = Kind == EUnifiedScriptClassKind::Object
+        ? TEXT("OnInitialized")
+        : TEXT("OnBeginPlay");
+    const TCHAR* UpdateHook = Kind == EUnifiedScriptClassKind::Object
+        ? TEXT("OnUpdate")
+        : TEXT("OnTick");
     return FString::Printf(
         TEXT("using UnifiedScript;\n")
         TEXT("using UnifiedScript.Unreal;\n\n")
         TEXT("namespace %s;\n\n")
         TEXT("[ScriptAsset(\"%s\", ClassId = \"%s\")]\n")
-        TEXT("public sealed class %s : UnrealActorScript\n")
+        TEXT("[UnrealScriptClass(UnrealScriptClassKind.%s)]\n")
+        TEXT("public sealed class %s : %s\n")
         TEXT("{\n")
         TEXT("    [Expose(InstanceEditable = true, Category = \"UnifiedScript\")]\n")
         TEXT("    public int StartValue { get; set; } = 1;\n\n")
@@ -259,18 +369,22 @@ FString RenderManagedSource(
         TEXT("    {\n")
         TEXT("        return value + 1;\n")
         TEXT("    }\n\n")
-        TEXT("    protected override void OnBeginPlay()\n")
+        TEXT("    protected override void %s()\n")
         TEXT("    {\n")
         TEXT("        StartValue = AddOne(StartValue);\n")
         TEXT("    }\n\n")
-        TEXT("    protected override void OnTick(float deltaSeconds)\n")
+        TEXT("    protected override void %s(float deltaSeconds)\n")
         TEXT("    {\n")
         TEXT("    }\n")
         TEXT("}\n"),
         *ManagedNamespace,
         *DeclarationAssetPath,
         *SemanticId,
-        *TypeName);
+        KindName,
+        *TypeName,
+        BaseType,
+        InitializeHook,
+        UpdateHook);
 }
 
 bool WriteTextAtomically(const FString& Path, const FString& Text, FString& OutError)
@@ -469,6 +583,12 @@ bool AppendDeployment(
     FString& OutJson,
     FString& OutError)
 {
+    FScriptClassDescriptor Descriptor;
+    if (!TryDescribeScriptClassKind(Kind, Descriptor))
+    {
+        OutError = TEXT("UnifiedScript Class kind is not supported.");
+        return false;
+    }
     const TArray<TSharedPtr<FJsonValue>>* ExistingScripts = nullptr;
     if (!Settings.DeploymentRoot->TryGetArrayField(
             TEXT("scripts"),
@@ -517,9 +637,7 @@ bool AppendDeployment(
     Entry->SetStringField(TEXT("typeName"), TypeName);
     Entry->SetStringField(
         TEXT("requiredTargetClass"),
-        Kind == EUnifiedScriptClassKind::Actor
-            ? TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptActor")
-            : TEXT("/Script/Engine.Actor"));
+        Descriptor.RequiredTargetClassPath);
     Entry->SetStringField(TEXT("sourcePath"), ToConfiguredPath(SourcePath, Settings));
     Entry->SetStringField(TEXT("declarationAssetPath"), DeclarationAssetPath);
     Scripts.Add(MakeShared<FJsonValueObject>(Entry));
@@ -546,6 +664,8 @@ void ConfigureScriptAsset(
     const FString& TypeName,
     const FString& DeclarationAssetPath)
 {
+    FScriptClassDescriptor Descriptor;
+    check(TryDescribeScriptClassKind(Kind, Descriptor));
     Asset.ScriptClassId = ClassId;
     Asset.ScriptClassKind = Kind;
     Asset.GeneratedClassPath = FSoftClassPath(GeneratedClassPath);
@@ -578,9 +698,7 @@ void ConfigureScriptAsset(
     {
         Asset.AuthoringServerUrl = Value;
     }
-    Asset.RequiredTargetClass = Kind == EUnifiedScriptClassKind::Actor
-        ? TSoftClassPtr<UObject>(AUnifiedScriptActor::StaticClass())
-        : TSoftClassPtr<UObject>(AActor::StaticClass());
+    Asset.RequiredTargetClass = TSoftClassPtr<UObject>(Descriptor.RequiredTargetClass);
 }
 }
 
@@ -609,9 +727,11 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
 #endif
     FString Error;
     FProjectClassSettings Settings;
+    FScriptClassDescriptor Descriptor;
     const FString TypeName = Name.ToString();
     if (ScriptClassKind == EUnifiedScriptClassKind::None || InParent == nullptr ||
         !IsManagedIdentifier(TypeName) ||
+        !TryDescribeScriptClassKind(ScriptClassKind, Descriptor) ||
         !ReadProjectSettings(Settings, Error))
     {
         if (Error.IsEmpty())
@@ -694,7 +814,8 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         Settings.ManagedNamespace,
         TypeName,
         DeclarationAssetPath,
-        ClassId);
+        ClassId,
+        ScriptClassKind);
     TArray<UE::UnifiedScript::ClassOperationJournal::FSnapshot>
         RecoverySnapshots;
     UE::UnifiedScript::ClassOperationJournal::FReceipt RecoveryReceipt;
@@ -756,30 +877,31 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     }
 
     FString PublishedFirstPlayRequestPath;
-    FString FirstPlayError;
-    const FString RequestId = FString::Printf(
-        TEXT("us_%s"),
-        *ClassId.ToString(EGuidFormats::Digits).ToLower());
-    if (!FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
-            Settings.ProjectRoot,
-            RequestId,
-            ScriptClassKind == EUnifiedScriptClassKind::Actor
-                ? TEXT("actor")
-                : TEXT("actorComponent"),
-            BlueprintAssetPath,
-            ScriptAssetObjectPath,
-            SourcePath,
-            ManagedTypeName,
-            PublishedFirstPlayRequestPath,
-            FirstPlayError))
+    if (Descriptor.bSupportsFirstPlay)
     {
-        Error = MoveTemp(FirstPlayError);
-        RollbackCreation();
-        Warn->Logf(
-            ELogVerbosity::Error,
-            TEXT("UnifiedScript Class creation failed: %s"),
-            *Error);
-        return nullptr;
+        FString FirstPlayError;
+        const FString RequestId = FString::Printf(
+            TEXT("us_%s"),
+            *ClassId.ToString(EGuidFormats::Digits).ToLower());
+        if (!FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
+                Settings.ProjectRoot,
+                RequestId,
+                Descriptor.KindToken,
+                BlueprintAssetPath,
+                ScriptAssetObjectPath,
+                SourcePath,
+                ManagedTypeName,
+                PublishedFirstPlayRequestPath,
+                FirstPlayError))
+        {
+            Error = MoveTemp(FirstPlayError);
+            RollbackCreation();
+            Warn->Logf(
+                ELogVerbosity::Error,
+                TEXT("UnifiedScript Class creation failed: %s"),
+                *Error);
+            return nullptr;
+        }
     }
 
     if (!UE::UnifiedScript::ClassOperationJournal::Advance(
@@ -812,9 +934,8 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     }
 #endif
 
-    ParentClass = ScriptClassKind == EUnifiedScriptClassKind::Actor
-        ? AUnifiedScriptActor::StaticClass()
-        : UUnifiedScriptComponent::StaticClass();
+    ParentClass = Descriptor.ParentClass;
+    BlueprintType = Descriptor.BlueprintType;
     UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
         ParentClass,
         InParent,
@@ -851,12 +972,15 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     FAssetRegistryModule::AssetCreated(ScriptAsset);
     ScriptAsset->MarkPackageDirty();
 
+    UUnifiedScriptBlueprint* UnifiedBlueprint = CastChecked<UUnifiedScriptBlueprint>(Blueprint);
+    UnifiedBlueprint->ScriptAsset = ScriptAsset;
+
     if (ScriptClassKind == EUnifiedScriptClassKind::Actor)
     {
         AUnifiedScriptActor* Defaults = CastChecked<AUnifiedScriptActor>(Blueprint->GeneratedClass->GetDefaultObject());
         Defaults->ScriptComponent->ScriptAsset = ScriptAsset;
     }
-    else
+    else if (ScriptClassKind == EUnifiedScriptClassKind::ActorComponent)
     {
         UUnifiedScriptComponent* Defaults = CastChecked<UUnifiedScriptComponent>(Blueprint->GeneratedClass->GetDefaultObject());
         Defaults->ScriptAsset = ScriptAsset;
@@ -877,11 +1001,34 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         return nullptr;
     }
 
-    Warn->Logf(
-        ELogVerbosity::Display,
-        TEXT("UnifiedScript Class is ready to build. Open Project Setup and choose Build, Restart & Continue. Request: %s"),
-        *PublishedFirstPlayRequestPath);
+    if (Descriptor.bSupportsFirstPlay)
+    {
+        Warn->Logf(
+            ELogVerbosity::Display,
+            TEXT("UnifiedScript Class is ready to build. Open Project Setup and choose Build, Restart & Continue. Request: %s"),
+            *PublishedFirstPlayRequestPath);
+    }
+    else
+    {
+        Warn->Logf(
+            ELogVerbosity::Display,
+            TEXT("UnifiedScript Class proxy '%s' is ready for the shared Build workflow."),
+            *BlueprintAssetPath);
+    }
     return Blueprint;
+}
+
+UUnifiedScriptObjectClassFactory::UUnifiedScriptObjectClassFactory(
+    const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    ScriptClassKind = EUnifiedScriptClassKind::Object;
+    ParentClass = UUnifiedScriptObject::StaticClass();
+}
+
+FText UUnifiedScriptObjectClassFactory::GetDisplayName() const
+{
+    return LOCTEXT("ObjectClassFactory", "UnifiedScript Object Class");
 }
 
 UUnifiedScriptActorClassFactory::UUnifiedScriptActorClassFactory(
@@ -908,6 +1055,23 @@ UUnifiedScriptActorComponentClassFactory::UUnifiedScriptActorComponentClassFacto
 FText UUnifiedScriptActorComponentClassFactory::GetDisplayName() const
 {
     return LOCTEXT("ActorComponentClassFactory", "UnifiedScript Actor Component Class");
+}
+
+UUnifiedScriptBlueprintFunctionLibraryClassFactory::
+    UUnifiedScriptBlueprintFunctionLibraryClassFactory(
+        const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    ScriptClassKind = EUnifiedScriptClassKind::BlueprintFunctionLibrary;
+    ParentClass = UUnifiedScriptBlueprintFunctionLibrary::StaticClass();
+    BlueprintType = BPTYPE_FunctionLibrary;
+}
+
+FText UUnifiedScriptBlueprintFunctionLibraryClassFactory::GetDisplayName() const
+{
+    return LOCTEXT(
+        "BlueprintFunctionLibraryClassFactory",
+        "UnifiedScript Blueprint Function Library");
 }
 
 #undef LOCTEXT_NAMESPACE

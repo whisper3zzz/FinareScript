@@ -4,6 +4,8 @@
 #include "Engine/Blueprint.h"
 #include "UnifiedScriptBlueprint.generated.h"
 
+class UUnifiedScriptAsset;
+
 /**
  * Product-owned Blueprint proxy for one complete UnifiedScript Class.
  *
@@ -15,4 +17,9 @@ UCLASS(BlueprintType)
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptBlueprint : public UBlueprint
 {
     GENERATED_BODY()
+
+public:
+    /** Exact sidecar owned by this generated proxy, independent of its native parent kind. */
+    UPROPERTY(VisibleAnywhere, Category="UnifiedScript|Class")
+    TObjectPtr<UUnifiedScriptAsset> ScriptAsset;
 };

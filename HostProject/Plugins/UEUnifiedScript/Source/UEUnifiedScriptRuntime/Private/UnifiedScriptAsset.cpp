@@ -132,9 +132,11 @@ bool UUnifiedScriptAsset::ValidateGeneratedClassIdentity(
     }
 
     UClass* ExpectedClass = GeneratedClassPath.TryLoadClass<UObject>();
-    const UObject* Candidate = ScriptClassKind == EUnifiedScriptClassKind::Actor
-        ? Target
-        : Host;
+    const UObject* Candidate =
+        ScriptClassKind == EUnifiedScriptClassKind::Actor ||
+        ScriptClassKind == EUnifiedScriptClassKind::Object
+            ? Target
+            : Host;
     if (ExpectedClass == nullptr || Candidate == nullptr || !Candidate->IsA(ExpectedClass))
     {
         OutError = FString::Printf(

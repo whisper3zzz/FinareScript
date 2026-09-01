@@ -7016,6 +7016,128 @@ def main() -> int:
     checks.append(
         "M13.2G gates first-Play and compatible reload usability with versioned CMD evidence"
     )
+    script_class_asset_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptAsset.h"
+    ).read_text(encoding="utf-8")
+    script_class_blueprint_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptBlueprint.h"
+    ).read_text(encoding="utf-8")
+    script_class_bases_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptClassBases.h"
+    ).read_text(encoding="utf-8")
+    script_class_factory_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptClassFactory.h"
+    ).read_text(encoding="utf-8")
+    script_class_factory_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptClassFactory.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_asset_operations = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptClassAssetOperations.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_editor_module = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UEUnifiedScriptEditorModule.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_factory_tests = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptClassFactoryTests.cpp"
+    ).read_text(encoding="utf-8")
+    managed_script_class_model = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptClassModel.cs"
+    ).read_text(encoding="utf-8")
+    managed_script_object_model = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptObjectModel.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "Object," in script_class_asset_header
+        and "BlueprintFunctionLibrary," in script_class_asset_header
+        and "TObjectPtr<UUnifiedScriptAsset> ScriptAsset" in script_class_blueprint_header
+        and "class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptObject" in script_class_bases_header
+        and "UUnifiedScriptBlueprintFunctionLibrary" in script_class_bases_header
+        and "UUnifiedScriptObjectClassFactory" in script_class_factory_header
+        and "UUnifiedScriptBlueprintFunctionLibraryClassFactory" in script_class_factory_header
+        and 'TEXT("actor")' in script_class_factory_source
+        and 'TEXT("actorComponent")' in script_class_factory_source
+        and 'TEXT("object")' in script_class_factory_source
+        and 'TEXT("blueprintFunctionLibrary")' in script_class_factory_source
+        and "UnrealActorComponentScript" in script_class_factory_source
+        and "public static class" in script_class_factory_source
+        and "Context.ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::Actor"
+        in script_class_asset_operations
+        and "OutJson.Reset();" in script_class_asset_operations
+        and "GetBlueprintScriptAsset" in script_class_asset_operations
+        and "Create UnifiedScript Class (Object)" in script_class_editor_module
+        and "Create UnifiedScript Class (Blueprint Function Library)"
+        in script_class_editor_module
+        and "UnrealScriptClassKind" in managed_script_class_model
+        and "UnrealScriptClassAttribute" in managed_script_class_model
+        and "class UnrealActorComponentScript" in managed_script_object_model
+        and "EUnifiedScriptClassKind::Object" in script_class_factory_tests
+        and "EUnifiedScriptClassKind::BlueprintFunctionLibrary"
+        in script_class_factory_tests
+        and "Script Class pins the exact reviewed native target contract"
+        in script_class_factory_tests
+        and "[x] **M13.3A — four-kind proxy identity:**" in roadmap_document,
+        "M13.3A four-kind proxy identity, managed contract, menu, sidecar, or regression proof is incomplete",
+    )
+    checks.append(
+        "M13.3A creates exact four-kind Script Class proxy identities"
+    )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")

@@ -251,3 +251,28 @@ public abstract class UnrealActorScript : UnrealObjectScript
     {
     }
 }
+
+/// <summary>
+/// ActorComponent behavior surface corresponding to BeginPlay, Tick, and
+/// EndPlay. Unlike UnrealActorScript it does not claim Actor overlap events.
+/// </summary>
+public abstract class UnrealActorComponentScript : UnrealObjectScript
+{
+    protected sealed override void OnInitialized() => OnBeginPlay();
+
+    protected sealed override void OnUpdate(float deltaSeconds) => OnTick(deltaSeconds);
+
+    protected sealed override void OnDestroyed() => OnEndPlay();
+
+    protected virtual void OnBeginPlay()
+    {
+    }
+
+    protected virtual void OnTick(float deltaSeconds)
+    {
+    }
+
+    protected virtual void OnEndPlay()
+    {
+    }
+}

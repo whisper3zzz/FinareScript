@@ -57,12 +57,12 @@ Last refreshed: **2026-09-01**
 
 - Active milestone: **M13.3 in progress — Managed Script Class and Blueprint parity**
 - Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate**
-- Current tranche: **M13.3 — first reviewed UObject/Actor/ActorComponent/BlueprintFunctionLibrary proxy and UClass parity slice**
-- Current implementation state: **M13.2 is closed. The packaged workflow now includes one discoverable create/open/build/Play/reload path, transactional C#/Graph authoring, product guidance, and a versioned CMD usability gate. `ue-usability-budget` hash-binds packaged first-Play, exact daily-build, deployment/chunk, and runtime Automation evidence; it always writes a report and can fail CI on action, restart, time, stage, identity, or runtime-proof regressions. The next product gap is extending that usable workflow from the current Actor/Component foundation through the ordinary reviewed UE class model**
-- Current verification state: **the checked-in M13.2G evidence passes at 7/8 first-Play actions, 1/1 explained first native-build restart, 569,454/720,000 ms enclosing time, and 3/3 compatible-edit actions with zero restarts and 6,366/15,000 ms exact daily time. The packaged CLI reproduces the passing report; the full managed suite passes 660/660, repository validation passes 124/124, the 32-document/248-file Release SDK packages with SHA-256 `00f47ab4793f84756077628453cf768fa1bbdb4f01c58c36ccd96a0085d3fdfb`, and native plus Blueprint-only packaged adoption passes 2/2. M13.2E-3's unchanged UE 5.8.1 native/26-test baseline remains green. Evidence is under `artifacts/m13-2g/`**
+- Current tranche: **M13.3B — generated Blueprint-visible properties, functions, and defaults**
+- Current implementation state: **M13.3A is closed. The installed workflow now creates reviewed Actor, ActorComponent, UObject, and BlueprintFunctionLibrary Script Classes with distinct native parents, stable numeric class-kind identity, one universal Blueprint-to-ScriptAsset sidecar, exact managed base/static shape, and lifecycle-only first-Play publication. The next product gap is materializing reviewed managed declarations as ordinary Blueprint-visible properties, functions, and class defaults instead of relying on the fixed native proxy surface**
+- Current verification state: **the M13.3A source passes the .NET 10 managed suite at 664/664, repository validation at 125/125, UE 5.8.1 Editor build, and the complete `UnifiedScript.Unreal` CMD Automation suite at 26/26. The four-kind focused factory contract creates, saves, and deletes all four proxy kinds while checking native parent/target, Blueprint type, sidecar, managed declaration, and first-Play isolation. Evidence is under `artifacts/m13-3a/automation/`; the earlier M13.2G packaged usability evidence remains under `artifacts/m13-2g/`**
 - Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
-- Next acceptance: **reviewed managed UObject, Actor, ActorComponent, and BlueprintFunctionLibrary declarations produce ordinary stable proxy/UClass assets without adding a handwritten host or facade per type**
-- Next user-visible slice: **expand Script Class creation and generation from the Actor/Component foundation to the first complete reviewed UE class-kind matrix**
+- Next acceptance: **reviewed managed properties, functions, and default values appear on all applicable generated proxy classes with stable reflection identity and no handwritten native member per declaration**
+- Next user-visible slice: **edit a C# property/function/default, build once, and use the result directly from Blueprint Details and call nodes**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -168,6 +168,7 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.2E-3 identity/comment/layout round-trip | Preview v0.3 emits a visible preservation receipt and binds synchronized `.usgraph` bytes to the same token as source and identity. Both C# -> Graph -> C# and Graph -> C# -> Graph retain stable IDs, source comments, layout-only Graph comments, node and route layout, and exact untouched source; new nodes are unplaced, removed layout is orphaned, and concurrent layout writes reject with `UAW1015`. UE 5.8.1 build, focused and refreshed 26/26 CMD Automation, 655/655 managed tests, BuildGraph regression, and 122/122 repository invariants pass. Evidence is at `artifacts/m13-2e3/automation/authoring-surface-focused.log` and `artifacts/m13-2e3/automation/unifiedscript-unreal-full.log` |
 | M13.2F packaged product guidance | The Release SDK and adopted project-local CLI resolve one first-project golden path and nine gameplay recipes without repository paths. 657/657 managed tests, 123/123 repository invariants, actual SDK packaging, and 2/2 packaged-adoption fixtures pass. Evidence is at `artifacts/m13-2f/sdk-package-verified.log` and `artifacts/m13-2f/packaged-adoption-verified.log` |
 | M13.2G usability regression gate | Versioned CMD evidence passes adopt-to-first-Play at 7/8 actions, 1/1 restart, and 569,454/720,000 ms; compatible edit/reload passes at 3/3 actions, zero restarts, 6,366/15,000 ms, and exactly two managed/chunk stages. The packaged CLI reproduces the report; 660/660 managed tests, 124/124 repository invariants, a 32-document/248-file SDK, and 2/2 packaged-adoption fixtures pass. Evidence is under `artifacts/m13-2g/`; SDK SHA-256 `00f47ab4793f84756077628453cf768fa1bbdb4f01c58c36ccd96a0085d3fdfb` |
+| M13.3A four-kind proxy identity | Actor, ActorComponent, UObject, and BlueprintFunctionLibrary factories create exact product-owned Blueprint/UClass shapes, a universal ScriptAsset sidecar, matching managed declaration kinds, and lifecycle-safe first-Play behavior. The .NET suite passes 664/664, repository validation passes 125/125, UE 5.8.1 builds, and CMD Automation passes 26/26. Evidence is under `artifacts/m13-3a/automation/` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -2968,8 +2969,14 @@ reviewed class-kind parity slice.
 Outcome: the usable M13.2 workflow expands through the ordinary UE class model
 instead of requiring a pre-authored host Component for each use case.
 
-- [ ] generate proxy Blueprint/UClass assets for reviewed managed UObject,
-  Actor, ActorComponent, and BlueprintFunctionLibrary types
+- [x] **M13.3A — four-kind proxy identity:** generate product-owned proxy
+  Blueprint/UClass assets for reviewed managed UObject, Actor, ActorComponent,
+  and BlueprintFunctionLibrary types; retain one universal ScriptAsset sidecar,
+  exact native target and managed class-kind contract, and lifecycle-only
+  first-Play publication
+- [ ] **M13.3B — reflected members and defaults:** materialize reviewed managed
+  properties, functions, metadata, and class defaults on the applicable proxy
+  UClass with stable reflection/source identity
 - [ ] support constructor/default state, Blueprint-visible properties and
   functions, lifecycle hooks, Blueprint events, Enhanced Input actions,
   delegates, interfaces, and `Super` dispatch with stable managed/source IDs
@@ -2986,6 +2993,21 @@ Acceptance: a generated managed Actor is selectable from Blueprint/project
 settings, receives lifecycle/input, exposes reviewed members, participates in
 Blueprint inheritance/events, survives transactional reload, and packages
 without a handwritten proxy class or a second behavior implementation.
+
+Progress (2026-09-01, M13.3A): the Script Class factory now owns one explicit
+four-kind descriptor for Actor, ActorComponent, UObject, and
+BlueprintFunctionLibrary. Each factory chooses the exact native parent, required
+target, Blueprint kind, managed declaration shape, and first-Play policy. A
+product-owned Blueprint sidecar carries ScriptAsset identity for every kind;
+legacy Actor/Component CDO links remain readable. Managed declarations pin the
+same numeric kind through `UnrealScriptClassAttribute`, Component has its own
+lifecycle base, Object uses generic object lifecycle, and Function Library
+source is static. UE 5.8.1 Editor builds, the full CMD-only Automation suite
+passes 26/26, the managed suite passes 664/664, and repository validation passes
+125/125. Evidence is at
+`artifacts/m13-3a/automation/unifiedscript-unreal-full-commit.log` and
+`artifacts/m13-3a/automation/script-class-family-final.log`. The cursor
+advances to M13.3B reflected properties, functions, metadata, and defaults.
 
 ### M13.4 — External real-project proof and production gameplay domains
 

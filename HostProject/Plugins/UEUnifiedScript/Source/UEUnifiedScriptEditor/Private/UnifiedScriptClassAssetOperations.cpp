@@ -24,6 +24,7 @@
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptAuthoringSurface.h"
+#include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptProjectSetup.h"
 #include "UObject/ObjectRedirector.h"
@@ -473,6 +474,12 @@ UUnifiedScriptAsset* GetBlueprintScriptAsset(UBlueprint* Blueprint)
     {
         return nullptr;
     }
+    if (const UUnifiedScriptBlueprint* UnifiedBlueprint =
+            Cast<UUnifiedScriptBlueprint>(Blueprint);
+        UnifiedBlueprint != nullptr && UnifiedBlueprint->ScriptAsset != nullptr)
+    {
+        return UnifiedBlueprint->ScriptAsset.Get();
+    }
     if (const AUnifiedScriptActor* Defaults = Cast<AUnifiedScriptActor>(
             Blueprint->GeneratedClass->GetDefaultObject()))
     {
@@ -498,6 +505,14 @@ bool SetBlueprintScriptAsset(
         OutError = TEXT("The generated Blueprint proxy is unavailable.");
         return false;
     }
+    UUnifiedScriptBlueprint* UnifiedBlueprint = Cast<UUnifiedScriptBlueprint>(Blueprint);
+    if (UnifiedBlueprint == nullptr)
+    {
+        OutError = TEXT("The generated proxy is not a product-owned UnifiedScript Blueprint.");
+        return false;
+    }
+    UnifiedBlueprint->Modify();
+    UnifiedBlueprint->ScriptAsset = ScriptAsset;
     if (AUnifiedScriptActor* Defaults = Cast<AUnifiedScriptActor>(
             Blueprint->GeneratedClass->GetDefaultObject()))
     {
@@ -517,8 +532,8 @@ bool SetBlueprintScriptAsset(
         Defaults->ScriptAsset = ScriptAsset;
         return true;
     }
-    OutError = TEXT("The generated proxy does not use a UnifiedScript host class.");
-    return false;
+    OutError.Reset();
+    return true;
 }
 
 bool BuildContext(
@@ -1113,6 +1128,13 @@ bool BuildFirstPlayRequest(
     FString& OutJson,
     FString& OutError)
 {
+    if (Context.ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::Actor &&
+        Context.ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::ActorComponent)
+    {
+        OutJson.Reset();
+        OutError.Reset();
+        return true;
+    }
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetStringField(
         TEXT("schemaVersion"),
@@ -1658,10 +1680,10 @@ bool PublishExternalFiles(
 {
     if (!WriteTextAtomically(Target.SourcePath, Source, OutError) ||
         !WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
-        !WriteTextAtomically(
+        (!FirstPlayRequest.IsEmpty() && !WriteTextAtomically(
             Context.FirstPlayRequestPath,
             FirstPlayRequest,
-            OutError))
+            OutError)))
     {
         return false;
     }
@@ -1698,10 +1720,10 @@ bool PublishManagedRenameExternalFiles(
         }
     }
     if (!WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
-        !WriteTextAtomically(
+        (!FirstPlayRequest.IsEmpty() && !WriteTextAtomically(
             Context.FirstPlayRequestPath,
             FirstPlayRequest,
-            OutError))
+            OutError)))
     {
         return false;
     }

@@ -888,6 +888,14 @@ private:
                 this,
                 &FUEUnifiedScriptEditorModule::OpenProjectSetup)));
         Section.AddMenuEntry(
+            TEXT("CreateUnifiedScriptObjectClass"),
+            LOCTEXT("CreateObjectClass", "Create UnifiedScript Class (Object)"),
+            LOCTEXT("CreateObjectClassTooltip", "Create an instantiable managed UObject class, C# source, Script Asset, and Blueprint proxy."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.Object")),
+            FUIAction(FExecuteAction::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptObjectClassFactory>)));
+        Section.AddMenuEntry(
             TEXT("CreateUnifiedScriptActorClass"),
             LOCTEXT("CreateActorClass", "Create UnifiedScript Class (Actor)"),
             LOCTEXT("CreateActorClassTooltip", "Create a placeable managed Actor class, C# source, Script Asset, and Blueprint proxy."),
@@ -903,6 +911,14 @@ private:
             FUIAction(FExecuteAction::CreateRaw(
                 this,
                 &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptActorComponentClassFactory>)));
+        Section.AddMenuEntry(
+            TEXT("CreateUnifiedScriptBlueprintFunctionLibraryClass"),
+            LOCTEXT("CreateBlueprintFunctionLibraryClass", "Create UnifiedScript Class (Blueprint Function Library)"),
+            LOCTEXT("CreateBlueprintFunctionLibraryClassTooltip", "Create a static managed Blueprint Function Library, C# source, Script Asset, and Blueprint proxy."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.BlueprintFunctionLibrary")),
+            FUIAction(FExecuteAction::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptBlueprintFunctionLibraryClassFactory>)));
         UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetContextMenu();
     }
 };
