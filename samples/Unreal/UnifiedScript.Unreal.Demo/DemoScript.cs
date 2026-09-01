@@ -219,4 +219,18 @@ public static class DemoLibrary
     {
         return value;
     }
+
+    [Visual]
+    public static UnrealClassHandle ResolveCommonValues(
+        UnrealName name,
+        ref UnrealRotator rotation,
+        out UnrealText label,
+        UnrealTransform transform)
+    {
+        _ = name;
+        _ = transform;
+        rotation = default;
+        label = default;
+        return default;
+    }
 }

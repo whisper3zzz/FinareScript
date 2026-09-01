@@ -16,6 +16,10 @@ method in a type that contains at least one `[Visual]` method.
   type. `ref`, `out`, and `in` parameters and ref returns are rejected. This
   keeps the node boundary deterministic even when its implementation uses full
   C# internally.
+- A directly projected `[Visual]` declaration may use the reviewed `ref` and
+  `out` parameter directions. They become input-output and output Blueprint pins;
+  `in` parameters and ref returns remain rejected. This does not widen the
+  source-only opaque-call boundary above.
 - A method that cannot satisfy the visual profile should normally move the
   unsupported logic into an unmarked helper and keep a graph-safe signature.
   Profile diagnostics include this action directly.
@@ -67,8 +71,8 @@ casts, parentheses, and conditional expressions. Constant, declaration, type,
 The versioned report is the authority rather than this prose. It also lists the
 current rejected-feature set, including `dynamic`, unsafe/pointer code, `goto`,
 `yield`, lambdas, local functions, exception control flow, locks, query syntax,
-`stackalloc`, mutable-ref iteration, borrowed async iteration, ref signatures,
-default parameters, named arguments, and multiple local declarators.
+`stackalloc`, mutable-ref iteration, borrowed async iteration, `in` parameters,
+ref returns, default parameters, named arguments, and multiple local declarators.
 
 ## Diagnostics and consumers
 

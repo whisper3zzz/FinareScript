@@ -408,7 +408,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             throw new MissingMethodException(
                 $"Managed Script Class '{_typeName}' has no reviewed Blueprint-callable function '{functionName}'.");
         }
-        ValidateFrame(frameAddress, contract.ArgumentCount, contract.HasReturnValue);
+        ValidateFrame(frameAddress, contract.ArgumentCount, contract.ResultCount);
 
         if (target is UnrealObjectScript objectScript)
         {
@@ -430,7 +430,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
 
     private sealed record FunctionContract(
         int ArgumentCount,
-        bool HasReturnValue,
+        int ResultCount,
         InvokeFunction Invoke)
     {
         public static bool TryCreate(MethodInfo method, out FunctionContract? contract)
@@ -447,17 +447,45 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             var target = Expression.Parameter(typeof(object), "target");
             var frame = Expression.Parameter(typeof(nint), "frame");
             var callArguments = new Expression[parameters.Length];
+            var variables = new List<ParameterExpression>();
+            var prefix = new List<Expression>();
+            var outputVariables = new List<(ParameterExpression Variable, Type Type)>();
             for (int index = 0; index < parameters.Length; ++index)
             {
-                Type parameterType = parameters[index].ParameterType;
-                if (parameterType.IsByRef || !IsSupported(parameterType))
+                ParameterInfo parameter = parameters[index];
+                Type parameterType = parameter.ParameterType;
+                Type valueType = parameterType.IsByRef
+                    ? parameterType.GetElementType() ?? typeof(void)
+                    : parameterType;
+                if (valueType == typeof(void) || !IsSupported(valueType) ||
+                    parameterType.IsByRef && parameter.IsIn && !parameter.IsOut)
                 {
                     return false;
                 }
-                callArguments[index] = Expression.Call(
-                    GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(parameterType),
-                    frame,
-                    Expression.Constant(index));
+                if (!parameterType.IsByRef)
+                {
+                    callArguments[index] = Expression.Call(
+                        GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(valueType),
+                        frame,
+                        Expression.Constant(index));
+                    continue;
+                }
+
+                ParameterExpression variable = Expression.Variable(
+                    valueType,
+                    $"parameter{index}");
+                variables.Add(variable);
+                if (!parameter.IsOut)
+                {
+                    prefix.Add(Expression.Assign(
+                        variable,
+                        Expression.Call(
+                            GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(valueType),
+                            frame,
+                            Expression.Constant(index))));
+                }
+                callArguments[index] = variable;
+                outputVariables.Add((variable, valueType));
             }
 
             MethodCallExpression call = method.IsStatic
@@ -469,17 +497,42 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                             $"Managed function '{method.Name}' has no declaring type.")),
                     method,
                     callArguments);
-            Expression body = method.ReturnType == typeof(void)
-                ? Expression.Block(
-                    call,
-                    Expression.Call(GetHelper(nameof(WriteVoidResult)), frame))
-                : Expression.Call(
-                    GetGenericHelper(nameof(WriteResult)).MakeGenericMethod(method.ReturnType),
-                    call,
-                    frame);
+            var bodyExpressions = new List<Expression>(prefix.Count + outputVariables.Count + 3);
+            bodyExpressions.AddRange(prefix);
+            int resultIndex = 0;
+            if (method.ReturnType == typeof(void))
+            {
+                bodyExpressions.Add(call);
+            }
+            else
+            {
+                ParameterExpression returnValue = Expression.Variable(
+                    method.ReturnType,
+                    "returnValue");
+                variables.Add(returnValue);
+                bodyExpressions.Add(Expression.Assign(returnValue, call));
+                bodyExpressions.Add(Expression.Call(
+                    GetGenericHelper(nameof(WriteResultAt)).MakeGenericMethod(method.ReturnType),
+                    returnValue,
+                    frame,
+                    Expression.Constant(resultIndex++)));
+            }
+            foreach ((ParameterExpression variable, Type valueType) in outputVariables)
+            {
+                bodyExpressions.Add(Expression.Call(
+                    GetGenericHelper(nameof(WriteResultAt)).MakeGenericMethod(valueType),
+                    variable,
+                    frame,
+                    Expression.Constant(resultIndex++)));
+            }
+            bodyExpressions.Add(Expression.Call(
+                GetHelper(nameof(CompleteResults)),
+                frame,
+                Expression.Constant(resultIndex)));
+            Expression body = Expression.Block(variables, bodyExpressions);
             contract = new FunctionContract(
                 parameters.Length,
-                method.ReturnType != typeof(void),
+                resultIndex,
                 Expression.Lambda<InvokeFunction>(body, target, frame).Compile());
             return true;
         }
@@ -499,14 +552,13 @@ internal sealed class UnrealManagedFunctionDispatcherV2
     private static unsafe void ValidateFrame(
         nint frameAddress,
         int argumentCount,
-        bool hasReturnValue)
+        int requiredResults)
     {
         if (frameAddress == 0)
         {
             throw new ArgumentNullException(nameof(frameAddress));
         }
         UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
-        int requiredResults = hasReturnValue ? 1 : 0;
         if (frame->Flags != 0 || frame->Reserved8 != 0 || frame->Reserved32 != 0 ||
             frame->ArgumentCount != argumentCount ||
             argumentCount is < 0 or > MaximumArgumentCount ||
@@ -568,9 +620,17 @@ internal sealed class UnrealManagedFunctionDispatcherV2
         return decoded;
     }
 
-    private static unsafe void WriteResult<T>(T value, nint frameAddress)
+    private static unsafe void WriteResultAt<T>(T value, nint frameAddress, int resultIndex)
     {
         UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
+        if (resultIndex < 0 || (uint)resultIndex >= frame->ResultCapacity ||
+            frame->Results == 0)
+        {
+            frame->Status = UnrealNativeCallStatusV3.InvalidFrame;
+            throw new ArgumentOutOfRangeException(
+                nameof(resultIndex),
+                "The managed Blueprint function result index is outside the borrowed result cells.");
+        }
         Span<byte> arena = frame->ByteCapacity == 0
             ? Span<byte>.Empty
             : new Span<byte>((void*)frame->ByteBuffer, checked((int)frame->ByteCapacity));
@@ -590,18 +650,21 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 $"Managed Blueprint function result '{typeof(T).FullName}' does not fit its borrowed arena.",
                 nameof(frameAddress));
         }
-        ((UnrealNativeValueV3*)frame->Results)[0] = encoded;
-        frame->ResultCount = 1;
+        ((UnrealNativeValueV3*)frame->Results)[resultIndex] = encoded;
         frame->ByteCount = checked((uint)byteCount);
         frame->RequiredByteCapacity = frame->ByteCount;
-        frame->Status = UnrealNativeCallStatusV3.Success;
     }
 
-    private static unsafe void WriteVoidResult(nint frameAddress)
+    private static unsafe void CompleteResults(nint frameAddress, int resultCount)
     {
         UnrealNativeCallFrameV3* frame = (UnrealNativeCallFrameV3*)frameAddress;
-        frame->ResultCount = 0;
-        frame->RequiredResultCapacity = 0;
+        if (resultCount < 0 || (uint)resultCount > frame->ResultCapacity)
+        {
+            frame->Status = UnrealNativeCallStatusV3.InvalidFrame;
+            throw new ArgumentOutOfRangeException(nameof(resultCount));
+        }
+        frame->ResultCount = checked((uint)resultCount);
+        frame->RequiredResultCapacity = frame->ResultCount;
         frame->RequiredByteCapacity = frame->ByteCount;
         frame->Status = UnrealNativeCallStatusV3.Success;
     }

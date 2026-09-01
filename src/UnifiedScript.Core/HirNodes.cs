@@ -48,7 +48,16 @@ public sealed record HirParameter(
     SemanticId Id,
     SourceSpan Span,
     string Name,
-    string TypeName) : HirNode(Id, Span);
+    string TypeName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    HirParameterDirection Direction = HirParameterDirection.Input) : HirNode(Id, Span);
+
+public enum HirParameterDirection
+{
+    Input,
+    Output,
+    InputOutput,
+}
 
 /// <summary>
 /// Identity-only HIR node used while reconciling type-level script state.

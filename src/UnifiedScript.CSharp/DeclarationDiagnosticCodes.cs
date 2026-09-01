@@ -11,4 +11,5 @@ public static class DeclarationDiagnosticCodes
     public const string InvalidScriptClassId = "UAD1007";
     public const string DuplicateScriptClassId = "UAD1008";
     public const string InvalidGameplayBinding = "UAD1009";
+    public const string UnsupportedFunctionSignature = "UAD1010";
 }

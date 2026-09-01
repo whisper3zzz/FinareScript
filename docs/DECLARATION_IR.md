@@ -77,13 +77,25 @@ Each document carries:
 - typed JSON defaults;
 - exact reflected type identity for reviewed struct state;
 - `instanceEditable`, `saveGame`, `replicated`, and optional `category` policy;
-- Visual function signatures linked to existing HIR method and parameter IDs.
+- Visual function signatures linked to existing HIR method and parameter IDs;
+- explicit `Input`, `Output`, or `InputOutput` direction on every function
+  parameter. Ordinary C# parameters map to `Input`, `out` maps to `Output`, and
+  `ref` maps to `InputOutput`; `in` is outside the reviewed Blueprint matrix.
 
 `ScriptAssetJson` rejects unknown JSON members, wrong schema versions, empty
 IDs, duplicate asset paths, duplicate state names/IDs, invalid source spans,
 blank categories, and defaults whose JSON kind conflicts with the declared
 state kind. Serialization normalizes asset, state, and function order before
 writing, so editor and CI artifacts do not depend on source-document order.
+Input-action, delegate, and interface contracts remain input-only. Function
+directions are part of canonical Declaration IR JSON and persistent generated
+class bindings; the state-focused runtime declaration binary remains v1.1.
+
+The managed function ABI v3 consumes input and input-output values in source
+parameter order, then returns one ordered result sequence: a non-void return
+value first, followed by every input-output and output parameter in source
+order. Consumers must bind by stable parameter name because Unreal may reorder
+output properties while constructing a UFunction.
 
 The compiled declaration payload remains major version 1 and advances to binary
 minor version 1.1. It adds the optional reflected type descriptor plus typed

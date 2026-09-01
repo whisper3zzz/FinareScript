@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using UnifiedScript.Core;
 
@@ -87,7 +88,16 @@ public sealed class VisualProfileInspector
         string parameterSignature = string.Join(
             ",",
             method.ParameterList.Parameters.Select(static parameter =>
-                parameter.Type?.ToString() ?? "?"));
+            {
+                string direction = parameter.Modifiers.Any(SyntaxKind.OutKeyword)
+                    ? "out "
+                    : parameter.Modifiers.Any(SyntaxKind.RefKeyword)
+                        ? "ref "
+                        : parameter.Modifiers.Any(SyntaxKind.InKeyword)
+                            ? "in "
+                            : string.Empty;
+                return direction + (parameter.Type?.ToString() ?? "?");
+            }));
         return $"{qualifiedTypeName}.{method.Identifier.ValueText}({parameterSignature})";
     }
 }

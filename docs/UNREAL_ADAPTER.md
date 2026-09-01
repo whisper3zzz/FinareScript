@@ -784,6 +784,30 @@ packaged input, exactly-once delegate delivery, native-to-managed interface
 return dispatch, compatible reload without duplicate bindings, and deterministic
 teardown. Evidence is under `artifacts/m13-3b3b/`.
 
+## Phase B.31 common function values and multi-result directions
+
+Ordinary public `[Visual]` methods can now expose `FName`, `FText`, `UClass`,
+`FRotator`, and `FTransform` as Blueprint-visible parameters or return values.
+C# `ref` and `out` lower to explicit input-output and output directions in HIR
+and Declaration IR, then materialize as the corresponding generated UFunction
+pins. Persistent bindings retain both parameter directions and stable source
+names because Unreal may reorder output properties when linking a UFunction.
+
+Managed ABI v3 receives inputs in source order and returns one ordered result
+sequence: the non-void return value first, followed by each `ref`/`out` value in
+source order. The generic native thunk resolves reflected properties by stable
+name and writes results through either the direct `ProcessEvent` out-parameter
+records or the Blueprint VM addresses captured while stepping the stack. This
+keeps direct calls, child Blueprint `Call Parent Function`, package reload, and
+World-owned static-library dispatch on one implementation without per-function
+C++ facades.
+
+The .NET suite passes 691/691, repository validation passes 132/132,
+deterministic generation passes 9/9, UE 5.8.1 Editor/Game builds pass, and the
+complete 29/29 CMD Automation suite plus a focused live static dispatch pass.
+The 345,567 ms Cook/Archive/packaged Golden Path is recorded under
+`artifacts/m13-3c1c/golden-path-final/`.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:
@@ -855,7 +879,9 @@ packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
 The generated allocation-free scalar lane now covers zero to four arguments
 for the supported int, float, bool, object-handle, and FVector families, with
-ABI v3 CallFrame fallback for broader shapes. The remaining production work is
-native debug traps and deeper evaluation, arbitrary control-wire authoring
-outside structured operations, additional shared/gameplay data schemas, and
-platform-specific CoreCLR packaging beyond Win64.
+ABI v3 CallFrame fallback for broader shapes. The generic Blueprint function
+lane also carries the reviewed common UE value types and ordered `ref`/`out`
+results. The remaining production work is container and Soft Reference function
+shapes, native debug traps and deeper evaluation, arbitrary control-wire
+authoring outside structured operations, additional shared/gameplay data
+schemas, and platform-specific CoreCLR packaging beyond Win64.

@@ -307,6 +307,66 @@ public sealed class UnrealManagedFunctionDispatchTests
         }
     }
 
+    [Fact]
+    public unsafe void V2DispatchesCommonValuesAndMultipleOutRefResults()
+    {
+        UnrealManagedFunctionDispatcherV2 library =
+            UnrealManagedFunctionDispatcherV2.Create(
+                typeof(DirectionManagedFunctionLibrary),
+                staticOnly: true);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
+        Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[3];
+        Span<byte> arena = stackalloc byte[2048];
+        int inputBytes = 0;
+        UnrealTransform transform = new(
+            UnrealQuaternion.Identity,
+            new UnrealVector(10.0, 20.0, 30.0),
+            UnrealVector.One);
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            new UnrealName("Player"), arena, ref inputBytes, out arguments[0], out _));
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            new UnrealRotator(1.0, 2.0, 3.0), arena, ref inputBytes, out arguments[1], out _));
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            default(UnrealText), arena, ref inputBytes, out arguments[2], out _));
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            transform, arena, ref inputBytes, out arguments[3], out _));
+
+        fixed (UnrealNativeValueV3* argumentPointer = arguments)
+        fixed (UnrealNativeValueV3* resultPointer = results)
+        fixed (byte* arenaPointer = arena)
+        {
+            var frame = new UnrealNativeCallFrameV3
+            {
+                Arguments = (nint)argumentPointer,
+                ArgumentCount = (uint)arguments.Length,
+                Results = (nint)resultPointer,
+                ResultCapacity = (uint)results.Length,
+                ByteBuffer = (nint)arenaPointer,
+                ByteCapacity = (uint)arena.Length,
+                ByteCount = (uint)inputBytes,
+            };
+            library.Invoke(
+                null,
+                nameof(DirectionManagedFunctionLibrary.Resolve),
+                (nint)(&frame));
+
+            Assert.Equal(UnrealNativeCallStatusV3.Success, frame.Status);
+            Assert.Equal(3U, frame.ResultCount);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[0], arena, checked((int)frame.ByteCount),
+                out UnrealClassHandle classHandle));
+            Assert.Equal(0x0000000200000003UL, classHandle.Value);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[1], arena, checked((int)frame.ByteCount),
+                out UnrealRotator rotation));
+            Assert.Equal(new UnrealRotator(11.0, 22.0, 33.0), rotation);
+            Assert.True(UnrealNativeValueCodecV3.TryDecode(
+                in results[2], arena, checked((int)frame.ByteCount),
+                out UnrealText label));
+            Assert.Equal("Player:10", label.Value);
+        }
+    }
+
     private sealed class FunctionTransport : IUnrealNativeInvocationTransport
     {
         public UnrealInvocationResponse ReadProperty(
@@ -427,6 +487,24 @@ public static class TypedManagedFunctionLibrary
 {
     [Visual]
     public static ManagedFunctionPayload Echo(ManagedFunctionPayload value) => value;
+}
+
+public static class DirectionManagedFunctionLibrary
+{
+    [Visual]
+    public static UnrealClassHandle Resolve(
+        UnrealName name,
+        ref UnrealRotator rotation,
+        out UnrealText label,
+        UnrealTransform transform)
+    {
+        rotation = new UnrealRotator(
+            rotation.Pitch + transform.Translation.X,
+            rotation.Yaw + transform.Translation.Y,
+            rotation.Roll + transform.Translation.Z);
+        label = new UnrealText($"{name.Value}:{transform.Translation.X:0}");
+        return new UnrealClassHandle(0x0000000200000003UL);
+    }
 }
 
 public abstract class InheritedManagedFunctionBase : IUnrealManagedScript

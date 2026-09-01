@@ -118,12 +118,16 @@ public sealed class VisualProfileValidator
 
         foreach (ParameterSyntax parameter in method.ParameterList.Parameters)
         {
-            if (parameter.Modifiers.Count > 0)
+            bool reviewedOutputDirection = parameter.Modifiers.Count == 1 &&
+                (parameter.Modifiers[0].IsKind(SyntaxKind.OutKeyword) ||
+                 parameter.Modifiers[0].IsKind(SyntaxKind.RefKeyword));
+            if (parameter.Modifiers.Count > 0 && !reviewedOutputDirection)
             {
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ParameterModifierNotSupported,
-                    $"Parameter modifier '{parameter.Modifiers}' is not supported in {ProfileName}.",
+                    $"Parameter modifier '{parameter.Modifiers}' is not supported in {ProfileName}; " +
+                    "the reviewed Blueprint direction matrix accepts only out and ref.",
                     parameter,
                     filePath);
             }

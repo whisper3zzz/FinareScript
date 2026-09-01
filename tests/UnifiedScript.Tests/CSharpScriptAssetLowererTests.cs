@@ -222,6 +222,86 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Fact]
+    public void CommonUnrealFunctionValuesAndDirectionsLowerIntoDeclarationIr()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/CommonFunctionShape")]
+            public sealed class CommonFunctionShape
+            {
+                [Visual]
+                public UnrealClassHandle Resolve(
+                    UnrealName name,
+                    ref UnrealRotator rotation,
+                    out UnrealText label,
+                    UnrealTransform transform)
+                {
+                    label = default;
+                    return default;
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "CommonUnrealFunctionShape",
+            [new CSharpSourceDocument("Game/CommonFunctionShape.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptFunctionDeclaration function = Assert.Single(
+            Assert.Single(result.ScriptAssets!.Assets).Functions);
+        Assert.Equal("UnifiedScript.Unreal.UnrealClassHandle", function.ReturnTypeMetadataName);
+        Assert.Equal(
+            [
+                ScriptParameterDirection.Input,
+                ScriptParameterDirection.InputOutput,
+                ScriptParameterDirection.Output,
+                ScriptParameterDirection.Input,
+            ],
+            function.Parameters.Select(static parameter => parameter.Direction));
+        Assert.Equal(
+            [
+                "UnifiedScript.Unreal.UnrealName",
+                "UnifiedScript.Unreal.UnrealRotator",
+                "UnifiedScript.Unreal.UnrealText",
+                "UnifiedScript.Unreal.UnrealTransform",
+            ],
+            function.Parameters.Select(static parameter => parameter.TypeMetadataName));
+        Assert.Contains("ref UnifiedScript.Unreal.UnrealRotator", function.QualifiedName);
+        Assert.Contains("out UnifiedScript.Unreal.UnrealText", function.QualifiedName);
+    }
+
+    [Fact]
+    public void CSharpInParameterFailsTheBlueprintFunctionContract()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            [ScriptAsset("Game/InvalidInParameter")]
+            public sealed class InvalidInParameter
+            {
+                [Visual]
+                public int Resolve(in int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "InvalidInParameter",
+            [new CSharpSourceDocument("Game/InvalidInParameter.cs", source)]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == VisualProfileDiagnosticCodes.ParameterModifierNotSupported);
+    }
+
+    [Fact]
     public void PersistentObjectStateRejectsProcessLocalHandleDefaults()
     {
         const string source = """

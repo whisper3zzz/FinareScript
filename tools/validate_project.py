@@ -7356,7 +7356,7 @@ def main() -> int:
         and "ManagedStaticLibrary" in managed_world_entry
         and "_staticLibraries" in managed_world_entry
         and "BlueprintFunctionLibrary" in blueprint_class_materializer_source
-        and "Binding.AbiVersion = 2" in blueprint_class_materializer_source
+        and "Binding.AbiVersion = 3" in blueprint_class_materializer_source
         and "Binding.bStatic = Planned.Declaration.bIsStatic"
         in blueprint_class_materializer_source
         and "KismetWorldContextName" in native_blueprint_source
@@ -7520,6 +7520,30 @@ def main() -> int:
     )
     checks.append(
         "M13.3C-1b materializes common Unreal state through Blueprint and managed runtime"
+    )
+    require(
+        "HirParameterDirection" in hir_nodes_source
+        and "ScriptParameterDirection" in script_asset_model
+        and "HirParameterDirection.Output" in script_asset_lowerer
+        and "HirParameterDirection.InputOutput" in script_asset_lowerer
+        and "ParameterNames" in native_blueprint_header
+        and "ParameterDirections" in native_blueprint_header
+        and "IndexOfByKey(Parameter->GetFName())" in native_blueprint_source
+        and "Stack.OutParms" in native_blueprint_source
+        and "Binding.AbiVersion = 3" in blueprint_class_materializer_source
+        and "Common function binding retains stable source parameter order"
+        in blueprint_class_materializer_tests
+        and "Static FName/FText/UClass/FRotator/FTransform call reaches CoreCLR"
+        in blueprint_class_materializer_tests
+        and "V2DispatchesCommonValuesAndMultipleOutRefResults"
+        in managed_function_tests
+        and "ResolveCommonValues" in unreal_demo_source
+        and "[x] **M13.3C-1c-a — common value and `ref`/`out` function vertical:**"
+        in roadmap_document,
+        "M13.3C-1c-a common Blueprint function values, stable parameter order, ref/out ABI, live dispatch, or roadmap closure is incomplete",
+    )
+    checks.append(
+        "M13.3C-1c-a dispatches common Blueprint values and ordered ref/out results"
     )
     visual_profile_model = (
         ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"

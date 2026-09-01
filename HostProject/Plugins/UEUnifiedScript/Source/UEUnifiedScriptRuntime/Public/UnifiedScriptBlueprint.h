@@ -47,6 +47,14 @@ enum class EUnifiedScriptManagedDelegateSource : uint8
     Host = 2,
 };
 
+UENUM()
+enum class EUnifiedScriptManagedParameterDirection : uint8
+{
+    Input = 0,
+    Output = 1,
+    InputOutput = 2,
+};
+
 USTRUCT()
 struct FUnifiedScriptManagedLifecycleBinding
 {
@@ -195,6 +203,14 @@ struct FUnifiedScriptManagedFunctionBinding
     /** One type contract per managed argument, excluding injected World context. */
     UPROPERTY()
     TArray<FUnifiedScriptManagedValueTypeBinding> ParameterTypes;
+
+    /** Stable source parameter order used when Unreal reorders output properties. */
+    UPROPERTY()
+    TArray<FName> ParameterNames;
+
+    /** One source-level input/out/ref direction per managed argument. */
+    UPROPERTY()
+    TArray<EUnifiedScriptManagedParameterDirection> ParameterDirections;
 
     /** Exact return value contract; empty for void and built-in values. */
     UPROPERTY()

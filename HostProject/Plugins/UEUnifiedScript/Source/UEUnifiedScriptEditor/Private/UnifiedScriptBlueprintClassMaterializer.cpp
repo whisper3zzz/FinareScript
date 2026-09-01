@@ -81,6 +81,8 @@ struct FFunctionParameterDeclaration
     FString TypeMetadataName;
     FEdGraphPinType PinType;
     FFunctionValueTypeDeclaration ValueType;
+    EUnifiedScriptManagedParameterDirection Direction =
+        EUnifiedScriptManagedParameterDirection::Input;
 };
 
 struct FFunctionDeclaration
@@ -374,10 +376,29 @@ bool ResolveFunctionPinType(
     {
         TypeKind = TEXT("string");
     }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealName"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Name;
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealText"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Text;
+        return true;
+    }
     else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle"))
     {
         OutType = FEdGraphPinType();
         OutType.PinCategory = UEdGraphSchema_K2::PC_Object;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Class;
         OutType.PinSubCategoryObject = UObject::StaticClass();
         return true;
     }
@@ -386,6 +407,20 @@ bool ResolveFunctionPinType(
         OutType = FEdGraphPinType();
         OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
         OutType.PinSubCategoryObject = TBaseStructure<FVector>::Get();
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        OutType.PinSubCategoryObject = TBaseStructure<FRotator>::Get();
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealTransform"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+        OutType.PinSubCategoryObject = TBaseStructure<FTransform>::Get();
         return true;
     }
     else
@@ -551,11 +586,25 @@ bool FunctionGraphSignatureMatches(
     Graph.GetNodesOfClass(EntryNodes);
     Graph.GetNodesOfClass(ResultNodes);
     const int32 ParameterOffset = Declaration.bIsStatic ? 1 : 0;
+    int32 InputParameterCount = 0;
+    int32 OutputParameterCount = 0;
+    for (const FFunctionParameterDeclaration& Parameter : Declaration.Parameters)
+    {
+        if (Parameter.Direction ==
+            EUnifiedScriptManagedParameterDirection::Output)
+        {
+            ++OutputParameterCount;
+        }
+        else
+        {
+            ++InputParameterCount;
+        }
+    }
     if (EntryNodes.Num() != 1 || ResultNodes.Num() != 1 ||
         EntryNodes[0]->UserDefinedPins.Num() !=
-            Declaration.Parameters.Num() + ParameterOffset ||
+            InputParameterCount + ParameterOffset ||
         ResultNodes[0]->UserDefinedPins.Num() !=
-            (Declaration.bHasReturnValue ? 1 : 0))
+            (Declaration.bHasReturnValue ? 1 : 0) + OutputParameterCount)
     {
         return false;
     }
@@ -582,21 +631,26 @@ bool FunctionGraphSignatureMatches(
             return false;
         }
     }
-    for (int32 Index = 0; Index < Declaration.Parameters.Num(); ++Index)
+    int32 EntryParameterIndex = ParameterOffset;
+    int32 ResultParameterIndex = 0;
+    for (const FFunctionParameterDeclaration& Parameter : Declaration.Parameters)
     {
-        const TSharedPtr<FUserPinInfo>& Pin =
-            EntryNodes[0]->UserDefinedPins[Index + ParameterOffset];
-        const FFunctionParameterDeclaration& Parameter = Declaration.Parameters[Index];
+        const bool bOutputOnly = Parameter.Direction ==
+            EUnifiedScriptManagedParameterDirection::Output;
+        const TSharedPtr<FUserPinInfo>& Pin = bOutputOnly
+            ? ResultNodes[0]->UserDefinedPins[ResultParameterIndex++]
+            : EntryNodes[0]->UserDefinedPins[EntryParameterIndex++];
         if (!Pin.IsValid() || Pin->PinName != Parameter.Name ||
             Pin->PinType != Parameter.PinType ||
-            Pin->DesiredPinDirection != EGPD_Output)
+            Pin->DesiredPinDirection != (bOutputOnly ? EGPD_Input : EGPD_Output))
         {
             return false;
         }
     }
     if (Declaration.bHasReturnValue)
     {
-        const TSharedPtr<FUserPinInfo>& Pin = ResultNodes[0]->UserDefinedPins[0];
+        const TSharedPtr<FUserPinInfo>& Pin =
+            ResultNodes[0]->UserDefinedPins[OutputParameterCount];
         if (!Pin.IsValid() || Pin->PinName != UEdGraphSchema_K2::PN_ReturnValue ||
             Pin->PinType != Declaration.ReturnPinType ||
             Pin->DesiredPinDirection != EGPD_Input)
@@ -632,12 +686,14 @@ bool RuntimeFunctionBindingMatches(
     const FFunctionDeclaration& Declaration)
 {
     if (Binding.ManagedName != Declaration.ManagedName.ToString() ||
-        Binding.FunctionId != Declaration.Id || Binding.AbiVersion != 2 ||
+        Binding.FunctionId != Declaration.Id || Binding.AbiVersion != 3 ||
         Binding.bStatic != Declaration.bIsStatic ||
         Binding.bBlueprintEvent != Declaration.bBlueprintEvent ||
         Binding.bInterfaceFunction != Declaration.bInterfaceFunction ||
         Binding.BlueprintEventSuperMode != Declaration.BlueprintEventSuperMode ||
         Binding.ParameterTypes.Num() != Declaration.Parameters.Num() ||
+        Binding.ParameterNames.Num() != Declaration.Parameters.Num() ||
+        Binding.ParameterDirections.Num() != Declaration.Parameters.Num() ||
         !RuntimeValueTypeBindingMatches(
             Binding.ReturnType,
             Declaration.ReturnValueType))
@@ -646,7 +702,10 @@ bool RuntimeFunctionBindingMatches(
     }
     for (int32 Index = 0; Index < Binding.ParameterTypes.Num(); ++Index)
     {
-        if (!RuntimeValueTypeBindingMatches(
+        if (Binding.ParameterNames[Index] != Declaration.Parameters[Index].Name ||
+            Binding.ParameterDirections[Index] !=
+                Declaration.Parameters[Index].Direction ||
+            !RuntimeValueTypeBindingMatches(
                 Binding.ParameterTypes[Index],
                 Declaration.Parameters[Index].ValueType))
         {
@@ -1872,6 +1931,37 @@ bool ParseDeclaration(
             FFunctionParameterDeclaration ParameterDeclaration;
             ParameterDeclaration.Name = FName(*ParameterName);
             ParameterDeclaration.TypeMetadataName = ParameterType;
+            FString ParameterDirection = TEXT("input");
+            if (Parameter->HasField(TEXT("direction")) &&
+                !Parameter->TryGetStringField(
+                    TEXT("direction"),
+                    ParameterDirection))
+            {
+                OutError = FString::Printf(
+                    TEXT("Function '%s' parameter '%s' has an invalid direction."),
+                    *Name,
+                    *ParameterName);
+                return false;
+            }
+            if (ParameterDirection == TEXT("output"))
+            {
+                ParameterDeclaration.Direction =
+                    EUnifiedScriptManagedParameterDirection::Output;
+            }
+            else if (ParameterDirection == TEXT("inputOutput"))
+            {
+                ParameterDeclaration.Direction =
+                    EUnifiedScriptManagedParameterDirection::InputOutput;
+            }
+            else if (ParameterDirection != TEXT("input"))
+            {
+                OutError = FString::Printf(
+                    TEXT("Function '%s' parameter '%s' uses unsupported direction '%s'."),
+                    *Name,
+                    *ParameterName,
+                    *ParameterDirection);
+                return false;
+            }
             bool bHasParameterValue = false;
             if (!ParseSemanticId(ParameterId, ParameterDeclaration.Id) ||
                 ParameterDeclaration.Name.IsNone() ||
@@ -1897,6 +1987,9 @@ bool ParseDeclaration(
                     *ParameterType);
                 return false;
             }
+            ParameterDeclaration.PinType.bIsReference =
+                ParameterDeclaration.Direction ==
+                EUnifiedScriptManagedParameterDirection::InputOutput;
             SeenParameterIds.Add(ParameterDeclaration.Id);
             SeenParameterNames.Add(ParameterDeclaration.Name);
             Declaration.Parameters.Add(MoveTemp(ParameterDeclaration));
@@ -2752,10 +2845,18 @@ bool ConfigureFunctionGraph(
     }
     for (const FFunctionParameterDeclaration& Parameter : Declaration.Parameters)
     {
-        if (Entry->CreateUserDefinedPin(
+        UK2Node_EditablePinBase* PinOwner = Parameter.Direction ==
+            EUnifiedScriptManagedParameterDirection::Output
+            ? static_cast<UK2Node_EditablePinBase*>(Result)
+            : static_cast<UK2Node_EditablePinBase*>(Entry);
+        const EEdGraphPinDirection PinDirection = Parameter.Direction ==
+            EUnifiedScriptManagedParameterDirection::Output
+            ? EGPD_Input
+            : EGPD_Output;
+        if (PinOwner->CreateUserDefinedPin(
                 Parameter.Name,
                 Parameter.PinType,
-                EGPD_Output,
+                PinDirection,
                 false) == nullptr)
         {
             OutError = FString::Printf(
@@ -3040,7 +3141,7 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             FUnifiedScriptManagedFunctionBinding Binding;
             Binding.ManagedName = Planned.Declaration.ManagedName.ToString();
             Binding.FunctionId = Planned.Declaration.Id;
-            Binding.AbiVersion = 2;
+            Binding.AbiVersion = 3;
             Binding.bStatic = Planned.Declaration.bIsStatic;
             Binding.bBlueprintEvent = Planned.Declaration.bBlueprintEvent;
             Binding.bInterfaceFunction =
@@ -3050,11 +3151,16 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Binding.ReturnType = MakeRuntimeValueTypeBinding(
                 Planned.Declaration.ReturnValueType);
             Binding.ParameterTypes.Reserve(Planned.Declaration.Parameters.Num());
+            Binding.ParameterNames.Reserve(Planned.Declaration.Parameters.Num());
+            Binding.ParameterDirections.Reserve(
+                Planned.Declaration.Parameters.Num());
             for (const FFunctionParameterDeclaration& Parameter :
                  Planned.Declaration.Parameters)
             {
                 Binding.ParameterTypes.Add(
                     MakeRuntimeValueTypeBinding(Parameter.ValueType));
+                Binding.ParameterNames.Add(Parameter.Name);
+                Binding.ParameterDirections.Add(Parameter.Direction);
             }
             GeneratedClass->ManagedFunctionBindings.Add(
                 Planned.Declaration.InternalName,

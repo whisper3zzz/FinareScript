@@ -239,6 +239,7 @@ public static class ScriptAssetJson
             if (parameter is null || parameter.Id.IsEmpty ||
                 string.IsNullOrWhiteSpace(parameter.Name) ||
                 string.IsNullOrWhiteSpace(parameter.TypeMetadataName) ||
+                !Enum.IsDefined(parameter.Direction) ||
                 !parameterIds.Add(parameter.Id) || !parameterNames.Add(parameter.Name))
             {
                 throw new JsonException($"Script function '{function.QualifiedName}' has an invalid parameter.");
@@ -289,6 +290,7 @@ public static class ScriptAssetJson
                 !IsUnrealObjectPath(binding.ActionPath) ||
                 !Enum.IsDefined(binding.TriggerEvent) ||
                 !Enum.IsDefined(binding.ValueType) || !typeMatches ||
+                function.Parameters[0].Direction != ScriptParameterDirection.Input ||
                 !ids.Add(binding.Id) || !routes.Add(route))
             {
                 throw new JsonException(
@@ -308,7 +310,9 @@ public static class ScriptAssetJson
         }
         if (!function.IsEvent || function.IsStatic || function.BlueprintEvent is not null ||
             (function.InputActions?.Count ?? 0) != 0 ||
-            (function.InterfaceFunctions?.Count ?? 0) != 0)
+            (function.InterfaceFunctions?.Count ?? 0) != 0 ||
+            function.Parameters.Any(static parameter =>
+                parameter.Direction != ScriptParameterDirection.Input))
         {
             throw new JsonException(
                 $"Delegate handler '{function.QualifiedName}' has an incompatible gameplay binding.");

@@ -348,10 +348,36 @@ bool PackValueV2(
         OutValue.Payload1 = static_cast<uint64>(Utf8.Length());
         return true;
     }
+    if (const FTextProperty* Typed = CastField<FTextProperty>(&Property))
+    {
+        const FString String = Typed->GetPropertyValue(Value).ToString();
+        const FTCHARToUTF8 Utf8(*String);
+        if (Utf8.Length() > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint text parameter '%s' exceeds the %d-byte managed call arena."),
+                *Property.GetName(),
+                MaximumManagedFunctionArenaBytes);
+            return false;
+        }
+        const int32 Offset = Arena.Num();
+        if (Utf8.Length() > 0)
+        {
+            const int32 AddedOffset = Arena.AddUninitialized(Utf8.Length());
+            FMemory::Memcpy(Arena.GetData() + AddedOffset, Utf8.Get(), Utf8.Length());
+        }
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Text;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.Payload0 = static_cast<uint64>(Offset);
+        OutValue.Payload1 = static_cast<uint64>(Utf8.Length());
+        return true;
+    }
     if (const FObjectPropertyBase* Typed = CastField<FObjectPropertyBase>(&Property))
     {
         UObject* Object = Typed->GetObjectPropertyValue(Value);
-        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Object;
+        OutValue.Kind = CastField<FClassProperty>(&Property) != nullptr
+            ? EUnifiedScriptNativeValueKindV3::Class
+            : EUnifiedScriptNativeValueKindV3::Object;
         if (Object == nullptr)
         {
             OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::Null;
@@ -375,6 +401,45 @@ bool PackValueV2(
         OutValue.Payload0 = DoubleBits(Vector.X);
         OutValue.Payload1 = DoubleBits(Vector.Y);
         OutValue.Payload2 = DoubleBits(Vector.Z);
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FRotator>::Get())
+    {
+        const FRotator& Rotator = *static_cast<const FRotator*>(Value);
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Rotator3;
+        OutValue.Payload0 = DoubleBits(Rotator.Pitch);
+        OutValue.Payload1 = DoubleBits(Rotator.Yaw);
+        OutValue.Payload2 = DoubleBits(Rotator.Roll);
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FTransform>::Get())
+    {
+        constexpr int32 TransformByteSize = 10 * sizeof(double);
+        if (TransformByteSize > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint transform parameter '%s' exceeds the %d-byte managed call arena."),
+                *Property.GetName(),
+                MaximumManagedFunctionArenaBytes);
+            return false;
+        }
+        const FTransform& Transform = *static_cast<const FTransform*>(Value);
+        const FQuat Rotation = Transform.GetRotation();
+        const FVector Translation = Transform.GetTranslation();
+        const FVector Scale = Transform.GetScale3D();
+        const double Components[10] = {
+            Rotation.X, Rotation.Y, Rotation.Z, Rotation.W,
+            Translation.X, Translation.Y, Translation.Z,
+            Scale.X, Scale.Y, Scale.Z,
+        };
+        const int32 Offset = Arena.AddUninitialized(TransformByteSize);
+        FMemory::Memcpy(Arena.GetData() + Offset, Components, TransformByteSize);
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::Transform;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.Payload0 = static_cast<uint64>(Offset);
+        OutValue.Payload1 = TransformByteSize;
         return true;
     }
     if (const FStructProperty* Typed = CastField<FStructProperty>(&Property))
@@ -453,7 +518,7 @@ bool PackValueV2(
         return OutValue.TypeId != 0;
     }
     OutError = FString::Printf(
-        TEXT("Blueprint parameter '%s' uses unsupported ABI v2 property '%s'."),
+        TEXT("Blueprint parameter '%s' uses unsupported managed-call property '%s'."),
         *Property.GetName(),
         *Property.GetClass()->GetName());
     return false;
@@ -571,8 +636,26 @@ bool UnpackReturnValueV2(
             FName(FString(Converted.Length(), Converted.Get())));
         return true;
     }
+    if (const FTextProperty* Typed = CastField<FTextProperty>(&Property);
+        Typed != nullptr && Value.Kind == EUnifiedScriptNativeValueKindV3::Text &&
+        Value.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+        Value.Payload0 <= ByteCount && Value.Payload1 <= ByteCount - Value.Payload0)
+    {
+        const int32 Offset = static_cast<int32>(Value.Payload0);
+        const int32 Length = static_cast<int32>(Value.Payload1);
+        const FUTF8ToTCHAR Converted(
+            reinterpret_cast<const ANSICHAR*>(Arena.GetData() + Offset),
+            Length);
+        Typed->SetPropertyValue(
+            Result,
+            FText::FromString(FString(Converted.Length(), Converted.Get())));
+        return true;
+    }
     if (const FObjectPropertyBase* Typed = CastField<FObjectPropertyBase>(&Property);
-        Typed != nullptr && Value.Kind == EUnifiedScriptNativeValueKindV3::Object)
+        Typed != nullptr && Value.Kind ==
+            (CastField<FClassProperty>(&Property) != nullptr
+                ? EUnifiedScriptNativeValueKindV3::Class
+                : EUnifiedScriptNativeValueKindV3::Object))
     {
         if (Value.Payload0 == 0)
         {
@@ -593,6 +676,34 @@ bool UnpackReturnValueV2(
             return false;
         }
         Typed->SetObjectPropertyValue(Result, Object);
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FRotator>::Get() &&
+        Value.Kind == EUnifiedScriptNativeValueKindV3::Rotator3)
+    {
+        *static_cast<FRotator*>(Result) = FRotator(
+            BitsDouble(Value.Payload0),
+            BitsDouble(Value.Payload1),
+            BitsDouble(Value.Payload2));
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FTransform>::Get() &&
+        Value.Kind == EUnifiedScriptNativeValueKindV3::Transform &&
+        Value.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+        Value.Payload1 == 10 * sizeof(double) && Value.Payload0 <= ByteCount &&
+        Value.Payload1 <= ByteCount - Value.Payload0)
+    {
+        double Components[10] = {};
+        FMemory::Memcpy(
+            Components,
+            Arena.GetData() + static_cast<int32>(Value.Payload0),
+            sizeof(Components));
+        *static_cast<FTransform*>(Result) = FTransform(
+            FQuat(Components[0], Components[1], Components[2], Components[3]),
+            FVector(Components[4], Components[5], Components[6]),
+            FVector(Components[7], Components[8], Components[9]));
         return true;
     }
     if (const FStructProperty* Typed = CastField<FStructProperty>(&Property);
@@ -673,7 +784,7 @@ bool UnpackReturnValueV2(
         return true;
     }
     OutError = FString::Printf(
-        TEXT("Managed ABI v2 return kind %u does not match Blueprint property '%s'."),
+        TEXT("Managed return kind %u does not match Blueprint property '%s'."),
         static_cast<uint32>(Value.Kind),
         *Property.GetName());
     return false;
@@ -877,6 +988,12 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
     // an explicit Blueprint Call Parent Function that is the child ubergraph,
     // not the managed parent UFunction selected by EX_FinalFunction.
     UFunction* Function = Stack.CurrentNativeFunction;
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass = Function != nullptr
+        ? Cast<UUnifiedScriptBlueprintGeneratedClass>(Function->GetOuter())
+        : nullptr;
+    const FUnifiedScriptManagedFunctionBinding* Binding = GeneratedClass != nullptr
+        ? GeneratedClass->ManagedFunctionBindings.Find(Function->GetFName())
+        : nullptr;
 
     // ProcessEvent supplies an already materialized parameter frame, while a
     // call emitted by the Blueprint VM leaves its arguments in the caller's
@@ -885,10 +1002,12 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
     // resumes in the middle of its argument list.
     TUniquePtr<FStructOnScope> DecodedParameters;
     void* ParameterContainer = Stack.Locals;
+    TMap<FName, void*> DecodedOutputDestinations;
     if (Function != nullptr && Stack.Node != Function)
     {
         DecodedParameters = MakeUnique<FStructOnScope>(Function);
         ParameterContainer = DecodedParameters->GetStructMemory();
+        int32 ManagedParameterIndex = 0;
         for (TFieldIterator<FProperty> It(
                  Function,
                  EFieldIteratorFlags::ExcludeSuper);
@@ -901,18 +1020,54 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             {
                 continue;
             }
+            const bool bInjectedWorldContext = Binding != nullptr && Binding->bStatic &&
+                (Parameter->GetFName() == WorldContextObjectName ||
+                 Parameter->GetFName() == KismetWorldContextName);
             Stack.Step(
                 Stack.Object,
                 Parameter->ContainerPtrToValuePtr<void>(ParameterContainer));
+            if (!bInjectedWorldContext)
+            {
+                const int32 BindingParameterIndex = Binding != nullptr &&
+                        Binding->ParameterNames.Num() == Binding->ParameterTypes.Num()
+                    ? Binding->ParameterNames.IndexOfByKey(Parameter->GetFName())
+                    : ManagedParameterIndex;
+                const EUnifiedScriptManagedParameterDirection Direction =
+                    Binding != nullptr &&
+                        Binding->ParameterDirections.IsValidIndex(BindingParameterIndex)
+                    ? Binding->ParameterDirections[BindingParameterIndex]
+                    : Parameter->HasAnyPropertyFlags(CPF_OutParm)
+                        ? EUnifiedScriptManagedParameterDirection::Output
+                        : EUnifiedScriptManagedParameterDirection::Input;
+                if (Direction != EUnifiedScriptManagedParameterDirection::Input &&
+                    Stack.MostRecentPropertyAddress != nullptr)
+                {
+                    DecodedOutputDestinations.Add(
+                        Parameter->GetFName(),
+                        Stack.MostRecentPropertyAddress);
+                }
+                ++ManagedParameterIndex;
+            }
         }
         P_FINISH;
     }
-    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass = Function != nullptr
-        ? Cast<UUnifiedScriptBlueprintGeneratedClass>(Function->GetOuter())
-        : nullptr;
-    const FUnifiedScriptManagedFunctionBinding* Binding = GeneratedClass != nullptr
-        ? GeneratedClass->ManagedFunctionBindings.Find(Function->GetFName())
-        : nullptr;
+    // ProcessEvent copies the caller's parameter block into Stack.Locals and
+    // exposes the original out/ref destinations through Stack.OutParms. A
+    // Blueprint VM call may also populate this chain, so prefer it whenever
+    // available and retain the MostRecentPropertyAddress fallback above.
+    for (FOutParmRec* OutParameter = Stack.OutParms;
+         OutParameter != nullptr;
+         OutParameter = OutParameter->NextOutParm)
+    {
+        if (OutParameter->Property != nullptr &&
+            OutParameter->PropAddr != nullptr &&
+            !OutParameter->Property->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            DecodedOutputDestinations.Add(
+                OutParameter->Property->GetFName(),
+                OutParameter->PropAddr);
+        }
+    }
     const FProperty* ReturnProperty = Function != nullptr
         ? Function->GetReturnProperty()
         : nullptr;
@@ -971,21 +1126,68 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
         }
 
         TArray<FUnifiedScriptNativeValueV3, TInlineAllocator<4>> ArgumentsV2;
+        TArray<const FProperty*, TInlineAllocator<4>> ManagedParameters;
+        if (Binding->ParameterNames.Num() == Binding->ParameterTypes.Num())
+        {
+            for (const FName ParameterName : Binding->ParameterNames)
+            {
+                const FProperty* Parameter = FindFProperty<FProperty>(
+                    Function,
+                    ParameterName);
+                if (Parameter == nullptr ||
+                    !Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+                    Parameter->HasAnyPropertyFlags(CPF_ReturnParm))
+                {
+                    UE_LOG(
+                        LogTemp,
+                        Error,
+                        TEXT("UnifiedScript function '%s' cannot resolve managed parameter '%s'."),
+                        *Function->GetPathName(),
+                        *ParameterName.ToString());
+                    return;
+                }
+                ManagedParameters.Add(Parameter);
+            }
+        }
+        else
+        {
+            for (TFieldIterator<FProperty> It(
+                     Function,
+                     EFieldIteratorFlags::ExcludeSuper);
+                 It;
+                 ++It)
+            {
+                const FProperty* Parameter = *It;
+                if (!Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+                    Parameter->HasAnyPropertyFlags(CPF_ReturnParm) ||
+                    (Binding->bStatic &&
+                     (Parameter->GetFName() == WorldContextObjectName ||
+                      Parameter->GetFName() == KismetWorldContextName)))
+                {
+                    continue;
+                }
+                ManagedParameters.Add(Parameter);
+            }
+        }
+        if (ManagedParameters.Num() != Binding->ParameterTypes.Num())
+        {
+            UE_LOG(
+                LogTemp,
+                Error,
+                TEXT("UnifiedScript function '%s' resolved %d managed parameters; expected %d."),
+                *Function->GetPathName(),
+                ManagedParameters.Num(),
+                Binding->ParameterTypes.Num());
+            return;
+        }
         TArray<uint8, TInlineAllocator<512>> Arena;
         Arena.Reserve(MaximumManagedFunctionArenaBytes);
         FString MarshalError;
-        int32 ManagedParameterIndex = 0;
-        for (TFieldIterator<FProperty> It(Function, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        for (int32 ManagedParameterIndex = 0;
+             ManagedParameterIndex < ManagedParameters.Num();
+             ++ManagedParameterIndex)
         {
-            const FProperty* Parameter = *It;
-            if (!Parameter->HasAnyPropertyFlags(CPF_Parm) ||
-                Parameter->HasAnyPropertyFlags(CPF_ReturnParm) ||
-                (Binding->bStatic &&
-                 (Parameter->GetFName() == WorldContextObjectName ||
-                  Parameter->GetFName() == KismetWorldContextName)))
-            {
-                continue;
-            }
+            const FProperty* Parameter = ManagedParameters[ManagedParameterIndex];
             FUnifiedScriptNativeValueV3& Value = ArgumentsV2.AddDefaulted_GetRef();
             const FUnifiedScriptManagedValueTypeBinding* ParameterType =
                 Binding->ParameterTypes.IsValidIndex(ManagedParameterIndex)
@@ -1011,16 +1213,25 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                     MarshalError.IsEmpty() ? TEXT("unsupported call shape") : *MarshalError);
                 return;
             }
-            ++ManagedParameterIndex;
         }
         const uint32 InputByteCount = static_cast<uint32>(Arena.Num());
         Arena.SetNumUninitialized(MaximumManagedFunctionArenaBytes, EAllowShrinking::No);
-        FUnifiedScriptNativeValueV3 ResultV2;
+        uint32 ExpectedResultCount = ReturnProperty != nullptr ? 1u : 0u;
+        for (EUnifiedScriptManagedParameterDirection Direction :
+             Binding->ParameterDirections)
+        {
+            if (Direction != EUnifiedScriptManagedParameterDirection::Input)
+            {
+                ++ExpectedResultCount;
+            }
+        }
+        TArray<FUnifiedScriptNativeValueV3, TInlineAllocator<5>> ResultsV2;
+        ResultsV2.SetNumZeroed(ExpectedResultCount);
         FUnifiedScriptNativeCallFrameV3 Frame;
         Frame.Arguments = ArgumentsV2.GetData();
         Frame.ArgumentCount = ArgumentsV2.Num();
-        Frame.Results = ReturnProperty != nullptr ? &ResultV2 : nullptr;
-        Frame.ResultCapacity = ReturnProperty != nullptr ? 1 : 0;
+        Frame.Results = ResultsV2.GetData();
+        Frame.ResultCapacity = ResultsV2.Num();
         Frame.ByteBuffer = Arena.GetData();
         Frame.ByteCapacity = Arena.Num();
         Frame.ByteCount = InputByteCount;
@@ -1067,13 +1278,13 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             UE_LOG(
                 LogTemp,
                 Error,
-                TEXT("UnifiedScript function '%s' ABI v2 dispatch failed (status=%u): %s"),
+                TEXT("UnifiedScript function '%s' ABI v%d dispatch failed (status=%u): %s"),
                 *Function->GetPathName(),
+                Binding->AbiVersion,
                 static_cast<uint32>(Frame.Status),
                 *Error);
             return;
         }
-        const uint32 ExpectedResultCount = ReturnProperty != nullptr ? 1 : 0;
         if (Frame.ResultCount != ExpectedResultCount)
         {
             UE_LOG(
@@ -1085,11 +1296,12 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                 ExpectedResultCount);
             return;
         }
+        int32 ResultIndex = 0;
         if (ReturnProperty != nullptr &&
             (RESULT_PARAM == nullptr ||
              !UnpackReturnValueV2(
                  *ReturnProperty,
-                 ResultV2,
+                 ResultsV2[ResultIndex++],
                  Arena,
                   Frame.ByteCount,
                   *Host,
@@ -1101,9 +1313,58 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             UE_LOG(
                 LogTemp,
                 Error,
-                TEXT("UnifiedScript cannot marshal ABI v2 return value for '%s': %s"),
+                TEXT("UnifiedScript cannot marshal ABI v%d return value for '%s': %s"),
+                Binding->AbiVersion,
                 *Function->GetPathName(),
                 *Error);
+            return;
+        }
+        for (int32 OutputParameterIndex = 0;
+             OutputParameterIndex < ManagedParameters.Num();
+             ++OutputParameterIndex)
+        {
+            const FProperty* Parameter = ManagedParameters[OutputParameterIndex];
+            const EUnifiedScriptManagedParameterDirection Direction =
+                Binding->ParameterDirections.IsValidIndex(OutputParameterIndex)
+                ? Binding->ParameterDirections[OutputParameterIndex]
+                : EUnifiedScriptManagedParameterDirection::Input;
+            if (Direction != EUnifiedScriptManagedParameterDirection::Input)
+            {
+                void* ParameterValue =
+                    Parameter->ContainerPtrToValuePtr<void>(ParameterContainer);
+                const FUnifiedScriptManagedValueTypeBinding* ParameterType =
+                    Binding->ParameterTypes.IsValidIndex(OutputParameterIndex)
+                    ? &Binding->ParameterTypes[OutputParameterIndex]
+                    : nullptr;
+                if (!ResultsV2.IsValidIndex(ResultIndex) ||
+                    !UnpackReturnValueV2(
+                        *Parameter,
+                        ResultsV2[ResultIndex++],
+                        Arena,
+                        Frame.ByteCount,
+                        *Host,
+                        ParameterType,
+                        {},
+                        ParameterValue,
+                        Error))
+                {
+                    UE_LOG(
+                        LogTemp,
+                        Error,
+                        TEXT("UnifiedScript cannot marshal ABI v3 output '%s' for '%s': %s"),
+                        *Parameter->GetName(),
+                        *Function->GetPathName(),
+                        *Error);
+                    return;
+                }
+                if (void** Destination =
+                        DecodedOutputDestinations.Find(Parameter->GetFName());
+                    Destination != nullptr && *Destination != nullptr &&
+                    *Destination != ParameterValue)
+                {
+                    Parameter->CopyCompleteValue(*Destination, ParameterValue);
+                }
+            }
         }
         return;
     }

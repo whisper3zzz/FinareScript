@@ -111,20 +111,24 @@ FString Parameter(
     const TCHAR* Id,
     const TCHAR* Name,
     const TCHAR* MetadataType,
-    const FString& UnrealType = FString())
+    const FString& UnrealType = FString(),
+    const TCHAR* Direction = TEXT("input"))
 {
     return FString::Printf(
         TEXT(R"JSON({
         "id": "us_%s",
         "name": "%s",
-        "typeMetadataName": "%s"%s
+        "typeMetadataName": "%s"%s%s
       })JSON"),
         Id,
         Name,
         MetadataType,
         UnrealType.IsEmpty()
             ? TEXT("")
-            : *FString::Printf(TEXT(",\n        \"unrealType\": %s"), *UnrealType));
+            : *FString::Printf(TEXT(",\n        \"unrealType\": %s"), *UnrealType),
+        FCString::Strcmp(Direction, TEXT("input")) == 0
+            ? TEXT("")
+            : *FString::Printf(TEXT(",\n        \"direction\": \"%s\""), Direction));
 }
 
 FString Function(
@@ -1596,6 +1600,7 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     constexpr const TCHAR* OffsetVectorId = TEXT("30303030303030303030303030303030");
     constexpr const TCHAR* EchoModeId = TEXT("40404040404040404040404040404040");
     constexpr const TCHAR* EchoHitResultId = TEXT("50505050505050505050505050505050");
+    constexpr const TCHAR* ResolveCommonId = TEXT("60606060606060606060606060606060");
 
     const FString DescribeParameters = FString::Join(
         TArray<FString>{
@@ -1633,6 +1638,30 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         TEXT("value"),
         TEXT("UnifiedScript.Unreal.Generated.HitResult"),
         HitValueType);
+    const FString CommonParameters = FString::Join(
+        TArray<FString>{
+            Parameter(
+                TEXT("66666666666666666666666666666610"),
+                TEXT("name"),
+                TEXT("UnifiedScript.Unreal.UnrealName")),
+            Parameter(
+                TEXT("66666666666666666666666666666620"),
+                TEXT("rotation"),
+                TEXT("UnifiedScript.Unreal.UnrealRotator"),
+                FString(),
+                TEXT("inputOutput")),
+            Parameter(
+                TEXT("66666666666666666666666666666630"),
+                TEXT("label"),
+                TEXT("UnifiedScript.Unreal.UnrealText"),
+                FString(),
+                TEXT("output")),
+            Parameter(
+                TEXT("66666666666666666666666666666640"),
+                TEXT("transform"),
+                TEXT("UnifiedScript.Unreal.UnrealTransform")),
+        },
+        TEXT(","));
     const FString Functions = FString::Join(
         TArray<FString>{
             Function(
@@ -1671,6 +1700,12 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 true,
                 false,
                 HitValueType),
+            Function(
+                ResolveCommonId,
+                TEXT("ResolveCommonValues"),
+                TEXT("UnifiedScript.Unreal.UnrealClassHandle"),
+                CommonParameters,
+                true),
         },
         TEXT(","));
 
@@ -1743,8 +1778,8 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         return false;
     }
-    TestEqual(TEXT("Five static functions are materialized"),
-        SyncResult.DeclaredFunctionCount, 5);
+    TestEqual(TEXT("Six static functions are materialized"),
+        SyncResult.DeclaredFunctionCount, 6);
 
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
@@ -1782,20 +1817,29 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     UFunction* EchoHitResultFunction = GeneratedClass->FindFunctionByName(
         EchoHitResultInternalName,
         EIncludeSuperFlag::ExcludeSuper);
+    const FName ResolveCommonInternalName(
+        *FString::Printf(TEXT("USF_%s"), ResolveCommonId));
+    UFunction* ResolveCommonFunction = GeneratedClass->FindFunctionByName(
+        ResolveCommonInternalName,
+        EIncludeSuperFlag::ExcludeSuper);
     const FUnifiedScriptManagedFunctionBinding* DescribeBinding =
         GeneratedClass->ManagedFunctionBindings.Find(DescribeInternalName);
     const FUnifiedScriptManagedFunctionBinding* EchoModeBinding =
         GeneratedClass->ManagedFunctionBindings.Find(EchoModeInternalName);
     const FUnifiedScriptManagedFunctionBinding* EchoHitResultBinding =
         GeneratedClass->ManagedFunctionBindings.Find(EchoHitResultInternalName);
+    const FUnifiedScriptManagedFunctionBinding* ResolveCommonBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(ResolveCommonInternalName);
     if (!TestNotNull(TEXT("Static Describe UFunction exists"), DescribeFunction) ||
         !TestNotNull(TEXT("Static EchoObject UFunction exists"), EchoObjectFunction) ||
         !TestNotNull(TEXT("Static OffsetVector UFunction exists"), OffsetVectorFunction) ||
         !TestNotNull(TEXT("Static EchoMode UFunction exists"), EchoModeFunction) ||
         !TestNotNull(TEXT("Static EchoHitResult UFunction exists"), EchoHitResultFunction) ||
+        !TestNotNull(TEXT("Static ResolveCommonValues UFunction exists"), ResolveCommonFunction) ||
         !TestNotNull(TEXT("Static Describe binding exists"), DescribeBinding) ||
         !TestNotNull(TEXT("Static EchoMode binding exists"), EchoModeBinding) ||
-        !TestNotNull(TEXT("Static EchoHitResult binding exists"), EchoHitResultBinding))
+        !TestNotNull(TEXT("Static EchoHitResult binding exists"), EchoHitResultBinding) ||
+        !TestNotNull(TEXT("Static ResolveCommonValues binding exists"), ResolveCommonBinding))
     {
         return false;
     }
@@ -1804,7 +1848,7 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     TestTrue(
         TEXT("Persistent FunctionLibrary restores native managed dispatch"),
         GeneratedClass->IsManagedFunctionBound(DescribeInternalName));
-    TestEqual(TEXT("Static binding selects ABI v2"), DescribeBinding->AbiVersion, 2);
+    TestEqual(TEXT("Static binding selects multi-result ABI v3"), DescribeBinding->AbiVersion, 3);
     TestTrue(TEXT("Static binding owns library routing"), DescribeBinding->bStatic);
     TestEqual(
         TEXT("Typed enum binding retains one argument contract"),
@@ -1818,6 +1862,21 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         TEXT("General struct binding retains stable generated field order"),
         EchoHitResultBinding->ReturnType.StructFields.Num(),
         17);
+    TestEqual(
+        TEXT("Common function binding retains four parameter directions"),
+        ResolveCommonBinding->ParameterDirections.Num(),
+        4);
+    TestTrue(
+        TEXT("Common function binding retains stable source parameter order"),
+        ResolveCommonBinding->ParameterNames ==
+            TArray<FName>{TEXT("name"), TEXT("rotation"), TEXT("label"), TEXT("transform")});
+    TestTrue(
+        TEXT("Common function binding retains ref and out directions"),
+        ResolveCommonBinding->ParameterDirections.Num() == 4 &&
+        ResolveCommonBinding->ParameterDirections[1] ==
+            EUnifiedScriptManagedParameterDirection::InputOutput &&
+        ResolveCommonBinding->ParameterDirections[2] ==
+            EUnifiedScriptManagedParameterDirection::Output);
     TestNotNull(
         TEXT("Static call persists a hidden WorldContextObject"),
         FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject")));
@@ -1857,6 +1916,31 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         TEXT("General struct return uses the exact FHitResult pin"),
         HitReturnProperty != nullptr &&
             HitReturnProperty->Struct == FHitResult::StaticStruct());
+    const FNameProperty* CommonNameProperty =
+        FindFProperty<FNameProperty>(ResolveCommonFunction, TEXT("name"));
+    const FStructProperty* CommonRotationProperty =
+        FindFProperty<FStructProperty>(ResolveCommonFunction, TEXT("rotation"));
+    const FTextProperty* CommonLabelProperty =
+        FindFProperty<FTextProperty>(ResolveCommonFunction, TEXT("label"));
+    const FStructProperty* CommonTransformProperty =
+        FindFProperty<FStructProperty>(ResolveCommonFunction, TEXT("transform"));
+    const FClassProperty* CommonReturnProperty = CastField<FClassProperty>(
+        ResolveCommonFunction->GetReturnProperty());
+    TestNotNull(TEXT("UnrealName parameter becomes FName"), CommonNameProperty);
+    TestTrue(
+        TEXT("UnrealRotator ref parameter keeps native type and direction flags"),
+        CommonRotationProperty != nullptr &&
+        CommonRotationProperty->Struct == TBaseStructure<FRotator>::Get() &&
+        CommonRotationProperty->HasAllPropertyFlags(CPF_OutParm | CPF_ReferenceParm));
+    TestTrue(
+        TEXT("UnrealText out parameter becomes FText output"),
+        CommonLabelProperty != nullptr &&
+        CommonLabelProperty->HasAnyPropertyFlags(CPF_OutParm));
+    TestTrue(
+        TEXT("UnrealTransform parameter becomes FTransform"),
+        CommonTransformProperty != nullptr &&
+        CommonTransformProperty->Struct == TBaseStructure<FTransform>::Get());
+    TestNotNull(TEXT("UnrealClassHandle return becomes UClass"), CommonReturnProperty);
 
     const int32 InitialManagedWorldCount =
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
@@ -1902,6 +1986,42 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 TEXT("Static String/ObjectHandle/FVector call reaches CoreCLR"),
                 ReturnProperty->GetPropertyValue_InContainer(Memory),
                 FString(TEXT("demo")));
+        }
+
+        const FObjectPropertyBase* CommonContextProperty =
+            FindFProperty<FObjectPropertyBase>(
+                ResolveCommonFunction,
+                TEXT("WorldContextObject"));
+        if (TestNotNull(TEXT("Common-values context property exists"), CommonContextProperty) &&
+            TestNotNull(TEXT("Common-values FName input exists"), CommonNameProperty) &&
+            TestNotNull(TEXT("Common-values FRotator ref exists"), CommonRotationProperty) &&
+            TestNotNull(TEXT("Common-values FText output exists"), CommonLabelProperty) &&
+            TestNotNull(TEXT("Common-values FTransform input exists"), CommonTransformProperty) &&
+            TestNotNull(TEXT("Common-values UClass return exists"), CommonReturnProperty))
+        {
+            FStructOnScope Call(ResolveCommonFunction);
+            uint8* Memory = Call.GetStructMemory();
+            CommonContextProperty->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            CommonNameProperty->SetPropertyValue_InContainer(Memory, TEXT("Player"));
+            *CommonRotationProperty->ContainerPtrToValuePtr<FRotator>(Memory) =
+                FRotator(1.0, 2.0, 3.0);
+            *CommonTransformProperty->ContainerPtrToValuePtr<FTransform>(Memory) =
+                FTransform(
+                    FQuat::Identity,
+                    FVector(10.0, 20.0, 30.0),
+                    FVector::OneVector);
+            LibraryObject->ProcessEvent(ResolveCommonFunction, Memory);
+            TestEqual(
+                TEXT("Static FName/FText/UClass/FRotator/FTransform call reaches CoreCLR"),
+                *CommonRotationProperty->ContainerPtrToValuePtr<FRotator>(Memory),
+                FRotator::ZeroRotator);
+            TestEqual(
+                TEXT("Managed out FText writes back into the Blueprint frame"),
+                CommonLabelProperty->GetPropertyValue_InContainer(Memory).ToString(),
+                FString());
+            TestNull(
+                TEXT("Managed UClass return preserves a null class handle"),
+                CommonReturnProperty->GetObjectPropertyValue_InContainer(Memory));
         }
 
         const FObjectPropertyBase* EchoContextProperty =

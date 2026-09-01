@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace UnifiedScript.Core;
 
@@ -58,7 +59,16 @@ public sealed record ScriptParameterDeclaration(
     SemanticId Id,
     string Name,
     string TypeMetadataName,
-    ScriptFunctionValueTypeDeclaration? UnrealType = null);
+    ScriptFunctionValueTypeDeclaration? UnrealType = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    ScriptParameterDirection Direction = ScriptParameterDirection.Input);
+
+public enum ScriptParameterDirection
+{
+    Input,
+    Output,
+    InputOutput,
+}
 
 public enum ScriptBlueprintEventSuperMode
 {

@@ -359,14 +359,39 @@ internal sealed class CSharpScriptAssetLowerer
                 typeSymbol,
                 method,
                 parameterTypeNames);
+            if (methodSymbol is { ReturnsByRef: true } or { ReturnsByRefReadonly: true } ||
+                methodSymbol?.Parameters.Any(static parameter => parameter.RefKind == RefKind.In) == true)
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                    UnifiedDiagnosticSeverity.Error,
+                    $"Blueprint-callable function '{type.QualifiedName}.{method.Name}' cannot use " +
+                    "a ref return or C# in parameter. Use a value return and input, out, or ref parameters.",
+                    method.Span,
+                    method.Id));
+                continue;
+            }
             ScriptParameterDeclaration[] parameters = method.Parameters
                 .Select((parameter, index) => new ScriptParameterDeclaration(
                     parameter.Id,
                     parameter.Name,
                     parameterTypeNames[index],
-                    LowerFunctionValueType(compilation, parameterTypeNames[index])))
+                    LowerFunctionValueType(compilation, parameterTypeNames[index]),
+                    parameter.Direction switch
+                    {
+                        HirParameterDirection.Output => ScriptParameterDirection.Output,
+                        HirParameterDirection.InputOutput => ScriptParameterDirection.InputOutput,
+                        _ => ScriptParameterDirection.Input,
+                    }))
                 .ToArray();
-            string signature = $"{type.QualifiedName}.{method.Name}({string.Join(',', parameterTypeNames)})";
+            string signature = $"{type.QualifiedName}.{method.Name}({string.Join(',',
+                parameterTypeNames.Select((parameterType, index) =>
+                    method.Parameters[index].Direction switch
+                    {
+                        HirParameterDirection.Output => $"out {parameterType}",
+                        HirParameterDirection.InputOutput => $"ref {parameterType}",
+                        _ => parameterType,
+                    }))})";
             IReadOnlyList<ScriptInputActionBindingDeclaration> inputActions =
                 LowerInputActions(method, methodSymbol, parameterTypeNames, diagnostics);
             IReadOnlyList<ScriptDelegateBindingDeclaration> delegateBindings =

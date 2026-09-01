@@ -81,7 +81,12 @@ public sealed class CSharpToHirLowerer
                 CSharpSemanticIds.ForNode(filePath, methodKey, parameter, $"parameter:{parameter.Identifier.ValueText}"),
                 RoslynSourceSpan.FromNode(parameter, filePath),
                 parameter.Identifier.ValueText,
-                parameter.Type?.ToString() ?? "unknown"))
+                parameter.Type?.ToString() ?? "unknown",
+                parameter.Modifiers.Any(SyntaxKind.OutKeyword)
+                    ? HirParameterDirection.Output
+                    : parameter.Modifiers.Any(SyntaxKind.RefKeyword)
+                        ? HirParameterDirection.InputOutput
+                        : HirParameterDirection.Input))
             .ToArray();
 
         HirBlockStatement body = LowerBlock(method.Body!, filePath, methodKey);

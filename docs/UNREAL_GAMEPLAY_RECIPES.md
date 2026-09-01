@@ -144,6 +144,39 @@ public sealed class HealthComponentScript : IUnrealManagedScript
 wrapper/member in the API Browser. Verify the component on two Actor instances
 so state ownership is not accidentally static or World-global.
 
+## Blueprint-callable common values and outputs
+
+A normal public `[Visual]` method becomes a generated typed Blueprint function.
+The reviewed common function matrix includes `UnrealName`, `UnrealText`,
+`UnrealClassHandle`, `UnrealRotator`, and `UnrealTransform`; C# `ref` becomes an
+input/output pin and `out` becomes an output-only pin:
+
+```csharp
+[ScriptAsset("MyGame/GameplayLibrary")]
+[UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+public static class GameplayLibrary
+{
+    [Visual]
+    public static UnrealClassHandle ResolveSpawnContract(
+        UnrealName profile,
+        ref UnrealRotator rotation,
+        out UnrealText displayName,
+        UnrealTransform origin)
+    {
+        // Resolve values through generated APIs as needed.
+        rotation = default;
+        displayName = default;
+        return default;
+    }
+}
+```
+
+Build & Reload creates an ordinary Blueprint Function Library node. The return
+pin is followed by the `ref`/`out` result pins in source order, while stable
+parameter names keep that contract intact even if Unreal internally reorders
+output properties. Verify the node once through direct Blueprint execution and
+once after a compatible reload; callers never need a handwritten C++ facade.
+
 ## Blueprint event
 
 For Blueprint-to-managed events, expose a typed multicast delegate in the
