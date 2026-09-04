@@ -980,6 +980,9 @@ bool MeasureValueV3(
     }
     switch (Value.Kind)
     {
+    case EUnifiedScriptValueKind::ByteBuffer:
+        return static_cast<uint32>(Value.ByteBufferValue.Num()) <= FUnifiedScriptByteBuffer::MaximumLength &&
+            AddArenaBytesV3(ByteCursor, Value.ByteBufferValue.Num());
     case EUnifiedScriptValueKind::String:
     {
         const FTCHARToUTF8 Utf8(*Value.StringValue);
@@ -1224,6 +1227,9 @@ bool ToNativeKindV3(
     case EUnifiedScriptValueKind::Set:
         OutKind = EUnifiedScriptNativeValueKindV3::Set;
         return true;
+    case EUnifiedScriptValueKind::ByteBuffer:
+        OutKind = EUnifiedScriptNativeValueKindV3::ByteBuffer;
+        return true;
     case EUnifiedScriptValueKind::Map:
         OutKind = EUnifiedScriptNativeValueKindV3::Map;
         return true;
@@ -1254,6 +1260,9 @@ bool ValidateResultDescriptorV3(
             Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
             (Descriptor.Payload1 == 0 || Descriptor.Payload1 == V3TransformByteSize);
     }
+    if (ExpectedKind == EUnifiedScriptValueKind::ByteBuffer)
+        return Descriptor.TypeId == 0 && Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+            Descriptor.Payload0 == 0 && Descriptor.Payload1 == 0 && Descriptor.Payload2 == 0 && Descriptor.Payload3 == 0;
     if (ExpectedKind == EUnifiedScriptValueKind::String ||
         ExpectedKind == EUnifiedScriptValueKind::Name ||
         ExpectedKind == EUnifiedScriptValueKind::Text)
@@ -1302,6 +1311,16 @@ bool DecodeValueV3(
     }
     switch (Native.Kind)
     {
+    case EUnifiedScriptNativeValueKindV3::ByteBuffer:
+    {
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked || Native.TypeId || Native.Payload2 || Native.Payload3 ||
+            Native.Payload0 > EntryByteCount || Native.Payload1 > EntryByteCount - Native.Payload0 ||
+            Native.Payload1 > FUnifiedScriptByteBuffer::MaximumLength) return false;
+        const auto View = Native.Payload1 == 0 ? TConstArrayView<uint8>() :
+            MakeArrayView(Frame.ByteBuffer + Native.Payload0, static_cast<int32>(Native.Payload1));
+        OutValue = FUnifiedScriptValue::FromByteBuffer(FUnifiedScriptByteBuffer::CopyFrom(View));
+        return true;
+    }
     case EUnifiedScriptNativeValueKindV3::Boolean:
         if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::None ||
             Native.TypeId != 0 || Native.Payload0 > 1)
@@ -1517,6 +1536,20 @@ bool EncodeValueV3(
     Native = {};
     switch (Value.Kind)
     {
+    case EUnifiedScriptValueKind::ByteBuffer:
+    {
+        const auto View = Value.ByteBufferValue.GetView();
+        const uint32 Count = static_cast<uint32>(View.Num());
+        if (Count > FUnifiedScriptByteBuffer::MaximumLength || ByteCursor > Frame.ByteCapacity ||
+            Count > Frame.ByteCapacity - ByteCursor) return false;
+        Native.Kind = EUnifiedScriptNativeValueKindV3::ByteBuffer;
+        Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        Native.Payload0 = ByteCursor;
+        Native.Payload1 = Count;
+        if (Count) FMemory::Memcpy(Frame.ByteBuffer + ByteCursor, View.GetData(), Count);
+        ByteCursor += Count;
+        break;
+    }
     case EUnifiedScriptValueKind::Boolean:
         Native.Kind = EUnifiedScriptNativeValueKindV3::Boolean;
         Native.Payload0 = Value.BooleanValue ? 1 : 0;
@@ -1886,6 +1919,23 @@ void InvokeByIdV3(
     }
     uint32 RequiredByteCapacity = EntryByteCount;
     bool bRequiresRequestHash = false;
+    bool bHasBinaryPayload = false;
+    uint64 BinaryInputBytes = 0;
+    for (uint32 Index = 0; Index < Frame->ArgumentCount; ++Index)
+    {
+        const auto& Argument = Frame->Arguments[Index];
+        if (Argument.Kind != EUnifiedScriptNativeValueKindV3::ByteBuffer) continue;
+        bHasBinaryPayload = true;
+        // Check before decoding: repeated offsets must not amplify allocation.
+        if (Argument.Payload1 > FUnifiedScriptByteBuffer::MaximumLength ||
+            EntryByteCount > FUnifiedScriptByteBuffer::MaximumCallBytes ||
+            BinaryInputBytes + Argument.Payload1 > FUnifiedScriptByteBuffer::MaximumCallBytes)
+        {
+            InvalidFrameV3(Frame, EntryByteCount);
+            return;
+        }
+        BinaryInputBytes += Argument.Payload1;
+    }
     for (uint32 ResultIndex = 0; ResultIndex < ExpectedResultCount; ++ResultIndex)
     {
         EUnifiedScriptValueKind ExpectedKind;
@@ -1908,6 +1958,7 @@ void InvokeByIdV3(
             InvalidFrameV3(Frame, EntryByteCount);
             return;
         }
+        bHasBinaryPayload |= ExpectedKind == EUnifiedScriptValueKind::ByteBuffer;
         if (ExpectedKind == EUnifiedScriptValueKind::Transform)
         {
             if (RequiredByteCapacity > MAX_uint32 - V3TransformByteSize)
@@ -1924,7 +1975,8 @@ void InvokeByIdV3(
             ExpectedKind == EUnifiedScriptValueKind::Struct ||
             ExpectedKind == EUnifiedScriptValueKind::Array ||
             ExpectedKind == EUnifiedScriptValueKind::Set ||
-            ExpectedKind == EUnifiedScriptValueKind::Map)
+            ExpectedKind == EUnifiedScriptValueKind::Map ||
+            ExpectedKind == EUnifiedScriptValueKind::ByteBuffer)
         {
             bRequiresRequestHash = true;
         }
@@ -2001,7 +2053,7 @@ void InvokeByIdV3(
                     bMeasured = bMeasured &&
                         MeasureValueV3(OutputValue, MeasuredByteCapacity);
                 }
-                if (!bMeasured)
+                if (!bMeasured || (bHasBinaryPayload && MeasuredByteCapacity > FUnifiedScriptByteBuffer::MaximumCallBytes))
                 {
                     Pending.Reset();
                     UnsupportedValueV3(*Frame, EntryByteCount);
@@ -3040,7 +3092,8 @@ UEUnifiedScript_GetNativeTransportV3()
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::OutputAndReference) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Utf8Results) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ContainerResults) |
-        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Structs);
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Structs) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ByteBuffers);
 
     static const FUnifiedScriptNativeTransportV3 Transport = {
         3,

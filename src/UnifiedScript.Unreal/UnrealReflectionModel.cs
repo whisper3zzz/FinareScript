@@ -39,6 +39,7 @@ public enum UnrealValueKind
     Unsupported,
     NativeObject,
     InvocationContext,
+    ByteBuffer,
 }
 
 public sealed record UnrealBlueprintMetadata(

@@ -677,13 +677,24 @@ public sealed partial class UnifiedScriptNativeExtensionFixture : global::Unifie
         global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
         : base(handle, bridge)
     {
-        RequireNativeBindings("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)");
+        RequireNativeBindings("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:BinaryCalls", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:ReadBytes()", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst\u0026)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst\u0026,FUnifiedScriptByteBuffer\u0026,int32\u0026)");
+    }
+
+    public int BinaryCalls
+    {
+        get => ReadProperty<int>(0xC85398A20EB5E549UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:BinaryCalls");
     }
 
     public int Counter
     {
         get => ReadProperty<int>(0x35FB42B6475CFD5FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter");
         set => WriteProperty(0x35FB42B6475CFD5FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealByteBuffer Payload
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealByteBuffer>(0x9C1DADA364EB2041UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload");
+        set => WriteProperty(0x9C1DADA364EB2041UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload", value);
     }
 
     public bool Accumulate(global::System.Collections.Generic.IReadOnlyList<int> values, ref int total, out string label)
@@ -706,6 +717,17 @@ public sealed partial class UnifiedScriptNativeExtensionFixture : global::Unifie
     public int Multiply(int left, int right)
         => Invoke<int, int, int>(0x62AD17A5520DE69CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)", left, right);
 
+    public global::UnifiedScript.Unreal.UnrealByteBuffer ReadBytes()
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x6033F04890FC5D4BUL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:ReadBytes()",
+            typeof(global::UnifiedScript.Unreal.UnrealByteBuffer),
+            [
+            ]);
+        return (global::UnifiedScript.Unreal.UnrealByteBuffer)__unifiedScriptResult.ReturnValue!;
+    }
+
     public void Reset()
         => Invoke(0x5CDDE02FC047FA8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()");
 
@@ -714,6 +736,33 @@ public sealed partial class UnifiedScriptNativeExtensionFixture : global::Unifie
 
     public int Scale(int value)
         => Invoke<int, int>(0x8D2759CE2B950ED0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)", value);
+
+    public void StoreBytes(global::UnifiedScript.Unreal.UnrealByteBuffer value)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x922BFD37E45B2752UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst\u0026)",
+            typeof(void),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealByteBuffer), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, value),
+            ]);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealByteBuffer TransformBytes(global::UnifiedScript.Unreal.UnrealByteBuffer input, ref global::UnifiedScript.Unreal.UnrealByteBuffer inOut, out int calls)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x2CDCDE9B1096F284UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst\u0026,FUnifiedScriptByteBuffer\u0026,int32\u0026)",
+            typeof(global::UnifiedScript.Unreal.UnrealByteBuffer),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealByteBuffer), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::UnifiedScript.Unreal.UnrealByteBuffer), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, inOut),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        inOut = (global::UnifiedScript.Unreal.UnrealByteBuffer)__unifiedScriptResult.Outputs[0]!;
+        calls = (int)__unifiedScriptResult.Outputs[1]!;
+        return (global::UnifiedScript.Unreal.UnrealByteBuffer)__unifiedScriptResult.ReturnValue!;
+    }
 }
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script World Library", Tooltip = "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.")]

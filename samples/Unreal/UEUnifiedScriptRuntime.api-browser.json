@@ -12,14 +12,14 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "b3fa4decc1c03049dfdfb0faaf68bb656f59d214b4bd4d734f555f49c8ec875b"
+    "inputSha256": "d15c3256b2dfab9bc0f670099dd12b5a1db68cb9b40a50c2b418a6045cdea930"
   },
   "summary": {
     "typeCount": 10,
-    "memberCount": 131,
-    "nodeCount": 145,
+    "memberCount": 136,
+    "nodeCount": 151,
     "directThunkCount": 47,
-    "callFrameCount": 81,
+    "callFrameCount": 86,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
@@ -7161,6 +7161,58 @@
           "diagnosticCodes": []
         },
         {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|ReadBytes",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:ReadBytes()",
+          "memberId": "0x6033F04890FC5D4B",
+          "kind": "function",
+          "title": "ReadBytes",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.ReadBytes(...).",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
           "id": "ue.call|UnifiedScriptNativeExtensionFixture|Reset",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()",
           "memberId": "0x5CDDE02FC047FA8F",
@@ -7303,6 +7355,190 @@
           "diagnosticCodes": []
         },
         {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|StoreBytes",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst\u0026)",
+          "memberId": "0x922BFD37E45B2752",
+          "kind": "function",
+          "title": "StoreBytes",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.StoreBytes(...).",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|TransformBytes",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst\u0026,FUnifiedScriptByteBuffer\u0026,int32\u0026)",
+          "memberId": "0x2CDCDE9B1096F284",
+          "kind": "function",
+          "title": "TransformBytes",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.TransformBytes(...).",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "InOut",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "InOut",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "Calls",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.get|UnifiedScriptNativeExtensionFixture|BinaryCalls",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:BinaryCalls",
+          "memberId": "0xC85398A20EB5E549",
+          "kind": "propertyRead",
+          "title": "BinaryCalls",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Read UnifiedScriptNativeExtensionFixture.BinaryCalls.",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
           "id": "ue.get|UnifiedScriptNativeExtensionFixture|Counter",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
           "memberId": "0x35FB42B6475CFD5F",
@@ -7338,6 +7574,48 @@
               "type": {
                 "kind": "int32",
                 "nativeName": "int32"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.get|UnifiedScriptNativeExtensionFixture|Payload",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload",
+          "memberId": "0x9C1DADA364EB2041",
+          "kind": "propertyRead",
+          "title": "Payload",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Read UnifiedScriptNativeExtensionFixture.Payload.",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
               }
             }
           ],
@@ -7384,6 +7662,58 @@
               "type": {
                 "kind": "int32",
                 "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.set|UnifiedScriptNativeExtensionFixture|Payload",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload",
+          "memberId": "0x9C1DADA364EB2041",
+          "kind": "propertyWrite",
+          "title": "Set Payload",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Write UnifiedScriptNativeExtensionFixture.Payload.",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "byteBuffer",
+                "nativeName": "FUnifiedScriptByteBuffer",
+                "headerPath": "UnifiedScriptByteBuffer.h"
               }
             },
             {

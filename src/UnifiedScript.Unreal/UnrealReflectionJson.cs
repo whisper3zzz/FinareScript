@@ -144,6 +144,8 @@ public static class UnrealReflectionJson
             }
 
             ValidateTypeReference(property.Type, allowVoid: false, $"property '{property.Path}'");
+            if (property.Type.Kind == UnrealValueKind.ByteBuffer && property.NativeExtension is null)
+                throw new JsonException($"Unreal property '{property.Path}': ByteBuffer requires an explicit native extension; reflected Blueprint state is not supported.");
             ValidateMetadata(property.Metadata, $"property '{property.Path}'");
             UnrealNativeExtensions.ValidateBinding(type, property);
         }
@@ -163,6 +165,9 @@ public static class UnrealReflectionJson
             ValidateMetadata(function.Metadata, $"function '{function.Path}'");
 
             ValidateTypeReference(function.ReturnType, allowVoid: true, $"function '{function.Path}' return");
+            if (function.NativeBinding is null &&
+                (function.ReturnType.Kind == UnrealValueKind.ByteBuffer || function.Parameters.Any(p => p?.Type?.Kind == UnrealValueKind.ByteBuffer)))
+                throw new JsonException($"Unreal function '{function.Path}': ByteBuffer requires an explicit native extension; UFUNCTION signatures are not supported.");
             var parameterNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (UnrealReflectedParameter? parameter in function.Parameters)
             {
@@ -277,6 +282,11 @@ public static class UnrealReflectionJson
                 UnrealValueKind.Struct or UnrealValueKind.Enum
                 when hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
                     !hasElement && !hasKey && !hasValue:
+                return;
+            case UnrealValueKind.ByteBuffer when depth > 0:
+                throw new JsonException($"Unreal {context}: ByteBuffer is supported as a direct member or parameter, not a container element/key/value.");
+            case UnrealValueKind.ByteBuffer when !hasTypePath && !hasElement && !hasKey && !hasValue &&
+                type.NativeName == "FUnifiedScriptByteBuffer" && type.HeaderPath == "UnifiedScriptByteBuffer.h":
                 return;
             case UnrealValueKind.NativeObject when hasTypePath && type.TypePath!.StartsWith("/Native/", StringComparison.Ordinal) &&
                 IsReflectedObjectPath(type.TypePath) && !hasElement && !hasKey && !hasValue:

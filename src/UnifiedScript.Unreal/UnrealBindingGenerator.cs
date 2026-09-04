@@ -294,7 +294,8 @@ public sealed class UnrealBindingGenerator
             EmitParameterList(source, function.Parameters, parameterNames, managedTypeNames);
 
             source.AppendLine(")");
-            if (function.Parameters.Count > 4 ||
+            if (function.Parameters.Count > 4 || function.ReturnType.Kind == UnrealValueKind.ByteBuffer ||
+                function.Parameters.Any(static parameter => parameter.Type.Kind == UnrealValueKind.ByteBuffer) ||
                 function.Parameters.Any(static parameter =>
                     parameter.Direction != UnrealParameterDirection.Input))
             {
@@ -743,6 +744,7 @@ public sealed class UnrealBindingGenerator
             UnrealValueKind.String => "string",
             UnrealValueKind.Name => "global::UnifiedScript.Unreal.UnrealName",
             UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
+            UnrealValueKind.ByteBuffer => "global::UnifiedScript.Unreal.UnrealByteBuffer",
             UnrealValueKind.Object =>
                 "global::UnifiedScript.Unreal.UnrealObjectHandle",
             UnrealValueKind.NativeObject when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? nativeName) => nativeName,

@@ -9,6 +9,7 @@
 #include "UObject/NoExportTypes.h"
 #include "UObject/Object.h"
 #include "UnifiedScriptActor.h"
+#include "UnifiedScriptByteBuffer.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
@@ -614,8 +615,16 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::Vector;
         OutTypeId = 0ull;
         return true;
+    case 0xC85398A20EB5E549ull:
+        OutKind = EUnifiedScriptValueKind::Int32;
+        OutTypeId = 0ull;
+        return true;
     case 0x35FB42B6475CFD5Full:
         OutKind = EUnifiedScriptValueKind::Int32;
+        OutTypeId = 0ull;
+        return true;
+    case 0x9C1DADA364EB2041ull:
+        OutKind = EUnifiedScriptValueKind::ByteBuffer;
         OutTypeId = 0ull;
         return true;
     default:
@@ -776,6 +785,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0x62AD17A5520DE69Cull:
         OutResultCount = 1;
         return true;
+    case 0x6033F04890FC5D4Bull:
+        OutResultCount = 1;
+        return true;
     case 0x5CDDE02FC047FA8Full:
         OutResultCount = 0;
         return true;
@@ -784,6 +796,12 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         return true;
     case 0x8D2759CE2B950ED0ull:
         OutResultCount = 1;
+        return true;
+    case 0x922BFD37E45B2752ull:
+        OutResultCount = 0;
+        return true;
+    case 0x2CDCDE9B1096F284ull:
+        OutResultCount = 3;
         return true;
     case 0x66FF01CF6D7A46C8ull:
         OutResultCount = 1;
@@ -1256,6 +1274,16 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x6033F04890FC5D4Bull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::ByteBuffer;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
     case 0x5CDDE02FC047FA8Full:
         return false;
     case 0xC80A9EFC81D5E099ull:
@@ -1272,6 +1300,26 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         switch (ResultIndex)
         {
         case 0:
+            OutKind = EUnifiedScriptValueKind::Int32;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x922BFD37E45B2752ull:
+        return false;
+    case 0x2CDCDE9B1096F284ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::ByteBuffer;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::ByteBuffer;
+            OutTypeId = 0ull;
+            return true;
+        case 2:
             OutKind = EUnifiedScriptValueKind::Int32;
             OutTypeId = 0ull;
             return true;
@@ -1813,6 +1861,18 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xC85398A20EB5E549ull:
+    {
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->BinaryCalls)>, int32>, "Native extension field type does not match its contract.");
+        OutValue = FUnifiedScriptValue::FromInt32(TypedTarget->BinaryCalls);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x35FB42B6475CFD5Full:
     {
         UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
@@ -1822,6 +1882,18 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         }
         static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Counter)>, int32>, "Native extension field type does not match its contract.");
         OutValue = FUnifiedScriptValue::FromInt32(TypedTarget->Counter);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x9C1DADA364EB2041ull:
+    {
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Payload)>, FUnifiedScriptByteBuffer>, "Native extension field type does not match its contract.");
+        OutValue = FUnifiedScriptValue::FromByteBuffer(TypedTarget->Payload);
         Succeed(OutResult);
         return true;
     }
@@ -2451,6 +2523,13 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xC85398A20EB5E549ull:
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::PropertyNotWritable,
+            TEXT("Generated native property is read-only."));
+    }
     case 0x35FB42B6475CFD5Full:
     {
         UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
@@ -2468,6 +2547,26 @@ bool UE::UnifiedScript::Generated::WriteProperty(
                 TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter' received an incompatible value."));
         }
         TypedTarget->Counter = NativeValue;
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x9C1DADA364EB2041ull:
+    {
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Payload)>, FUnifiedScriptByteBuffer>, "Native extension field type does not match its contract.");
+        FUnifiedScriptByteBuffer NativeValue = {};
+        if (!Value.TryGetByteBuffer(NativeValue))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload' received an incompatible value."));
+        }
+        TypedTarget->Payload = NativeValue;
         Succeed(OutResult);
         return true;
     }
@@ -4007,6 +4106,23 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x6033F04890FC5D4Bull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FUnifiedScriptByteBuffer ReturnValue = (TypedTarget->*static_cast<FUnifiedScriptByteBuffer (UUnifiedScriptNativeExtensionFixture::*)()>(&UUnifiedScriptNativeExtensionFixture::ReadBytes))();
+        OutReturnValue = FUnifiedScriptValue::FromByteBuffer(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x5CDDE02FC047FA8Full:
     {
         if (!RequireArgumentCount(Arguments, 0, OutResult))
@@ -4071,6 +4187,72 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         int32 ReturnValue = (TypedTarget->*static_cast<int32 (UUnifiedScriptNativeExtensionFixture::*)(int32) const>(&UUnifiedScriptNativeExtensionFixture::Scale))(Argument0);
         OutReturnValue = FUnifiedScriptValue::FromInt32(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x922BFD37E45B2752ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FUnifiedScriptByteBuffer Argument0 = {};
+        if (!Arguments[0].TryGetByteBuffer(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst&)' received an incompatible value."));
+        }
+        (TypedTarget->*static_cast<void (UUnifiedScriptNativeExtensionFixture::*)(FUnifiedScriptByteBuffer const&)>(&UUnifiedScriptNativeExtensionFixture::StoreBytes))(Argument0);
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x2CDCDE9B1096F284ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptNativeExtensionFixture* TypedTarget = ResolveTarget<UUnifiedScriptNativeExtensionFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        FUnifiedScriptByteBuffer Argument0 = {};
+        if (!Arguments[0].TryGetByteBuffer(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst&,FUnifiedScriptByteBuffer&,int32&)' received an incompatible value."));
+        }
+        FUnifiedScriptByteBuffer Argument1 = {};
+        if (!Arguments[1].TryGetByteBuffer(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst&,FUnifiedScriptByteBuffer&,int32&)' received an incompatible value."));
+        }
+        int32 Argument2 = 0;
+        FUnifiedScriptByteBuffer ReturnValue = (TypedTarget->*static_cast<FUnifiedScriptByteBuffer (UUnifiedScriptNativeExtensionFixture::*)(FUnifiedScriptByteBuffer const&, FUnifiedScriptByteBuffer&, int32&)>(&UUnifiedScriptNativeExtensionFixture::TransformBytes))(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromByteBuffer(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        EncodedOutput0 = FUnifiedScriptValue::FromByteBuffer(Argument1);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        EncodedOutput1 = FUnifiedScriptValue::FromInt32(Argument2);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
         Succeed(OutResult);
         return true;
     }

@@ -15,7 +15,7 @@
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
-      "members": ["Counter", "Scale(int32)", "Scale(double)", "Multiply", "Accumulate", "Reset"]
+      "members": ["Counter", "Scale(int32)", "Scale(double)", "Multiply", "Accumulate", "Reset", "Payload", "BinaryCalls", "StoreBytes", "ReadBytes", "TransformBytes"]
     },
     {
       "path": "/Script/Engine.HitResult",
@@ -273,6 +273,8 @@
         "nativeName": "UUnifiedScriptNativeExtensionFixture",
         "headerPath": "UnifiedScriptNativeExtensionFixture.h",
         "properties": [
+          {"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload", "name": "Payload", "type": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"}, "access": {"readable": true, "writable": true, "editorVisible": false}},
+          {"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:BinaryCalls", "name": "BinaryCalls", "type": {"kind": "int32", "nativeName": "int32"}, "access": {"readable": true, "writable": false, "editorVisible": false}},
           {
             "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
             "name": "Counter",
@@ -298,6 +300,32 @@
             },
             "const": false,
             "parameters": []
+          },
+          {
+            "declaration": {
+              "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst&)", "name": "StoreBytes",
+              "returnType": {"kind": "void", "nativeName": "void"},
+              "parameters": [{"name": "Value", "type": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"}, "direction": "input"}],
+              "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": ["constReference"]
+          },
+          {
+            "declaration": {
+              "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:ReadBytes()", "name": "ReadBytes",
+              "returnType": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"},
+              "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": []
+          },
+          {
+            "declaration": {
+              "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst&,FUnifiedScriptByteBuffer&,int32&)", "name": "TransformBytes",
+              "returnType": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"},
+              "parameters": [
+                {"name": "Input", "type": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"}, "direction": "input"},
+                {"name": "InOut", "type": {"kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h"}, "direction": "inputOutput"},
+                {"name": "Calls", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "output"}
+              ], "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": ["constReference", "reference", "reference"]
           },
           {
             "declaration": {

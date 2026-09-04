@@ -323,6 +323,7 @@ enum class EUnifiedScriptNativeValueKindV3 : uint8
     Array = 22,
     Set = 23,
     Map = 24,
+    ByteBuffer = 25,
 };
 
 enum class EUnifiedScriptNativeValueFlagsV3 : uint8
@@ -357,6 +358,7 @@ enum class EUnifiedScriptNativeCapabilitiesV3 : uint64
     Utf8Results = 1ull << 8, // Preflight-safe UTF-8 reads and return values.
     ContainerResults = 1ull << 9, // Preflight-safe container reads and returns.
     Structs = 1ull << 10, // Generated field-addressable UScriptStruct values.
+    ByteBuffers = 1ull << 11,
 };
 
 /**

@@ -3,6 +3,7 @@
 #include "Containers/ArrayView.h"
 #include "CoreMinimal.h"
 #include "UnifiedScriptObjectRegistry.h"
+#include "UnifiedScriptByteBuffer.h"
 
 #include <atomic>
 
@@ -49,6 +50,7 @@ enum class EUnifiedScriptValueKind : uint8
     Array = 22,
     Set = 23,
     Map = 24,
+    ByteBuffer = 25,
 };
 
 /** Owned value transport. No address into UObject or UFunction storage escapes. */
@@ -77,6 +79,21 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     FTransform TransformValue = FTransform::Identity;
     // Array/Set elements, or flattened alternating Map key/value cells.
     TArray<FUnifiedScriptValue> ContainerValues;
+    FUnifiedScriptByteBuffer ByteBufferValue;
+
+    static FUnifiedScriptValue FromByteBuffer(FUnifiedScriptByteBuffer Value)
+    {
+        FUnifiedScriptValue Result;
+        Result.Kind = EUnifiedScriptValueKind::ByteBuffer;
+        Result.ByteBufferValue = MoveTemp(Value);
+        return Result;
+    }
+    bool TryGetByteBuffer(FUnifiedScriptByteBuffer& OutValue) const
+    {
+        if (Kind != EUnifiedScriptValueKind::ByteBuffer) return false;
+        OutValue = ByteBufferValue;
+        return true;
+    }
 
     static FUnifiedScriptValue FromBoolean(bool Value);
     static FUnifiedScriptValue FromInt32(int32 Value);

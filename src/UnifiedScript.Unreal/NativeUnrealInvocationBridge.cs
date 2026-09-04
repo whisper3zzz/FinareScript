@@ -571,6 +571,7 @@ public sealed class NativeUnrealInvocationBridge
         string propertyPath)
     {
         ValidateFastRequest(target, memberId, propertyPath);
+        if (typeof(T) == typeof(UnrealByteBuffer)) RequireByteBuffers();
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         if (TryExecuteCallFrameResult<T>(
                 UnrealNativeOperationV3.ReadProperty,
@@ -608,7 +609,9 @@ public sealed class NativeUnrealInvocationBridge
         T value)
     {
         ValidateFastRequest(target, memberId, propertyPath);
-        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        if (typeof(T) == typeof(UnrealByteBuffer)) RequireByteBuffers();
+        int arenaCapacity = value is UnrealByteBuffer buffer ? Math.Max(CallFrameArenaByteCapacity, buffer.Length) : CallFrameArenaByteCapacity;
+        Span<byte> arena = arenaCapacity == CallFrameArenaByteCapacity ? stackalloc byte[CallFrameArenaByteCapacity] : new byte[arenaCapacity];
         int byteCount = 0;
         if (UnrealNativeValueCodecV3.TryEncode(
                 value,
@@ -714,6 +717,10 @@ public sealed class NativeUnrealInvocationBridge
         string memberPath)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(UnrealByteBuffer))
+        {
+            return (TResult)InvokeWithOutputs(target, memberId, memberPath, typeof(TResult), []).ReturnValue!;
+        }
         if (TryExecuteFixedResult(
                 target,
                 memberId,
@@ -750,6 +757,10 @@ public sealed class NativeUnrealInvocationBridge
         T0 argument0)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(UnrealByteBuffer) || typeof(T0) == typeof(UnrealByteBuffer))
+        {
+            return (TResult)InvokeWithOutputs(target, memberId, memberPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0)]).ReturnValue!;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             TryExecuteFixedResult(target, memberId, arguments, out TResult fixedResult))
@@ -792,6 +803,10 @@ public sealed class NativeUnrealInvocationBridge
         T1 argument1)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(UnrealByteBuffer) || typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer))
+        {
+            return (TResult)InvokeWithOutputs(target, memberId, memberPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1)]).ReturnValue!;
+        }
         if (typeof(TResult) == typeof(int) &&
             typeof(T0) == typeof(int) &&
             typeof(T1) == typeof(int) &&
@@ -871,6 +886,10 @@ public sealed class NativeUnrealInvocationBridge
         T2 argument2)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(UnrealByteBuffer) || typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer) || typeof(T2) == typeof(UnrealByteBuffer))
+        {
+            return (TResult)InvokeWithOutputs(target, memberId, memberPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2)]).ReturnValue!;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
@@ -919,6 +938,10 @@ public sealed class NativeUnrealInvocationBridge
         T3 argument3)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(UnrealByteBuffer) || typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer) || typeof(T2) == typeof(UnrealByteBuffer) || typeof(T3) == typeof(UnrealByteBuffer))
+        {
+            return (TResult)InvokeWithOutputs(target, memberId, memberPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2), new(typeof(T3), UnrealParameterDirection.Input, argument3)]).ReturnValue!;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
@@ -1004,6 +1027,11 @@ public sealed class NativeUnrealInvocationBridge
         T0 argument0)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(T0) == typeof(UnrealByteBuffer))
+        {
+            InvokeWithOutputs(target, memberId, memberPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0)]);
+            return;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             TryExecuteFixedVoid(target, memberId, arguments))
@@ -1045,6 +1073,11 @@ public sealed class NativeUnrealInvocationBridge
         T1 argument1)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer))
+        {
+            InvokeWithOutputs(target, memberId, memberPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1)]);
+            return;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
@@ -1094,6 +1127,11 @@ public sealed class NativeUnrealInvocationBridge
         T2 argument2)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer) || typeof(T2) == typeof(UnrealByteBuffer))
+        {
+            InvokeWithOutputs(target, memberId, memberPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2)]);
+            return;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
@@ -1141,6 +1179,11 @@ public sealed class NativeUnrealInvocationBridge
         T3 argument3)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(T0) == typeof(UnrealByteBuffer) || typeof(T1) == typeof(UnrealByteBuffer) || typeof(T2) == typeof(UnrealByteBuffer) || typeof(T3) == typeof(UnrealByteBuffer))
+        {
+            InvokeWithOutputs(target, memberId, memberPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2), new(typeof(T3), UnrealParameterDirection.Input, argument3)]);
+            return;
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
         if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
             UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
@@ -1231,7 +1274,13 @@ public sealed class NativeUnrealInvocationBridge
             inputCount == 0 ? Span<UnrealNativeValueV3>.Empty : stackalloc UnrealNativeValueV3[inputCount];
         Span<UnrealNativeValueV3> results =
             resultCount == 0 ? Span<UnrealNativeValueV3>.Empty : stackalloc UnrealNativeValueV3[resultCount];
-        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int arenaCapacity = CallFrameArenaByteCapacity;
+        foreach (var argument in arguments)
+            if (argument.Direction != UnrealParameterDirection.Output && argument.Value is UnrealByteBuffer buffer)
+                arenaCapacity = checked(arenaCapacity + buffer.Length);
+        if (arenaCapacity > UnrealByteBuffer.MaximumCallBytes)
+            throw new NotSupportedException("Binary invocation input arena exceeds 64 MiB.");
+        Span<byte> arena = arenaCapacity == CallFrameArenaByteCapacity ? stackalloc byte[CallFrameArenaByteCapacity] : new byte[arenaCapacity];
         int inputByteCount = 0;
         int inputIndex = 0;
         int resultIndex = 0;
@@ -1287,7 +1336,7 @@ public sealed class NativeUnrealInvocationBridge
                 out IUnrealNativeCallFrameTransportV3? transport))
         {
             throw new NotSupportedException(
-                "The native Unreal transport does not advertise ABI v3 output/reference support.");
+                $"The native Unreal transport does not advertise the required ABI v3 capabilities: {requiredCapabilities}.");
         }
         long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
@@ -1302,6 +1351,7 @@ public sealed class NativeUnrealInvocationBridge
         if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
             outcome.RequiredByteCapacity > arena.Length)
         {
+            ValidateBinaryRetryCapacity(requiredCapabilities, outcome.RequiredByteCapacity);
             retryArena = GC.AllocateUninitializedArray<byte>(
                 outcome.RequiredByteCapacity);
             arena[..inputByteCount].CopyTo(retryArena);
@@ -1352,6 +1402,18 @@ public sealed class NativeUnrealInvocationBridge
         Interlocked.Increment(ref _callFrameInvocationCount);
         CompleteCallFrameProfilerSample(profilerStart);
         return new UnrealOutputInvocationResult(returnValue, outputs);
+    }
+
+    private void RequireByteBuffers()
+    {
+        if (!TryGetCallFrameTransport(UnrealNativeCapabilitiesV3.ByteBuffers, out _))
+            throw new NotSupportedException("The native transport does not advertise binary buffer support.");
+    }
+
+    private static void ValidateBinaryRetryCapacity(UnrealNativeCapabilitiesV3 capabilities, int capacity)
+    {
+        if ((capabilities & UnrealNativeCapabilitiesV3.ByteBuffers) != 0 && capacity > UnrealByteBuffer.MaximumCallBytes)
+            throw new NotSupportedException("Binary invocation input/output arena exceeds 64 MiB.");
     }
 
     private bool TryExecuteFixedResult<TResult>(
@@ -1455,6 +1517,7 @@ public sealed class NativeUnrealInvocationBridge
         if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
             outcome.RequiredByteCapacity > arena.Length)
         {
+            ValidateBinaryRetryCapacity(argumentCapabilities | resultCapability, outcome.RequiredByteCapacity);
             retryArena = GC.AllocateUninitializedArray<byte>(
                 outcome.RequiredByteCapacity);
             arena[..inputByteCount].CopyTo(retryArena);

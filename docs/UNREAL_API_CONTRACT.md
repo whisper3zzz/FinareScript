@@ -83,6 +83,83 @@ has a generated accessor. Native code remains responsible for its storage and
 referenced object ownership. Packaged execution of this new sample is not yet
 acceptance evidence.
 
+## Binary payload interop
+
+`UnrealByteBuffer` and `FUnifiedScriptByteBuffer` provide a contiguous binary
+value for generated, non-reflected UObject members. This addresses the two-way
+payload use case in Puerts' [ArrayBuffer examples](https://puerts.github.io/docs/puerts/unreal/script_call_uclass/#arraybuffer),
+not JavaScript object compatibility or identical memory ownership. The same
+contract generates the native calls, C# signatures and visual node descriptions.
+The type reference is:
+
+```json
+{ "kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h" }
+```
+
+See the complete contract and
+[binary example](../samples/Unreal/UnifiedScript.Unreal.Demo/BinaryPayloadDemoScript.cs):
+
+```csharp
+byte[] packet = [21, 0, 31];
+target.StoreBytes(UnrealByteBuffer.Borrow(packet));
+UnrealByteBuffer received = target.ReadBytes();
+byte[] ownedBytes = received.ToArray();
+var response = target.TransformBytes(received, ref received, out int calls);
+```
+
+Direct properties, input/value/const-reference parameters, returns, `ref` and
+`out` use the existing generated call-frame route. Typed bridge overloads with
+zero through four arguments use the same binary route; larger generated
+signatures already use `InvokeWithOutputs`. Binary calls do not fall back to
+JSON or reflection when the native extension is missing.
+
+- `CopyFrom(ReadOnlySpan<byte>)` creates an owned managed snapshot.
+  `Borrow(byte[])` retains the managed array without a local copy; later array
+  mutations are visible. Do not mutate that array concurrently with a call.
+  `Slice(start, length)` retains the same storage and ownership mode. `Span`
+  is read-only; `ToArray()` creates another independent copy. `default` is empty.
+- **Crossing the native boundary always copies.** Native input decode retains
+  no pointer into the managed call arena. Managed result decode creates an owned
+  snapshot independent of arena reuse, native storage replacement and context
+  lifetime. These plain byte values contain no World or generation handle.
+- Native `CopyFrom(TConstArrayView<uint8>)` owns a copy; `TakeOwnership(TArray&&)`
+  transfers storage whose existing aliases must no longer mutate it. Copies of
+  `FUnifiedScriptByteBuffer` share immutable storage. `GetView()` borrows it only
+  while at least one buffer retains that storage.
+- A wire buffer is at most **16 MiB**. A binary invocation's input/output arena
+  is bounded by **64 MiB**, including input bytes and result copies; the managed
+  input allocation reserves 4 KiB for other values. Native constructors may
+  hold larger local data, but such values cannot cross the bridge. Large inputs
+  allocate beyond the usual 4 KiB stack arena; oversized retry requests fail
+  before allocating their requested capacity.
+
+ABI v3 appends value kind **25** and capability **`ByteBuffers = 1 << 11`**.
+The value cell stays 48 bytes and the call frame stays 72 bytes. One ArenaBacked
+cell records byte offset in `Payload0` and byte length in `Payload1`; all other
+metadata is zero. Empty buffers use length zero, not the null flag. Payload
+storage is exactly the contiguous bytes, not one 48-byte cell per byte. Existing
+schema channels and the shared-data protocol are unchanged. Older transports
+reject this capability before native invocation.
+
+Variable-output retries reuse the native pending result, so an invoked method
+is not executed twice merely to enlarge the return arena. Managed `ref/out`
+variables are assigned only after every result decodes successfully. This does
+not roll back arbitrary C++ side effects if the function returns invalid data.
+
+The current boundary excludes buffer container elements/keys/values, reflected
+Blueprint properties/functions, serialized Script Class state, raw-pointer
+views, native-object fixed-lane buffer arguments and native-to-managed callbacks.
+Unsupported declarations are rejected rather than emitted as usable APIs.
+`[Visual]` call boundaries and generated descriptors are supported; unrestricted
+interactive palette insertion and cooked execution of this sample are not yet
+established. This is **not cross-language shared memory or a zero-copy API**.
+
+`UnifiedScript.Unreal.BinaryBuffers.WireValidation` and `.ManagedRoundTrip`
+exercise real native/CoreCLR calls, 64 KiB input, 72 KiB return plus `ref` output,
+embedded zeros, sliced/empty buffers, malformed metadata, output retry, reload
+and teardown. Managed tests additionally cover the 16 MiB limit, bounded arena
+requests, old transports, direct overloads and transactional output publication.
+
 ## Ordinary C++ object runtime
 
 The v0.2 declarations generate ordinary C++ constructors, fields, instance/static

@@ -8,13 +8,13 @@
   },
   "summary": {
     "typeCount": 10,
-    "memberCount": 131,
+    "memberCount": 136,
     "directThunkCount": 47,
-    "callFrameCount": 81,
+    "callFrameCount": 86,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 128,
+    "nativeThunkCount": 133,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -996,6 +996,15 @@
       "nativeExtension": "Demo.Native"
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:BinaryCalls",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
       "kind": "property",
@@ -1009,6 +1018,24 @@
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
       "kind": "function",
       "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Payload",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:ReadBytes()",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": "",
       "nativeExtension": "Demo.Native"
@@ -1036,6 +1063,24 @@
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
       "kind": "function",
       "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:StoreBytes(FUnifiedScriptByteBufferconst\u0026)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:TransformBytes(FUnifiedScriptByteBufferconst\u0026,FUnifiedScriptByteBuffer\u0026,int32\u0026)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": "",
       "nativeExtension": "Demo.Native"

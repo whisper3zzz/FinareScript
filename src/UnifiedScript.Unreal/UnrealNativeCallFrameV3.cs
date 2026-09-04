@@ -126,6 +126,32 @@ internal static class UnrealNativeValueCodecV3
 {
     internal const int TransformByteSize = 10 * sizeof(double);
 
+    private static bool TryEncodeBuffer(UnrealByteBuffer buffer, Span<byte> arena,
+        ref int byteCount, out UnrealNativeValueV3 value)
+    {
+        value = default;
+        if (byteCount < 0 || byteCount > arena.Length || buffer.Length > arena.Length - byteCount) return false;
+        buffer.Span.CopyTo(arena[byteCount..]);
+        value.Kind = UnrealNativeValueKindV3.ByteBuffer;
+        value.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
+        value.Payload0 = (ulong)byteCount;
+        value.Payload1 = (ulong)buffer.Length;
+        byteCount += buffer.Length;
+        return true;
+    }
+
+    private static bool TryDecodeBuffer(in UnrealNativeValueV3 value, ReadOnlySpan<byte> arena,
+        int byteCount, out UnrealByteBuffer buffer)
+    {
+        buffer = default;
+        if (value.Kind != UnrealNativeValueKindV3.ByteBuffer || value.Flags != UnrealNativeValueFlagsV3.ArenaBacked ||
+            value.TypeId != 0 || value.Reserved16 != 0 || value.Auxiliary != 0 || value.Payload2 != 0 || value.Payload3 != 0 ||
+            byteCount < 0 || byteCount > arena.Length || value.Payload0 > (ulong)byteCount ||
+            value.Payload1 > (ulong)byteCount - value.Payload0 || value.Payload1 > UnrealByteBuffer.MaximumLength) return false;
+        buffer = UnrealByteBuffer.CopyFrom(arena.Slice((int)value.Payload0, (int)value.Payload1));
+        return true;
+    }
+
     public static bool TryEncode<T>(
         T value,
         Span<byte> arena,
@@ -135,6 +161,11 @@ internal static class UnrealNativeValueCodecV3
     {
         encoded = default;
         requiredCapability = UnrealNativeCapabilitiesV3.FixedScalars;
+        if (typeof(T) == typeof(UnrealByteBuffer))
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.ByteBuffers;
+            return TryEncodeBuffer(Reinterpret<T, UnrealByteBuffer>(ref value), arena, ref byteCount, out encoded);
+        }
         if (typeof(T) == typeof(bool))
         {
             encoded.Kind = UnrealNativeValueKindV3.Boolean;
@@ -400,6 +431,13 @@ internal static class UnrealNativeValueCodecV3
         ArgumentNullException.ThrowIfNull(type);
         descriptor = default;
         requiredCapability = UnrealNativeCapabilitiesV3.FixedScalars;
+        if (type == typeof(UnrealByteBuffer))
+        {
+            descriptor.Kind = UnrealNativeValueKindV3.ByteBuffer;
+            descriptor.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
+            requiredCapability = UnrealNativeCapabilitiesV3.ByteBuffers;
+            return true;
+        }
         if (type == typeof(bool)) descriptor.Kind = UnrealNativeValueKindV3.Boolean;
         else if (type == typeof(sbyte)) descriptor.Kind = UnrealNativeValueKindV3.Int8;
         else if (type == typeof(byte)) descriptor.Kind = UnrealNativeValueKindV3.UInt8;
@@ -506,6 +544,8 @@ internal static class UnrealNativeValueCodecV3
         out T decoded)
     {
         decoded = default!;
+        if (typeof(T) == typeof(UnrealByteBuffer))
+            return TryDecodeBuffer(value, arena, byteCount, out var buffer) && Set(buffer, out decoded);
         if (typeof(T) == typeof(bool) && value.Kind == UnrealNativeValueKindV3.Boolean)
             return Set(value.Payload0 != 0, out decoded);
         if (typeof(T) == typeof(sbyte) && value.Kind == UnrealNativeValueKindV3.Int8)
@@ -621,6 +661,12 @@ internal static class UnrealNativeValueCodecV3
     {
         ArgumentNullException.ThrowIfNull(type);
         decoded = null;
+        if (type == typeof(UnrealByteBuffer))
+        {
+            if (!TryDecodeBuffer(value, arena, byteCount, out var buffer)) return false;
+            decoded = buffer;
+            return true;
+        }
         if (type == typeof(bool) && value.Kind == UnrealNativeValueKindV3.Boolean)
             decoded = value.Payload0 != 0;
         else if (type == typeof(sbyte) && value.Kind == UnrealNativeValueKindV3.Int8)
@@ -1088,6 +1134,11 @@ internal static class UnrealNativeValueCodecV3
     {
         encoded = default;
         requiredCapability = UnrealNativeCapabilitiesV3.FixedScalars;
+        if (type == typeof(UnrealByteBuffer) && value is UnrealByteBuffer buffer)
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.ByteBuffers;
+            return TryEncodeBuffer(buffer, arena, ref byteCount, out encoded);
+        }
         if (type == typeof(bool) && value is bool booleanValue)
         {
             encoded.Kind = UnrealNativeValueKindV3.Boolean;

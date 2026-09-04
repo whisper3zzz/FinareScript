@@ -1519,7 +1519,7 @@ public sealed class UnrealNativeThunkGenerator
             UnrealValueKind.Float32 or UnrealValueKind.Float64 or
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
             UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or
-            UnrealValueKind.SoftObject or UnrealValueKind.SoftClass ||
+            UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or UnrealValueKind.ByteBuffer ||
         type.Kind == UnrealValueKind.Struct &&
             (IsCoreStruct(type.TypePath) ||
              type.TypePath is not null && supportedStructPaths.Contains(type.TypePath)) ||
@@ -1572,6 +1572,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Array => "Array",
         UnrealValueKind.Set => "Set",
         UnrealValueKind.Map => "Map",
+        UnrealValueKind.ByteBuffer => "ByteBuffer",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
@@ -1633,6 +1634,7 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string FromNative(UnrealTypeReference type, string expression) => type.Kind switch
     {
+        UnrealValueKind.ByteBuffer => $"FUnifiedScriptValue::FromByteBuffer({expression})",
         UnrealValueKind.Boolean => $"FUnifiedScriptValue::FromBoolean({expression})",
         UnrealValueKind.Int8 => $"FUnifiedScriptValue::FromInt8({expression})",
         UnrealValueKind.UInt8 => $"FUnifiedScriptValue::FromUInt8({expression})",
@@ -1662,6 +1664,7 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string CppType(UnrealTypeReference type) => type.Kind switch
     {
+        UnrealValueKind.ByteBuffer => "FUnifiedScriptByteBuffer",
         UnrealValueKind.Void => "void",
         UnrealValueKind.Boolean => "bool",
         UnrealValueKind.Int8 => "int8",
@@ -1686,6 +1689,7 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string CppDefault(UnrealTypeReference type) => type.Kind switch
     {
+        UnrealValueKind.ByteBuffer => "{}",
         UnrealValueKind.Boolean => "false",
         UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
         UnrealValueKind.Int16 or UnrealValueKind.UInt16 or
@@ -1718,6 +1722,7 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string TryGetMethod(UnrealTypeReference type) => type.Kind switch
     {
+        UnrealValueKind.ByteBuffer => "TryGetByteBuffer",
         UnrealValueKind.Boolean => "TryGetBoolean",
         UnrealValueKind.Int8 => "TryGetInt8",
         UnrealValueKind.UInt8 => "TryGetUInt8",

@@ -33,6 +33,7 @@ public enum UnrealNativeValueKindV3 : byte
     Array = 22,
     Set = 23,
     Map = 24,
+    ByteBuffer = 25,
 }
 
 [Flags]
@@ -68,6 +69,7 @@ public enum UnrealNativeCapabilitiesV3 : ulong
     Utf8Results = 1UL << 8,
     ContainerResults = 1UL << 9,
     Structs = 1UL << 10,
+    ByteBuffers = 1UL << 11,
 }
 
 /// <summary>
