@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
-    [ValidateSet('Play', 'Editor', 'Prepare', 'Verify', 'Package')]
+    [ValidateSet('Play', 'Editor', 'Author', 'Prepare', 'Verify', 'Package')]
     [string]$Mode = 'Play',
     [switch]$SkipBuild
 )
@@ -75,5 +75,33 @@ if ($Mode -eq 'Verify') {
 # These modes explicitly request a visible interactive game/editor window.
 $arguments = @(('"' + $project + '"'), $map, '-windowed', '-ResX=1280', '-ResY=720', '-nosplash')
 if ($Mode -eq 'Play') { $arguments += '-game' }
+if ($Mode -eq 'Author') {
+    $server = & (Join-Path $PSScriptRoot 'start-unifiedscript-authoring.ps1') `
+        -Project $project -EngineRoot $engine -Script AsyncUiDemoScript.cs `
+        -ApiBrowserPath (Join-Path $repoRoot 'samples\Unreal\UMG.api-browser.json') `
+        -Background -LogDirectory $logs
+    try {
+        $deadline = [DateTime]::UtcNow.AddSeconds(120)
+        do {
+            if ($server.HasExited) { throw "Demo authoring exited before readiness. See $logs" }
+            $workspace = $null
+            # Wait for our process, not an unrelated server already using this port.
+            if (Select-String -LiteralPath (Join-Path $logs 'authoring.stdout.log') -Pattern 'visual debug server ready' -Quiet) {
+                try { $workspace = Invoke-RestMethod 'http://127.0.0.1:4173/api/authoring/workspace' -TimeoutSec 2 } catch { }
+            }
+            if ($workspace.sourcePath -eq 'AsyncUiDemoScript.cs') { break }
+            if ([DateTime]::UtcNow -gt $deadline) { throw "Demo authoring did not become ready. See $logs" }
+            Start-Sleep -Milliseconds 200
+        } while ($true)
+        $arguments += '-ExecCmds="UnifiedScript.OpenAuthoring /Game/UnifiedScriptDemo/BP_AsyncUiDemo.AsyncUiScript"'
+        $process = Start-Process -FilePath $editor -ArgumentList $arguments -PassThru
+        Write-Host 'Demo authoring is running. Edit PreviewHeight in C# or Graph; keep this launcher open until the editor exits.'
+        $process.WaitForExit()
+    } finally {
+        if (!$server.HasExited) { Stop-Process -Id $server.Id -Force }
+        $server.Dispose()
+    }
+    return
+}
 $process = Start-Process -FilePath $editor -ArgumentList $arguments -PassThru
 Write-Output "Opened Async UI Demo ($Mode), process $($process.Id)."

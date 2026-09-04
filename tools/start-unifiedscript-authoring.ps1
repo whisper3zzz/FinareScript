@@ -7,8 +7,14 @@ param(
 
     [string]$Script,
 
+    [string]$ApiBrowserPath,
+
     [ValidateRange(1024, 65535)]
-    [int]$Port = 4173
+    [int]$Port = 4173,
+
+    [switch]$Background,
+
+    [string]$LogDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,6 +104,9 @@ $apiBrowser = if ([string]::IsNullOrWhiteSpace($config.bindings.browserOutput)) 
         -Path ([string]$config.bindings.browserOutput) `
         -BaseDirectory $configDirectory
 }
+if (-not [string]::IsNullOrWhiteSpace($ApiBrowserPath)) {
+    $apiBrowser = [IO.Path]::GetFullPath($ApiBrowserPath)
+}
 $managedStage = Resolve-ConfigPath `
     -Path ([string]$config.managed.stageDirectory) `
     -BaseDirectory $configDirectory
@@ -134,20 +143,22 @@ foreach ($required in @($managedProject, $managedOutput, $apiBrowser, $scriptPat
     }
 }
 
-[xml]$managedProjectXml = Get-Content -LiteralPath $managedProject -Raw
-$assemblyName = [string]$managedProjectXml.Project.PropertyGroup.AssemblyName |
-    Select-Object -First 1
-if ([string]::IsNullOrWhiteSpace($assemblyName)) {
-    $assemblyName = [IO.Path]::GetFileNameWithoutExtension($managedProject)
+$matchingChunks = @($config.managed.chunks | Where-Object {
+    (Resolve-ConfigPath -Path ([string]$_.project) -BaseDirectory $configDirectory) -eq $managedProject
+})
+if ($matchingChunks.Count -ne 1) {
+    throw 'Authoring requires exactly one configured managed chunk for the selected project; use the normal Build workflow first.'
 }
-$scriptStage = Join-Path $managedStage 'Scripts'
-$identityPath = Join-Path $scriptStage "$([IO.Path]::GetFileName($scriptPath)).usids"
-$assetPath = Join-Path $scriptStage "$assemblyName.asset.json"
-$surfacePath = Join-Path $scriptStage "$assemblyName.surface.json"
-$layoutPath = Join-Path $scriptStage "$assemblyName.usgraph"
-$assemblyPath = Join-Path $scriptStage "$assemblyName.dll"
-$pdbPath = Join-Path $scriptStage "$assemblyName.pdb"
-$historyPath = Join-Path $scriptStage "$assemblyName.authoring-history.json"
+$chunkPath = Resolve-ConfigPath -Path ([string]$matchingChunks[0].stagePath) -BaseDirectory $configDirectory
+$scriptStage = Split-Path -Parent $chunkPath
+$identityPath = $scriptPath + '.usids'
+$assetPath = [IO.Path]::ChangeExtension($chunkPath, '.asset.json')
+$surfacePath = [IO.Path]::ChangeExtension($chunkPath, '.surface.json')
+$layoutPath = [IO.Path]::ChangeExtension($chunkPath, '.usgraph')
+$assemblyPath = [IO.Path]::ChangeExtension($chunkPath, '.dll')
+$pdbPath = [IO.Path]::ChangeExtension($chunkPath, '.pdb')
+# Separate histories for source-oriented sessions that publish the same project.
+$historyPath = Join-Path $scriptStage "$([IO.Path]::GetFileName($scriptPath)).authoring-history.json"
 $coreAssembly = Join-Path $managedStage 'UnifiedScript.Core.dll'
 $unrealAssembly = Join-Path $managedStage 'UnifiedScript.Unreal.dll'
 foreach ($required in @($coreAssembly, $unrealAssembly)) {
@@ -156,45 +167,44 @@ foreach ($required in @($coreAssembly, $unrealAssembly)) {
     }
 }
 
-if (-not (Test-Path -LiteralPath $identityPath)) {
-    Write-Host '[identity] Initializing persistent semantic identities...'
-    & $dotnet $cliAssembly identity-init $scriptPath `
-        --out $identityPath `
-        --reference $coreAssembly `
-        --reference $unrealAssembly
-    if ($LASTEXITCODE -ne 0) {
-        throw "Identity initialization failed with exit code $LASTEXITCODE."
-    }
-}
-
-Write-Host '[build] Refreshing the project managed assembly before authoring...'
-& $dotnet build $managedProject -c Release --nologo
-if ($LASTEXITCODE -ne 0) {
-    throw "Managed project build failed with exit code $LASTEXITCODE."
-}
+# MSBuild evaluation supplies all Compile items, references and language settings.
+# Do not rebuild/stage shared native-host dependencies while the Editor owns them.
+# A missing or changed dependency is handled by the normal Build & Reload workflow.
+$configuration = if ([string]::IsNullOrWhiteSpace($config.managed.configuration)) { 'Release' } else { [string]$config.managed.configuration }
 
 $arguments = [Collections.Generic.List[string]]::new()
 foreach ($argument in @(
     $cliAssembly,
     'debug-serve',
     $scriptPath,
-    '--source', $managedOutput,
+    '--project', $managedProject,
+    '--configuration', $configuration,
+    '--no-restore',
+    '--no-build',
+    '--publish-initial',
     '--api-browser', $apiBrowser,
     '--root', $workbenchRoot,
     '--port', [string]$Port,
-    '--assembly', $assemblyName,
-    '--reference', $coreAssembly,
-    '--reference', $unrealAssembly,
     '--identity', $identityPath,
     '--asset-out', $assetPath,
     '--surface-out', $surfacePath,
     '--layout-out', $layoutPath,
     '--managed-out', $assemblyPath,
+    '--chunk-out', $chunkPath,
     '--pdb-out', $pdbPath,
     '--history', $historyPath)) {
     $arguments.Add([string]$argument)
 }
 Write-Host "UnifiedScript authoring server: http://127.0.0.1:$Port/"
+if ($Background) {
+    if ([string]::IsNullOrWhiteSpace($LogDirectory)) { throw '-Background requires -LogDirectory; the caller owns the returned process lifetime.' }
+    New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
+    $quotedArguments = @($arguments | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' })
+    Start-Process -FilePath $dotnet -ArgumentList $quotedArguments -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput (Join-Path $LogDirectory 'authoring.stdout.log') `
+        -RedirectStandardError (Join-Path $LogDirectory 'authoring.stderr.log')
+    return
+}
 Write-Host 'Keep this terminal open; use Apply & Reload in the UE authoring tab.'
 & $dotnet @arguments
 exit $LASTEXITCODE

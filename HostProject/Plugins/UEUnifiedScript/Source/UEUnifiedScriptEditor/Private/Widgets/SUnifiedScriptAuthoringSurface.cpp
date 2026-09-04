@@ -2142,6 +2142,16 @@ bool SUnifiedScriptAuthoringSurface::LoadScriptAsset(UUnifiedScriptAsset* Script
     {
         ServerUrlTextBox->SetText(FText::FromString(ServerUrl));
     }
+    // A project surface contains multiple classes. Opening one Script Asset
+    // must not silently focus the first, potentially read-only, class instead.
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        if (Asset.AssetPath == ScriptAsset->DeclarationAssetPath && !Asset.Functions.IsEmpty())
+        {
+            SelectFunction(Asset.Functions[0].Id);
+            break;
+        }
+    }
     return true;
 }
 

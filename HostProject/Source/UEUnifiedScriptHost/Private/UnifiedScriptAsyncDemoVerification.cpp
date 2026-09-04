@@ -12,6 +12,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "EngineUtils.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Paths.h"
 #include "Misc/Parse.h"
 #include "UObject/UObjectIterator.h"
 
@@ -25,6 +26,10 @@ TWeakObjectPtr<UUserWidget> Hud;
 TWeakObjectPtr<UUserWidget> OldHud;
 int32 Phase = 0;
 double Started = 0;
+FString ReloadSignal;
+float ExpectedHeight = 100;
+float ReloadedHeight = 100;
+bool bAnnouncedEdit = false;
 
 bool Finish(bool bSuccess, const FString& Message)
 {
@@ -36,7 +41,7 @@ bool Finish(bool bSuccess, const FString& Message)
 
 bool Tick(float)
 {
-    if (FPlatformTime::Seconds() - Started > 60)
+    if (FPlatformTime::Seconds() - Started > (ReloadSignal.IsEmpty() ? 60 : 180))
         return Finish(false, FString::Printf(TEXT("Timed out at phase %d; state=%s"), Phase,
             Actor.IsValid() ? *Actor->GetUnifiedScriptComponent()->ManagedState : TEXT("no sample Actor")));
     if (Phase == 0)
@@ -100,6 +105,9 @@ bool Tick(float)
         for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
         {
             if (!It->GetStaticMeshComponent()->GetStaticMesh()) return Finish(false, TEXT("Spawned Actor has no loaded mesh."));
+            const float Height = Phase == 3 ? ExpectedHeight : ReloadedHeight;
+            if (!FMath::IsNearlyEqual(It->GetActorLocation().Z, static_cast<double>(Height), 0.01))
+                return Finish(false, FString::Printf(TEXT("Preview height %f does not match authored %f."), It->GetActorLocation().Z, Height));
             ++Previews;
         }
         if (Previews != 1) return Finish(false, TEXT("Expected exactly one owned preview."));
@@ -108,6 +116,15 @@ bool Tick(float)
             return Finish(false, TEXT("HUD did not reflect managed success."));
         if (Phase == 3)
         {
+            if (!ReloadSignal.IsEmpty() && !FPaths::FileExists(ReloadSignal))
+            {
+                if (!bAnnouncedEdit)
+                {
+                    UE_LOG(LogTemp, Display, TEXT("UNIFIEDSCRIPT_ASYNC_UI_READY_FOR_EDIT height=%f"), ExpectedHeight);
+                    bAnnouncedEdit = true;
+                }
+                return true;
+            }
             OldHud = Hud;
             Hud.Reset();
             if (!Component->ReloadScript()) return Finish(false, TEXT("Reload of the deployed compiled chunk failed."));
@@ -121,7 +138,7 @@ bool Tick(float)
                 return Finish(false, TEXT("Actor deletion leaked UI, subscriptions or resources."));
             for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
                 return Finish(false, TEXT("Actor deletion retained the preview."));
-            return Finish(true, TEXT("Saved scene, viewport, cancel, async mesh spawn, chunk reload and teardown."));
+            return Finish(true, FString::Printf(TEXT("Saved scene, viewport, cancel, async mesh spawn, chunk reload and teardown; height %f -> %f."), ExpectedHeight, ReloadedHeight));
         }
     }
     return true;
@@ -133,6 +150,13 @@ void Start()
     if (!FParse::Param(FCommandLine::Get(), TEXT("UnifiedScriptAsyncUiVerify"))) return;
     Started = FPlatformTime::Seconds();
     Phase = 0;
+    ReloadSignal.Reset();
+    ExpectedHeight = ReloadedHeight = 100;
+    bAnnouncedEdit = false;
+    FParse::Value(FCommandLine::Get(), TEXT("UnifiedScriptAsyncUiReloadSignal="), ReloadSignal);
+    FParse::Value(FCommandLine::Get(), TEXT("UnifiedScriptAsyncUiHeight="), ExpectedHeight);
+    ReloadedHeight = ExpectedHeight;
+    FParse::Value(FCommandLine::Get(), TEXT("UnifiedScriptAsyncUiReloadedHeight="), ReloadedHeight);
     Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&Tick));
 }
 

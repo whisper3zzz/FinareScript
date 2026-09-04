@@ -32,6 +32,9 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Current delivery strategy: **M13.5 comparison and capability breadth first ->
   M13.3 deeper Script Class integration -> M13.4 external validation ->
   M13.6 delivery expansion**.
+- Transition rule: **usable common gameplay coverage, not full Puerts parity**.
+  Compare enough to choose the next missing capability, implement it through the
+  public workflow, and return to M13.3/M13.4 once the breadth target below is met.
 - Latest capability checkpoint delivered: **basic Actor/ActorComponent networking**.
   Saved generated classes run on one server and two connected clients, including
   a dynamically attached component. Both paths cover RepNotify, explicit RPC,
@@ -62,13 +65,20 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   and the archived Win64 Development executable using its bundled CoreCLR.
   The UI Automation suite also works with the persistent class present without
   modifying its scene or defaults.
-- Next work: **connect and verify the composed Demo's ordinary C#/Graph authoring
-  workflow**. Its repository launcher supports build/relaunch and scene editing;
-  native Build & Reload/deployment discovery, transactional Graph apply and
-  installed-consumer authoring are not yet established for this example. Keep
-  that work in the same batch rather than calling the runtime/package checkpoint
-  the full breadth target. Visual appearance and physical mouse input also
-  remain unreviewed by the CMD/NullRHI checks.
+- Current authoring checkpoint: **project-backed C#/Graph publication and live
+  Demo reload**. The session evaluates the actual MSBuild project, preserves
+  adjacent identities and publishes the preferred runtime chunk transactionally.
+  The Demo's preview height changes from 100 to 120 through C#, then to 180 through
+  Graph; the same game process reloads and observes height 180. Undo restores the
+  original source/chunk. Native Slate loads the full project surface and focuses
+  the selected Demo class. The launcher now has an `Author` entry.
+- Next work: **finish the ordinary native Build & Reload/deployment path and
+  installed-consumer authoring for the composed Demo**. The verified HTTP
+  publication plus component reload is not yet proof of the complete native
+  toolbar workflow. External IDE edits currently require session restart;
+  project/dependency reevaluation and source refresh need integration. Keep this
+  in the same capability batch. Visual appearance and physical mouse input remain
+  unreviewed by the CMD/NullRHI checks.
   Push-model, travel and richer native-object forms remain follow-ups; do not
   resume the full M13.3 scope before the M13.5 breadth target is met.
 
@@ -95,7 +105,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
-| Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, button events, async class/mesh loading, preview replacement, cancel/retry and lifecycle cleanup; persistent scene/launcher and Win64 cooked cancel/spawn/reload/teardown | Ordinary C#/Graph and installed-consumer authoring still need integration; no physical mouse or visual appearance acceptance, and no general UMG/latent parity claim |
+| Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph edits now publish matching chunks and change behavior after live reload | Native toolbar build/deployment and installed-consumer authoring still need verification/integration; external IDE refresh is not live; no physical mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
@@ -112,6 +122,11 @@ Priority decision: **M13.5 -> M13.3 -> M13.4 -> M13.6**. Compare against
 Puerts and build sufficient common capability coverage before resuming deeper
 class integration and external-project validation. Do not restore numeric order
 just because M13.3 or M13.4 still has unfinished work.
+
+M13.5 is an implementation phase guided by comparison, not a documentation-only
+audit. Identify practical gaps against Puerts, deliver reusable capability
+batches, and keep the comparison current as those batches land. Do not wait for
+an exhaustive inventory before implementing a clearly missing common capability.
 
 | Order | Deliverable | Why it comes next |
 | --- | --- | --- |
@@ -164,7 +179,7 @@ not an exhaustive signature audit or a claim of parity.
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
-| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example now composes these routes, with a saved scene, launcher and cooked runtime proof. Finish its ordinary C#/Graph authoring workflow, then audit other common callback, latent and subsystem gaps | M13.5 |
+| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example composes these routes, with a saved scene, cooked runtime checkpoint and project-backed C#/Graph-to-live-reload proof. Finish native daily-workflow and installed-consumer integration, then audit other common callback, latent and subsystem gaps | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -190,23 +205,21 @@ scenarios, not a target API count or a requirement to enumerate every signature.
 Deeper Blueprint inheritance, CDO/subobject identity and authoring composition
 are deliberately not prerequisites for this breadth target.
 
-Use those scenarios to decide when to return to M13.3, not a percentage of
-Puerts APIs or completion of every item within each family. The transition does
-not require clearing every M13.5 checkbox: those items describe broader family
-backlogs, not an exhaustive prerequisite for M13.3. Once the representative
-scenarios' common paths work through reusable product APIs, carry the remaining
-uncommon cases as explicit follow-up work and resume M13.3, then M13.4. Each
-batch should make the next missing everyday capability clearer, not reset the
-comparison audit.
+**Move on when those representative scenarios work through reusable public APIs
+and the normal development workflow, with no wholly missing common family in
+the scope above.** Use observable gameplay coverage, not an API percentage, to
+judge "enough." Declarations or untested stubs alone do not meet this target.
 
-This does not require every Unreal API or every combination of signatures.
-Rare combinations, platform additions and language-specific differences remain
-explicitly bounded. However, an entire common family that only has declarations
-or an untested stub is not sufficient coverage. After this target, complete the
-remaining M13.3 integration and then use M13.4 to check external integration and
-usability. External validation is still required before claiming a general
-replacement. Selecting or modifying an external project requires the user's
-authorization.
+This does not require clearing every M13.5 checkbox, every signature combination
+or every Puerts feature. Those checkboxes include broader family backlogs. Carry
+uncommon cases, additional platforms and intentional language differences as
+explicit follow-ups; do not let them postpone M13.3 indefinitely. Each batch
+should close a practical gap rather than restart the comparison audit.
+
+After that breadth checkpoint, complete the remaining M13.3 integration, then
+use M13.4 to check external integration and usability. External validation is
+still required before claiming a general replacement. Selecting or modifying
+an external project requires the user's authorization.
 
 ## Remaining work
 
@@ -236,8 +249,9 @@ authorization.
   implemented and compose them in representative gameplay examples.
   The composed UMG/async/SpawnActor runtime checkpoint is implemented, including
   cancel/retry, saved-class reload and teardown. Persistent launch and cooked
-  execution are now verified; ordinary C#/Graph and installed-consumer authoring
-  remain open, as described by the current cursor.
+  execution are verified. Project-backed C#/Graph transactions now change the
+  live Demo through chunk reload; native toolbar build/deployment and
+  installed-consumer authoring remain open, as described by the current cursor.
 - [ ] Audit and complete bounded byte-buffer interop for ordinary binary payloads,
   with explicit copy/borrow/ownership rules and generation-safe callbacks. Reuse
   existing transports and data-plane contracts where applicable.
@@ -389,6 +403,17 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The project-backed authoring checkpoint passes 88 focused managed tests in
+`artifacts/m13-5-ui/authoring-tests/project-authoring.trx`, the UE 5.8.1 Editor
+build and four CMD tests in `artifacts/m13-5-ui/authoring-tests/native-authoring.log`.
+That native run supplies the emitted full-project surface through
+`-UnifiedScriptProjectSurface` and verifies its parser, class selection and
+editable height Graph, alongside the three UI tests. The same-process source
+edit, Graph apply and changed runtime height pass in
+`artifacts/ue/async-authoring/20260904-182118-640/runtime.log`; the test undoes its
+edits through the authoring API. This does not establish physical interaction,
+the complete native daily-build path or a new cooked-source-edit result.
 
 The persistent UI Demo builds for Editor and Win64 Development. The saved scene
 passes the actual standalone game path in

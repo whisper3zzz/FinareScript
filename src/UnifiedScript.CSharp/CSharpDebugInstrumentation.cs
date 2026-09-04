@@ -184,7 +184,10 @@ internal sealed class CSharpDebugInstrumenter
                          .Where(static symbol => symbol is IParameterSymbol or ILocalSymbol)
                          .OrderBy(static symbol => symbol.Name, StringComparer.Ordinal))
             {
-                if (symbol is IParameterSymbol ||
+                // A probe runs before the statement. Capturing an out parameter
+                // before its first definite assignment makes valid user code fail
+                // CS0269; after assignment it is an ordinary inspectable value.
+                if (symbol is IParameterSymbol { RefKind: not RefKind.Out } ||
                     flow?.DefinitelyAssignedOnEntry.Contains(symbol, SymbolEqualityComparer.Default) == true)
                 {
                     yield return symbol;

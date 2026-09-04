@@ -6,6 +6,38 @@ a bounded server-owned history, while journal
 `unifiedscript.authoring-history/v0.1` persists that history inside the same
 source, identity, artifact, and CoreCLR publication boundary.
 
+## Project-backed sessions and runtime chunks
+
+`debug-serve <source.cs> --project <project.csproj>` evaluates the actual MSBuild
+project: Compile items (including linked/generated inputs), references, implicit
+usings, configuration, framework and language settings. `--configuration` and
+`--framework` select the project configuration; `--no-build --no-restore` reuse
+prepared project outputs. Manual `--assembly`, `--source` and `--reference`
+overrides are rejected in project mode. File-only sessions remain supported.
+
+This is a source-oriented session with whole-project compilation. Only the
+selected source is editable; other Compile items are read-only inputs. An edit
+to those inputs is rejected with `UAW1017`, including during preview. Open a
+different primary source in its own session to edit it. Avoid simultaneous
+writers to the same project outputs. Adjacent `.cs.usids` files are consumed by
+both project authoring and ordinary CLI project emission so rebuilds retain the
+identities saved by Graph. The primary source's sidecar is persisted on commit.
+
+`--chunk-out` adds the runtime `.uschunk` to the existing artifact transaction.
+Source/Graph apply, Undo and Redo publish the chunk from the same uninstrumented
+program as the DLL/PDB and Declaration IR; they cannot leave the preferred chunk
+at an older behavior while publishing a newer DLL. `--publish-initial` publishes
+the initial snapshot after acquiring the loopback listener. It does not rewrite
+unchanged compilation inputs.
+
+`tools/start-unifiedscript-authoring.ps1` uses the configured project and chunk
+stage path and requires normal build outputs to exist. It does not rebuild or
+replace shared native-host dependencies during Editor use. Restart the session
+after external source edits or changes to project membership, settings or
+dependencies; live MSBuild reevaluation and external-editor refresh are not yet
+provided by this project session. Native World/component reload remains a
+separate consumer of the published artifacts, not an HTTP commit side effect.
+
 ## Request contract
 
 Mutation clients send these headers:
@@ -118,7 +150,7 @@ Every endpoint runs under the authoring/debug session gate:
 4. prepare and fully analyze the candidate snapshot;
 5. reload the candidate through the same CoreCLR transport;
 6. synchronize stable-ID layout and transactionally publish source, `.usids`,
-   `.usgraph`, Declaration IR, Surface, DLL, PDB, and the prospective history
+   `.usgraph`, Declaration IR, Surface, DLL, PDB, optional compiled chunk, and the prospective history
    journal;
 7. commit the in-memory workspace and history entry, then expose the new
    revision and runtime generation.

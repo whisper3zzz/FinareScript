@@ -35,7 +35,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         int port,
         AuthoringArtifactOutputs? artifactOutputs = null,
         IReadOnlyDictionary<string, string>? sourceFiles = null,
-        UnrealApiBrowserDocument? apiBrowser = null)
+        UnrealApiBrowserDocument? apiBrowser = null,
+        IReadOnlySet<string>? readOnlySources = null,
+        bool publishInitial = false)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
@@ -56,15 +58,26 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             sourcePath,
             identityPath,
             artifactOutputs ?? new AuthoringArtifactOutputs(),
-            sourceFiles);
+            sourceFiles,
+            readOnlySources);
         this.apiBrowser = apiBrowser;
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        if (publishInitial)
+        {
+            try
+            {
+                // A competing server must be rejected before publishing its outputs.
+                listener.Start();
+                session.PublishInitialArtifacts();
+            }
+            catch { listener.Close(); session.Dispose(); throw; }
+        }
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        listener.Start();
+        if (!listener.IsListening) listener.Start();
         using CancellationTokenRegistration registration = cancellationToken.Register(listener.Stop);
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -710,6 +723,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly string sourcePath;
         private readonly string sourceLogicalPath;
         private readonly IReadOnlyDictionary<string, string> sourceFiles;
+        private readonly IReadOnlySet<string> readOnlySources;
         private readonly Dictionary<string, string> persistedSources = new(StringComparer.Ordinal);
         private readonly string? identityPath;
         private readonly AuthoringArtifactOutputs artifactOutputs;
@@ -733,7 +747,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             string sourcePath,
             string? identityPath,
             AuthoringArtifactOutputs artifactOutputs,
-            IReadOnlyDictionary<string, string>? sourceFiles)
+            IReadOnlyDictionary<string, string>? sourceFiles,
+            IReadOnlySet<string>? readOnlySources)
         {
             ArgumentNullException.ThrowIfNull(request);
             ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -742,10 +757,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             this.sourcePath = Path.GetFullPath(sourcePath);
             this.identityPath = identityPath is null ? null : Path.GetFullPath(identityPath);
             this.artifactOutputs = artifactOutputs.Normalize();
+            this.readOnlySources = readOnlySources ?? new HashSet<string>(StringComparer.Ordinal);
             string normalizedSourcePath = this.sourcePath.Replace('\\', '/');
             CSharpSourceDocument primarySource = request.Sources.SingleOrDefault(source =>
                     string.Equals(
-                        Path.GetFullPath(source.LogicalPath).Replace('\\', '/'),
+                        Path.GetFullPath(sourceFiles is not null && sourceFiles.TryGetValue(source.LogicalPath, out string? physical)
+                            ? physical : source.LogicalPath).Replace('\\', '/'),
                         normalizedSourcePath,
                         StringComparison.OrdinalIgnoreCase))
                 ?? throw new ArgumentException(
@@ -817,6 +834,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         public DebugHealthResponse Health { get; private set; }
 
         public AuthoringWorkspaceResponse Workspace { get; private set; }
+
+        public void PublishInitialArtifacts()
+        {
+            EnsureFilesUnchanged();
+            Persist(authoring.Current, authoring.ExportHistory(), PrepareGraphLayout(authoring.Current, authoring.Current));
+        }
 
         public AuthoringRollbackResponse CreateRollbackResponse(string state)
         {
@@ -1656,6 +1679,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             AuthoringTransactionContext transaction,
             bool publishesRuntime)
         {
+            ValidateEditableSources(candidate);
             Dictionary<string, string> beforeSources = baseline.Request.Sources.ToDictionary(
                 static source => source.LogicalPath,
                 static source => source.Source,
@@ -2360,12 +2384,30 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
         }
 
+        private void ValidateEditableSources(CSharpAuthoringSnapshot snapshot)
+        {
+            foreach (CSharpSourceDocument source in snapshot.Request.Sources)
+            {
+                if (readOnlySources.Contains(source.LogicalPath) && source.Source != persistedSources[source.LogicalPath])
+                    throw new AuthoringProtocolException(HttpStatusCode.Conflict, "UAW1017",
+                        $"'{source.LogicalPath}' is a project compilation input; open that source in its own authoring session before editing it.");
+            }
+        }
+
         private void Persist(
             CSharpAuthoringSnapshot snapshot,
             CSharpAuthoringHistoryDocument history,
             PreparedGraphLayout? graphLayout)
         {
+            ValidateEditableSources(snapshot);
+            var artifactPaths = new[] { artifactOutputs.DeclarationPath, artifactOutputs.SurfacePath,
+                artifactOutputs.ManagedAssemblyPath, artifactOutputs.PortablePdbPath,
+                artifactOutputs.HistoryPath, artifactOutputs.GraphLayoutPath, artifactOutputs.CompiledChunkPath, identityPath };
+            foreach (string path in artifactPaths.OfType<string>())
+                if (sourceFiles.Values.Any(source => string.Equals(source, path, StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException($"Authoring artifact '{path}' cannot overwrite a compilation source.");
             var outputs = snapshot.Request.Sources
+                .Where(source => source.Source != persistedSources[source.LogicalPath])
                 .Select(source => new AuthoringOutput(
                     sourceFiles[source.LogicalPath],
                     Encoding.UTF8.GetBytes(source.Source)))
@@ -2410,7 +2452,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
 
             if (artifactOutputs.ManagedAssemblyPath is not null ||
-                artifactOutputs.PortablePdbPath is not null)
+                artifactOutputs.PortablePdbPath is not null || artifactOutputs.CompiledChunkPath is not null)
             {
                 CSharpProgramEmitResult emitted = emitter.Emit(snapshot.Request);
                 if (!emitted.Succeeded || emitted.Image is null)
@@ -2434,6 +2476,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     outputs.Add(new AuthoringOutput(
                         artifactOutputs.PortablePdbPath,
                         emitted.Image.PortablePdb));
+                }
+                if (artifactOutputs.CompiledChunkPath is not null)
+                {
+                    CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
+                        emitted.Image, new CSharpProgramChunkOptions(
+                            RuntimeReferencePaths: snapshot.Request.RuntimeReferencePaths));
+                    outputs.Add(new AuthoringOutput(artifactOutputs.CompiledChunkPath, chunk.Content));
                 }
             }
 
@@ -2729,7 +2778,8 @@ internal sealed record AuthoringArtifactOutputs(
     string? ManagedAssemblyPath = null,
     string? PortablePdbPath = null,
     string? HistoryPath = null,
-    string? GraphLayoutPath = null)
+    string? GraphLayoutPath = null,
+    string? CompiledChunkPath = null)
 {
     public AuthoringArtifactOutputs Normalize() => new(
         NormalizePath(DeclarationPath),
@@ -2737,7 +2787,8 @@ internal sealed record AuthoringArtifactOutputs(
         NormalizePath(ManagedAssemblyPath),
         NormalizePath(PortablePdbPath),
         NormalizePath(HistoryPath),
-        NormalizePath(GraphLayoutPath));
+        NormalizePath(GraphLayoutPath),
+        NormalizePath(CompiledChunkPath));
 
     private static string? NormalizePath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);

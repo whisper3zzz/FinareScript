@@ -24,7 +24,9 @@ an ordinary Widget Blueprint with the same named controls can replace it.
   invoke the new generation. The viewport owns the visible widget; a managed
   wrapper alone is not a GC root.
 
-`RequestSpawn` and `CancelSpawn` are Visual methods. The async helper bodies are
+`RequestSpawn`, `CancelSpawn` and `PreviewHeight` are Visual methods. The height
+function supplies the spawned preview's Z coordinate and is a simple C#/Graph
+editing example. The async helper bodies are
 ordinary source-only C#, represented as opaque calls, not editable async graphs.
 The two `[Expose]` paths are configuration, not cross-generation native handles.
 Reload starts a fresh view/preview rather than migrating a pending Task.
@@ -71,6 +73,7 @@ needed. `-SkipBuild` reuses already current native and managed outputs.
 | --- | --- |
 | `Play` (default) | Open the saved scene with `-game` |
 | `Editor` | Open the saved scene in Unreal Editor for scene/default editing |
+| `Author` | Start project-backed authoring and open the saved scene plus its native C#/Graph tab; stop the owned server when the editor exits |
 | `Prepare` | Create missing assets and synchronize the generated class, without launching a game |
 | `Verify` | Exercise the saved scene in a separate CMD/NullRHI game, including cancel, mesh spawn, chunk reload and teardown |
 | `Package` | Build/cook/archive Win64 Development, exercise the packaged game, and add `StartAsyncDemo.cmd` beside its executable |
@@ -88,12 +91,57 @@ launch `StartAsyncDemo.cmd` to select the Demo map without changing project-wide
 defaults. Cube and Sphere are explicit native cook dependencies; custom mesh
 paths must also be included in the project's cook inputs.
 
-For source iteration, edit `AsyncUiDemoScript.cs`, close the game/editor and
-rerun the launcher without `-SkipBuild`. `Editor` mode is a scene-editing entry,
-not yet an integrated C#/Graph authoring session: the sample's native
-Build & Reload/deployment discovery and transactional Graph surface still need
-to be connected and verified. The runtime verifier reloads the deployed chunk;
-it does not claim a source-change or Graph-apply test.
+### C#/Graph iteration
+
+```powershell
+.\tools\launch-unreal-async-demo.ps1 -EngineRoot D:\UE_5.8 -Mode Author
+```
+
+The launcher starts a project-backed session at `http://127.0.0.1:4173` and opens
+the native tab for `/Game/UnifiedScriptDemo/BP_AsyncUiDemo.AsyncUiScript`. Keep
+the launcher running until the editor exits. Its logs are in the printed run
+directory; an occupied port fails startup instead of taking over another server.
+The equivalent console entry is `UnifiedScript.OpenAuthoring <ScriptAssetObjectPath>`.
+
+Select `PreviewHeight` to edit its return literal in Graph, or use the tab's C#
+view to edit the same source. Both use the normal preview/commit protocol and
+publish matching source, identities, declarations, DLL/PDB and runtime chunk.
+The whole Demo project participates in compilation; its other source files are
+read-only in this session. Only the supported Visual profile is graph-editable.
+See [project session boundaries](AUTHORING_TRANSACTIONS.md#project-backed-sessions-and-runtime-chunks).
+
+The native Apply & Reload entry still routes through the daily-build coordinator.
+The source/Graph transaction and live chunk-consumer path below are verified;
+this is not yet acceptance of the entire toolbar-triggered build/deployment path,
+installed-consumer authoring, or physical editor interaction. External IDE edits
+currently require restarting the authoring session. For an immediate full rebuild,
+close the game/editor and rerun the launcher without `-SkipBuild`.
+
+### Source/Graph to live runtime verification
+
+```powershell
+.\tools\test-unreal-async-authoring.ps1 -EngineRoot D:\UE_5.8
+```
+
+With the sample editor/game and other writers closed, this runs the actual Demo
+project and a separate CMD/NullRHI game. It starts with height 100, applies a C#
+edit to 120, applies a stable-ID Graph literal edit to 180, then signals the
+same running game to reload the published chunk. The native verifier checks the
+new Actor's height, HUD, cancellation, subscriptions and teardown. Transactional
+Undo restores the two test edits and their matching chunk; concurrent external
+edits are never force-restored. `-SkipBuild` requires current prepared outputs.
+
+The 2026-09-04 run passed at
+`artifacts/ue/async-authoring/20260904-182118-640/runtime.log`. This proves a real
+behavior change in the same World process, not just loading the same chunk twice.
+Managed project/transaction/semantic/debug tests are in
+`artifacts/m13-5-ui/authoring-tests/project-authoring.trx` (88 passed).
+The Editor build and four CMD tests also pass in
+`artifacts/m13-5-ui/authoring-tests/native-authoring.log`: the three UI tests and
+`UnifiedScript.Unreal.Editor.AuthoringSurface`. Supplying
+`-UnifiedScriptProjectSurface=<staged Demo .surface.json>` to that run adds
+full-project native schema, selected-class focus and height-Graph checks.
+This authored-source check is not a new cooked-build or visual-appearance result.
 
 ### Focused Automation
 

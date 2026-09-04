@@ -51,6 +51,13 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
         CancelPendingSpawn();
     }
 
+    // Edit this value in C# or Graph, then reload and spawn another preview.
+    [Visual]
+    public float PreviewHeight()
+    {
+        return 100.0f;
+    }
+
     private async Task InitializeHudAsync()
     {
         CancellationToken lifetime = Lifetime;
@@ -126,7 +133,7 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
             cancellation.ThrowIfCancellationRequested();
             candidate = _world.SpawnActor(TargetHandle, _actorClass,
                 new UnrealTransform(new UnrealQuaternion(0, 0, 0, 1),
-                    new UnrealVector(200, 0, 100), new UnrealVector(1, 1, 1)));
+                    new UnrealVector(200, 0, PreviewHeight()), new UnrealVector(1, 1, 1)));
             if (candidate.IsNull) throw new InvalidOperationException("SpawnActor returned null.");
             var actor = new UI.StaticMeshActor(candidate, Bridge);
             actor.SetMobility(UI.EComponentMobility.Movable);

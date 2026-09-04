@@ -96,13 +96,17 @@ int32 UUnifiedScriptPrepareAsyncDemoCommandlet::Main(const FString& Params)
     }
 
     auto* Asset = Blueprint->ScriptAsset.Get();
+    const FString SurfacePath = TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json");
+    // Upgrade the owned sample's authoring association without touching scene/default edits.
+    const bool bSetSurfacePath = Asset->AuthoringSurfacePath.IsEmpty();
+    if (bSetSurfacePath) Asset->AuthoringSurfacePath = SurfacePath;
     FUnifiedScriptBlueprintClassSyncResult Result;
     FString Error;
     if (!FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(*Asset, *Blueprint, Declaration, false, Result, Error))
         return Fail(Error);
     auto* CDO = Cast<AUnifiedScriptActor>(Blueprint->GeneratedClass->GetDefaultObject());
     if (!CDO) return Fail(TEXT("Generated Demo class is not an Actor."));
-    if (CDO->GetUnifiedScriptComponent()->ScriptAsset != Asset)
+    if (bSetSurfacePath || CDO->GetUnifiedScriptComponent()->ScriptAsset != Asset)
     {
         CDO->GetUnifiedScriptComponent()->ScriptAsset = Asset;
         FSavePackageArgs Save;

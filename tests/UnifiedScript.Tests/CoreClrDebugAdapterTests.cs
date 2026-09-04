@@ -57,6 +57,53 @@ public sealed class CoreClrDebugAdapterTests
         """;
 
     [Fact]
+    public async Task OutParametersAreCapturedOnlyAfterDefiniteAssignment()
+    {
+        const string source = """
+            using UnifiedScript;
+            namespace Tests.Debug;
+            public static class OutputRules
+            {
+                [Visual]
+                public static int Assign(int input, out int result)
+                {
+                    result = input + 1;
+                    return result;
+                }
+                [Visual]
+                public static int Run(int input)
+                {
+                    return SourceRun(input);
+                }
+                private static int SourceRun(int input)
+                {
+                    int output = 0;
+                    return Assign(input, out output);
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, "Tests/Debug/OutputRules.cs");
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(analysis.Succeeded, string.Join("\n", analysis.Diagnostics));
+        HirExpressionStatement assignment = Assert.Single(analysis.Hir!.DescendantsAndSelf().OfType<HirExpressionStatement>());
+        using var adapter = new CoreClrDebugAdapter(SemanticId.FromKey("out-parameter-debug"));
+        CoreClrDebugReloadResult reload = adapter.Reload(request);
+        adapter.SetBreakpoint(new SemanticBreakpoint(SemanticId.FromKey("before-out-write"), assignment.Id));
+        CoreClrDebugExecution execution = adapter.Start(new ExecutionInvocation(
+            adapter.ResolveVisualMethodId("Tests.Debug.OutputRules.Run"), [new ExecutionArgument("41")]));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause before = await adapter.WaitForPauseAsync(execution.ExecutionId, timeout.Token);
+        CoreClrDebugStackFrame frame = adapter.GetStackTrace(reload.Generation.GenerationId, before.PauseId)[0];
+        Assert.DoesNotContain(adapter.GetLocals(reload.Generation.GenerationId, before.PauseId, frame.FrameId), value => value.Name == "result");
+        adapter.StepOver(reload.Generation.GenerationId, before.PauseId);
+        CoreClrDebugPause after = await adapter.WaitForPauseAsync(execution.ExecutionId, timeout.Token);
+        CoreClrDebugStackFrame assignedFrame = adapter.GetStackTrace(reload.Generation.GenerationId, after.PauseId)[0];
+        Assert.Equal("42", adapter.GetLocals(reload.Generation.GenerationId, after.PauseId, assignedFrame.FrameId).Single(value => value.Name == "result").Display);
+        adapter.Continue(reload.Generation.GenerationId, after.PauseId);
+        Assert.Equal("42", (await adapter.WaitForCompletionAsync(execution.ExecutionId, timeout.Token)).ReturnValue!.Json);
+    }
+
+    [Fact]
     public async Task Breakpoint_ReallySuspendsCoreClrAndExposesStackAndLocalsThenSteps()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);

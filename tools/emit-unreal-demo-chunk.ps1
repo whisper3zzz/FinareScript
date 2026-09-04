@@ -73,7 +73,7 @@ if (!$SkipManagedBuild) {
 }
 
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
-& $dotnetExe run `
+$emissionOutput = & $dotnetExe run `
     --project $cliProject `
     -c Release `
     --no-build `
@@ -84,17 +84,34 @@ New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
     --configuration $Configuration `
     --no-restore `
     --no-build
+$emissionOutput | Write-Output
 if ($LASTEXITCODE -ne 0) {
     throw "UnifiedScript chunk emission failed with exit code $LASTEXITCODE."
 }
 
 $reconciledIdentities = @(
-    Get-ChildItem -LiteralPath $outputDirectory -Filter '*.usids' -File
+    $emissionOutput | Where-Object { [IO.Path]::GetExtension($_) -eq '.usids' } |
+        ForEach-Object { Get-Item -LiteralPath $_ }
 )
-if ($reconciledIdentities.Count -ne 1) {
-    throw "Chunk emission must produce exactly one reconciled Demo identity sidecar."
+$managedDirectory = [IO.Path]::GetFullPath((Split-Path -Parent $managedProject))
+$identityUpdates = @{}
+foreach ($sidecar in $reconciledIdentities) {
+    $logicalSource = [string](Get-Content -LiteralPath $sidecar.FullName -Raw | ConvertFrom-Json).sourcePath
+    $candidates = @(
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $logicalSource)),
+        [IO.Path]::GetFullPath((Join-Path $managedDirectory $logicalSource))
+    ) | Sort-Object -Unique | Where-Object {
+        $_.StartsWith($managedDirectory + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $_ -PathType Leaf)
+    }
+    if (@($candidates).Count -ne 1) {
+        throw "Cannot resolve emitted identity to exactly one Demo source: $logicalSource"
+    }
+    $identityUpdates.Add($sidecar.FullName, ([string]@($candidates)[0] + '.usids'))
 }
-Copy-Item -LiteralPath $reconciledIdentities[0].FullName -Destination $identityPath -Force
+foreach ($sidecarPath in $identityUpdates.Keys) {
+    Copy-Item -LiteralPath $sidecarPath -Destination $identityUpdates[$sidecarPath] -Force
+}
 
 $chunkName = 'UnifiedScript.Unreal.Demo.uschunk'
 $compiledChunk = Join-Path $outputDirectory $chunkName

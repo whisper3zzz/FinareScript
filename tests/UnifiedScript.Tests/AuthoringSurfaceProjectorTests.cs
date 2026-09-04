@@ -225,6 +225,36 @@ public sealed class AuthoringSurfaceProjectorTests
         Assert.Throws<JsonException>(() => AuthoringSurfaceJson.Serialize(invalidEdgeType));
     }
 
+    [Fact]
+    public void NameofMethodReferenceProjectsAValidTypedSurface()
+    {
+        const string source = """
+            using UnifiedScript;
+            [ScriptAsset("Tests/Names")]
+            public class Names
+            {
+                [Visual] public string ReadName() { return nameof(Target); }
+                private void Target() { }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(source, "Names.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(
+            analysis.Hir!, analysis.Semantics!, analysis.DeclarationReferences);
+        AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
+            analysis.ScriptAssets!, graph);
+        AuthoringActionSurface invocation = surface.Assets.Single().Functions.Single().Actions
+            .Single(action => action.GraphKind == "invocation");
+        Assert.All(invocation.Ports.Where(port => port.Direction == GraphPortDirection.Input), port =>
+        {
+            Assert.Null(port.TypeId);
+            Assert.Null(port.TypeDisplayName);
+        });
+        Assert.Equal("string", invocation.Ports.Single(port => port.Direction == GraphPortDirection.Output).TypeDisplayName);
+        Assert.Equal(AuthoringSurfaceJson.Serialize(surface),
+            AuthoringSurfaceJson.Serialize(AuthoringSurfaceJson.Deserialize(AuthoringSurfaceJson.Serialize(surface))));
+    }
+
     private static (CSharpAnalysisResult Analysis, GraphDocument Graph) Analyze()
     {
         CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(

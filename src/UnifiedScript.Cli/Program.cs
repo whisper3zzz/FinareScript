@@ -2485,50 +2485,62 @@ internal static class Program
         }
 
         string fullInputPath = Path.GetFullPath(options.InputPath);
-        string logicalPath = GetLogicalInputPath(fullInputPath);
         string identityPath = options.IdentityPath ?? options.InputPath + ".usids";
         string historyPath = options.HistoryPath ?? options.InputPath + ".ushistory.json";
-        IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
-            ? LoadIdentitySidecar(identityPath)
-            : IdentitySidecarDocument.CreateEmpty(logicalPath);
-        string[] additionalSourcePaths = options.AdditionalSourcePaths
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        string? missingSource = additionalSourcePaths.FirstOrDefault(path => !File.Exists(path));
-        if (missingSource is not null)
+        CSharpCompilationRequest request;
+        Dictionary<string, string> sourceFiles;
+        IReadOnlySet<string>? readOnlySources = null;
+        if (options.ProjectPath is null)
         {
-            Console.Error.WriteLine($"Additional source file does not exist: {missingSource}");
-            return 66;
+            string logicalPath = GetLogicalInputPath(fullInputPath);
+            IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
+                ? LoadIdentitySidecar(identityPath)
+                : IdentitySidecarDocument.CreateEmpty(logicalPath);
+            string[] additionalSourcePaths = options.AdditionalSourcePaths
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string? missingSource = additionalSourcePaths.FirstOrDefault(path => !File.Exists(path));
+            if (missingSource is not null)
+            {
+                Console.Error.WriteLine($"Additional source file does not exist: {missingSource}");
+                return 66;
+            }
+            CSharpSourceDocument[] sources =
+            [
+                new CSharpSourceDocument(logicalPath, File.ReadAllText(fullInputPath), identitySidecar),
+                .. additionalSourcePaths
+                    .Where(path => !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase))
+                    .Select(path => new CSharpSourceDocument(
+                        GetLogicalInputPath(path), File.ReadAllText(path),
+                        IdentitySidecarDocument.CreateEmpty(GetLogicalInputPath(path)))),
+            ];
+            sourceFiles = new Dictionary<string, string>(StringComparer.Ordinal) { [logicalPath] = fullInputPath };
+            foreach (string path in additionalSourcePaths.Where(path =>
+                !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase)))
+                sourceFiles.Add(GetLogicalInputPath(path), path);
+            request = new CSharpCompilationRequest(options.AssemblyName, sources,
+                options.ReferencePaths, LoadEffectCatalog(options.EffectCatalogPath));
         }
-
-        CSharpSourceDocument[] sources =
-        [
-            new CSharpSourceDocument(
-                logicalPath,
-                File.ReadAllText(fullInputPath),
-                identitySidecar),
-            .. additionalSourcePaths
-                .Where(path => !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase))
-                .Select(path => new CSharpSourceDocument(
-                    GetLogicalInputPath(path),
-                    File.ReadAllText(path),
-                    IdentitySidecarDocument.CreateEmpty(GetLogicalInputPath(path)))),
-        ];
-        var sourceFiles = new Dictionary<string, string>(StringComparer.Ordinal)
+        else
         {
-            [logicalPath] = fullInputPath,
-        };
-        foreach (string path in additionalSourcePaths.Where(path =>
-            !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase)))
-        {
-            sourceFiles.Add(GetLogicalInputPath(path), path);
+            try
+            {
+                ProjectAuthoringInput project = ProjectAuthoringInput.Load(
+                    options.ProjectPath, fullInputPath, options.IdentityPath,
+                    new CSharpProjectLoadOptions(options.Configuration, options.TargetFramework,
+                        options.Restore, options.Build), LoadEffectCatalog(options.EffectCatalogPath));
+                request = project.Request;
+                sourceFiles = new Dictionary<string, string>(project.SourceFiles, StringComparer.Ordinal);
+                identityPath = project.IdentityPath;
+                readOnlySources = project.ReadOnlySources;
+            }
+            catch (CSharpProjectLoadException exception)
+            {
+                Console.Error.WriteLine($"error USCS3001: {exception.Message}");
+                return 2;
+            }
         }
-        var request = new CSharpCompilationRequest(
-            options.AssemblyName,
-            sources,
-            options.ReferencePaths,
-            LoadEffectCatalog(options.EffectCatalogPath));
         UnrealApiBrowserDocument? apiBrowser = options.ApiBrowserPath is null
             ? null
             : UnrealApiBrowserJson.Deserialize(File.ReadAllText(options.ApiBrowserPath));
@@ -2546,9 +2558,12 @@ internal static class Program
                     options.ManagedAssemblyOutputPath,
                     options.PortablePdbOutputPath,
                     historyPath,
-                    options.GraphLayoutPath),
+                    options.GraphLayoutPath,
+                    options.CompiledChunkOutputPath),
                 sourceFiles,
-                apiBrowser);
+                apiBrowser,
+                readOnlySources,
+                options.PublishInitial);
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {
@@ -3602,11 +3617,16 @@ internal static class Program
             loaded.Request.IncludeDefaultReferences);
     }
 
-    private static CSharpSourceDocument[] AttachIdentitySidecars(
+    internal static CSharpSourceDocument[] AttachIdentitySidecars(
         IReadOnlyList<CSharpSourceDocument> sources,
         IReadOnlyList<CSharpProjectSource> projectSources,
         IReadOnlyList<string> identityPaths)
     {
+        // Ordinary builds and authoring must consume the same persistent IDs.
+        // Explicit paths still support existing portable/non-adjacent sidecars.
+        identityPaths = identityPaths.Select(Path.GetFullPath)
+            .Concat(projectSources.Select(source => source.Path + ".usids").Where(File.Exists))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var identities = new List<ProjectIdentityInput>(identityPaths.Count);
         var identitySourcePaths = new HashSet<string>(StringComparer.Ordinal);
         foreach (string identityPath in identityPaths)
@@ -5079,6 +5099,14 @@ internal static class Program
         string? historyPath = null;
         string? graphLayoutPath = null;
         string? apiBrowserPath = null;
+        string? projectPath = null;
+        string configuration = "Debug";
+        string? targetFramework = null;
+        string? compiledChunkOutputPath = null;
+        bool hasConfiguration = false;
+        bool restore = true;
+        bool build = true;
+        bool publishInitial = false;
         int port = 4173;
         bool hasPort = false;
         var referencePaths = new List<string>();
@@ -5087,6 +5115,9 @@ internal static class Program
         while (index < args.Count)
         {
             string option = args[index++];
+            if (option == "--no-restore" && restore) { restore = false; continue; }
+            if (option == "--no-build" && build) { build = false; continue; }
+            if (option == "--publish-initial" && !publishInitial) { publishInitial = true; continue; }
             if (index >= args.Count)
             {
                 return false;
@@ -5138,6 +5169,19 @@ internal static class Program
                 case "--api-browser" when apiBrowserPath is null:
                     apiBrowserPath = value;
                     break;
+                case "--project" when projectPath is null:
+                    projectPath = value;
+                    break;
+                case "--configuration" when !hasConfiguration:
+                    configuration = value;
+                    hasConfiguration = true;
+                    break;
+                case "--framework" when targetFramework is null:
+                    targetFramework = value;
+                    break;
+                case "--chunk-out" when compiledChunkOutputPath is null:
+                    compiledChunkOutputPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -5147,6 +5191,10 @@ internal static class Program
         {
             return false;
         }
+        if (projectPath is null && (hasConfiguration || targetFramework is not null || !restore || !build))
+            return false;
+        if (projectPath is not null && (assemblyName is not null || referencePaths.Count != 0 || additionalSourcePaths.Count != 0))
+            return false; // MSBuild, not command-line source guesses, owns the project compilation.
 
         options = new DebugServeOptions(
             inputPath,
@@ -5163,7 +5211,8 @@ internal static class Program
             portablePdbOutputPath,
             historyPath,
             graphLayoutPath,
-            apiBrowserPath);
+            apiBrowserPath,
+            projectPath, configuration, targetFramework, restore, build, compiledChunkOutputPath, publishInitial);
         return true;
     }
 
@@ -6324,7 +6373,7 @@ internal static class Program
         "  unifiedscript apply-declaration-patch <input.cs> --declaration-patch <patch.json> " +
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
-        "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
+        "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--project <project.csproj>] [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
@@ -6363,6 +6412,8 @@ internal static class Program
         "  --asset-out <path>      Transactional Declaration IR output for debug-serve.\n" +
         "  --surface-out <path>    Transactional Authoring Surface output for debug-serve.\n" +
         "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
+        "  --chunk-out <path>      Publish the matching compiled chunk in the authoring transaction.\n" +
+        "  --publish-initial       Publish initial authoring artifacts before accepting requests.\n" +
         "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
         "  --history <path>        Persistent transactional Undo/Redo journal for debug-serve.\n" +
         "  --layout-out <path>     Transactional .usgraph layout synchronized by debug-serve.\n" +
@@ -6435,7 +6486,14 @@ internal static class Program
         string? PortablePdbOutputPath,
         string? HistoryPath,
         string? GraphLayoutPath,
-        string? ApiBrowserPath);
+        string? ApiBrowserPath,
+        string? ProjectPath,
+        string Configuration,
+        string? TargetFramework,
+        bool Restore,
+        bool Build,
+        string? CompiledChunkOutputPath,
+        bool PublishInitial);
 
     private sealed record DebugFrameServeOptions(
         string InputPath,

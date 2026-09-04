@@ -13,7 +13,9 @@
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -2272,6 +2274,36 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FString(TEXT("UnifiedScript|Interop")));
     TestTrue(TEXT("Generated pin default reaches the Palette tooltip"),
         DefaultApiAction.Tooltip.Contains(TEXT("Defaults: Amount=1")));
+
+    // Opt into a freshly emitted project fixture without making the checked-in
+    // single-asset regression depend on a running authoring server.
+    FString ProjectSurfacePath;
+    if (FParse::Value(FCommandLine::Get(), TEXT("UnifiedScriptProjectSurface="), ProjectSurfacePath))
+    {
+        FUnifiedScriptAuthoringSurfaceDocument ProjectDocument;
+        if (!TestTrue(TEXT("Full project Surface passes native schema validation"),
+            FUnifiedScriptAuthoringSurfaceReader::LoadFile(ProjectSurfacePath, ProjectDocument, Error)))
+        {
+            AddError(Error);
+            return false;
+        }
+        const FUnifiedScriptAuthoringAsset* Demo = ProjectDocument.Assets.FindByPredicate(
+            [](const FUnifiedScriptAuthoringAsset& Asset) { return Asset.AssetPath == TEXT("Unreal/AsyncUiDemo"); });
+        if (!TestTrue(TEXT("Project fixture includes the composed Demo and other classes"),
+            Demo && !Demo->Functions.IsEmpty() && ProjectDocument.Assets.Num() > 1)) return false;
+        UUnifiedScriptAsset* Selected = NewObject<UUnifiedScriptAsset>();
+        Selected->AuthoringSurfacePath = ProjectSurfacePath;
+        Selected->DeclarationAssetPath = Demo->AssetPath;
+        TestTrue(TEXT("Opening a Script Asset loads the full project Surface"), Widget->LoadScriptAsset(Selected));
+        TestEqual(TEXT("Opening the Demo selects its behavior, not the first unrelated project class"),
+            Widget->GetActiveFunctionId(), Demo->Functions[0].Id);
+        const FUnifiedScriptAuthoringFunction* Height = Demo->Functions.FindByPredicate(
+            [](const FUnifiedScriptAuthoringFunction& Candidate) { return Candidate.Name == TEXT("PreviewHeight"); });
+        if (!TestNotNull(TEXT("Project fixture exposes the editable preview height"), Height)) return false;
+        TestTrue(TEXT("The actual Demo height function opens as a native Graph"), Widget->SelectFunction(Height->Id));
+        TestTrue(TEXT("The height Graph has visible nodes"), Widget->GetVisibleGraphNodeCount() > 0);
+        AddInfo(TEXT("Full project Demo Surface and native class selection verified."));
+    }
     return true;
 }
 

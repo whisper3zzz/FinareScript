@@ -319,10 +319,10 @@ public:
 
         OpenAuthoringConsoleCommand = IConsoleManager::Get().RegisterConsoleCommand(
             TEXT("UnifiedScript.OpenAuthoring"),
-            TEXT("Open the UnifiedScript Authoring Surface."),
-            FConsoleCommandDelegate::CreateRaw(
+            TEXT("Open the UnifiedScript Authoring Surface, optionally for an exact Script Asset object path."),
+            FConsoleCommandWithArgsDelegate::CreateRaw(
                 this,
-                &FUEUnifiedScriptEditorModule::OpenAuthoringSurfaceCommand),
+                &FUEUnifiedScriptEditorModule::OpenAuthoringAssetCommand),
             ECVF_Default);
 
         OpenProjectSetupConsoleCommand = IConsoleManager::Get().RegisterConsoleCommand(
@@ -922,6 +922,19 @@ private:
     void OpenAuthoringSurfaceCommand()
     {
         OpenAuthoringSurface(nullptr);
+    }
+
+    void OpenAuthoringAssetCommand(const TArray<FString>& Args)
+    {
+        if (Args.IsEmpty()) { OpenAuthoringSurfaceCommand(); return; }
+        UUnifiedScriptAsset* Asset = Args.Num() == 1
+            ? LoadObject<UUnifiedScriptAsset>(nullptr, *Args[0]) : nullptr;
+        if (!Asset)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UnifiedScript.OpenAuthoring expects one valid Script Asset object path."));
+            return;
+        }
+        OpenAuthoringSurface(Asset);
     }
 
     void RequestDailyBuildCommand()

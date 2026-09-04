@@ -455,6 +455,11 @@ public sealed class RoslynSemanticBinder
             ExpressionSyntax syntax = context.SyntaxIndex.Find<ExpressionSyntax>(expression);
             TypeInfo typeInfo = context.SemanticModel.GetTypeInfo(syntax);
             ITypeSymbol? expressionType = typeInfo.ConvertedType ?? typeInfo.Type;
+            // Contextual syntax such as the `nameof` target has an error-type
+            // sentinel even in valid C#. It is not a value with a usable type.
+            // Actual unresolved expressions remain rejected by compiler diagnostics.
+            if (expressionType?.TypeKind == TypeKind.Error)
+                expressionType = null;
             SemanticId? typeId = expressionType is null ? null : GetTypeDescriptor(expressionType).Id;
             SymbolInfo symbolInfo = context.SemanticModel.GetSymbolInfo(syntax);
             ISymbol? referencedSymbol = symbolInfo.Symbol;
