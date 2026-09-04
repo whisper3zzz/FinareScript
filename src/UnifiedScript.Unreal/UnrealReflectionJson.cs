@@ -138,6 +138,7 @@ public static class UnrealReflectionJson
 
             ValidateTypeReference(property.Type, allowVoid: false, $"property '{property.Path}'");
             ValidateMetadata(property.Metadata, $"property '{property.Path}'");
+            UnrealNativeExtensions.ValidateBinding(type, property);
         }
 
         var functionPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -179,6 +180,7 @@ public static class UnrealReflectionJson
                 throw new JsonException(
                     $"Unreal function '{function.Path}' references an absent policy parameter.");
             }
+            UnrealNativeExtensions.ValidateBinding(type, function);
         }
 
         var delegatePaths = new HashSet<string>(StringComparer.Ordinal);

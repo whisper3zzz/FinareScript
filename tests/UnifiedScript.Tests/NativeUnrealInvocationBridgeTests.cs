@@ -93,6 +93,44 @@ public sealed class NativeUnrealInvocationBridgeTests
     }
 
     [Fact]
+    public void NativeOnlyMembersNeverFallBackWhenGeneratedTableIsMissing()
+    {
+        var transport = new MissingGeneratedMemberTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport);
+        bridge.RequireNativeBindings([FixtureTransport.ScriptAssetPath, FixtureTransport.AddPath, FixtureTransport.ReloadPath]);
+        var wrapper = new GeneratedComponent(Handle, bridge);
+        Assert.Throws<NotSupportedException>(() => wrapper.ScriptAssetPath = "/Game/ForbiddenFallback");
+        Assert.Throws<NotSupportedException>(() => wrapper.ScriptAssetPath);
+        Assert.Throws<NotSupportedException>(() => wrapper.Add(20, 22));
+        Assert.Throws<NotSupportedException>(() => wrapper.RequestReload());
+        Assert.Empty(transport.LegacyMemberPaths);
+        Assert.Equal(4, transport.GeneratedCallCount);
+    }
+
+    [Fact]
+    public void NativeOnlyBindingsRejectReflectionOnlyTransports()
+    {
+        var bridge = new NativeUnrealInvocationBridge(new FixtureTransport());
+        Assert.Throws<NotSupportedException>(() => bridge.RequireNativeBindings([FixtureTransport.AddPath]));
+    }
+
+    [Fact]
+    public void GenerationBridgePreservesNativeOnlyPolicyAndRejectsDisposedRegistration()
+    {
+        var transport = new MissingGeneratedMemberTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport);
+        Type generationType = typeof(UnrealObject).Assembly.GetType("UnifiedScript.Unreal.UnrealGenerationInvocationBridge", throwOnError: true)!;
+        object generation = Activator.CreateInstance(generationType, bridge)!;
+        var native = Assert.IsAssignableFrom<IUnrealNativeBindingBridge>(generation);
+        native.RequireNativeBindings([FixtureTransport.AddPath]);
+        var wrapper = new GeneratedComponent(Handle, (IUnrealInvocationBridge)generation);
+        Assert.Throws<NotSupportedException>(() => wrapper.Add(20, 22));
+        Assert.Empty(transport.LegacyMemberPaths);
+        ((IDisposable)generation).Dispose();
+        Assert.Throws<ObjectDisposedException>(() => native.RequireNativeBindings([FixtureTransport.AddPath]));
+    }
+
+    [Fact]
     public void FastErrorsOtherThanMissingMemberDoNotFallBack()
     {
         var transport = new FastFixtureTransport();

@@ -124,6 +124,15 @@ public sealed class UnrealBindingGenerator
         source.AppendLine("        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)");
         source.AppendLine("        : base(handle, bridge)");
         source.AppendLine("    {");
+        string[] nativePaths = type.Properties.Where(static field => field.NativeExtension is not null)
+            .Select(static field => field.Path)
+            .Concat(type.Functions.Where(static method => method.NativeBinding is not null).Select(static method => method.Path))
+            .Order(StringComparer.Ordinal).ToArray();
+        if (nativePaths.Length > 0)
+        {
+            source.Append("        RequireNativeBindings(")
+                .Append(string.Join(", ", nativePaths.Select(Literal))).AppendLine(");");
+        }
         source.AppendLine("    }");
 
         var memberNames = new HashSet<string>(StringComparer.Ordinal);

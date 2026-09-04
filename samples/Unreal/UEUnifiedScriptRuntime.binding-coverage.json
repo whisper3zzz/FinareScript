@@ -7,14 +7,14 @@
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
-    "typeCount": 7,
-    "memberCount": 111,
-    "directThunkCount": 30,
-    "callFrameCount": 78,
+    "typeCount": 8,
+    "memberCount": 117,
+    "directThunkCount": 33,
+    "callFrameCount": 81,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 108,
+    "nativeThunkCount": 114,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -859,6 +859,60 @@
       "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",

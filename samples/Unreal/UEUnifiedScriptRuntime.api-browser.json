@@ -12,14 +12,14 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "2b5270ce4219ecb8411aac90d587aff21db8dae986ece203db18319fcf0dc729"
+    "inputSha256": "39c8ea48bd9b17586c76551528c4393c729ca6bfc091f8ff73795b99c877bda1"
   },
   "summary": {
-    "typeCount": 7,
-    "memberCount": 111,
-    "nodeCount": 122,
-    "directThunkCount": 30,
-    "callFrameCount": 78,
+    "typeCount": 8,
+    "memberCount": 117,
+    "nodeCount": 129,
+    "directThunkCount": 33,
+    "callFrameCount": 81,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
@@ -6162,6 +6162,398 @@
                 "typePath": "/Script/CoreUObject.Vector",
                 "headerPath": "UObject/NoExportTypes.h"
               }
+            }
+          ],
+          "diagnosticCodes": []
+        }
+      ]
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "name": "UnifiedScriptNativeExtensionFixture",
+      "managedTypeName": "UnifiedScriptNativeExtensionFixture",
+      "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+      "members": [
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Accumulate",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+          "memberId": "0x5A9ADB7CAD164FB3",
+          "kind": "function",
+          "title": "Accumulate",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Accumulate(...).",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003Cint32\u003E",
+                "elementType": {
+                  "kind": "int32",
+                  "nativeName": "int32"
+                }
+              }
+            },
+            {
+              "name": "Total",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Total",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Label",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Multiply",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)",
+          "memberId": "0x62AD17A5520DE69C",
+          "kind": "function",
+          "title": "Multiply",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Multiply(...).",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object"
+              }
+            },
+            {
+              "name": "Left",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Right",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Reset",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()",
+          "memberId": "0x5CDDE02FC047FA8F",
+          "kind": "function",
+          "title": "Reset",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Reset(...).",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Scale|8D2759CE2B950ED0",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)",
+          "memberId": "0x8D2759CE2B950ED0",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Scale(...).",
+          "pure": true,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Scale|C80A9EFC81D5E099",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)",
+          "memberId": "0xC80A9EFC81D5E099",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Scale(...).",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.get|UnifiedScriptNativeExtensionFixture|Counter",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+          "memberId": "0x35FB42B6475CFD5F",
+          "kind": "propertyRead",
+          "title": "Counter",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Read UnifiedScriptNativeExtensionFixture.Counter.",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.set|UnifiedScriptNativeExtensionFixture|Counter",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+          "memberId": "0x35FB42B6475CFD5F",
+          "kind": "propertyWrite",
+          "title": "Set Counter",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Write UnifiedScriptNativeExtensionFixture.Counter.",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
             }
           ],
           "diagnosticCodes": []

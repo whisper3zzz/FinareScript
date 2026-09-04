@@ -3194,6 +3194,32 @@
 			]
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+			"name": "UnifiedScriptNativeExtensionFixture",
+			"nativeName": "UUnifiedScriptNativeExtensionFixture",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptNativeExtensionFixture.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Object",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Native Extension Fixture",
+				"tooltip": "Deliberately lacks UPROPERTY/UFUNCTION metadata on every bound member.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
 			"name": "UnifiedScriptObject",
 			"nativeName": "UUnifiedScriptObject",

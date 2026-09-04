@@ -119,6 +119,9 @@ public sealed record UnrealReflectedProperty(
     UnrealPropertyAccess Access)
 {
     public UnrealBlueprintMetadata Metadata { get; init; } = new();
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeExtension { get; init; }
 }
 
 public sealed record UnrealReflectedParameter(
@@ -144,6 +147,9 @@ public sealed record UnrealReflectedFunction(
     UnrealFunctionTraits Traits)
 {
     public UnrealBlueprintMetadata Metadata { get; init; } = new();
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealNativeFunctionBinding? NativeBinding { get; init; }
 }
 
 public sealed record UnrealDelegateTraits(

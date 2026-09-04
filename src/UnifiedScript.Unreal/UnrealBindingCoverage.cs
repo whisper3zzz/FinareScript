@@ -18,7 +18,11 @@ public sealed record UnrealBindingCoverageEntry(
     string Kind,
     UnrealBindingDisposition Disposition,
     IReadOnlyList<string> DiagnosticCodes,
-    string Message);
+    string Message)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeExtension { get; init; }
+}
 
 public sealed record UnrealBindingCoverageSummary(
     int TypeCount,
@@ -111,8 +115,10 @@ public sealed record UnrealBindingCoverageReport(
                     property.Type,
                     function: null,
                     supportsReflectionFallback: type.Kind == UnrealReflectedTypeKind.Class &&
+                        property.NativeExtension is null &&
                         SupportsReflectionType(property.Type, allowVoid: false),
-                    "Safe reflection fallback cannot marshal this property type.",
+                    property.NativeExtension is null ? "Safe reflection fallback cannot marshal this property type."
+                        : "Native-only properties have no reflected fallback.",
                     policy.For(property.Path),
                     managedDiagnostics,
                     nativeDiagnostics);
@@ -132,8 +138,8 @@ public sealed record UnrealBindingCoverageReport(
                     function.Path,
                     function.ReturnType,
                     function,
-                    !hasOutputs && reflectionTypesSupported,
-                    hasOutputs
+                    function.NativeBinding is null && !hasOutputs && reflectionTypesSupported,
+                    function.NativeBinding is not null ? "Native-only functions have no reflected fallback." : hasOutputs
                         ? "Safe reflection fallback cannot preserve output or reference parameters."
                         : "Safe reflection fallback cannot marshal one or more function value types.",
                     policy.For(function.Path),
@@ -164,7 +170,12 @@ public sealed record UnrealBindingCoverageReport(
             }
         }
 
+        Dictionary<string, string?> origins = normalized.Types.SelectMany(static type =>
+            type.Properties.Select(static field => (field.Path, Origin: field.NativeExtension))
+                .Concat(type.Functions.Select(static method => (method.Path, Origin: method.NativeBinding?.Extension))))
+            .ToDictionary(static item => item.Path, static item => item.Origin, StringComparer.Ordinal);
         UnrealBindingCoverageEntry[] ordered = entries
+            .Select(entry => entry with { NativeExtension = origins.GetValueOrDefault(entry.Path) })
             .OrderBy(static item => item.Path, StringComparer.Ordinal)
             .ThenBy(static item => item.Kind, StringComparer.Ordinal)
             .ToArray();

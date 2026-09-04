@@ -558,12 +558,18 @@ def main() -> int:
         / "SUnifiedScriptAuthoringSurface.cpp"
     ).read_text(encoding="utf-8")
     contract_member_names = {
-        member
+        (type_selector["path"], member)
         for type_selector in api_contract["types"]
         for member in type_selector["members"]
     }
     node_member_names = {
-        member["path"].rsplit(":", 1)[1]
+        (
+            node_type["path"],
+            member["path"].rsplit(":", 1)[1]
+            if member_group == "functions"
+            and sum(item["name"] == member["name"] for item in node_type["functions"]) > 1
+            else member["name"],
+        )
         for node_type in api_nodes["types"]
         for member_group in ("properties", "functions", "delegates")
         for member in node_type[member_group]
@@ -4301,6 +4307,7 @@ def main() -> int:
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
@@ -4310,6 +4317,11 @@ def main() -> int:
             "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
         }
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
+        and any(
+            item["path"] == "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+            and item["properties"] == [] and item["functions"] == []
+            for item in unreal_manifest["types"]
+        )
         and all(
             item["access"]["nativeAccess"] == "public"
             for item in unreal_component_manifest["properties"]

@@ -11835,6 +11835,845 @@
       ]
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "name": "UnifiedScriptNativeExtensionFixture",
+      "managedTypeName": "UnifiedScriptNativeExtensionFixture",
+      "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+      "properties": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+          "name": "Counter",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeExtension": "Demo.Native"
+        }
+      ],
+      "functions": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+          "name": "Accumulate",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Values",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003Cint32\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "int32",
+                  "nativeName": "int32",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Total",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "inputOutput",
+              "defaultValue": null
+            },
+            {
+              "name": "Label",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "constReference",
+              "reference",
+              "reference"
+            ]
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)",
+          "name": "Multiply",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Left",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Right",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [
+              "value",
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()",
+          "name": "Reset",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": []
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)",
+          "name": "Scale",
+          "returnType": {
+            "kind": "float64",
+            "nativeName": "double",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)",
+          "name": "Scale",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "value"
+            ]
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Accumulate",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+          "memberId": "0x5A9ADB7CAD164FB3",
+          "kind": "function",
+          "title": "Accumulate",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Accumulate(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003Cint32\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "int32",
+                  "nativeName": "int32",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Total",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Total",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Label",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Multiply",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)",
+          "memberId": "0x62AD17A5520DE69C",
+          "kind": "function",
+          "title": "Multiply",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Multiply(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Left",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Right",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Reset",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()",
+          "memberId": "0x5CDDE02FC047FA8F",
+          "kind": "function",
+          "title": "Reset",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Reset(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Scale|8D2759CE2B950ED0",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)",
+          "memberId": "0x8D2759CE2B950ED0",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Scale(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptNativeExtensionFixture|Scale|C80A9EFC81D5E099",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)",
+          "memberId": "0xC80A9EFC81D5E099",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture",
+          "tooltip": "Call UnifiedScriptNativeExtensionFixture.Scale(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|UnifiedScriptNativeExtensionFixture|Counter",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+          "memberId": "0x35FB42B6475CFD5F",
+          "kind": "propertyRead",
+          "title": "Counter",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Read UnifiedScriptNativeExtensionFixture.Counter.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|UnifiedScriptNativeExtensionFixture|Counter",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter",
+          "memberId": "0x35FB42B6475CFD5F",
+          "kind": "propertyWrite",
+          "title": "Set Counter",
+          "category": "Unreal API|UnifiedScriptNativeExtensionFixture|Properties",
+          "tooltip": "Write UnifiedScriptNativeExtensionFixture.Counter.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptNativeExtensionFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
       "name": "UnifiedScriptWorldLibrary",
       "managedTypeName": "UnifiedScriptWorldLibrary",

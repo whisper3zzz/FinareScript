@@ -333,6 +333,12 @@ public sealed class UnrealTypeAttribute(string path) : Attribute
         : path;
 }
 
+/// <summary>Registers native-only paths once per wrapper, preventing reflected fallback.</summary>
+public interface IUnrealNativeBindingBridge
+{
+    void RequireNativeBindings(IReadOnlyList<string> memberPaths);
+}
+
 public abstract class UnrealObject
 {
     protected UnrealObject(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
@@ -351,6 +357,15 @@ public abstract class UnrealObject
     public UnrealObjectHandle Handle { get; }
 
     protected IUnrealInvocationBridge Bridge { get; }
+
+    protected void RequireNativeBindings(params string[] memberPaths)
+    {
+        if (Bridge is not IUnrealNativeBindingBridge nativeBridge)
+        {
+            throw new NotSupportedException("Native extension bindings require a generated native invocation bridge; reflection is not a substitute.");
+        }
+        nativeBridge.RequireNativeBindings(memberPaths);
+    }
 
     protected T ReadProperty<T>(string propertyPath) =>
         Bridge.ReadProperty<T>(Handle, propertyPath);

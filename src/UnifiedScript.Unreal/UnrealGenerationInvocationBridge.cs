@@ -7,6 +7,7 @@ namespace UnifiedScript.Unreal;
 /// </summary>
 internal sealed class UnrealGenerationInvocationBridge :
     IUnrealInvocationBridge,
+    IUnrealNativeBindingBridge,
     IUnrealFastInvocationBridge,
     IUnrealTypedInvocationBridge,
     IUnrealOutputInvocationBridge,
@@ -25,6 +26,13 @@ internal sealed class UnrealGenerationInvocationBridge :
     public bool SupportsFastInvocation =>
         !_disposed && _inner is IUnrealFastInvocationBridge bridge &&
         bridge.SupportsFastInvocation;
+
+    public void RequireNativeBindings(IReadOnlyList<string> memberPaths)
+    {
+        if (LiveInner is not IUnrealNativeBindingBridge bridge)
+            throw new NotSupportedException("The World bridge does not support native extension bindings.");
+        bridge.RequireNativeBindings(memberPaths);
+    }
 
     public bool SupportsTypedInvocation =>
         !_disposed && _inner is IUnrealTypedInvocationBridge bridge &&

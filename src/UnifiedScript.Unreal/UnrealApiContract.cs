@@ -30,6 +30,9 @@ public sealed record UnrealApiContract(
     public UnrealApiPolicy Policy { get; init; } = UnrealApiPolicy.AllowSelected;
 
     public UnrealBindingCoverageBaseline? CoverageBaseline { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealNativeExtensionManifest? NativeExtensions { get; init; }
 }
 
 public sealed record UnrealApiContractProjection(
@@ -115,6 +118,8 @@ public static class UnrealApiContractJson
             Types = normalizedTypes.OrderBy(static type => type.Path, StringComparer.Ordinal).ToArray(),
             Policy = UnrealApiPolicyEvaluator.Normalize(contract.Policy),
             CoverageBaseline = NormalizeBaseline(contract.CoverageBaseline),
+            NativeExtensions = contract.NativeExtensions is null
+                ? null : UnrealNativeExtensions.Normalize(contract.NativeExtensions),
         };
     }
 
@@ -203,6 +208,10 @@ public static class UnrealApiContractProjector
             UnrealReflectionJson.NormalizeAndValidate(reflection);
         UnrealApiContract normalizedContract = UnrealApiContractJson.Deserialize(
             UnrealApiContractJson.Serialize(contract, writeIndented: false));
+        if (normalizedContract.NativeExtensions is not null)
+        {
+            normalizedReflection = UnrealNativeExtensions.Apply(normalizedReflection, normalizedContract.NativeExtensions);
+        }
         IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes = normalizedReflection.Types
             .ToDictionary(static type => type.Path, StringComparer.Ordinal);
         var selectedTypes = new List<UnrealReflectedType>(normalizedContract.Types.Count);
@@ -258,12 +267,39 @@ public static class UnrealApiContractProjector
             selectedReflection,
             evaluation,
             native: true);
+        ValidateNativeExtensionRoutes(selectedReflection, nativeReflection, evaluation);
         return new UnrealApiContractProjection(normalizedContract, managedReflection)
         {
             SelectedReflection = selectedReflection,
             NativeReflection = nativeReflection,
             PolicyEvaluation = evaluation,
         };
+    }
+
+    private static void ValidateNativeExtensionRoutes(
+        UnrealReflectionManifest selected,
+        UnrealReflectionManifest native,
+        UnrealApiPolicyEvaluation evaluation)
+    {
+        HashSet<string> paths = selected.Types.SelectMany(static type =>
+            type.Properties.Where(static field => field.NativeExtension is not null).Select(static field => field.Path)
+                .Concat(type.Functions.Where(static method => method.NativeBinding is not null).Select(static method => method.Path)))
+            .Where(path => evaluation.For(path).Action == UnrealApiPolicyAction.Allow)
+            .ToHashSet(StringComparer.Ordinal);
+        if (paths.Count == 0) return;
+        foreach (string path in paths)
+        {
+            if (evaluation.For(path).Route is UnrealBindingRoute.ReflectionFallback or UnrealBindingRoute.DataPlaneOperation)
+            {
+                throw new JsonException($"USUE5405: Native-only member '{path}' requires a generated native route, not reflection or a data-plane substitution.");
+            }
+        }
+        UnrealNativeThunkDiagnostic? unsupported = new UnrealNativeThunkGenerator().Generate(native).Diagnostics
+            .FirstOrDefault(diagnostic => paths.Contains(diagnostic.MemberPath));
+        if (unsupported is not null)
+        {
+            throw new JsonException($"USUE5405: Native-only member '{unsupported.MemberPath}' cannot be generated: {unsupported.Message}");
+        }
     }
 
     private static string GetSelectedMember(
@@ -433,6 +469,9 @@ public sealed record UnrealApiNodeDescriptor(
     bool Pure,
     IReadOnlyList<UnrealApiNodePin> Pins)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeExtension { get; init; }
+
     public bool Deprecated { get; init; }
 
     public string? DeprecationMessage { get; init; }
@@ -655,7 +694,11 @@ public static class UnrealApiNodeCatalogGenerator
                 type.Properties,
                 type.Functions,
                 type.Delegates,
-                nodes.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray());
+                nodes.Select(node => node with
+                {
+                    NativeExtension = type.Properties.FirstOrDefault(field => field.Path == node.MemberPath)?.NativeExtension
+                        ?? type.Functions.FirstOrDefault(method => method.Path == node.MemberPath)?.NativeBinding?.Extension,
+                }).OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray());
         }).ToArray();
         return new UnrealApiNodeCatalog(
             UnrealApiNodeCatalog.CurrentSchemaVersion,

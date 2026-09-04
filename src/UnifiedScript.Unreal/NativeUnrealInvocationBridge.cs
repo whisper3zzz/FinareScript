@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -323,6 +324,7 @@ public sealed class UnrealInvocationException : Exception
 /// </summary>
 public sealed class NativeUnrealInvocationBridge
     : IUnrealInvocationBridge,
+      IUnrealNativeBindingBridge,
       IUnrealFastInvocationBridge,
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
@@ -334,6 +336,7 @@ public sealed class NativeUnrealInvocationBridge
 {
     private const int CallFrameArenaByteCapacity = 4096;
     private readonly IUnrealNativeInvocationTransport _transport;
+    private readonly ConcurrentDictionary<string, byte> _nativeOnlyPaths = new(StringComparer.Ordinal);
     private long _callFrameInvocationCount;
     private long _legacyInvocationCount;
     private long _directThunkProfilerCount;
@@ -355,6 +358,28 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public UnrealWorldDataPlane DataPlane { get; }
+
+    public void RequireNativeBindings(IReadOnlyList<string> memberPaths)
+    {
+        ArgumentNullException.ThrowIfNull(memberPaths);
+        if (!SupportsFastInvocation)
+        {
+            throw new NotSupportedException("Native extensions require generated native binding support in the installed transport.");
+        }
+        foreach (string path in memberPaths)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        }
+        foreach (string path in memberPaths) _nativeOnlyPaths.TryAdd(path, 0);
+    }
+
+    private void RequireReflectionAllowed(string memberPath)
+    {
+        if (_nativeOnlyPaths.ContainsKey(memberPath))
+        {
+            throw new NotSupportedException($"Native-only member '{memberPath}' has no available generated route. Rebuild/deploy its native extension; reflection fallback is forbidden.");
+        }
+    }
 
     IUnrealAsyncServiceTransport? IUnrealAsyncServiceProvider.AsyncTransport =>
         _transport as IUnrealAsyncServiceTransport;
@@ -428,6 +453,7 @@ public sealed class NativeUnrealInvocationBridge
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
     {
         ValidateRequest(target, propertyPath);
+        RequireReflectionAllowed(propertyPath);
         long profilerStart = BeginProfilerSample();
         try
         {
@@ -450,6 +476,7 @@ public sealed class NativeUnrealInvocationBridge
         T value)
     {
         ValidateRequest(target, propertyPath);
+        RequireReflectionAllowed(propertyPath);
         long profilerStart = BeginProfilerSample();
         try
         {
@@ -473,6 +500,7 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<object?> arguments)
     {
         ValidateRequest(target, functionPath);
+        RequireReflectionAllowed(functionPath);
         long profilerStart = BeginProfilerSample();
         try
         {
@@ -498,6 +526,7 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<object?> arguments)
     {
         ValidateRequest(target, functionPath);
+        RequireReflectionAllowed(functionPath);
         long profilerStart = BeginProfilerSample();
         try
         {

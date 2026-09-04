@@ -1,11 +1,12 @@
 # Unreal API Contract
 
 The project API contract is the product boundary between broad Unreal
-reflection and the API actually shipped to a UnifiedScript game module. One
+reflection, explicit native extensions, and the API actually shipped to a UnifiedScript game module. One
 strict allowlist drives all generated consumers:
 
 ```text
 selected UClass reflection
+        + optional native-extension declarations
         + project API contract
         -> typed C# wrappers
         -> direct native C++ thunks
@@ -16,6 +17,70 @@ selected UClass reflection
 
 This prevents managed code, the native dispatcher, and the visual palette from
 silently exposing different Unreal members.
+
+## Native extension declarations
+
+An optional `nativeExtensions` object in the API contract admits public C++
+members that are not marked `UFUNCTION` or `UPROPERTY`. It uses its own schema,
+`unifiedscript.unreal-native-extensions/v0.1`, while contracts without this
+object retain their existing canonical representation. The extension is applied
+before member selection, dependency closure, source-driven expansion and all
+generators. The normal `ue-bindings --contract` and project setup commands need
+no separate native-extension step.
+
+The checked-in
+[Demo contract](../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json)
+contains the complete example. Each extension has a `name` and `types`. A type
+declares the exact exported UObject `path`, `nativeName`, `headerPath`,
+`properties`, and `functions`. Properties reuse the typed property declaration;
+each function contains a typed `declaration`, a `const` method flag, and an
+ordered `parameters` list of C++ passing modes:
+
+| Passing mode | C++ signature | Managed direction |
+| --- | --- | --- |
+| `value` | `T` | input |
+| `constReference` | `T const&` | input |
+| `reference` | `T&` | `ref` or `out`, as declared |
+
+Every native function path includes its signature, including `()` for zero
+parameters. For example, `Scale(int32)` and `Scale(double)` are distinct members;
+the sample's combined container/ref/out path ends in
+`Accumulate(TArray<int32>const&,int32&,FString&)`. Spaces are omitted in the path,
+not in generated C++. A single function can be selected by name; overloaded
+functions require the exact signature selector.
+
+Generated C++ uses typed member/function pointers to select the exact overload,
+including const qualification, and compile-time assertions for field types.
+Declarations that disagree with the real header cannot silently convert to a
+different member signature. Value and const-reference overloads with the same
+managed input types are rejected because C# cannot distinguish those overloads.
+Extensions cannot replace existing reflected members or claim that an ordinary
+field is Editor-visible. Private/protected members, invalid directions, unknown
+owners/headers and unsupported native codecs fail before artifact publication.
+
+Generated wrappers register native-only paths with the World bridge through its
+generation-scoped view. Missing native tables or unavailable codecs fail with an
+actionable error; they cannot fall back to reflection. Typed fixed calls and
+the existing ABI v3 call-frame/ref/out routes are reused, with no JSON on the
+invocation path. Node and coverage descriptors retain `nativeExtension` origin.
+
+The
+[managed example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeExtensionDemoScript.cs)
+calls unreflected fields, const integer/double overloads, a static method, a
+zero-argument void method, and a container/ref/out method. CMD tests
+`UnifiedScript.Unreal.NativeExtensions.GeneratedDispatch` and
+`UnifiedScript.Unreal.NativeExtensions.ManagedRoundTrip` exercise the real
+generated native table, CoreCLR calls, generation replacement and World teardown.
+
+Current boundary: owners are existing native UObject classes. Ordinary C++
+constructors, opaque owned/borrowed handles, non-UObject inheritance, custom
+converters and native callbacks are not implemented by this declaration version.
+The normal value codecs and their bounds still apply; this is not arbitrary
+pointer/reference interop. A non-UPROPERTY field does not acquire GC rooting,
+serialization, replication or a reflected Blueprint property merely because it
+has a generated accessor. Native code remains responsible for its storage and
+referenced object ownership. Packaged execution of this new sample is not yet
+acceptance evidence.
 
 ## Contract schema
 

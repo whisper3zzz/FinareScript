@@ -590,6 +590,55 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
         => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xB9016520F3956867UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap", values);
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Native Extension Fixture", Tooltip = "Deliberately lacks UPROPERTY/UFUNCTION metadata on every bound member.")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture")]
+public sealed partial class UnifiedScriptNativeExtensionFixture : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptNativeExtensionFixture(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+        RequireNativeBindings("/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)", "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)");
+    }
+
+    public int Counter
+    {
+        get => ReadProperty<int>(0x35FB42B6475CFD5FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter");
+        set => WriteProperty(0x35FB42B6475CFD5FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Counter", value);
+    }
+
+    public bool Accumulate(global::System.Collections.Generic.IReadOnlyList<int> values, ref int total, out string label)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x5A9ADB7CAD164FB3UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+            typeof(bool),
+            [
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<int>), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, values),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, total),
+                new(typeof(string), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        total = (int)__unifiedScriptResult.Outputs[0]!;
+        label = (string)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public int Multiply(int left, int right)
+        => Invoke<int, int, int>(0x62AD17A5520DE69CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Multiply(int32,int32)", left, right);
+
+    public void Reset()
+        => Invoke(0x5CDDE02FC047FA8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Reset()");
+
+    public double Scale(double value)
+        => Invoke<double, double>(0xC80A9EFC81D5E099UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(double)", value);
+
+    public int Scale(int value)
+        => Invoke<int, int>(0x8D2759CE2B950ED0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture:Scale(int32)", value);
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script World Library", Tooltip = "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.")]
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary")]

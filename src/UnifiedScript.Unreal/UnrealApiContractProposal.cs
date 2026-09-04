@@ -199,9 +199,12 @@ public sealed class UnrealApiContractProposalGenerator
             StringComparer.Ordinal);
         var decisions = new List<UnrealApiContractProposalDecision>(
             normalizedRequests.Requests.Count);
+        UnrealReflectionManifest available = normalizedContract.NativeExtensions is null
+            ? normalizedReflection
+            : UnrealNativeExtensions.Apply(normalizedReflection, normalizedContract.NativeExtensions);
         foreach (UnrealPuertsContractRequest request in normalizedRequests.Requests)
         {
-            decisions.Add(ResolveRequest(request, normalizedReflection.Types, selected));
+            decisions.Add(ResolveRequest(request, available.Types, selected));
         }
 
         UnrealApiContract proposedContract = normalizedContract with
