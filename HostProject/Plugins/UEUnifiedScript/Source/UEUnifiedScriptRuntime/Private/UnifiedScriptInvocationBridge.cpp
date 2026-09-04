@@ -1004,15 +1004,25 @@ bool FUnifiedScriptInvocationBridge::Invoke(
     if (RpcBinding != nullptr)
     {
         AActor* Owner = NetworkOwner(Object);
+        const UActorComponent* Component = Cast<UActorComponent>(Object);
         const bool bClient = Owner != nullptr && Owner->GetNetMode() == NM_Client;
-        const bool bAllowed = Owner != nullptr && Owner->GetIsReplicated() &&
+        // bReplicates itself is not replicated. An Actor enabled at runtime on
+        // the server can retain a non-replicating archetype on its clients;
+        // UE's received local role identifies that replica, not the CDO flag.
+        const bool bNetworkedActor = Owner != nullptr && (bClient
+            ? Owner->GetLocalRole() == ROLE_AutonomousProxy || Owner->GetLocalRole() == ROLE_SimulatedProxy
+            : Owner->GetIsReplicated());
+        const bool bAllowed = bNetworkedActor &&
+            (Component == nullptr || Component->GetIsReplicated()) &&
             (!bClient || (RpcBinding->RpcTarget == EUnifiedScriptRpcTarget::Server && Owner->HasLocalNetOwner())) &&
             (bClient || RpcBinding->RpcTarget != EUnifiedScriptRpcTarget::Client ||
                 Owner->GetNetMode() == NM_Standalone || Owner->GetNetConnection() != nullptr || Owner->HasLocalNetOwner());
         if (!bAllowed || !Function->HasAnyFunctionFlags(FUNC_Net))
         {
             Fail(OutResult, EUnifiedScriptInvocationError::FunctionNotCallable,
-                FString::Printf(TEXT("RPC '%s' has no valid replicated owner/connection or authority for this direction."), *FunctionPath));
+                FString::Printf(TEXT("RPC '%s' has no valid replicated owner/connection or authority for this direction (networkedActor=%d, componentReplicated=%d, localOwner=%d, netFunction=%d)."),
+                    *FunctionPath, bNetworkedActor, Component == nullptr || Component->GetIsReplicated(),
+                    Owner != nullptr && Owner->HasLocalNetOwner(), Function->HasAnyFunctionFlags(FUNC_Net)));
             return false;
         }
     }

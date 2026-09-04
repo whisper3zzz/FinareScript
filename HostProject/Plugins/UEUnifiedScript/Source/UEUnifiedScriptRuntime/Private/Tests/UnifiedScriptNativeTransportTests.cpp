@@ -400,6 +400,58 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
             Registry.RegisterObject(InteropFixture, HandleResult);
         TestTrue(TEXT("Common-value fixture registration succeeds"), HandleResult.IsSuccess());
 
+        const FTCHARToUTF8 FloatPath(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue"));
+        const FTCHARToUTF8 DoublePath(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue"));
+        FUnifiedScriptNativeValueV1 NativeFloat;
+        NativeFloat.Kind = static_cast<uint8>(EUnifiedScriptValueKind::Float32);
+        NativeFloat.Int32Value = std::bit_cast<int32>(-0.0f);
+        Captured = {};
+        Transport->WriteProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(FloatPath.Get()), FloatPath.Length(), &NativeFloat, &Capture, &Captured);
+        TestTrue(TEXT("Legacy float property write succeeds"), Captured.bSuccess);
+        TestEqual(TEXT("Legacy float write preserves signed zero"), std::bit_cast<int32>(InteropFixture->FloatValue), NativeFloat.Int32Value);
+        Captured = {};
+        Transport->ReadProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(FloatPath.Get()), FloatPath.Length(), &Capture, &Captured);
+        TestTrue(TEXT("Legacy float property read succeeds"), Captured.bSuccess);
+        TestEqual(TEXT("Legacy float result kind"), Captured.ValueKind, EUnifiedScriptValueKind::Float32);
+        TestEqual(TEXT("Legacy float result preserves signed zero"), Captured.Int32Value, NativeFloat.Int32Value);
+        const FTCHARToUTF8 FloatCall(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1"));
+        NativeFloat.Int32Value = std::bit_cast<int32>(2.25f);
+        Captured = {};
+        Transport->Invoke(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(FloatCall.Get()), FloatCall.Length(), &NativeFloat, 1, &Capture, &Captured);
+        TestTrue(TEXT("Legacy function accepts float input"), Captured.bSuccess);
+        TestEqual(TEXT("Legacy function returns float result"), std::bit_cast<float>(Captured.Int32Value), 3.75f);
+
+        uint8 DoublePayload[8];
+        constexpr double DoubleValue = -12345.12500000001;
+        WriteUInt64LittleEndian(MakeArrayView(DoublePayload), std::bit_cast<uint64>(DoubleValue));
+        FUnifiedScriptNativeValueV1 NativeDouble;
+        NativeDouble.Kind = static_cast<uint8>(EUnifiedScriptValueKind::Float64);
+        NativeDouble.StringData = DoublePayload;
+        NativeDouble.StringLength = sizeof(DoublePayload);
+        Captured = {};
+        Transport->WriteProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(DoublePath.Get()), DoublePath.Length(), &NativeDouble, &Capture, &Captured);
+        TestTrue(TEXT("Legacy double property write succeeds"), Captured.bSuccess);
+        TestEqual(TEXT("Legacy double retains binary64 precision"), InteropFixture->DoubleValue, DoubleValue);
+        Captured = {};
+        Transport->ReadProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(DoublePath.Get()), DoublePath.Length(), &Capture, &Captured);
+        TestTrue(TEXT("Legacy double property read succeeds"), Captured.bSuccess);
+        TestEqual(TEXT("Legacy double result kind"), Captured.ValueKind, EUnifiedScriptValueKind::Float64);
+        if (TestEqual(TEXT("Legacy double result owns eight payload bytes"), Captured.ValuePayload.Num(), 8))
+            TestEqual(TEXT("Legacy double round-trip"), ReadDoubleLittleEndian(Captured.ValuePayload), DoubleValue);
+        for (int32 InvalidLength : {0, 7, 9})
+        {
+            NativeDouble.StringLength = InvalidLength;
+            Captured = {};
+            Transport->WriteProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(DoublePath.Get()), DoublePath.Length(), &NativeDouble, &Capture, &Captured);
+            TestFalse(TEXT("Malformed double payload is rejected"), Captured.bSuccess);
+            TestEqual(TEXT("Malformed payload leaves UObject state intact"), InteropFixture->DoubleValue, DoubleValue);
+        }
+        NativeDouble.StringLength = sizeof(DoublePayload);
+        NativeDouble.StringData = nullptr;
+        Captured = {};
+        Transport->WriteProperty(Context, CommonValueHandle.Value, reinterpret_cast<const uint8*>(DoublePath.Get()), DoublePath.Length(), &NativeDouble, &Capture, &Captured);
+        TestFalse(TEXT("Null double payload is rejected"), Captured.bSuccess);
+
         const FTCHARToUTF8 VectorPath(
             TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue"));
         Captured = {};

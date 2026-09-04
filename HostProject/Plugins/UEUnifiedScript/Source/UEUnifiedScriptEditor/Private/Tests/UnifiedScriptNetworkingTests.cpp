@@ -33,7 +33,6 @@
 
 namespace UE::UnifiedScript::Networking::Tests
 {
-constexpr const TCHAR* PackageName = TEXT("/Game/UnifiedScriptTests/BP_NetworkingDemo");
 constexpr const TCHAR* MapName = TEXT("/Game/UnifiedScriptTests/NetworkingMap");
 
 struct FScenario
@@ -45,8 +44,14 @@ struct FScenario
     bool bOwnsMap = false;
     bool bStartedPIE = false;
     bool bPreviousPrecompiledPlay = false;
+    const bool bComponent;
+    const FString ClassName;
+    const FString PackageName;
 
-    explicit FScenario(FAutomationTestBase& InTest) : Test(InTest) {}
+    explicit FScenario(FAutomationTestBase& InTest, bool bInComponent = false)
+        : Test(InTest), bComponent(bInComponent),
+          ClassName(bInComponent ? TEXT("BP_NetworkingComponentDemo") : TEXT("BP_NetworkingDemo")),
+          PackageName(TEXT("/Game/UnifiedScriptTests/") + ClassName) {}
     bool ValidateInitialNotifyLifetime();
     ~FScenario()
     {
@@ -66,7 +71,7 @@ struct FScenario
         Blueprint.Reset();
         if (bOwnsPackage)
         {
-            if (UPackage* Package = FindPackage(nullptr, PackageName))
+            if (UPackage* Package = FindPackage(nullptr, *PackageName))
             {
                 Package->SetDirtyFlag(false);
                 TArray<UPackage*> Packages{Package};
@@ -75,6 +80,23 @@ struct FScenario
             IFileManager::Get().Delete(*FPackageName::LongPackageNameToFilename(
                 PackageName, FPackageName::GetAssetPackageExtension()), false, true);
         }
+    }
+
+    UUnifiedScriptComponent* Component(UObject* Object) const
+    {
+        return bComponent ? Cast<UUnifiedScriptComponent>(Object) :
+            CastChecked<AUnifiedScriptActor>(Object)->GetUnifiedScriptComponent();
+    }
+
+    AActor* Owner(UObject* Object) const
+    {
+        return bComponent ? Component(Object)->GetOwner() : CastChecked<AActor>(Object);
+    }
+
+    FString TextValue(UObject* Object, const TCHAR* Name) const
+    {
+        const FStrProperty* Property = FindFProperty<FStrProperty>(Object->GetClass(), Name);
+        return Property ? Property->GetPropertyValue_InContainer(Object) : TEXT("<missing>");
     }
 
     UFunction* Function(const TCHAR* ManagedName) const
@@ -103,26 +125,26 @@ struct FScenario
     bool Build()
     {
         if (!Test.TestFalse(TEXT("Fixture must not overwrite an existing asset"),
-            FindObject<UUnifiedScriptBlueprint>(nullptr, TEXT("/Game/UnifiedScriptTests/BP_NetworkingDemo.BP_NetworkingDemo")) != nullptr ||
-            FindObject<UUnifiedScriptAsset>(nullptr, TEXT("/Game/UnifiedScriptTests/BP_NetworkingDemo.NetworkingScript")) != nullptr ||
+            FindObject<UUnifiedScriptBlueprint>(nullptr, *(PackageName + TEXT(".") + ClassName)) != nullptr ||
+            FindObject<UUnifiedScriptAsset>(nullptr, *(PackageName + TEXT(".NetworkingScript"))) != nullptr ||
             FPackageName::DoesPackageExist(PackageName))) return false;
         FString Declaration;
         const FString DeclarationPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() /
             TEXT("../artifacts/ue/compiled-chunks/release/UnifiedScript.Unreal.Demo.asset.json"));
         if (!Test.TestTrue(TEXT("Load declarations emitted from the actual C# sample"),
             FFileHelper::LoadFileToString(Declaration, *DeclarationPath))) return false;
-        UPackage* Package = CreatePackage(PackageName);
+        UPackage* Package = CreatePackage(*PackageName);
         bOwnsPackage = true;
         Blueprint.Reset(Cast<UUnifiedScriptBlueprint>(FKismetEditorUtilities::CreateBlueprint(
-            AUnifiedScriptActor::StaticClass(), Package, TEXT("BP_NetworkingDemo"), BPTYPE_Normal,
+            bComponent ? UUnifiedScriptComponent::StaticClass() : AUnifiedScriptActor::StaticClass(), Package, FName(*ClassName), BPTYPE_Normal,
             UUnifiedScriptBlueprint::StaticClass(), UUnifiedScriptBlueprintGeneratedClass::StaticClass())));
         if (!Test.TestNotNull(TEXT("Create generated networking Actor"), Blueprint.Get())) return false;
         UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(Package, TEXT("NetworkingScript"), RF_Public | RF_Standalone);
-        FGuid::ParseExact(TEXT("762043152e714d68b05a31426591ee01"), EGuidFormats::Digits, Asset->ScriptClassId);
-        Asset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+        FGuid::ParseExact(bComponent ? TEXT("762043152e714d68b05a31426591ee02") : TEXT("762043152e714d68b05a31426591ee01"), EGuidFormats::Digits, Asset->ScriptClassId);
+        Asset->ScriptClassKind = bComponent ? EUnifiedScriptClassKind::ActorComponent : EUnifiedScriptClassKind::Actor;
         Asset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
-        Asset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.NetworkingDemoScript");
-        Asset->DeclarationAssetPath = TEXT("Unreal/NetworkingDemo");
+        Asset->ScriptTypeName = bComponent ? TEXT("UnifiedScript.Unreal.Demo.NetworkingComponentDemoScript") : TEXT("UnifiedScript.Unreal.Demo.NetworkingDemoScript");
+        Asset->DeclarationAssetPath = bComponent ? TEXT("Unreal/NetworkingComponentDemo") : TEXT("Unreal/NetworkingDemo");
         Asset->DeclarationPath = DeclarationPath;
         Asset->CompiledChunkPath = TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
         Asset->ScriptAssemblyPath = TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
@@ -136,11 +158,11 @@ struct FScenario
             return false;
         }
         auto* Class = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
-        auto* CDO = Class->GetDefaultObject<AUnifiedScriptActor>();
-        Test.TestTrue(TEXT("Network declarations enable Actor replication"), CDO->GetIsReplicated());
-        CDO->bAlwaysRelevant = true;
-        CDO->GetUnifiedScriptComponent()->ScriptAsset = Asset;
-        CDO->GetUnifiedScriptComponent()->bTickAutomatically = false;
+        UObject* CDO = Class->GetDefaultObject();
+        Test.TestTrue(TEXT("Network declarations enable replication"), bComponent ? Component(CDO)->GetIsReplicated() : Owner(CDO)->GetIsReplicated());
+        if (!bComponent) Owner(CDO)->bAlwaysRelevant = true;
+        Component(CDO)->ScriptAsset = Asset;
+        Component(CDO)->bTickAutomatically = false;
         for (const TCHAR* Name : {TEXT("ServerAdd"), TEXT("ClientAccepted"), TEXT("AllObserved")})
         {
             UFunction* Method = Function(Name);
@@ -181,10 +203,10 @@ struct FScenario
         Package->SetDirtyFlag(false);
         TArray<UPackage*> Packages{Package};
         if (!Test.TestTrue(TEXT("Unload generated networking class before runtime"), UPackageTools::UnloadPackages(Packages))) return false;
-        Blueprint.Reset(LoadObject<UUnifiedScriptBlueprint>(nullptr,
-            TEXT("/Game/UnifiedScriptTests/BP_NetworkingDemo.BP_NetworkingDemo")));
+        Blueprint.Reset(LoadObject<UUnifiedScriptBlueprint>(nullptr, *(PackageName + TEXT(".") + ClassName)));
         if (!Test.TestNotNull(TEXT("Reload persisted networking class"), Blueprint.Get())) return false;
-        Test.TestTrue(TEXT("Replication default survives reload"), Blueprint->GeneratedClass->GetDefaultObject<AUnifiedScriptActor>()->GetIsReplicated());
+        CDO = Blueprint->GeneratedClass->GetDefaultObject();
+        Test.TestTrue(TEXT("Replication default survives reload"), bComponent ? Component(CDO)->GetIsReplicated() : Owner(CDO)->GetIsReplicated());
         Test.TestEqual(TEXT("RepNotify binding survives reload"),
             FindFProperty<FIntProperty>(Blueprint->GeneratedClass, TEXT("Score"))->RepNotifyFunc, Function(TEXT("ScoreChanged"))->GetFName());
         return !Test.HasAnyErrors();
@@ -198,8 +220,9 @@ class FConnectedScenario final : public IAutomationLatentCommand
     TSharedPtr<FScenario> Scenario;
     double Started = FPlatformTime::Seconds();
     int32 Phase = 0;
-    TWeakObjectPtr<AUnifiedScriptActor> ServerActor;
-    TArray<TWeakObjectPtr<AUnifiedScriptActor>> Clients;
+    TWeakObjectPtr<AActor> ServerActor;
+    TWeakObjectPtr<UObject> ServerScript;
+    TArray<TWeakObjectPtr<UObject>> Clients;
 public:
     explicit FConnectedScenario(TSharedPtr<FScenario> InScenario) : Scenario(MoveTemp(InScenario)) {}
     virtual bool Update() override
@@ -229,25 +252,46 @@ public:
             FActorSpawnParameters Params;
             Params.Owner = Server->GetNetDriver()->ClientConnections[0]->PlayerController;
             Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-            ServerActor = Server->SpawnActor<AUnifiedScriptActor>(S.Blueprint->GeneratedClass, Params);
-            if (!S.Test.TestNotNull(TEXT("Spawn server-generated managed Actor"), ServerActor.Get()) ||
-                !S.Test.TestTrue(*ServerActor->GetUnifiedScriptComponent()->LastScriptError,
-                    ServerActor->GetUnifiedScriptComponent()->bScriptRunning)) { Scenario.Reset(); return true; }
-            S.Call(ServerActor.Get(), TEXT("InitializeScore"), 10);
+            ServerActor = Server->SpawnActor<AActor>(S.bComponent ? AActor::StaticClass() : S.Blueprint->GeneratedClass.Get(), Params);
+            if (!S.Test.TestNotNull(TEXT("Spawn server Actor"), ServerActor.Get())) { Scenario.Reset(); return true; }
+            if (S.bComponent)
+            {
+                ServerActor->SetReplicates(true);
+                ServerActor->bAlwaysRelevant = true;
+                auto* Component = NewObject<UUnifiedScriptComponent>(ServerActor.Get(), S.Blueprint->GeneratedClass, TEXT("NetworkBehavior"));
+                ServerActor->AddInstanceComponent(Component);
+                Component->RegisterComponent();
+                ServerScript = Component;
+            }
+            else ServerScript = ServerActor.Get();
+            if (!S.Test.TestTrue(*S.Component(ServerScript.Get())->LastScriptError,
+                S.Component(ServerScript.Get())->bScriptRunning)) { Scenario.Reset(); return true; }
+            S.Call(ServerScript.Get(), TEXT("InitializeScore"), 10);
             ServerActor->ForceNetUpdate();
             Phase = 1;
             S.Test.AddInfo(TEXT("Server spawned generated Actor; waiting for replication on two clients."));
         }
         Clients.Reset();
         for (UWorld* World : ClientWorlds)
-            for (TActorIterator<AUnifiedScriptActor> It(World, S.Blueprint->GeneratedClass.Get()); It; ++It) Clients.Add(*It);
+        {
+            if (S.bComponent)
+            {
+                for (TActorIterator<AActor> It(World); It; ++It)
+                {
+                    TInlineComponentArray<UUnifiedScriptComponent*> Components(*It);
+                    for (auto* Component : Components)
+                        if (Component->GetClass() == S.Blueprint->GeneratedClass) Clients.Add(Component);
+                }
+            }
+            else for (TActorIterator<AUnifiedScriptActor> It(World, S.Blueprint->GeneratedClass.Get()); It; ++It) Clients.Add(*It);
+        }
         if (Clients.Num() != 2) return false;
-        AUnifiedScriptActor* Owner = nullptr;
-        AUnifiedScriptActor* Observer = nullptr;
+        UObject* Owner = nullptr;
+        UObject* Observer = nullptr;
         for (auto Client : Clients)
         {
-            if (!Client->GetUnifiedScriptComponent()->bScriptRunning) return false;
-            if (Client->HasLocalNetOwner()) Owner = Client.Get(); else Observer = Client.Get();
+            if (!S.Component(Client.Get())->bScriptRunning) return false;
+            if (S.Owner(Client.Get())->HasLocalNetOwner()) Owner = Client.Get(); else Observer = Client.Get();
         }
         if (!Owner || !Observer) return false;
         if (Phase == 1)
@@ -259,6 +303,19 @@ public:
             {
                 S.Test.TestEqual(TEXT("Initial RepNotify runs once"), S.Value(Client.Get(), TEXT("Notifications")), 1);
                 S.Test.TestEqual(TEXT("Initial RepNotify receives previous value"), S.Value(Client.Get(), TEXT("PreviousScore")), 0);
+                if (S.bComponent)
+                {
+                    S.Test.TestEqual(TEXT("Initial string value"), S.TextValue(Client.Get(), TEXT("Label")), FString(TEXT("Ready")));
+                    S.Test.TestEqual(TEXT("Initial string RepNotify owns the previous value"), S.TextValue(Client.Get(), TEXT("PreviousLabel")), FString());
+                    S.Test.TestEqual(TEXT("Initial string notification runs once"), S.Value(Client.Get(), TEXT("LabelNotifications")), 1);
+                    S.Test.TestEqual(TEXT("InitialOnly sends the initial component value"), S.Value(Client.Get(), TEXT("InitialScore")), 10);
+                    S.Test.TestEqual(TEXT("InitialOrOwner initially reaches both clients"), S.Value(Client.Get(), TEXT("InitialOrOwnerScore")), 10);
+                }
+            }
+            if (S.bComponent)
+            {
+                S.Test.TestEqual(TEXT("SkipOwner hides initial component state from owner"), S.Value(Owner, TEXT("ObserverScore")), 0);
+                S.Test.TestEqual(TEXT("SkipOwner delivers initial component state to observer"), S.Value(Observer, TEXT("ObserverScore")), 10);
             }
             // A normal local method tries to edit replicated state: client flush
             // must restore authority's values rather than contaminate the mirror.
@@ -282,6 +339,20 @@ public:
                     Bridge.WriteProperty(Handle, ClassPath + TEXT(":Score"), Args[0], Result));
                 S.Test.TestEqual(TEXT("Replicated write rejection is explicit"), Result.Error, EUnifiedScriptInvocationError::PropertyNotWritable);
             }
+            if (S.bComponent)
+            {
+                FUnifiedScriptObjectRegistry Registry(Owner->GetWorld());
+                FUnifiedScriptInvocationBridge Bridge(Registry);
+                FUnifiedScriptObjectHandleResult HandleResult;
+                const auto Handle = Registry.RegisterObject(Owner, HandleResult);
+                FUnifiedScriptInvocationResult Result;
+                FUnifiedScriptValue Return;
+                S.Component(Owner)->SetIsReplicated(false);
+                S.Test.TestFalse(TEXT("A non-replicating component cannot send even with an owned replicated Actor"),
+                    Bridge.Invoke(Handle, S.Blueprint->GeneratedClass->GetPathName() + TEXT(":ServerPing"), {}, Return, Result));
+                S.Test.TestEqual(TEXT("Non-replicating component rejection is explicit"), Result.Error, EUnifiedScriptInvocationError::FunctionNotCallable);
+                S.Component(Owner)->SetIsReplicated(true);
+            }
             S.Call(Owner, TEXT("RequestAdd"), 7);
             Phase = 2;
             S.Test.AddInfo(TEXT("Owning client sent Server RPC through C# SendRpc."));
@@ -289,10 +360,10 @@ public:
         if (Phase == 2 || Phase == 3)
         {
             const int32 Expected = Phase == 2 ? 17 : 20;
-            if (S.Value(ServerActor.Get(), TEXT("Score")) != Expected || S.Value(Owner, TEXT("Score")) != Expected ||
+            if (S.Value(ServerScript.Get(), TEXT("Score")) != Expected || S.Value(Owner, TEXT("Score")) != Expected ||
                 S.Value(Observer, TEXT("Score")) != Expected || S.Value(Owner, TEXT("AcknowledgedScore")) != Expected ||
                 S.Value(Owner, TEXT("BroadcastScore")) != Expected || S.Value(Observer, TEXT("BroadcastScore")) != Expected ||
-                S.Value(ServerActor.Get(), TEXT("BroadcastScore")) != Expected ||
+                S.Value(ServerScript.Get(), TEXT("BroadcastScore")) != Expected ||
                 S.Value(Owner, TEXT("OwnerSecret")) != Expected * 10) return false;
             S.Test.TestEqual(TEXT("Client RPC reaches only owner"), S.Value(Observer, TEXT("AcknowledgedScore")), 0);
             S.Test.TestEqual(TEXT("Replication retains owner-only audience"), S.Value(Observer, TEXT("OwnerSecret")), 0);
@@ -301,14 +372,44 @@ public:
                 S.Test.TestEqual(TEXT("RepNotify counts real changes"), S.Value(Client.Get(), TEXT("Notifications")), Phase);
                 S.Test.TestEqual(TEXT("RepNotify receives preceding replicated value"), S.Value(Client.Get(), TEXT("PreviousScore")), Phase == 2 ? 10 : 17);
             }
+            if (S.bComponent)
+            {
+                const FString Label = Phase == 2 ? TEXT("First") : TEXT("Second");
+                for (auto Client : Clients)
+                {
+                    S.Test.TestEqual(TEXT("InitialOnly withholds later component changes"), S.Value(Client.Get(), TEXT("InitialScore")), 10);
+                    S.Test.TestEqual(TEXT("Zero-input RPC updates replicated component state"), S.Value(Client.Get(), TEXT("Pings")), Phase - 1);
+                    S.Test.TestEqual(TEXT("Replicated string reaches both clients"), S.TextValue(Client.Get(), TEXT("Label")), Label);
+                    S.Test.TestEqual(TEXT("String RepNotify preserves previous data"), S.TextValue(Client.Get(), TEXT("PreviousLabel")), FString(Phase == 2 ? TEXT("Ready") : TEXT("First")));
+                    S.Test.TestEqual(TEXT("String notifications include reload"), S.Value(Client.Get(), TEXT("LabelNotifications")), Phase);
+                    S.Test.TestEqual(TEXT("Two-input multicast carries float payload"),
+                        FindFProperty<FFloatProperty>(Client->GetClass(), TEXT("BroadcastGain"))->GetPropertyValue_InContainer(Client.Get()), 1.5f);
+                }
+                S.Test.TestEqual(TEXT("InitialOrOwner keeps updating owner"), S.Value(Owner, TEXT("InitialOrOwnerScore")), Expected);
+                S.Test.TestEqual(TEXT("InitialOrOwner preserves observer's initial value"), S.Value(Observer, TEXT("InitialOrOwnerScore")), 10);
+                S.Test.TestEqual(TEXT("SkipOwner keeps the owning mirror unchanged"), S.Value(Owner, TEXT("ObserverScore")), 0);
+                S.Test.TestEqual(TEXT("SkipOwner keeps updating observer"), S.Value(Observer, TEXT("ObserverScore")), Expected);
+                S.Test.TestEqual(TEXT("Authority still changes its InitialOnly value"), S.Value(ServerScript.Get(), TEXT("InitialScore")), Expected);
+                S.Test.TestEqual(TEXT("Three-input client RPC carries string"), S.TextValue(Owner, TEXT("AcknowledgedLabel")), Label);
+                S.Test.TestEqual(TEXT("Object RPC resolves to the owning client's Actor, not a server handle"),
+                    FindFProperty<FObjectPropertyBase>(Owner->GetClass(), TEXT("AcknowledgedActor"))->GetObjectPropertyValue_InContainer(Owner), static_cast<UObject*>(S.Owner(Owner)));
+                S.Test.TestEqual(TEXT("Four-input server RPC carries float"),
+                    FindFProperty<FFloatProperty>(ServerScript->GetClass(), TEXT("Gain"))->GetPropertyValue_InContainer(ServerScript.Get()), 1.5f);
+                S.Test.TestTrue(TEXT("Four-input server RPC carries bool"),
+                    FindFProperty<FBoolProperty>(ServerScript->GetClass(), TEXT("Enabled"))->GetPropertyValue_InContainer(ServerScript.Get()));
+                S.Test.TestEqual(TEXT("Four-input server RPC carries Vector"),
+                    *FindFProperty<FStructProperty>(ServerScript->GetClass(), TEXT("Aim"))->ContainerPtrToValuePtr<FVector>(ServerScript.Get()), FVector(1, 2, 3));
+            }
             if (Phase == 2)
             {
-                S.Test.TestTrue(TEXT("Reload owning client's managed generation"), Owner->ReloadManagedBehavior());
+                S.Test.TestTrue(TEXT("Reload owning client's managed generation"), S.Component(Owner)->ReloadScript());
                 S.Call(Owner, TEXT("RequestAdd"), 3);
                 Phase = 3;
                 return false;
             }
-            if (!S.Test.HasAnyErrors())
+            if (!S.Test.HasAnyErrors() && S.bComponent)
+                S.Test.AddInfo(TEXT("PASS: dynamic ActorComponent replication, all five exposed conditions, string RepNotify, 0/2/3/4-input RPC with int/float/bool/Vector/string/object payloads, ownership and reload."));
+            else if (!S.Test.HasAnyErrors())
                 S.Test.AddInfo(TEXT("PASS: two connected clients, replicated/owner-only state, RepNotify old values, Server/Client/Multicast RPC and reload."));
             Scenario.Reset();
             return true;
@@ -322,18 +423,22 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptConnectedNetworkingTest,
     "UnifiedScript.Unreal.Networking.ConnectedScriptClass",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnifiedScriptConnectedNetworkingTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptConnectedComponentNetworkingTest,
+    "UnifiedScript.Unreal.Networking.ConnectedComponent",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+static bool RunNetworkingScenario(FAutomationTestBase& Test, bool bComponent)
 {
     using namespace UE::UnifiedScript::Networking::Tests;
-    if (!TestNotNull(TEXT("CMD editor engine available"), GEditor) ||
-        !TestNull(TEXT("Networking test must not interrupt an existing PIE session"), GEditor->PlayWorld)) return false;
-    auto Scenario = MakeShared<FScenario>(*this);
+    if (!Test.TestNotNull(TEXT("CMD editor engine available"), GEditor) ||
+        !Test.TestNull(TEXT("Networking test must not interrupt an existing PIE session"), GEditor->PlayWorld)) return false;
+    auto Scenario = MakeShared<FScenario>(Test, bComponent);
     if (!Scenario->Build()) return false;
-    if (!Scenario->ValidateInitialNotifyLifetime()) return false;
-    if (!TestFalse(TEXT("Fixture must not overwrite an existing map"), FPackageName::DoesPackageExist(MapName))) return false;
+    if (!bComponent && !Scenario->ValidateInitialNotifyLifetime()) return false;
+    if (!Test.TestFalse(TEXT("Fixture must not overwrite an existing map"), FPackageName::DoesPackageExist(MapName))) return false;
     UWorld* Map = FAutomationEditorCommonUtils::CreateNewMap();
     Scenario->bOwnsMap = true;
-    if (!TestTrue(TEXT("Save a real map for replicated level identity"), UEditorLoadingAndSavingUtils::SaveMap(Map, MapName))) return false;
+    if (!Test.TestTrue(TEXT("Save a real map for replicated level identity"), UEditorLoadingAndSavingUtils::SaveMap(Map, MapName))) return false;
     auto* Settings = NewObject<ULevelEditorPlaySettings>();
     Settings->SetPlayNetMode(EPlayNetMode::PIE_Client);
     Settings->SetPlayNumberOfClients(2);
@@ -352,6 +457,16 @@ bool FUnifiedScriptConnectedNetworkingTest::RunTest(const FString& Parameters)
     Scenario->bStartedPIE = true;
     ADD_LATENT_AUTOMATION_COMMAND(FConnectedScenario(Scenario));
     return true;
+}
+
+bool FUnifiedScriptConnectedNetworkingTest::RunTest(const FString& Parameters)
+{
+    return RunNetworkingScenario(*this, false);
+}
+
+bool FUnifiedScriptConnectedComponentNetworkingTest::RunTest(const FString& Parameters)
+{
+    return RunNetworkingScenario(*this, true);
 }
 
 bool UE::UnifiedScript::Networking::Tests::FScenario::ValidateInitialNotifyLifetime()

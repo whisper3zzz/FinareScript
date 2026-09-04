@@ -144,4 +144,89 @@ public sealed class UnrealScriptNetworkingTests
             Score += (int)arguments[0]!;
         }
     }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void ComponentRpcUsesHostAndAuthorityUsesOwnerWithTypedPayloads(bool authority, bool delegates)
+    {
+        var host = UnrealObjectHandle.Create(1, 1);
+        var actor = UnrealObjectHandle.Create(2, 1);
+        var bridge = new ComponentBridge(host, actor, authority);
+        var script = new ComponentProbe();
+        IUnrealManagedScript lifecycle = script;
+        lifecycle.OnStart(new(bridge, host, actor, 1, 1));
+        Assert.Equal(authority, script.HasAuthority);
+        lifecycle.OnTick(0.01f);
+        Assert.Equal(authority ? 11 : 10, bridge.Score);
+        script.RequestAll(delegates);
+        Assert.Equal(5, bridge.Calls.Count);
+        Assert.Equal(Enumerable.Range(0, 5), bridge.Calls.Select(c => c.Arguments.Count));
+        Assert.Equal(new object?[] { 7, 1.5f, true, new UnrealVector(1, 2, 3) }, bridge.Calls[4].Arguments);
+        Assert.Equal(new object?[] { 7, "payload", actor }, bridge.Calls[3].Arguments);
+        lifecycle.OnStop();
+        Assert.Throws<InvalidOperationException>(() => script.RequestAll(delegates));
+    }
+
+    [UnrealScriptClass(UnrealScriptClassKind.ActorComponent, GeneratedClassPath = "/Game/Tests/BP_NetworkComponent.BP_NetworkComponent_C")]
+    private sealed class ComponentProbe : UnrealActorComponentScript
+    {
+        [Expose(Replicated = true)] public int Score { get; set; }
+        protected override void OnTick(float deltaSeconds) => Score++;
+        [UnrealRpc(UnrealRpcTarget.Server)] public void Zero() { }
+        [UnrealRpc(UnrealRpcTarget.Server)] public void One(int a) { }
+        [UnrealRpc(UnrealRpcTarget.Server)] public void Two(int a, float b) { }
+        [UnrealRpc(UnrealRpcTarget.Server)] public void Three(int a, string b, UnrealObjectHandle c) { }
+        [UnrealRpc(UnrealRpcTarget.Server)] public void Four(int a, float b, bool c, UnrealVector d) { }
+        public void RequestAll(bool delegates)
+        {
+            if (delegates)
+            {
+                SendRpc(Zero);
+                SendRpc(One, 7);
+                SendRpc(Two, 7, 1.5f);
+                SendRpc(Three, 7, "payload", TargetHandle);
+                SendRpc(Four, 7, 1.5f, true, new UnrealVector(1, 2, 3));
+            }
+            else
+            {
+                SendRpc(nameof(Zero));
+                SendRpc(nameof(One), 7);
+                SendRpc(nameof(Two), 7, 1.5f);
+                SendRpc(nameof(Three), 7, "payload", TargetHandle);
+                SendRpc(nameof(Four), 7, 1.5f, true, new UnrealVector(1, 2, 3));
+            }
+        }
+    }
+
+    private sealed class ComponentBridge(UnrealObjectHandle host, UnrealObjectHandle actor, bool authority) : IUnrealInvocationBridge
+    {
+        public int Score = 10;
+        public List<(string Path, IReadOnlyList<object?> Arguments)> Calls = [];
+        public T ReadProperty<T>(UnrealObjectHandle target, string path)
+        {
+            Assert.Equal(host, target);
+            return (T)(object)Score;
+        }
+        public void WriteProperty<T>(UnrealObjectHandle target, string path, T value)
+        {
+            Assert.Equal(host, target);
+            Assert.True(authority);
+            Score = (int)(object)value!;
+        }
+        public T Invoke<T>(UnrealObjectHandle target, string path, IReadOnlyList<object?> arguments)
+        {
+            Assert.Equal(actor, target);
+            Assert.Equal("/Script/Engine.Actor:HasAuthority", path);
+            return (T)(object)authority;
+        }
+        public void Invoke(UnrealObjectHandle target, string path, IReadOnlyList<object?> arguments)
+        {
+            Assert.Equal(host, target);
+            Assert.StartsWith("/Game/Tests/BP_NetworkComponent.BP_NetworkComponent_C:", path);
+            Calls.Add((path, arguments));
+        }
+    }
 }

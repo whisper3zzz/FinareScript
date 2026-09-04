@@ -17,7 +17,9 @@
 /**
  * Stable, standard-layout value passed into the version-one native ABI.
  * StringData is a borrowed UTF-8 slice for text kinds and a compact,
- * kind-specific little-endian payload for object handles and FVector values.
+ * kind-specific little-endian payload for object handles, binary64 and FVector.
+ * Float32 uses the IEEE-754 bit pattern in Int32Value; existing kinds/layouts
+ * are unchanged. Matching SDK/native versions are required for added kinds.
  */
 struct FUnifiedScriptNativeValueV1
 {

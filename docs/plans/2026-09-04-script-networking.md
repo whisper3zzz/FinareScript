@@ -72,8 +72,33 @@ Queued parameters belong to a `UFunction`, not a `UScriptStruct`: reference
 collection must traverse the function properties directly. The GC regression
 test exercises that storage before managed activation.
 
-Next: verify ActorComponent replication/RPC and remaining common payload and
-condition shapes. Push-model dirty notifications are implemented but need a
-push-enabled connected run. Travel and cooked networking remain unproven. RPC
-payloads are currently 0-4 common input values; reject containers, Soft References,
-complex structures, return/ref/out and conflicting bindings before publication.
+### ActorComponent and mixed-payload checkpoint
+
+The public `NetworkingComponentDemoScript` and shared connected fixture now
+materialize, save/reload and dynamically attach a replicated component to an
+ordinary Actor. One server/two clients verify all five exposed lifetime conditions,
+int/string previous-value notifications, 0/2/3/4-input RPC, int/float/bool/Vector/
+string/object payloads, ownership rejection and client reload. The Actor fixture
+continues to cover one-input RPC and initial-notification GC behavior.
+
+Two reusable runtime gaps were exposed and repaired:
+
+- Path-based state reads and RPC sends still use the v1 value transport. Its
+  float/double codecs were missing despite those values working through ABI v3.
+  Both native and managed codecs now preserve binary32/binary64 values without
+  changing the frozen layout; malformed double payloads fail before writes.
+- `AActor.bReplicates` is not replicated. A runtime-enabled Actor can have a
+  false archetype flag on clients; use UE's received replica role there while
+  enforcing the server flag, direction/connection ownership and component flag.
+
+UE build and chunk emission pass. The 42 affected managed cases pass in
+`artifacts/m13-5-network/managed/component-transport-contracts.trx`. Native ABI
+and both connected scenarios pass in `components-verified.log` in that directory.
+Earlier full-suite evidence predates these changes.
+
+Next: close common path-value gaps (other integer widths, enums, Rotator and
+Transform) and align advertised fallback coverage with the real transport. The
+RPC declaration whitelist is currently broader than the send codec. Push-model
+dirty notifications need a push-enabled run; travel and cooked networking remain
+unproven. Containers, Soft References, complex structures, return/ref/out and
+conflicting RPC bindings remain rejected before publication.

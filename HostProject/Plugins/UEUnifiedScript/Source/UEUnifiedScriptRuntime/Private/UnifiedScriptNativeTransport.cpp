@@ -441,7 +441,13 @@ void Complete(
         ? reinterpret_cast<const uint8*>(StringUtf8.Get())
         : nullptr;
     int32 ValueLength = bHasString ? StringUtf8.Length() : 0;
-    if (Value.Kind == EUnifiedScriptValueKind::Object ||
+    if (Value.Kind == EUnifiedScriptValueKind::Float64)
+    {
+        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(Value.Float64Value));
+        ValueData = BinaryPayload;
+        ValueLength = sizeof(double);
+    }
+    else if (Value.Kind == EUnifiedScriptValueKind::Object ||
         Value.Kind == EUnifiedScriptValueKind::Class)
     {
         WriteUInt64LittleEndian(BinaryPayload, Value.ObjectHandleValue.Value);
@@ -467,7 +473,7 @@ void Complete(
         Result.IsSuccess() ? 1 : 0,
         static_cast<uint8>(Value.Kind),
         Value.BooleanValue ? 1 : 0,
-        Value.Int32Value,
+        Value.Kind == EUnifiedScriptValueKind::Float32 ? std::bit_cast<int32>(Value.Float32Value) : Value.Int32Value,
         ValueData,
         ValueLength,
         static_cast<uint8>(Result.Error),
@@ -558,6 +564,18 @@ bool DecodeValue(
         return true;
     case EUnifiedScriptValueKind::Int32:
         OutValue = FUnifiedScriptValue::FromInt32(NativeValue.Int32Value);
+        return true;
+    case EUnifiedScriptValueKind::Float32:
+        OutValue = FUnifiedScriptValue::FromFloat32(std::bit_cast<float>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::Float64:
+        if (NativeValue.StringData == nullptr || NativeValue.StringLength != sizeof(double))
+        {
+            CompleteFailure(Callback, UserData, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("The UnifiedScript native binary64 payload must contain exactly eight bytes."));
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromFloat64(std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData)));
         return true;
     case EUnifiedScriptValueKind::String:
     {

@@ -302,8 +302,11 @@ minimum per-route counts and a maximum rejected count; falling below that
 baseline fails generation with stable `USUE51xx` diagnostics.
 `--fail-on-rejected` exits with code 65, so projects can make incomplete API
 coverage a build gate. Runtime member-ID
-misses retry the exact ABI v1 reflected path for scalar, object/class, enum,
-FVector, FRotator, and FTransform members. The report rejects missing direct
+misses select the exact ABI v1 reflected path. Its runtime value codec is narrower
+than the generator's fallback classification: bool/int32, float/double,
+string/name/text, object/class handles and FVector are implemented. Do not infer
+legacy support for other numeric widths, enums, Rotator or Transform from their
+working generated ABI v3 routes. The report rejects missing direct
 thunks for containers or `out`/`ref` functions because the legacy value contract
 cannot preserve those shapes.
 
@@ -313,10 +316,14 @@ it from drifting. UE Automation executes generated int64, enum, FVector, and
 FTransform property/function thunks against that fixture. ABI v1/v2 remain
 available for existing hosts. Without changing the frozen v1 table or value
 struct layout, the borrowed `StringData`/`StringLength` slice now carries
-Object/Class handles as one 8-byte little-endian unsigned integer and FVector as
-three little-endian IEEE-754 binary64 components. The callback owns neither
-slice and must copy it synchronously. Other compound/container shapes remain on
-ABI v3/v4.
+Object/Class handles as one 8-byte little-endian unsigned integer, Float64 as
+one little-endian IEEE-754 binary64 value, and FVector as three binary64
+components. Float32 carries its IEEE-754 bits in `Int32Value`, not a numeric
+integer conversion. Float64 decoding requires exactly eight non-null payload
+bytes and rejects malformed writes before changing UObject state. The callback
+owns neither slice and must copy it synchronously. Update managed and native SDK
+parts together for newly supported kinds; old hosts do not gain these codecs
+automatically. Other compound/container shapes remain on ABI v3/v4.
 
 ABI v3 is frozen as an independent caller-owned synchronous call-frame contract
 in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,

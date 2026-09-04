@@ -1822,6 +1822,10 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 UnrealInvocationValue.FromBoolean(booleanValue != 0),
             UnrealInvocationValueKind.Int32 =>
                 UnrealInvocationValue.FromInt32(int32Value),
+            UnrealInvocationValueKind.Float32 =>
+                UnrealInvocationValue.FromFloat32(BitConverter.Int32BitsToSingle(int32Value)),
+            UnrealInvocationValueKind.Float64 =>
+                UnrealInvocationValue.FromFloat64(BitConverter.Int64BitsToDouble(unchecked((long)ReadUInt64Payload(stringData, stringLength)))),
             UnrealInvocationValueKind.String =>
                 UnrealInvocationValue.FromString(ReadUtf8(stringData, stringLength)),
             UnrealInvocationValueKind.Name =>
@@ -2115,7 +2119,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             {
                 Kind = (byte)value.Kind,
                 BooleanValue = value.BooleanValue ? (byte)1 : (byte)0,
-                Int32Value = value.Int32Value,
+                Int32Value = value.Kind == UnrealInvocationValueKind.Float32
+                    ? BitConverter.SingleToInt32Bits((float)value.FloatingPointValue)
+                    : value.Int32Value,
             };
             if (value.Kind is UnrealInvocationValueKind.String or
                 UnrealInvocationValueKind.Name or UnrealInvocationValueKind.Text)
@@ -2123,6 +2129,14 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 _string = new Utf8Buffer(value.StringValue ?? string.Empty);
                 nativeValue.StringData = _string.Pointer;
                 nativeValue.StringLength = _string.Length;
+            }
+            else if (value.Kind == UnrealInvocationValueKind.Float64)
+            {
+                byte[] payload = new byte[sizeof(double)];
+                WriteDoubleLittleEndian(payload, value.FloatingPointValue);
+                _payload = new NativeByteBuffer(payload);
+                nativeValue.StringData = _payload.Pointer;
+                nativeValue.StringLength = _payload.Length;
             }
             else if (value.Kind is UnrealInvocationValueKind.Object or
                 UnrealInvocationValueKind.Class)

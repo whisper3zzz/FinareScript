@@ -19,6 +19,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
     private const string ObjectPath = TypePath + ":ObjectValue";
     private const string ClassPath = TypePath + ":ClassValue";
     private const string VectorPath = TypePath + ":VectorValue";
+    private const string FloatPath = TypePath + ":FloatValue";
+    private const string DoublePath = TypePath + ":DoubleValue";
 
     private readonly UnrealNativeReadPropertyV1 _read;
     private readonly UnrealNativeWritePropertyV1 _write;
@@ -33,6 +35,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
     private UnrealObjectHandle _objectValue = UnrealObjectHandle.Create(7, 11);
     private UnrealObjectHandle _classValue = UnrealObjectHandle.Create(13, 17);
     private UnrealVector _vectorValue = new(1.25, -2.5, 4096.75);
+    private float _floatValue = 1.25f;
+    private double _doubleValue = 2.5;
+    private int _doublePayloadLength = sizeof(double);
     private int _retainedContexts;
     private int _fastCalls;
     private int _callFrameCalls;
@@ -125,6 +130,35 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
         Assert.Equal(nextObject, _objectValue);
         Assert.Equal(nextClass, _classValue);
         Assert.Equal(nextVector, _vectorValue);
+    }
+
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(-0.0)]
+    [InlineData(-12345.125)]
+    [InlineData(double.Epsilon)]
+    public void LegacyFloatPropertyTransportPreservesBits(double value)
+    {
+        using var transport = new InProcessUnrealNativeInvocationTransport(new nint(0x1234), _tablePointer);
+        var bridge = new NativeUnrealInvocationBridge(transport);
+        var target = UnrealObjectHandle.Create(4, 9);
+        Assert.Equal(_floatValue, bridge.ReadProperty<float>(target, FloatPath));
+        Assert.Equal(_doubleValue, bridge.ReadProperty<double>(target, DoublePath));
+        bridge.WriteProperty(target, FloatPath, (float)value);
+        bridge.WriteProperty(target, DoublePath, value);
+        Assert.Equal(BitConverter.SingleToInt32Bits((float)value), BitConverter.SingleToInt32Bits(_floatValue));
+        Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(_doubleValue));
+        Assert.Equal(BitConverter.SingleToInt32Bits((float)value), BitConverter.SingleToInt32Bits(bridge.ReadProperty<float>(target, FloatPath)));
+        Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(bridge.ReadProperty<double>(target, DoublePath)));
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(7)] [InlineData(9)]
+    public void LegacyDoubleRejectsMalformedNativeResponse(int length)
+    {
+        _doublePayloadLength = length;
+        using var transport = new InProcessUnrealNativeInvocationTransport(new nint(0x1234), _tablePointer);
+        Assert.Throws<InvalidOperationException>(() => transport.ReadProperty(UnrealObjectHandle.Create(4, 9), DoublePath));
     }
 
     [Fact]
@@ -564,6 +598,20 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
         nint userData)
     {
         string memberPath = ReadUtf8(path, pathLength);
+        if (memberPath == FloatPath)
+        {
+            InvokeCallback(callback, userData, true, UnrealInvocationValueKind.Float32,
+                int32Value: BitConverter.SingleToInt32Bits(_floatValue));
+            return;
+        }
+        if (memberPath == DoublePath)
+        {
+            var payload = new byte[Math.Max(sizeof(double), _doublePayloadLength)];
+            WriteDoubleLittleEndian(payload, _doubleValue);
+            InvokeCallback(callback, userData, true, UnrealInvocationValueKind.Float64,
+                valuePayload: payload[.._doublePayloadLength]);
+            return;
+        }
         if (memberPath == ScriptAssetPath)
         {
             InvokeCallback(
@@ -630,6 +678,21 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
             return;
         }
         string memberPath = ReadUtf8(path, pathLength);
+        if (memberPath == FloatPath && value.Kind == (byte)UnrealInvocationValueKind.Float32)
+        {
+            _floatValue = BitConverter.Int32BitsToSingle(value.Int32Value);
+            InvokeCallback(callback, userData, true);
+            return;
+        }
+        if (memberPath == DoublePath && value.Kind == (byte)UnrealInvocationValueKind.Float64)
+        {
+            Assert.Equal(sizeof(double), value.StringLength);
+            byte[] payload = new byte[sizeof(double)];
+            Marshal.Copy(value.StringData, payload, 0, payload.Length);
+            _doubleValue = ReadDoubleLittleEndian(payload);
+            InvokeCallback(callback, userData, true);
+            return;
+        }
         if (memberPath == ObjectPath &&
             value.Kind == (byte)UnrealInvocationValueKind.Object)
         {

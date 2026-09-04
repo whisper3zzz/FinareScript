@@ -398,10 +398,13 @@ Verify timeout, manual cancellation, reload, deletion, travel, and PIE stop.
 
 ## Replicated state and RPC
 
-Use a generated Actor Script Class for the currently verified network example.
-Its owning Actor must be replicated and have the intended client ownership;
+Use a generated Actor or ActorComponent Script Class for the network examples.
+The Actor must be replicated and have the intended client ownership;
 materializing replicated state or RPC declarations enables replication on the
-generated default object. This does not assign a player owner automatically.
+generated default object. A generated component must itself replicate, and its
+Actor must separately enable replication. This does not assign a player owner
+automatically. Runtime-enabled Actors are supported: a client's received UE role
+identifies its replica even when the Actor archetype's `bReplicates` is false.
 
 ```csharp
 [Expose(Replicated = true)]
@@ -457,13 +460,31 @@ declarations, materializes the class, reloads its saved package and uses a serve
 plus two connected clients under CMD/NullRHI. Ownership rejection and repeated replication are checked; role
 flags or manual state copies are not the network evidence.
 
-Current RPC payloads are 0-4 input values using reviewed scalars, strings/names/text,
-enums, object/class handles and Vector/Rotator/Transform. Return/ref/out parameters,
+The [component example](../samples/Unreal/UnifiedScript.Unreal.Demo/NetworkingComponentDemoScript.cs)
+uses a dynamically created, registered component on an ordinary replicated Actor.
+`UnifiedScript.Unreal.Networking.ConnectedComponent` runs it through the same
+saved-class/server/two-client workflow. `HostHandle` identifies the component;
+`TargetHandle` and `HasAuthority` refer to its owning Actor. RPC object parameters
+are resolved into each receiving World's object handles, not sent as raw managed
+handle numbers. Disabling component replication explicitly rejects sends.
+
+Set `Expose.ReplicationCondition` to `None`, `InitialOnly`, `OwnerOnly`, `SkipOwner`
+or `InitialOrOwner`. The component example verifies the initial and later
+audiences for all five, plus string previous-value notifications and client
+reload. Its RPCs exercise zero, two, three and four inputs, including float,
+bool, Vector, string and Actor references; the Actor example exercises one input.
+
+RPC declarations currently accept 0-4 common inputs, but declaration acceptance
+is broader than the path transport used by `SendRpc`. That transport implements
+bool/int32, float/double, string/name/text, object/class handles and Vector;
+the other integer widths, enums and Rotator/Transform remain missing there even
+though generated ABI v3 calls support them. Float/double path property access is
+also implemented, including signed zero and binary64 precision. Return/ref/out parameters,
 collections, Soft References and complex structures are not supported RPC payloads
-yet. The connected example proves the integer Actor path, not every accepted
-signature. ActorComponent networking, broader conditions/payloads, push-model
-runtime, travel and cooked network execution still require dedicated verification.
-Do not infer packaged WindowsServer or full networking parity from this example.
+yet. The connected samples prove the listed mixed payloads, not every accepted
+signature or combination. Push-model runtime, travel and cooked network execution
+still require dedicated verification. Do not infer packaged WindowsServer or
+full networking parity from these examples.
 
 ## Packaging
 
