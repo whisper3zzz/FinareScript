@@ -35,6 +35,8 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Transition rule: **usable common gameplay coverage, not full Puerts parity**.
   Compare enough to choose the next missing capability, implement it through the
   public workflow, and return to M13.3/M13.4 once the breadth target below is met.
+  One example per family is not sufficient if ordinary use still requires a
+  project-specific facade or a missing common call direction.
 - Execution focus: **close common Puerts capability gaps, not complete every
   detail of the current Demo or subsystem**. Finish workflow fixes needed to use
   a capability, then select the next practical gap. Full Script Class depth and
@@ -84,13 +86,22 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   refreshes its Graph-only tab. Stale tabs recover; unsaved buffers are retained.
   Attached gameplay builds no longer overwrite loaded shared-host DLLs, and Demo
   staging no longer replaces an existing Graph layout.
-- Next work: **generated ordinary C++ object arguments**. Constructors, methods,
-  fields and owned/borrowed returns already work, but passing those generated
-  objects to another native call is still rejected by the fixed-value input lane.
-  Compare the common pointer/reference forms, then carry typed object inputs
-  through contracts, managed/native generation, ownership validation and a
-  working public example. Preserve World/generation and borrowed-owner lifetimes;
-  do not pull in the entire inheritance/converter/callback backlog.
+- Latest native-binding checkpoint: **generated ordinary C++ object arguments**.
+  Constructors and static/instance methods accept pointer, const-pointer and
+  mutable/const object-reference inputs; nullable pointers are explicit. C#,
+  C++ and node descriptions share that contract. The CoreCLR example composes
+  objects without losing alias identity, including reload and failed-candidate
+  rollback. Invalid type/scope/null/borrowed-owner inputs are rejected before
+  native side effects; old transport prefixes remain usable for fixed calls.
+- Next work: **generated reflected callback arguments and result propagation**.
+  Puerts documents passing a typed delegate to a native function and returning
+  values/ref outputs through callbacks. Current generated subscriptions cover
+  BlueprintAssignable events, but event ABI v4 rejects reverse ref/out and the
+  reflected value model has no callable argument kind. Add the public path for
+  a native API to accept and invoke a managed callback, including a synchronous
+  result and lifetime-safe unbinding/reload. Compare exact forms before extending
+  the contract; do not substitute another hard-coded completion service or pull
+  in all native `std::function`, inheritance and converter work.
 - Remaining workflow scope: installed-consumer authoring and live class-shape/
   default deployment are still open. The latest native test invokes the real
   coordinator, not a physical toolbar click; CMD/NullRHI does not establish visual
@@ -119,7 +130,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Daily workflow — M13.2 | Native create/open/build entrypoints, dependency-aware Play, compatible all-instance reload, unified diagnostics, IDE setup, one C#/Graph asset | Reviewed fixtures demonstrate the workflow; they are not proof that an arbitrary project is equally easy to use |
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
-| Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
+| Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns and qualified object inputs, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Richer values, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
 | Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph publication, external IDE refresh and native body build/live reload with automatic Slate synchronization | Installed-consumer authoring and live class-shape/default deployment remain open; no physical toolbar/mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
@@ -148,6 +159,13 @@ implemented through UnifiedScript's public surface, and what reusable capability
 would enable it?** Prioritize those blockers over rare combinations, Demo polish
 or completing M13.3/M13.4 in advance. A concrete class prerequisite can be part of
 the selected batch; it does not pull forward the rest of those milestones.
+
+Use the comparison table below as the backlog: connect an upstream use case to
+the missing reusable capability and a concrete gameplay result. Keep updates in
+that table or the relevant existing implementation plan, not a separate audit
+document for every batch. After completing the current batch, select the next
+high-impact gap across families; do not automatically continue deeper within
+the same subsystem or advance to M13.3 because a Demo already runs.
 
 | Order | Deliverable | Why it comes next |
 | --- | --- | --- |
@@ -187,6 +205,7 @@ packaging operational as capabilities expand.
 
 The comparison uses the official Unreal documentation for
 [reflected APIs and containers](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/script_call_uclass.md),
+[native-to-script callbacks](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/engine_call_script.md),
 [script-class types and RPC](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/uclass_extends.md),
 [mixin](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/mixin.md), and
 [non-reflected C++ binding](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/template_binding.md),
@@ -199,8 +218,8 @@ not an exhaustive signature audit or a claim of parity.
 | Reflected API and value types | On-demand generation exists; audit common native/Blueprint member forms, references, defaults and discovery gaps beyond the existing fixtures | M13.1B / M13.3 / M13.5 |
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
-| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
-| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example composes these routes, with a saved scene, cooked runtime checkpoint, C#/Graph-to-live-reload proof and native body build/source refresh. Installed-consumer authoring, other common callbacks, latent and subsystem gaps remain follow-ups | M13.5 |
+| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Rich values, ref/out, retention/transfer, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
+| Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Next close callable delegate parameters and synchronous result propagation, as in the upstream callback examples: existing event subscriptions do not implement that route. Installed-consumer authoring, broader latent and subsystem gaps remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -215,8 +234,10 @@ capabilities already present, and do not label an unaudited shape as supported.
 **Sufficient breadth to resume the full M13.3 scope** means ordinary gameplay
 can use the existing class foundation with common reflected calls and members,
 collections/Soft References, non-reflected bindings, events/async/services,
-binary interop and basic replication/RPC. No common family in this scope should
-remain wholly missing or depend on a per-project handwritten facade.
+binary interop and basic replication/RPC. For the common uses selected from the
+comparison, developers must be able to compose these capabilities through public
+APIs without per-project handwritten facades. A family is not sufficiently
+covered merely because one constructor, signature or happy-path Demo works.
 
 Representative in-repository examples should combine these capabilities in
 ordinary gameplay: UI/events and async asset loading/spawn; a non-reflected C++
@@ -227,9 +248,12 @@ Deeper Blueprint inheritance, CDO/subobject identity and authoring composition
 are deliberately not prerequisites for this breadth target.
 
 **Move on when those representative scenarios work through reusable public APIs
-and the normal development workflow, with no wholly missing common family in
-the scope above.** Use observable gameplay coverage, not an API percentage, to
-judge "enough." Declarations or untested stubs alone do not meet this target.
+and the normal development workflow, and the comparison shows no remaining
+blocker to their selected common uses.** Check the ordinary operations, required
+call directions and lifecycle behavior, not just whether each family has an
+example. Reuse relevant existing verification; this decision does not require
+another full-suite run. Use observable gameplay coverage, not an API percentage,
+to judge "enough." Declarations or untested stubs alone do not meet this target.
 
 This does not require clearing every M13.5 checkbox, every signature combination
 or every Puerts feature. Those checkboxes include broader family backlogs. Carry
@@ -261,7 +285,8 @@ an external project requires the user's authorization.
   from the same description instead of separate handwritten surfaces.
   The first UObject-member implementation is available; it does not close this
   broader item. Ordinary C++ fixed-value and owned/borrowed-return generation is
-  now implemented with an actual generated CoreCLR example; richer forms remain
+  now implemented with an actual generated CoreCLR example, as are qualified
+  pointer/reference inputs with exact scope and null policy; richer forms remain
   open. Manual member registration remains only in low-level registry tests.
   See [native extension declarations](UNREAL_API_CONTRACT.md#native-extension-declarations)
   and the [ordinary C++ runtime](UNREAL_API_CONTRACT.md#ordinary-c-object-runtime).
@@ -425,6 +450,18 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The ordinary-object argument checkpoint passes 57 focused managed tests in
+`artifacts/m13-5-native-arguments/managed/object-arguments.trx` and 39 affected
+generation/contract/ABI tests in `managed/affected-generation.trx` under that
+directory, including checked-in managed/native generator output matching.
+The UE 5.8.1 Editor build and Demo chunk emission succeed. All six selected CMD
+tests pass in `artifacts/m13-5-native-arguments/native-arguments.log`, including
+generated object arguments, old ownership/lifecycle behavior and rejection of
+native-object tags by UObject transports. The actual CoreCLR example covers
+constructor/static/instance inputs, alias mutation, explicit null, failed reload
+and generation/World cleanup. No cooked, interactive palette or comparative
+performance result is claimed by this batch.
 
 The external-refresh/native-build checkpoint passes 31 focused managed tests in
 `artifacts/m13-5-ui/authoring-tests/project-refresh-final.trx`, including project

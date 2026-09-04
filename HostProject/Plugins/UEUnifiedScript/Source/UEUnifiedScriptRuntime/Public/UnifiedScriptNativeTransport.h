@@ -328,6 +328,8 @@ enum class EUnifiedScriptNativeValueKindV3 : uint8
     Set = 23,
     Map = 24,
     ByteBuffer = 25,
+    // Valid only on the separate native-object transport, never a UObject cell.
+    NativeObject = 26,
 };
 
 enum class EUnifiedScriptNativeValueFlagsV3 : uint8

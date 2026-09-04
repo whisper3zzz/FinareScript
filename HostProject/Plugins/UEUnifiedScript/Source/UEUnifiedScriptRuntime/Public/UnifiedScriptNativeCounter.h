@@ -16,8 +16,10 @@ class FCounter
 public:
     inline static int32 LiveCount = 0;
     inline static int32 DestroyCount = 0;
+    inline static int32 ArgumentCalls = 0;
     FCounter() : FCounter(1) {}
     explicit FCounter(int32 Initial) : ChildState{Initial} { ++LiveCount; }
+    explicit FCounter(const FCounterChild& Initial) : FCounter(Initial.Value) { ++ArgumentCalls; }
     ~FCounter() { --LiveCount; ++DestroyCount; }
     FCounter(const FCounter&) = delete;
     FCounter& operator=(const FCounter&) = delete;
@@ -32,6 +34,13 @@ public:
     bool Flip(bool Value) const { return !Value; }
     FVector Shift(const FVector& Value) const { return Value + FVector(Bias); }
     void Reset() { ChildState.Value = 0; }
+    int32 ReadPointer(FCounterChild* Other) const { ++ArgumentCalls; return Other->Value; }
+    int32 ReadConstPointer(const FCounterChild* Other) const { ++ArgumentCalls; return Other->Value; }
+    int32 ReadOptional(FCounterChild* Other) const { ++ArgumentCalls; return Other ? Other->Value : -1; }
+    int32 ReadOptionalConst(const FCounterChild* Other) const { ++ArgumentCalls; return Other ? Other->Value : -1; }
+    int32 AddFrom(const FCounterChild& Other) { ++ArgumentCalls; ChildState.Value += Other.Value; return ChildState.Value; }
+    static void AddTo(FCounterChild& Other, int32 Delta) { ++ArgumentCalls; Other.Value += Delta; }
+    static int32 Sum(const FCounterChild& Left, const FCounterChild& Right) { ++ArgumentCalls; return Left.Value + Right.Value; }
 private:
     FCounterChild ChildState;
 };

@@ -9,6 +9,12 @@ public enum UnrealNativeParameterPassing
     Value,
     ConstReference,
     Reference,
+    Pointer,
+    ConstPointer,
+    NullablePointer,
+    NullableConstPointer,
+    ObjectReference,
+    ConstObjectReference,
 }
 
 public enum UnrealNativeOperation { Method, Constructor }
@@ -53,7 +59,8 @@ public sealed record UnrealNativeExtensionManifest(
     string Name,
     IReadOnlyList<UnrealNativeExtensionType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-native-extensions/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-native-extensions/v0.3";
+    public const string ObjectSchemaVersion = "unifiedscript.unreal-native-extensions/v0.2";
     public const string LegacySchemaVersion = "unifiedscript.unreal-native-extensions/v0.1";
 }
 
@@ -61,7 +68,7 @@ public static class UnrealNativeExtensions
 {
     public static UnrealNativeExtensionManifest Normalize(UnrealNativeExtensionManifest manifest)
     {
-        if (manifest.SchemaVersion is not (UnrealNativeExtensionManifest.CurrentSchemaVersion or UnrealNativeExtensionManifest.LegacySchemaVersion) ||
+        if (manifest.SchemaVersion is not (UnrealNativeExtensionManifest.CurrentSchemaVersion or UnrealNativeExtensionManifest.ObjectSchemaVersion or UnrealNativeExtensionManifest.LegacySchemaVersion) ||
             string.IsNullOrWhiteSpace(manifest.Name) ||
             !Regex.IsMatch(manifest.Name, @"\A[A-Za-z_][A-Za-z0-9_.-]*\z") ||
             manifest.Types is null || manifest.Types.Count == 0)
@@ -91,6 +98,9 @@ public static class UnrealNativeExtensions
                 throw new JsonException("USUE5401: Invalid or duplicate native-extension owner/declaration.");
             }
             UnrealReflectedType projected = MakeType(type, manifest.Name);
+            if (manifest.SchemaVersion != UnrealNativeExtensionManifest.CurrentSchemaVersion &&
+                type.Functions.Any(f => f.Parameters.Any(UnrealNativeObjectBindings.IsObjectPassing)))
+                throw new JsonException("USUE5401: Explicit native-object argument passing requires native-extensions/v0.3.");
             UnrealReflectionJson.NormalizeAndValidate(UnrealReflectionManifest.Create(
                 new UnrealEngineIdentity(5, 0, 0, "native-extension"), [projected.Module], [projected]));
             var signatures = new HashSet<string>(StringComparer.Ordinal);
@@ -179,19 +189,17 @@ public static class UnrealNativeExtensions
         {
             UnrealNativeParameterPassing passing = binding.Parameters[index];
             UnrealParameterDirection direction = function.Parameters[index].Direction;
-            if (!Enum.IsDefined(passing) ||
-                (direction != UnrealParameterDirection.Input) != (passing == UnrealNativeParameterPassing.Reference))
+            bool objectPassing = UnrealNativeObjectBindings.IsObjectPassing(passing);
+            if (!Enum.IsDefined(passing) || (objectPassing
+                ? owner.Kind != UnrealReflectedTypeKind.NativeObject || function.Parameters[index].Type.Kind != UnrealValueKind.NativeObject ||
+                    direction != UnrealParameterDirection.Input
+                : (direction != UnrealParameterDirection.Input) != (passing == UnrealNativeParameterPassing.Reference)))
             {
                 throw new JsonException($"USUE5404: Parameter '{function.Parameters[index].Name}' has incompatible C++ passing and ref/out direction.");
             }
         }
         string expectedPath = $"{owner.Path}:{function.Name}({string.Join(",", function.Parameters.Select((p, index) =>
-            p.Type.NativeName.Replace(" ", "") + (binding.Parameters[index] switch
-            {
-                UnrealNativeParameterPassing.ConstReference => "const&",
-                UnrealNativeParameterPassing.Reference => "&",
-                _ => "",
-            })))})";
+            UnrealNativeObjectBindings.ParameterCppType(p.Type, binding.Parameters[index]).Replace(" ", "")))})";
         if (function.Path != expectedPath)
         {
             throw new JsonException($"USUE5404: Native overload identity must be '{expectedPath}'.");

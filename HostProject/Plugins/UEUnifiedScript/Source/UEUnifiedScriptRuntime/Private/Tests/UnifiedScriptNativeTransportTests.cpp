@@ -1085,6 +1085,24 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
                 V3Result.Kind == EUnifiedScriptNativeValueKindV3::Object &&
                 V3Result.Payload0 == ObjectValueHandle.Value);
 
+        for (bool bNullNativeObject : {false, true})
+        {
+            auto NativeArgument = ObjectArgument;
+            NativeArgument.Kind = EUnifiedScriptNativeValueKindV3::NativeObject;
+            NativeArgument.TypeId = UnifiedScriptMemberId("/Native/UEUnifiedScriptRuntime.NativeCounter");
+            NativeArgument.Payload0 = bNullNativeObject ? 0 : ObjectValueHandle.Value;
+            NativeArgument.Flags = bNullNativeObject ? EUnifiedScriptNativeValueFlagsV3::Null : EUnifiedScriptNativeValueFlagsV3::None;
+            V3Frame = {};
+            V3Frame.Arguments = &NativeArgument;
+            V3Frame.ArgumentCount = 1;
+            CallFrameTransport->WritePropertyById(Context, InteropHandle.Value, ObjectValueId, &V3Frame);
+            TestTrue(TEXT("Native object tag cannot enter reflected property lane"), V3Frame.Status != EUnifiedScriptNativeCallStatusV3::Success);
+            TestTrue(TEXT("Rejected native object tag preserves UObject property"), Interop->ObjectValue == ObjectValue);
+            FUnifiedScriptNativeValueV3 ObjectResult;
+            ObjectResult.Kind = EUnifiedScriptNativeValueKindV3::Object;
+            TestFalse(TEXT("Native object tag cannot enter reflected fixed-call lane"), InvokeFixed(EchoObjectId, &NativeArgument, 1, ObjectResult));
+        }
+
         UClass* ClassValue = UUnifiedScriptInteropFixture::StaticClass();
         const FUnifiedScriptObjectHandle ClassValueHandle =
             Registry.RegisterObject(ClassValue, HandleResult);

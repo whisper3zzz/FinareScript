@@ -1,5 +1,6 @@
 #include "UnifiedScriptNativeObjectRegistry.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptNativeObjectValues.h"
 #include <atomic>
 
 namespace
@@ -233,10 +234,18 @@ EStatus FUnifiedScriptNativeObjectRegistry::Invoke(uint64 Scope, FUnifiedScriptN
         if (!Entry) return EStatus::InvalidHandle;
         if (Entry->Scope != Scope) return EStatus::WrongOwner;
     }
-    // Fixed ABI lane only; pointer/arena-backed cells cannot enter this route.
+    // Cells contain fixed values or typed ownership tokens, never native pointers.
     if (Arguments.Num() > 16) return EStatus::InvalidArgument;
     for (const auto& Value : Arguments)
-        if (!IsFixedCell(Value, false)) return EStatus::InvalidArgument;
+    {
+        if (Value.Kind == EUnifiedScriptNativeValueKindV3::NativeObject)
+        {
+            void* Pointer = nullptr;
+            Status = UE::UnifiedScript::NativeObjectValues::ReadObject(*this, Scope, Value, Value.TypeId, true, Pointer);
+            if (Status != EStatus::Success) return Status;
+        }
+        else if (!IsFixedCell(Value, false)) return EStatus::InvalidArgument;
+    }
     FUnifiedScriptNativeValueV3 Value;
     FUnifiedScriptNativeObjectHandle Handle;
     TArray<uint64> Allocations;

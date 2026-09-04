@@ -25,6 +25,7 @@ public sealed class NativeObjectLifetimeDemoScript : IUnrealManagedScript
         if (_owner is not null)
         {
             _child!.Add(0);
+            _owner.ReadPointer(_child);
             return;
         }
         _owner = new NativeCounter(context.Bridge, 10);
@@ -43,6 +44,19 @@ public sealed class NativeObjectLifetimeDemoScript : IUnrealManagedScript
         catch (UnrealNativeObjectException exception) when (exception.Status == UnrealNativeObjectStatus.WrongOwner) { }
         if (_owner.Scale(2) != 30 || _child.Value != 15)
             throw new InvalidOperationException("Rejected duplicate ownership damaged the original object.");
+        using (var copy = NativeCounter.Create(context.Bridge, _child))
+        {
+            using var copiedChild = copy.GetChild();
+            if (copy.ReadPointer(_child) != 15 || copy.ReadConstPointer(_child) != 15 ||
+                copy.ReadOptional(_child) != 15 || copy.ReadOptionalConst(_child) != 15 ||
+                copy.ReadOptional(null) != -1 || copy.ReadOptionalConst(null) != -1)
+                throw new InvalidOperationException("Native object pointer or explicit null argument failed.");
+            NativeCounter.AddTo(context.Bridge, copiedChild, 2);
+            if (copiedChild.Value != 17 || copy.AddFrom(_child) != 32 ||
+                NativeCounter.Sum(context.Bridge, _child, copiedChild) != 47 ||
+                copy.AddFrom(copiedChild) != 64 || _child.Value != 15)
+                throw new InvalidOperationException("Native object references lost mutation or alias identity.");
+        }
         using (var clone = _owner.Clone())
         {
             using var child = clone.GetChild();
@@ -62,12 +76,26 @@ public sealed class NativeObjectLifetimeDemoScript : IUnrealManagedScript
             throw new InvalidOperationException("A borrowed object survived its native owner.");
         }
         catch (UnrealNativeObjectException exception) when (exception.Status == UnrealNativeObjectStatus.InvalidHandle) { }
+        using (var probe = NativeCounter.Create(context.Bridge))
+        {
+            try
+            {
+                probe.ReadPointer(_child);
+                throw new InvalidOperationException("An argument survived its borrowed native owner.");
+            }
+            catch (UnrealNativeObjectException exception) when (exception.Status == UnrealNativeObjectStatus.InvalidHandle) { }
+        }
         _child.Dispose();
         _owner = NativeCounter.Create(context.Bridge, 20);
         _child = _owner.GetChild();
     }
 
-    public void OnTick(float deltaSeconds) => _child!.Add(1);
+    public void OnTick(float deltaSeconds)
+    {
+        int expected = _child!.Add(1);
+        if (_owner!.ReadConstPointer(_child) != expected)
+            throw new InvalidOperationException("Native object argument failed after generation transition.");
+    }
 
     // Intentionally omit lease disposal: generation shutdown must retire both.
     public void OnStop() { }

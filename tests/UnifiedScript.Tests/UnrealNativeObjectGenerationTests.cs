@@ -34,11 +34,16 @@ public sealed class UnrealNativeObjectGenerationTests
                     return NativeCounter.Create(bridge, value);
                 }
                 [Visual]
-                public int Update(NativeCounter counter, int delta)
+                public int Update(IUnrealInvocationBridge bridge, NativeCounter counter, int delta)
                 {
                     NativeCounterChild child = counter.GetChild();
                     child.Value = child.Add(delta);
                     int result = counter.Scale(child.Value);
+                    NativeCounter.AddTo(bridge, child, delta);
+                    result = counter.AddFrom(child) + counter.ReadOptional(null);
+                    NativeCounter copy = NativeCounter.Create(bridge, child);
+                    result = NativeCounter.Sum(bridge, child, copy.GetChild());
+                    copy.Dispose();
                     child.Dispose();
                     return result;
                 }
@@ -96,9 +101,16 @@ public sealed class UnrealNativeObjectGenerationTests
             Assert.Single(owner.Nodes, n => n.MemberPath == Owner + ":GetChild()").ReturnOwnership);
         var coverage = UnrealBindingCoverageReport.Create(projection, managed, native);
         var entries = coverage.Entries.Where(e => e.Path.StartsWith("/Native/", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(14, entries.Length);
+        Assert.Equal(22, entries.Length);
         Assert.All(entries, e => Assert.Equal(UnrealBindingDisposition.DirectThunk, e.Disposition));
         Assert.Equal(native.Source, new UnrealNativeThunkGenerator().Generate(projection.NativeReflection).Source);
+        Assert.Contains("Values::ReadObject(Registry, Scope", native.Source);
+        Assert.Contains("FCounterChild const&", native.Source);
+        Assert.Contains("NativeCounterChild? @Other", managed.Source);
+        var optional = Assert.Single(owner.Nodes, n => n.Title == "ReadOptional");
+        Assert.Equal(UnrealNativeParameterPassing.NullablePointer,
+            Assert.Single(optional.Pins, p => p.Name == "Other").NativePassing);
+        Assert.Contains("nullable, caller-owned", optional.Tooltip);
     }
 
     [Fact]
@@ -207,5 +219,68 @@ public sealed class UnrealNativeObjectGenerationTests
         var compilation = new CSharpCompilationHost().Create(CSharpSyntaxTree.ParseText(source),
             [MetadataReference.CreateFromFile(typeof(UnrealObject).Assembly.Location)]);
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+    }
+
+    [Fact]
+    public void VersionTwoObjectDeclarationsRetainTheirOldSignatures()
+    {
+        var contract = Contract();
+        contract = contract with
+        {
+            Types = [new(Owner, ["Create(int32)", "GetChild", "Scale(int32)"])],
+            CoverageBaseline = null,
+            NativeExtensions = contract.NativeExtensions! with
+            {
+                SchemaVersion = UnrealNativeExtensionManifest.ObjectSchemaVersion,
+                Types = contract.NativeExtensions.Types.Select(t => t with
+                {
+                    Functions = t.Functions.Where(f => f.Parameters.All(p =>
+                        p is UnrealNativeParameterPassing.Value or UnrealNativeParameterPassing.ConstReference or UnrealNativeParameterPassing.Reference)).ToArray(),
+                }).ToArray(),
+            },
+        };
+        string json = UnrealApiContractJson.Serialize(contract);
+        Assert.Equal(json, UnrealApiContractJson.Serialize(UnrealApiContractJson.Deserialize(json)));
+        var projection = UnrealApiContractProjector.Project(Reflection(), contract);
+        Compile(new UnrealBindingGenerator().Generate(projection.Reflection).Source);
+        var owner = Assert.Single(projection.Reflection.Types, t => t.Path == Owner);
+        Assert.Contains(owner.Functions, f => f.Path == Owner + ":Create(int32)");
+        Assert.Contains(owner.Functions, f => f.Path == Owner + ":Scale(int32)");
+    }
+
+    [Theory]
+    [InlineData("old-schema")]
+    [InlineData("fixed-type")]
+    [InlineData("out")]
+    [InlineData("ref")]
+    [InlineData("wrong-identity")]
+    [InlineData("managed-overload-collision")]
+    public void InvalidObjectArgumentDeclarationsFailBeforeGeneration(string change)
+    {
+        var contract = Contract();
+        var manifest = contract.NativeExtensions!;
+        if (change == "old-schema")
+            manifest = manifest with { SchemaVersion = UnrealNativeExtensionManifest.ObjectSchemaVersion };
+        var types = manifest.Types.ToArray();
+        int index = Array.FindIndex(types, t => t.Path == Owner);
+        var functions = types[index].Functions.ToArray();
+        int method = Array.FindIndex(functions, f => f.Declaration.Name == "ReadPointer");
+        var declaration = functions[method].Declaration;
+        var parameter = declaration.Parameters[0];
+        if (change == "fixed-type") parameter = parameter with { Type = new(UnrealValueKind.Int32, "int32") };
+        if (change == "out") parameter = parameter with { Direction = UnrealParameterDirection.Output };
+        if (change == "ref") parameter = parameter with { Direction = UnrealParameterDirection.InputOutput };
+        declaration = declaration with { Parameters = [parameter] };
+        if (change == "wrong-identity") declaration = declaration with { Path = Owner + ":ReadPointer(wrong*)" };
+        functions[method] = functions[method] with { Declaration = declaration };
+        if (change == "managed-overload-collision")
+            functions = [.. functions, functions[method] with
+            {
+                Declaration = declaration with { Path = Owner + ":ReadPointer(UE::UnifiedScript::NativeExample::FCounterChildconst*)" },
+                Parameters = [UnrealNativeParameterPassing.ConstPointer],
+            }];
+        types[index] = types[index] with { Functions = functions };
+        contract = contract with { NativeExtensions = manifest with { Types = types } };
+        Assert.Throws<JsonException>(() => UnrealApiContractProjector.Project(Reflection(), contract));
     }
 }

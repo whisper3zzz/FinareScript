@@ -5688,6 +5688,37 @@ static Status Member_4BC018878763C95C(FUnifiedScriptNativeObjectRegistry& Regist
     TypedTarget->Bias = Argument0;
     return Status::Success;
 }
+static Status Member_59E239DEF207F1CF(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild const&)>(&UE::UnifiedScript::NativeExample::FCounter::AddFrom))(*Argument0), 0);
+    return Status::Success;
+}
+static Status Member_B0CAB788728796AB(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 2) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(ArgumentPointer0);
+    int32 Argument1{};
+    if (!Values::Read(Arguments[1], Argument1, 0)) return Status::InvalidArgument;
+    (static_cast<void (*)(UE::UnifiedScript::NativeExample::FCounterChild&, int32)>(&UE::UnifiedScript::NativeExample::FCounter::AddTo))(*Argument0, Argument1);
+    return Status::Success;
+}
 static Status Member_0A14AF11DAE662D4(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
     FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
@@ -5711,6 +5742,23 @@ static Status Member_C7FB3979E2537381(FUnifiedScriptNativeObjectRegistry& Regist
     if (Arguments.Num() != 0) return Status::InvalidArgument;
     if (Target.Value) return Status::InvalidArgument;
     TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object(new UE::UnifiedScript::NativeExample::FCounter());
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
+static Status Member_B53253FE54579082(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object(new UE::UnifiedScript::NativeExample::FCounter(*Argument0));
     const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
         [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
     // A rejected duplicate address still belongs to its existing owner.
@@ -5787,6 +5835,70 @@ static Status Member_9E6B4803C8D0E235(FUnifiedScriptNativeObjectRegistry& Regist
     OutValue = Values::Write((static_cast<int32 (*)(int32, int32)>(&UE::UnifiedScript::NativeExample::FCounter::Multiply))(Argument0, Argument1), 0);
     return Status::Success;
 }
+static Status Member_7D8B79A1C3B70F2E(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild const*) const>(&UE::UnifiedScript::NativeExample::FCounter::ReadConstPointer))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_C764190318412901(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, true, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(ArgumentPointer0);
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild*) const>(&UE::UnifiedScript::NativeExample::FCounter::ReadOptional))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_15F8FC47D399215B(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, true, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild const*) const>(&UE::UnifiedScript::NativeExample::FCounter::ReadOptionalConst))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_2FFF6F26AE23D57C(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(ArgumentPointer0);
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild*) const>(&UE::UnifiedScript::NativeExample::FCounter::ReadPointer))(Argument0), 0);
+    return Status::Success;
+}
 static Status Member_65004780946EA712(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
     FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
@@ -5841,6 +5953,23 @@ static Status Member_FAA4C2DBD80FDF4F(FUnifiedScriptNativeObjectRegistry& Regist
     OutValue = Values::Write((TypedTarget->*static_cast<FVector (UE::UnifiedScript::NativeExample::FCounter::*)(FVector const&) const>(&UE::UnifiedScript::NativeExample::FCounter::Shift))(Argument0), 0);
     return Status::Success;
 }
+static Status Member_9AFBA3505E48CF64(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 2) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    void* ArgumentPointer1 = nullptr;
+    const Status ArgumentStatus1 = Values::ReadObject(Registry, Scope, Arguments[1], 0x988618A984C7E632ull, false, ArgumentPointer1);
+    if (ArgumentStatus1 != Status::Success) return ArgumentStatus1;
+    auto* Argument1 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer1);
+    OutValue = Values::Write((static_cast<int32 (*)(UE::UnifiedScript::NativeExample::FCounterChild const&, UE::UnifiedScript::NativeExample::FCounterChild const&)>(&UE::UnifiedScript::NativeExample::FCounter::Sum))(*Argument0, *Argument1), 0);
+    return Status::Success;
+}
 static_assert(!std::is_base_of_v<UObject, UE::UnifiedScript::NativeExample::FCounterChild>, "Native object bindings cannot own UObjects");
 static Status Member_087CC455F186614A(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
@@ -5888,17 +6017,25 @@ static const FUnifiedScriptNativeObjectMemberEntry Members[] =
 {
     {0xB4A70487C31468D0ull, &Member_B4A70487C31468D0},
     {0x4BC018878763C95Cull, &Member_4BC018878763C95C},
+    {0x59E239DEF207F1CFull, &Member_59E239DEF207F1CF},
+    {0xB0CAB788728796ABull, &Member_B0CAB788728796AB},
     {0x0A14AF11DAE662D4ull, &Member_0A14AF11DAE662D4},
     {0xC7FB3979E2537381ull, &Member_C7FB3979E2537381},
+    {0xB53253FE54579082ull, &Member_B53253FE54579082},
     {0x1E238BBF8A4F6005ull, &Member_1E238BBF8A4F6005},
     {0xBD419863586ED57Aull, &Member_BD419863586ED57A},
     {0x4AC35189F0573E27ull, &Member_4AC35189F0573E27},
     {0x4819FCD2D84238E2ull, &Member_4819FCD2D84238E2},
     {0x9E6B4803C8D0E235ull, &Member_9E6B4803C8D0E235},
+    {0x7D8B79A1C3B70F2Eull, &Member_7D8B79A1C3B70F2E},
+    {0xC764190318412901ull, &Member_C764190318412901},
+    {0x15F8FC47D399215Bull, &Member_15F8FC47D399215B},
+    {0x2FFF6F26AE23D57Cull, &Member_2FFF6F26AE23D57C},
     {0x65004780946EA712ull, &Member_65004780946EA712},
     {0x1DB552A3F63B54D4ull, &Member_1DB552A3F63B54D4},
     {0x4699DD1B1F305F07ull, &Member_4699DD1B1F305F07},
     {0xFAA4C2DBD80FDF4Full, &Member_FAA4C2DBD80FDF4F},
+    {0x9AFBA3505E48CF64ull, &Member_9AFBA3505E48CF64},
     {0x087CC455F186614Aull, &Member_087CC455F186614A},
     {0xA2FCC855B8BA82A6ull, &Member_A2FCC855B8BA82A6},
     {0x5F5612A76C182766ull, &Member_5F5612A76C182766},

@@ -21,6 +21,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
         using var fixture = new NativeObjectAbiFixture(this);
         var transport = new InProcessUnrealNativeInvocationTransport(new(0x1234), fixture.Parent);
         Assert.True(transport.SupportsNativeObjects);
+        Assert.False(transport.SupportsNativeObjectArguments);
         var scope = new UnrealNativeObjectScope(transport);
         var lease = scope.Construct(42, [new() { Kind = UnrealNativeValueKindV3.Int32, Payload0 = 17 }]);
         Assert.Equal(new UnrealNativeObjectHandle(700), lease.Handle);
@@ -38,6 +39,23 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
             Assert.Throws<UnrealNativeObjectException>(() => lease.Invoke(43, [])).Status);
         lease.Dispose();
         scope.Dispose();
+    }
+
+    [Theory]
+    [InlineData(0UL, false)]
+    [InlineData(1UL, true)]
+    [InlineData(2UL, false)]
+    public void NativeObjectArgumentsUseTheOptionalCapabilityTail(ulong flags, bool supported)
+    {
+        using var fixture = new NativeObjectAbiFixture(this, flags);
+        using var transport = new InProcessUnrealNativeInvocationTransport(new(0x1234), fixture.Parent);
+        Assert.Equal(supported, transport.SupportsNativeObjectArguments);
+        using var scope = new UnrealNativeObjectScope(transport);
+        var argument = new UnrealNativeValueV3 { Kind = UnrealNativeValueKindV3.NativeObject, TypeId = 42, Payload0 = 7 };
+        if (supported) scope.Invoke(default, 123, [argument]);
+        else Assert.Equal(UnrealNativeObjectStatus.Unavailable,
+            Assert.Throws<UnrealNativeObjectException>(() => scope.Invoke(default, 123, [argument])).Status);
+        Assert.Equal(supported ? 1 : 0, fixture.Calls);
     }
 
     [Theory]
@@ -98,7 +116,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
         public int Open, Calls;
         public UnrealNativeObjectStatus CloseStatus;
 
-        public unsafe NativeObjectAbiFixture(InProcessUnrealNativeInvocationTransportTests owner)
+        public unsafe NativeObjectAbiFixture(InProcessUnrealNativeInvocationTransportTests owner, ulong? capabilities = null)
         {
             _nativeObjectFixture = this;
             var parent = new TestNativeObjectExtension
@@ -119,15 +137,16 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
             };
             var table = new UnrealNativeObjectTransportTableV1
             {
-                AbiVersion = 1, TableSize = 64, ValueSize = 48,
+                AbiVersion = 1, TableSize = capabilities is null ? 64u : 72u, ValueSize = 48,
                 RetainContext = parent.Base.RetainContext, ReleaseContext = parent.Base.ReleaseContext,
                 OpenScope = (nint)(delegate* unmanaged[Cdecl]<nint, ulong*, byte>)&NativeObjectOpen,
                 CloseScope = (nint)(delegate* unmanaged[Cdecl]<nint, ulong, byte>)&NativeObjectClose,
                 ReleaseObject = (nint)(delegate* unmanaged[Cdecl]<nint, ulong, ulong, byte>)&NativeObjectRelease,
                 Invoke = (nint)(delegate* unmanaged[Cdecl]<nint, ulong, ulong, ulong, UnrealNativeValueV3*, uint, UnrealNativeValueV3*, ulong*, byte>)&NativeObjectInvoke,
             };
-            Extension = Marshal.AllocHGlobal(Marshal.SizeOf<UnrealNativeObjectTransportTableV1>());
+            Extension = Marshal.AllocHGlobal((int)table.TableSize);
             Marshal.StructureToPtr(table, Extension, false);
+            if (capabilities is ulong flags) Marshal.WriteInt64(Extension, 64, unchecked((long)flags));
             parent.NativeObjectTransport = Extension;
             Parent = Marshal.AllocHGlobal(Marshal.SizeOf<TestNativeObjectExtension>());
             Marshal.StructureToPtr(parent, Parent, false);

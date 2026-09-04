@@ -12,6 +12,15 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
         get => global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0xB4A70487C31468D0UL, []).Value);
         set => Lease.Invoke(0x4BC018878763C95CUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(value)]);
     }
+    public int @AddFrom(NativeCounterChild @Other)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x59E239DEF207F1CFUL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, false)]).Value);
+    }
+    public static void @AddTo(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Other, int @Delta)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        __scope.Invoke(default, 0xB0CAB788728796ABUL, [global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Other, 0x988618A984C7E632UL, false), global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Delta)]);
+    }
     public NativeCounter @Clone()
     {
         return new NativeCounter(Lease.Acquire(0x0A14AF11DAE662D4UL, []));
@@ -22,6 +31,13 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
     {
         var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
         return new NativeCounter(__scope.Construct(0xC7FB3979E2537381UL, []));
+    }
+    public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Initial)
+        : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).Construct(0xB53253FE54579082UL, [global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Initial, 0x988618A984C7E632UL, false)])) { }
+    public static NativeCounter @Create(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Initial)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        return new NativeCounter(__scope.Construct(0xB53253FE54579082UL, [global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Initial, 0x988618A984C7E632UL, false)]));
     }
     public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, int @Initial)
         : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).Construct(0x1E238BBF8A4F6005UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Initial)])) { }
@@ -47,6 +63,22 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
         var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
         return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(__scope.Invoke(default, 0x9E6B4803C8D0E235UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Left), global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Right)]).Value);
     }
+    public int @ReadConstPointer(NativeCounterChild @Other)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x7D8B79A1C3B70F2EUL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, false)]).Value);
+    }
+    public int @ReadOptional(NativeCounterChild? @Other)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0xC764190318412901UL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, true)]).Value);
+    }
+    public int @ReadOptionalConst(NativeCounterChild? @Other)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x15F8FC47D399215BUL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, true)]).Value);
+    }
+    public int @ReadPointer(NativeCounterChild @Other)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x2FFF6F26AE23D57CUL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, false)]).Value);
+    }
     public void @Reset()
     {
         Lease.Invoke(0x65004780946EA712UL, []);
@@ -62,6 +94,11 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
     public global::UnifiedScript.Unreal.UnrealVector @Shift(global::UnifiedScript.Unreal.UnrealVector @Value)
     {
         return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<global::UnifiedScript.Unreal.UnrealVector>(Lease.Invoke(0xFAA4C2DBD80FDF4FUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
+    }
+    public static int @Sum(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Left, NativeCounterChild @Right)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(__scope.Invoke(default, 0x9AFBA3505E48CF64UL, [global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Left, 0x988618A984C7E632UL, false), global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Right, 0x988618A984C7E632UL, false)]).Value);
     }
 }
 

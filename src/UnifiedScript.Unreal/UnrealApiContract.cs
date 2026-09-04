@@ -447,6 +447,8 @@ public sealed record UnrealApiNodePin(
     UnrealTypeReference? Type)
 {
     public string? DefaultValue { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealNativeParameterPassing? NativePassing { get; init; }
 }
 
 public enum UnrealApiThreadRequirement
@@ -638,13 +640,16 @@ public static class UnrealApiNodeCatalogGenerator
                             "UObject*",
                             "/Script/CoreUObject.Object")
                         : receiverType));
-                foreach (UnrealReflectedParameter parameter in function.Parameters)
+                for (int parameterIndex = 0; parameterIndex < function.Parameters.Count; parameterIndex++)
                 {
+                    UnrealReflectedParameter parameter = function.Parameters[parameterIndex];
                     if (parameter.Direction != UnrealParameterDirection.Output)
                     {
                         pins.Add(new(parameter.Name, "input", "data", parameter.Type)
                         {
                             DefaultValue = parameter.DefaultValue,
+                            NativePassing = parameter.Type.Kind == UnrealValueKind.NativeObject
+                                ? function.NativeBinding?.Parameters[parameterIndex] : null,
                         });
                     }
                     if (parameter.Direction != UnrealParameterDirection.Input)
@@ -668,7 +673,11 @@ public static class UnrealApiNodeCatalogGenerator
                     "function",
                     function.Metadata.DisplayName ?? function.Name,
                     function.Metadata.Category ?? category,
-                    function.Metadata.Tooltip ?? $"Call {type.Name}.{function.Name}(...).",
+                    (function.Metadata.Tooltip ?? $"Call {type.Name}.{function.Name}(...).") +
+                        string.Concat(function.Parameters.Select((p, i) => p.Type.Kind == UnrealValueKind.NativeObject
+                            ? $"\n{p.Name}: {UnrealNativeObjectBindings.ParameterCppType(p.Type, function.NativeBinding!.Parameters[i])}; " +
+                              $"{(UnrealNativeObjectBindings.AllowsNull(function.NativeBinding.Parameters[i]) ? "nullable" : "non-null")}, caller-owned, synchronous use only."
+                            : "")),
                     function.Traits.Pure,
                     pins,
                     function.Metadata));

@@ -20,6 +20,32 @@ path instead of adding facades.
 
 ## Decisions and remaining work
 
+### Completed batch: ordinary object arguments
+
+Puerts' [argument holders](https://github.com/Tencent/puerts/blob/master/unreal/Puerts/Source/JsEnv/Public/StaticCall.hpp)
+handle object pointers and reference wrappers. UnifiedScript now supports that
+public path for constructors, static and instance methods, through generated
+wrappers and a CoreCLR example rather than only a registry primitive.
+
+- Add explicit pointer/const-pointer and object-reference/const-object-reference
+  passing forms. Nullable pointers are opt-in; references are non-null. Preserve
+  existing fixed-value/ref-out semantics and overload IDs. Native objects remain
+  caller-owned; arguments may be used synchronously but cannot be retained or
+  deleted by a conforming binding. Pointer replacement/ref-out, ownership transfer,
+  inheritance and callbacks are separate work.
+- Carry a distinct typed native-object token in the fixed-size value cell. The
+  native-object transport advertises argument support through an optional tail
+  capability while preserving its v1 prefix. Old transports keep fixed-value
+  support; generated object arguments fail explicitly when unsupported.
+- Validate managed scope identity and disposal, then native type/scope/borrowed
+  owner liveness before entering the native method. Null and malformed cells,
+  stale generations and cross-World handles must not cause native side effects.
+- Extend generated C#/C++/node metadata, a composed public native example and
+  focused managed/native tests, including actual reload/World cleanup. Generate
+  checked-in bindings normally; leave the protected legacy thunk header alone.
+
+### Existing foundation
+
 - Add an optional, independently versioned native-extension declaration to the
   existing API contract. Existing contracts keep their canonical representation.
   A UObject owner must match its exported C++ identity and header; an extension
@@ -61,11 +87,11 @@ path instead of adding facades.
   reallocates resources in `OnStart` must release or reuse its existing leases.
 - Failed native factories roll back allocations made during that invocation;
   this does not promise rollback of arbitrary native method side effects.
-- The current native-object lane carries up to 16 fixed value inputs, one fixed
+- The initial native-object lane carried up to 16 fixed value inputs, one fixed
   value result and a separate optional object handle. It deliberately rejects
   arena-backed values and UObject cells. Rich value/container/ref/out codecs and
-  native-object argument contracts remain to be connected, not silently mapped
-  to scalars or UObject handles.
+  native-object argument contracts were not part of that checkpoint. The current
+  batch adds typed object inputs; rich value/container/ref/out codecs remain open.
 - This runtime checkpoint is now consumed by the generated bindings below.
 
 ### Generated ordinary C++ bindings
@@ -89,13 +115,24 @@ path instead of adding facades.
 - Module registration serves old/new Worlds, rejects collisions and retires
   its objects/aliases before code unload. Arbitrary unload from within an active
   invocation and cross-module inheritance are not supported.
-- **Remaining:** native-object arguments, richer value/container/ref/out routes,
+- **Remaining:** richer value/container/ref/out routes,
   defaults, inheritance, callbacks/converters and cooked execution. This is a
   usable generated-call batch, not completion of the whole native-extension family.
-  The next M13.5 family is general binary payload interop; follow the roadmap
-  rather than extending every native signature first.
+  Binary payload interop has its own completed bounded batch. Follow the current
+  roadmap for the next cross-family gap rather than extending every native signature.
 
 ## Relevant verification
+
+The object-argument batch passes 57 focused managed ownership/extension tests
+and 39 affected generation/contract/ABI tests in
+`artifacts/m13-5-native-arguments/managed/`. The UE 5.8.1 Editor build and Demo
+chunk emission succeed. All six selected CMD tests pass in
+`artifacts/m13-5-native-arguments/native-arguments.log`: five `NativeObjects`
+tests plus `NativeTransport.Abi`. These prove generated pointer/reference
+calls, exact alias behavior, null policy, failed-call non-mutation, isolated
+UObject/native-object tags and actual CoreCLR reload/rollback/World cleanup.
+They do not establish cooked execution, physical palette interaction or a new
+Puerts performance result. Older results below retain their original scopes.
 
 Contract tests cover deterministic generation, collisions, unsupported routes,
 exact overloads and no reflection fallback. Compile and execute the generated

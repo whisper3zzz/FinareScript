@@ -54,9 +54,11 @@ internal static class UnrealNativeObjectThunkGenerator
                 Begin(source, entries, function.Path, function.Parameters.Count);
                 if (!function.Traits.Static) Target(source, type);
                 else source.AppendLine("    if (Target.Value) return Status::InvalidArgument;");
-                for (int index = 0; index < function.Parameters.Count; index++) Decode(source, function.Parameters[index].Type, index);
+                for (int index = 0; index < function.Parameters.Count; index++)
+                    Decode(source, function.Parameters[index].Type, index, function.NativeBinding!.Parameters[index]);
                 var binding = function.NativeBinding!;
-                string args = string.Join(", ", Enumerable.Range(0, function.Parameters.Count).Select(i => $"Argument{i}"));
+                string args = string.Join(", ", Enumerable.Range(0, function.Parameters.Count).Select(i =>
+                    (UnrealNativeObjectBindings.IsObjectReference(binding.Parameters[i]) ? "*" : "") + $"Argument{i}"));
                 string cppReturn = UnrealNativeObjectBindings.CppType(function.ReturnType);
                 string invocation;
                 if (binding.Operation == UnrealNativeOperation.Constructor)
@@ -64,7 +66,7 @@ internal static class UnrealNativeObjectThunkGenerator
                 else
                 {
                     string parameters = string.Join(", ", function.Parameters.Select((p, i) =>
-                        UnrealNativeObjectBindings.CppType(p.Type) + (binding.Parameters[i] == UnrealNativeParameterPassing.ConstReference ? " const&" : "")));
+                        UnrealNativeObjectBindings.ParameterCppType(p.Type, binding.Parameters[i])));
                     string pointer = function.Traits.Static
                         ? $"{cppReturn} (*)({parameters})"
                         : $"{cppReturn} ({type.NativeName}::*)({parameters}){(binding.Const ? " const" : "")}";
@@ -128,8 +130,18 @@ internal static class UnrealNativeObjectThunkGenerator
         source.AppendLine("    if (Resolved != Status::Success) return Resolved;");
         source.AppendLine($"    auto* TypedTarget = static_cast<{owner.NativeName}*>(Pointer);");
     }
-    private static void Decode(StringBuilder source, UnrealTypeReference type, int index)
+    private static void Decode(StringBuilder source, UnrealTypeReference type, int index,
+        UnrealNativeParameterPassing passing = UnrealNativeParameterPassing.Value)
     {
+        if (type.Kind == UnrealValueKind.NativeObject)
+        {
+            string pointerType = UnrealNativeObjectBindings.ParameterCppType(type, passing).Replace('&', '*');
+            source.AppendLine($"    void* ArgumentPointer{index} = nullptr;");
+            source.AppendLine($"    const Status ArgumentStatus{index} = Values::ReadObject(Registry, Scope, Arguments[{index}], {TypeId(type)}, {(UnrealNativeObjectBindings.AllowsNull(passing) ? "true" : "false")}, ArgumentPointer{index});");
+            source.AppendLine($"    if (ArgumentStatus{index} != Status::Success) return ArgumentStatus{index};");
+            source.AppendLine($"    auto* Argument{index} = static_cast<{pointerType}>(ArgumentPointer{index});");
+            return;
+        }
         source.AppendLine($"    {UnrealNativeObjectBindings.CppType(type)} Argument{index}{{}};");
         source.AppendLine($"    if (!Values::Read(Arguments[{index}], Argument{index}, {TypeId(type)})) return Status::InvalidArgument;");
     }

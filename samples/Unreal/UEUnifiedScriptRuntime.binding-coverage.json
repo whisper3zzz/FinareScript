@@ -8,13 +8,13 @@
   },
   "summary": {
     "typeCount": 10,
-    "memberCount": 136,
-    "directThunkCount": 47,
+    "memberCount": 144,
+    "directThunkCount": 55,
     "callFrameCount": 86,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 133,
+    "nativeThunkCount": 141,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -30,6 +30,24 @@
     "diagnostics": []
   },
   "entries": [
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:AddFrom(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:AddTo(UE::UnifiedScript::NativeExample::FCounterChild\u0026,int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
@@ -50,6 +68,15 @@
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
       "disposition": "directThunk",
@@ -103,6 +130,42 @@
       "nativeExtension": "Demo.Native"
     },
     {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadConstPointer(UE::UnifiedScript::NativeExample::FCounterChildconst*)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadOptional(UE::UnifiedScript::NativeExample::FCounterChild*)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadOptionalConst(UE::UnifiedScript::NativeExample::FCounterChildconst*)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadPointer(UE::UnifiedScript::NativeExample::FCounterChild*)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
@@ -131,6 +194,15 @@
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Shift(FVectorconst\u0026)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Sum(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026,UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
       "disposition": "directThunk",

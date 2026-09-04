@@ -36,10 +36,14 @@ internal static class UnrealNativeObjectBindingGenerator
                 diagnostics.Add(new("USUE5410", reason, function.Path));
                 continue;
             }
-            var parameters = function.Parameters.Select(p => $"{UnrealBindingGenerator.GetManagedType(p.Type, names)} @{p.Name}").ToList();
+            var parameters = function.Parameters.Select((p, i) =>
+                $"{UnrealBindingGenerator.GetManagedType(p.Type, names)}{(UnrealNativeObjectBindings.AllowsNull(function.NativeBinding!.Parameters[i]) ? "?" : "")} @{p.Name}").ToList();
             string bridgeName = UniqueName(function, "__bridge"), scopeName = UniqueName(function, "__scope");
             if (function.Traits.Static) parameters.Insert(0, $"{Runtime}IUnrealInvocationBridge {bridgeName}");
-            string arguments = "[" + string.Join(", ", function.Parameters.Select(p => $"{Runtime}UnrealNativeObjectValues.Encode(@{p.Name})")) + "]";
+            string argumentScope = function.Traits.Static ? $"{Runtime}UnrealNativeObjectScope.FromBridge({bridgeName})" : "Lease";
+            string arguments = "[" + string.Join(", ", function.Parameters.Select((p, i) => p.Type.Kind == UnrealValueKind.NativeObject
+                ? $"{argumentScope}.EncodeObject(@{p.Name}, {Id(p.Type.TypePath!)}, {(UnrealNativeObjectBindings.AllowsNull(function.NativeBinding!.Parameters[i]) ? "true" : "false")})"
+                : $"{Runtime}UnrealNativeObjectValues.Encode(@{p.Name})")) + "]";
             string returnType = UnrealBindingGenerator.GetManagedType(function.ReturnType, names)!;
             if (function.NativeBinding!.Operation == UnrealNativeOperation.Constructor)
             {

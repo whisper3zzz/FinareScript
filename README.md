@@ -25,8 +25,10 @@ alternative. It separates available capabilities from remaining limitations
 and prioritizes Puerts comparison and common capability completion (M13.5), then
 deeper Script Class integration (M13.3), external-project validation (M13.4), and
 delivery expansion (M13.6). Only specific class dependencies are pulled forward;
-core capability work does not wait for the full class model or a pilot. Earlier implementation
-logs and acceptance results are retained in
+core capability work does not wait for the full class model or a pilot. Resume
+M13.3 after common Puerts use cases work through reusable public APIs, not merely
+after each family has a Demo, and without waiting for exhaustive Puerts parity.
+Earlier implementation logs and acceptance results are retained in
 [docs/ROADMAP_HISTORY.md](docs/ROADMAP_HISTORY.md).
 An unqualified request to continue iteration follows its current cursor.
 

@@ -26,5 +26,14 @@ static_assert(std::is_standard_layout_v<FUnifiedScriptNativeObjectTransportV1>);
 static_assert(sizeof(FUnifiedScriptNativeObjectTransportV1) == 64);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeObjectTransportV1, Invoke) == 56);
 
+/** Optional v1 tail: bit 0 admits typed object argument cells. */
+struct alignas(8) FUnifiedScriptNativeObjectTransportWithCapabilities
+{
+    FUnifiedScriptNativeObjectTransportV1 Base;
+    uint64 Capabilities = 1;
+};
+static_assert(sizeof(FUnifiedScriptNativeObjectTransportWithCapabilities) == 72);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeObjectTransportWithCapabilities, Capabilities) == 64);
+
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeObjectTransportV1*
 UEUnifiedScript_GetNativeObjectTransportV1();

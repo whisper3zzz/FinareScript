@@ -23,6 +23,7 @@ public abstract class UnrealNativeObject : IDisposable
 {
     protected UnrealNativeObject(UnrealNativeObjectLease lease) => Lease = lease ?? throw new ArgumentNullException(nameof(lease));
     protected UnrealNativeObjectLease Lease { get; }
+    internal UnrealNativeObjectLease ArgumentLease => Lease;
     public UnrealNativeObjectHandle Handle => Lease.Handle;
     public void Dispose() => Lease.Dispose();
 }
@@ -58,6 +59,8 @@ public sealed class UnrealNativeObjectException(UnrealNativeObjectStatus status,
 public interface IUnrealNativeObjectTransport
 {
     bool SupportsNativeObjects { get; }
+    // Older transports remain usable for fixed values but cannot accept object cells.
+    bool SupportsNativeObjectArguments => false;
     UnrealNativeObjectStatus OpenNativeObjectScope(out ulong scope);
     UnrealNativeObjectStatus CloseNativeObjectScope(ulong scope);
     UnrealNativeObjectStatus ReleaseNativeObject(ulong scope, UnrealNativeObjectHandle handle);
@@ -102,6 +105,28 @@ public sealed class UnrealNativeObjectScope : IDisposable
 
     public UnrealNativeObjectLease Construct(ulong constructorId, ReadOnlySpan<UnrealNativeValueV3> arguments) =>
         Acquire(default, constructorId, arguments);
+
+    /// <summary>Encode a synchronous, non-transferring argument in this exact ownership scope.</summary>
+    public UnrealNativeValueV3 EncodeObject(UnrealNativeObject? value, ulong typeId, bool allowNull = false)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_transport.SupportsNativeObjectArguments)
+                throw new NotSupportedException("The installed native-object transport does not support object arguments.");
+        }
+        if (typeId == 0) throw new ArgumentOutOfRangeException(nameof(typeId));
+        if (value is null && !allowNull) throw new ArgumentNullException(nameof(value));
+        // Do not nest the scope lock around a lease lock; invocation/disposal
+        // locks the lease first. Native resolution checks liveness again at use.
+        return new UnrealNativeValueV3
+        {
+            Kind = UnrealNativeValueKindV3.NativeObject,
+            TypeId = typeId,
+            Flags = value is null ? UnrealNativeValueFlagsV3.Null : UnrealNativeValueFlagsV3.None,
+            Payload0 = value?.ArgumentLease.ArgumentHandle(this).Value ?? 0,
+        };
+    }
 
     internal UnrealNativeObjectLease Acquire(UnrealNativeObjectHandle target, ulong memberId,
         ReadOnlySpan<UnrealNativeValueV3> arguments)
@@ -167,6 +192,20 @@ public sealed class UnrealNativeObjectLease : IDisposable
         Handle = handle;
     }
 
+    internal UnrealNativeObjectHandle ArgumentHandle(UnrealNativeObjectScope expectedScope)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!ReferenceEquals(_scope, expectedScope))
+                throw new UnrealNativeObjectException(UnrealNativeObjectStatus.WrongOwner, "argument scope");
+            return Handle;
+        }
+    }
+
+    public UnrealNativeValueV3 EncodeObject(UnrealNativeObject? value, ulong typeId, bool allowNull = false) =>
+        _scope.EncodeObject(value, typeId, allowNull);
+
     public UnrealNativeObjectCallResult Invoke(ulong memberId, ReadOnlySpan<UnrealNativeValueV3> arguments)
     {
         lock (_gate)
@@ -205,4 +244,12 @@ public struct UnrealNativeObjectTransportTableV1
 {
     public uint AbiVersion, TableSize, ValueSize, Reserved;
     public nint RetainContext, ReleaseContext, OpenScope, CloseScope, ReleaseObject, Invoke;
+}
+
+/// <summary>Optional v1 tail; bit 0 admits typed object argument cells.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public struct UnrealNativeObjectTransportTableWithCapabilities
+{
+    public UnrealNativeObjectTransportTableV1 Base;
+    public ulong Capabilities;
 }

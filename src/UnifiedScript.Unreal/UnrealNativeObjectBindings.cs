@@ -66,11 +66,44 @@ internal static class UnrealNativeObjectBindings
         type.Kind == UnrealValueKind.Struct && type.TypePath is "/Script/CoreUObject.Vector" or "/Script/CoreUObject.Rotator" ||
         allowVoid && type.Kind == UnrealValueKind.Void;
 
+    internal static bool IsObjectPassing(UnrealNativeParameterPassing passing) => passing is
+        UnrealNativeParameterPassing.Pointer or UnrealNativeParameterPassing.ConstPointer or
+        UnrealNativeParameterPassing.NullablePointer or UnrealNativeParameterPassing.NullableConstPointer or
+        UnrealNativeParameterPassing.ObjectReference or UnrealNativeParameterPassing.ConstObjectReference;
+
+    internal static bool AllowsNull(UnrealNativeParameterPassing passing) => passing is
+        UnrealNativeParameterPassing.NullablePointer or UnrealNativeParameterPassing.NullableConstPointer;
+
+    internal static bool IsObjectReference(UnrealNativeParameterPassing passing) => passing is
+        UnrealNativeParameterPassing.ObjectReference or UnrealNativeParameterPassing.ConstObjectReference;
+
+    internal static string ParameterCppType(UnrealTypeReference type, UnrealNativeParameterPassing passing)
+    {
+        if (IsObjectPassing(passing))
+        {
+            string native = type.NativeName.EndsWith('*') ? type.NativeName[..^1] : type.NativeName;
+            return passing switch
+            {
+                UnrealNativeParameterPassing.ConstPointer or UnrealNativeParameterPassing.NullableConstPointer => native + " const*",
+                UnrealNativeParameterPassing.ObjectReference => native + "&",
+                UnrealNativeParameterPassing.ConstObjectReference => native + " const&",
+                _ => native + "*",
+            };
+        }
+        return type.NativeName + (passing switch
+        {
+            UnrealNativeParameterPassing.ConstReference => " const&",
+            UnrealNativeParameterPassing.Reference => "&",
+            _ => "",
+        });
+    }
+
     internal static string? Unsupported(UnrealReflectedFunction function) =>
-        function.Parameters.Count > 16 || function.Parameters.Any(p => p.Direction != UnrealParameterDirection.Input ||
-            p.DefaultValue is not null || !IsFixed(p.Type)) ||
+        function.Parameters.Count > 16 || function.Parameters.Where((p, i) => p.Direction != UnrealParameterDirection.Input ||
+            p.DefaultValue is not null || !(IsFixed(p.Type) || p.Type.Kind == UnrealValueKind.NativeObject &&
+                IsObjectPassing(function.NativeBinding!.Parameters[i]))).Any() ||
         !(IsFixed(function.ReturnType, true) || function.ReturnType.Kind == UnrealValueKind.NativeObject)
-            ? "The native-object generated lane supports up to 16 fixed input values and a fixed or ownership-qualified object return. Native-object arguments, defaults, containers and ref/out require the richer native-object codec path."
+            ? "Native-object calls support up to 16 fixed or explicitly qualified object inputs and a fixed or ownership-qualified object return. Defaults, containers, implicit object passing and ref/out require another codec path."
             : null;
 
     internal static string? Unsupported(UnrealReflectedProperty field) =>

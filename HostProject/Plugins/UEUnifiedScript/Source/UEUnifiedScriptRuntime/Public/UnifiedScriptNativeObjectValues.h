@@ -1,11 +1,30 @@
 #pragma once
 
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptNativeObjectRegistry.h"
 #include <bit>
 #include <type_traits>
 
 namespace UE::UnifiedScript::NativeObjectValues
 {
+inline bool IsObjectCell(const FUnifiedScriptNativeValueV3& Cell)
+{
+    return Cell.Kind == EUnifiedScriptNativeValueKindV3::NativeObject && Cell.TypeId &&
+        !Cell.Reserved16 && !Cell.Auxiliary && !Cell.Payload1 && !Cell.Payload2 && !Cell.Payload3 &&
+        ((Cell.Flags == EUnifiedScriptNativeValueFlagsV3::None && Cell.Payload0) ||
+         (Cell.Flags == EUnifiedScriptNativeValueFlagsV3::Null && !Cell.Payload0));
+}
+
+inline EUnifiedScriptNativeObjectStatus ReadObject(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    const FUnifiedScriptNativeValueV3& Cell, uint64 TypeId, bool bAllowNull, void*& OutPointer)
+{
+    OutPointer = nullptr;
+    if (!IsObjectCell(Cell)) return EUnifiedScriptNativeObjectStatus::InvalidArgument;
+    if (Cell.TypeId != TypeId) return EUnifiedScriptNativeObjectStatus::WrongType;
+    if (!Cell.Payload0) return bAllowNull ? EUnifiedScriptNativeObjectStatus::Success : EUnifiedScriptNativeObjectStatus::InvalidArgument;
+    return Registry.Resolve(Scope, {Cell.Payload0}, TypeId, OutPointer);
+}
+
 template <typename T> constexpr EUnifiedScriptNativeValueKindV3 Kind()
 {
     using K = EUnifiedScriptNativeValueKindV3;

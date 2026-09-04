@@ -34,6 +34,8 @@ public enum UnrealNativeValueKindV3 : byte
     Set = 23,
     Map = 24,
     ByteBuffer = 25,
+    // Valid only on the separate native-object transport, never a UObject cell.
+    NativeObject = 26,
 }
 
 [Flags]

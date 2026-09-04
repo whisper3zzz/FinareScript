@@ -28,6 +28,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
     private NativeCloseScope? _nativeCloseScope;
     private NativeReleaseObject? _nativeReleaseObject;
     private NativeInvokeObject? _nativeInvokeObject;
+    private bool _nativeObjectArguments;
     private readonly HashSet<ulong> _nativeObjectScopes = [];
 
     private void LoadNativeObjects(nint tablePointer, NativeTransportTableV1 parent)
@@ -47,9 +48,12 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
         _nativeCloseScope = Marshal.GetDelegateForFunctionPointer<NativeCloseScope>(table.CloseScope);
         _nativeReleaseObject = Marshal.GetDelegateForFunctionPointer<NativeReleaseObject>(table.ReleaseObject);
         _nativeInvokeObject = Marshal.GetDelegateForFunctionPointer<NativeInvokeObject>(table.Invoke);
+        if (header.TableSize >= Marshal.SizeOf<UnrealNativeObjectTransportTableWithCapabilities>())
+            _nativeObjectArguments = (Marshal.PtrToStructure<UnrealNativeObjectTransportTableWithCapabilities>(extension.NativeObjectTransport).Capabilities & 1UL) != 0;
     }
 
     public bool SupportsNativeObjects => !_disposed && _nativeOpenScope is not null;
+    public bool SupportsNativeObjectArguments => SupportsNativeObjects && _nativeObjectArguments;
 
     public UnrealNativeObjectStatus OpenNativeObjectScope(out ulong scope)
     {
@@ -95,6 +99,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
             if (_disposed || _nativeInvokeObject is null) return UnrealNativeObjectStatus.Unavailable;
             if (!_nativeObjectScopes.Contains(scope)) return UnrealNativeObjectStatus.InvalidScope;
             if (arguments.Length > 16) return UnrealNativeObjectStatus.InvalidArgument;
+            if (!_nativeObjectArguments)
+                foreach (var argument in arguments)
+                    if (argument.Kind == UnrealNativeValueKindV3.NativeObject) return UnrealNativeObjectStatus.Unavailable;
             fixed (UnrealNativeValueV3* pointer = arguments)
             {
                 var status = _nativeInvokeObject(_context, scope, target.Value, memberId, pointer,

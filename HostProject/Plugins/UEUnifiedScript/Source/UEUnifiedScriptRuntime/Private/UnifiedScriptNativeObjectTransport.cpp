@@ -49,10 +49,10 @@ EStatus Invoke(void* Context, uint64 Scope, uint64 Target, uint64 MemberId,
 
 extern "C" const FUnifiedScriptNativeObjectTransportV1* UEUnifiedScript_GetNativeObjectTransportV1()
 {
-    static const FUnifiedScriptNativeObjectTransportV1 Table{
-        1, sizeof(FUnifiedScriptNativeObjectTransportV1), sizeof(FUnifiedScriptNativeValueV3), 0,
+    static const FUnifiedScriptNativeObjectTransportWithCapabilities Table{{
+        1, sizeof(FUnifiedScriptNativeObjectTransportWithCapabilities), sizeof(FUnifiedScriptNativeValueV3), 0,
         UEUnifiedScript_GetNativeTransportV1()->RetainContext,
         UEUnifiedScript_GetNativeTransportV1()->ReleaseContext,
-        &OpenScope, &CloseScope, &ReleaseObject, &Invoke};
-    return &Table;
+        &OpenScope, &CloseScope, &ReleaseObject, &Invoke}, 1};
+    return &Table.Base;
 }

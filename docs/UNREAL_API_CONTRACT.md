@@ -22,9 +22,10 @@ silently exposing different Unreal members.
 
 An optional `nativeExtensions` object in the API contract admits public C++
 members that are not marked `UFUNCTION` or `UPROPERTY`. It uses its own schema,
-`unifiedscript.unreal-native-extensions/v0.2`. Legacy v0.1 UObject extensions
-remain readable and retain their canonical representation; ordinary C++ types
-require v0.2. Contracts without this object remain unchanged. The extension is applied
+`unifiedscript.unreal-native-extensions/v0.3`. Legacy v0.1 UObject and v0.2
+ordinary-object extensions remain readable and retain their canonical
+representation. Ordinary C++ declarations require at least v0.2; explicit
+object-argument passing modes require v0.3. Contracts without this object remain unchanged. The extension is applied
 before member selection, dependency closure, source-driven expansion and all
 generators. The normal `ue-bindings --contract` and project setup commands need
 no separate native-extension step.
@@ -42,6 +43,14 @@ ordered `parameters` list of C++ passing modes:
 | `value` | `T` | input |
 | `constReference` | `T const&` | input |
 | `reference` | `T&` | `ref` or `out`, as declared |
+| `pointer` / `constPointer` | `T*` / `T const*` | non-null native wrapper input |
+| `nullablePointer` / `nullableConstPointer` | `T*` / `T const*` | nullable native wrapper input |
+| `objectReference` / `constObjectReference` | `T&` / `T const&` | non-null native wrapper input; not C# `ref`/`out` |
+
+The last three rows apply only to ordinary native-object parameters on
+`nativeObject` owners. They borrow an existing object's storage for the call;
+they do not replace its wrapper or transfer ownership. `value` and
+`constReference` do not implicitly opt an object into these modes.
 
 Every native function path includes its signature, including `()` for zero
 parameters. For example, `Scale(int32)` and `Scale(double)` are distinct members;
@@ -179,6 +188,10 @@ int scaled = counter.Scale(2);          // 30; exact int32 overload.
 double fractional = counter.Scale(0.5); // 7.5; exact double overload.
 using var clone = counter.Clone();     // Independent owned result.
 counter.Bias = 3;
+using var copied = NativeCounter.Create(context.Bridge, child); // const object reference.
+NativeCounter.AddTo(context.Bridge, child, 2); // Mutates the original C++ child to 17.
+int read = copied.ReadConstPointer(child);   // 17; no detached object copy.
+int absent = copied.ReadOptional(null);      // -1; nullable pointer declared explicitly.
 ```
 
 Declare an ordinary type with `kind: "nativeObject"`, a stable
@@ -198,7 +211,7 @@ traits, Blueprint inheritance or reflected state.
   results require a non-static receiver whose lifetime owns the storage.
   Such calls are effectful even when the C++ method is const: they publish leases.
 - Scalar/enum/vector/rotator fields and methods use fixed values. A dependency
-  on a native return type emits its wrapper shell, not unselected members.
+  on a native argument or return type emits its wrapper shell, not unselected members.
   Static calls require the generation's `IUnrealInvocationBridge`; no fabricated
   UObject receiver or process-global managed scope is used.
 - Generated wrappers and that context can cross `[Visual]` call boundaries.
@@ -206,6 +219,23 @@ traits, Blueprint inheritance or reflected state.
   native handles serializable Script Class state or reflected Blueprint pins.
   Full interactive palette insertion is not established: the current palette
   still has receiver/type/return-shape restrictions beyond the generated catalog.
+
+Object arguments keep the canonical type reference `nativeName: "T*"`, even
+when `parameters` selects `constObjectReference`. The passing mode determines
+the exact C++ signature and overload path (for example, `Use(Tconst&)`). C#
+uses the generated wrapper, with `?` only for explicit nullable pointer modes;
+nodes carry `nativePassing` and a tooltip with qualification, nullability and
+caller ownership. Const qualification constrains the native call, not every
+other alias to that storage.
+
+An argument must belong to the same live generation scope as the call. Managed
+encoding rejects disposed wrappers and foreign scopes; native dispatch resolves
+the token again and checks type, World, generation and borrowed-owner liveness
+before entering the method. All arguments are checked before native invocation,
+so an invalid later parameter cannot cause an earlier reference mutation.
+Conforming native methods may use these arguments synchronously, but must not
+retain, delete or take ownership of them. Pointer replacement, ownership
+transfer and asynchronous retention need separate contracts and are unsupported.
 
 `FUnifiedScriptNativeObjectRegistry` belongs to one native World context. Its
 opaque object and scope tokens are process-unique and non-recycled. An owned
@@ -244,23 +274,30 @@ not itself clear that retained scope. If `OnStart` allocates replacement resourc
 when restarting, script code must dispose or reuse the previous leases. Native
 handles are not transferable between generation scopes or Worlds.
 
-Native Object ABI v1 is an optional 64-byte table appended to the v2 transport.
+Native Object ABI v1 has an optional 64-byte table prefix appended to the v2 transport.
 It shares context retain/release functions and the existing 48-byte value cell,
 without changing the existing UObject transport prefixes or call-frame layout.
-Its initial synchronous lane accepts up to 16 fixed scalar/enum/vector/rotator
-inputs and returns one fixed value plus an optional native-object handle. It
-rejects strings, containers, other arena values and UObject cells; it does not
-fall back to reflection. Failed factories discard unpublished allocations and
-outputs, not arbitrary native side effects. Native-object arguments, strings,
-containers, richer structs, ref/out, default arguments, inheritance, converters
+The current table adds an optional capability word at byte 64 (72 bytes total);
+bit 0 enables object inputs. Old 64-byte tables still serve fixed calls, while
+new object calls fail explicitly when the capability is absent. The synchronous
+lane accepts up to 16 fixed scalar/enum/vector/rotator or typed object inputs and
+returns one fixed value plus an optional native-object handle. Object input
+cells use the distinct `NativeObject` tag (26), a type ID and an opaque token,
+never a raw pointer. Null uses the explicit Null flag and a zero token; spare
+fields must be zero. UObject codecs reject this tag, and the native-object lane
+rejects UObject cells and arena-backed values. Neither falls back to the other.
+Failed factories discard unpublished allocations and outputs, not arbitrary
+native side effects. Strings, containers, richer structs, ref/out, default arguments, inheritance, converters
 and native callbacks remain unsupported on this ordinary-object lane. They
 must not silently use UObject codecs or reflection fallback. The broader
 UObject-member call-frame support above is a different route.
 
 `UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation`,
-`.GeneratedLibrary` and `.ManagedLifetime` verify the native registry, ABI
+`.GeneratedLibrary`, `.ObjectArguments` and `.ManagedLifetime` verify the native registry, ABI
 rejection, automatic dispatch, library retirement and actual generated CoreCLR
-startup/rollback/reload/teardown. The sample also injects a duplicate owned return
+startup/rollback/reload/teardown. Object-argument tests exercise all six passing
+modes, constructors, static/instance calls, alias mutation, explicit null and
+rejection before native side effects. The sample also injects a duplicate owned return
 to prove that rejection preserves the existing object. The 10,000-level borrow-chain test checks
 iterative invalidation, not Puerts performance. No cooked result is claimed yet.
 

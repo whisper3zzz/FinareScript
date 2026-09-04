@@ -7,7 +7,7 @@
   "types": [
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
-      "members": ["Create()", "Create(int32)", "Bias", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset"]
+      "members": ["Create()", "Create(int32)", "Create(UE::UnifiedScript::NativeExample::FCounterChildconst&)", "Bias", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset", "ReadPointer", "ReadConstPointer", "ReadOptional", "ReadOptionalConst", "AddFrom", "AddTo", "Sum"]
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
@@ -160,7 +160,7 @@
     }
   ],
   "nativeExtensions": {
-    "schemaVersion": "unifiedscript.unreal-native-extensions/v0.2",
+    "schemaVersion": "unifiedscript.unreal-native-extensions/v0.3",
     "name": "Demo.Native",
     "types": [
       {
@@ -248,6 +248,278 @@
               "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()", "name": "Reset", "returnType": {"kind": "void", "nativeName": "void"},
               "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
             }, "const": false, "parameters": []
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(UE::UnifiedScript::NativeExample::FCounterChildconst&)",
+              "name": "Create",
+              "returnType": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "parameters": [
+                {
+                  "name": "Initial",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": true,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": false,
+            "parameters": [
+              "constObjectReference"
+            ],
+            "operation": "constructor",
+            "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadPointer(UE::UnifiedScript::NativeExample::FCounterChild*)",
+              "name": "ReadPointer",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": false,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": true,
+            "parameters": [
+              "pointer"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadConstPointer(UE::UnifiedScript::NativeExample::FCounterChildconst*)",
+              "name": "ReadConstPointer",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": false,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": true,
+            "parameters": [
+              "constPointer"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadOptional(UE::UnifiedScript::NativeExample::FCounterChild*)",
+              "name": "ReadOptional",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": false,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": true,
+            "parameters": [
+              "nullablePointer"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:ReadOptionalConst(UE::UnifiedScript::NativeExample::FCounterChildconst*)",
+              "name": "ReadOptionalConst",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": false,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": true,
+            "parameters": [
+              "nullableConstPointer"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:AddFrom(UE::UnifiedScript::NativeExample::FCounterChildconst&)",
+              "name": "AddFrom",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": false,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": false,
+            "parameters": [
+              "constObjectReference"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:AddTo(UE::UnifiedScript::NativeExample::FCounterChild&,int32)",
+              "name": "AddTo",
+              "returnType": {
+                "kind": "void",
+                "nativeName": "void"
+              },
+              "parameters": [
+                {
+                  "name": "Other",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                },
+                {
+                  "name": "Delta",
+                  "type": {
+                    "kind": "int32",
+                    "nativeName": "int32"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": true,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": false,
+            "parameters": [
+              "objectReference",
+              "value"
+            ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Sum(UE::UnifiedScript::NativeExample::FCounterChildconst&,UE::UnifiedScript::NativeExample::FCounterChildconst&)",
+              "name": "Sum",
+              "returnType": {
+                "kind": "int32",
+                "nativeName": "int32"
+              },
+              "parameters": [
+                {
+                  "name": "Left",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                },
+                {
+                  "name": "Right",
+                  "type": {
+                    "kind": "nativeObject",
+                    "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                    "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                    "headerPath": "UnifiedScriptNativeCounter.h"
+                  },
+                  "direction": "input"
+                }
+              ],
+              "traits": {
+                "static": true,
+                "pure": false,
+                "callable": true
+              }
+            },
+            "const": false,
+            "parameters": [
+              "constObjectReference",
+              "constObjectReference"
+            ]
           }
         ]
       },
