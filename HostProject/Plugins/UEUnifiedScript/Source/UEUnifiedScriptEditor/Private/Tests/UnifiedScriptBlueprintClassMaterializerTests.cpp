@@ -1662,7 +1662,29 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 TEXT("UnifiedScript.Unreal.UnrealTransform")),
         },
         TEXT(","));
-    const FString Functions = FString::Join(
+    struct FExchangeShape
+    {
+        const TCHAR* Name;
+        const TCHAR* Id;
+        const TCHAR* Metadata;
+        FString Type;
+    };
+    const TArray<FExchangeShape> ExchangeShapes{
+        {TEXT("ExchangeArray"), TEXT("71717171717171717171717171717171"),
+         TEXT("System.Collections.Generic.IReadOnlyList<System.Int32>"),
+         TEXT(R"JSON({"kind":"array","unrealTypePath":"","unrealNativeName":"TArray","fields":[],"typeArguments":[{"typeMetadataName":"System.Int32"}]})JSON")},
+        {TEXT("ExchangeSet"), TEXT("72727272727272727272727272727272"),
+         TEXT("System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealName>"),
+         TEXT(R"JSON({"kind":"set","unrealTypePath":"","unrealNativeName":"TSet","fields":[],"typeArguments":[{"typeMetadataName":"UnifiedScript.Unreal.UnrealName"}]})JSON")},
+        {TEXT("ExchangeMap"), TEXT("73737373737373737373737373737373"),
+         TEXT("System.Collections.Generic.IReadOnlyDictionary<System.String, UnifiedScript.Unreal.UnrealSoftObjectHandle>"),
+         TEXT(R"JSON({"kind":"map","unrealTypePath":"","unrealNativeName":"TMap","fields":[],"typeArguments":[{"typeMetadataName":"System.String"},{"typeMetadataName":"UnifiedScript.Unreal.UnrealSoftObjectHandle"}]})JSON")},
+        {TEXT("ExchangeSoftObject"), TEXT("74747474747474747474747474747474"),
+         TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle"), FString()},
+        {TEXT("ExchangeSoftClass"), TEXT("75757575757575757575757575757575"),
+         TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle"), FString()},
+    };
+    FString Functions = FString::Join(
         TArray<FString>{
             Function(
                 DescribeId,
@@ -1709,6 +1731,16 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         },
         TEXT(","));
 
+    for (const FExchangeShape& Shape : ExchangeShapes)
+    {
+        const FString ShapeParameters = FString::Join(TArray<FString>{
+            Parameter(TEXT("81818181818181818181818181818181"), TEXT("replacement"), Shape.Metadata, Shape.Type),
+            Parameter(TEXT("82828282828282828282828282828282"), TEXT("value"), Shape.Metadata, Shape.Type, TEXT("inputOutput")),
+            Parameter(TEXT("83838383838383838383838383838383"), TEXT("previous"), Shape.Metadata, Shape.Type, TEXT("output")),
+        }, TEXT(","));
+        Functions += TEXT(",") + Function(Shape.Id, Shape.Name, Shape.Metadata, ShapeParameters,
+            true, true, false, Shape.Type);
+    }
     UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
     ScriptAsset->ScriptClassId = Guid(LibraryClassId);
     ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::BlueprintFunctionLibrary;
@@ -1778,8 +1810,8 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         return false;
     }
-    TestEqual(TEXT("Six static functions are materialized"),
-        SyncResult.DeclaredFunctionCount, 6);
+    TestEqual(TEXT("Common and container/Soft Reference functions are materialized"),
+        SyncResult.DeclaredFunctionCount, 6 + ExchangeShapes.Num());
 
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
@@ -1961,6 +1993,65 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         WorldContext->RegisterComponentWithWorld(World);
         UObject* LibraryObject = GeneratedClass->GetDefaultObject();
+        for (const FExchangeShape& Shape : ExchangeShapes)
+        {
+            UFunction* Exchange = GeneratedClass->FindFunctionByName(
+                FName(*FString::Printf(TEXT("USF_%s"), Shape.Id)));
+            if (!TestNotNull(*FString::Printf(TEXT("%s persists after package reload"), Shape.Name), Exchange)) continue;
+            const FProperty* Replacement = FindFProperty<FProperty>(Exchange, TEXT("replacement"));
+            const FProperty* Value = FindFProperty<FProperty>(Exchange, TEXT("value"));
+            const FProperty* Previous = FindFProperty<FProperty>(Exchange, TEXT("previous"));
+            const FProperty* Return = Exchange->GetReturnProperty();
+            const FObjectPropertyBase* Context = FindFProperty<FObjectPropertyBase>(Exchange, TEXT("WorldContextObject"));
+            if (!TestTrue(TEXT("Exchange signature retains input/ref/out/return pins"),
+                    Replacement && Value && Previous && Return && Context)) continue;
+            TestTrue(TEXT("Exchange ref pin keeps reference and output flags"),
+                Value->HasAllPropertyFlags(CPF_ReferenceParm | CPF_OutParm));
+            FStructOnScope Call(Exchange);
+            FStructOnScope Before(Exchange);
+            void* Memory = Call.GetStructMemory();
+            auto Fill = [&](const FProperty& Property, void* Address, bool bReplacement)
+            {
+                const FString Path = bReplacement ? TEXT("/Game/Test/NewAsset.NewAsset") : TEXT("/Game/Test/OldAsset.OldAsset");
+                if (const FArrayProperty* Typed = CastField<FArrayProperty>(&Property))
+                {
+                    FScriptArrayHelper Array(Typed, Address);
+                    Array.AddValues(2);
+                    CastFieldChecked<FIntProperty>(Typed->Inner)->SetPropertyValue(Array.GetRawPtr(0), bReplacement ? 42 : 7);
+                    CastFieldChecked<FIntProperty>(Typed->Inner)->SetPropertyValue(Array.GetRawPtr(1), bReplacement ? 99 : -3);
+                }
+                else if (const FSetProperty* SetType = CastField<FSetProperty>(&Property))
+                {
+                    FScriptSetHelper Set(SetType, Address);
+                    const int32 Index = Set.AddDefaultValue_Invalid_NeedsRehash();
+                    CastFieldChecked<FNameProperty>(SetType->ElementProp)->SetPropertyValue(Set.GetElementPtr(Index), bReplacement ? TEXT("New") : TEXT("Old"));
+                    Set.Rehash();
+                }
+                else if (const FMapProperty* MapType = CastField<FMapProperty>(&Property))
+                {
+                    FScriptMapHelper Map(MapType, Address);
+                    const int32 Index = Map.AddDefaultValue_Invalid_NeedsRehash();
+                    CastFieldChecked<FStrProperty>(MapType->KeyProp)->SetPropertyValue(Map.GetKeyPtr(Index), bReplacement ? TEXT("New") : TEXT("Old"));
+                    CastFieldChecked<FSoftObjectProperty>(MapType->ValueProp)->SetPropertyValue(Map.GetValuePtr(Index), FSoftObjectPtr(FSoftObjectPath(Path)));
+                    Map.Rehash();
+                }
+                else
+                {
+                    CastFieldChecked<FSoftObjectProperty>(&Property)->SetPropertyValue(Address, FSoftObjectPtr(FSoftObjectPath(Path)));
+                }
+            };
+            Context->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            Fill(*Replacement, Replacement->ContainerPtrToValuePtr<void>(Memory), true);
+            Fill(*Value, Value->ContainerPtrToValuePtr<void>(Memory), false);
+            Value->CopyCompleteValue_InContainer(Before.GetStructMemory(), Memory);
+            LibraryObject->ProcessEvent(Exchange, Memory);
+            TestTrue(*FString::Printf(TEXT("%s writes replacement to ref"), Shape.Name),
+                Value->Identical(Value->ContainerPtrToValuePtr<void>(Memory), Replacement->ContainerPtrToValuePtr<void>(Memory)));
+            TestTrue(*FString::Printf(TEXT("%s returns the previous value"), Shape.Name),
+                Return->Identical(Return->ContainerPtrToValuePtr<void>(Memory), Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+            TestTrue(*FString::Printf(TEXT("%s writes the previous value to out"), Shape.Name),
+                Previous->Identical(Previous->ContainerPtrToValuePtr<void>(Memory), Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+        }
         const FObjectPropertyBase* ContextProperty =
             FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject"));
         const FObjectPropertyBase* ValueProperty =

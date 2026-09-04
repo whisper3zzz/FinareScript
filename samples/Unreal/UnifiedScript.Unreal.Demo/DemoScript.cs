@@ -188,6 +188,53 @@ public sealed class DemoScript : IUnrealManagedScript
 public static class DemoLibrary
 {
     [Visual]
+    public static IReadOnlyList<int> ExchangeArray(
+        IReadOnlyList<int> replacement, ref IReadOnlyList<int> value, out IReadOnlyList<int> previous)
+    {
+        previous = value;
+        value = replacement;
+        return previous;
+    }
+
+    [Visual]
+    public static IReadOnlySet<UnrealName> ExchangeSet(
+        IReadOnlySet<UnrealName> replacement, ref IReadOnlySet<UnrealName> value, out IReadOnlySet<UnrealName> previous)
+    {
+        previous = value;
+        value = replacement;
+        return previous;
+    }
+
+    [Visual]
+    public static IReadOnlyDictionary<string, UnrealSoftObjectHandle> ExchangeMap(
+        IReadOnlyDictionary<string, UnrealSoftObjectHandle> replacement,
+        ref IReadOnlyDictionary<string, UnrealSoftObjectHandle> value,
+        out IReadOnlyDictionary<string, UnrealSoftObjectHandle> previous)
+    {
+        previous = value;
+        value = replacement;
+        return previous;
+    }
+
+    [Visual]
+    public static UnrealSoftObjectHandle ExchangeSoftObject(
+        UnrealSoftObjectHandle replacement, ref UnrealSoftObjectHandle value, out UnrealSoftObjectHandle previous)
+    {
+        previous = value;
+        value = replacement;
+        return previous;
+    }
+
+    [Visual]
+    public static UnrealSoftClassHandle ExchangeSoftClass(
+        UnrealSoftClassHandle replacement, ref UnrealSoftClassHandle value, out UnrealSoftClassHandle previous)
+    {
+        previous = value;
+        value = replacement;
+        return previous;
+    }
+
+    [Visual]
     public static string Describe(
         UnrealObjectHandle value,
         UnrealVector location,

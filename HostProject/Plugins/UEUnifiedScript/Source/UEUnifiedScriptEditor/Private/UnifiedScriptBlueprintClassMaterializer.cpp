@@ -64,6 +64,9 @@ enum class EFunctionValueTypeKind : uint8
     None,
     Enum,
     Struct,
+    Array,
+    Set,
+    Map,
 };
 
 struct FFunctionValueTypeDeclaration
@@ -72,6 +75,8 @@ struct FFunctionValueTypeDeclaration
     FString UnrealTypePath;
     FString UnrealNativeName;
     TArray<TArray<FName>> StructFieldPaths;
+    TArray<FString> ArgumentMetadataNames;
+    TArray<FFunctionValueTypeDeclaration> TypeArguments;
 };
 
 struct FFunctionParameterDeclaration
@@ -311,6 +316,47 @@ bool ResolveFunctionPinType(
         OutType = FEdGraphPinType();
         return bAllowVoid;
     }
+    if (ValueType.Kind == EFunctionValueTypeKind::Array ||
+        ValueType.Kind == EFunctionValueTypeKind::Set ||
+        ValueType.Kind == EFunctionValueTypeKind::Map)
+    {
+        const bool bMap = ValueType.Kind == EFunctionValueTypeKind::Map;
+        const FString Definition = bMap ? TEXT("System.Collections.Generic.IReadOnlyDictionary") :
+            ValueType.Kind == EFunctionValueTypeKind::Array
+                ? TEXT("System.Collections.Generic.IReadOnlyList")
+                : TEXT("System.Collections.Generic.IReadOnlySet");
+        if (ValueType.TypeArguments.Num() != (bMap ? 2 : 1) ||
+            ValueType.ArgumentMetadataNames.Num() != ValueType.TypeArguments.Num() ||
+            MetadataName != Definition + TEXT("<") +
+                FString::Join(ValueType.ArgumentMetadataNames, TEXT(", ")) + TEXT(">"))
+        {
+            return false;
+        }
+        bool bHasElement = false;
+        if (!ResolveFunctionPinType(ValueType.ArgumentMetadataNames[0], ValueType.TypeArguments[0],
+                false, OutType, bHasElement) || !bHasElement || OutType.IsContainer() ||
+            (ValueType.Kind != EFunctionValueTypeKind::Array &&
+             !FBlueprintEditorUtils::HasGetTypeHash(OutType)))
+        {
+            return false;
+        }
+        OutType.ContainerType = bMap ? EPinContainerType::Map :
+            ValueType.Kind == EFunctionValueTypeKind::Array
+                ? EPinContainerType::Array : EPinContainerType::Set;
+        if (bMap)
+        {
+            FEdGraphPinType MappedType;
+            if (!ResolveFunctionPinType(ValueType.ArgumentMetadataNames[1], ValueType.TypeArguments[1],
+                    false, MappedType, bHasElement) || !bHasElement || MappedType.IsContainer())
+            {
+                return false;
+            }
+            OutType.PinValueType.TerminalCategory = MappedType.PinCategory;
+            OutType.PinValueType.TerminalSubCategory = MappedType.PinSubCategory;
+            OutType.PinValueType.TerminalSubCategoryObject = MappedType.PinSubCategoryObject;
+        }
+        return true;
+    }
     if (ValueType.Kind == EFunctionValueTypeKind::Enum)
     {
         UEnum* Enum = LoadObject<UEnum>(nullptr, *ValueType.UnrealTypePath);
@@ -333,9 +379,22 @@ bool ResolveFunctionPinType(
         for (const TArray<FName>& FieldPath : ValueType.StructFieldPaths)
         {
             const UStruct* Owner = Struct;
+            const FProperty* Field = nullptr;
             for (int32 Index = 0; Index < FieldPath.Num(); ++Index)
             {
-                const FProperty* Field = FindFProperty<FProperty>(Owner, FieldPath[Index]);
+                if (Owner != nullptr)
+                    Field = FindFProperty<FProperty>(Owner, FieldPath[Index]);
+                else if (const FArrayProperty* Array = CastField<FArrayProperty>(Field);
+                         Array && FieldPath[Index] == FName(TEXT("$element")))
+                    Field = Array->Inner;
+                else if (const FSetProperty* Set = CastField<FSetProperty>(Field);
+                         Set && FieldPath[Index] == FName(TEXT("$element")))
+                    Field = Set->ElementProp;
+                else if (const FMapProperty* Map = CastField<FMapProperty>(Field))
+                    Field = FieldPath[Index] == FName(TEXT("$key")) ? Map->KeyProp :
+                        FieldPath[Index] == FName(TEXT("$value")) ? Map->ValueProp : nullptr;
+                else
+                    Field = nullptr;
                 if (Field == nullptr)
                 {
                     return false;
@@ -343,11 +402,7 @@ bool ResolveFunctionPinType(
                 if (Index + 1 < FieldPath.Num())
                 {
                     const FStructProperty* Nested = CastField<FStructProperty>(Field);
-                    if (Nested == nullptr)
-                    {
-                        return false;
-                    }
-                    Owner = Nested->Struct;
+                    Owner = Nested != nullptr ? Nested->Struct : nullptr;
                 }
             }
         }
@@ -386,6 +441,15 @@ bool ResolveFunctionPinType(
     {
         OutType = FEdGraphPinType();
         OutType.PinCategory = UEdGraphSchema_K2::PC_Text;
+        return true;
+    }
+    else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle") ||
+             MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle"))
+    {
+        OutType = FEdGraphPinType();
+        OutType.PinCategory = MetadataName.EndsWith(TEXT("UnrealSoftClassHandle"))
+            ? UEdGraphSchema_K2::PC_SoftClass : UEdGraphSchema_K2::PC_SoftObject;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
         return true;
     }
     else if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle"))
@@ -1012,18 +1076,83 @@ bool ReadRequiredString(
     return true;
 }
 
+bool ParseFunctionValueType(
+    const TSharedPtr<FJsonObject>& Owner,
+    const TCHAR* Field,
+    FFunctionValueTypeDeclaration& OutType,
+    FString& OutError,
+    int32 Depth = 0);
+
 bool AppendFunctionValueType(
     const TSharedPtr<FJsonObject>& Object,
     bool bTopLevel,
     TArray<FName>& Prefix,
     FFunctionValueTypeDeclaration& OutType,
-    FString& OutError)
+    FString& OutError,
+    int32 Depth)
 {
     FString Kind;
     FString UnrealTypePath;
     FString UnrealNativeName;
     const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
-    if (!ReadRequiredString(Object, TEXT("kind"), Kind, OutError) ||
+    if (Depth > 16 || !ReadRequiredString(Object, TEXT("kind"), Kind, OutError))
+    {
+        OutError = TEXT("Function type nesting exceeds the supported depth or has no kind.");
+        return false;
+    }
+    if (Kind == TEXT("array") || Kind == TEXT("set") || Kind == TEXT("map"))
+    {
+        const bool bMap = Kind == TEXT("map");
+        const FString NativeName = bMap ? TEXT("TMap") :
+            Kind == TEXT("array") ? TEXT("TArray") : TEXT("TSet");
+        const TArray<TSharedPtr<FJsonValue>>* Arguments = nullptr;
+        if (!Object->TryGetStringField(TEXT("unrealTypePath"), UnrealTypePath) ||
+            !UnrealTypePath.IsEmpty() ||
+            !ReadRequiredString(Object, TEXT("unrealNativeName"), UnrealNativeName, OutError) ||
+            UnrealNativeName != NativeName ||
+            !Object->TryGetArrayField(TEXT("fields"), Fields) || !Fields->IsEmpty() ||
+            !Object->TryGetArrayField(TEXT("typeArguments"), Arguments) ||
+            Arguments->Num() != (bMap ? 2 : 1))
+        {
+            OutError = TEXT("Container function type has invalid identity or type arguments.");
+            return false;
+        }
+        if (bTopLevel)
+        {
+            OutType.Kind = bMap ? EFunctionValueTypeKind::Map :
+                Kind == TEXT("array") ? EFunctionValueTypeKind::Array : EFunctionValueTypeKind::Set;
+            OutType.UnrealNativeName = NativeName;
+        }
+        for (int32 Index = 0; Index < Arguments->Num(); ++Index)
+        {
+            const TSharedPtr<FJsonObject> Argument = (*Arguments)[Index].IsValid()
+                ? (*Arguments)[Index]->AsObject() : nullptr;
+            FString MetadataName;
+            FFunctionValueTypeDeclaration Child;
+            if (!ReadRequiredString(Argument, TEXT("typeMetadataName"), MetadataName, OutError) ||
+                !ParseFunctionValueType(Argument, TEXT("unrealType"), Child, OutError, Depth + 1))
+            {
+                return false;
+            }
+            // Reserved segments cannot collide with native reflected field names.
+            Prefix.Add(FName(bMap ? (Index == 0 ? TEXT("$key") : TEXT("$value")) : TEXT("$element")));
+            OutType.StructFieldPaths.Add(Prefix);
+            for (const TArray<FName>& ChildPath : Child.StructFieldPaths)
+            {
+                TArray<FName> Path = Prefix;
+                Path.Append(ChildPath);
+                OutType.StructFieldPaths.Add(MoveTemp(Path));
+            }
+            Prefix.Pop();
+            if (bTopLevel)
+            {
+                OutType.ArgumentMetadataNames.Add(MetadataName);
+                OutType.TypeArguments.Add(MoveTemp(Child));
+            }
+        }
+        return true;
+    }
+    if (
         !ReadRequiredString(Object, TEXT("unrealTypePath"), UnrealTypePath, OutError) ||
         !ReadRequiredString(Object, TEXT("unrealNativeName"), UnrealNativeName, OutError) ||
         !Object->TryGetArrayField(TEXT("fields"), Fields) || Fields == nullptr)
@@ -1042,6 +1171,7 @@ bool AppendFunctionValueType(
             : EFunctionValueTypeKind::None;
     if (ParsedKind == EFunctionValueTypeKind::None ||
         !UnrealTypePath.StartsWith(TEXT("/Script/")) ||
+        Object->HasField(TEXT("typeArguments")) ||
         (ParsedKind == EFunctionValueTypeKind::Enum && !Fields->IsEmpty()))
     {
         OutError = FString::Printf(
@@ -1087,7 +1217,7 @@ bool AppendFunctionValueType(
         {
             if (!Field->TryGetObjectField(TEXT("unrealType"), Nested) ||
                 Nested == nullptr || !Nested->IsValid() ||
-                !AppendFunctionValueType(*Nested, false, Prefix, OutType, OutError))
+                !AppendFunctionValueType(*Nested, false, Prefix, OutType, OutError, Depth + 1))
             {
                 Prefix.Pop();
                 return false;
@@ -1102,7 +1232,8 @@ bool ParseFunctionValueType(
     const TSharedPtr<FJsonObject>& Owner,
     const TCHAR* Field,
     FFunctionValueTypeDeclaration& OutType,
-    FString& OutError)
+    FString& OutError,
+    int32 Depth)
 {
     OutType = FFunctionValueTypeDeclaration();
     if (!Owner.IsValid() || !Owner->HasField(Field))
@@ -1116,7 +1247,7 @@ bool ParseFunctionValueType(
         return false;
     }
     TArray<FName> Prefix;
-    return AppendFunctionValueType(*Object, true, Prefix, OutType, OutError);
+    return AppendFunctionValueType(*Object, true, Prefix, OutType, OutError, Depth);
 }
 
 FUnifiedScriptManagedValueTypeBinding MakeRuntimeValueTypeBinding(
@@ -1901,9 +2032,10 @@ bool ParseDeclaration(
                 Declaration.bHasReturnValue))
         {
             OutError = FString::Printf(
-                TEXT("Function '%s' has unsupported return type '%s'. Managed function ABI v2 supports void, bool, byte, int, long, float, double, string, ObjectHandle, and FVector."),
+                TEXT("Function '%s' has unsupported return type '%s'. %s Use reviewed values, array/set/map, or Soft References; K2 forbids direct nested containers and requires hashable set elements/map keys."),
                 *Name,
-                *ReturnType);
+                *ReturnType,
+                *OutError);
             return false;
         }
 
@@ -1981,10 +2113,11 @@ bool ParseDeclaration(
                 !bHasParameterValue)
             {
                 OutError = FString::Printf(
-                    TEXT("Function '%s' has duplicate, invalid, or unsupported parameter '%s' of type '%s'. Managed function ABI v2 supports bool, byte, int, long, float, double, string, ObjectHandle, and FVector."),
+                    TEXT("Function '%s' has duplicate, invalid, or unsupported parameter '%s' of type '%s'. %s Use reviewed values, array/set/map, or Soft References; K2 forbids direct nested containers and requires hashable set elements/map keys."),
                     *Name,
                     *ParameterName,
-                    *ParameterType);
+                    *ParameterType,
+                    *OutError);
                 return false;
             }
             ParameterDeclaration.PinType.bIsReference =

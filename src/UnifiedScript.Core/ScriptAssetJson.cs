@@ -412,11 +412,47 @@ public static class ScriptAssetJson
         {
             return;
         }
+        if (type.Kind is ScriptFunctionValueTypeKind.Array or
+            ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
+        {
+            string definition = type.Kind switch
+            {
+                ScriptFunctionValueTypeKind.Array => "System.Collections.Generic.IReadOnlyList",
+                ScriptFunctionValueTypeKind.Set => "System.Collections.Generic.IReadOnlySet",
+                _ => "System.Collections.Generic.IReadOnlyDictionary",
+            };
+            string nativeName = type.Kind switch
+            {
+                ScriptFunctionValueTypeKind.Array => "TArray",
+                ScriptFunctionValueTypeKind.Set => "TSet",
+                _ => "TMap",
+            };
+            int arity = type.Kind == ScriptFunctionValueTypeKind.Map ? 2 : 1;
+            if (depth > 16 || type.UnrealTypePath != string.Empty ||
+                type.UnrealNativeName != nativeName || type.Fields is not { Count: 0 } ||
+                type.TypeArguments is null || type.TypeArguments.Count != arity ||
+                type.TypeArguments.Any(static argument => argument is null ||
+                    string.IsNullOrWhiteSpace(argument.TypeMetadataName)))
+            {
+                throw new JsonException($"Container value type '{metadataName}' has invalid type arguments.");
+            }
+            string expected = $"{definition}<{string.Join(", ", type.TypeArguments.Select(
+                static argument => argument.TypeMetadataName))}>";
+            if (metadataName != expected)
+            {
+                throw new JsonException($"Container value type '{metadataName}' does not match '{expected}'.");
+            }
+            foreach (ScriptFunctionTypeArgumentDeclaration argument in type.TypeArguments)
+            {
+                ValidateFunctionValueType(argument.UnrealType, argument.TypeMetadataName, depth + 1);
+            }
+            return;
+        }
         if (depth > 16 || !Enum.IsDefined(type.Kind) ||
             string.IsNullOrWhiteSpace(type.UnrealTypePath) ||
             !type.UnrealTypePath.StartsWith("/Script/", StringComparison.Ordinal) ||
             string.IsNullOrWhiteSpace(type.UnrealNativeName) ||
-            type.Fields is null ||
+            type.Fields is null || type.TypeArguments is not null ||
             string.IsNullOrWhiteSpace(metadataName))
         {
             throw new JsonException($"Function value type '{metadataName}' has invalid Unreal identity.");

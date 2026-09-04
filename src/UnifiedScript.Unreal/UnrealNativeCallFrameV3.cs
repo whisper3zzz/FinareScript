@@ -1382,6 +1382,8 @@ internal static class UnrealNativeValueCodecV3
             type == typeof(UnrealVector) ? "FVector" :
             type == typeof(UnrealRotator) ? "FRotator" :
             type == typeof(UnrealTransform) ? "FTransform" :
+            TryGetEnumShape(type, out UnrealEnumShape enumShape)
+                ? enumShape.Attribute.NativeName :
             TryGetStructShape(type, out UnrealStructShape structShape)
                 ? structShape.Attribute.NativeName
                 : string.Empty;

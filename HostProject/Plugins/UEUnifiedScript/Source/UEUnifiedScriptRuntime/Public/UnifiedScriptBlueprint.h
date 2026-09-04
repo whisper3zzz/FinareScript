@@ -147,7 +147,7 @@ struct FUnifiedScriptManagedStructFieldPath
 {
     GENERATED_BODY()
 
-    /** Native reflected property path from the top-level generated UStruct. */
+    /** Native field path; $element/$key/$value select container components. */
     UPROPERTY()
     TArray<FName> Segments;
 };

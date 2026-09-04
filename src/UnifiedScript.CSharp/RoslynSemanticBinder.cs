@@ -921,6 +921,19 @@ public sealed class RoslynSemanticBinder
             return ClassifySpecialType(type.SpecialType, nullability);
         }
 
+        // Dictionary enumeration exposes a readonly pair. Its safety follows
+        // both component types; accepting the dictionary alone would leave an
+        // unsafe element in the Graph/foreach contract.
+        if (type is INamedTypeSymbol { Arity: 2, Name: "KeyValuePair", IsReadOnly: true } pair &&
+            pair.ContainingNamespace.ToDisplayString() == "System.Collections.Generic" &&
+            pair.ContainingAssembly.GetTypeByMetadataName(
+                "System.Collections.Generic.KeyValuePair`2") is { } pairDefinition &&
+            SymbolEqualityComparer.Default.Equals(pair.OriginalDefinition, pairDefinition))
+        {
+            return (UnifiedTypeKind.Struct, nullability,
+                pair.TypeArguments.All(argument => GetTypeDescriptor(argument).IsGraphSafe));
+        }
+
         if (TryGetEnumerableElementType(type, out ITypeSymbol? enumerableElement))
         {
             return (

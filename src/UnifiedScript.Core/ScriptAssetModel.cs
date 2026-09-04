@@ -41,6 +41,9 @@ public enum ScriptFunctionValueTypeKind
 {
     Enum,
     Struct,
+    Array,
+    Set,
+    Map,
 }
 
 public sealed record ScriptFunctionStructFieldDeclaration(
@@ -49,11 +52,17 @@ public sealed record ScriptFunctionStructFieldDeclaration(
     string TypeMetadataName,
     ScriptFunctionValueTypeDeclaration? UnrealType = null);
 
+public sealed record ScriptFunctionTypeArgumentDeclaration(
+    string TypeMetadataName,
+    ScriptFunctionValueTypeDeclaration? UnrealType = null);
+
 public sealed record ScriptFunctionValueTypeDeclaration(
     ScriptFunctionValueTypeKind Kind,
     string UnrealTypePath,
     string UnrealNativeName,
-    IReadOnlyList<ScriptFunctionStructFieldDeclaration> Fields);
+    IReadOnlyList<ScriptFunctionStructFieldDeclaration> Fields,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ScriptFunctionTypeArgumentDeclaration>? TypeArguments = null);
 
 public sealed record ScriptParameterDeclaration(
     SemanticId Id,

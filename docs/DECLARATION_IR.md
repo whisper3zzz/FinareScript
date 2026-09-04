@@ -11,6 +11,30 @@ Roslyn is the first producer, the visual editor and AI outline are consumers,
 and the future Unreal adapter will map the same exposure metadata to generated
 host properties. None of those consumers owns a second declaration model.
 
+## Container and Soft Reference function declarations
+
+Blueprint-callable `IReadOnlyList<T>`, `IReadOnlySet<T>` and
+`IReadOnlyDictionary<TKey, TValue>` carry `array`, `set` and `map` value-type
+descriptors. Their ordered `typeArguments` retain the CLR metadata name and
+optional nested Unreal enum/struct descriptor of each component. Containers have
+an empty `unrealTypePath`, native family name (`TArray`/`TSet`/`TMap`) and no struct
+`fields`. Strict readers reject inconsistent kinds, arity or metadata names.
+Existing enum/struct documents remain unchanged when no type arguments exist.
+
+`UnrealSoftObjectHandle` and `UnrealSoftClassHandle` remain built-in path values,
+projected as soft object/class pins without loading their referenced asset.
+Input, return, `ref` and `out` use the same ABI v3 cell/arena transport. Container
+descriptors are bounded by the call arena, and all outputs decode into temporary
+storage before publication to the caller. Generated native struct-field paths
+use reserved `$element`, `$key` and `$value` segments inside containers.
+
+K2 does not permit direct nested container pins; sets and map keys must support
+Unreal hashing. Such unsupported signatures fail during class preflight. The
+DemoLibrary `ExchangeArray`, `ExchangeSet`, `ExchangeMap`, `ExchangeSoftObject`
+and `ExchangeSoftClass` examples exercise all directions through generated
+functions. See the live roadmap for the remaining validation scope; package
+reload within Editor Automation does not itself prove cooked execution.
+
 ## C# source contract
 
 An explicit Script Asset is a class or struct marked with a relative asset

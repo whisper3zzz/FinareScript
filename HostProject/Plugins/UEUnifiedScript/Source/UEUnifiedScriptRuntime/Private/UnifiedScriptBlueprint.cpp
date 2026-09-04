@@ -217,6 +217,41 @@ void CollectDirectStructFields(
     }
 }
 
+FString ContainerValueNativeName(const FProperty& Property)
+{
+    if (const FEnumProperty* Typed = CastField<FEnumProperty>(&Property)) return Typed->GetEnum()->GetName();
+    if (const FByteProperty* Typed = CastField<FByteProperty>(&Property); Typed && Typed->Enum)
+        return Typed->Enum->GetName();
+    if (CastField<FBoolProperty>(&Property)) return TEXT("bool");
+    if (CastField<FByteProperty>(&Property)) return TEXT("uint8");
+    if (CastField<FIntProperty>(&Property)) return TEXT("int32");
+    if (CastField<FInt64Property>(&Property)) return TEXT("int64");
+    if (CastField<FFloatProperty>(&Property)) return TEXT("float");
+    if (CastField<FDoubleProperty>(&Property)) return TEXT("double");
+    if (CastField<FStrProperty>(&Property)) return TEXT("FString");
+    if (CastField<FNameProperty>(&Property)) return TEXT("FName");
+    if (CastField<FTextProperty>(&Property)) return TEXT("FText");
+    if (CastField<FSoftClassProperty>(&Property)) return TEXT("FSoftClassPath");
+    if (CastField<FSoftObjectProperty>(&Property)) return TEXT("FSoftObjectPath");
+    if (CastField<FClassProperty>(&Property)) return TEXT("UClass*");
+    if (CastField<FObjectPropertyBase>(&Property)) return TEXT("UObject*");
+    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property))
+    {
+        if (Typed->Struct == TBaseStructure<FVector>::Get()) return TEXT("FVector");
+        if (Typed->Struct == TBaseStructure<FRotator>::Get()) return TEXT("FRotator");
+        if (Typed->Struct == TBaseStructure<FTransform>::Get()) return TEXT("FTransform");
+        return Typed->Struct->GetStructCPPName();
+    }
+    if (const FArrayProperty* Typed = CastField<FArrayProperty>(&Property))
+        return TEXT("TArray<") + ContainerValueNativeName(*Typed->Inner) + TEXT(">");
+    if (const FSetProperty* Typed = CastField<FSetProperty>(&Property))
+        return TEXT("TSet<") + ContainerValueNativeName(*Typed->ElementProp) + TEXT(">");
+    if (const FMapProperty* Typed = CastField<FMapProperty>(&Property))
+        return TEXT("TMap<") + ContainerValueNativeName(*Typed->KeyProp) + TEXT(",") +
+            ContainerValueNativeName(*Typed->ValueProp) + TEXT(">");
+    return FString();
+}
+
 bool PackValueV2(
     const FProperty& Property,
     const void* Container,
@@ -225,9 +260,89 @@ bool PackValueV2(
     const FUnifiedScriptManagedValueTypeBinding* TypeBinding,
     TConstArrayView<FName> StructPrefix,
     FUnifiedScriptNativeValueV3& OutValue,
-    FString& OutError)
+    FString& OutError,
+    bool bDirectValue = false)
 {
-    const void* Value = Property.ContainerPtrToValuePtr<void>(Container);
+    const void* Value = bDirectValue ? Container : Property.ContainerPtrToValuePtr<void>(Container);
+    if (StructPrefix.Num() > 16)
+    {
+        OutError = TEXT("Managed function value nesting exceeds 16 levels.");
+        return false;
+    }
+    const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(&Property);
+    const FSetProperty* SetProperty = CastField<FSetProperty>(&Property);
+    const FMapProperty* MapProperty = CastField<FMapProperty>(&Property);
+    if (ArrayProperty || SetProperty || MapProperty)
+    {
+        const int32 Count = ArrayProperty ? FScriptArrayHelper(ArrayProperty, Value).Num() :
+            SetProperty ? FScriptSetHelper(SetProperty, Value).Num() : FScriptMapHelper(MapProperty, Value).Num();
+        const int32 CellsPerEntry = MapProperty ? 2 : 1;
+        const int64 DescriptorBytes = static_cast<int64>(Count) * CellsPerEntry * sizeof(FUnifiedScriptNativeValueV3);
+        if (DescriptorBytes > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = TEXT("Container arguments exceed the bounded managed function arena.");
+            return false;
+        }
+        const int32 Offset = Arena.AddZeroed(static_cast<int32>(DescriptorBytes));
+        int32 CellIndex = 0;
+        auto PackCell = [&](const FProperty& ChildProperty, const void* ChildValue, const TCHAR* Segment)
+        {
+            TArray<FName, TInlineAllocator<8>> Prefix;
+            Prefix.Append(StructPrefix.GetData(), StructPrefix.Num());
+            Prefix.Add(FName(Segment));
+            FUnifiedScriptNativeValueV3 Cell;
+            if (!PackValueV2(ChildProperty, ChildValue, Host, Arena, TypeBinding, Prefix, Cell, OutError, true))
+                return false;
+            FMemory::Memcpy(Arena.GetData() + Offset + CellIndex++ * sizeof(Cell), &Cell, sizeof(Cell));
+            return true;
+        };
+        if (ArrayProperty)
+        {
+            FScriptArrayHelper Array(ArrayProperty, Value);
+            for (int32 Index = 0; Index < Array.Num(); ++Index)
+                if (!PackCell(*ArrayProperty->Inner, Array.GetRawPtr(Index), TEXT("$element"))) return false;
+        }
+        else if (SetProperty)
+        {
+            FScriptSetHelper Set(SetProperty, Value);
+            for (int32 Index = 0; Index < Set.GetMaxIndex(); ++Index)
+                if (Set.IsValidIndex(Index) && !PackCell(*SetProperty->ElementProp, Set.GetElementPtr(Index), TEXT("$element"))) return false;
+        }
+        else
+        {
+            FScriptMapHelper Map(MapProperty, Value);
+            for (int32 Index = 0; Index < Map.GetMaxIndex(); ++Index)
+                if (Map.IsValidIndex(Index) &&
+                    (!PackCell(*MapProperty->KeyProp, Map.GetKeyPtr(Index), TEXT("$key")) ||
+                     !PackCell(*MapProperty->ValueProp, Map.GetValuePtr(Index), TEXT("$value")))) return false;
+        }
+        OutValue.Kind = ArrayProperty ? EUnifiedScriptNativeValueKindV3::Array :
+            SetProperty ? EUnifiedScriptNativeValueKindV3::Set : EUnifiedScriptNativeValueKindV3::Map;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.TypeId = TypeIdFromPath(ContainerValueNativeName(Property));
+        OutValue.Payload0 = Offset;
+        OutValue.Payload1 = DescriptorBytes;
+        OutValue.Payload2 = Count;
+        OutValue.Payload3 = sizeof(FUnifiedScriptNativeValueV3);
+        return OutValue.TypeId != 0;
+    }
+    if (const FSoftObjectProperty* Typed = CastField<FSoftObjectProperty>(&Property))
+    {
+        const FString Path = Typed->GetPropertyValue(Value).ToSoftObjectPath().ToString();
+        const FTCHARToUTF8 Utf8(*Path);
+        if (Utf8.Length() > MaximumManagedFunctionArenaBytes - Arena.Num())
+        {
+            OutError = TEXT("Soft Reference path exceeds the managed function arena.");
+            return false;
+        }
+        const int32 Offset = Arena.AddUninitialized(Utf8.Length());
+        if (Utf8.Length() > 0) FMemory::Memcpy(Arena.GetData() + Offset, Utf8.Get(), Utf8.Length());
+        OutValue.Kind = EUnifiedScriptNativeValueKindV3::String;
+        OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        OutValue.Payload0 = Offset;
+        OutValue.Payload1 = Utf8.Length();
+        return true;
+    }
     const UEnum* Enum = nullptr;
     int64 EnumValue = 0;
     if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
@@ -535,6 +650,92 @@ bool UnpackReturnValueV2(
     void* Result,
     FString& OutError)
 {
+    if (ByteCount > static_cast<uint32>(Arena.Num()) || StructPrefix.Num() > 16)
+    {
+        OutError = TEXT("Managed function result has invalid arena bounds or nesting.");
+        return false;
+    }
+    const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(&Property);
+    const FSetProperty* SetProperty = CastField<FSetProperty>(&Property);
+    const FMapProperty* MapProperty = CastField<FMapProperty>(&Property);
+    if (ArrayProperty || SetProperty || MapProperty)
+    {
+        const EUnifiedScriptNativeValueKindV3 Kind = ArrayProperty ? EUnifiedScriptNativeValueKindV3::Array :
+            SetProperty ? EUnifiedScriptNativeValueKindV3::Set : EUnifiedScriptNativeValueKindV3::Map;
+        const uint64 CellsPerEntry = MapProperty ? 2 : 1;
+        if (Value.Kind != Kind || Value.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+            Value.TypeId != TypeIdFromPath(ContainerValueNativeName(Property)) ||
+            Value.Payload2 > MaximumManagedFunctionArenaBytes / (CellsPerEntry * sizeof(FUnifiedScriptNativeValueV3)) ||
+            Value.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||
+            Value.Payload1 != Value.Payload2 * CellsPerEntry * sizeof(FUnifiedScriptNativeValueV3) ||
+            Value.Payload0 > ByteCount || Value.Payload1 > ByteCount - Value.Payload0)
+        {
+            OutError = TEXT("Managed container result has invalid kind, type identity, count, or bounds.");
+            return false;
+        }
+        const int32 Count = static_cast<int32>(Value.Payload2);
+        int32 CellIndex = 0;
+        auto UnpackCell = [&](const FProperty& ChildProperty, void* ChildValue, const TCHAR* Segment)
+        {
+            TArray<FName, TInlineAllocator<8>> Prefix;
+            Prefix.Append(StructPrefix.GetData(), StructPrefix.Num());
+            Prefix.Add(FName(Segment));
+            FUnifiedScriptNativeValueV3 Cell;
+            FMemory::Memcpy(&Cell, Arena.GetData() + Value.Payload0 + CellIndex++ * sizeof(Cell), sizeof(Cell));
+            return UnpackReturnValueV2(ChildProperty, Cell, Arena, ByteCount, Host, TypeBinding, Prefix, ChildValue, OutError);
+        };
+        if (ArrayProperty)
+        {
+            FScriptArrayHelper Array(ArrayProperty, Result);
+            Array.EmptyAndAddValues(Count);
+            for (int32 Index = 0; Index < Count; ++Index)
+                if (!UnpackCell(*ArrayProperty->Inner, Array.GetRawPtr(Index), TEXT("$element"))) return false;
+        }
+        else if (SetProperty)
+        {
+            FScriptSetHelper Set(SetProperty, Result);
+            Set.EmptyElements(Count);
+            for (int32 Index = 0; Index < Count; ++Index)
+            {
+                const int32 Added = Set.AddDefaultValue_Invalid_NeedsRehash();
+                if (!UnpackCell(*SetProperty->ElementProp, Set.GetElementPtr(Added), TEXT("$element"))) return false;
+            }
+            Set.Rehash();
+        }
+        else
+        {
+            FScriptMapHelper Map(MapProperty, Result);
+            Map.EmptyValues(Count);
+            for (int32 Index = 0; Index < Count; ++Index)
+            {
+                const int32 Added = Map.AddDefaultValue_Invalid_NeedsRehash();
+                if (!UnpackCell(*MapProperty->KeyProp, Map.GetKeyPtr(Added), TEXT("$key")) ||
+                    !UnpackCell(*MapProperty->ValueProp, Map.GetValuePtr(Added), TEXT("$value"))) return false;
+            }
+            Map.Rehash();
+        }
+        return true;
+    }
+    if (const FSoftObjectProperty* Typed = CastField<FSoftObjectProperty>(&Property))
+    {
+        if (Value.Kind != EUnifiedScriptNativeValueKindV3::String ||
+            Value.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked || Value.TypeId != 0 ||
+            Value.Payload0 > ByteCount || Value.Payload1 > ByteCount - Value.Payload0)
+        {
+            OutError = TEXT("Managed Soft Reference result has an invalid path cell.");
+            return false;
+        }
+        const FUTF8ToTCHAR Converted(reinterpret_cast<const ANSICHAR*>(Arena.GetData() + Value.Payload0),
+            static_cast<int32>(Value.Payload1));
+        const FSoftObjectPath Path(FString(Converted.Length(), Converted.Get()));
+        if (!Path.IsNull() && !Path.IsValid())
+        {
+            OutError = TEXT("Managed Soft Reference result is not a valid Unreal asset path.");
+            return false;
+        }
+        Typed->SetPropertyValue(Result, FSoftObjectPtr(Path));
+        return true;
+    }
     const UEnum* Enum = nullptr;
     FNumericProperty* EnumStorage = nullptr;
     if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
@@ -1296,6 +1497,11 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                 ExpectedResultCount);
             return;
         }
+        // Decode every output into owned storage before changing caller memory.
+        // A malformed element or stale ObjectHandle must not partially overwrite
+        // a ref container or publish a return value before later outputs fail.
+        FStructOnScope DecodedResults(Function);
+        void* ResultContainer = DecodedResults.GetStructMemory();
         int32 ResultIndex = 0;
         if (ReturnProperty != nullptr &&
             (RESULT_PARAM == nullptr ||
@@ -1307,7 +1513,7 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                   *Host,
                   &Binding->ReturnType,
                   {},
-                  RESULT_PARAM,
+                  ReturnProperty->ContainerPtrToValuePtr<void>(ResultContainer),
                  Error)))
         {
             UE_LOG(
@@ -1331,7 +1537,7 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             if (Direction != EUnifiedScriptManagedParameterDirection::Input)
             {
                 void* ParameterValue =
-                    Parameter->ContainerPtrToValuePtr<void>(ParameterContainer);
+                    Parameter->ContainerPtrToValuePtr<void>(ResultContainer);
                 const FUnifiedScriptManagedValueTypeBinding* ParameterType =
                     Binding->ParameterTypes.IsValidIndex(OutputParameterIndex)
                     ? &Binding->ParameterTypes[OutputParameterIndex]
@@ -1357,12 +1563,30 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                         *Error);
                     return;
                 }
+            }
+        }
+        if (ReturnProperty != nullptr)
+            ReturnProperty->CopyCompleteValue(RESULT_PARAM,
+                ReturnProperty->ContainerPtrToValuePtr<void>(ResultContainer));
+        for (int32 Index = 0; Index < ManagedParameters.Num(); ++Index)
+        {
+            const EUnifiedScriptManagedParameterDirection Direction =
+                Binding->ParameterDirections.IsValidIndex(Index)
+                    ? Binding->ParameterDirections[Index] : EUnifiedScriptManagedParameterDirection::Input;
+            if (Direction != EUnifiedScriptManagedParameterDirection::Input)
+            {
+                const FProperty* Parameter = ManagedParameters[Index];
+                const void* ParameterValue = Parameter->ContainerPtrToValuePtr<void>(ResultContainer);
                 if (void** Destination =
                         DecodedOutputDestinations.Find(Parameter->GetFName());
-                    Destination != nullptr && *Destination != nullptr &&
-                    *Destination != ParameterValue)
+                    Destination != nullptr && *Destination != nullptr)
                 {
                     Parameter->CopyCompleteValue(*Destination, ParameterValue);
+                }
+                else
+                {
+                    Parameter->CopyCompleteValue(
+                        Parameter->ContainerPtrToValuePtr<void>(ParameterContainer), ParameterValue);
                 }
             }
         }

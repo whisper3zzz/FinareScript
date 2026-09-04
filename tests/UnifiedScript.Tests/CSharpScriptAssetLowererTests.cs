@@ -897,6 +897,100 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Theory]
+    [InlineData("IReadOnlyList<int>", ScriptFunctionValueTypeKind.Array, "TArray", 1)]
+    [InlineData("IReadOnlySet<UnrealName>", ScriptFunctionValueTypeKind.Set, "TSet", 1)]
+    [InlineData("IReadOnlyDictionary<string, UnrealSoftObjectHandle>", ScriptFunctionValueTypeKind.Map, "TMap", 2)]
+    [InlineData("IReadOnlyList<FixturePayload>", ScriptFunctionValueTypeKind.Array, "TArray", 1)]
+    public void ContainerFunctionsRetainTypedArgumentsDirectionsAndJsonIdentity(
+        string valueType, ScriptFunctionValueTypeKind kind, string nativeName, int arity)
+    {
+        CSharpAnalysisResult result = AnalyzeFunctionShape(valueType);
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDocument document = result.ScriptAssets!;
+        ScriptFunctionDeclaration function = Assert.Single(document.Assets.Single(
+            static asset => asset.QualifiedName == "Game.TypedLibrary").Functions);
+        ScriptFunctionValueTypeDeclaration declaration = Assert.IsType<
+            ScriptFunctionValueTypeDeclaration>(function.ReturnUnrealType);
+        Assert.Equal(kind, declaration.Kind);
+        Assert.Equal(nativeName, declaration.UnrealNativeName);
+        Assert.Empty(declaration.UnrealTypePath);
+        Assert.Empty(declaration.Fields);
+        Assert.Equal(arity, declaration.TypeArguments!.Count);
+        Assert.Equal(
+            [ScriptParameterDirection.InputOutput, ScriptParameterDirection.Output],
+            function.Parameters.Select(static parameter => parameter.Direction));
+        Assert.All(function.Parameters, parameter => Assert.Equal(
+            declaration.Kind, parameter.UnrealType!.Kind));
+        if (valueType.Contains("FixturePayload", StringComparison.Ordinal))
+        {
+            ScriptFunctionValueTypeDeclaration element = declaration.TypeArguments[0].UnrealType!;
+            Assert.Equal("/Script/FixtureRuntime.FixturePayload", element.UnrealTypePath);
+            Assert.Equal("Count", Assert.Single(element.Fields).NativeName);
+        }
+        string json = ScriptAssetJson.Serialize(document);
+        Assert.Equal(json, ScriptAssetJson.Serialize(ScriptAssetJson.Deserialize(json)));
+        Assert.Contains("\"typeArguments\"", json);
+    }
+
+    [Theory]
+    [InlineData("UnrealSoftObjectHandle")]
+    [InlineData("UnrealSoftClassHandle")]
+    public void SoftReferenceFunctionsPreserveBuiltInTypeAndDirections(string valueType)
+    {
+        CSharpAnalysisResult result = AnalyzeFunctionShape(valueType);
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptFunctionDeclaration function = Assert.Single(result.ScriptAssets!.Assets.Single(
+            static asset => asset.QualifiedName == "Game.TypedLibrary").Functions);
+        Assert.Equal($"UnifiedScript.Unreal.{valueType}", function.ReturnTypeMetadataName);
+        Assert.Null(function.ReturnUnrealType);
+        Assert.All(function.Parameters, parameter =>
+            Assert.Equal(function.ReturnTypeMetadataName, parameter.TypeMetadataName));
+    }
+
+    [Fact]
+    public void ContainerJsonRejectsMismatchedKindArityAndArgumentIdentity()
+    {
+        CSharpAnalysisResult result = AnalyzeFunctionShape("IReadOnlyList<int>");
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string json = ScriptAssetJson.Serialize(result.ScriptAssets!);
+        Assert.Throws<System.Text.Json.JsonException>(() => ScriptAssetJson.Deserialize(
+            json.Replace("\"kind\": \"array\"", "\"kind\": \"map\"", StringComparison.Ordinal)));
+        Assert.Throws<System.Text.Json.JsonException>(() => ScriptAssetJson.Deserialize(
+            json.Replace("\"TArray\"", "\"TSet\"", StringComparison.Ordinal)));
+        Assert.Throws<System.Text.Json.JsonException>(() => ScriptAssetJson.Deserialize(
+            json.Replace("\"typeMetadataName\": \"System.Int32\"",
+                "\"typeMetadataName\": \"System.Boolean\"", StringComparison.Ordinal)));
+    }
+
+    private static CSharpAnalysisResult AnalyzeFunctionShape(string valueType)
+    {
+        string source = $$"""
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+            namespace Game;
+            [UnrealStruct("/Script/FixtureRuntime.FixturePayload", "FFixturePayload")]
+            [UnrealValue]
+            public readonly record struct FixturePayload(
+                [property: UnrealStructField(0, "Count")] int Count);
+            [ScriptAsset("Game/TypedLibrary", ClassId = "us_00000000000000000000000000000006")]
+            [UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+            public static class TypedLibrary
+            {
+                [Visual]
+                public static {{valueType}} Echo(ref {{valueType}} value, out {{valueType}} copy)
+                {
+                    copy = value;
+                    return value;
+                }
+            }
+            """;
+        return new CSharpSemanticPipeline().Analyze(new CSharpCompilationRequest(
+            "FunctionShape", [new CSharpSourceDocument("Game/TypedLibrary.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]));
+    }
+
+    [Theory]
     [InlineData("us_0123456789ABCDEF0123456789ABCDEF")]
     [InlineData("0123456789abcdef0123456789abcdef")]
     [InlineData("us_short")]

@@ -376,7 +376,10 @@ internal sealed class CSharpScriptAssetLowerer
                     parameter.Id,
                     parameter.Name,
                     parameterTypeNames[index],
-                    LowerFunctionValueType(compilation, parameterTypeNames[index]),
+                    LowerFunctionValueType(
+                        compilation,
+                        methodSymbol?.Parameters[index].Type ??
+                            compilation.GetTypeByMetadataName(parameterTypeNames[index])),
                     parameter.Direction switch
                     {
                         HirParameterDirection.Output => ScriptParameterDirection.Output,
@@ -414,7 +417,8 @@ internal sealed class CSharpScriptAssetLowerer
                 parameters,
                 LowerFunctionValueType(
                     compilation,
-                    types[descriptor.ReturnTypeId].MetadataName),
+                    methodSymbol?.ReturnType ?? compilation.GetTypeByMetadataName(
+                        types[descriptor.ReturnTypeId].MetadataName)),
                 blueprintEvent
                     ? new ScriptBlueprintEventDeclaration(
                         ScriptBlueprintEventSuperMode.Explicit)
@@ -749,16 +753,44 @@ internal sealed class CSharpScriptAssetLowerer
 
     private static ScriptFunctionValueTypeDeclaration? LowerFunctionValueType(
         CSharpCompilation compilation,
-        string metadataName,
+        ITypeSymbol? symbol,
         int depth = 0)
     {
-        string normalizedName = metadataName.EndsWith("?", StringComparison.Ordinal)
-            ? metadataName[..^1]
-            : metadataName;
-        INamedTypeSymbol? type = compilation.GetTypeByMetadataName(normalizedName);
-        if (type is null)
+        if (symbol is not INamedTypeSymbol type || depth > 16)
         {
             return null;
+        }
+
+        ScriptFunctionValueTypeKind? containerKind = null;
+        foreach ((string metadataName, ScriptFunctionValueTypeKind kind) in new[]
+        {
+            ("System.Collections.Generic.IReadOnlyList`1", ScriptFunctionValueTypeKind.Array),
+            ("System.Collections.Generic.IReadOnlySet`1", ScriptFunctionValueTypeKind.Set),
+            ("System.Collections.Generic.IReadOnlyDictionary`2", ScriptFunctionValueTypeKind.Map),
+        })
+        {
+            if (SymbolEqualityComparer.Default.Equals(
+                    type.OriginalDefinition, compilation.GetTypeByMetadataName(metadataName)))
+            {
+                containerKind = kind;
+                break;
+            }
+        }
+        if (containerKind is { } collection)
+        {
+            return new ScriptFunctionValueTypeDeclaration(
+                collection,
+                string.Empty,
+                collection switch
+                {
+                    ScriptFunctionValueTypeKind.Array => "TArray",
+                    ScriptFunctionValueTypeKind.Set => "TSet",
+                    _ => "TMap",
+                },
+                [],
+                type.TypeArguments.Select(argument => new ScriptFunctionTypeArgumentDeclaration(
+                    argument.ToDisplayString(TypeMetadataFormat),
+                    LowerFunctionValueType(compilation, argument, depth + 1))).ToArray());
         }
 
         AttributeData? enumAttribute = FindAttribute(type, UnrealEnumAttributeName);
@@ -800,7 +832,7 @@ internal sealed class CSharpScriptAssetLowerer
                 pair.Property.Type.ToDisplayString(TypeMetadataFormat),
                 LowerFunctionValueType(
                     compilation,
-                    pair.Property.Type.ToDisplayString(TypeMetadataFormat),
+                    pair.Property.Type,
                     depth + 1)))
             .OrderBy(static field => field.Index)
             .ToArray();
