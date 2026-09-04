@@ -21,7 +21,9 @@ public sealed record ScriptExposure(
     bool InstanceEditable,
     bool SaveGame,
     bool Replicated,
-    string? Category = null)
+    string? Category = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    global::UnifiedScript.ReplicationCondition ReplicationCondition = global::UnifiedScript.ReplicationCondition.None)
 {
     public static ScriptExposure None { get; } = new(false, false, false);
 }
@@ -86,6 +88,10 @@ public enum ScriptBlueprintEventSuperMode
 
 public sealed record ScriptBlueprintEventDeclaration(
     ScriptBlueprintEventSuperMode SuperMode);
+
+public enum ScriptRpcTarget { Server = 1, Client = 2, Multicast = 3 }
+
+public sealed record ScriptRpcDeclaration(ScriptRpcTarget Target, bool Reliable);
 
 public enum ScriptInputTriggerEvent
 {
@@ -155,7 +161,11 @@ public sealed record ScriptFunctionDeclaration(
     ScriptBlueprintEventDeclaration? BlueprintEvent = null,
     IReadOnlyList<ScriptInputActionBindingDeclaration>? InputActions = null,
     IReadOnlyList<ScriptDelegateBindingDeclaration>? DelegateBindings = null,
-    IReadOnlyList<ScriptInterfaceFunctionDeclaration>? InterfaceFunctions = null);
+    IReadOnlyList<ScriptInterfaceFunctionDeclaration>? InterfaceFunctions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ScriptRpcDeclaration? Rpc = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RepNotifyProperty = null);
 
 public sealed record ScriptAssetDeclaration(
     SemanticId Id,

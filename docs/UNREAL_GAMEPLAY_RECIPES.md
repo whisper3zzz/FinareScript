@@ -396,6 +396,75 @@ Start the task from `OnBeginPlay`/`OnInitialized` and intentionally discard it
 only when all exceptions are handled. Do not use `Task.Run` for UObject work.
 Verify timeout, manual cancellation, reload, deletion, travel, and PIE stop.
 
+## Replicated state and RPC
+
+Use a generated Actor Script Class for the currently verified network example.
+Its owning Actor must be replicated and have the intended client ownership;
+materializing replicated state or RPC declarations enables replication on the
+generated default object. This does not assign a player owner automatically.
+
+```csharp
+[Expose(Replicated = true)]
+public int Score { get; set; } = 0;
+
+[UnrealRepNotify(nameof(Score))]
+public void ScoreChanged(int previous)
+{
+    UpdateScoreDisplay(previous, Score);
+}
+
+[UnrealRpc(UnrealRpcTarget.Server, Reliable = true)]
+public void ServerAdd(int amount)
+{
+    if (amount > 0 && amount <= 10)
+    {
+        Score += amount;
+    }
+}
+
+[Visual]
+public void RequestAdd(int amount)
+{
+    SendRpc(nameof(ServerAdd), amount);
+}
+```
+
+`UpdateScoreDisplay` above is the game's own helper. `SendRpc(ServerAdd, amount)`
+is the delegate-typed C# alternative; the `nameof` form fits the current visual
+call boundary and validates the exact declared signature before dispatch.
+Calling `ServerAdd(amount)` normally in C# is a local call, **not** a network send.
+The attribute declares the receive body; there is no hidden source rewrite.
+
+`Client` and `Multicast` use the same attribute/send API. UE supplies actual
+callspace, actor channels, delivery and connection ownership. An owning client
+may send a Server RPC; clients cannot originate Client/Multicast sends. A Server
+RPC still needs game-specific payload/permission checks in its body. `HasAuthority`
+queries the owning Actor rather than caching a role across travel/reload.
+
+Client state synchronization restores server-owned replicated fields instead of
+writing local changes back. Direct native-bridge writes enforce the same boundary.
+Incoming state is hydrated before a managed callback. An initial RepNotify can
+arrive before the managed host starts: its owned previous-value snapshot is queued
+and delivered once after automatic activation. Pre-start changes coalesce while
+retaining the first old value; stop/failed activation discards the queue. This is
+not a promise that managed RepNotify precedes managed BeginPlay.
+
+The [checked-in example](../samples/Unreal/UnifiedScript.Unreal.Demo/NetworkingDemoScript.cs)
+combines replicated/owner-only state, RepNotify, Server/Client/Multicast RPCs and
+reload. After running `tools/emit-unreal-demo-chunk.ps1 -Configuration Release`,
+`UnifiedScript.Unreal.Networking.ConnectedScriptClass` consumes the emitted
+declarations, materializes the class, reloads its saved package and uses a server
+plus two connected clients under CMD/NullRHI. Ownership rejection and repeated replication are checked; role
+flags or manual state copies are not the network evidence.
+
+Current RPC payloads are 0-4 input values using reviewed scalars, strings/names/text,
+enums, object/class handles and Vector/Rotator/Transform. Return/ref/out parameters,
+collections, Soft References and complex structures are not supported RPC payloads
+yet. The connected example proves the integer Actor path, not every accepted
+signature. ActorComponent networking, broader conditions/payloads, push-model
+runtime, travel and cooked network execution still require dedicated verification.
+Do not infer packaged WindowsServer or full networking parity from this example.
+
 ## Packaging
 
 Before packaging, save the map and run the project-local validation gate. It

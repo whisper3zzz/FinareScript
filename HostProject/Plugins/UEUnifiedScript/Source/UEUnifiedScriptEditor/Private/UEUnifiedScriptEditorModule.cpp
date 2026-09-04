@@ -453,6 +453,16 @@ public:
         return DailyBuildCompleted;
     }
 
+#if WITH_DEV_AUTOMATION_TESTS
+    virtual bool SetPrecompiledAutomationPlay(bool bEnabled) override
+    {
+        check(GIsAutomationTesting);
+        const bool bPrevious = bPrecompiledAutomationPlay;
+        bPrecompiledAutomationPlay = bEnabled;
+        return bPrevious;
+    }
+#endif
+
     virtual bool OpenAuthoringMember(const FString& SemanticId) override
     {
         PendingAuthoringSemanticId = SemanticId;
@@ -494,6 +504,9 @@ private:
     FString DailyBuildOutput;
     bool bActiveDailyBuildReload = false;
     mutable bool bAllowNextPlay = false;
+#if WITH_DEV_AUTOMATION_TESTS
+    bool bPrecompiledAutomationPlay = false;
+#endif
     mutable TOptional<FRequestPlaySessionParams> DeferredPlayRequest;
 
     virtual TValueOrError<bool, FText> IsPIEAuthorizedInternal(
@@ -512,6 +525,9 @@ private:
     virtual TValueOrError<bool, FText> RequestPIEPermissionInternal(
         bool bIsSimulateInEditor) const override
     {
+#if WITH_DEV_AUTOMATION_TESTS
+        if (GIsAutomationTesting && bPrecompiledAutomationPlay) return MakeValue(true);
+#endif
         FUEUnifiedScriptEditorModule* MutableThis =
             const_cast<FUEUnifiedScriptEditorModule*>(this);
         if (bAllowNextPlay)

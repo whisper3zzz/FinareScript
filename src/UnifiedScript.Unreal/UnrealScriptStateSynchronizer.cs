@@ -30,7 +30,7 @@ internal static class UnrealScriptStateSynchronizer
         UnrealObjectHandle handle = contract.Kind == UnrealScriptClassKind.ActorComponent
             ? context.Host
             : context.Target;
-        return new StateSession(script, context.Bridge, handle, contract.Bindings);
+        return new StateSession(script, context.Bridge, handle, context.Target, contract.Bindings);
     }
 
     internal sealed class StateSession
@@ -38,17 +38,20 @@ internal static class UnrealScriptStateSynchronizer
         private readonly UnrealObjectScript _script;
         private readonly IUnrealInvocationBridge _bridge;
         private readonly UnrealObjectHandle _handle;
+        private readonly UnrealObjectHandle _actor;
         private readonly IReadOnlyList<StateBinding> _bindings;
 
         internal StateSession(
             UnrealObjectScript script,
             IUnrealInvocationBridge bridge,
             UnrealObjectHandle handle,
+            UnrealObjectHandle actor,
             IReadOnlyList<StateBinding> bindings)
         {
             _script = script;
             _bridge = bridge;
             _handle = handle;
+            _actor = actor;
             _bindings = bindings;
         }
 
@@ -62,9 +65,12 @@ internal static class UnrealScriptStateSynchronizer
 
         public void Flush()
         {
+            bool authority = !_bindings.Any(b => b.Replicated) ||
+                _bridge.Invoke<bool>(_actor, "/Script/Engine.Actor:HasAuthority", Array.Empty<object?>());
             foreach (StateBinding binding in _bindings)
             {
-                binding.Flush(_script, _bridge, _handle);
+                if (binding.Replicated && !authority) binding.Hydrate(_script, _bridge, _handle);
+                else binding.Flush(_script, _bridge, _handle);
             }
         }
     }
@@ -122,7 +128,9 @@ internal static class UnrealScriptStateSynchronizer
                 }
 
                 string memberPath = $"{generatedClassPath}:{property.Name}";
-                bindings.Add(StateBinding.Create(property, memberPath));
+                StateBinding binding = StateBinding.Create(property, memberPath);
+                binding.Replicated = property.GetCustomAttribute<global::UnifiedScript.ExposeAttribute>()?.Replicated == true;
+                bindings.Add(binding);
             }
             return new StateContract(classAttribute.Kind, bindings);
         }
@@ -130,6 +138,7 @@ internal static class UnrealScriptStateSynchronizer
 
     internal abstract class StateBinding(string memberPath)
     {
+        public bool Replicated { get; internal set; }
         protected string MemberPath { get; } = memberPath;
 
         public abstract void Hydrate(

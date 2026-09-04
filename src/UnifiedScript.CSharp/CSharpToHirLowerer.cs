@@ -117,7 +117,8 @@ public sealed class CSharpToHirLowerer
                 return name is "UnrealEvent" or "UnrealEventAttribute" or
                     "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute" or
                     "UnrealInputAction" or "UnrealInputActionAttribute" or
-                    "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute";
+                    "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute" or
+                    "UnrealRpc" or "UnrealRpcAttribute" or "UnrealRepNotify" or "UnrealRepNotifyAttribute";
             })
             .Select(attribute =>
             {

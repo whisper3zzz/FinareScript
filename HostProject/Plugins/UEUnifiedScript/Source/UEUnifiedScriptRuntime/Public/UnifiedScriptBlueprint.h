@@ -8,6 +8,22 @@
 class UUnifiedScriptAsset;
 
 UENUM()
+enum class EUnifiedScriptRpcTarget : uint8 { None, Server, Client, Multicast };
+
+inline EFunctionFlags UnifiedScriptRpcFlags(EUnifiedScriptRpcTarget Target, bool bReliable)
+{
+    EFunctionFlags Direction;
+    switch (Target)
+    {
+    case EUnifiedScriptRpcTarget::Server: Direction = FUNC_NetServer; break;
+    case EUnifiedScriptRpcTarget::Client: Direction = FUNC_NetClient; break;
+    case EUnifiedScriptRpcTarget::Multicast: Direction = FUNC_NetMulticast; break;
+    default: return FUNC_None;
+    }
+    return FUNC_Net | FUNC_Event | Direction | (bReliable ? FUNC_NetReliable : FUNC_None);
+}
+
+UENUM()
 enum class EUnifiedScriptBlueprintEventSuperMode : uint8
 {
     Explicit = 1,
@@ -186,6 +202,16 @@ struct FUnifiedScriptManagedFunctionBinding
     /** Static libraries resolve their managed program from the generated-class sidecar. */
     UPROPERTY()
     bool bStatic = false;
+
+    UPROPERTY()
+    EUnifiedScriptRpcTarget RpcTarget = EUnifiedScriptRpcTarget::None;
+
+    UPROPERTY()
+    bool bReliable = false;
+
+    /** Rebind after Blueprint compilation, which only retains zero-argument notifies. */
+    UPROPERTY()
+    FName RepNotifyProperty;
 
     /** Makes the generated base function an ordinary overridable Blueprint event. */
     UPROPERTY()

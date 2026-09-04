@@ -81,4 +81,8 @@ public:
     virtual bool IsDailyBuildRunning() const = 0;
     virtual const FUnifiedScriptDailyBuildResult& GetLastDailyBuildResult() const = 0;
     virtual FOnUnifiedScriptDailyBuildCompleted& OnDailyBuildCompleted() = 0;
+#if WITH_DEV_AUTOMATION_TESTS
+    /** Scoped runtime tests supply compiled inputs; do not rebuild their fixtures on PIE startup. Returns the previous state. */
+    virtual bool SetPrecompiledAutomationPlay(bool bEnabled) = 0;
+#endif
 };

@@ -25,6 +25,8 @@ internal sealed class CSharpScriptAssetLowerer
         "UnifiedScript.Unreal.UnrealScriptClassAttribute";
     private const string UnrealBlueprintEventAttributeName =
         "UnifiedScript.Unreal.UnrealBlueprintEventAttribute";
+    private const string UnrealRpcAttributeName = "UnifiedScript.Unreal.UnrealRpcAttribute";
+    private const string UnrealRepNotifyAttributeName = "UnifiedScript.Unreal.UnrealRepNotifyAttribute";
     private const string UnrealInputActionAttributeName =
         "UnifiedScript.Unreal.UnrealInputActionAttribute";
     private const string UnrealInterfaceFunctionAttributeName =
@@ -181,11 +183,19 @@ internal sealed class CSharpScriptAssetLowerer
             return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
         }
 
-        ScriptAssetDocument document = ScriptAssetJson.NormalizeAndValidate(ScriptAssetDocument.Create(
-            hir.Id,
-            semantics.ConfigurationId,
-            declarations));
-        return new ScriptAssetLoweringResult(document, declarationReferences, diagnostics);
+        try
+        {
+            ScriptAssetDocument document = ScriptAssetJson.NormalizeAndValidate(ScriptAssetDocument.Create(
+                hir.Id, semantics.ConfigurationId, declarations));
+            return new ScriptAssetLoweringResult(document, declarationReferences, diagnostics);
+        }
+        catch (JsonException exception) when (declarations.Any(a => a.Functions.Any(f => f.Rpc is not null || f.RepNotifyProperty is not null) ||
+            a.States.Any(s => s.Exposure.ReplicationCondition != global::UnifiedScript.ReplicationCondition.None)))
+        {
+            diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
+                UnifiedDiagnosticSeverity.Error, exception.Message, hir.Span));
+            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
+        }
     }
 
     private static bool TryReadNamedString(
@@ -405,6 +415,31 @@ internal sealed class CSharpScriptAssetLowerer
                 ? FindAttribute(methodSymbol, UnrealBlueprintEventAttributeName) is not null
                 : method.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealBlueprintEvent") == true;
+            AttributeData? rpcAttribute = methodSymbol is null ? null : FindAttribute(methodSymbol, UnrealRpcAttributeName);
+            AttributeData? notifyAttribute = methodSymbol is null ? null : FindAttribute(methodSymbol, UnrealRepNotifyAttributeName);
+            ScriptRpcDeclaration? rpc = rpcAttribute is null ? null : new(
+                (ScriptRpcTarget)(int)(rpcAttribute.ConstructorArguments[0].Value ?? 0),
+                rpcAttribute.NamedArguments.Any(a => a.Key == "Reliable" && a.Value.Value is true));
+            string? repNotifyProperty = notifyAttribute?.ConstructorArguments[0].Value as string;
+            if (notifyAttribute is not null && string.IsNullOrWhiteSpace(repNotifyProperty))
+                diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
+                    UnifiedDiagnosticSeverity.Error, "RepNotify requires an exact replicated property name.", method.Span, method.Id));
+            if (rpcAttribute is not null || notifyAttribute is not null)
+            {
+                AttributeData? scriptClass = FindAttribute(typeSymbol, UnrealScriptClassAttributeName);
+                if (scriptClass?.ConstructorArguments[0].Value is not int kind || kind is not (1 or 2))
+                    diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
+                        UnifiedDiagnosticSeverity.Error, "RPC and RepNotify require an Actor or ActorComponent Script Class.", method.Span, method.Id));
+            }
+            if (rpc is not null && (parameters.Length > 4 || parameters.Any(p =>
+                p.UnrealType?.Kind is ScriptFunctionValueTypeKind.Array or ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map ||
+                p.TypeMetadataName.StartsWith("UnifiedScript.Unreal.UnrealSoft", StringComparison.Ordinal) ||
+                p.UnrealType?.Kind == ScriptFunctionValueTypeKind.Struct &&
+                    p.UnrealType.UnrealTypePath is not ("/Script/CoreUObject.Vector" or "/Script/CoreUObject.Rotator" or "/Script/CoreUObject.Transform"))))
+                diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
+                    UnifiedDiagnosticSeverity.Error,
+                    "RPC sends currently support 0-4 input values: scalars, strings/names/text, enums, object/class handles, Vector/Rotator/Transform. Collections, Soft References and complex structures are not supported RPC payloads yet.",
+                    method.Span, method.Id));
             functions.Add(new ScriptFunctionDeclaration(
                 method.Id,
                 method.Name,
@@ -425,7 +460,9 @@ internal sealed class CSharpScriptAssetLowerer
                     : null,
                 inputActions,
                 delegateBindings,
-                interfaceFunctions));
+                interfaceFunctions,
+                rpc,
+                repNotifyProperty));
         }
 
         return functions;
@@ -1291,6 +1328,7 @@ internal sealed class CSharpScriptAssetLowerer
         bool instanceEditable = false;
         bool saveGame = false;
         bool replicated = false;
+        global::UnifiedScript.ReplicationCondition replicationCondition = default;
         string? category = null;
         foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
         {
@@ -1305,13 +1343,16 @@ internal sealed class CSharpScriptAssetLowerer
                 case nameof(UnifiedScript.ExposeAttribute.Replicated):
                     replicated = argument.Value.Value is true;
                     break;
+                case nameof(UnifiedScript.ExposeAttribute.ReplicationCondition):
+                    replicationCondition = (global::UnifiedScript.ReplicationCondition)(int)(argument.Value.Value ?? 0);
+                    break;
                 case nameof(UnifiedScript.ExposeAttribute.Category):
                     category = argument.Value.Value as string;
                     break;
             }
         }
 
-        return new ScriptExposure(instanceEditable, saveGame, replicated, category);
+        return new ScriptExposure(instanceEditable, saveGame, replicated, category, replicationCondition);
     }
 
     private static AttributeData? FindAttribute(ISymbol symbol, string metadataName) => symbol

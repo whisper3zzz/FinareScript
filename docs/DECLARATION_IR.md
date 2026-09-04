@@ -35,6 +35,33 @@ and `ExchangeSoftClass` examples exercise all directions through generated
 functions. See the live roadmap for the remaining validation scope; package
 reload within Editor Automation does not itself prove cooked execution.
 
+## Replication and network function declarations
+
+State exposure optionally carries `replicationCondition`: `none` (the omitted
+default), `initialOnly`, `ownerOnly`, `skipOwner`, or `initialOrOwner`. A non-default
+condition requires `replicated: true`. These are portable audience policies,
+not serialized Unreal flag values. State patches preserve the condition.
+
+A function can carry `rpc: { "target": "server", "reliable": true }`, with
+`server`, `client` or `multicast` direction, or `repNotifyProperty: "Score"`.
+RPC/RepNotify functions must be public instance `void` methods with input-only
+parameters and one binding owner; event/input/delegate/interface bindings cannot
+be combined with them. RepNotify names one existing replicated state and accepts
+zero arguments or exactly that state's previous-value type. Each state has at
+most one notification handler. Invalid source contracts report `UAD1011`;
+invalid JSON is rejected before publication.
+
+The Unreal adapter requires an Actor/ActorComponent Script Class and rejects
+RPC payloads outside its current 0-4 common-value input surface. Network flags
+and stable notification identities persist in the generated class, including
+the native previous-value RepNotify signature that ordinary Blueprint compilation
+does not retain. This extends declaration metadata without changing the existing
+native call-frame ABI. Older consumers must be upgraded with the SDK before
+using network declarations; an older reader is not a networking fallback.
+
+See [networked gameplay](UNREAL_GAMEPLAY_RECIPES.md#replicated-state-and-rpc)
+for explicit send semantics and current runtime evidence.
+
 ## C# source contract
 
 An explicit Script Asset is a class or struct marked with a relative asset

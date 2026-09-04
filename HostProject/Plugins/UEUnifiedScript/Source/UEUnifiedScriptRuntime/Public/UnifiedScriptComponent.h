@@ -14,6 +14,7 @@ class AActor;
 class APlayerController;
 struct FPropertyChangedChainEvent;
 struct FInputActionInstance;
+struct FUnifiedScriptInitialRepNotify;
 struct FUnifiedScriptStateMigrationReport;
 struct FUnifiedScriptNativeCallFrameV3;
 enum class EUnifiedScriptManagedInputValueType : uint8;
@@ -154,6 +155,9 @@ public:
         FUnifiedScriptNativeCallFrameV3& Frame,
         FString& OutError);
 
+    /** Retains initial network notifications until automatic managed activation. */
+    bool QueueInitialRepNotify(UObject* Target, UFunction* Function, const void* Parameters);
+
     /** Extends an authoring publication transaction through the live World swap. */
     bool ReloadScriptWithTransaction(const FString& PublicationTransactionJson);
 
@@ -293,6 +297,9 @@ public:
 #endif
 
 private:
+    TArray<TSharedPtr<FUnifiedScriptInitialRepNotify>> InitialRepNotifies;
+    bool bManagedStartAttempted = false;
+
     struct FPreparedScriptReloadState
     {
         bool bWasRunning = false;

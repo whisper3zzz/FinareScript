@@ -29,5 +29,17 @@ public sealed class ExposeAttribute : Attribute
 
     public bool Replicated { get; set; }
 
+    public ReplicationCondition ReplicationCondition { get; set; }
+
     public string? Category { get; set; }
+}
+
+/// <summary>Portable audience/initial-state policy; adapters map it to their replication system.</summary>
+public enum ReplicationCondition
+{
+    None,
+    InitialOnly,
+    OwnerOnly,
+    SkipOwner,
+    InitialOrOwner,
 }

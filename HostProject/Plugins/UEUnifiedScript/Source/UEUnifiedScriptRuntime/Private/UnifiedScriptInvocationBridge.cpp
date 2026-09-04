@@ -3,6 +3,10 @@
 #include "Containers/StringConv.h"
 #include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptBlueprint.h"
+#include "GameFramework/Actor.h"
+#include "Components/ActorComponent.h"
+#include "Net/Core/PushModel/PushModel.h"
 #include "UObject/Class.h"
 #include "UObject/EnumProperty.h"
 #include "UObject/StrProperty.h"
@@ -13,6 +17,13 @@
 
 namespace UE::UnifiedScript::Invocation::Private
 {
+AActor* NetworkOwner(UObject* Object)
+{
+    if (AActor* Actor = Cast<AActor>(Object)) return Actor;
+    if (UActorComponent* Component = Cast<UActorComponent>(Object)) return Component->GetOwner();
+    return nullptr;
+}
+
 void Succeed(FUnifiedScriptInvocationResult& OutResult)
 {
     OutResult.Error = EUnifiedScriptInvocationError::None;
@@ -908,10 +919,23 @@ bool FUnifiedScriptInvocationBridge::WriteProperty(
             FString::Printf(TEXT("Property '%s' is not Blueprint-writable."), *PropertyPath));
         return false;
     }
+    if (Property->HasAnyPropertyFlags(CPF_Net) && Cast<UUnifiedScriptBlueprintGeneratedClass>(Property->GetOwnerClass()) != nullptr)
+    {
+        AActor* Owner = NetworkOwner(Object);
+        if (Owner == nullptr || !Owner->HasAuthority())
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::PropertyNotWritable,
+                TEXT("Replicated Script Class state can only be written by authority; send a Server RPC instead."));
+            return false;
+        }
+    }
     if (!WriteValue(Registry, Property, Object, Value, OutResult))
     {
         return false;
     }
+    // Generated state writes do not execute a K2 SetVariable node. Notify the
+    // standard replication dirty tracker as that node would, including Iris.
+    MARK_PROPERTY_DIRTY(Object, Property);
 
     Succeed(OutResult);
     return true;
@@ -940,6 +964,24 @@ bool FUnifiedScriptInvocationBridge::Invoke(
     }
 
     UFunction* Function = TargetClass->FindFunctionByName(FunctionName);
+    const FUnifiedScriptManagedFunctionBinding* RpcBinding = nullptr;
+    for (UClass* Class = TargetClass; Class != nullptr; Class = Class->GetSuperClass())
+    {
+        auto* Generated = Cast<UUnifiedScriptBlueprintGeneratedClass>(Class);
+        if (Generated == nullptr) continue;
+        for (const auto& Pair : Generated->ManagedFunctionBindings)
+        {
+            if (Pair.Value.RpcTarget != EUnifiedScriptRpcTarget::None &&
+                ((Function != nullptr && Function->GetFName() == Pair.Key) ||
+                 (Function == nullptr && Pair.Value.ManagedName == FunctionName.ToString())))
+            {
+                RpcBinding = &Pair.Value;
+                Function = Generated->FindFunctionByName(Pair.Key);
+                break;
+            }
+        }
+        if (RpcBinding != nullptr) break;
+    }
     if (Function == nullptr)
     {
         Fail(
@@ -959,6 +1001,21 @@ bool FUnifiedScriptInvocationBridge::Invoke(
     }
 
     TArray<FProperty*, TInlineAllocator<8>> InputProperties;
+    if (RpcBinding != nullptr)
+    {
+        AActor* Owner = NetworkOwner(Object);
+        const bool bClient = Owner != nullptr && Owner->GetNetMode() == NM_Client;
+        const bool bAllowed = Owner != nullptr && Owner->GetIsReplicated() &&
+            (!bClient || (RpcBinding->RpcTarget == EUnifiedScriptRpcTarget::Server && Owner->HasLocalNetOwner())) &&
+            (bClient || RpcBinding->RpcTarget != EUnifiedScriptRpcTarget::Client ||
+                Owner->GetNetMode() == NM_Standalone || Owner->GetNetConnection() != nullptr || Owner->HasLocalNetOwner());
+        if (!bAllowed || !Function->HasAnyFunctionFlags(FUNC_Net))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::FunctionNotCallable,
+                FString::Printf(TEXT("RPC '%s' has no valid replicated owner/connection or authority for this direction."), *FunctionPath));
+            return false;
+        }
+    }
     FProperty* ReturnProperty = nullptr;
     for (TFieldIterator<FProperty> Iterator(Function); Iterator; ++Iterator)
     {

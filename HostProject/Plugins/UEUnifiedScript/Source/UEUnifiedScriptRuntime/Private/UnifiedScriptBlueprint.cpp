@@ -1093,6 +1093,7 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
         // any later UFunction::Bind pass tries to resolve it.
         Function->FunctionFlags |= FUNC_Native;
         Function->FunctionFlags |= FUNC_Public | FUNC_BlueprintCallable;
+        Function->FunctionFlags &= ~(FUNC_Net | FUNC_NetServer | FUNC_NetClient | FUNC_NetMulticast | FUNC_NetReliable);
         const bool bManagedEventEntry = Pair.Value.bBlueprintEvent ||
             Pair.Value.bInterfaceFunction;
         if (bManagedEventEntry)
@@ -1105,6 +1106,19 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
         }
         Function->SetNativeFunc(
             &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction);
+        Function->FunctionFlags |= UnifiedScriptRpcFlags(Pair.Value.RpcTarget, Pair.Value.bReliable);
+        if (!Pair.Value.RepNotifyProperty.IsNone())
+        {
+            FProperty* Property = FindFProperty<FProperty>(this, Pair.Value.RepNotifyProperty);
+            if (Property && Property->HasAllPropertyFlags(CPF_Net | CPF_RepNotify))
+            {
+                // UE's Blueprint compiler accepts only zero-parameter OnRep,
+                // but RepLayout also supports a native previous-value parameter.
+                // The declaration validator has checked that exact property type.
+                Property->RepNotifyFunc = Pair.Key;
+            }
+            else bAllFunctionsBound = false;
+        }
 #if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
         if (bManagedEventEntry)
         {
@@ -1171,6 +1185,13 @@ bool UUnifiedScriptBlueprintGeneratedClass::IsManagedFunctionBound(
             &UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction)
     {
         return false;
+    }
+    if (Binding->RpcTarget != EUnifiedScriptRpcTarget::None &&
+        !Function->HasAllFunctionFlags(UnifiedScriptRpcFlags(Binding->RpcTarget, Binding->bReliable))) return false;
+    if (!Binding->RepNotifyProperty.IsNone())
+    {
+        const FProperty* Property = FindFProperty<FProperty>(this, Binding->RepNotifyProperty);
+        if (!Property || Property->RepNotifyFunc != FunctionName || !Property->HasAllPropertyFlags(CPF_Net | CPF_RepNotify)) return false;
     }
 #if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
     if ((Binding->bBlueprintEvent || Binding->bInterfaceFunction) &&
@@ -1325,6 +1346,9 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
                 *Function->GetPathName());
             return;
         }
+
+        if (Component && !Binding->RepNotifyProperty.IsNone() &&
+            Component->QueueInitialRepNotify(Context, Function, ParameterContainer)) return;
 
         TArray<FUnifiedScriptNativeValueV3, TInlineAllocator<4>> ArgumentsV2;
         TArray<const FProperty*, TInlineAllocator<4>> ManagedParameters;

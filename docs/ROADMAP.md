@@ -39,12 +39,17 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   exactly-once output retry, reload and World teardown. Copy versus local borrow
   is explicit; this is not cross-language zero-copy or reflected Blueprint state.
   See [binary interop](UNREAL_API_CONTRACT.md#binary-payload-interop).
-- Next capability batch: **basic replication and RPC**. Compare the ordinary
-  replicated-property, RepNotify and client/server RPC workflow against Puerts
-  examples and the existing Script Class foundation. Carry the common path
-  through declarations, materialization, managed dispatch, authority/ownership
-  checks and an actual client/server example. Pull forward only the specific
-  class dependencies required by this family; do not resume all of M13.3.
+- Current capability batch: **basic replication and RPC**. The generated Actor
+  path now runs on one server and two connected clients: replicated/owner-only
+  state, initial and subsequent RepNotify with old values, Server/Client/Multicast
+  sends, ownership rejection and client reload. Declarations, saved-class rebinds
+  and public `SendRpc` calls use UE's actual network driver and actor channels.
+  Initial notifications received before managed activation use owned snapshots;
+  GC survival, coalescing and cancellation on stop are verified.
+  See the [network recipe](UNREAL_GAMEPLAY_RECIPES.md#replicated-state-and-rpc).
+  Next, verify the generated ActorComponent path and common remaining network
+  conditions/payloads; keep travel, push-model and cooked networking explicit.
+  Pull forward only class dependencies of this family, not all of M13.3.
   Richer binary/native-object signatures and interactive/cooked acceptance
   remain explicit follow-ups, not prerequisites for starting networking.
 
@@ -71,9 +76,10 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
+| Basic networking — M13.5 | Generated Actor replication/OwnerOnly, RepNotify old values, explicit Server/Client/Multicast RPC, ownership checks and reload on a real server/two-client CMD session | ActorComponent network execution, broader payload/condition coverage, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
-| Runtime and Demo — M9–M12 | Compiled chunks, reload, debugging/profiling, packaged BlockBreaker, World scheduling and batch/shared-data routes | The advertised package target is UE 5.8.1 / Win64; networking and broader engine/platform support are not established |
+| Runtime and Demo — M9–M12 | Compiled chunks, reload, debugging/profiling, packaged BlockBreaker, World scheduling and batch/shared-data routes | The advertised package target is UE 5.8.1 / Win64; cooked networking and broader engine/platform support are not established |
 | Performance — M10 | Matched workload infrastructure and measured wins on batch/shared-data routes | Scalar, resource/spawn and reload weaknesses remain; there is no general "faster than Puerts" conclusion |
 
 The project has a working, bounded product and Demo. It is **not yet a general
@@ -139,7 +145,7 @@ not an exhaustive signature audit or a claim of parity.
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
 | Delegates, interfaces and async gameplay | Reviewed routes exist; audit and fill remaining common callback, latent, UI, subsystem and asset-loading forms with reusable examples | M13.5 |
-| Replication and RPC | Script Class replication metadata, RPC, RepNotify and authority/lifetime behavior remain unfinished; implement a basic client/server gameplay path on the existing class foundation, pulling forward specific class dependencies if needed | M13.5 |
+| Replication and RPC | Basic Actor property replication, RepNotify, explicit RPC and ownership/lifecycle behavior now pass a connected example. ActorComponent, richer payloads/conditions, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
 
@@ -220,6 +226,10 @@ authorization.
   class foundation; complete specific missing class dependencies as needed rather
   than waiting for all of M13.3. Packaged WindowsServer remains unsupported until
   separately built, packaged and exercised.
+  The Actor checkpoint now includes a public sample and a server/two-client CMD
+  test, including initial notification buffering, native class save/reload and
+  live client generation replacement. This does not close the remaining network
+  scope or prove every accepted RPC signature.
 - [ ] Publish usable .NET library, async/threading and native-callback guidance,
   with explicit runtime/platform restrictions. Do not imply npm/Node ecosystem
   compatibility or unrestricted dynamic-language behavior.
@@ -353,6 +363,21 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The first networking Actor checkpoint passes the UE 5.8.1 Editor build and all
+38 UE CMD tests, including `Networking.ConnectedScriptClass`
+(`artifacts/m13-5-network/unreal-suite.log`). The complete managed run passes 784
+tests (`managed/managed-complete.trx` under the same directory). Later RPC payload
+rejection cases and state-patch preservation pass in the 28 focused cases in
+`managed/networking-contracts-final.trx`. After the initial notification GC fix
+and stricter previous-value pin validation, the affected native code rebuilds
+and the focused networking test passes in `networking-verified.log`. That run
+covers snapshot ownership across GC, coalescing, cancellation on stop, and the
+connected Actor scenario. The earlier full-suite result is not a rerun of these
+later edits. Demo chunk emission and repository validation pass. The connected
+run uses in-process UE server/client Worlds with
+real loopback connections, not packaged executables or manually copied state.
+No networking performance or full Puerts parity claim is made.
 
 The binary payload batch passes the UE 5.8.1 Editor build, all 770 managed tests
 (including 26 buffer tests), and all 37 UE CMD tests, including both

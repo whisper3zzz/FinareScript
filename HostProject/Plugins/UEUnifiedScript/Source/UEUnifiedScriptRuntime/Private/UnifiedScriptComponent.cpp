@@ -14,6 +14,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -27,8 +28,35 @@
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
+#include "UObject/GCObject.h"
+#include "UObject/StructOnScope.h"
 
 #include <atomic>
+
+// Own the parameter values, including string/object previous values, across
+// initial replication and BeginPlay. Never retain a network stack address.
+struct FUnifiedScriptInitialRepNotify final : FGCObject
+{
+    TWeakObjectPtr<UObject> Target;
+    TObjectPtr<UFunction> Function;
+    FStructOnScope Parameters;
+
+    FUnifiedScriptInitialRepNotify(UObject* InTarget, UFunction* InFunction, const void* Source)
+        : Target(InTarget), Function(InFunction), Parameters(InFunction)
+    {
+        for (TFieldIterator<FProperty> It(Function); It; ++It)
+            if (It->HasAnyPropertyFlags(CPF_Parm))
+                It->CopyCompleteValue_InContainer(Parameters.GetStructMemory(), Source);
+    }
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        Collector.AddReferencedObject(Function);
+        // FStructOnScope::AddReferencedObjects assumes UScriptStruct, whereas
+        // this storage belongs to a UFunction. Traverse its properties directly.
+        Collector.AddPropertyReferences(Function, Parameters.GetStructMemory());
+    }
+    virtual FString GetReferencerName() const override { return TEXT("UnifiedScriptInitialRepNotify"); }
+};
 
 namespace UE::UnifiedScript::Component::Private
 {
@@ -527,6 +555,8 @@ bool UUnifiedScriptComponent::StartScript()
     {
         return true;
     }
+    bManagedStartAttempted = true;
+    ON_SCOPE_EXIT { if (!bScriptRunning) InitialRepNotifies.Reset(); };
     const double StartSeconds = FPlatformTime::Seconds();
     LastStartMilliseconds = 0.0;
 
@@ -757,12 +787,36 @@ bool UUnifiedScriptComponent::StartScript()
         HandleRegistrationMilliseconds,
         ManagedActivationMilliseconds,
         FinalizationMilliseconds);
+    auto Pending = MoveTemp(InitialRepNotifies);
+    InitialRepNotifies.Reset();
+    for (const auto& Notify : Pending)
+        if (bScriptRunning && Notify->Target.IsValid() &&
+            Notify->Target->FindFunction(Notify->Function->GetFName()) == Notify->Function.Get())
+            Notify->Target->ProcessEvent(Notify->Function, Notify->Parameters.GetStructMemory());
+    return true;
+}
+
+bool UUnifiedScriptComponent::QueueInitialRepNotify(UObject* Target, UFunction* Function, const void* Parameters)
+{
+    check(IsInGameThread());
+    if (bScriptRunning || bManagedStartAttempted || !bStartAutomatically || HasBegunPlay() || !Target || !Function ||
+        Function->NumParms > 1 || Function->GetReturnProperty() != nullptr ||
+        (Function->NumParms != 0 && Parameters == nullptr)) return false;
+    const auto* Class = Cast<UUnifiedScriptBlueprintGeneratedClass>(Function->GetOuter());
+    const auto* Binding = Class ? Class->ManagedFunctionBindings.Find(Function->GetFName()) : nullptr;
+    if (!Binding || Binding->RepNotifyProperty.IsNone()) return false;
+    // Multiple pre-start updates retain the first old value; hydration will
+    // expose the newest replicated state, matching UE's coalesced notification.
+    if (InitialRepNotifies.ContainsByPredicate([&](const auto& N) { return N->Function == Function; })) return true;
+    if (InitialRepNotifies.Num() >= 256) return false;
+    InitialRepNotifies.Add(MakeShared<FUnifiedScriptInitialRepNotify>(Target, Function, Parameters));
     return true;
 }
 
 void UUnifiedScriptComponent::StopScript()
 {
     check(IsInGameThread());
+    InitialRepNotifies.Reset();
     UnbindManagedInputActions();
     bStopRequestedByInputFailure = false;
     if (!bScriptRunning && ManagedScriptInstanceId == 0 &&

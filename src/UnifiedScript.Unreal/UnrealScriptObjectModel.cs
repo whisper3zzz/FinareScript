@@ -20,7 +20,7 @@ public interface IUnrealManagedEventSink
     void OnUnrealEvent(UnrealScriptEvent scriptEvent);
 }
 
-public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedEventSink
+public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedEventSink
 {
     private CancellationTokenSource? _lifetime;
     private UnrealAsyncScope? _asyncScope;

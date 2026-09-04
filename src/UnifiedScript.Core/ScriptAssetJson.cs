@@ -96,6 +96,16 @@ public static class ScriptAssetJson
             ValidateFunction(asset, function, functionIds);
         }
 
+        var notifiedStates = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ScriptFunctionDeclaration function in asset.Functions.Where(f => f.RepNotifyProperty is not null))
+        {
+            ScriptStateDeclaration? state = asset.States.SingleOrDefault(s => s.Name == function.RepNotifyProperty);
+            if (state is null || !state.Exposure.Replicated || !notifiedStates.Add(state.Name) ||
+                function.Parameters.Count > 1 || (function.Parameters.Count == 1 &&
+                    function.Parameters[0].TypeMetadataName != state.TypeMetadataName))
+                throw new JsonException($"RepNotify '{function.Name}' requires one replicated state and zero arguments or its exact previous-value type; each state has one notification owner.");
+        }
+
         var lifecycleIds = new HashSet<SemanticId>();
         var lifecycleKinds = new HashSet<ScriptLifecycleHookKind>();
         foreach (ScriptLifecycleHookDeclaration? hook in asset.LifecycleHooks ?? [])
@@ -131,6 +141,9 @@ public static class ScriptAssetJson
         {
             throw new JsonException($"Script state '{state.Name}' has a blank exposure category.");
         }
+        if (!Enum.IsDefined(state.Exposure.ReplicationCondition) ||
+            !state.Exposure.Replicated && state.Exposure.ReplicationCondition != global::UnifiedScript.ReplicationCondition.None)
+            throw new JsonException($"Script state '{state.Name}' has an invalid replication condition or is not replicated.");
 
         ValidateFunctionValueType(state.UnrealType, state.TypeMetadataName, 0);
         if (state.TypeKind == ScriptStateTypeKind.Struct)
@@ -214,6 +227,18 @@ public static class ScriptAssetJson
         if (!functionIds.Add(function.Id))
         {
             throw new JsonException($"Duplicate script function ID '{function.Id}'.");
+        }
+
+        if (function.Rpc is not null || function.RepNotifyProperty is not null)
+        {
+            if (!function.IsPublic || function.IsStatic || function.IsEvent ||
+                function.ReturnTypeMetadataName != "System.Void" ||
+                function.Parameters.Any(p => p is null || p.Direction != ScriptParameterDirection.Input) ||
+                function.BlueprintEvent is not null || (function.InputActions?.Count ?? 0) != 0 ||
+                (function.DelegateBindings?.Count ?? 0) != 0 || (function.InterfaceFunctions?.Count ?? 0) != 0 ||
+                function.Rpc is not null && (function.RepNotifyProperty is not null || !Enum.IsDefined(function.Rpc.Target)) ||
+                function.RepNotifyProperty is not null && !IsIdentifier(function.RepNotifyProperty))
+                throw new JsonException($"Network method '{function.Name}' must be public, instance, void and input-only with one RPC/RepNotify binding and no conflicting gameplay binding.");
         }
 
         if (function.BlueprintEvent is not null)

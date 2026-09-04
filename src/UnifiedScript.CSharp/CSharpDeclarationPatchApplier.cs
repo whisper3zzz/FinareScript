@@ -1229,6 +1229,9 @@ public sealed class CSharpDeclarationPatchApplier
             arguments.Add("Replicated = true");
         }
 
+        if (exposure.ReplicationCondition != global::UnifiedScript.ReplicationCondition.None)
+            arguments.Add($"ReplicationCondition = global::UnifiedScript.ReplicationCondition.{exposure.ReplicationCondition}");
+
         if (exposure.Category is not null)
         {
             arguments.Add("Category = " + Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(

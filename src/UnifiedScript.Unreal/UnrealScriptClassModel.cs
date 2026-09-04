@@ -48,6 +48,23 @@ public enum UnrealBlueprintEventSuperMode
     Explicit = 1,
 }
 
+public enum UnrealRpcTarget { Server = 1, Client = 2, Multicast = 3 }
+
+/// <summary>Declares a UE network receive body. Use SendRpc to send; normal C# calls stay local.</summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealRpcAttribute(UnrealRpcTarget target) : Attribute
+{
+    public UnrealRpcTarget Target { get; } = target;
+    public bool Reliable { get; init; }
+}
+
+/// <summary>Invoked after UE receives a replicated property, with no argument or its previous value.</summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealRepNotifyAttribute(string propertyName) : Attribute
+{
+    public string PropertyName { get; } = propertyName;
+}
+
 /// <summary>Enhanced Input trigger phase projected onto a managed method.</summary>
 public enum UnrealInputTriggerEvent
 {

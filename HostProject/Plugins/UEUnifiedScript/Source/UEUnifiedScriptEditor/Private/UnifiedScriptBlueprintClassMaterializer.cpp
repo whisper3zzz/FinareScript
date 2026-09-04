@@ -5,6 +5,8 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/Blueprint.h"
+#include "GameFramework/Actor.h"
+#include "Components/ActorComponent.h"
 #include "Interfaces/IPluginManager.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
@@ -48,6 +50,8 @@ struct FStateDeclaration
     FString DefaultValue;
     FString Category;
     uint64 PropertyFlags = 0;
+    FName RepNotifyFunc;
+    ELifetimeCondition ReplicationCondition = COND_None;
 };
 
 struct FPlannedState
@@ -103,6 +107,9 @@ struct FFunctionDeclaration
     bool bIsStatic = false;
     bool bBlueprintEvent = false;
     bool bInterfaceFunction = false;
+    EUnifiedScriptRpcTarget RpcTarget = EUnifiedScriptRpcTarget::None;
+    bool bReliable = false;
+    FName RepNotifyProperty;
     TArray<FString> InterfacePaths;
     EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
         EUnifiedScriptBlueprintEventSuperMode::Explicit;
@@ -673,8 +680,8 @@ bool FunctionGraphSignatureMatches(
         return false;
     }
     const int32 RelevantFlags = FUNC_Public | FUNC_BlueprintCallable | FUNC_Static |
-        FUNC_Event | FUNC_BlueprintEvent;
-    const int32 ExpectedFlags = FUNC_Public | FUNC_BlueprintCallable |
+        FUNC_Event | FUNC_BlueprintEvent | FUNC_Net | FUNC_NetServer | FUNC_NetClient | FUNC_NetMulticast | FUNC_NetReliable;
+    const int32 ExpectedFlags = FUNC_Public | FUNC_BlueprintCallable | UnifiedScriptRpcFlags(Declaration.RpcTarget, Declaration.bReliable) |
         (Declaration.bIsStatic ? FUNC_Static : FUNC_None) |
         (Declaration.bBlueprintEvent
             ? static_cast<int32>(FUNC_Event | FUNC_BlueprintEvent)
@@ -752,6 +759,8 @@ bool RuntimeFunctionBindingMatches(
     if (Binding.ManagedName != Declaration.ManagedName.ToString() ||
         Binding.FunctionId != Declaration.Id || Binding.AbiVersion != 3 ||
         Binding.bStatic != Declaration.bIsStatic ||
+        Binding.RpcTarget != Declaration.RpcTarget || Binding.bReliable != Declaration.bReliable ||
+        Binding.RepNotifyProperty != Declaration.RepNotifyProperty ||
         Binding.bBlueprintEvent != Declaration.bBlueprintEvent ||
         Binding.bInterfaceFunction != Declaration.bInterfaceFunction ||
         Binding.BlueprintEventSuperMode != Declaration.BlueprintEventSuperMode ||
@@ -1695,6 +1704,9 @@ bool ParseDeclaration(
         return false;
     }
 
+    const bool bGameplayLifecycle =
+        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::Actor ||
+        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::ActorComponent;
     TSet<FGuid> SeenIds;
     TSet<FName> SeenNames;
     OutStates.Reset();
@@ -1807,6 +1819,24 @@ bool ParseDeclaration(
         {
             Declaration.PropertyFlags |= CPF_Net;
         }
+        FString Condition = TEXT("none");
+        if ((*Exposure)->HasField(TEXT("replicationCondition")) &&
+            !(*Exposure)->TryGetStringField(TEXT("replicationCondition"), Condition))
+        {
+            OutError = TEXT("State replicationCondition must be a named condition.");
+            return false;
+        }
+        if (Condition == TEXT("none")) Declaration.ReplicationCondition = COND_None;
+        else if (Condition == TEXT("initialOnly")) Declaration.ReplicationCondition = COND_InitialOnly;
+        else if (Condition == TEXT("ownerOnly")) Declaration.ReplicationCondition = COND_OwnerOnly;
+        else if (Condition == TEXT("skipOwner")) Declaration.ReplicationCondition = COND_SkipOwner;
+        else if (Condition == TEXT("initialOrOwner")) Declaration.ReplicationCondition = COND_InitialOrOwner;
+        else { OutError = TEXT("Unsupported state replication condition."); return false; }
+        if ((!bReplicated && Declaration.ReplicationCondition != COND_None) || (bReplicated && !bGameplayLifecycle))
+        {
+            OutError = TEXT("Replicated state requires an Actor/ActorComponent; conditions require replicated state.");
+            return false;
+        }
 
         SeenIds.Add(Declaration.Id);
         SeenNames.Add(Declaration.Name);
@@ -1822,9 +1852,6 @@ bool ParseDeclaration(
         OutError = TEXT("Script Class lifecycleHooks must be an array.");
         return false;
     }
-    const bool bGameplayLifecycle =
-        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::Actor ||
-        ScriptAsset.ScriptClassKind == EUnifiedScriptClassKind::ActorComponent;
     if (LifecycleHooks != nullptr && !LifecycleHooks->IsEmpty() && !bGameplayLifecycle)
     {
         OutError = TEXT("Only Actor and ActorComponent Script Classes can declare gameplay lifecycle hooks.");
@@ -1991,6 +2018,25 @@ bool ParseDeclaration(
         Declaration.ReturnTypeMetadataName = ReturnType;
         Declaration.bIsStatic = bIsStatic;
         Declaration.bBlueprintEvent = BlueprintEvent != nullptr;
+        if (Function->HasField(TEXT("rpc")))
+        {
+            const TSharedPtr<FJsonObject>* Rpc = nullptr;
+            FString Target;
+            if (!Function->TryGetObjectField(TEXT("rpc"), Rpc) || Rpc == nullptr || !Rpc->IsValid() ||
+                !(*Rpc)->TryGetStringField(TEXT("target"), Target) || !(*Rpc)->TryGetBoolField(TEXT("reliable"), Declaration.bReliable))
+            { OutError = TEXT("RPC requires a target and explicit reliability."); return false; }
+            if (Target == TEXT("server")) Declaration.RpcTarget = EUnifiedScriptRpcTarget::Server;
+            else if (Target == TEXT("client")) Declaration.RpcTarget = EUnifiedScriptRpcTarget::Client;
+            else if (Target == TEXT("multicast")) Declaration.RpcTarget = EUnifiedScriptRpcTarget::Multicast;
+            else { OutError = TEXT("Unsupported RPC target."); return false; }
+        }
+        if (Function->HasField(TEXT("repNotifyProperty")))
+        {
+            FString Property;
+            if (!Function->TryGetStringField(TEXT("repNotifyProperty"), Property) || Property.IsEmpty())
+            { OutError = TEXT("RepNotify requires an exact property name."); return false; }
+            Declaration.RepNotifyProperty = FName(*Property);
+        }
         if (!ParseSemanticId(SemanticId, Declaration.Id) ||
             Declaration.ManagedName.IsNone() ||
             SeenFunctionIds.Contains(Declaration.Id) ||
@@ -2128,9 +2174,41 @@ bool ParseDeclaration(
             Declaration.Parameters.Add(MoveTemp(ParameterDeclaration));
         }
 
+        if (Declaration.RpcTarget != EUnifiedScriptRpcTarget::None || !Declaration.RepNotifyProperty.IsNone())
+        {
+            if (!bGameplayLifecycle || Declaration.bIsStatic || Declaration.bHasReturnValue ||
+                Declaration.bBlueprintEvent || Declaration.bInterfaceFunction ||
+                (Declaration.RpcTarget != EUnifiedScriptRpcTarget::None && !Declaration.RepNotifyProperty.IsNone()) ||
+                Declaration.Parameters.ContainsByPredicate([](const FFunctionParameterDeclaration& P)
+                    { return P.Direction != EUnifiedScriptManagedParameterDirection::Input; }) ||
+                OutInputBindings.ContainsByPredicate([&](const FInputActionDeclaration& B) { return B.ManagedName == Declaration.ManagedName; }) ||
+                OutDelegateBindings.ContainsByPredicate([&](const FDelegateBindingDeclaration& B) { return B.ManagedName == Declaration.ManagedName; }))
+            { OutError = TEXT("RPC/RepNotify must be instance void input-only gameplay methods without other bindings."); return false; }
+        }
+        if (Declaration.RpcTarget != EUnifiedScriptRpcTarget::None &&
+            (Declaration.Parameters.Num() > 4 || Declaration.Parameters.ContainsByPredicate([](const FFunctionParameterDeclaration& P)
+            {
+                const FEdGraphPinType& Pin = P.PinType;
+                if (Pin.IsContainer() || Pin.PinCategory == UEdGraphSchema_K2::PC_SoftObject || Pin.PinCategory == UEdGraphSchema_K2::PC_SoftClass) return true;
+                const UObject* Type = Pin.PinSubCategoryObject.Get();
+                return Pin.PinCategory == UEdGraphSchema_K2::PC_Struct &&
+                    Type != TBaseStructure<FVector>::Get() && Type != TBaseStructure<FRotator>::Get() && Type != TBaseStructure<FTransform>::Get();
+            })))
+        { OutError = TEXT("RPC supports 0-4 scalar/common-value inputs; collections, Soft References and complex structures are not supported RPC payloads yet."); return false; }
         SeenFunctionIds.Add(Declaration.Id);
         SeenFunctionNames.Add(Declaration.ManagedName);
         OutFunctions.Add(MoveTemp(Declaration));
+    }
+    for (const FFunctionDeclaration& Function : OutFunctions)
+    {
+        if (Function.RepNotifyProperty.IsNone()) continue;
+        FStateDeclaration* State = OutStates.FindByPredicate([&](const FStateDeclaration& S) { return S.Name == Function.RepNotifyProperty; });
+        if (State == nullptr || !(State->PropertyFlags & CPF_Net) || !State->RepNotifyFunc.IsNone() ||
+            Function.Parameters.Num() > 1 || (Function.Parameters.Num() == 1 &&
+                (Function.Parameters[0].TypeMetadataName != State->TypeMetadataName || Function.Parameters[0].PinType != State->PinType)))
+        { OutError = TEXT("RepNotify needs one replicated property and zero parameters or its exact previous-value type."); return false; }
+        State->RepNotifyFunc = Function.InternalName;
+        State->PropertyFlags |= CPF_RepNotify;
     }
     return true;
 }
@@ -2396,7 +2474,8 @@ bool BuildPlan(
         const bool bTypeChanged = Existing.VarType != Declaration.PinType;
         const bool bFriendlyNameChanged = Existing.FriendlyName != FriendlyName;
         const bool bCategoryChanged = Existing.Category.ToString() != Declaration.Category;
-        const bool bFlagsChanged = Existing.PropertyFlags != Declaration.PropertyFlags;
+        const bool bFlagsChanged = Existing.PropertyFlags != Declaration.PropertyFlags ||
+            Existing.RepNotifyFunc != Declaration.RepNotifyFunc || Existing.ReplicationCondition != Declaration.ReplicationCondition;
         const bool bDefaultChanged = CurrentDefault != Planned.AppliedDefault;
         const bool bMarkerChanged = !HasMetadataValue(Existing, ManagedStateKey, TEXT("true"));
         const bool bStateIdChanged =
@@ -2911,7 +2990,7 @@ bool ConfigureFunctionGraph(
     Result->Modify();
     Entry->CustomGeneratedFunctionName = Declaration.InternalName;
     Entry->SetExtraFlags(
-        FUNC_Public | FUNC_BlueprintCallable |
+        FUNC_Public | FUNC_BlueprintCallable | UnifiedScriptRpcFlags(Declaration.RpcTarget, Declaration.bReliable) |
         (Declaration.bIsStatic ? FUNC_Static : FUNC_None) |
         (Declaration.bBlueprintEvent
             ? static_cast<int32>(FUNC_Event | FUNC_BlueprintEvent)
@@ -3178,8 +3257,8 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Planned.Declaration.PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean);
         Variable.Category = FText::FromString(Planned.Declaration.Category);
         Variable.PropertyFlags = Planned.Declaration.PropertyFlags;
-        Variable.RepNotifyFunc = NAME_None;
-        Variable.ReplicationCondition = COND_None;
+        Variable.RepNotifyFunc = Planned.Declaration.RepNotifyFunc;
+        Variable.ReplicationCondition = Planned.Declaration.ReplicationCondition;
         Variable.DefaultValue = Planned.AppliedDefault;
         Variable.SetMetaData(ManagedStateKey, TEXT("true"));
         Variable.SetMetaData(StateIdKey, Planned.Declaration.SemanticId);
@@ -3276,6 +3355,9 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             Binding.FunctionId = Planned.Declaration.Id;
             Binding.AbiVersion = 3;
             Binding.bStatic = Planned.Declaration.bIsStatic;
+            Binding.RpcTarget = Planned.Declaration.RpcTarget;
+            Binding.bReliable = Planned.Declaration.bReliable;
+            Binding.RepNotifyProperty = Planned.Declaration.RepNotifyProperty;
             Binding.bBlueprintEvent = Planned.Declaration.bBlueprintEvent;
             Binding.bInterfaceFunction =
                 Planned.Declaration.bInterfaceFunction;
@@ -3300,6 +3382,13 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
                 MoveTemp(Binding));
         }
         GeneratedClass->BindManagedFunctions();
+        const bool bNetworked = Plan.States.ContainsByPredicate([](const FPlannedState& S) { return (S.Declaration.PropertyFlags & CPF_Net) != 0; }) ||
+            Plan.Functions.ContainsByPredicate([](const FPlannedFunction& F) { return F.Declaration.RpcTarget != EUnifiedScriptRpcTarget::None; });
+        if (bNetworked)
+        {
+            if (AActor* Actor = Cast<AActor>(GeneratedClass->GetDefaultObject())) Actor->SetReplicates(true);
+            if (UActorComponent* Component = Cast<UActorComponent>(GeneratedClass->GetDefaultObject())) Component->SetIsReplicated(true);
+        }
         for (const FPlannedFunction& Planned : Plan.Functions)
         {
             if (!GeneratedClass->IsManagedFunctionBound(

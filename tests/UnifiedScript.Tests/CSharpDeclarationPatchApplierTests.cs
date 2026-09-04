@@ -37,6 +37,29 @@ public sealed class CSharpDeclarationPatchApplierTests
         """;
 
     [Fact]
+    public void ApplyPreservesReplicationConditionThroughStateRename()
+    {
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest();
+        ScriptStateDeclaration state = State(original, "MaxDamage");
+        var exposure = new ScriptExposure(true, false, true, "Network", UnifiedScript.ReplicationCondition.OwnerOnly);
+        var patch = Patch(original, new UpdateScriptStatePatchOperation(state.Id, Expected(state),
+            Spec("OwnerDamage", "int", ScriptStateTypeKind.Integer, 10, exposure)));
+        var result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(exposure, State(result.Analysis!, "OwnerDamage").Exposure);
+        Assert.Contains("ReplicationCondition = global::UnifiedScript.ReplicationCondition.OwnerOnly",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+
+        var renamed = State(result.Analysis!, "OwnerDamage");
+        var again = new CSharpDeclarationPatchApplier().Apply(result.PatchedRequest, Patch(result.Analysis!,
+            new UpdateScriptStatePatchOperation(renamed.Id, Expected(renamed),
+                Spec("PrivateDamage", "int", ScriptStateTypeKind.Integer, 12, renamed.Exposure))));
+        Assert.True(again.Succeeded, string.Join(Environment.NewLine, again.Diagnostics));
+        Assert.Equal(state.Id, State(again.Analysis!, "PrivateDamage").Id);
+        Assert.Equal(exposure, State(again.Analysis!, "PrivateDamage").Exposure);
+    }
+
+    [Fact]
     public void ApplyUpdatesContractRenamesReferencesAndPreservesStateIdentity()
     {
         (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest();

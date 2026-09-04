@@ -433,6 +433,9 @@ public static class DeclarationPatchJson
 
     private static void ValidateExposure(ScriptExposure exposure, string role)
     {
+        if (!Enum.IsDefined(exposure.ReplicationCondition) ||
+            !exposure.Replicated && exposure.ReplicationCondition != global::UnifiedScript.ReplicationCondition.None)
+            throw new JsonException($"The {role} exposure has an invalid replication condition or is not replicated.");
         if (exposure.Category is not null && string.IsNullOrWhiteSpace(exposure.Category))
         {
             throw new JsonException($"The {role} exposure category cannot be blank.");
