@@ -1,0 +1,30 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UnifiedScriptNativeObjectRegistry.h"
+#include <type_traits>
+
+struct FUnifiedScriptNativeValueV3;
+
+/** Independent optional table: existing UObject v1/v2/v3 layouts are unchanged. */
+struct alignas(8) FUnifiedScriptNativeObjectTransportV1
+{
+    uint32 AbiVersion = 1;
+    uint32 TableSize = 0;
+    uint32 ValueSize = 0;
+    uint32 Reserved = 0;
+    uint8 (*RetainContext)(void*) = nullptr;
+    void (*ReleaseContext)(void*) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*OpenScope)(void*, uint64*) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*CloseScope)(void*, uint64) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*ReleaseObject)(void*, uint64, uint64) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*Invoke)(void*, uint64, uint64, uint64,
+        const FUnifiedScriptNativeValueV3*, uint32, FUnifiedScriptNativeValueV3*, uint64*) = nullptr;
+};
+
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeObjectTransportV1>);
+static_assert(sizeof(FUnifiedScriptNativeObjectTransportV1) == 64);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeObjectTransportV1, Invoke) == 56);
+
+extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeObjectTransportV1*
+UEUnifiedScript_GetNativeObjectTransportV1();

@@ -82,6 +82,57 @@ has a generated accessor. Native code remains responsible for its storage and
 referenced object ownership. Packaged execution of this new sample is not yet
 acceptance evidence.
 
+## Ordinary C++ object runtime
+
+The ownership/dispatch runtime for non-UObject C++ objects is implemented, but
+**the v0.1 declarations above do not yet generate ordinary C++ object bindings**.
+`NativeObjectLifetimeDemoScript` is a CMD integration fixture whose native members
+are registered by `UnifiedScriptNativeObjectTests.cpp`; it is not an author-facing
+facade or a generally installed native library.
+
+`FUnifiedScriptNativeObjectRegistry` belongs to one native World context. Its
+opaque object and scope tokens are process-unique and non-recycled. An owned
+registration transfers a pointer and native destructor only on success. An
+address cannot acquire two deleting owners. A borrowed registration requires a
+live same-scope owner and never deletes the borrowed pointer. Releasing an owner
+invalidates all descendant aliases first. Before native code moves/replaces child
+storage, it must call `InvalidateBorrowed`; merely retaining an unrelated object
+does not make an arbitrary pointer safe. Binding/destructor code must remain
+loaded until the context is detached; dynamic native module unloading is not
+supported by this checkpoint.
+
+Managed code obtains a generation scope through
+`UnrealNativeObjectScope.FromBridge(context.Bridge)`. Construction returns an
+`UnrealNativeObjectLease`; `Borrow` creates a dependent alias, `Invoke` uses a
+stable member ID, and `Dispose` releases the lease. The registry owns the actual
+ownership policy, not a caller-provided managed Boolean. Forgotten leases are
+released when their generation/transport is disposed or their World detaches.
+Explicit calls and disposal are game-thread-only. Worker disposal fails before
+changing ownership and can be retried on the game thread; there is no native
+destruction from a managed finalizer.
+
+During reload, the stopped previous generation keeps its native objects until
+commit retires that generation. A failed candidate's objects are destroyed;
+the previous generation can restart using its retained handles. `OnStop` does
+not itself clear that retained scope. If `OnStart` allocates replacement resources
+when restarting, script code must dispose or reuse the previous leases. Native
+handles are not transferable between generation scopes or Worlds.
+
+Native Object ABI v1 is an optional 64-byte table appended to the v2 transport.
+It shares context retain/release functions and the existing 48-byte value cell,
+without changing the existing UObject transport prefixes or call-frame layout.
+Its initial synchronous lane accepts up to 16 fixed scalar/enum/vector/rotator
+inputs and returns one fixed value plus an optional native-object handle. It
+rejects strings, containers, other arena values and UObject cells; it does not
+fall back to reflection. Failed factories discard unpublished allocations and
+outputs, not arbitrary native side effects. Rich codecs, native-object parameters,
+ref/out and generated wrapper/node surfaces remain follow-up implementation.
+
+`UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation` and
+`.ManagedLifetime` verify the native registry, ABI rejection rules and actual
+CoreCLR startup/rollback/reload/teardown. The 10,000-level borrow-chain test checks
+iterative invalidation, not Puerts performance. No cooked result is claimed yet.
+
 ## Contract schema
 
 `unifiedscript.unreal-api-contract/v0.2` requires a contract name, managed

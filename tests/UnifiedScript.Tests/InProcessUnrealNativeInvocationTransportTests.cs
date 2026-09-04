@@ -7,7 +7,7 @@ using GeneratedComponent = UnifiedScript.Unreal.Generated.UnifiedScriptComponent
 
 namespace UnifiedScript.Tests;
 
-public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
+public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDisposable
 {
     [ThreadStatic]
     private static InProcessUnrealNativeInvocationTransportTests? _activeV3Fixture;
@@ -79,6 +79,7 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
             Assert.Equal("/Game/Scripts/FunctionTable", wrapper.ScriptAssetPath);
             Assert.Equal(42, wrapper.Add(17, 25));
             Assert.Equal(1, _retainedContexts);
+            Assert.False(transport.SupportsNativeObjects);
         }
         Assert.Equal(0, _retainedContexts);
     }

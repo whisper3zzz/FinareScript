@@ -224,7 +224,7 @@ internal delegate uint UnrealNativeAsyncCancelOwnerV5(
 /// this transport is disposed, and becomes unavailable after its world detaches.
 /// ABI v1 uses canonical member paths; ABI v2 appends generated member-ID thunks.
 /// </summary>
-public sealed class InProcessUnrealNativeInvocationTransport
+public sealed partial class InProcessUnrealNativeInvocationTransport
     : IUnrealNativeInvocationTransport,
       IUnrealNativeFastInvocationTransport,
       IUnrealNativeCallFrameTransportV3,
@@ -731,6 +731,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 table.RetainContext);
         _releaseContext = Marshal.GetDelegateForFunctionPointer<UnrealNativeReleaseContextV1>(
             table.ReleaseContext);
+        LoadNativeObjects(tablePointer, table);
         if (retainContext(_context) == 0)
         {
             throw new InvalidOperationException(
@@ -1553,6 +1554,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
             {
                 return;
             }
+            CloseNativeObjectScopes();
             if (_unsubscribeEvent is not null)
             {
                 foreach (NativeEventSubscription subscription in _eventSubscriptions.ToArray())

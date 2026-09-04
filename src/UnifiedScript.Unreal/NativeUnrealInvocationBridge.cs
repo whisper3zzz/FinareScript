@@ -325,6 +325,8 @@ public sealed class UnrealInvocationException : Exception
 public sealed class NativeUnrealInvocationBridge
     : IUnrealInvocationBridge,
       IUnrealNativeBindingBridge,
+      IUnrealNativeObjectProvider,
+      IUnrealNativeObjectScopeFactory,
       IUnrealFastInvocationBridge,
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
@@ -337,6 +339,8 @@ public sealed class NativeUnrealInvocationBridge
     private const int CallFrameArenaByteCapacity = 4096;
     private readonly IUnrealNativeInvocationTransport _transport;
     private readonly ConcurrentDictionary<string, byte> _nativeOnlyPaths = new(StringComparer.Ordinal);
+    private readonly object _nativeObjectGate = new();
+    private UnrealNativeObjectScope? _nativeObjects;
     private long _callFrameInvocationCount;
     private long _legacyInvocationCount;
     private long _directThunkProfilerCount;
@@ -358,6 +362,21 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public UnrealWorldDataPlane DataPlane { get; }
+
+    public UnrealNativeObjectScope NativeObjects
+    {
+        get
+        {
+            lock (_nativeObjectGate) return _nativeObjects ??= CreateNativeObjectScope();
+        }
+    }
+
+    UnrealNativeObjectScope IUnrealNativeObjectScopeFactory.CreateNativeObjectScope() => CreateNativeObjectScope();
+
+    private UnrealNativeObjectScope CreateNativeObjectScope() =>
+        _transport is IUnrealNativeObjectTransport native
+            ? new UnrealNativeObjectScope(native)
+            : throw new NotSupportedException("The installed transport does not support native objects.");
 
     public void RequireNativeBindings(IReadOnlyList<string> memberPaths)
     {

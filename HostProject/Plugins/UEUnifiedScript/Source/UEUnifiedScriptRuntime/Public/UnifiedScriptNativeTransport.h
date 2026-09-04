@@ -8,6 +8,7 @@
 #include "UnifiedScriptAsyncService.h"
 #include "UnifiedScriptGameplayDataPlane.h"
 #include "UnifiedScriptInvocationBridge.h"
+#include "UnifiedScriptNativeObjectTransport.h"
 #include "UnifiedScriptSharedDataPlane.h"
 
 #include <atomic>
@@ -218,6 +219,8 @@ public:
         TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation);
     bool ExecuteAsyncService(
         TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation);
+    /** Native objects are game-thread-only, including explicit disposal. */
+    bool ExecuteNativeObjects(TFunctionRef<void(FUnifiedScriptNativeObjectRegistry&)> Operation);
 
 private:
     struct FPendingGameThreadCall;
@@ -230,6 +233,7 @@ private:
     FUnifiedScriptSharedDataPlane* SharedDataPlane = nullptr;
     FUnifiedScriptGameplayDataPlane* GameplayDataPlane = nullptr;
     FUnifiedScriptAsyncService* AsyncService = nullptr;
+    FUnifiedScriptNativeObjectRegistry NativeObjects;
     FPendingCallFrameResult PendingCallFrameResult;
     TQueue<TSharedPtr<FPendingGameThreadCall>, EQueueMode::Mpsc> PendingGameThreadCalls;
     std::atomic<bool> bAcceptWorkerDispatch{true};
@@ -284,6 +288,8 @@ struct FUnifiedScriptNativeTransportV2
     const FUnifiedScriptGameplayDataTransportV4* GameplayDataTransport = nullptr;
     /** Optional async/latent service ABI; older v2 clients ignore this suffix. */
     const FUnifiedScriptAsyncTransportV5* AsyncTransport = nullptr;
+    /** Optional non-UObject ownership/dispatch ABI; earlier v2 clients ignore it. */
+    const FUnifiedScriptNativeObjectTransportV1* NativeObjectTransport = nullptr;
 };
 
 /**
@@ -503,6 +509,9 @@ static_assert(
 static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, AsyncTransport) ==
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, GameplayDataTransport) + sizeof(void*));
+static_assert(
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, NativeObjectTransport) ==
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, AsyncTransport) + sizeof(void*));
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV1*
 UEUnifiedScript_GetNativeTransportV1();

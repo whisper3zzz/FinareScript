@@ -36,8 +36,16 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   UObject fields/methods now use one contract to generate C++, C# and visual
   nodes; the real CMD/CoreCLR example includes overloads, static/void calls,
   containers, ref/out, reload and teardown.
-- Next implementation: extend native binding to ordinary C++ objects with
-  explicit construction and owned/borrowed, generation-safe handles. Do not
+  Ordinary C++ ownership now has an independent World/generation-scoped runtime,
+  opaque owned/borrowed handles and a fixed-value dispatch ABI, verified through
+  CoreCLR construction, failed startup, reload rollback and teardown. This is
+  a runtime implementation checkpoint, not completed generated object bindings.
+- Next implementation: extend the versioned native declarations and generators
+  to ordinary C++ constructors, methods and owned/borrowed return contracts;
+  generate typed C# wrappers, native registration/dispatch and visual nodes on
+  the new runtime. Replace the test-only manual registration with generated
+  bindings. Continue to value/container/ref/out integration, inheritance and
+  callbacks rather than stopping at the fixed-value runtime lane. Do not
   complete all of M13.3 before continuing this capability work.
 
 Existing in-flight work, **M13.3C-1c-b**, is implemented through declaration lowering, typed container
@@ -61,7 +69,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Daily workflow — M13.2 | Native create/open/build entrypoints, dependency-aware Play, compatible all-instance reload, unified diagnostics, IDE setup, one C#/Graph asset | Reviewed fixtures demonstrate the workflow; they are not proof that an arbitrary project is equally easy to use |
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
-| Native extensions — M13.5 | Contract-declared public non-reflected UObject members; exact overloads and generated field access, with native-only dispatch | Ordinary C++ object construction/ownership, non-UObject inheritance, converters and callbacks remain unfinished; the new sample has not yet been exercised in a cooked package |
+| Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ owned/borrowed runtime with fixed-value calls and generation/World cleanup | Ordinary C++ declaration/wrapper/node generation, richer call signatures, inheritance, converters and callbacks remain unfinished; the new samples have no cooked execution proof |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
 | Runtime and Demo — M9–M12 | Compiled chunks, reload, debugging/profiling, packaged BlockBreaker, World scheduling and batch/shared-data routes | The advertised package target is UE 5.8.1 / Win64; networking and broader engine/platform support are not established |
@@ -114,7 +122,7 @@ not an exhaustive signature audit or a claim of parity.
 | Reflected API and value types | On-demand generation exists; audit common native/Blueprint member forms, references, defaults and discovery gaps beyond the existing fixtures | M13.1B / M13.3 / M13.5 |
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
-| Non-reflected C++ | Public non-reflected UObject methods/fields now have generated C#/C++/node support. Next: ordinary C++ constructors and owned/borrowed handles, then inheritance, callbacks and converters | M13.5 |
+| Non-reflected C++ | UObject members have generated C#/C++/nodes. Ordinary C++ ownership and fixed-value runtime calls are implemented; next connect constructor/member/borrow declarations to generators, then richer signatures, inheritance, callbacks and converters | M13.5 |
 | Delegates, interfaces and async gameplay | Reviewed routes exist; audit and fill remaining common callback, latent, UI, subsystem and asset-loading forms with reusable examples | M13.5 |
 | Replication and RPC | Script Class replication metadata, RPC, RepNotify and authority/lifetime behavior remain unfinished; implement a basic client/server gameplay path on the existing class foundation, pulling forward specific class dependencies if needed | M13.5 |
 | Binary and bulk data | World-scoped schema channels exist; check general byte-buffer interop against Puerts' ArrayBuffer use cases, including ownership and invalidation, without assuming one batch route covers all buffer use | M13.5; reuse M7 data-plane foundations |
@@ -168,7 +176,10 @@ authorization.
   conversion and explicit ownership. Generate C# declarations and visual nodes
   from the same description instead of separate handwritten surfaces.
   The first UObject-member implementation is available; it does not close this
-  broader item. See [native extension declarations](UNREAL_API_CONTRACT.md#native-extension-declarations).
+  broader item. Ordinary C++ ownership/dispatch is a tested runtime checkpoint,
+  still using test-only member registration rather than generated authoring APIs.
+  See [native extension declarations](UNREAL_API_CONTRACT.md#native-extension-declarations)
+  and the [ordinary C++ runtime](UNREAL_API_CONTRACT.md#ordinary-c-object-runtime).
 - [ ] Close common latent, delegate, interface, subsystem, UI and asset-loading
   gaps through the existing automatic surface. Reuse the reviewed forms already
   implemented and compose them in representative gameplay examples.
@@ -313,6 +324,17 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The ordinary C++ runtime checkpoint has a UE 5.8.1 Editor build, 729 passing
+managed tests, and 34 passing UE CMD tests. The three `NativeObjects` tests cover
+ownership, ABI validation and real CoreCLR lifecycle, including failed startup,
+candidate rollback, retained old handles, generation replacement, forgotten
+Dispose and World detach. Ownership tests also exercise a 10,000-level borrowed
+chain and 1,000 independent owned objects; these are correctness tests, not a
+performance comparison. Evidence:
+`artifacts/m13-5-native-objects/managed/managed-complete.trx` and
+`artifacts/m13-5-native-objects/unreal-suite.log`. Demo chunk emission succeeds;
+neither generated ordinary C++ authoring APIs nor cooked execution is established.
 
 The M13.5 native UObject-member batch has an Editor build, the complete managed
 suite (714 tests), and the complete UE CMD suite (31 tests), including the two

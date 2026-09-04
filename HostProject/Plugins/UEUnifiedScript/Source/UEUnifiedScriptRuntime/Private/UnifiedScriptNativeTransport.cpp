@@ -176,6 +176,7 @@ void FUnifiedScriptNativeBridgeContext::Detach()
     }
     if (bWasAttached)
     {
+        NativeObjects.Detach();
         UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GAttachedContextCount.fetch_sub(
             1,
             std::memory_order_relaxed);
@@ -256,6 +257,14 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteCallFrame(
         {
             Operation(CurrentBridge, PendingCallFrameResult);
         });
+}
+
+bool FUnifiedScriptNativeBridgeContext::ExecuteNativeObjects(
+    TFunctionRef<void(FUnifiedScriptNativeObjectRegistry&)> Operation)
+{
+    if (!IsInGameThread() || FastBridge.load(std::memory_order_acquire) == nullptr) return false;
+    Operation(NativeObjects);
+    return true;
 }
 
 void FUnifiedScriptNativeBridgeContext::PumpGameThreadCalls()
@@ -2875,6 +2884,7 @@ UEUnifiedScript_GetNativeTransportV2()
         UEUnifiedScript_GetSharedDataTransportV4(),
         UEUnifiedScript_GetGameplayDataTransportV4(),
         UEUnifiedScript_GetAsyncTransportV5(),
+        UEUnifiedScript_GetNativeObjectTransportV1(),
     };
     return &Transport;
 }

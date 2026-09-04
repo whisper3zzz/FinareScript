@@ -33,6 +33,39 @@ only admits reflected input. Reuse that generator instead of adding facades.
   require a distinct ownership contract; do not pretend they are UObjects or
   close the full native-extension roadmap item after the first implementation.
 
+### Ordinary C++ runtime checkpoint
+
+- Implemented `FUnifiedScriptNativeObjectRegistry`, owned by the World bridge
+  context, and optional Native Object ABI v1 appended to the existing v2 table.
+  Existing UObject ABI cells and prefixes are unchanged. Native object and scope
+  IDs are separate process-unique tokens, never pointers and never recycled.
+- Owned pointers have one deleting owner. Borrowed children are tied to a live
+  same-scope parent and retired before parent destruction. Native code must
+  invalidate aliases before moving/replacing borrowed storage. Pointer and
+  child/scope indexes avoid scanning every live object on registration/release;
+  subtree invalidation is iterative rather than recursive.
+- Managed generation bridges open scopes lazily. Explicit lease disposal,
+  generation disposal, transport disposal and World detach clean ownership.
+  Worker operations are rejected without side effects; failed worker disposal
+  remains retryable on the game thread. No finalizer runs native destruction.
+- A stopped previous generation retains native objects until reload commit
+  retires it. A failed candidate releases its own scope; restarting the previous
+  generation can reuse its existing native handles. `OnStop` alone does not
+  destroy the retained generation's native objects. Application code that
+  reallocates resources in `OnStart` must release or reuse its existing leases.
+- Failed native factories roll back allocations made during that invocation;
+  this does not promise rollback of arbitrary native method side effects.
+- The current native-object lane carries up to 16 fixed value inputs, one fixed
+  value result and a separate optional object handle. It deliberately rejects
+  arena-backed values and UObject cells. Rich value/container/ref/out codecs and
+  native-object argument contracts remain to be connected, not silently mapped
+  to scalars or UObject handles.
+- **Next:** extend declarations and shared generation to native object types,
+  constructors, member/field calls and ownership-qualified return values.
+  Generate native registration, typed C# wrappers, coverage and visual nodes.
+  The current manual member registrations exist only inside the CMD test fixture;
+  they are not a new project-facade authoring workflow or a claim of parity.
+
 ## Relevant verification
 
 Contract tests cover deterministic generation, collisions, unsupported routes,
@@ -46,5 +79,11 @@ including generated C# calls, reload and World teardown; see
 missing capability forwarder on the generation bridge, now fixed and covered.
 The combined current-source UE CMD suite also passes all 31 tests in
 `artifacts/m13-5-native/unreal-suite.log`; the Demo chunk was regenerated.
-Ordinary C++ construction/ownership remains the next implementation, and the
-new sample has not yet been proven in a cooked package.
+The ordinary C++ runtime now passes the complete managed suite (729 tests), UE
+Editor build and complete CMD suite (34 tests), including three new ownership,
+transport and managed-lifecycle tests. It covers failed construction/startup,
+reload rollback, old-handle retention, explicit/forgotten Dispose, World teardown,
+deep borrowed chains and many independent owned objects. See
+`artifacts/m13-5-native-objects/managed/managed-complete.trx` and
+`artifacts/m13-5-native-objects/unreal-suite.log`. The Demo chunk was regenerated.
+Ordinary C++ generated authoring, richer codecs and cooked execution remain open.

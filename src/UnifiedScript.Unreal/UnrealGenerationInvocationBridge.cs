@@ -8,6 +8,7 @@ namespace UnifiedScript.Unreal;
 internal sealed class UnrealGenerationInvocationBridge :
     IUnrealInvocationBridge,
     IUnrealNativeBindingBridge,
+    IUnrealNativeObjectProvider,
     IUnrealFastInvocationBridge,
     IUnrealTypedInvocationBridge,
     IUnrealOutputInvocationBridge,
@@ -19,6 +20,22 @@ internal sealed class UnrealGenerationInvocationBridge :
     private readonly IUnrealInvocationBridge _inner;
     private readonly List<IUnrealEventSubscription> _subscriptions = [];
     private bool _disposed;
+    private readonly object _nativeObjectGate = new();
+    private UnrealNativeObjectScope? _nativeObjects;
+
+    public UnrealNativeObjectScope NativeObjects
+    {
+        get
+        {
+            lock (_nativeObjectGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _nativeObjects ??= LiveInner is IUnrealNativeObjectScopeFactory factory
+                    ? factory.CreateNativeObjectScope()
+                    : throw new NotSupportedException("The World bridge does not support generation-owned native objects.");
+            }
+        }
+    }
 
     public UnrealGenerationInvocationBridge(IUnrealInvocationBridge inner) =>
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
@@ -152,11 +169,13 @@ internal sealed class UnrealGenerationInvocationBridge :
 
     public void Dispose()
     {
-        if (_disposed)
+        lock (_nativeObjectGate)
         {
-            return;
+            if (_disposed) return;
+            // A worker-thread native release is rejected and must remain retryable.
+            _nativeObjects?.Dispose();
+            _disposed = true;
         }
-        _disposed = true;
         ClearSubscriptions();
     }
 
