@@ -51,6 +51,7 @@ enum class EUnifiedScriptValueKind : uint8
     Set = 23,
     Map = 24,
     ByteBuffer = 25,
+    Callback = 26,
 };
 
 /** Owned value transport. No address into UObject or UFunction storage escapes. */
@@ -80,6 +81,16 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     // Array/Set elements, or flattened alternating Map key/value cells.
     TArray<FUnifiedScriptValue> ContainerValues;
     FUnifiedScriptByteBuffer ByteBufferValue;
+
+    static FUnifiedScriptValue FromCallbackToken(uint64 Token, uint64 Scope, uint64 SignatureId)
+    {
+        FUnifiedScriptValue Result;
+        Result.Kind = EUnifiedScriptValueKind::Callback;
+        Result.ObjectHandleValue = {Token};
+        Result.UInt64Value = Scope;
+        Result.TypeIdValue = SignatureId;
+        return Result;
+    }
 
     static FUnifiedScriptValue FromByteBuffer(FUnifiedScriptByteBuffer Value)
     {
@@ -283,6 +294,9 @@ public:
         FUnifiedScriptInvocationResult& OutResult);
 
     void ReleaseEventArguments(TConstArrayView<FUnifiedScriptValue> Arguments);
+    FUnifiedScriptObjectRegistry& GetObjectRegistry() { return Registry; }
+    bool WriteCallbackOutputs(const UFunction* Signature, void* Parameters,
+        TConstArrayView<FUnifiedScriptValue> Outputs, FUnifiedScriptInvocationResult& OutResult);
 
 private:
     FUnifiedScriptObjectRegistry& Registry;

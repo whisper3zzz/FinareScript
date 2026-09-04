@@ -63,7 +63,7 @@ public static class UnrealReflectionJson
             ValidateType(type, modules, typePaths);
         }
 
-        return manifest with
+        var normalized = manifest with
         {
             SchemaVersion = UnrealReflectionManifest.CurrentSchemaVersion,
             Engine = manifest.Engine with { Branch = manifest.Engine.Branch.Trim() },
@@ -73,6 +73,8 @@ public static class UnrealReflectionJson
                 .Select(NormalizeType)
                 .ToArray(),
         };
+        UnrealCallbackBindings.Collect(normalized.Types);
+        return normalized;
     }
 
     private static void ValidateType(
@@ -144,6 +146,8 @@ public static class UnrealReflectionJson
             }
 
             ValidateTypeReference(property.Type, allowVoid: false, $"property '{property.Path}'");
+            if (UnrealCallbackBindings.ContainsCallback(property.Type))
+                throw new JsonException($"USUE5502: Callback values are supported as function inputs, not property '{property.Path}'.");
             if (property.Type.Kind == UnrealValueKind.ByteBuffer && property.NativeExtension is null)
                 throw new JsonException($"Unreal property '{property.Path}': ByteBuffer requires an explicit native extension; reflected Blueprint state is not supported.");
             ValidateMetadata(property.Metadata, $"property '{property.Path}'");
@@ -165,6 +169,8 @@ public static class UnrealReflectionJson
             ValidateMetadata(function.Metadata, $"function '{function.Path}'");
 
             ValidateTypeReference(function.ReturnType, allowVoid: true, $"function '{function.Path}' return");
+            if (UnrealCallbackBindings.ContainsCallback(function.ReturnType))
+                throw new JsonException($"USUE5502: Returning callback values is not supported by '{function.Path}'.");
             if (function.NativeBinding is null &&
                 (function.ReturnType.Kind == UnrealValueKind.ByteBuffer || function.Parameters.Any(p => p?.Type?.Kind == UnrealValueKind.ByteBuffer)))
                 throw new JsonException($"Unreal function '{function.Path}': ByteBuffer requires an explicit native extension; UFUNCTION signatures are not supported.");
@@ -183,6 +189,10 @@ public static class UnrealReflectionJson
                     parameter.Type,
                     allowVoid: false,
                     $"parameter '{function.Path}:{parameter.Name}'");
+                if (parameter.Type.Kind == UnrealValueKind.Callback &&
+                    (parameter.Direction != UnrealParameterDirection.Input || parameter.DefaultValue is not null ||
+                     type.Kind != UnrealReflectedTypeKind.Class || function.NativeBinding is not null))
+                    throw new JsonException($"USUE5502: Callback '{function.Path}:{parameter.Name}' requires a reflected function input without a default.");
             }
             if (function.Metadata.WorldContextParameter is not null &&
                 !parameterNames.Contains(function.Metadata.WorldContextParameter) ||
@@ -255,7 +265,8 @@ public static class UnrealReflectionJson
     {
         if (type is null || !Enum.IsDefined(type.Kind) ||
             string.IsNullOrWhiteSpace(type.NativeName) ||
-            !IsValidHeaderPath(type.HeaderPath) || depth > 16)
+            !IsValidHeaderPath(type.HeaderPath) || depth > 16 ||
+            type.Kind != UnrealValueKind.Callback && type.CallbackSignature is not null)
         {
             throw new JsonException($"Unreal {context} has an invalid type reference.");
         }
@@ -266,6 +277,22 @@ public static class UnrealReflectionJson
         bool hasValue = type.ValueType is not null;
         switch (type.Kind)
         {
+            case UnrealValueKind.Callback when depth == 0 && hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
+                !hasElement && !hasKey && !hasValue && type.CallbackSignature is { } signature:
+                if (signature.Parameters is null || signature.Parameters.Count > 16 ||
+                    signature.ReturnType is null || UnrealCallbackBindings.ContainsCallback(signature.ReturnType))
+                    throw new JsonException($"USUE5501: Unreal {context} has an invalid or nested callback signature.");
+                ValidateTypeReference(signature.ReturnType, true, context + " callback return");
+                var callbackNames = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var parameter in signature.Parameters)
+                {
+                    if (parameter is null || !IsIdentifier(parameter.Name) || !callbackNames.Add(parameter.Name) ||
+                        !Enum.IsDefined(parameter.Direction) || parameter.DefaultValue is not null ||
+                        parameter.Type is null || UnrealCallbackBindings.ContainsCallback(parameter.Type))
+                        throw new JsonException($"USUE5501: Unreal {context} has an invalid callback parameter.");
+                    ValidateTypeReference(parameter.Type, false, context + " callback " + parameter.Name);
+                }
+                return;
             case UnrealValueKind.Void when allowVoid && !hasTypePath && !hasElement && !hasKey && !hasValue:
             case UnrealValueKind.Boolean or
                 UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
@@ -358,6 +385,11 @@ public static class UnrealReflectionJson
         ElementType = type.ElementType is null ? null : NormalizeTypeReference(type.ElementType),
         KeyType = type.KeyType is null ? null : NormalizeTypeReference(type.KeyType),
         ValueType = type.ValueType is null ? null : NormalizeTypeReference(type.ValueType),
+        CallbackSignature = type.CallbackSignature is null ? null : type.CallbackSignature with
+        {
+            ReturnType = NormalizeTypeReference(type.CallbackSignature.ReturnType),
+            Parameters = type.CallbackSignature.Parameters.Select(p => p with { Type = NormalizeTypeReference(p.Type) }).ToArray(),
+        },
     };
 
     private static bool IsIdentifier(string? value) =>

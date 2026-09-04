@@ -286,6 +286,20 @@ bool WriteValue(
     const FUnifiedScriptValue& Value,
     FUnifiedScriptInvocationResult& OutResult)
 {
+    if (auto* DelegateProperty = CastField<FDelegateProperty>(Property))
+    {
+        FScriptDelegate Delegate;
+        if (!DelegateProperty->SignatureFunction || !UEUnifiedScript_ResolveCallback(Registry, Value,
+            UnifiedScriptMemberId(TCHAR_TO_UTF8(*DelegateProperty->SignatureFunction->GetPathName())), Delegate, OutResult)) return false;
+        UFunction* Bound = Delegate.GetUObject()->FindFunction(Delegate.GetFunctionName());
+        if (!Bound || !Bound->IsSignatureCompatibleWith(DelegateProperty->SignatureFunction))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch, TEXT("Callback signature changed since binding."));
+            return false;
+        }
+        *DelegateProperty->ContainerPtrToValuePtr<FScriptDelegate>(Container) = Delegate;
+        return true;
+    }
     if (FBoolProperty* BoolProperty = CastField<FBoolProperty>(Property))
     {
         bool NativeValue = false;
@@ -1327,6 +1341,34 @@ bool FUnifiedScriptInvocationBridge::ReadDelegateArguments(
         OutArguments.Add(MoveTemp(Value));
     }
 
+    Succeed(OutResult);
+    return true;
+}
+
+bool FUnifiedScriptInvocationBridge::WriteCallbackOutputs(const UFunction* Signature, void* Parameters,
+    TConstArrayView<FUnifiedScriptValue> Outputs, FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Invocation::Private;
+    check(IsInGameThread());
+    if (!Signature || (Signature->ParmsSize && !Parameters))
+    {
+        Fail(OutResult, EUnifiedScriptInvocationError::InvalidMemberPath, TEXT("Callback output memory is unavailable."));
+        return false;
+    }
+    TArray<FProperty*> Properties;
+    if (FProperty* Return = Signature->GetReturnProperty()) Properties.Add(Return);
+    for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        if (It->HasAllPropertyFlags(CPF_Parm | CPF_OutParm) && !It->HasAnyPropertyFlags(CPF_ReturnParm | CPF_ConstParm)) Properties.Add(*It);
+    if (Properties.Num() != Outputs.Num())
+    {
+        Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch, TEXT("Callback result/ref/out count does not match its signature."));
+        return false;
+    }
+    FStructOnScope Candidate(Signature);
+    for (int32 Index = 0; Index < Properties.Num(); ++Index)
+        if (!WriteValue(Registry, Properties[Index], Candidate.GetStructMemory(), Outputs[Index], OutResult)) return false;
+    for (FProperty* Property : Properties)
+        Property->CopyCompleteValue_InContainer(Parameters, Candidate.GetStructMemory());
     Succeed(OutResult);
     return true;
 }

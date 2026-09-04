@@ -161,6 +161,14 @@ internal static class UnrealNativeValueCodecV3
     {
         encoded = default;
         requiredCapability = UnrealNativeCapabilitiesV3.FixedScalars;
+        if (typeof(T) == typeof(UnrealCallbackArgument))
+        {
+            var callback = Reinterpret<T, UnrealCallbackArgument>(ref value);
+            requiredCapability = UnrealNativeCapabilitiesV3.CallbackArguments;
+            encoded = new() { Kind = UnrealNativeValueKindV3.Callback, TypeId = callback.SignatureId,
+                Payload0 = callback.Token, Payload1 = callback.Scope };
+            return callback.Token != 0 && callback.Scope != 0 && callback.SignatureId != 0;
+        }
         if (typeof(T) == typeof(UnrealByteBuffer))
         {
             requiredCapability = UnrealNativeCapabilitiesV3.ByteBuffers;
@@ -1134,6 +1142,8 @@ internal static class UnrealNativeValueCodecV3
     {
         encoded = default;
         requiredCapability = UnrealNativeCapabilitiesV3.FixedScalars;
+        if (type == typeof(UnrealCallbackArgument) && value is UnrealCallbackArgument callback)
+            return TryEncode(callback, arena, ref byteCount, out encoded, out requiredCapability);
         if (type == typeof(UnrealByteBuffer) && value is UnrealByteBuffer buffer)
         {
             requiredCapability = UnrealNativeCapabilitiesV3.ByteBuffers;

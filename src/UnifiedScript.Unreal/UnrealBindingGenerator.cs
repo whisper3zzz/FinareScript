@@ -51,6 +51,18 @@ public sealed class UnrealBindingGenerator
 
         var managedTypeNames = CreateManagedTypeNames(normalized.Types);
 
+        foreach (var callback in UnrealCallbackBindings.Collect(normalized.Types))
+        {
+            if (GetManagedType(callback, managedTypeNames) is null) continue;
+            var signature = callback.CallbackSignature!;
+            source.Append("[global::UnifiedScript.Unreal.UnrealCallbackTypeAttribute(").Append(Literal(callback.TypePath!)).AppendLine(")]");
+            source.Append("public delegate ").Append(GetManagedType(signature.ReturnType, managedTypeNames)).Append(' ')
+                .Append(managedTypeNames[callback.TypePath!]).Append('(');
+            EmitParameterList(source, signature.Parameters, CreateParameterNames(signature.Parameters), managedTypeNames);
+            source.AppendLine(");");
+            source.AppendLine();
+        }
+
         foreach (UnrealReflectedType type in normalized.Types)
         {
             if (type.Kind == UnrealReflectedTypeKind.NativeObject)
@@ -283,6 +295,19 @@ public sealed class UnrealBindingGenerator
                 functionNames.Add(memberName);
             }
             string[] parameterNames = CreateParameterNames(function.Parameters);
+            foreach (var parameter in function.Parameters.Where(p => p.Type.Kind == UnrealValueKind.Callback))
+            {
+                string stem = memberName.TrimStart('@');
+                if (!stem.EndsWith(parameter.Name, StringComparison.Ordinal)) stem += parameter.Name;
+                if (!stem.EndsWith("Callback", StringComparison.Ordinal)) stem += "Callback";
+                string factoryName = MakeUniqueMemberName("Create" + stem,
+                    function.Path + ":" + parameter.Name + ":callback", memberNames);
+                string callbackType = GetManagedType(parameter.Type, managedTypeNames)!;
+                source.AppendLine();
+                source.Append("    public ").Append(callbackType).Append(' ').Append(factoryName).Append('(')
+                    .Append(managedTypeNames[parameter.Type.TypePath!]).AppendLine(" handler)");
+                source.Append("        => ").Append(callbackType).AppendLine(".Create(Bridge, handler);");
+            }
             source.AppendLine();
             EmitBlueprintMetadata(source, function.Metadata, "    ");
             EmitObsolete(source, function.Metadata, "    ");
@@ -295,7 +320,7 @@ public sealed class UnrealBindingGenerator
 
             source.AppendLine(")");
             if (function.Parameters.Count > 4 || function.ReturnType.Kind == UnrealValueKind.ByteBuffer ||
-                function.Parameters.Any(static parameter => parameter.Type.Kind == UnrealValueKind.ByteBuffer) ||
+                function.Parameters.Any(static parameter => parameter.Type.Kind is UnrealValueKind.ByteBuffer or UnrealValueKind.Callback) ||
                 function.Parameters.Any(static parameter =>
                     parameter.Direction != UnrealParameterDirection.Input))
             {
@@ -486,13 +511,14 @@ public sealed class UnrealBindingGenerator
         for (int index = 0; index < function.Parameters.Count; index++)
         {
             UnrealReflectedParameter parameter = function.Parameters[index];
-            string managedType = GetManagedType(parameter.Type, managedTypeNames)!;
+            bool callback = parameter.Type.Kind == UnrealValueKind.Callback;
+            string managedType = callback ? "global::UnifiedScript.Unreal.UnrealCallbackArgument" : GetManagedType(parameter.Type, managedTypeNames)!;
             source.Append("                new(typeof(").Append(managedType).Append("), ")
                 .Append("global::UnifiedScript.Unreal.UnrealParameterDirection.")
                 .Append(parameter.Direction).Append(", ")
                 .Append(parameter.Direction == UnrealParameterDirection.Output
                     ? "null"
-                    : parameterNames[index])
+                    : callback ? parameterNames[index] + ".AsArgument(Bridge)" : parameterNames[index])
                 .AppendLine("),");
         }
         source.AppendLine("            ]);");
@@ -745,6 +771,11 @@ public sealed class UnrealBindingGenerator
             UnrealValueKind.Name => "global::UnifiedScript.Unreal.UnrealName",
             UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
             UnrealValueKind.ByteBuffer => "global::UnifiedScript.Unreal.UnrealByteBuffer",
+            UnrealValueKind.Callback when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? callbackName) &&
+                type.CallbackSignature is { } signature &&
+                signature.Parameters.Select(p => p.Type).Append(signature.ReturnType).All(t =>
+                    t.Kind is not (UnrealValueKind.NativeObject or UnrealValueKind.InvocationContext) && GetManagedType(t, managedTypeNames) is not null) =>
+                $"global::UnifiedScript.Unreal.UnrealCallback<{callbackName}>",
             UnrealValueKind.Object =>
                 "global::UnifiedScript.Unreal.UnrealObjectHandle",
             UnrealValueKind.NativeObject when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? nativeName) => nativeName,
@@ -786,6 +817,8 @@ public sealed class UnrealBindingGenerator
                 ? ToIdentifier(TrimNativeStructPrefix(type.NativeName)) : ToIdentifier(type.Name);
             names.Add(type.Path, MakeUniqueTypeName(candidate, type.Path, used));
         }
+        foreach (var callback in UnrealCallbackBindings.Collect(types))
+            names.Add(callback.TypePath!, MakeUniqueTypeName(ToIdentifier(TrimNativeStructPrefix(callback.NativeName)) + "Handler", callback.TypePath!, used));
         return names;
     }
 

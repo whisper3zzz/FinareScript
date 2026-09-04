@@ -6,6 +6,7 @@
 #include "Misc/ScopeLock.h"
 #include "Misc/ScopeExit.h"
 #include "UnifiedScriptDelegateProxy.h"
+#include "UnifiedScriptCallbackProxy.h"
 #include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UObject/Field.h"
 
@@ -165,12 +166,25 @@ void FUnifiedScriptNativeBridgeContext::Detach()
     {
         FScopeLock Lock(&BridgeLock);
         bWasAttached = Bridge != nullptr;
+        for (auto& Entry : CallbackProxies)
+        {
+            CastChecked<UUnifiedScriptCallbackProxy>(Entry.Value.Get())->Unbind();
+            if (Bridge)
+            {
+                FUnifiedScriptObjectHandleResult HandleResult;
+                Bridge->GetObjectRegistry().ReleaseObject({Entry.Key}, HandleResult);
+            }
+        }
+        CallbackProxies.Reset();
+        CallbackScopes.Reset();
         FastBridge.store(nullptr, std::memory_order_release);
         Bridge = nullptr;
         SharedDataPlane = nullptr;
         GameplayDataPlane = nullptr;
         AsyncService = nullptr;
         PendingCallFrameResult.Reset();
+        CorrelatedResults.Reset();
+        CorrelatedResultBytes = 0;
         EventSubscriptions.GenerateValueArray(Subscriptions);
         EventSubscriptions.Reset();
     }
@@ -249,14 +263,71 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteGameThreadFast(
 bool FUnifiedScriptNativeBridgeContext::ExecuteCallFrame(
     TUniqueFunction<void(
         FUnifiedScriptInvocationBridge&,
-        FPendingCallFrameResult&)>&& Operation)
+        FPendingCallFrameResult&)>&& Operation,
+    uint64 CorrelationId)
 {
-    return Execute(
-        [this, Operation = MoveTemp(Operation)](
+    bool bAccepted = true;
+    const bool bExecuted = Execute(
+        [this, CorrelationId, &bAccepted, Operation = MoveTemp(Operation)](
             FUnifiedScriptInvocationBridge& CurrentBridge) mutable
         {
-            Operation(CurrentBridge, PendingCallFrameResult);
+            if (CorrelationId == 0)
+            {
+                Operation(CurrentBridge, PendingCallFrameResult);
+                return;
+            }
+            TSharedPtr<FPendingCallFrameResult> Pending = CorrelatedResults.FindRef(CorrelationId);
+            if (!Pending)
+            {
+                if (CorrelatedResults.Num() >= MaximumCorrelatedResults)
+                {
+                    bAccepted = false;
+                    return;
+                }
+                Pending = MakeShared<FPendingCallFrameResult>();
+                CorrelatedResults.Add(CorrelationId, Pending);
+            }
+            if (Pending->bInFlight)
+            {
+                bAccepted = false;
+                return;
+            }
+            // Keep the entry stable when a callback reenters and grows the map.
+            const uint32 PreviousBytes = Pending->EncodedByteCount;
+            Pending->bInFlight = true;
+            Operation(CurrentBridge, *Pending);
+            Pending->bInFlight = false;
+            if (Bridge == nullptr)
+            {
+                bAccepted = false;
+                return; // Detach already cleared the map and accounting.
+            }
+            CorrelatedResultBytes -= PreviousBytes;
+            if (Pending->bValid &&
+                CorrelatedResultBytes + Pending->EncodedByteCount <= MaximumCorrelatedResultBytes)
+            {
+                CorrelatedResultBytes += Pending->EncodedByteCount;
+            }
+            else
+            {
+                bAccepted = !Pending->bValid;
+                CorrelatedResults.Remove(CorrelationId);
+            }
         });
+    return bExecuted && bAccepted;
+}
+
+void FUnifiedScriptNativeBridgeContext::ReleaseCorrelatedResult(uint64 CorrelationId)
+{
+    Execute([this, CorrelationId](FUnifiedScriptInvocationBridge&)
+    {
+        const auto Pending = CorrelatedResults.FindRef(CorrelationId);
+        if (Pending && !Pending->bInFlight)
+        {
+            CorrelatedResultBytes -= Pending->EncodedByteCount;
+            CorrelatedResults.Remove(CorrelationId);
+        }
+    });
 }
 
 bool FUnifiedScriptNativeBridgeContext::ExecuteNativeObjects(
@@ -1453,6 +1524,11 @@ bool DecodeValueV3(
     }
     switch (Native.Kind)
     {
+    case EUnifiedScriptNativeValueKindV3::Callback:
+        if (Depth || Native.Flags != EUnifiedScriptNativeValueFlagsV3::None || !Native.TypeId ||
+            !Native.Payload0 || !Native.Payload1 || Native.Payload2 || Native.Payload3) return false;
+        OutValue = FUnifiedScriptValue::FromCallbackToken(Native.Payload0, Native.Payload1, Native.TypeId);
+        return true;
     case EUnifiedScriptNativeValueKindV3::ByteBuffer:
     {
         if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked || Native.TypeId || Native.Payload2 || Native.Payload3 ||
@@ -2029,11 +2105,12 @@ void WritePropertyByIdV3(
     }
 }
 
-void InvokeByIdV3(
+void InvokeByIdV3Core(
     void* Context,
     uint64 Target,
     uint64 MemberId,
-    FUnifiedScriptNativeCallFrameV3* Frame)
+    FUnifiedScriptNativeCallFrameV3* Frame,
+    uint64 CorrelationId)
 {
     uint32 EntryByteCount = Frame != nullptr ? Frame->ByteCount : 0;
     if (Frame == nullptr || Frame->ArgumentCount > 64)
@@ -2157,6 +2234,11 @@ void InvokeByIdV3(
                 const bool bUsePending = Pending.bValid && Pending.Operation == 2 &&
                     Pending.Target == Target && Pending.MemberId == MemberId &&
                     Pending.RequestHash == RequestHash;
+                if (CorrelationId != 0 && Pending.bValid && !bUsePending)
+                {
+                    InvalidFrameV3(Frame, EntryByteCount);
+                    return; // An identity cannot be reused for a different pending request.
+                }
                 if (bUsePending)
                 {
                     ReturnValue = Pending.ReturnValue;
@@ -2208,6 +2290,7 @@ void InvokeByIdV3(
                     Pending.Target = Target;
                     Pending.MemberId = MemberId;
                     Pending.RequestHash = RequestHash;
+                    Pending.EncodedByteCount = MeasuredByteCapacity;
                     Pending.ReturnValue = ReturnValue;
                     Pending.OutputValues = OutputValues;
                     ResetV3Output(*Frame, EntryByteCount);
@@ -2245,12 +2328,34 @@ void InvokeByIdV3(
                 Frame->ResultCount = ResultIndex;
                 Frame->ByteCount = ByteCursor;
                 Frame->Status = EUnifiedScriptNativeCallStatusV3::Success;
-            });
+            }, CorrelationId);
     if (!bExecuted)
     {
         ResetV3Output(*Frame, EntryByteCount);
         Frame->Status = EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
     }
+}
+
+void InvokeByIdV3(void* Context, uint64 Target, uint64 MemberId, FUnifiedScriptNativeCallFrameV3* Frame)
+{
+    InvokeByIdV3Core(Context, Target, MemberId, Frame, 0);
+}
+
+void InvokeCorrelatedByIdV3(void* Context, uint64 CorrelationId, uint64 Target,
+    uint64 MemberId, FUnifiedScriptNativeCallFrameV3* Frame)
+{
+    if (CorrelationId == 0)
+    {
+        InvalidFrameV3(Frame, Frame ? Frame->ByteCount : 0);
+        return;
+    }
+    InvokeByIdV3Core(Context, Target, MemberId, Frame, CorrelationId);
+}
+
+void ReleaseCorrelatedResultV3(void* Context, uint64 CorrelationId)
+{
+    if (Context && CorrelationId != 0)
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->ReleaseCorrelatedResult(CorrelationId);
 }
 
 uint8 InvokeInt32x2ByIdV3(
@@ -3080,6 +3185,7 @@ UEUnifiedScript_GetNativeTransportV2()
         UEUnifiedScript_GetGameplayDataTransportV4(),
         UEUnifiedScript_GetAsyncTransportV5(),
         UEUnifiedScript_GetNativeObjectTransportV1(),
+        UEUnifiedScript_GetCallbackTransport(),
     };
     return &Transport;
 }
@@ -3236,7 +3342,9 @@ UEUnifiedScript_GetNativeTransportV3()
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Utf8Results) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ContainerResults) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Structs) |
-        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ByteBuffers);
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ByteBuffers) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CallbackArguments) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CorrelatedResults);
 
     static const FUnifiedScriptNativeTransportV3 Transport = {
         3,
@@ -3251,6 +3359,8 @@ UEUnifiedScript_GetNativeTransportV3()
         &InvokeByIdV3,
         &InvokeInt32x2ByIdV3,
         &InvokeFixedByIdV3,
+        &InvokeCorrelatedByIdV3,
+        &ReleaseCorrelatedResultV3,
     };
     return &Transport;
 }

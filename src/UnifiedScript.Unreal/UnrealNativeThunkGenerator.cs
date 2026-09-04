@@ -1178,6 +1178,16 @@ public sealed class UnrealNativeThunkGenerator
         string memberPath)
     {
         string padding = new(' ', indent);
+        if (type.Kind == UnrealValueKind.Callback)
+        {
+            source.Append(padding).Append("FScriptDelegate ").Append(variable).AppendLine("Delegate;");
+            source.Append(padding).Append("if (!UEUnifiedScript_ResolveCallback(Registry, ").Append(expression)
+                .Append(", ").Append(TypeIdLiteral(type.TypePath!)).Append(", ").Append(variable).AppendLine("Delegate, OutResult)) return false;");
+            source.Append(padding).Append(CppType(type)).Append(' ').Append(variable).AppendLine(";");
+            source.Append(padding).Append(variable).Append(".BindUFunction(").Append(variable).Append("Delegate.GetUObject(), ")
+                .Append(variable).AppendLine("Delegate.GetFunctionName());");
+            return;
+        }
         if (IsContainer(type))
         {
             EmitContainerRead(source, type, expression, variable, indent, memberPath);
@@ -1527,6 +1537,9 @@ public sealed class UnrealNativeThunkGenerator
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
             UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or
             UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or UnrealValueKind.ByteBuffer ||
+        type.Kind == UnrealValueKind.Callback && type.CallbackSignature is { } signature &&
+            IsNativeValueType(signature.ReturnType, true, supportedStructPaths) &&
+            signature.Parameters.All(p => IsNativeValueType(p.Type, false, supportedStructPaths)) ||
         type.Kind == UnrealValueKind.Struct &&
             (IsCoreStruct(type.TypePath) ||
              type.TypePath is not null && supportedStructPaths.Contains(type.TypePath)) ||
@@ -1580,6 +1593,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Set => "Set",
         UnrealValueKind.Map => "Map",
         UnrealValueKind.ByteBuffer => "ByteBuffer",
+        UnrealValueKind.Callback => "Callback",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
@@ -1622,6 +1636,12 @@ public sealed class UnrealNativeThunkGenerator
             {
                 yield return nested;
             }
+        }
+        if (type.CallbackSignature is { } signature)
+        {
+            foreach (var nested in EnumerateTypeReferences(signature.ReturnType)) yield return nested;
+            foreach (var parameter in signature.Parameters)
+                foreach (var nested in EnumerateTypeReferences(parameter.Type)) yield return nested;
         }
     }
 
@@ -1687,7 +1707,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.String => "FString",
         UnrealValueKind.Name => "FName",
         UnrealValueKind.Text => "FText",
-        UnrealValueKind.Enum or UnrealValueKind.Struct => type.NativeName,
+        UnrealValueKind.Enum or UnrealValueKind.Struct or UnrealValueKind.Callback => type.NativeName,
         UnrealValueKind.Object or UnrealValueKind.Class => CppObjectType(type.NativeName),
         UnrealValueKind.SoftObject or UnrealValueKind.SoftClass => type.NativeName,
         UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => type.NativeName,
@@ -1706,7 +1726,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Float64 => "0.0",
         UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
         UnrealValueKind.Struct or UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => "{}",
-        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass => "{}",
+        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or UnrealValueKind.Callback => "{}",
         UnrealValueKind.Object or UnrealValueKind.Class => "nullptr",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };

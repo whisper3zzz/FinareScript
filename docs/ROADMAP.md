@@ -25,8 +25,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — gap-driven capability batches**
-- Last completed product slice: **M13.3C-1c-a**, local commit `6c03d51`.
+- Current tranche: **M13.5 — select the next common capability gap after
+  generated reflected callbacks**. Stay in M13.5; callback completion alone
+  does not establish the breadth target or start M13.3/M13.4.
+- Previous committed M13.5 checkpoint: **ordinary native object arguments**,
+  local commit `7d6e0c0`.
+- Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
 - Container/Soft Reference implementation checkpoint: `46f912d`; the full
   M13.3C-1c-b acceptance scope remains open.
 - Current delivery strategy: **M13.5 comparison and capability breadth first ->
@@ -93,15 +97,21 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   objects without losing alias identity, including reload and failed-candidate
   rollback. Invalid type/scope/null/borrowed-owner inputs are rejected before
   native side effects; old transport prefixes remain usable for fixed calls.
-- Next work: **generated reflected callback arguments and result propagation**.
-  Puerts documents passing a typed delegate to a native function and returning
-  values/ref outputs through callbacks. Current generated subscriptions cover
-  BlueprintAssignable events, but event ABI v4 rejects reverse ref/out and the
-  reflected value model has no callable argument kind. Add the public path for
-  a native API to accept and invoke a managed callback, including a synchronous
-  result and lifetime-safe unbinding/reload. Compare exact forms before extending
-  the contract; do not substitute another hard-coded completion service or pull
-  in all native `std::function`, inheritance and converter work.
+- Latest callback checkpoint: **generated reflected callback arguments,
+  synchronous return/ref/out and callback-to-native reentry**. Typed leases,
+  native proxies and the public C#/node contract cover immediate and retained
+  calls, disposal, GC, reload rollback/replacement and World teardown.
+  `CallbackWorkerDemoScript` queues two worker-originated calls; each callback
+  reads/writes a generated UE property and performs a nested large-result call
+  on the game thread. Both results arrive correctly with exactly two native
+  evaluations. Forward invocation lifetime leases avoid the reproduced managed
+  lock deadlock; correlated arena retries preserve each call's pending result.
+  The ProcessEvent shallow-copy ownership defect is also fixed. See the
+  [callback contract](UNREAL_API_CONTRACT.md#reflected-callback-arguments) and
+  [implementation record](plans/2026-09-04-reflected-callbacks.md).
+  Handler bodies remain C#-only; cooked callback execution, arbitrary native
+  `std::function` and every signature combination are not claimed. Choose the
+  next practical gap across families, not an exhaustive callback expansion.
 - Remaining workflow scope: installed-consumer authoring and live class-shape/
   default deployment are still open. The latest native test invokes the real
   coordinator, not a physical toolbar click; CMD/NullRHI does not establish visual
@@ -130,6 +140,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Daily workflow — M13.2 | Native create/open/build entrypoints, dependency-aware Play, compatible all-instance reload, unified diagnostics, IDE setup, one C#/Graph asset | Reviewed fixtures demonstrate the workflow; they are not proof that an arbitrary project is equally easy to use |
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
+| Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns and qualified object inputs, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Richer values, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
 | Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph publication, external IDE refresh and native body build/live reload with automatic Slate synchronization | Installed-consumer authoring and live class-shape/default deployment remain open; no physical toolbar/mouse or visual appearance acceptance, and no general UMG/latent parity claim |
@@ -150,6 +161,11 @@ Puerts and build sufficient common capability coverage before resuming deeper
 class integration and external-project validation. Do not restore numeric order
 just because M13.3 or M13.4 still has unfinished work.
 
+M13.5 stays active across multiple capability batches. Completing the reflected
+callback batch is a checkpoint within M13.5, not permission to switch to M13.3
+or M13.4. Their full scopes remain deferred until the breadth target below is
+met; only a concrete dependency of a selected common use case is pulled forward.
+
 M13.5 is an implementation phase guided by comparison, not a documentation-only
 audit. Identify practical gaps against Puerts, deliver reusable capability
 batches, and keep the comparison current as those batches land. Do not wait for
@@ -169,9 +185,9 @@ the same subsystem or advance to M13.3 because a Demo already runs.
 
 | Order | Deliverable | Why it comes next |
 | --- | --- | --- |
-| First | **M13.5:** compare Puerts and fill common capability gaps | Use upstream examples and current source to choose substantial, reusable implementation batches |
-| After sufficient breadth | **M13.3:** deepen Script Class integration | Complete extension, inheritance, defaults, subobjects and authoring composition after the common API/runtime surface is usable |
-| After class integration | **M13.4:** one external-project validation | Test the combined product against real project complexity, not discover every basic capability during migration |
+| Active now | **M13.5:** compare Puerts and fill common capability gaps | Repeatedly select and deliver substantial, reusable batches from upstream use cases and current gaps |
+| Deferred until sufficient breadth | **M13.3:** deepen Script Class integration | Complete extension, inheritance, defaults, subobjects and authoring composition after the common API/runtime surface is usable |
+| Deferred until class integration | **M13.4:** one external-project validation | Test the combined product against real project complexity, not discover every basic capability during migration |
 | Then | **M13.6:** distribution and platform expansion, broad performance acceptance | Expand the product after capability completion and external validation |
 
 **Neither completion of M13.3 nor M13.4 is a prerequisite for M13.5.** Compare
@@ -219,7 +235,7 @@ not an exhaustive signature audit or a claim of parity.
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Rich values, ref/out, retention/transfer, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
-| Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Next close callable delegate parameters and synchronous result propagation, as in the upstream callback examples: existing event subscriptions do not implement that route. Installed-consumer authoring, broader latent and subsystem gaps remain follow-ups | M13.5 |
+| Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters now support synchronous results/ref/out, native retention and generated UE reentry with a real worker-originated example. Installed-consumer authoring, broader latent/interface/subsystem gaps and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -238,6 +254,12 @@ binary interop and basic replication/RPC. For the common uses selected from the
 comparison, developers must be able to compose these capabilities through public
 APIs without per-project handwritten facades. A family is not sufficiently
 covered merely because one constructor, signature or happy-path Demo works.
+
+Select those common uses from the Puerts comparison, not only from what our
+existing examples already support. A missing everyday operation remains a gap
+even when a narrower Demo passes. The switch is based on usable coverage across
+these families, not a fixed number of batches, API count or claimed percentage
+of Puerts compatibility.
 
 Representative in-repository examples should combine these capabilities in
 ordinary gameplay: UI/events and async asset loading/spawn; a non-reflected C++
@@ -299,6 +321,9 @@ an external project requires the user's authorization.
   live Demo through chunk reload; external refresh and the native body-build/live
   reload path are verified. Installed-consumer authoring and class-shape/default
   deployment remain open, as described by the current cursor.
+  Reflected callbacks now have generated typed leases and synchronous return/ref/out,
+  including retained native calls and worker-originated reentry. This closes that
+  callback batch, not all latent/interface/subsystem or native callback support.
 - [ ] Audit and complete bounded byte-buffer interop for ordinary binary payloads,
   with explicit copy/borrow/ownership rules and generation-safe callbacks. Reuse
   existing transports and data-plane contracts where applicable.
@@ -450,6 +475,21 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The reflected-callback batch passes 187 affected managed tests, including
+callback-only type dependency closure, node signatures, old ABI prefixes,
+cross-thread reentry and disposal during a pending result retry:
+`artifacts/m13-5-callbacks/managed/callback-contracts-final.trx`.
+The UE 5.8.1 Editor build and Demo chunk emission pass. Six CMD cases pass in
+`artifacts/m13-5-callbacks/callback-reentry-native.log`: three callback cases,
+correlated-result isolation/bounds/cleanup, native-object ManagedLifetime and
+binary ManagedRoundTrip. That run exposed an outdated 80-byte table assertion
+in NativeTransport.Abi; after checking the new 96-byte suffix and old offsets,
+the ABI case passes in `abi-correlated-verified.log` under the same directory.
+WorldHost.Lifecycle and LifecycleStress also pass in `world-lifetime-verified.log`,
+including zero leaked native contexts and pending worker calls after teardown.
+These are focused integration results, not new cooked, physical UI or performance
+acceptance. Detailed lifecycle and retry decisions are in the callback plan.
 
 The ordinary-object argument checkpoint passes 57 focused managed tests in
 `artifacts/m13-5-native-arguments/managed/object-arguments.trx` and 39 affected

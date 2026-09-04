@@ -36,6 +36,7 @@ public enum UnrealNativeValueKindV3 : byte
     ByteBuffer = 25,
     // Valid only on the separate native-object transport, never a UObject cell.
     NativeObject = 26,
+    Callback = 27,
 }
 
 [Flags]
@@ -72,6 +73,8 @@ public enum UnrealNativeCapabilitiesV3 : ulong
     ContainerResults = 1UL << 9,
     Structs = 1UL << 10,
     ByteBuffers = 1UL << 11,
+    CallbackArguments = 1UL << 12,
+    CorrelatedResults = 1UL << 13,
 }
 
 /// <summary>
@@ -154,6 +157,13 @@ public struct UnrealNativeFixedTransportTableV3
     public nint InvokeFixedById;
 }
 
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public struct UnrealNativeCorrelatedTransportTableV3
+{
+    public UnrealNativeFixedTransportTableV3 Base;
+    public nint InvokeCorrelatedById, ReleaseCorrelatedResult;
+}
+
 public static class UnrealNativeAbiV3
 {
     public const uint Version = 3;
@@ -162,5 +172,6 @@ public static class UnrealNativeAbiV3
     public const int TransportTableSize = 64;
     public const int ScalarTransportTableSize = 72;
     public const int FixedTransportTableSize = 80;
+    public const int CorrelatedTransportTableSize = 96;
     public const int MaximumFixedArgumentCount = 4;
 }

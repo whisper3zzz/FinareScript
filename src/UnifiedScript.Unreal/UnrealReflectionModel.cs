@@ -40,6 +40,7 @@ public enum UnrealValueKind
     NativeObject,
     InvocationContext,
     ByteBuffer,
+    Callback,
 }
 
 public sealed record UnrealBlueprintMetadata(
@@ -101,7 +102,15 @@ public sealed record UnrealTypeReference(
     UnrealTypeReference? ElementType = null,
     UnrealTypeReference? KeyType = null,
     UnrealTypeReference? ValueType = null,
-    string? HeaderPath = null);
+    string? HeaderPath = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealCallbackSignature? CallbackSignature { get; init; }
+}
+
+public sealed record UnrealCallbackSignature(
+    UnrealTypeReference ReturnType,
+    IReadOnlyList<UnrealReflectedParameter> Parameters);
 
 public sealed record UnrealTypeTraits(
     bool Abstract,

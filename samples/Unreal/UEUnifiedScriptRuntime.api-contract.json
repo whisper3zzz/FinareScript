@@ -6,6 +6,10 @@
   "nativeNamespace": "UE::UnifiedScript::Generated",
   "types": [
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService",
+      "members": ["Create", "StoreCallback", "ClearCallback", "Evaluate", "EvaluateNow", "LastQueryValue", "FormatReply"]
+    },
+    {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "members": ["Create()", "Create(int32)", "Create(UE::UnifiedScript::NativeExample::FCounterChildconst&)", "Bias", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset", "ReadPointer", "ReadConstPointer", "ReadOptional", "ReadOptionalConst", "AddFrom", "AddTo", "Sum"]
     },

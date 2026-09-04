@@ -9,6 +9,7 @@ internal sealed class UnrealGenerationInvocationBridge :
     IUnrealInvocationBridge,
     IUnrealNativeBindingBridge,
     IUnrealNativeObjectProvider,
+    IUnrealCallbackProvider,
     IUnrealFastInvocationBridge,
     IUnrealTypedInvocationBridge,
     IUnrealOutputInvocationBridge,
@@ -22,6 +23,21 @@ internal sealed class UnrealGenerationInvocationBridge :
     private bool _disposed;
     private readonly object _nativeObjectGate = new();
     private UnrealNativeObjectScope? _nativeObjects;
+    private UnrealCallbackScope? _callbacks;
+
+    public UnrealCallbackScope Callbacks
+    {
+        get
+        {
+            lock (_nativeObjectGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _callbacks ??= LiveInner is IUnrealCallbackScopeFactory factory
+                    ? factory.CreateCallbackScope()
+                    : throw new NotSupportedException("The World bridge does not support generation-owned callbacks.");
+            }
+        }
+    }
 
     public UnrealNativeObjectScope NativeObjects
     {
@@ -173,6 +189,7 @@ internal sealed class UnrealGenerationInvocationBridge :
         {
             if (_disposed) return;
             // A worker-thread native release is rejected and must remain retryable.
+            _callbacks?.Dispose();
             _nativeObjects?.Dispose();
             _disposed = true;
         }

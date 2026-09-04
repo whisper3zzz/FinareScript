@@ -18,6 +18,107 @@ selected UClass reflection
 This prevents managed code, the native dispatcher, and the visual palette from
 silently exposing different Unreal members.
 
+## Reflected callback arguments
+
+A reflected `UFUNCTION` can accept a dynamic single-cast delegate whose body is
+managed C#. Unlike a `BlueprintAssignable` event subscription, this route can
+synchronously return a value and publish supported `ref`/`out` values to its
+native caller. Reflection exports `callbackSignature` with its return type,
+parameter types and directions. The selected Contract drives the typed delegate,
+lease factory, C++ thunk and visual node signature together, including types
+referenced only inside the callback signature.
+
+For the checked-in `UUnifiedScriptCallbackService`, generated usage is:
+
+```csharp
+// Here context.Target is an existing UUnifiedScriptCallbackService instance.
+var service = new UnifiedScriptCallbackService(context.Target, context.Bridge);
+using var callback = service.CreateStoreCallback(
+    (int value, ref string text, out UnrealVector position) =>
+    {
+        service.LastQueryValue = value; // Generated UE calls can reenter the bridge.
+        text = service.FormatReply(text);
+        position = new(value, 2, 3);
+        return value == 7;
+    });
+service.StoreCallback(callback);
+string reply = "request";
+bool accepted = service.Evaluate(7, ref reply, out UnrealVector location);
+```
+
+The factory returns `UnrealCallback<UnifiedScriptQueryCallbackHandler>`.
+Keep it alive for as long as native code should call it; a `using` block is
+appropriate only when the registration should end with that block. The
+[public sample](../samples/Unreal/UnifiedScript.Unreal.Demo/CallbackGameplayDemoScript.cs)
+also demonstrates generation-owned retention without explicit disposal.
+
+Lifetime and threading rules:
+
+- Registration, unbinding and native delegate execution run on the game thread.
+  A worker may make a supported forward UE call; the World host queues it to the
+  game thread, where its callback can call generated UE APIs again. Never wait
+  synchronously on the game thread for a worker that needs that queue.
+- Native code retains a weak delegate copy. The callback scope owns its transient
+  proxy and the managed handler. Explicit disposal disables every native copy;
+  generation replacement, failed candidate cleanup and World teardown retire the
+  corresponding registrations. Passing a lease through another generation's
+  bridge is rejected. Registration or disposal rejected for wrong-thread use can
+  be retried on the game thread.
+- An invocation already in progress keeps its handler and context alive through
+  completion, including handler self-disposal. New invocations of a retired
+  native copy cannot reach managed code. `IsBound()` on a copied delegate may
+  remain true until its disabled proxy is garbage-collected; it is not a lease
+  validity check.
+- Managed exceptions do not escape the reverse ABI. Native code logs the failure
+  and gets a default return with no partially published `ref`/`out` results.
+  `InProcessUnrealNativeInvocationTransport.LastCallbackError` exposes the latest
+  managed callback diagnostic; success clears it. This does not undo arbitrary
+  side effects in either the handler or the enclosing native function.
+
+The callback ABI has its own optional table (version 1), appended to the v2
+bootstrap after the native-object table. Event ABI v4 remains notification-only
+and unchanged. Requests/responses reuse v3's 48-byte values and owned, copied
+arenas. Wire kind **27** carries token, scope and signature identity;
+`CallbackArguments = 1 << 12` advertises forward argument support. No raw managed
+pointer is passed as the callback identity. Requests allow at most 16 parameters
+and 16 MiB of arena data; responses allow the return plus ref/out values and a
+16 MiB arena. Encoding growth never reruns the managed handler.
+
+The demonstrated native/CoreCLR signature is `bool(int, ref string, out FVector)`,
+including immediate/retained execution, GC, reload rollback and worker-originated
+reentry. Other signatures require both the generated type mapping and the shared
+native/managed value codecs; this is not proof of every value/direction combination.
+Nested-struct/enum dependency generation is checked separately from native runtime
+coverage. Callback properties, callback-valued returns, nested callbacks, defaulted
+callback parameters, ordinary C++ `std::function` and native-object callback
+parameters are outside this batch. Unsupported shapes must not be advertised as
+working APIs merely because a delegate name can be generated.
+
+Typed leases can cross a `[Visual]` call boundary and node descriptions retain
+the callback signature. Creating or editing a delegate body in Graph is not
+implemented; write the handler in ordinary C#. This batch does not establish
+cooked callback execution, physical palette interaction or a Puerts performance
+advantage.
+
+### Correlated variable-result retries
+
+The optional v3 suffix advertises `CorrelatedResults = 1 << 13` and appends
+`InvokeCorrelatedById` / `ReleaseCorrelatedResult` at offsets 80 / 88. The table
+is 96 bytes; its earlier 64/72/80-byte prefixes, 48-byte values and 72-byte frames
+are unchanged. Current generated-call bridges assign one logical invocation ID
+across arena-growth retries. Nested callbacks and interleaved workers cannot
+overwrite another invocation's pending return/ref/out values or rerun its side
+effects merely to fetch a larger result.
+
+The World context retains at most 64 correlated entries and 64 MiB of encoded
+pending-result capacity, with no silent eviction. Count exhaustion rejects before
+execution; an oversized produced result fails without claiming rollback of the
+already executed function. Successful consumption, abandoned-call cleanup and
+World detach release retained results. The context stays alive across retries
+even if the callback disposes the managed transport. Old clients/runtimes can
+still use the legacy entrypoint and its single pending-result slot; that fallback
+does not provide the new interleaved-retry guarantee.
+
 ## Native extension declarations
 
 An optional `nativeExtensions` object in the API contract admits public C++

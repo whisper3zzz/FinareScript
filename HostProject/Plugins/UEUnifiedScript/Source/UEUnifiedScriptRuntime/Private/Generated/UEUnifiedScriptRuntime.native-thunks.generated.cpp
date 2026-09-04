@@ -10,6 +10,7 @@
 #include "UObject/Object.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptByteBuffer.h"
+#include "UnifiedScriptCallbackService.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
@@ -483,6 +484,10 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::Object;
         OutTypeId = 0ull;
         return true;
+    case 0x6325672916FED51Dull:
+        OutKind = EUnifiedScriptValueKind::Int32;
+        OutTypeId = 0ull;
+        return true;
     case 0x28736A9007707BEEull:
         OutKind = EUnifiedScriptValueKind::String;
         OutTypeId = 0ull;
@@ -654,6 +659,24 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         OutResultCount = 1;
         return true;
     case 0xFD7407AAD8E613E8ull:
+        OutResultCount = 0;
+        return true;
+    case 0x78B16CB5BE93D54Eull:
+        OutResultCount = 0;
+        return true;
+    case 0x0D78482D89DB3D14ull:
+        OutResultCount = 1;
+        return true;
+    case 0x380C821A66347233ull:
+        OutResultCount = 3;
+        return true;
+    case 0x5720B0279059C71Dull:
+        OutResultCount = 3;
+        return true;
+    case 0xB37C5DF2DE73DD75ull:
+        OutResultCount = 1;
+        return true;
+    case 0x4488A222DB801132ull:
         OutResultCount = 0;
         return true;
     case 0xB324FB910D9CED26ull:
@@ -875,6 +898,66 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
             return false;
         }
     case 0xFD7407AAD8E613E8ull:
+        return false;
+    case 0x78B16CB5BE93D54Eull:
+        return false;
+    case 0x0D78482D89DB3D14ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Object;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x380C821A66347233ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::String;
+            OutTypeId = 0ull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Vector;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x5720B0279059C71Dull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::String;
+            OutTypeId = 0ull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Vector;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xB37C5DF2DE73DD75ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::String;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x4488A222DB801132ull:
         return false;
     case 0xB324FB910D9CED26ull:
         switch (ResultIndex)
@@ -1465,6 +1548,17 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0x6325672916FED51Dull:
+    {
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromInt32(TypedTarget->LastQueryValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x28736A9007707BEEull:
     {
         UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
@@ -1944,6 +2038,25 @@ bool UE::UnifiedScript::Generated::WriteProperty(
             OutResult,
             EUnifiedScriptInvocationError::PropertyNotWritable,
             TEXT("Generated native property is read-only."));
+    }
+    case 0x6325672916FED51Dull:
+    {
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        int32 NativeValue = 0;
+        if (!Value.TryGetInt32(NativeValue))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:LastQueryValue' received an incompatible value."));
+        }
+        TypedTarget->LastQueryValue = NativeValue;
+        Succeed(OutResult);
+        return true;
     }
     case 0x28736A9007707BEEull:
     {
@@ -2696,6 +2809,175 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         OutOutputValues.Reset();
         TypedTarget->StopManagedBehavior();
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x78B16CB5BE93D54Eull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TypedTarget->ClearCallback();
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x0D78482D89DB3D14ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        UObject* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* ReturnValue = UUnifiedScriptCallbackService::Create(Argument0);
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x380C821A66347233ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:Evaluate' received an incompatible value."));
+        }
+        FString Argument1 = {};
+        if (!Arguments[1].TryGetString(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:Evaluate' received an incompatible value."));
+        }
+        FVector Argument2 = {};
+        bool ReturnValue = TypedTarget->Evaluate(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        EncodedOutput0 = FUnifiedScriptValue::FromString(Argument1);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        EncodedOutput1 = FUnifiedScriptValue::FromVector(Argument2);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x5720B0279059C71Dull:
+    {
+        if (!RequireArgumentCount(Arguments, 3, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        FScriptDelegate Argument0Delegate;
+        if (!UEUnifiedScript_ResolveCallback(Registry, Arguments[0], 0x92A315B8A0692854ull, Argument0Delegate, OutResult)) return false;
+        FUnifiedScriptQueryCallback Argument0;
+        Argument0.BindUFunction(Argument0Delegate.GetUObject(), Argument0Delegate.GetFunctionName());
+        int32 Argument1 = 0;
+        if (!Arguments[1].TryGetInt32(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:EvaluateNow' received an incompatible value."));
+        }
+        FString Argument2 = {};
+        if (!Arguments[2].TryGetString(Argument2))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:EvaluateNow' received an incompatible value."));
+        }
+        FVector Argument3 = {};
+        bool ReturnValue = TypedTarget->EvaluateNow(Argument0, Argument1, Argument2, Argument3);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        EncodedOutput0 = FUnifiedScriptValue::FromString(Argument2);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        EncodedOutput1 = FUnifiedScriptValue::FromVector(Argument3);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xB37C5DF2DE73DD75ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FString Argument0 = {};
+        if (!Arguments[0].TryGetString(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:FormatReply' received an incompatible value."));
+        }
+        FString ReturnValue = TypedTarget->FormatReply(Argument0);
+        OutReturnValue = FUnifiedScriptValue::FromString(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x4488A222DB801132ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FScriptDelegate Argument0Delegate;
+        if (!UEUnifiedScript_ResolveCallback(Registry, Arguments[0], 0x92A315B8A0692854ull, Argument0Delegate, OutResult)) return false;
+        FUnifiedScriptQueryCallback Argument0;
+        Argument0.BindUFunction(Argument0Delegate.GetUObject(), Argument0Delegate.GetFunctionName());
+        TypedTarget->StoreCallback(Argument0);
         OutReturnValue = {};
         Succeed(OutResult);
         return true;
@@ -4672,6 +4954,57 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
         Succeed(OutResult);
         return true;
     }
+    case 0x78B16CB5BE93D54Eull:
+    {
+        if (Arguments.Num() != 0)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 0 arguments."));
+        }
+        UUnifiedScriptCallbackService* TypedTarget = ResolveTarget<UUnifiedScriptCallbackService>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue != nullptr)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        TypedTarget->ClearCallback();
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x0D78482D89DB3D14ull:
+    {
+        if (Arguments.Num() != 1)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 1 arguments."));
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Object)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        if (Arguments[0].Kind != EUnifiedScriptNativeValueKindV3::Object)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        UObject* Argument0 = nullptr;
+        if (!DecodeFixedObject(Registry, Arguments[0], Argument0, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptCallbackService* ReturnValue = UUnifiedScriptCallbackService::Create(Argument0);
+        if (!EncodeFixedObject(Registry, GetObjectPointer(ReturnValue), (*OutReturnValue), OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
     case 0xB324FB910D9CED26ull:
     {
         if (Arguments.Num() != 2)
@@ -5650,6 +5983,7 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
 #include "UnifiedScriptNativeObjectValues.h"
 #include "Engine/HitResult.h"
 #include "UnifiedScriptActor.h"
+#include "UnifiedScriptCallbackService.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptNativeCounter.h"

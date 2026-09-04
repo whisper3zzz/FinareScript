@@ -335,6 +335,8 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealNativeBindingBridge,
       IUnrealNativeObjectProvider,
       IUnrealNativeObjectScopeFactory,
+      IUnrealCallbackProvider,
+      IUnrealCallbackScopeFactory,
       IUnrealFastInvocationBridge,
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
@@ -349,6 +351,7 @@ public sealed class NativeUnrealInvocationBridge
     private readonly ConcurrentDictionary<string, byte> _nativeOnlyPaths = new(StringComparer.Ordinal);
     private readonly object _nativeObjectGate = new();
     private UnrealNativeObjectScope? _nativeObjects;
+    private UnrealCallbackScope? _callbacks;
     private long _callFrameInvocationCount;
     private long _legacyInvocationCount;
     private long _directThunkProfilerCount;
@@ -370,6 +373,17 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public UnrealWorldDataPlane DataPlane { get; }
+
+    public UnrealCallbackScope Callbacks
+    {
+        get { lock (_nativeObjectGate) return _callbacks ??= CreateCallbackScope(); }
+    }
+
+    UnrealCallbackScope IUnrealCallbackScopeFactory.CreateCallbackScope() => CreateCallbackScope();
+
+    private UnrealCallbackScope CreateCallbackScope() =>
+        _transport is IUnrealNativeCallbackTransport callbacks ? new(callbacks) :
+        throw new NotSupportedException("The installed transport does not support typed callbacks.");
 
     public UnrealNativeObjectScope NativeObjects
     {
@@ -1346,6 +1360,8 @@ public sealed class NativeUnrealInvocationBridge
             throw new NotSupportedException(
                 $"The native Unreal transport does not advertise the required ABI v3 capabilities: {requiredCapabilities}.");
         }
+        using var invocation = (transport as IUnrealNativeCallFrameScopeFactory)?.BeginCallFrameInvocation();
+        transport = invocation ?? transport;
         long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
             UnrealNativeOperationV3.Invoke,
@@ -1512,6 +1528,9 @@ public sealed class NativeUnrealInvocationBridge
 
         Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
         results[0] = descriptor;
+        using var invocation = operation == UnrealNativeOperationV3.Invoke
+            ? (transport as IUnrealNativeCallFrameScopeFactory)?.BeginCallFrameInvocation() : null;
+        transport = invocation ?? transport;
         long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
             operation,

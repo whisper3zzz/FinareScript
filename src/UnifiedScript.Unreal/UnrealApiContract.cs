@@ -418,6 +418,12 @@ public static class UnrealApiContractProjector
         {
             foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.ValueType)) yield return nested;
         }
+        if (type.CallbackSignature is { } signature)
+        {
+            foreach (var nested in EnumerateTypeReferences(signature.ReturnType)) yield return nested;
+            foreach (var parameter in signature.Parameters)
+                foreach (var nested in EnumerateTypeReferences(parameter.Type)) yield return nested;
+        }
     }
 
     private static void AddMembers<T>(

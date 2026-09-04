@@ -294,15 +294,19 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
         static_cast<uint32>(sizeof(FUnifiedScriptNativeCallFrameV3)),
         72u);
     TestEqual(
-        TEXT("ABI v3 transport-table layout is fixed"),
+        TEXT("ABI v3 transport table includes the correlated-result suffix"),
         static_cast<uint32>(sizeof(FUnifiedScriptNativeTransportV3)),
-        80u);
+        96u);
+    TestEqual(TEXT("ABI v3 old fixed-lane prefix is preserved"),
+        static_cast<uint32>(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeCorrelatedById)), 80u);
+    TestEqual(TEXT("ABI v3 correlation cleanup offset is explicit"),
+        static_cast<uint32>(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, ReleaseCorrelatedResult)), 88u);
     TestEqual(
         TEXT("ABI v3 status byte offset is fixed"),
         static_cast<uint32>(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status)),
         58u);
     TestEqual(
-        TEXT("ABI v3 highest published value kind is stable"),
+        TEXT("ABI v3 legacy Map kind is stable"),
         static_cast<uint8>(EUnifiedScriptNativeValueKindV3::Map),
         static_cast<uint8>(24));
     const FUnifiedScriptNativeTransportV3* CallFrameTransport =
@@ -335,6 +339,10 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(
         TEXT("Call-frame transport exposes the mixed fixed-value lane"),
         CallFrameTransport->InvokeFixedById);
+    TestNotNull(TEXT("Correlated invocation entrypoint exists"), CallFrameTransport->InvokeCorrelatedById);
+    TestNotNull(TEXT("Correlated cleanup entrypoint exists"), CallFrameTransport->ReleaseCorrelatedResult);
+    TestTrue(TEXT("Correlated-result capability is advertised"),
+        (CallFrameTransport->Capabilities & static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CorrelatedResults)) != 0);
     TestTrue(
         TEXT("Call-frame transport advertises generation-safe object handles"),
         (CallFrameTransport->Capabilities &

@@ -125,9 +125,35 @@ FString CanonicalNativeName(const FProperty* Property)
     return Property->GetCPPType();
 }
 
-TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
+TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property, int32 Depth = 0)
 {
     const FString NativeName = CanonicalNativeName(Property);
+    if (Depth > 16) return TypeReference(TEXT("unsupported"), NativeName);
+    if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property))
+    {
+        const UFunction* Signature = Delegate->SignatureFunction;
+        if (!Signature) return TypeReference(TEXT("unsupported"), NativeName);
+        TSharedRef<FJsonObject> Json = TypeReference(TEXT("callback"), NativeName, Signature->GetPathName(), ReflectedHeaderPath(Signature));
+        TSharedRef<FJsonObject> Callback = MakeShared<FJsonObject>();
+        const FProperty* Return = Signature->GetReturnProperty();
+        Callback->SetObjectField(TEXT("returnType"), Return ? PropertyTypeReference(Return, Depth + 1) : TypeReference(TEXT("void"), TEXT("void")));
+        TArray<TSharedPtr<FJsonValue>> Parameters;
+        for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            const FProperty* Parameter = *It;
+            if (!Parameter->HasAnyPropertyFlags(CPF_Parm) || Parameter->HasAnyPropertyFlags(CPF_ReturnParm)) continue;
+            TSharedRef<FJsonObject> ParameterJson = MakeShared<FJsonObject>();
+            ParameterJson->SetStringField(TEXT("name"), Parameter->GetName());
+            ParameterJson->SetObjectField(TEXT("type"), PropertyTypeReference(Parameter, Depth + 1));
+            const bool bOutput = Parameter->HasAnyPropertyFlags(CPF_OutParm) && !Parameter->HasAnyPropertyFlags(CPF_ConstParm);
+            const bool bReference = Parameter->HasAnyPropertyFlags(CPF_ReferenceParm);
+            ParameterJson->SetStringField(TEXT("direction"), bOutput && bReference ? TEXT("inputOutput") : bOutput ? TEXT("output") : TEXT("input"));
+            Parameters.Add(MakeShared<FJsonValueObject>(ParameterJson));
+        }
+        Callback->SetArrayField(TEXT("parameters"), Parameters);
+        Json->SetObjectField(TEXT("callbackSignature"), Callback);
+        return Json;
+    }
     if (CastField<FBoolProperty>(Property))
     {
         return TypeReference(TEXT("boolean"), NativeName);
@@ -205,20 +231,20 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
     if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
     {
         TSharedRef<FJsonObject> Json = TypeReference(TEXT("array"), NativeName);
-        Json->SetObjectField(TEXT("elementType"), PropertyTypeReference(Array->Inner));
+        Json->SetObjectField(TEXT("elementType"), PropertyTypeReference(Array->Inner, Depth + 1));
         return Json;
     }
     if (const FSetProperty* Set = CastField<FSetProperty>(Property))
     {
         TSharedRef<FJsonObject> Json = TypeReference(TEXT("set"), NativeName);
-        Json->SetObjectField(TEXT("elementType"), PropertyTypeReference(Set->ElementProp));
+        Json->SetObjectField(TEXT("elementType"), PropertyTypeReference(Set->ElementProp, Depth + 1));
         return Json;
     }
     if (const FMapProperty* Map = CastField<FMapProperty>(Property))
     {
         TSharedRef<FJsonObject> Json = TypeReference(TEXT("map"), NativeName);
-        Json->SetObjectField(TEXT("keyType"), PropertyTypeReference(Map->KeyProp));
-        Json->SetObjectField(TEXT("valueType"), PropertyTypeReference(Map->ValueProp));
+        Json->SetObjectField(TEXT("keyType"), PropertyTypeReference(Map->KeyProp, Depth + 1));
+        Json->SetObjectField(TEXT("valueType"), PropertyTypeReference(Map->ValueProp, Depth + 1));
         return Json;
     }
     if (const FSoftClassProperty* SoftClass = CastField<FSoftClassProperty>(Property))
@@ -588,8 +614,10 @@ bool IsBuiltInStruct(const UScriptStruct* Struct)
 
 void CollectReferencedStructs(
     const FProperty* Property,
-    TSet<const UScriptStruct*>& Structs)
+    TSet<const UScriptStruct*>& Structs,
+    int32 Depth = 0)
 {
+    if (Depth > 16) return;
     if (const FStructProperty* StructProperty = CastField<FStructProperty>(Property))
     {
         if (!IsBuiltInStruct(StructProperty->Struct))
@@ -600,21 +628,27 @@ void CollectReferencedStructs(
     }
     if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
     {
-        CollectReferencedStructs(Array->Inner, Structs);
+        CollectReferencedStructs(Array->Inner, Structs, Depth + 1);
     }
     else if (const FSetProperty* Set = CastField<FSetProperty>(Property))
     {
-        CollectReferencedStructs(Set->ElementProp, Structs);
+        CollectReferencedStructs(Set->ElementProp, Structs, Depth + 1);
     }
     else if (const FMapProperty* Map = CastField<FMapProperty>(Property))
     {
-        CollectReferencedStructs(Map->KeyProp, Structs);
-        CollectReferencedStructs(Map->ValueProp, Structs);
+        CollectReferencedStructs(Map->KeyProp, Structs, Depth + 1);
+        CollectReferencedStructs(Map->ValueProp, Structs, Depth + 1);
+    }
+    else if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property); Delegate && Delegate->SignatureFunction)
+    {
+        for (TFieldIterator<FProperty> It(Delegate->SignatureFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+            if (It->HasAnyPropertyFlags(CPF_Parm)) CollectReferencedStructs(*It, Structs, Depth + 1);
     }
 }
 
-void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums)
+void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums, int32 Depth = 0)
 {
+    if (Depth > 16) return;
     if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
     {
         Enums.Add(EnumProperty->GetEnum());
@@ -627,16 +661,21 @@ void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums
     }
     if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
     {
-        CollectReferencedEnums(Array->Inner, Enums);
+        CollectReferencedEnums(Array->Inner, Enums, Depth + 1);
     }
     else if (const FSetProperty* Set = CastField<FSetProperty>(Property))
     {
-        CollectReferencedEnums(Set->ElementProp, Enums);
+        CollectReferencedEnums(Set->ElementProp, Enums, Depth + 1);
     }
     else if (const FMapProperty* Map = CastField<FMapProperty>(Property))
     {
-        CollectReferencedEnums(Map->KeyProp, Enums);
-        CollectReferencedEnums(Map->ValueProp, Enums);
+        CollectReferencedEnums(Map->KeyProp, Enums, Depth + 1);
+        CollectReferencedEnums(Map->ValueProp, Enums, Depth + 1);
+    }
+    else if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property); Delegate && Delegate->SignatureFunction)
+    {
+        for (TFieldIterator<FProperty> It(Delegate->SignatureFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+            if (It->HasAnyPropertyFlags(CPF_Parm)) CollectReferencedEnums(*It, Enums, Depth + 1);
     }
 }
 

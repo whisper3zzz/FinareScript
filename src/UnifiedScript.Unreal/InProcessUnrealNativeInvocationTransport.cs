@@ -295,6 +295,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
     private long _profileOverlapTicks;
     private int _profilerEnabled;
     private bool _disposed;
+    private int _activeNativeInvocations;
+    private bool _contextReleased;
 
     public InProcessUnrealNativeInvocationTransport(nint context, nint tablePointer)
     {
@@ -407,6 +409,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     _readPropertyByIdV3 = tableV3.ReadPropertyById;
                     _writePropertyByIdV3 = tableV3.WritePropertyById;
                     _invokeByIdV3 = tableV3.InvokeById;
+                    LoadCorrelatedCalls(extended.CallFrameTransport, tableV3);
                     if (tableV3.TableSize >= UnrealNativeAbiV3.ScalarTransportTableSize)
                     {
                         UnrealNativeScalarTransportTableV3 scalarTable =
@@ -732,6 +735,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         _releaseContext = Marshal.GetDelegateForFunctionPointer<UnrealNativeReleaseContextV1>(
             table.ReleaseContext);
         LoadNativeObjects(tablePointer, table);
+        LoadCallbacks(tablePointer, table);
         if (retainContext(_context) == 0)
         {
             throw new InvalidOperationException(
@@ -1222,9 +1226,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         UnrealObjectHandle target,
         string propertyPath)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             using var path = new Utf8Buffer(propertyPath);
             return Capture(userData => _readProperty(
                 _context,
@@ -1241,9 +1244,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         string propertyPath,
         UnrealInvocationValue value)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             using var path = new Utf8Buffer(propertyPath);
             using var nativeValue = new NativeValueArrayLease([value]);
             return Capture(userData => _writeProperty(
@@ -1262,9 +1264,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         string functionPath,
         IReadOnlyList<UnrealInvocationValue> arguments)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(arguments);
             using var path = new Utf8Buffer(functionPath);
             using var nativeArguments = new NativeValueArrayLease(arguments);
@@ -1284,9 +1285,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         UnrealObjectHandle target,
         ulong memberId)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             UnrealNativeReadPropertyByIdV2 readProperty = _readPropertyById ??
                 throw new NotSupportedException(
                     "The native Unreal transport does not expose ABI v2 fast members.");
@@ -1304,9 +1304,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         ulong memberId,
         UnrealInvocationValue value)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             UnrealNativeWritePropertyByIdV2 writeProperty = _writePropertyById ??
                 throw new NotSupportedException(
                     "The native Unreal transport does not expose ABI v2 fast members.");
@@ -1326,9 +1325,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         ulong memberId,
         IReadOnlyList<UnrealInvocationValue> arguments)
     {
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(arguments);
             UnrealNativeInvokeByIdV2 invoke = _invokeById ??
                 throw new NotSupportedException(
@@ -1353,6 +1351,12 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         Span<UnrealNativeValueV3> results,
         Span<byte> byteBuffer,
         int inputByteCount)
+        => ExecuteByIdCore(operation, target, memberId, arguments, results, byteBuffer, inputByteCount, 0);
+
+    private unsafe UnrealNativeCallOutcomeV3 ExecuteByIdCore(
+        UnrealNativeOperationV3 operation, UnrealObjectHandle target, ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments, Span<UnrealNativeValueV3> results,
+        Span<byte> byteBuffer, int inputByteCount, ulong correlationId)
     {
         if (inputByteCount < 0 || inputByteCount > byteBuffer.Length)
         {
@@ -1374,9 +1378,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             (delegate* unmanaged[Cdecl]<nint, ulong, ulong, UnrealNativeCallFrameV3*, void>)
             executePointer;
 
-        lock (_lifetimeGate)
+        using (correlationId == 0 ? EnterNativeInvocation() : default)
         {
-            ThrowIfDisposed();
             fixed (UnrealNativeValueV3* argumentPointer = arguments)
             fixed (UnrealNativeValueV3* resultPointer = results)
             fixed (byte* bytePointer = byteBuffer)
@@ -1393,7 +1396,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     ByteCount = checked((uint)inputByteCount),
                     Status = UnrealNativeCallStatusV3.Uninitialized,
                 };
-                execute(_context, target.Value, memberId, &frame);
+                if (correlationId == 0) execute(_context, target.Value, memberId, &frame);
+                else ((delegate* unmanaged[Cdecl]<nint, ulong, ulong, ulong, UnrealNativeCallFrameV3*, void>)
+                    _invokeCorrelatedByIdV3)(_context, correlationId, target.Value, memberId, &frame);
                 if (!Enum.IsDefined(frame.Status) ||
                     frame.ResultCount > results.Length ||
                     frame.ByteCount > byteBuffer.Length ||
@@ -1450,9 +1455,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 nint, ulong, ulong, int, int, int*, byte*, byte*, byte>)
             _invokeInt32x2ByIdV3;
 
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             int returnValue = 0;
             byte invocationError = 0;
             byte handleError = 0;
@@ -1511,9 +1515,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 UnrealNativeValueV3*, byte*, byte*, byte>)
             _invokeFixedByIdV3;
 
-        lock (_lifetimeGate)
+        using (EnterNativeInvocation())
         {
-            ThrowIfDisposed();
             byte invocationError = 0;
             byte handleError = 0;
             fixed (UnrealNativeValueV3* argumentPointer = arguments)
@@ -1548,12 +1551,14 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
 
     public void Dispose()
     {
+        bool releaseContext;
         lock (_lifetimeGate)
         {
             if (_disposed)
             {
                 return;
             }
+            CloseCallbackScopes();
             CloseNativeObjectScopes();
             if (_unsubscribeEvent is not null)
             {
@@ -1565,8 +1570,42 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 _eventSubscriptions.Clear();
             }
             _disposed = true;
-            _releaseContext(_context);
+            releaseContext = _activeNativeInvocations == 0;
+            if (releaseContext) _contextReleased = true;
         }
+        if (releaseContext) _releaseContext(_context);
+    }
+
+    private NativeInvocationLease EnterNativeInvocation()
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            checked { _activeNativeInvocations++; }
+            return new(this);
+        }
+    }
+
+    private void ExitNativeInvocation()
+    {
+        bool releaseContext;
+        lock (_lifetimeGate)
+        {
+            if (_activeNativeInvocations <= 0) throw new InvalidOperationException("Unbalanced native invocation lease.");
+            --_activeNativeInvocations;
+            releaseContext = _disposed && _activeNativeInvocations == 0 && !_contextReleased;
+            if (releaseContext) _contextReleased = true;
+        }
+        if (releaseContext) _releaseContext(_context);
+    }
+
+    // Keep the constructor's native context reference until every synchronous call
+    // has returned. Never hold a managed monitor while UE executes/queues a call:
+    // its callback can reenter this transport on the game thread. Disposal disables
+    // registrations immediately, but neither waits for nor frees an in-flight call.
+    private readonly struct NativeInvocationLease(InProcessUnrealNativeInvocationTransport? owner) : IDisposable
+    {
+        public void Dispose() => owner?.ExitNativeInvocation();
     }
 
     private long BeginProfilerSample() =>

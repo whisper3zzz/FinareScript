@@ -981,7 +981,7 @@ public sealed class RoslynSemanticBinder
             INamedTypeSymbol { TypeKind: TypeKind.Struct } =>
                 (UnifiedTypeKind.Struct, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Class } unrealType
-                when IsUnrealReflectedType(unrealType) || IsUnrealNativeObjectType(unrealType) =>
+                when IsUnrealReflectedType(unrealType) || IsUnrealNativeObjectType(unrealType) || IsUnrealCallbackType(unrealType) =>
                 (UnifiedTypeKind.Object, nullability, true),
             INamedTypeSymbol { TypeKind: TypeKind.Class } =>
                 (UnifiedTypeKind.Object, nullability, false),
@@ -1009,6 +1009,12 @@ public sealed class RoslynSemanticBinder
         type.BaseType?.ToDisplayString() == "UnifiedScript.Unreal.UnrealNativeObject" &&
         type.GetAttributes().Any(static attribute =>
             attribute.AttributeClass?.ToDisplayString() == "UnifiedScript.Unreal.UnrealNativeObjectTypeAttribute");
+
+    // A retained callback is an opaque call-boundary resource, not a graph-editable delegate body.
+    private static bool IsUnrealCallbackType(INamedTypeSymbol type) =>
+        type.OriginalDefinition.ToDisplayString() == "UnifiedScript.Unreal.UnrealCallback<T>" &&
+        type.TypeArguments is [INamedTypeSymbol { TypeKind: TypeKind.Delegate } handler] &&
+        handler.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "UnifiedScript.Unreal.UnrealCallbackTypeAttribute");
 
     private static bool TryGetEnumerableElementType(
         ITypeSymbol type,

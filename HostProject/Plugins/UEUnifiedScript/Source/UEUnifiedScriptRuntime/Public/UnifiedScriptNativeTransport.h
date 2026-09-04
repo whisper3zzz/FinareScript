@@ -9,6 +9,7 @@
 #include "UnifiedScriptGameplayDataPlane.h"
 #include "UnifiedScriptInvocationBridge.h"
 #include "UnifiedScriptNativeObjectTransport.h"
+#include "UnifiedScriptCallbackTransport.h"
 #include "UnifiedScriptSharedDataPlane.h"
 
 #include <atomic>
@@ -156,6 +157,8 @@ class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptNativeBridgeContext final
 {
 public:
     static constexpr int32 MaximumPendingWorkerDispatchCount = 1024;
+    static constexpr int32 MaximumCorrelatedResults = 64;
+    static constexpr uint64 MaximumCorrelatedResultBytes = 64ull * 1024 * 1024;
     struct FPendingCallFrameResult
     {
         bool bValid = false;
@@ -163,6 +166,8 @@ public:
         uint64 Target = 0;
         uint64 MemberId = 0;
         uint64 RequestHash = 0;
+        uint32 EncodedByteCount = 0;
+        bool bInFlight = false;
         FUnifiedScriptValue ReturnValue;
         TArray<FUnifiedScriptValue> OutputValues;
 
@@ -173,6 +178,7 @@ public:
             Target = 0;
             MemberId = 0;
             RequestHash = 0;
+            EncodedByteCount = 0;
             ReturnValue = {};
             OutputValues.Reset();
         }
@@ -200,7 +206,10 @@ public:
     bool ExecuteCallFrame(
         TUniqueFunction<void(
             FUnifiedScriptInvocationBridge&,
-            FPendingCallFrameResult&)>&& Operation);
+            FPendingCallFrameResult&)>&& Operation,
+        uint64 CorrelationId = 0);
+    void ReleaseCorrelatedResult(uint64 CorrelationId);
+    int32 GetCorrelatedResultCount() const { check(IsInGameThread()); return CorrelatedResults.Num(); }
     /** Executes worker-originated bridge calls without blocking the Game Thread. */
     void PumpGameThreadCalls();
     /** Rejects and releases worker calls before World teardown. */
@@ -225,6 +234,12 @@ public:
         TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation);
     /** Native objects are game-thread-only, including explicit disposal. */
     bool ExecuteNativeObjects(TFunctionRef<void(FUnifiedScriptNativeObjectRegistry&)> Operation);
+    EUnifiedScriptCallbackStatus OpenCallbackScope(uint64& OutScope);
+    int32 GetCallbackCount() const { check(IsInGameThread()); return CallbackProxies.Num(); }
+    EUnifiedScriptCallbackStatus CloseCallbackScope(uint64 Scope);
+    EUnifiedScriptCallbackStatus RegisterCallback(uint64 Scope, const FString& Signature,
+        FUnifiedScriptCallback Callback, void* UserData, uint64& OutToken);
+    EUnifiedScriptCallbackStatus ReleaseCallback(uint64 Scope, uint64 Token);
 
 private:
     struct FPendingGameThreadCall;
@@ -239,10 +254,14 @@ private:
     FUnifiedScriptAsyncService* AsyncService = nullptr;
     FUnifiedScriptNativeObjectRegistry NativeObjects;
     FPendingCallFrameResult PendingCallFrameResult;
+    TMap<uint64, TSharedPtr<FPendingCallFrameResult>> CorrelatedResults;
+    uint64 CorrelatedResultBytes = 0;
     TQueue<TSharedPtr<FPendingGameThreadCall>, EQueueMode::Mpsc> PendingGameThreadCalls;
     std::atomic<bool> bAcceptWorkerDispatch{true};
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
+    TSet<uint64> CallbackScopes;
+    TMap<uint64, TStrongObjectPtr<UObject>> CallbackProxies;
 };
 
 /**
@@ -294,6 +313,7 @@ struct FUnifiedScriptNativeTransportV2
     const FUnifiedScriptAsyncTransportV5* AsyncTransport = nullptr;
     /** Optional non-UObject ownership/dispatch ABI; earlier v2 clients ignore it. */
     const FUnifiedScriptNativeObjectTransportV1* NativeObjectTransport = nullptr;
+    const FUnifiedScriptCallbackTransport* CallbackTransport = nullptr;
 };
 
 /**
@@ -330,6 +350,7 @@ enum class EUnifiedScriptNativeValueKindV3 : uint8
     ByteBuffer = 25,
     // Valid only on the separate native-object transport, never a UObject cell.
     NativeObject = 26,
+    Callback = 27,
 };
 
 enum class EUnifiedScriptNativeValueFlagsV3 : uint8
@@ -365,6 +386,8 @@ enum class EUnifiedScriptNativeCapabilitiesV3 : uint64
     ContainerResults = 1ull << 9, // Preflight-safe container reads and returns.
     Structs = 1ull << 10, // Generated field-addressable UScriptStruct values.
     ByteBuffers = 1ull << 11,
+    CallbackArguments = 1ull << 12,
+    CorrelatedResults = 1ull << 13,
 };
 
 /**
@@ -425,6 +448,11 @@ using FUnifiedScriptNativeExecuteByIdV3 = void (*)(
     uint64 MemberId,
     FUnifiedScriptNativeCallFrameV3* Frame);
 
+using FUnifiedScriptNativeInvokeCorrelatedByIdV3 = void (*)(
+    void* Context, uint64 CorrelationId, uint64 Target, uint64 MemberId,
+    FUnifiedScriptNativeCallFrameV3* Frame);
+using FUnifiedScriptNativeReleaseCorrelatedResultV3 = void (*)(void* Context, uint64 CorrelationId);
+
 /** Allocation-free scalar lane for generated int32(int32, int32) members. */
 using FUnifiedScriptNativeInvokeInt32x2ByIdV3 = uint8 (*)(
     void* Context,
@@ -468,6 +496,9 @@ struct alignas(8) FUnifiedScriptNativeTransportV3
     FUnifiedScriptNativeInvokeInt32x2ByIdV3 InvokeInt32x2ById = nullptr;
     /** Optional append-only mixed fixed-value lane; nullptr result denotes void. */
     FUnifiedScriptNativeInvokeFixedByIdV3 InvokeFixedById = nullptr;
+    /** Optional logical invocation identity, independent of worker/thread identity. */
+    FUnifiedScriptNativeInvokeCorrelatedByIdV3 InvokeCorrelatedById = nullptr;
+    FUnifiedScriptNativeReleaseCorrelatedResultV3 ReleaseCorrelatedResult = nullptr;
 };
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeValueV1>);
@@ -489,13 +520,15 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status) == 58);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, ErrorMessageOffset) == 60);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV3>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeTransportV3>);
-static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 80);
+static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 96);
 static_assert(alignof(FUnifiedScriptNativeTransportV3) == 8);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, Capabilities) == 16);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, RetainContext) == 24);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeById) == 56);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeInt32x2ById) == 64);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeFixedById) == 72);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeCorrelatedById) == 80);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, ReleaseCorrelatedResult) == 88);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(sizeof(FUnifiedScriptNativeEventFrameV4) == 64);

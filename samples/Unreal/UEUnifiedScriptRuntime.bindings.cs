@@ -3,6 +3,9 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealCallbackTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptQueryCallback__DelegateSignature")]
+public delegate bool UnifiedScriptQueryCallbackHandler(int value, ref string text, out global::UnifiedScript.Unreal.UnrealVector position);
+
 [global::UnifiedScript.Unreal.UnrealNativeObjectTypeAttribute("/Native/UEUnifiedScriptRuntime.NativeCounter")]
 public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealNativeObject
 {
@@ -207,6 +210,92 @@ public sealed partial class UnifiedScriptActor : global::UnifiedScript.Unreal.Un
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Stop Managed Behavior", Category = "UnifiedScript", Tooltip = "Stop Managed Behavior")]
     public void StopManagedBehavior()
         => Invoke(0xFD7407AAD8E613E8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior");
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Callback Service", Tooltip = "Public sample of a reflected API that invokes and retains a typed callback.")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService")]
+public sealed partial class UnifiedScriptCallbackService : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptCallbackService(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Last Query Value", Category = "UnifiedScript|Callbacks")]
+    public int LastQueryValue
+    {
+        get => ReadProperty<int>(0x6325672916FED51DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:LastQueryValue");
+        set => WriteProperty(0x6325672916FED51DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:LastQueryValue", value);
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Clear Callback", Category = "UnifiedScript|Callbacks", Tooltip = "Clear Callback")]
+    public void ClearCallback()
+        => Invoke(0x78B16CB5BE93D54EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:ClearCallback");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Create", Category = "UnifiedScript|Callbacks", Tooltip = "Create")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle Create(global::UnifiedScript.Unreal.UnrealObjectHandle outer)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x0D78482D89DB3D14UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:Create", outer);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Evaluate", Category = "UnifiedScript|Callbacks", Tooltip = "Evaluate")]
+    public bool Evaluate(int value, ref string text, out global::UnifiedScript.Unreal.UnrealVector position)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x380C821A66347233UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:Evaluate",
+            typeof(bool),
+            [
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, value),
+                new(typeof(string), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, text),
+                new(typeof(global::UnifiedScript.Unreal.UnrealVector), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        text = (string)__unifiedScriptResult.Outputs[0]!;
+        position = (global::UnifiedScript.Unreal.UnrealVector)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    public global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler> CreateEvaluateNowCallback(UnifiedScriptQueryCallbackHandler handler)
+        => global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler>.Create(Bridge, handler);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Evaluate Now", Category = "UnifiedScript|Callbacks", Tooltip = "Evaluate Now")]
+    public bool EvaluateNow(global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler> callback, int value, ref string text, out global::UnifiedScript.Unreal.UnrealVector position)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x5720B0279059C71DUL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:EvaluateNow",
+            typeof(bool),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealCallbackArgument), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, callback.AsArgument(Bridge)),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, value),
+                new(typeof(string), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, text),
+                new(typeof(global::UnifiedScript.Unreal.UnrealVector), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        text = (string)__unifiedScriptResult.Outputs[0]!;
+        position = (global::UnifiedScript.Unreal.UnrealVector)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Format Reply", Category = "UnifiedScript|Callbacks", Tooltip = "Format Reply")]
+    public string FormatReply(string text)
+        => Invoke<string, string>(0xB37C5DF2DE73DD75UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:FormatReply", text);
+
+    public global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler> CreateStoreCallback(UnifiedScriptQueryCallbackHandler handler)
+        => global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler>.Create(Bridge, handler);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Store Callback", Category = "UnifiedScript|Callbacks", Tooltip = "Store Callback")]
+    public void StoreCallback(global::UnifiedScript.Unreal.UnrealCallback<UnifiedScriptQueryCallbackHandler> callback)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x4488A222DB801132UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService:StoreCallback",
+            typeof(void),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealCallbackArgument), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, callback.AsArgument(Bridge)),
+            ]);
+    }
 }
 
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Component", Tooltip = "Unified Script Component")]
