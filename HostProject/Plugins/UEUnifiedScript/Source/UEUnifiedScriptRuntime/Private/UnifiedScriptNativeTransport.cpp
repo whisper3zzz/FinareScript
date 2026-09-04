@@ -436,12 +436,49 @@ void Complete(
     const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String ||
         Value.Kind == EUnifiedScriptValueKind::Name ||
         Value.Kind == EUnifiedScriptValueKind::Text;
-    uint8 BinaryPayload[VectorPayloadSize] = {};
+    uint8 BinaryPayload[sizeof(double) * 10] = {};
+    TArray<uint8> EnumPayload;
+    int32 EncodedInt32 = Value.Int32Value;
+    switch (Value.Kind)
+    {
+    case EUnifiedScriptValueKind::Int8: EncodedInt32 = Value.Int8Value; break;
+    case EUnifiedScriptValueKind::UInt8: EncodedInt32 = Value.UInt8Value; break;
+    case EUnifiedScriptValueKind::Int16: EncodedInt32 = Value.Int16Value; break;
+    case EUnifiedScriptValueKind::UInt16: EncodedInt32 = Value.UInt16Value; break;
+    case EUnifiedScriptValueKind::UInt32: EncodedInt32 = std::bit_cast<int32>(Value.UInt32Value); break;
+    case EUnifiedScriptValueKind::Float32: EncodedInt32 = std::bit_cast<int32>(Value.Float32Value); break;
+    default: break;
+    }
     const uint8* ValueData = bHasString
         ? reinterpret_cast<const uint8*>(StringUtf8.Get())
         : nullptr;
     int32 ValueLength = bHasString ? StringUtf8.Length() : 0;
-    if (Value.Kind == EUnifiedScriptValueKind::Float64)
+    if (Value.Kind == EUnifiedScriptValueKind::Int64 || Value.Kind == EUnifiedScriptValueKind::UInt64)
+    {
+        WriteUInt64LittleEndian(BinaryPayload, Value.Kind == EUnifiedScriptValueKind::Int64
+            ? std::bit_cast<uint64>(Value.Int64Value) : Value.UInt64Value);
+        ValueData = BinaryPayload;
+        ValueLength = sizeof(uint64);
+    }
+    else if (Value.Kind == EUnifiedScriptValueKind::Enum)
+    {
+        const FTCHARToUTF8 Path(Value.TypePath.IsNone() ? TEXT("") : *Value.TypePath.ToString());
+        if (Value.TypeIdValue == 0 || Path.Length() > 4096)
+        {
+            FUnifiedScriptInvocationResult Failure;
+            Failure.Error = EUnifiedScriptInvocationError::ValueTypeMismatch;
+            Failure.Message = TEXT("Enum result requires a stable type ID and a bounded type path.");
+            Complete(Callback, UserData, {}, Failure);
+            return;
+        }
+        EnumPayload.SetNumUninitialized(16 + Path.Length());
+        WriteUInt64LittleEndian(EnumPayload.GetData(), std::bit_cast<uint64>(Value.Int64Value));
+        WriteUInt64LittleEndian(EnumPayload.GetData() + 8, Value.TypeIdValue);
+        if (Path.Length() > 0) FMemory::Memcpy(EnumPayload.GetData() + 16, Path.Get(), Path.Length());
+        ValueData = EnumPayload.GetData();
+        ValueLength = EnumPayload.Num();
+    }
+    else if (Value.Kind == EUnifiedScriptValueKind::Float64)
     {
         WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(Value.Float64Value));
         ValueData = BinaryPayload;
@@ -468,12 +505,31 @@ void Complete(
         ValueData = BinaryPayload;
         ValueLength = VectorPayloadSize;
     }
+    else if (Value.Kind == EUnifiedScriptValueKind::Rotator)
+    {
+        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(Value.RotatorValue.Pitch));
+        WriteUInt64LittleEndian(BinaryPayload + 8, std::bit_cast<uint64>(Value.RotatorValue.Yaw));
+        WriteUInt64LittleEndian(BinaryPayload + 16, std::bit_cast<uint64>(Value.RotatorValue.Roll));
+        ValueData = BinaryPayload;
+        ValueLength = 24;
+    }
+    else if (Value.Kind == EUnifiedScriptValueKind::Transform)
+    {
+        const FQuat Q = Value.TransformValue.GetRotation();
+        const FVector T = Value.TransformValue.GetTranslation();
+        const FVector S = Value.TransformValue.GetScale3D();
+        const double Cells[] = {Q.X, Q.Y, Q.Z, Q.W, T.X, T.Y, T.Z, S.X, S.Y, S.Z};
+        for (int32 Index = 0; Index < 10; ++Index)
+            WriteUInt64LittleEndian(BinaryPayload + Index * 8, std::bit_cast<uint64>(Cells[Index]));
+        ValueData = BinaryPayload;
+        ValueLength = 80;
+    }
     Callback(
         UserData,
         Result.IsSuccess() ? 1 : 0,
         static_cast<uint8>(Value.Kind),
         Value.BooleanValue ? 1 : 0,
-        Value.Kind == EUnifiedScriptValueKind::Float32 ? std::bit_cast<int32>(Value.Float32Value) : Value.Int32Value,
+        EncodedInt32,
         ValueData,
         ValueLength,
         static_cast<uint8>(Result.Error),
@@ -538,6 +594,11 @@ bool DecodeValue(
     FUnifiedScriptNativeResultCallbackV1 Callback,
     void* UserData)
 {
+    const auto Invalid = [&](const TCHAR* Message)
+    {
+        CompleteFailure(Callback, UserData, EUnifiedScriptInvocationError::ValueTypeMismatch, Message);
+        return false;
+    };
     if (NativeValue.Reserved != 0)
     {
         CompleteFailure(
@@ -565,6 +626,54 @@ bool DecodeValue(
     case EUnifiedScriptValueKind::Int32:
         OutValue = FUnifiedScriptValue::FromInt32(NativeValue.Int32Value);
         return true;
+    case EUnifiedScriptValueKind::Int8:
+        if (NativeValue.Int32Value < MIN_int8 || NativeValue.Int32Value > MAX_int8) return Invalid(TEXT("Int8 payload is outside its declared width."));
+        OutValue = FUnifiedScriptValue::FromInt8(static_cast<int8>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::UInt8:
+        if (NativeValue.Int32Value < 0 || NativeValue.Int32Value > MAX_uint8) return Invalid(TEXT("UInt8 payload is outside its declared width."));
+        OutValue = FUnifiedScriptValue::FromUInt8(static_cast<uint8>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::Int16:
+        if (NativeValue.Int32Value < MIN_int16 || NativeValue.Int32Value > MAX_int16) return Invalid(TEXT("Int16 payload is outside its declared width."));
+        OutValue = FUnifiedScriptValue::FromInt16(static_cast<int16>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::UInt16:
+        if (NativeValue.Int32Value < 0 || NativeValue.Int32Value > MAX_uint16) return Invalid(TEXT("UInt16 payload is outside its declared width."));
+        OutValue = FUnifiedScriptValue::FromUInt16(static_cast<uint16>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::UInt32:
+        OutValue = FUnifiedScriptValue::FromUInt32(std::bit_cast<uint32>(NativeValue.Int32Value));
+        return true;
+    case EUnifiedScriptValueKind::Int64:
+    case EUnifiedScriptValueKind::UInt64:
+        if (NativeValue.StringData == nullptr || NativeValue.StringLength != 8) return Invalid(TEXT("64-bit integer payload requires exactly eight bytes."));
+        OutValue = static_cast<EUnifiedScriptValueKind>(NativeValue.Kind) == EUnifiedScriptValueKind::Int64
+            ? FUnifiedScriptValue::FromInt64(std::bit_cast<int64>(ReadUInt64LittleEndian(NativeValue.StringData)))
+            : FUnifiedScriptValue::FromUInt64(ReadUInt64LittleEndian(NativeValue.StringData));
+        return true;
+    case EUnifiedScriptValueKind::Enum:
+    {
+        if (NativeValue.StringData == nullptr || NativeValue.StringLength < 16 || NativeValue.StringLength > 16 + 4096)
+            return Invalid(TEXT("Enum payload requires a value, type ID and optional bounded type path."));
+        const int64 Value = std::bit_cast<int64>(ReadUInt64LittleEndian(NativeValue.StringData));
+        const uint64 TypeId = ReadUInt64LittleEndian(NativeValue.StringData + 8);
+        if (TypeId == 0) return Invalid(TEXT("Enum payload requires a nonzero type ID."));
+        if (NativeValue.StringLength == 16)
+        {
+            OutValue = FUnifiedScriptValue::FromEnumTypeId(Value, TypeId);
+            return true;
+        }
+        for (int32 Index = 16; Index < NativeValue.StringLength; ++Index)
+            if (NativeValue.StringData[Index] == 0) return Invalid(TEXT("Enum type path contains a null byte."));
+        FString Path;
+        if (!TryDecodeUtf8(NativeValue.StringData + 16, NativeValue.StringLength - 16, Path) || Path.TrimStartAndEnd().IsEmpty())
+            return Invalid(TEXT("Enum type path is invalid."));
+        const FTCHARToUTF8 PathUtf8(*Path);
+        if (UnifiedScriptMemberId(PathUtf8.Get()) != TypeId) return Invalid(TEXT("Enum type path and ID disagree."));
+        OutValue = FUnifiedScriptValue::FromEnum(Value, FName(*Path));
+        return true;
+    }
     case EUnifiedScriptValueKind::Float32:
         OutValue = FUnifiedScriptValue::FromFloat32(std::bit_cast<float>(NativeValue.Int32Value));
         return true;
@@ -652,6 +761,21 @@ bool DecodeValue(
             std::bit_cast<double>(ReadUInt64LittleEndian(
                 NativeValue.StringData + sizeof(uint64) * 2))));
         return true;
+    case EUnifiedScriptValueKind::Rotator:
+        if (NativeValue.StringData == nullptr || NativeValue.StringLength != 24) return Invalid(TEXT("Rotator payload requires three binary64 cells."));
+        OutValue = FUnifiedScriptValue::FromRotator(FRotator(
+            std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData)),
+            std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData + 8)),
+            std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData + 16))));
+        return true;
+    case EUnifiedScriptValueKind::Transform:
+    {
+        if (NativeValue.StringData == nullptr || NativeValue.StringLength != 80) return Invalid(TEXT("Transform payload requires ten binary64 cells."));
+        const auto At = [&](int32 Index) { return std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData + Index * 8)); };
+        OutValue = FUnifiedScriptValue::FromTransform(FTransform(FQuat(At(0), At(1), At(2), At(3)),
+            FVector(At(4), At(5), At(6)), FVector(At(7), At(8), At(9))));
+        return true;
+    }
     default:
         CompleteFailure(
             Callback,

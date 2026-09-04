@@ -8,6 +8,39 @@ namespace UnifiedScript.Tests;
 public sealed class UnrealBindingCoverageTests
 {
     [Fact]
+    public void CommonValueFallbackClassificationMatchesTheLegacyCodecFamilies()
+    {
+        const string owner = "/Script/FixtureRuntime.Fixture";
+        const string enumPath = "/Script/FixtureRuntime.EFixtureMode";
+        UnrealTypeReference[] types =
+        [
+            new(UnrealValueKind.Int8, "int8"), new(UnrealValueKind.UInt8, "uint8"),
+            new(UnrealValueKind.Int16, "int16"), new(UnrealValueKind.UInt16, "uint16"),
+            new(UnrealValueKind.UInt32, "uint32"), new(UnrealValueKind.Int64, "int64"),
+            new(UnrealValueKind.UInt64, "uint64"), new(UnrealValueKind.Enum, "EFixtureMode", enumPath),
+            new(UnrealValueKind.Struct, "FRotator", "/Script/CoreUObject.Rotator"),
+            new(UnrealValueKind.Struct, "FTransform", "/Script/CoreUObject.Transform"),
+        ];
+        var manifest = UnrealReflectionManifest.Create(new(5, 8, 1, "fixture"), ["FixtureRuntime"],
+        [
+            new(enumPath, "EFixtureMode", "EFixtureMode", "FixtureRuntime", UnrealReflectedTypeKind.Enum,
+                null, new(false, true), [], [], "Fixture.h") { EnumValues = [new("Idle", 0), new("Active", 1)] },
+            new(owner, "Fixture", "UFixture", "FixtureRuntime", UnrealReflectedTypeKind.Class,
+                "/Script/CoreUObject.Object", new(false, true),
+                types.Select((type, i) => new UnrealReflectedProperty($"{owner}:Value{i}", $"Value{i}", type,
+                    new(true, true, true, UnrealNativeAccess.Protected))).ToArray(),
+                types.Select((type, i) => new UnrealReflectedFunction($"{owner}:Echo{i}", $"Echo{i}", type,
+                    [new("Value", type, UnrealParameterDirection.Input)], new(false, false, true, UnrealNativeAccess.Protected))).ToArray(), "Fixture.h"),
+        ]);
+        var managed = new UnrealBindingGenerator().Generate(manifest);
+        var native = new UnrealNativeThunkGenerator().Generate(manifest);
+        var report = UnrealBindingCoverageReport.Create(manifest, managed, native);
+        Assert.Equal(types.Length * 2, report.Entries.Count);
+        Assert.All(report.Entries, entry => Assert.Equal(UnrealBindingDisposition.ReflectionFallback, entry.Disposition));
+        Assert.True(report.Gate.Passed);
+    }
+
+    [Fact]
     public void M71MatrixMatchesAllGoldenArtifactsAndCompiles()
     {
         string fixtureRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures");

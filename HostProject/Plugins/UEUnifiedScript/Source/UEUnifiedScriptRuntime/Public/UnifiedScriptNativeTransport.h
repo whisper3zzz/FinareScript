@@ -17,9 +17,11 @@
 /**
  * Stable, standard-layout value passed into the version-one native ABI.
  * StringData is a borrowed UTF-8 slice for text kinds and a compact,
- * kind-specific little-endian payload for object handles, binary64 and FVector.
- * Float32 uses the IEEE-754 bit pattern in Int32Value; existing kinds/layouts
- * are unchanged. Matching SDK/native versions are required for added kinds.
+ * kind-specific little-endian payload for 64-bit values, enums and core structs.
+ * Small integers use Int32Value (UInt32 and Float32 use their bit patterns).
+ * Enum payload: int64 value, uint64 type ID, optional UTF-8 path (max 4096 bytes).
+ * Rotator is three binary64 cells; Transform is quaternion XYZW, translation XYZ,
+ * scale XYZ. Existing encodings/layouts are unchanged; update SDK/native together.
  */
 struct FUnifiedScriptNativeValueV1
 {

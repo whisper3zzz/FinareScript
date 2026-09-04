@@ -1822,6 +1822,13 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 UnrealInvocationValue.FromBoolean(booleanValue != 0),
             UnrealInvocationValueKind.Int32 =>
                 UnrealInvocationValue.FromInt32(int32Value),
+            UnrealInvocationValueKind.Int8 => UnrealInvocationValue.FromInt8(checked((sbyte)int32Value)),
+            UnrealInvocationValueKind.UInt8 => UnrealInvocationValue.FromUInt8(checked((byte)int32Value)),
+            UnrealInvocationValueKind.Int16 => UnrealInvocationValue.FromInt16(checked((short)int32Value)),
+            UnrealInvocationValueKind.UInt16 => UnrealInvocationValue.FromUInt16(checked((ushort)int32Value)),
+            UnrealInvocationValueKind.UInt32 => UnrealInvocationValue.FromUInt32(unchecked((uint)int32Value)),
+            UnrealInvocationValueKind.Int64 => UnrealInvocationValue.FromInt64(unchecked((long)ReadUInt64Payload(stringData, stringLength))),
+            UnrealInvocationValueKind.UInt64 => UnrealInvocationValue.FromUInt64(ReadUInt64Payload(stringData, stringLength)),
             UnrealInvocationValueKind.Float32 =>
                 UnrealInvocationValue.FromFloat32(BitConverter.Int32BitsToSingle(int32Value)),
             UnrealInvocationValueKind.Float64 =>
@@ -1841,9 +1848,40 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     isClass: true),
             UnrealInvocationValueKind.Vector =>
                 UnrealInvocationValue.FromVector(ReadVectorPayload(stringData, stringLength)),
+            UnrealInvocationValueKind.Rotator => ReadRotatorPayload(stringData, stringLength),
+            UnrealInvocationValueKind.Transform => ReadTransformPayload(stringData, stringLength),
+            UnrealInvocationValueKind.Enum => ReadEnumPayload(stringData, stringLength),
             _ => throw new InvalidOperationException(
                 $"The native Unreal transport returned unknown value kind {kind}."),
         };
+
+    private static UnrealInvocationValue ReadEnumPayload(nint data, int length)
+    {
+        if (length < 16 || length > 16 + 4096)
+            throw new InvalidOperationException("The native enum payload has an invalid size.");
+        byte[] bytes = ReadPayload(data, length, length);
+        long value = BinaryPrimitives.ReadInt64LittleEndian(bytes);
+        ulong typeId = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(8));
+        if (length == 16) return UnrealInvocationValue.FromEnumTypeId(typeId, value);
+        string path = new UTF8Encoding(false, true).GetString(bytes.AsSpan(16));
+        if (string.IsNullOrWhiteSpace(path) || path.Contains('\0') || UnrealMemberId.FromPath(path) != typeId)
+            throw new InvalidOperationException("The native enum payload has inconsistent type identity.");
+        return UnrealInvocationValue.FromEnum(new UnrealEnumValue(path, value));
+    }
+
+    private static UnrealInvocationValue ReadRotatorPayload(nint data, int length)
+    {
+        UnrealVector value = ReadVectorPayload(data, length);
+        return UnrealInvocationValue.FromRotator(new(value.X, value.Y, value.Z));
+    }
+
+    private static UnrealInvocationValue ReadTransformPayload(nint data, int length)
+    {
+        byte[] bytes = ReadPayload(data, length, 80);
+        double At(int index) => ReadDoubleLittleEndian(bytes.AsSpan(index * 8, 8));
+        return UnrealInvocationValue.FromTransform(new(new(At(0), At(1), At(2), At(3)),
+            new(At(4), At(5), At(6)), new(At(7), At(8), At(9))));
+    }
 
     private static ulong ReadUInt64Payload(nint data, int length)
     {
@@ -2119,9 +2157,14 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             {
                 Kind = (byte)value.Kind,
                 BooleanValue = value.BooleanValue ? (byte)1 : (byte)0,
-                Int32Value = value.Kind == UnrealInvocationValueKind.Float32
-                    ? BitConverter.SingleToInt32Bits((float)value.FloatingPointValue)
-                    : value.Int32Value,
+                Int32Value = value.Kind switch
+                {
+                    UnrealInvocationValueKind.Int8 or UnrealInvocationValueKind.Int16 => checked((int)value.SignedIntegerValue),
+                    UnrealInvocationValueKind.UInt8 or UnrealInvocationValueKind.UInt16 => checked((int)value.UnsignedIntegerValue),
+                    UnrealInvocationValueKind.UInt32 => unchecked((int)value.UnsignedIntegerValue),
+                    UnrealInvocationValueKind.Float32 => BitConverter.SingleToInt32Bits((float)value.FloatingPointValue),
+                    _ => value.Int32Value,
+                },
             };
             if (value.Kind is UnrealInvocationValueKind.String or
                 UnrealInvocationValueKind.Name or UnrealInvocationValueKind.Text)
@@ -2130,10 +2173,16 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 nativeValue.StringData = _string.Pointer;
                 nativeValue.StringLength = _string.Length;
             }
-            else if (value.Kind == UnrealInvocationValueKind.Float64)
+            else if (value.Kind is UnrealInvocationValueKind.Float64 or UnrealInvocationValueKind.Int64 or UnrealInvocationValueKind.UInt64)
             {
                 byte[] payload = new byte[sizeof(double)];
-                WriteDoubleLittleEndian(payload, value.FloatingPointValue);
+                ulong bits = value.Kind switch
+                {
+                    UnrealInvocationValueKind.Int64 => unchecked((ulong)value.SignedIntegerValue),
+                    UnrealInvocationValueKind.UInt64 => value.UnsignedIntegerValue,
+                    _ => unchecked((ulong)BitConverter.DoubleToInt64Bits(value.FloatingPointValue)),
+                };
+                BinaryPrimitives.WriteUInt64LittleEndian(payload, bits);
                 _payload = new NativeByteBuffer(payload);
                 nativeValue.StringData = _payload.Pointer;
                 nativeValue.StringLength = _payload.Length;
@@ -2147,17 +2196,32 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 nativeValue.StringData = _payload.Pointer;
                 nativeValue.StringLength = _payload.Length;
             }
-            else if (value.Kind == UnrealInvocationValueKind.Vector)
+            else if (value.Kind == UnrealInvocationValueKind.Enum)
             {
-                const int componentSize = sizeof(ulong);
-                byte[] payload = new byte[componentSize * 3];
-                WriteDoubleLittleEndian(payload.AsSpan(0, componentSize), value.VectorValue.X);
-                WriteDoubleLittleEndian(
-                    payload.AsSpan(componentSize, componentSize),
-                    value.VectorValue.Y);
-                WriteDoubleLittleEndian(
-                    payload.AsSpan(componentSize * 2, componentSize),
-                    value.VectorValue.Z);
+                byte[] path = value.StringValue is null ? [] : Encoding.UTF8.GetBytes(value.StringValue);
+                if (value.EnumTypeId == 0 || path.Length > 4096 || value.StringValue?.Contains('\0') == true)
+                    throw new ArgumentException("An enum requires a stable type identity and a bounded path.");
+                byte[] payload = new byte[16 + path.Length];
+                BinaryPrimitives.WriteInt64LittleEndian(payload, value.SignedIntegerValue);
+                BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(8), value.EnumTypeId);
+                path.CopyTo(payload, 16);
+                _payload = new NativeByteBuffer(payload);
+                nativeValue.StringData = _payload.Pointer;
+                nativeValue.StringLength = _payload.Length;
+            }
+            else if (value.Kind is UnrealInvocationValueKind.Vector or UnrealInvocationValueKind.Rotator or UnrealInvocationValueKind.Transform)
+            {
+                double[] cells = value.Kind switch
+                {
+                    UnrealInvocationValueKind.Vector => [value.VectorValue.X, value.VectorValue.Y, value.VectorValue.Z],
+                    UnrealInvocationValueKind.Rotator => [value.RotatorValue.Pitch, value.RotatorValue.Yaw, value.RotatorValue.Roll],
+                    _ => [value.TransformValue.Rotation.X, value.TransformValue.Rotation.Y, value.TransformValue.Rotation.Z, value.TransformValue.Rotation.W,
+                        value.TransformValue.Translation.X, value.TransformValue.Translation.Y, value.TransformValue.Translation.Z,
+                        value.TransformValue.Scale3D.X, value.TransformValue.Scale3D.Y, value.TransformValue.Scale3D.Z],
+                };
+                byte[] payload = new byte[cells.Length * sizeof(double)];
+                for (int index = 0; index < cells.Length; ++index)
+                    WriteDoubleLittleEndian(payload.AsSpan(index * 8, 8), cells[index]);
                 _payload = new NativeByteBuffer(payload);
                 nativeValue.StringData = _payload.Pointer;
                 nativeValue.StringLength = _payload.Length;

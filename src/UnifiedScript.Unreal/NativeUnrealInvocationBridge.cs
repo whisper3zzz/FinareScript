@@ -74,7 +74,8 @@ public readonly record struct UnrealInvocationValue
         UnrealObjectHandle objectHandle = default,
         UnrealVector vectorValue = default,
         UnrealRotator rotatorValue = default,
-        UnrealTransform transformValue = default)
+        UnrealTransform transformValue = default,
+        ulong enumTypeId = 0)
     {
         Kind = kind;
         BooleanValue = booleanValue;
@@ -87,6 +88,7 @@ public readonly record struct UnrealInvocationValue
         VectorValue = vectorValue;
         RotatorValue = rotatorValue;
         TransformValue = transformValue;
+        EnumTypeId = enumTypeId;
     }
 
     public UnrealInvocationValueKind Kind { get; }
@@ -110,6 +112,7 @@ public readonly record struct UnrealInvocationValue
     public UnrealRotator RotatorValue { get; }
 
     public UnrealTransform TransformValue { get; }
+    public ulong EnumTypeId { get; }
 
     public static UnrealInvocationValue Void => default;
 
@@ -170,7 +173,12 @@ public readonly record struct UnrealInvocationValue
             : new(
                 UnrealInvocationValueKind.Enum,
                 signedIntegerValue: value.Value,
-                stringValue: value.TypePath);
+                stringValue: value.TypePath,
+                enumTypeId: UnrealMemberId.FromPath(value.TypePath));
+
+    public static UnrealInvocationValue FromEnumTypeId(ulong typeId, long value) =>
+        typeId == 0 ? throw new ArgumentException("An enum type ID is required.", nameof(typeId)) :
+        new(UnrealInvocationValueKind.Enum, signedIntegerValue: value, enumTypeId: typeId);
 
     public static UnrealInvocationValue FromVector(UnrealVector value) =>
         new(UnrealInvocationValueKind.Vector, vectorValue: value);
@@ -1858,7 +1866,7 @@ public sealed class NativeUnrealInvocationBridge
                 UnrealInvocationValue.FromObjectHandle(classHandle.ObjectHandle, isClass: true),
             UnrealEnumValue enumValue when !string.IsNullOrWhiteSpace(enumValue.TypePath) =>
                 UnrealInvocationValue.FromEnum(enumValue),
-            IUnrealEnumValue enumValue when TryGetEnumPath(typeof(T), out string enumPath) =>
+            IUnrealEnumValue enumValue when TryGetEnumPath(enumValue.GetType(), out string enumPath) =>
                 UnrealInvocationValue.FromEnum(new UnrealEnumValue(enumPath, enumValue.Value)),
             UnrealVector vectorValue => UnrealInvocationValue.FromVector(vectorValue),
             UnrealRotator rotatorValue => UnrealInvocationValue.FromRotator(rotatorValue),
@@ -1871,10 +1879,12 @@ public sealed class NativeUnrealInvocationBridge
         string memberPath)
     {
         if (value.Kind == UnrealInvocationValueKind.Enum &&
-            !string.IsNullOrWhiteSpace(value.StringValue) &&
+            TryGetEnumPath(typeof(T), out string expectedEnumPath) &&
+            value.EnumTypeId == UnrealMemberId.FromPath(expectedEnumPath) &&
+            (value.StringValue is null || string.Equals(value.StringValue, expectedEnumPath, StringComparison.Ordinal)) &&
             TryCreateTypedEnum(
                 typeof(T),
-                value.StringValue ?? string.Empty,
+                expectedEnumPath,
                 value.SignedIntegerValue,
                 out object? typedEnum))
         {

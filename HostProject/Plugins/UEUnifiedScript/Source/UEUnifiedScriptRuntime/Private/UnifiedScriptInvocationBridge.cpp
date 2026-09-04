@@ -753,10 +753,16 @@ bool FUnifiedScriptValue::TryGetObjectHandle(
 
 bool FUnifiedScriptValue::TryGetEnum(int64& OutValue, FName ExpectedTypePath) const
 {
-    if (Kind != EUnifiedScriptValueKind::Enum || TypePath != ExpectedTypePath)
+    if (Kind != EUnifiedScriptValueKind::Enum)
     {
         return false;
     }
+    if (TypePath.IsNone())
+    {
+        const FTCHARToUTF8 ExpectedPath(*ExpectedTypePath.ToString());
+        if (TypeIdValue == 0 || TypeIdValue != UnifiedScriptMemberId(ExpectedPath.Get())) return false;
+    }
+    else if (TypePath != ExpectedTypePath) return false;
     OutValue = Int64Value;
     return true;
 }

@@ -96,9 +96,11 @@ UE build and chunk emission pass. The 42 affected managed cases pass in
 and both connected scenarios pass in `components-verified.log` in that directory.
 Earlier full-suite evidence predates these changes.
 
-Next: close common path-value gaps (other integer widths, enums, Rotator and
-Transform) and align advertised fallback coverage with the real transport. The
-RPC declaration whitelist is currently broader than the send codec. Push-model
+The [common-value follow-up](2026-09-04-common-value-path-interop.md) closes the
+integer-width, enum and Rotator/Transform path codecs and adds a connected RPC
+and long-state reload example. It does not expand all Script Class state/default
+declarations or prove every signature combination. Follow the roadmap's next
+composed gameplay batch instead of exhausting network edge cases here. Push-model
 dirty notifications need a push-enabled run; travel and cooked networking remain
 unproven. Containers, Soft References, complex structures, return/ref/out and
 conflicting RPC bindings remain rejected before publication.

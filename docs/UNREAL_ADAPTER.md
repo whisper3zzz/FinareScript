@@ -302,11 +302,11 @@ minimum per-route counts and a maximum rejected count; falling below that
 baseline fails generation with stable `USUE51xx` diagnostics.
 `--fail-on-rejected` exits with code 65, so projects can make incomplete API
 coverage a build gate. Runtime member-ID
-misses select the exact ABI v1 reflected path. Its runtime value codec is narrower
-than the generator's fallback classification: bool/int32, float/double,
-string/name/text, object/class handles and FVector are implemented. Do not infer
-legacy support for other numeric widths, enums, Rotator or Transform from their
-working generated ABI v3 routes. The report rejects missing direct
+misses select the exact ABI v1 reflected path. Its runtime codec now covers
+bool, all supported integer widths, float/double, string/name/text, object/class
+handles, typed enums and Vector/Rotator/Transform. The common-value coverage test
+keeps property/function fallback classification aligned with these families.
+The report rejects missing direct
 thunks for containers or `out`/`ref` functions because the legacy value contract
 cannot preserve those shapes.
 
@@ -315,15 +315,33 @@ manifest, including `UUnifiedScriptInteropFixture`, and a golden test prevents
 it from drifting. UE Automation executes generated int64, enum, FVector, and
 FTransform property/function thunks against that fixture. ABI v1/v2 remain
 available for existing hosts. Without changing the frozen v1 table or value
-struct layout, the borrowed `StringData`/`StringLength` slice now carries
-Object/Class handles as one 8-byte little-endian unsigned integer, Float64 as
-one little-endian IEEE-754 binary64 value, and FVector as three binary64
-components. Float32 carries its IEEE-754 bits in `Int32Value`, not a numeric
-integer conversion. Float64 decoding requires exactly eight non-null payload
-bytes and rejects malformed writes before changing UObject state. The callback
-owns neither slice and must copy it synchronously. Update managed and native SDK
+struct layout, common values use the following encoding:
+
+| Kind | Encoding |
+| --- | --- |
+| Int8/UInt8/Int16/UInt16/Int32 | `Int32Value`, with narrow-width range validation |
+| UInt32 / Float32 | Unsigned integer / IEEE-754 bit pattern in `Int32Value` |
+| Int64/UInt64, Object/Class, Float64 | Exactly eight little-endian payload bytes |
+| Vector / Rotator | Three binary64 cells: XYZ / Pitch-Yaw-Roll |
+| Transform | Ten binary64 cells: quaternion XYZW, translation XYZ, scale XYZ |
+| Enum | Signed 64-bit value, unsigned 64-bit stable type ID, optional UTF-8 path |
+
+Enum paths are limited to 4096 bytes, cannot contain a null byte, and must agree
+with the type ID when present. Generated results can carry an ID without a path:
+typed managed enum consumers validate the expected identity, while an untyped
+`UnrealEnumValue` consumer requiring a path fails instead of inventing one. Boxed
+typed enum arguments retain their runtime enum metadata. Payload sizes and
+integer ranges are checked before dispatching writes. The callback owns neither
+slice and must copy it synchronously. Update managed and native SDK
 parts together for newly supported kinds; old hosts do not gain these codecs
 automatically. Other compound/container shapes remain on ABI v3/v4.
+
+This transport support does not expand the generated Script Class property/default
+matrix to every type. The connected example proves long state and enum/Rotator/
+Transform RPC; broader Script Class state declarations remain a separate gap.
+UE still controls network serialization: FRotator RPC axes use its compressed-short
+format and wrap angles, whereas local bridge transfer preserves the original
+binary64 cells. Do not confuse engine wire quantization with bridge conversion.
 
 ABI v3 is frozen as an independent caller-owned synchronous call-frame contract
 in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,

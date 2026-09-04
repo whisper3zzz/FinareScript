@@ -1,4 +1,5 @@
 using UnifiedScript;
+using UnifiedScript.Unreal.Generated;
 
 namespace UnifiedScript.Unreal.Demo;
 
@@ -42,6 +43,9 @@ public sealed class NetworkingComponentDemoScript : UnrealActorComponentScript
     public UnrealVector Aim { get; set; } = UnrealVector.Zero;
     public UnrealVector RequestedAim { get; set; } = new(1, 2, 3);
     public float BroadcastGain { get; set; } = 0;
+    public long ReceivedWide { get; set; } = 0;
+    public long AcknowledgedWide { get; set; } = 0;
+    public string CommonPayloadError { get; set; } = "";
 
     [Visual]
     public void InitializeScore(int value)
@@ -114,4 +118,43 @@ public sealed class NetworkingComponentDemoScript : UnrealActorComponentScript
         PreviousLabel = previous;
         LabelNotifications += 1;
     }
+
+    [Visual]
+    public void RequestCommonValues()
+    {
+        SendRpc(nameof(ServerCommonValues), 9007199254740993L, EUnifiedScriptInteropMode.Active,
+            RequestedRotation(), RequestedTransform());
+    }
+
+    [UnrealRpc(UnrealRpcTarget.Server, Reliable = true)]
+    public void ServerCommonValues(long value, EUnifiedScriptInteropMode mode, UnrealRotator rotation, UnrealTransform transform)
+    {
+        CommonPayloadError = DescribeCommonValueMismatch(value, mode, rotation, transform);
+        if (CommonPayloadError == "")
+        {
+            ReceivedWide = value;
+            SendRpc(nameof(ClientCommonValues), value, mode, rotation, transform);
+        }
+    }
+
+    [UnrealRpc(UnrealRpcTarget.Client, Reliable = true)]
+    public void ClientCommonValues(long value, EUnifiedScriptInteropMode mode, UnrealRotator rotation, UnrealTransform transform)
+    {
+        CommonPayloadError = DescribeCommonValueMismatch(value, mode, rotation, transform);
+        if (CommonPayloadError == "") AcknowledgedWide = value;
+    }
+
+    private static UnrealRotator RequestedRotation() => new(12.5, -90, 1.25);
+    private static UnrealTransform RequestedTransform() =>
+        new(new(.5, .5, .5, .5), new(11, -22, 33), new(2, 3, 4));
+    // FRotator::NetSerialize uses compressed-short axes. The bridge transports
+    // doubles exactly; UE's wire format quantizes and wraps each angle.
+    private static double NetworkAngle(double angle) =>
+        (((int)System.Math.Floor(angle * (65536.0 / 360.0) + .5)) & 65535) * (360.0 / 65536.0);
+    private static UnrealRotator ExpectedNetworkRotation() =>
+        new(NetworkAngle(12.5), NetworkAngle(-90), NetworkAngle(1.25));
+    private static string DescribeCommonValueMismatch(long value, EUnifiedScriptInteropMode mode, UnrealRotator rotation, UnrealTransform transform) =>
+        value == 9007199254740993L && mode == EUnifiedScriptInteropMode.Active &&
+        rotation == ExpectedNetworkRotation() && transform == RequestedTransform()
+            ? "" : $"Unexpected payload: integer={value}, mode={mode.Value}, rotation={rotation}, transform={transform}";
 }

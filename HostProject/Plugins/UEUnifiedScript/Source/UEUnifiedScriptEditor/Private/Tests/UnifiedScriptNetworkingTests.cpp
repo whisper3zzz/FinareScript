@@ -407,10 +407,41 @@ public:
                 Phase = 3;
                 return false;
             }
-            if (!S.Test.HasAnyErrors() && S.bComponent)
-                S.Test.AddInfo(TEXT("PASS: dynamic ActorComponent replication, all five exposed conditions, string RepNotify, 0/2/3/4-input RPC with int/float/bool/Vector/string/object payloads, ownership and reload."));
-            else if (!S.Test.HasAnyErrors())
+            if (S.bComponent)
+            {
+                S.Call(Owner, TEXT("RequestCommonValues"), 0);
+                Phase = 4;
+                return false;
+            }
+            if (!S.Test.HasAnyErrors())
                 S.Test.AddInfo(TEXT("PASS: two connected clients, replicated/owner-only state, RepNotify old values, Server/Client/Multicast RPC and reload."));
+            Scenario.Reset();
+            return true;
+        }
+        if (Phase == 4)
+        {
+            for (UObject* Endpoint : {ServerScript.Get(), Owner})
+            {
+                const FString Error = S.TextValue(Endpoint, TEXT("CommonPayloadError"));
+                if (!Error.IsEmpty())
+                {
+                    S.Test.AddError(Error);
+                    Scenario.Reset();
+                    return true;
+                }
+            }
+            constexpr int64 ExpectedWide = 9007199254740993ll;
+            auto* Received = FindFProperty<FInt64Property>(ServerScript->GetClass(), TEXT("ReceivedWide"));
+            auto* Acknowledged = FindFProperty<FInt64Property>(Owner->GetClass(), TEXT("AcknowledgedWide"));
+            if (Received->GetPropertyValue_InContainer(ServerScript.Get()) != ExpectedWide ||
+                Acknowledged->GetPropertyValue_InContainer(Owner) != ExpectedWide) return false;
+            S.Test.TestEqual(TEXT("Common-value Client RPC remains owner-only"),
+                Acknowledged->GetPropertyValue_InContainer(Observer), static_cast<int64>(0));
+            S.Test.TestTrue(TEXT("Reload after wide integer state and common-value RPC"), S.Component(Owner)->ReloadScript());
+            S.Test.TestEqual(TEXT("Wide integer state retains precision after reload"),
+                Acknowledged->GetPropertyValue_InContainer(Owner), ExpectedWide);
+            if (!S.Test.HasAnyErrors())
+                S.Test.AddInfo(TEXT("PASS: ActorComponent conditions, mixed RPC payloads, typed enum/Rotator/Transform, integer beyond binary64 precision and reload."));
             Scenario.Reset();
             return true;
         }

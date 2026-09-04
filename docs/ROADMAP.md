@@ -42,14 +42,19 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Float/double path transport and runtime-enabled Actor ownership checks are
   repaired. These are real UE network-driver/actor-channel tests, not state copies.
   See the [network recipe](UNREAL_GAMEPLAY_RECIPES.md#replicated-state-and-rpc).
-- Next capability batch: **common-value consistency across path and generated
-  calls**. The path transport still lacks other integer widths, enum and
-  Rotator/Transform codecs available through generated ABI v3. Close these common
-  state/RPC/fallback gaps through public APIs and examples, and align fallback
-  classification with what the runtime can actually carry. Do not confuse an
-  accepted declaration with a working send. Push-model, travel, cooked networking
-  and richer binary/native-object signatures remain explicit follow-ups; do not
-  turn them into prerequisites for all other M13.5 families or resume all M13.3.
+- Latest common-value follow-up: **path and generated-call transport consistency**.
+  Integer widths, typed enums and Rotator/Transform now have legacy path codecs,
+  including boxed enum arguments and ID-only generated enum results. The connected
+  component example verifies enum/Rotator/Transform RPC and a long integer beyond
+  double's exact range, including reload. Fallback classification tests cover the
+  same codec families. This does not expand every Script Class state/default shape.
+- Next capability batch: **composed UI/event/async gameplay**. Combine the existing
+  delegate/UI, async asset-loading and SpawnActor APIs in a reusable in-repository
+  example that follows create/build/Play/reload. Fill the concrete common API or
+  state/default gaps encountered there, rather than exhaustively expanding one
+  signature family. Keep cooked delivery as an explicit part of the breadth
+  target. Push-model, travel and richer native-object forms remain follow-ups;
+  do not resume the full M13.3 scope before the M13.5 breadth target is met.
 
 Existing in-flight work, **M13.3C-1c-b**, is implemented through declaration lowering, typed container
 arguments, Blueprint pins and native/managed ABI v3 calls. The five Demo exchange
@@ -74,7 +79,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
-| Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify old values, explicit Server/Client/Multicast RPC, mixed input payloads, ownership checks and reload on real server/two-client CMD sessions | Other path-transport value kinds, full payload/condition combinations, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
+| Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
 | Runtime and Demo — M9–M12 | Compiled chunks, reload, debugging/profiling, packaged BlockBreaker, World scheduling and batch/shared-data routes | The advertised package target is UE 5.8.1 / Win64; cooked networking and broader engine/platform support are not established |
@@ -143,7 +148,7 @@ not an exhaustive signature audit or a claim of parity.
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
 | Delegates, interfaces and async gameplay | Reviewed routes exist; audit and fill remaining common callback, latent, UI, subsystem and asset-loading forms with reusable examples | M13.5 |
-| Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed-payload RPC and ownership/reload. Common path-value gaps, broader combinations, push-model, travel and cooked coverage remain unfinished | M13.5 |
+| Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
 
@@ -228,7 +233,8 @@ authorization.
   CMD tests: initial notification buffering, native class save/reload, dynamic
   components, exposed conditions, mixed-payload sends and client generation
   replacement. This does not close the remaining network scope or prove every
-  accepted RPC signature; path-codec gaps are the next common-capability batch.
+  accepted RPC signature. The common path codecs now include integer widths,
+  enums and core transforms; next compose other common gameplay families.
 - [ ] Publish usable .NET library, async/threading and native-callback guidance,
   with explicit runtime/platform restrictions. Do not imply npm/Node ecosystem
   compatibility or unrestricted dynamic-language behavior.
@@ -362,6 +368,15 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The common-value transport follow-up passes the UE 5.8.1 Editor build, Demo
+chunk emission, 85 relevant managed tests (including fallback classification)
+and the three native ABI/Actor/ActorComponent CMD tests. Evidence is in
+`artifacts/m13-5-values/managed/common-values-contracts-final.trx` and
+`artifacts/m13-5-values/common-values-verified.log`. Native codec tests cover
+integer limits, enum identity, owned payloads and rejected writes; the connected
+example proves enum/Rotator/Transform RPC and exact long state across reload.
+No full-suite rerun, cooked result or performance claim is implied.
 
 The ActorComponent/mixed-payload checkpoint passes the UE 5.8.1 Editor build and
 the three affected CMD tests (`NativeTransport.Abi`, `Networking.ConnectedComponent`,

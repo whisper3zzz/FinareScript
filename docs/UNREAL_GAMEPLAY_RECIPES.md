@@ -474,12 +474,17 @@ audiences for all five, plus string previous-value notifications and client
 reload. Its RPCs exercise zero, two, three and four inputs, including float,
 bool, Vector, string and Actor references; the Actor example exercises one input.
 
-RPC declarations currently accept 0-4 common inputs, but declaration acceptance
-is broader than the path transport used by `SendRpc`. That transport implements
-bool/int32, float/double, string/name/text, object/class handles and Vector;
-the other integer widths, enums and Rotator/Transform remain missing there even
-though generated ABI v3 calls support them. Float/double path property access is
-also implemented, including signed zero and binary64 precision. Return/ref/out parameters,
+The component's `RequestCommonValues` also sends a long integer beyond double's
+exact range, a generated typed enum, Rotator and Transform to the server and back
+to its owner. Long state remains exact after client reload. The Rotator check
+uses UE's compressed-short wire result (including angle wrapping), not the
+uncompressed source value; local bridge transfer itself retains binary64 values.
+
+RPC declarations accept 0-4 common inputs. The path transport used by `SendRpc`
+now implements bool, the supported integer widths, float/double, string/name/text,
+typed enums, object/class handles and Vector/Rotator/Transform. This does not
+make every transport kind a supported Blueprint pin or Script Class property:
+the declaration/default matrix is still separately bounded. Return/ref/out parameters,
 collections, Soft References and complex structures are not supported RPC payloads
 yet. The connected samples prove the listed mixed payloads, not every accepted
 signature or combination. Push-model runtime, travel and cooked network execution

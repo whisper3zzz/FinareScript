@@ -8,6 +8,8 @@
 #include "Engine/StaticMeshActor.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptGeneratedThunkRegistry.h"
+#include "Misc/ScopeExit.h"
 #include "Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
@@ -17,6 +19,36 @@
 
 namespace UE::UnifiedScript::NativeTransport::Tests
 {
+constexpr uint64 CommonValueMember = UnifiedScriptMemberId("/Script/UnifiedScriptTests.CommonValues:Echo");
+FUnifiedScriptValue CommonValueStorage;
+
+FUnifiedScriptGeneratedThunkTable CommonValueTable()
+{
+    FUnifiedScriptGeneratedThunkTable Table;
+    Table.DescribeReadResult = [](uint64 Member, EUnifiedScriptValueKind& Kind, uint64& TypeId)
+    { Kind = CommonValueStorage.Kind; TypeId = CommonValueStorage.TypeIdValue; return Member == CommonValueMember; };
+    Table.DescribeInvokeResultCount = [](uint64 Member, uint32& Count)
+    { Count = 1; return Member == CommonValueMember; };
+    Table.DescribeInvokeResult = [](uint64 Member, uint32 Index, EUnifiedScriptValueKind& Kind, uint64& TypeId)
+    { Kind = CommonValueStorage.Kind; TypeId = CommonValueStorage.TypeIdValue; return Member == CommonValueMember && Index == 0; };
+    Table.ReadProperty = [](UObject*, FUnifiedScriptObjectRegistry&, uint64 Member, FUnifiedScriptValue& Value, FUnifiedScriptInvocationResult& Result)
+    { if (Member != CommonValueMember) return false; Value = CommonValueStorage; Result = {}; return true; };
+    Table.WriteProperty = [](UObject*, FUnifiedScriptObjectRegistry&, uint64 Member, const FUnifiedScriptValue& Value, FUnifiedScriptInvocationResult& Result)
+    { if (Member != CommonValueMember) return false; CommonValueStorage = Value; Result = {}; return true; };
+    Table.Invoke = [](UObject*, FUnifiedScriptObjectRegistry&, uint64 Member, TConstArrayView<FUnifiedScriptValue> Args,
+        FUnifiedScriptValue& Value, TArray<FUnifiedScriptValue>& Outputs, FUnifiedScriptInvocationResult& Result)
+    { if (Member != CommonValueMember || Args.Num() != 1) return false; Value = Args[0]; Outputs.Reset(); Result = {}; return true; };
+    return Table;
+}
+
+bool CommonValuesEqual(const FUnifiedScriptValue& A, const FUnifiedScriptValue& B)
+{
+    return A.Kind == B.Kind && A.Int8Value == B.Int8Value && A.UInt8Value == B.UInt8Value &&
+        A.Int16Value == B.Int16Value && A.UInt16Value == B.UInt16Value && A.UInt32Value == B.UInt32Value &&
+        A.Int64Value == B.Int64Value && A.UInt64Value == B.UInt64Value && A.TypeIdValue == B.TypeIdValue &&
+        A.TypePath == B.TypePath && A.RotatorValue == B.RotatorValue && A.TransformValue.Equals(B.TransformValue);
+}
+
 struct FCapturedResult
 {
     bool bCalled = false;
@@ -400,6 +432,64 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
             Registry.RegisterObject(InteropFixture, HandleResult);
         TestTrue(TEXT("Common-value fixture registration succeeds"), HandleResult.IsSuccess());
 
+        const FName CodecOwner(TEXT("UnifiedScriptCommonValueTransportTests"));
+        if (TestTrue(TEXT("Register isolated common-value transport fixture"),
+            FUnifiedScriptGeneratedThunkRegistry::RegisterTable(CodecOwner, CommonValueTable())))
+        {
+            ON_SCOPE_EXIT { FUnifiedScriptGeneratedThunkRegistry::UnregisterTable(CodecOwner); CommonValueStorage = {}; };
+            const TArray<FUnifiedScriptValue> Values = {
+                FUnifiedScriptValue::FromInt8(MIN_int8), FUnifiedScriptValue::FromInt8(MAX_int8),
+                FUnifiedScriptValue::FromUInt8(MAX_uint8), FUnifiedScriptValue::FromInt16(MIN_int16),
+                FUnifiedScriptValue::FromInt16(MAX_int16), FUnifiedScriptValue::FromUInt16(MAX_uint16),
+                FUnifiedScriptValue::FromUInt32(MAX_uint32), FUnifiedScriptValue::FromInt64(MIN_int64),
+                FUnifiedScriptValue::FromInt64(MAX_int64), FUnifiedScriptValue::FromUInt64(MAX_uint64),
+                FUnifiedScriptValue::FromEnum(-1, TEXT("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode")),
+                FUnifiedScriptValue::FromEnumTypeId(2, UnifiedScriptMemberId("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode")),
+                FUnifiedScriptValue::FromRotator(FRotator(-90, 123.125, 360)),
+                FUnifiedScriptValue::FromTransform(FTransform(FQuat(.5, .5, .5, .5), FVector(11, -22, 33), FVector(2, 3, 4))),
+            };
+            for (const FUnifiedScriptValue& Expected : Values)
+            {
+                CommonValueStorage = Expected;
+                Captured = {};
+                FastTransport->ReadPropertyById(Context, CommonValueHandle.Value, CommonValueMember, &Capture, &Captured);
+                TestTrue(TEXT("Common-value encoder reaches legacy callback"), Captured.bSuccess);
+                FUnifiedScriptNativeValueV1 Native;
+                Native.Kind = static_cast<uint8>(Captured.ValueKind);
+                Native.Int32Value = Captured.Int32Value;
+                TArray<uint8> Payload = Captured.ValuePayload;
+                Native.StringData = Payload.GetData();
+                Native.StringLength = Payload.Num();
+                CommonValueStorage = {};
+                Captured = {};
+                FastTransport->WritePropertyById(Context, CommonValueHandle.Value, CommonValueMember, &Native, &Capture, &Captured);
+                TestTrue(TEXT("Common-value legacy decode succeeds"), Captured.bSuccess);
+                TestTrue(TEXT("Common-value round-trip retains exact integer/type identity and component order"), CommonValuesEqual(CommonValueStorage, Expected));
+                Captured = {};
+                FastTransport->InvokeById(Context, CommonValueHandle.Value, CommonValueMember, &Native, 1, &Capture, &Captured);
+                TestTrue(TEXT("Common-value function input/return succeeds"), Captured.bSuccess);
+                TestEqual(TEXT("Common-value function retains kind"), Captured.ValueKind, Expected.Kind);
+                TestTrue(TEXT("Common-value function retains payload bytes"), Captured.ValuePayload == Payload);
+                TestEqual(TEXT("Common-value function retains scalar bits"), Captured.Int32Value, Native.Int32Value);
+            }
+            const EUnifiedScriptValueKind InvalidKinds[] = {EUnifiedScriptValueKind::Int8, EUnifiedScriptValueKind::UInt8,
+                EUnifiedScriptValueKind::Int16, EUnifiedScriptValueKind::UInt16, EUnifiedScriptValueKind::Int64,
+                EUnifiedScriptValueKind::UInt64, EUnifiedScriptValueKind::Enum, EUnifiedScriptValueKind::Rotator, EUnifiedScriptValueKind::Transform};
+            for (EUnifiedScriptValueKind Kind : InvalidKinds)
+            {
+                FUnifiedScriptNativeValueV1 Invalid;
+                Invalid.Kind = static_cast<uint8>(Kind);
+                Invalid.Int32Value = MAX_int32;
+                Invalid.StringLength = 1;
+                CommonValueStorage = {};
+                Captured = {};
+                FastTransport->WritePropertyById(Context, CommonValueHandle.Value, CommonValueMember, &Invalid, &Capture, &Captured);
+                TestFalse(TEXT("Invalid common-value payload is rejected"), Captured.bSuccess);
+                TestEqual(TEXT("Failed decode does not dispatch a write"), CommonValueStorage.Kind, EUnifiedScriptValueKind::Void);
+            }
+        }
+
+        const uint64 CommonValueFastCalls = Bridge.GetFastInvocationCount();
         const FTCHARToUTF8 FloatPath(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue"));
         const FTCHARToUTF8 DoublePath(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue"));
         FUnifiedScriptNativeValueV1 NativeFloat;
@@ -667,7 +757,7 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
             Captured.bSuccess && Captured.Int32Value == 42);
         TestEqual(
             TEXT("Bridge counts successful generated fast calls"),
-            Bridge.GetFastInvocationCount(),
+            Bridge.GetFastInvocationCount() - CommonValueFastCalls,
             3ull);
 
         FUnifiedScriptNativeValueV3 V3Arguments[2];
