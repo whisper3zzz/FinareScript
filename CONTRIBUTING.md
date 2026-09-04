@@ -20,6 +20,32 @@
 
 ## Verification
 
+Use the risk-based rules in [AGENTS.md](AGENTS.md): validate the behavior that
+changed. Documentation normally needs a content/link review, a local logic fix
+needs relevant tests, and cross-language or lifecycle changes need the affected
+native integration checks. Broaden coverage when there is a concrete risk,
+not simply because a file belongs to a large module.
+
+The [Engineering Harness](docs/HARNESS.md) is optional orchestration. Use its
+plan for impact discovery or a profile when that combined coverage is useful;
+direct focused commands remain valid. No plan file or profile run is required
+for every change. The Roadmap remains the product ordering authority.
+
+```powershell
+# Optional: inspect possible impact, then choose relevant verification.
+python -B tools/harness.py plan --paths <changed files>
+# Only when the full managed and generation baseline is relevant:
+python -B tools/harness.py run --profile precommit
+```
+
+The profile name does not authorize or create a Git commit. A green quick
+profile cannot prove native, package, or performance behavior. Formal release
+and milestone acceptance retain their relevant requirements; routine edits do
+not automatically trigger full acceptance. Do not rerun compilation or UE
+solely because a final documentation update changed a report fingerprint.
+
+Underlying commands remain available when their coverage is needed:
+
 ```bash
 dotnet build UnifiedScript.slnx
 dotnet test UnifiedScript.slnx --no-build

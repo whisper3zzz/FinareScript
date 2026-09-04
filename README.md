@@ -21,10 +21,22 @@ weakening the generated Contract or lifecycle model.
 
 [docs/ROADMAP.md](docs/ROADMAP.md) is the canonical execution queue from the
 current packaged BlockBreaker demo to an adoptable, production-ready Puerts
-alternative. It records the verified baseline, active milestone, next vertical
-slice, acceptance gates, and the longer path through runtime coverage,
-visual/C# authoring, debugging, performance, release hardening, and migration.
+alternative. It separates available capabilities from remaining limitations
+and prioritizes Puerts comparison and common capability completion (M13.5), then
+deeper Script Class integration (M13.3), external-project validation (M13.4), and
+delivery expansion (M13.6). Only specific class dependencies are pulled forward;
+core capability work does not wait for the full class model or a pilot. Earlier implementation
+logs and acceptance results are retained in
+[docs/ROADMAP_HISTORY.md](docs/ROADMAP_HISTORY.md).
 An unqualified request to continue iteration follows its current cursor.
+
+Repository work follows the delivery-first, risk-based rules in
+[AGENTS.md](AGENTS.md). The [Engineering Harness](docs/HARNESS.md) is optional:
+`status` shows source/evidence state, `plan --paths <owned files>` suggests
+possible coverage, and `run --profile <profile>` combines existing checks.
+Direct focused tests are valid; no mandatory status/plan/run ritual, plan file,
+or full matrix is required for ordinary edits. Profiles do not commit, push,
+or advance the Roadmap automatically.
 
 The M13.1A first-use entry point previews or transactionally adopts an existing
 C++ or Blueprint-only project without hand-editing `.uproject`, Contract,

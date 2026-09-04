@@ -29,6 +29,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      - name: Run Harness behavior and repository gates
+        shell: powershell
+        run: >-
+          python -B tools/harness.py run
+          --profile quick
+          --require-clean
+          --output ci-quick
       - name: Run managed tests and repository validator
         shell: powershell
         run: >-
@@ -48,6 +55,9 @@ jobs:
         with:
           name: ci-managed-tests
           path: |
+            artifacts/harness/runs/ci-quick/**/*.json
+            artifacts/harness/runs/ci-quick/**/*.log
+            artifacts/harness/runs/ci-quick/**/*.md
             artifacts/ci/managed-tests/**/*.json
             artifacts/ci/managed-tests/**/*.log
             artifacts/ci/managed-tests/**/*.md

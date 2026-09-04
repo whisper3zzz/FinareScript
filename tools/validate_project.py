@@ -102,6 +102,7 @@ DOCUMENTS = [
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
     ROOT / "docs" / "ROADMAP.md",
+    ROOT / "docs" / "ROADMAP_HISTORY.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
     ROOT / "docs" / "milestones" / "M3_BIDIRECTIONAL_PATCHING.md",
@@ -161,9 +162,29 @@ def main() -> int:
     compiled_chunk_document = (
         ROOT / "docs" / "COMPILED_CHUNKS.md"
     ).read_text(encoding="utf-8")
-    roadmap_document = (
+    current_roadmap_document = (
         ROOT / "docs" / "ROADMAP.md"
     ).read_text(encoding="utf-8")
+    # Completed-delivery assertions belong to the historical record, not the
+    # live priority document. Preserve their existing source and test checks.
+    roadmap_document = (
+        ROOT / "docs" / "ROADMAP_HISTORY.md"
+    ).read_text(encoding="utf-8")
+    current_tranches = re.findall(
+        r"^- Current tranche: \*\*(\S+)", current_roadmap_document, re.MULTILINE
+    )
+    require(
+        current_roadmap_document.count("- Active milestone:") == 1
+        and len(current_tranches) == 1
+        and re.search(
+            rf"^- \[ \] \*\*{re.escape(current_tranches[0])}(?:\s|:)",
+            current_roadmap_document,
+            re.MULTILINE,
+        ) is not None
+        and "ROADMAP_HISTORY.md" in current_roadmap_document,
+        "The live roadmap must name one active milestone and one explicitly unfinished tranche",
+    )
+    checks.append("live roadmap separates active work from historical delivery evidence")
     compiled_program_source = (
         ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
     ).read_text(encoding="utf-8")
@@ -1045,7 +1066,7 @@ def main() -> int:
         and "run-unifiedscript-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
-        and "Active milestone: **M13.3 in progress" in roadmap_document
+        and "## Current execution cursor" in current_roadmap_document
         and "### M13.2 — Puerts-grade daily authoring" in roadmap_document
         and "M12 strict release acceptance" in roadmap_document
         and "Frozen RC1 acceptance" in release_readiness_document
@@ -2215,6 +2236,24 @@ def main() -> int:
         "Clean CI lane matrix, deterministic gate, workflow isolation, or runner guide is missing",
     )
     checks.append("seven clean CI lanes isolate managed, generated, UE, package, performance, and SDK gates")
+
+    # Validate the real declarative Harness, not a second embedded gate registry.
+    from harness import load_manifest
+
+    harness_manifest = load_manifest(ROOT)
+    harness_guide = (ROOT / "docs" / "HARNESS.md").read_text(encoding="utf-8")
+    require(
+        (ROOT / "tools" / "tests" / "test_harness.py").is_file()
+        and "tools/harness.py run" in ci_workflow
+        and "--profile quick" in ci_workflow
+        and "artifacts/harness/runs/ci-quick/**/*.json" in ci_workflow
+        and "sourceChangedDuringRun" in (ROOT / "tools" / "harness.py").read_text(encoding="utf-8")
+        and "matches-source" in harness_guide
+        and "RELEASE_READINESS.md" in harness_guide
+        and "script-class" in harness_manifest["profiles"],
+        "Engineering Harness manifest, behavior tests, evidence rules, or CI entry is missing",
+    )
+    checks.append("engineering Harness reuses gates with explicit scope and source-bound evidence")
 
     diagnostics_policy_path = (
         ROOT / "schemas" / "unifiedscript.diagnostics-policy.v0.1.json"
@@ -4911,7 +4950,7 @@ def main() -> int:
     puerts_inventory_builder_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsMigrationInventory.cs"
     )
-    roadmap_path = ROOT / "docs" / "ROADMAP.md"
+    roadmap_path = ROOT / "docs" / "ROADMAP_HISTORY.md"
     for path in [
         blockbreaker_inventory_path,
         blockbreaker_coverage_path,

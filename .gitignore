@@ -19,6 +19,9 @@ TestResults/
 artifacts/
 coverage/
 
+# Checkout-local Harness toolchain and user-file protection
+/harness.local.json
+
 # Unreal host build output and machine-local project state
 HostProject/Binaries/
 HostProject/Build/

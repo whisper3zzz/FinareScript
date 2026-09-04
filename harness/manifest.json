@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "unifiedscript.harness-manifest/v0.1",
+  "documents": ["AGENTS.md", "docs/HARNESS.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "CONTRIBUTING.md", "docs/plans/TEMPLATE.md"],
+  "gates": {
+    "harness-tests": {
+      "description": "Harness behavior tests, without Unreal or .NET",
+      "driver": "python", "script": "tools/tests/test_harness.py", "args": [],
+      "dependsOn": [], "requires": [], "timeoutSeconds": 120, "mayRegenerateSource": false
+    },
+    "repository": {
+      "description": "Repository structure and contract invariants",
+      "driver": "python", "script": "tools/validate_project.py", "args": [],
+      "dependsOn": ["harness-tests"], "requires": [], "timeoutSeconds": 120, "mayRegenerateSource": false
+    },
+    "managed-tests": {
+      "description": "Full Debug .NET suite and repository validator",
+      "driver": "ci-lane", "script": "tools/run-ci-lane.ps1", "args": [],
+      "dependsOn": ["repository"], "requires": ["dotnet"], "timeoutSeconds": 1800, "mayRegenerateSource": false,
+      "report": {"path": "ci-lane.json", "schemaVersion": "unifiedscript.ci-lane/v0.1", "checks": {"status": "passed", "lane": "managed-tests"}}
+    },
+    "deterministic-generation": {
+      "description": "Generate twice and compare checked-in outputs (no publication)",
+      "driver": "ci-lane", "script": "tools/run-ci-lane.ps1", "args": [],
+      "dependsOn": ["repository"], "requires": ["dotnet"], "timeoutSeconds": 1800, "mayRegenerateSource": false,
+      "report": {"path": "ci-lane.json", "schemaVersion": "unifiedscript.ci-lane/v0.1", "checks": {"status": "passed", "lane": "deterministic-generation"}}
+    },
+    "ue-build": {
+      "description": "Managed Release + UE Editor Development build; not a Game/package proof",
+      "driver": "ci-lane", "script": "tools/run-ci-lane.ps1", "args": [],
+      "dependsOn": ["managed-tests", "deterministic-generation"], "requires": ["dotnet", "engine"], "timeoutSeconds": 5400, "mayRegenerateSource": false,
+      "report": {"path": "ci-lane.json", "schemaVersion": "unifiedscript.ci-lane/v0.1", "checks": {"status": "passed", "lane": "ue-build"}}
+    },
+    "unreal-automation": {
+      "description": "Configured ValidateOnly onboarding and CMD Automation",
+      "driver": "ci-lane", "script": "tools/run-ci-lane.ps1", "args": [],
+      "dependsOn": ["ue-build"], "requires": ["dotnet", "engine"], "timeoutSeconds": 5400, "mayRegenerateSource": false,
+      "report": {"path": "ci-lane.json", "schemaVersion": "unifiedscript.ci-lane/v0.1", "checks": {"status": "passed", "lane": "unreal-automation"}}
+    },
+    "script-class-golden-path": {
+      "description": "Real class creation/reload, Win64 cook/archive and packaged lifecycle",
+      "driver": "powershell", "script": "tools/test-script-class-golden-path.ps1", "args": [],
+      "dependsOn": ["unreal-automation"], "requires": ["dotnet", "engine"], "timeoutSeconds": 7200, "mayRegenerateSource": true,
+      "report": {"path": "script-class-golden-path-report.json", "schemaVersion": "unifiedscript.script-class-golden-path/v0.2", "checks": {"status": "passed", "cook.skipped": false, "packagedSmoke.status": "passed"}}
+    },
+    "workload-performance": {
+      "description": "Matched Puerts comparison; explicitly touches the supplied external comparison checkout",
+      "driver": "ci-lane", "script": "tools/run-ci-lane.ps1", "args": [],
+      "dependsOn": ["unreal-automation"], "requires": ["dotnet", "engine", "comparison"], "timeoutSeconds": 28800, "mayRegenerateSource": true,
+      "report": {"path": "ci-lane.json", "schemaVersion": "unifiedscript.ci-lane/v0.1", "checks": {"status": "passed", "lane": "workload-performance"}}
+    }
+  },
+  "profiles": {
+    "quick": ["repository"],
+    "managed": ["managed-tests"],
+    "precommit": ["managed-tests", "deterministic-generation"],
+    "native": ["unreal-automation"],
+    "script-class": ["script-class-golden-path"],
+    "performance": ["workload-performance"]
+  },
+  "routes": [
+    {"patterns": ["AGENTS.md", "harness/*", "docs/*", "README.md", "CONTRIBUTING.md"], "profile": "quick", "reason": "Instructions, plans and documentation"},
+    {"patterns": ["tools/*", ".github/*", ".gitignore"], "profile": "precommit", "reason": "Tooling and verification entrypoints"},
+    {"patterns": ["src/*", "tests/*", "schemas/*", "samples/*", "global.json", "Directory.Build.*", "UnifiedScript.slnx"], "profile": "precommit", "reason": "Managed contracts, compiler, runtime or generated samples"},
+    {"patterns": ["HostProject/*", "src/UnifiedScript.Unreal/*", "src/UnifiedScript.Runtime/*"], "profile": "native", "reason": "Native integration or managed runtime ABI"},
+    {"patterns": ["*UnifiedScriptBlueprint*", "*CSharpScriptAssetLowerer*", "*ScriptAssetModel*", "*ScriptAssetJson*", "*UnrealManagedFunctionAbi*", "*UnrealNativeCallFrame*", "tools/setup-unreal-project.ps1", "tools/test-script-class*", "templates/*"], "profile": "script-class", "reason": "Script Class declaration, generated Blueprint or package identity"},
+    {"patterns": ["comparison/*"], "profile": "performance", "reason": "Matched workload or comparison contract"}
+  ]
+}

@@ -7,6 +7,13 @@ point and GitHub Actions call the same command:
 tools/run-ci-lane.ps1 -Lane <lane> -RequireCleanTree
 ```
 
+For a task-oriented view, [Engineering Harness](HARNESS.md) adds source status,
+change-to-gate planning, and unified evidence without replacing these providers.
+The managed job first runs `python -B tools/harness.py run --profile quick --require-clean --output ci-quick`;
+its behavioral tests cover the orchestrator's failure/staleness/ownership rules.
+Its reports are uploaded alongside the managed lane. Existing seven-lane and
+release-readiness acceptance remains intact.
+
 Every invocation performs preflight before creating outputs, requires a
 resolvable Git revision, optionally rejects any tracked or untracked working
 tree change, runs into an empty output directory, and writes
