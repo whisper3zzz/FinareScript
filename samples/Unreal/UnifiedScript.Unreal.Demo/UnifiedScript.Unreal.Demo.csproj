@@ -9,6 +9,7 @@
     <ProjectReference Include="../../../src/UnifiedScript.Unreal/UnifiedScript.Unreal.csproj" />
     <Compile Include="../UEUnifiedScriptRuntime.bindings.cs"
              Link="Generated/UEUnifiedScriptRuntime.bindings.cs" />
+    <Compile Include="../UMG.bindings.cs" Link="Generated/UMG.bindings.cs" />
   </ItemGroup>
   <Target Name="StageUnrealManagedDemo" AfterTargets="Build"
           Condition="'$(DesignTimeBuild)' != 'true'">

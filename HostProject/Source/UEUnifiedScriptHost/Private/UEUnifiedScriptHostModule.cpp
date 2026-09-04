@@ -17,6 +17,7 @@
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "UnifiedScriptUMGThunks.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -618,6 +619,9 @@ public:
     virtual void StartupModule() override
     {
         FDefaultGameModuleImpl::StartupModule();
+        const bool bRegisteredUMG = FUnifiedScriptGeneratedThunkRegistry::RegisterTable(
+            TEXT("UEUnifiedScriptHost.UMG"), UE::UnifiedScript::Generated::UI::Table());
+        checkf(bRegisteredUMG, TEXT("Could not register the generated UMG bindings."));
         if (FParse::Param(FCommandLine::Get(), TEXT("UnifiedScriptSmoke")))
         {
             SmokeDelegateHandle = FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
@@ -644,6 +648,7 @@ public:
 
     virtual void ShutdownModule() override
     {
+        FUnifiedScriptGeneratedThunkRegistry::UnregisterTable(TEXT("UEUnifiedScriptHost.UMG"));
         if (SmokeDelegateHandle.IsValid())
         {
             FCoreDelegates::OnFEngineLoopInitComplete.Remove(SmokeDelegateHandle);

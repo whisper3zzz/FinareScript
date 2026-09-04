@@ -2827,7 +2827,8 @@ void UUnifiedScriptDelegateProxy::Dispatch(
     const FUnifiedScriptObjectHandle LocalSourceHandle = SourceHandle;
     const uint64 LocalEventId = EventId;
     if (EventContext == nullptr || EventCallback == nullptr ||
-        DispatchFunction == nullptr || ParameterMemory == nullptr ||
+        DispatchFunction == nullptr ||
+        (DispatchFunction->ParmsSize > 0 && ParameterMemory == nullptr) ||
         !EventContext->TryRetain())
     {
         return;

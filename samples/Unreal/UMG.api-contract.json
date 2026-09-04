@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
+  "contractName": "UnifiedScript.UMG.Demo",
+  "managedNamespace": "UnifiedScript.Unreal.Generated.UI",
+  "nativeHeader": "UnifiedScriptUMGThunks.h",
+  "nativeNamespace": "UE::UnifiedScript::Generated::UI",
+  "types": [
+    { "path": "/Script/UMG.WidgetBlueprintLibrary", "members": ["Create"] },
+    { "path": "/Script/UMG.UserWidget", "members": ["AddToViewport", "GetWidgetFromName"] },
+    { "path": "/Script/UMG.Widget", "members": ["RemoveFromParent", "SetIsEnabled", "GetIsEnabled"] },
+    { "path": "/Script/UMG.Button", "members": ["OnClicked"] },
+    { "path": "/Script/UMG.TextBlock", "members": ["SetText", "GetText"] },
+    { "path": "/Script/Engine.StaticMeshActor", "members": ["StaticMeshComponent", "SetMobility"] },
+    { "path": "/Script/Engine.StaticMeshComponent", "members": ["SetStaticMesh"] }
+  ],
+  "nativeExtensions": {
+    "schemaVersion": "unifiedscript.unreal-native-extensions/v0.2",
+    "name": "UnifiedScript.UMG",
+    "types": [
+      {
+        "path": "/Script/UMG.UserWidget",
+        "nativeName": "UUserWidget",
+        "headerPath": "Blueprint/UserWidget.h",
+        "properties": [],
+        "functions": [
+          {
+            "declaration": {
+              "path": "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst&)",
+              "name": "GetWidgetFromName",
+              "returnType": { "kind": "object", "nativeName": "UWidget*", "typePath": "/Script/UMG.Widget", "headerPath": "Components/Widget.h" },
+              "parameters": [
+                { "name": "Name", "type": { "kind": "name", "nativeName": "FName" }, "direction": "input" }
+              ],
+              "traits": { "static": false, "pure": true, "callable": true }
+            },
+            "const": true,
+            "parameters": ["constReference"]
+          }
+        ]
+      }
+    ]
+  },
+  "policy": { "defaultAction": "allow", "rules": [] }
+}

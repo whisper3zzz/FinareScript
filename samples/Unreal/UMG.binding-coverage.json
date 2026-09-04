@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
+  "engine": {
+    "major": 5,
+    "minor": 8,
+    "patch": 1,
+    "branch": "//UE5/Release-5.8"
+  },
+  "summary": {
+    "typeCount": 8,
+    "memberCount": 12,
+    "directThunkCount": 5,
+    "callFrameCount": 5,
+    "dataPlaneOperationCount": 0,
+    "reflectionFallbackCount": 2,
+    "rejectedCount": 0,
+    "nativeThunkCount": 10,
+    "deferredTypeCount": 0
+  },
+  "baseline": null,
+  "gate": {
+    "passed": true,
+    "diagnostics": []
+  },
+  "entries": [
+    {
+      "path": "/Script/Engine.StaticMeshActor:SetMobility",
+      "ownerPath": "/Script/Engine.StaticMeshActor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.StaticMeshActor:StaticMeshComponent",
+      "ownerPath": "/Script/Engine.StaticMeshActor",
+      "kind": "property",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE3002",
+        "USUE4104"
+      ],
+      "message": "Only public native properties can use direct generated thunks. The native thunk is unavailable; the member is safe on reflected fallback."
+    },
+    {
+      "path": "/Script/Engine.StaticMeshComponent:SetStaticMesh",
+      "ownerPath": "/Script/Engine.StaticMeshComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.Button:OnClicked",
+      "ownerPath": "/Script/UMG.Button",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
+    },
+    {
+      "path": "/Script/UMG.TextBlock:GetText",
+      "ownerPath": "/Script/UMG.TextBlock",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.TextBlock:SetText",
+      "ownerPath": "/Script/UMG.TextBlock",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.UserWidget:AddToViewport",
+      "ownerPath": "/Script/UMG.UserWidget",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst\u0026)",
+      "ownerPath": "/Script/UMG.UserWidget",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "UnifiedScript.UMG"
+    },
+    {
+      "path": "/Script/UMG.Widget:GetIsEnabled",
+      "ownerPath": "/Script/UMG.Widget",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.Widget:RemoveFromParent",
+      "ownerPath": "/Script/UMG.Widget",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.Widget:SetIsEnabled",
+      "ownerPath": "/Script/UMG.Widget",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UMG.WidgetBlueprintLibrary:Create",
+      "ownerPath": "/Script/UMG.WidgetBlueprintLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    }
+  ]
+}

@@ -11,6 +11,7 @@ public class UEUnifiedScriptHost : ModuleRules
             "CoreUObject",
             "Engine",
             "EnhancedInput",
+            "UMG",
             "UEUnifiedScriptRuntime"
         });
     }

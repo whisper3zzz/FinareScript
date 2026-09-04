@@ -509,16 +509,13 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    EUnifiedScriptValueKind& OutKind,");
         source.AppendLine("    uint64& OutTypeId)");
         source.AppendLine("{");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, properties.Count);
         foreach ((_, UnrealReflectedProperty property) in properties)
         {
             source.Append("    case ").Append(MemberIdLiteral(property.Path)).AppendLine(":");
             EmitResultDescriptorAssignment(source, property.Type, 8);
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return false;");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, properties.Count, "false");
         source.AppendLine("}");
         source.AppendLine();
 
@@ -526,8 +523,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    uint32& OutResultCount)");
         source.AppendLine("{");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, functions.Count);
         foreach ((_, UnrealReflectedFunction function) in functions)
         {
             int count = (function.ReturnType.Kind == UnrealValueKind.Void ? 0 : 1) +
@@ -537,9 +533,7 @@ public sealed class UnrealNativeThunkGenerator
             source.Append("        OutResultCount = ").Append(count).AppendLine(";");
             source.AppendLine("        return true;");
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return false;");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, functions.Count, "false");
         source.AppendLine("}");
         source.AppendLine();
 
@@ -549,8 +543,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    EUnifiedScriptValueKind& OutKind,");
         source.AppendLine("    uint64& OutTypeId)");
         source.AppendLine("{");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, functions.Count);
         foreach ((_, UnrealReflectedFunction function) in functions)
         {
             var resultTypes = new List<UnrealTypeReference>();
@@ -578,11 +571,24 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("            return false;");
             source.AppendLine("        }");
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return false;");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, functions.Count, "false");
         source.AppendLine("}");
         source.AppendLine();
+    }
+
+    // MSVC treats default-only switches as C4065 under Unreal's warnings-as-errors.
+    private static void EmitMemberSwitchStart(StringBuilder source, int count)
+    {
+        if (count == 0) return;
+        source.AppendLine("    switch (MemberId)");
+        source.AppendLine("    {");
+    }
+
+    private static void EmitMemberSwitchEnd(StringBuilder source, int count, string fallback)
+    {
+        if (count > 0) source.AppendLine("    default:");
+        source.Append(count > 0 ? "        return " : "    return ").Append(fallback).AppendLine(";");
+        if (count > 0) source.AppendLine("    }");
     }
 
     private static void EmitResultDescriptorAssignment(
@@ -617,8 +623,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
         source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, properties.Count);
         foreach ((UnrealReflectedType type, UnrealReflectedProperty property) in properties)
         {
             source.Append("    case ").Append(MemberIdLiteral(property.Path)).AppendLine(":");
@@ -641,9 +646,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        return true;");
             source.AppendLine("    }");
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return FailUnknownMember(OutResult, MemberId);");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, properties.Count, "FailUnknownMember(OutResult, MemberId)");
         source.AppendLine("}");
         source.AppendLine();
     }
@@ -661,8 +664,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
         source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, properties.Count);
         foreach ((UnrealReflectedType type, UnrealReflectedProperty property) in properties)
         {
             source.Append("    case ").Append(MemberIdLiteral(property.Path)).AppendLine(":");
@@ -691,9 +693,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        return true;");
             source.AppendLine("    }");
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return FailUnknownMember(OutResult, MemberId);");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, properties.Count, "FailUnknownMember(OutResult, MemberId)");
         source.AppendLine("}");
         source.AppendLine();
     }
@@ -721,8 +721,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
         source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
-        source.AppendLine("    switch (MemberId)");
-        source.AppendLine("    {");
+        EmitMemberSwitchStart(source, functions.Count);
         foreach ((UnrealReflectedType type, UnrealReflectedFunction function) in functions)
         {
             int inputCount = function.Parameters.Count(static parameter =>
@@ -805,9 +804,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        return true;");
             source.AppendLine("    }");
         }
-        source.AppendLine("    default:");
-        source.AppendLine("        return FailUnknownMember(OutResult, MemberId);");
-        source.AppendLine("    }");
+        EmitMemberSwitchEnd(source, functions.Count, "FailUnknownMember(OutResult, MemberId)");
         source.AppendLine("}");
     }
 
@@ -1252,8 +1249,18 @@ public sealed class UnrealNativeThunkGenerator
         source.Append(padding).AppendLine("}");
         if (type.Kind == UnrealValueKind.Enum)
         {
+            string castType = CppType(type);
+            if (castType.StartsWith("TEnumAsByte<", StringComparison.Ordinal) && castType.EndsWith('>'))
+            {
+                castType = castType[12..^1].Trim();
+                source.Append(padding).Append("if (").Append(variable).Append("Raw < 0 || ")
+                    .Append(variable).AppendLine("Raw > 255)");
+                source.Append(padding).AppendLine("{");
+                EmitFailure(source, "ValueTypeMismatch", "TEnumAsByte value is outside its byte range.", indent + 4);
+                source.Append(padding).AppendLine("}");
+            }
             source.Append(padding).Append(CppType(type)).Append(' ').Append(variable)
-                .Append(" = static_cast<").Append(CppType(type)).Append(">(")
+                .Append(" = static_cast<").Append(castType).Append(">(")
                 .Append(variable).AppendLine("Raw);");
         }
     }

@@ -30,6 +30,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "SlateCore",
             "ToolMenus",
             "UnrealEd",
+            "UMG",
             "WorkspaceMenuStructure",
             "UEUnifiedScriptRuntime"
         });

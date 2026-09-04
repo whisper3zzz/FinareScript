@@ -1,0 +1,1321 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
+  "contractName": "UnifiedScript.UMG.Demo",
+  "managedNamespace": "UnifiedScript.Unreal.Generated.UI",
+  "engine": {
+    "major": 5,
+    "minor": 8,
+    "patch": 1,
+    "branch": "//UE5/Release-5.8"
+  },
+  "types": [
+    {
+      "path": "/Script/Engine.EComponentMobility",
+      "name": "EComponentMobility",
+      "managedTypeName": "EComponentMobility",
+      "category": "Unreal API|EComponentMobility",
+      "properties": [],
+      "functions": [],
+      "delegates": [],
+      "nodes": []
+    },
+    {
+      "path": "/Script/Engine.StaticMeshActor",
+      "name": "StaticMeshActor",
+      "managedTypeName": "StaticMeshActor",
+      "category": "Unreal API|StaticMeshActor",
+      "properties": [
+        {
+          "path": "/Script/Engine.StaticMeshActor:StaticMeshComponent",
+          "name": "StaticMeshComponent",
+          "type": {
+            "kind": "object",
+            "nativeName": "TObjectPtr\u003CUStaticMeshComponent\u003E",
+            "typePath": "/Script/Engine.StaticMeshComponent",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Components/StaticMeshComponent.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": false,
+            "editorVisible": true,
+            "nativeAccess": "private"
+          },
+          "metadata": {
+            "displayName": "\u9759\u6001\u7F51\u683C\u4F53\u7EC4\u4EF6",
+            "category": "StaticMeshActor",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "functions": [
+        {
+          "path": "/Script/Engine.StaticMeshActor:SetMobility",
+          "name": "SetMobility",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "InMobility",
+              "type": {
+                "kind": "enum",
+                "nativeName": "TEnumAsByte\u003CEComponentMobility::Type\u003E",
+                "typePath": "/Script/Engine.EComponentMobility",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Set Mobility",
+            "category": "Mobility",
+            "tooltip": "\u6539\u53D8\u79FB\u52A8\u7C7B\u578B\u7684\u529F\u80FD",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|StaticMeshActor|SetMobility",
+          "memberPath": "/Script/Engine.StaticMeshActor:SetMobility",
+          "memberId": "0xA24E16E1FC86F701",
+          "kind": "function",
+          "title": "Set Mobility",
+          "category": "Mobility",
+          "tooltip": "\u6539\u53D8\u79FB\u52A8\u7C7B\u578B\u7684\u529F\u80FD",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AStaticMeshActor*",
+                "typePath": "/Script/Engine.StaticMeshActor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "InMobility",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "enum",
+                "nativeName": "TEnumAsByte\u003CEComponentMobility::Type\u003E",
+                "typePath": "/Script/Engine.EComponentMobility",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|StaticMeshActor|StaticMeshComponent",
+          "memberPath": "/Script/Engine.StaticMeshActor:StaticMeshComponent",
+          "memberId": "0x773F7AAFA26F42A6",
+          "kind": "propertyRead",
+          "title": "\u9759\u6001\u7F51\u683C\u4F53\u7EC4\u4EF6",
+          "category": "Unreal API|StaticMeshActor|Properties",
+          "tooltip": "Read StaticMeshActor.StaticMeshComponent.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AStaticMeshActor*",
+                "typePath": "/Script/Engine.StaticMeshActor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "TObjectPtr\u003CUStaticMeshComponent\u003E",
+                "typePath": "/Script/Engine.StaticMeshComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Components/StaticMeshComponent.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/Engine.StaticMeshComponent",
+      "name": "StaticMeshComponent",
+      "managedTypeName": "StaticMeshComponent",
+      "category": "Unreal API|StaticMeshComponent",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/Engine.StaticMeshComponent:SetStaticMesh",
+          "name": "SetStaticMesh",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "NewMesh",
+              "type": {
+                "kind": "object",
+                "nativeName": "UStaticMesh*",
+                "typePath": "/Script/Engine.StaticMesh",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/StaticMesh.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Set Static Mesh",
+            "category": "Components|StaticMesh",
+            "tooltip": "\u4FEE\u6539\u6B64\u5B9E\u4F8B\u4F7F\u7528\u7684StaticMesh\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|StaticMeshComponent|SetStaticMesh",
+          "memberPath": "/Script/Engine.StaticMeshComponent:SetStaticMesh",
+          "memberId": "0xA4B9F97F0FFD6A35",
+          "kind": "function",
+          "title": "Set Static Mesh",
+          "category": "Components|StaticMesh",
+          "tooltip": "\u4FEE\u6539\u6B64\u5B9E\u4F8B\u4F7F\u7528\u7684StaticMesh\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UStaticMeshComponent*",
+                "typePath": "/Script/Engine.StaticMeshComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "NewMesh",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UStaticMesh*",
+                "typePath": "/Script/Engine.StaticMesh",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/StaticMesh.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/UMG.Button",
+      "name": "Button",
+      "managedTypeName": "Button",
+      "category": "Unreal API|Button",
+      "properties": [],
+      "functions": [],
+      "delegates": [
+        {
+          "path": "/Script/UMG.Button:OnClicked",
+          "name": "OnClicked",
+          "signaturePath": "/Script/UMG.OnButtonClickedEvent__DelegateSignature",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "kind": "multicast",
+            "blueprintAssignable": true,
+            "blueprintCallable": false,
+            "blueprintAuthorityOnly": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u70B9\u51FB\u65F6",
+            "category": "Button|Event",
+            "tooltip": "\u6309\u952E\u88AB\u70B9\u51FB\u65F6\u8C03\u7528",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "nodes": [
+        {
+          "id": "ue.event|Button|OnClicked",
+          "memberPath": "/Script/UMG.Button:OnClicked",
+          "memberId": "0x0180A9F996652ECD",
+          "kind": "event",
+          "title": "Event \u70B9\u51FB\u65F6",
+          "category": "Button|Event",
+          "tooltip": "\u6309\u952E\u88AB\u70B9\u51FB\u65F6\u8C03\u7528",
+          "pure": false,
+          "pins": [
+            {
+              "name": "Then",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/UMG.TextBlock",
+      "name": "TextBlock",
+      "managedTypeName": "TextBlock",
+      "category": "Unreal API|TextBlock",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/UMG.TextBlock:GetText",
+          "name": "GetText",
+          "returnType": {
+            "kind": "text",
+            "nativeName": "FText",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "GetText (Text)",
+            "category": "Widget",
+            "tooltip": "\u83B7\u53D6\u63A7\u4EF6\u6587\u672C\n@return\u63A7\u4EF6\u6587\u672C",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UMG.TextBlock:SetText",
+          "name": "SetText",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "InText",
+              "type": {
+                "kind": "text",
+                "nativeName": "FText",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "SetText (Text)",
+            "category": "Widget",
+            "tooltip": "\u76F4\u63A5\u8BBE\u7F6E\u63A7\u4EF6\u6587\u672C\u3002\n\u8B66\u544A\uFF1A\u6B64\u64CD\u4F5C\u5C06\u6E05\u9664\u4E3AText\u5C5E\u6027\u521B\u5EFA\u7684\u6240\u6709\u7ED1\u5B9A\uFF01\n@param InText \u6307\u5B9A\u5230\u63A7\u4EF6\u7684\u6587\u672C",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|TextBlock|GetText",
+          "memberPath": "/Script/UMG.TextBlock:GetText",
+          "memberId": "0x654BAFF6CD98955E",
+          "kind": "function",
+          "title": "GetText (Text)",
+          "category": "Widget",
+          "tooltip": "\u83B7\u53D6\u63A7\u4EF6\u6587\u672C\n@return\u63A7\u4EF6\u6587\u672C",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UTextBlock*",
+                "typePath": "/Script/UMG.TextBlock",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "text",
+                "nativeName": "FText",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|TextBlock|SetText",
+          "memberPath": "/Script/UMG.TextBlock:SetText",
+          "memberId": "0x582A29684C54345A",
+          "kind": "function",
+          "title": "SetText (Text)",
+          "category": "Widget",
+          "tooltip": "\u76F4\u63A5\u8BBE\u7F6E\u63A7\u4EF6\u6587\u672C\u3002\n\u8B66\u544A\uFF1A\u6B64\u64CD\u4F5C\u5C06\u6E05\u9664\u4E3AText\u5C5E\u6027\u521B\u5EFA\u7684\u6240\u6709\u7ED1\u5B9A\uFF01\n@param InText \u6307\u5B9A\u5230\u63A7\u4EF6\u7684\u6587\u672C",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UTextBlock*",
+                "typePath": "/Script/UMG.TextBlock",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "InText",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "text",
+                "nativeName": "FText",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/UMG.UserWidget",
+      "name": "UserWidget",
+      "managedTypeName": "UserWidget",
+      "category": "Unreal API|UserWidget",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/UMG.UserWidget:AddToViewport",
+          "name": "AddToViewport",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "ZOrder",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": "0"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Add to Viewport",
+            "category": "User Interface|Viewport",
+            "tooltip": "\u5C06\u5176\u6DFB\u52A0\u5230\u6E38\u620F\u89C6\u53E3\u5E76\u586B\u5145\u6574\u4E2A\u5C4F\u5E55\uFF0C\u9664\u975E\u8C03\u7528SetDesiredSizeInViewport\n\u6765\u663E\u5F0F\u8BBE\u7F6E\u5927\u5C0F\u3002\n\n@param Zorder \u6570\u5B57\u8D8A\u9AD8\uFF0C\u6B64\u63A7\u4EF6\u6240\u5904\u5C42\u7EA7\u8D8A\u9AD8\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst\u0026)",
+          "name": "GetWidgetFromName",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UWidget*",
+            "typePath": "/Script/UMG.Widget",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Components/Widget.h"
+          },
+          "parameters": [
+            {
+              "name": "Name",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "UnifiedScript.UMG",
+            "const": true,
+            "parameters": [
+              "constReference"
+            ]
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|UserWidget|AddToViewport",
+          "memberPath": "/Script/UMG.UserWidget:AddToViewport",
+          "memberId": "0x176603F80FE79B6C",
+          "kind": "function",
+          "title": "Add to Viewport",
+          "category": "User Interface|Viewport",
+          "tooltip": "\u5C06\u5176\u6DFB\u52A0\u5230\u6E38\u620F\u89C6\u53E3\u5E76\u586B\u5145\u6574\u4E2A\u5C4F\u5E55\uFF0C\u9664\u975E\u8C03\u7528SetDesiredSizeInViewport\n\u6765\u663E\u5F0F\u8BBE\u7F6E\u5927\u5C0F\u3002\n\n@param Zorder \u6570\u5B57\u8D8A\u9AD8\uFF0C\u6B64\u63A7\u4EF6\u6240\u5904\u5C42\u7EA7\u8D8A\u9AD8\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUserWidget*",
+                "typePath": "/Script/UMG.UserWidget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ZOrder",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": "0"
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UserWidget|GetWidgetFromName",
+          "memberPath": "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst\u0026)",
+          "memberId": "0x890F0C0AF0D474EC",
+          "kind": "function",
+          "title": "GetWidgetFromName",
+          "category": "Unreal API|UserWidget",
+          "tooltip": "Call UserWidget.GetWidgetFromName(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUserWidget*",
+                "typePath": "/Script/UMG.UserWidget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Name",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWidget*",
+                "typePath": "/Script/UMG.Widget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Components/Widget.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "UnifiedScript.UMG",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/UMG.Widget",
+      "name": "Widget",
+      "managedTypeName": "Widget",
+      "category": "Unreal API|Widget",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/UMG.Widget:GetIsEnabled",
+          "name": "GetIsEnabled",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Is Enabled",
+            "category": "Widget",
+            "tooltip": "\u83B7\u53D6\u63A7\u4EF6\u5F53\u524D\u7684\u542F\u7528\u72B6\u6001",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UMG.Widget:RemoveFromParent",
+          "name": "RemoveFromParent",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Remove from Parent",
+            "category": "Widget",
+            "tooltip": "\u4ECE\u7236\u63A7\u4EF6\u79FB\u9664\u63A7\u4EF6\u3002\u5982\u679C\u6B64\u63A7\u4EF6\u88AB\u6DFB\u52A0\u5230\u73A9\u5BB6\u7684\u753B\u9762\u6216\u89C6\u53E3\uFF0C\n\u5176\u4E5F\u5C06\u4ECE\u8FD9\u4E9B\u5BB9\u5668\u4E2D\u79FB\u9664\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UMG.Widget:SetIsEnabled",
+          "name": "SetIsEnabled",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "bInIsEnabled",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Set Is Enabled",
+            "category": "Widget",
+            "tooltip": "\u8BBE\u7F6E\u63A7\u4EF6\u5F53\u524D\u7684\u542F\u7528\u72B6\u6001",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|Widget|GetIsEnabled",
+          "memberPath": "/Script/UMG.Widget:GetIsEnabled",
+          "memberId": "0xADD0EE8AA6711870",
+          "kind": "function",
+          "title": "Get Is Enabled",
+          "category": "Widget",
+          "tooltip": "\u83B7\u53D6\u63A7\u4EF6\u5F53\u524D\u7684\u542F\u7528\u72B6\u6001",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWidget*",
+                "typePath": "/Script/UMG.Widget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|Widget|RemoveFromParent",
+          "memberPath": "/Script/UMG.Widget:RemoveFromParent",
+          "memberId": "0x1E3B6A9E5B7784B5",
+          "kind": "function",
+          "title": "Remove from Parent",
+          "category": "Widget",
+          "tooltip": "\u4ECE\u7236\u63A7\u4EF6\u79FB\u9664\u63A7\u4EF6\u3002\u5982\u679C\u6B64\u63A7\u4EF6\u88AB\u6DFB\u52A0\u5230\u73A9\u5BB6\u7684\u753B\u9762\u6216\u89C6\u53E3\uFF0C\n\u5176\u4E5F\u5C06\u4ECE\u8FD9\u4E9B\u5BB9\u5668\u4E2D\u79FB\u9664\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWidget*",
+                "typePath": "/Script/UMG.Widget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|Widget|SetIsEnabled",
+          "memberPath": "/Script/UMG.Widget:SetIsEnabled",
+          "memberId": "0xD9BEEFC7EBA8338C",
+          "kind": "function",
+          "title": "Set Is Enabled",
+          "category": "Widget",
+          "tooltip": "\u8BBE\u7F6E\u63A7\u4EF6\u5F53\u524D\u7684\u542F\u7528\u72B6\u6001",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWidget*",
+                "typePath": "/Script/UMG.Widget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bInIsEnabled",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/UMG.WidgetBlueprintLibrary",
+      "name": "WidgetBlueprintLibrary",
+      "managedTypeName": "WidgetBlueprintLibrary",
+      "category": "Unreal API|WidgetBlueprintLibrary",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/UMG.WidgetBlueprintLibrary:Create",
+          "name": "Create",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UUserWidget*",
+            "typePath": "/Script/UMG.UserWidget",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Blueprint/UserWidget.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "WidgetType",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUUserWidget\u003E",
+                "typePath": "/Script/UMG.UserWidget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Blueprint/UserWidget.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OwningPlayer",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Create Widget",
+            "category": "Widget",
+            "tooltip": "\u521B\u5EFA\u4E00\u4E2A\u63A7\u4EF6",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|WidgetBlueprintLibrary|Create",
+          "memberPath": "/Script/UMG.WidgetBlueprintLibrary:Create",
+          "memberId": "0x4B72F7160A024D3B",
+          "kind": "function",
+          "title": "Create Widget",
+          "category": "Widget",
+          "tooltip": "\u521B\u5EFA\u4E00\u4E2A\u63A7\u4EF6",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WidgetType",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUUserWidget\u003E",
+                "typePath": "/Script/UMG.UserWidget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Blueprint/UserWidget.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OwningPlayer",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUserWidget*",
+                "typePath": "/Script/UMG.UserWidget",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Blueprint/UserWidget.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "WorldContextObject",
+          "callableWithoutWorldContext": false
+        }
+      ]
+    }
+  ]
+}

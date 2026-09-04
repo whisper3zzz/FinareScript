@@ -332,8 +332,14 @@ ignored Actor, and batch-capacity behavior.
 
 ## UI bridge
 
-Keep widget construction and animation in UMG/Blueprint, and expose a small
-typed Blueprint bridge to managed gameplay. For example, a
+Use generated UMG wrappers directly for ordinary widget creation, named-control
+lookup, button events, enabled state and text. The
+[async UI gameplay example](UNREAL_ASYNC_UI_DEMO.md) combines them with asset
+loading and Actor creation, including cancel/retry and generation cleanup.
+UMG/Blueprint can own the layout without owning or forwarding the gameplay.
+
+A small typed Blueprint bridge is an optional integration choice when an
+existing project's view already exposes one. For example, a
 `BP_ManagedHudBridge` Actor can own the widget and expose `SetStatusText` plus an
 `OnActionPressed` delegate. After Build & Reload, use its generated wrapper:
 
@@ -356,11 +362,13 @@ private void OnActionPressed(int actionId)
 }
 ```
 
-This keeps Slate/UMG ownership native while gameplay policy remains C#/Graph.
-If the project deliberately exposes `CreateWidget` and viewport members in its
-Contract, their generated wrappers are also valid; their World/thread policy in
-the API Browser still applies. Verify viewport creation, input event delivery,
-reload unsubscription, and map teardown.
+Both approaches keep Slate/UMG ownership native while gameplay policy remains
+C#/Graph. The API Browser's World/thread policy still applies. For a view created
+after an async load, subscribe through its generated event endpoint after creation
+and dispose the subscription on stop; an attributed source member must already
+exist when startup binding runs. Zero-argument events such as `Button.OnClicked`
+are supported. Verify viewport creation, event delivery, reload unsubscription
+and map teardown; viewport ownership, not a C# handle, keeps the view alive.
 
 ## Async work
 

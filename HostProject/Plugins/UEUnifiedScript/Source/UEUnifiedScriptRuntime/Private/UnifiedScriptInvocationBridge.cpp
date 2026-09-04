@@ -1299,12 +1299,12 @@ bool FUnifiedScriptInvocationBridge::ReadDelegateArguments(
     using namespace UE::UnifiedScript::Invocation::Private;
     check(IsInGameThread());
     OutArguments.Reset();
-    if (Signature == nullptr || ParameterMemory == nullptr)
+    if (Signature == nullptr || (Signature->ParmsSize > 0 && ParameterMemory == nullptr))
     {
         Fail(
             OutResult,
             EUnifiedScriptInvocationError::InvalidMemberPath,
-            TEXT("A delegate dispatch requires a signature and parameter memory."));
+            TEXT("A delegate dispatch requires a signature and memory for non-empty parameters."));
         return false;
     }
 
