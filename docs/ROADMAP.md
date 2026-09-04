@@ -55,11 +55,20 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   cleanup. The example exposed and repaired zero-parameter native event dispatch,
   empty generated dispatch tables and `TEnumAsByte` conversion. See the
   [async UI example](UNREAL_ASYNC_UI_DEMO.md).
-- Next work: **finish the composed Demo's consumer-facing launch/authoring and
-  cooked path**. The current CMD test creates and removes its own saved Script
-  Class; that is runtime evidence, not a persistent Demo installer or installed
-  workflow acceptance. Keep these missing delivery steps in the same batch,
-  rather than counting the runtime checkpoint as the full breadth target.
+- Current Demo delivery checkpoint: **persistent scene, launcher and cooked Win64**.
+  One command prepares a saved Script Class/camera/input scene and launches it;
+  unchanged preparation preserves the saved files. The same cancel/load/spawn,
+  chunk reload and teardown scenario passes in both a separate `-game` process
+  and the archived Win64 Development executable using its bundled CoreCLR.
+  The UI Automation suite also works with the persistent class present without
+  modifying its scene or defaults.
+- Next work: **connect and verify the composed Demo's ordinary C#/Graph authoring
+  workflow**. Its repository launcher supports build/relaunch and scene editing;
+  native Build & Reload/deployment discovery, transactional Graph apply and
+  installed-consumer authoring are not yet established for this example. Keep
+  that work in the same batch rather than calling the runtime/package checkpoint
+  the full breadth target. Visual appearance and physical mouse input also
+  remain unreviewed by the CMD/NullRHI checks.
   Push-model, travel and richer native-object forms remain follow-ups; do not
   resume the full M13.3 scope before the M13.5 breadth target is met.
 
@@ -86,7 +95,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
-| Composed UI/async gameplay — M13.5 | Generated UMG wrappers and nodes, native-only named-widget lookup, button events, async class/mesh loading, spawned preview replacement, cancellation/retry and reload/deletion cleanup in a real CMD Play viewport | Consumer-facing launch/authoring and cooked execution of this example remain open; no physical mouse or visual appearance acceptance, and no general UMG/latent parity claim |
+| Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, button events, async class/mesh loading, preview replacement, cancel/retry and lifecycle cleanup; persistent scene/launcher and Win64 cooked cancel/spawn/reload/teardown | Ordinary C#/Graph and installed-consumer authoring still need integration; no physical mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
@@ -155,7 +164,7 @@ not an exhaustive signature audit or a claim of parity.
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
-| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example now composes these routes and repairs zero-parameter events. Finish its normal launch/authoring and cooked workflow, then audit other common callback, latent and subsystem gaps | M13.5 |
+| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example now composes these routes, with a saved scene, launcher and cooked runtime proof. Finish its ordinary C#/Graph authoring workflow, then audit other common callback, latent and subsystem gaps | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -226,8 +235,9 @@ authorization.
   gaps through the existing automatic surface. Reuse the reviewed forms already
   implemented and compose them in representative gameplay examples.
   The composed UMG/async/SpawnActor runtime checkpoint is implemented, including
-  cancel/retry, saved-class reload and teardown. Its persistent consumer-facing
-  launch/authoring path and cooked proof are still open; see the current cursor.
+  cancel/retry, saved-class reload and teardown. Persistent launch and cooked
+  execution are now verified; ordinary C#/Graph and installed-consumer authoring
+  remain open, as described by the current cursor.
 - [ ] Audit and complete bounded byte-buffer interop for ordinary binary payloads,
   with explicit copy/borrow/ownership rules and generation-safe callbacks. Reuse
   existing transports and data-plane contracts where applicable.
@@ -379,6 +389,18 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The persistent UI Demo builds for Editor and Win64 Development. The saved scene
+passes the actual standalone game path in
+`artifacts/ue/async-demo/20260904-174027-825/runtime.log`; repeated preparation
+leaves both saved class and map unchanged. All three UI CMD tests pass with the
+persistent class present in `artifacts/m13-5-ui/ui-persistent-demo.log`.
+BuildCookRun and the archived executable pass; the final runtime result is
+`artifacts/ue/async-demo/20260904-174236-470/packaged-runtime.log`, including the
+package-local CoreCLR path. The generated package contains `StartAsyncDemo.cmd`.
+These checks prove cancel/spawn/chunk reload/teardown beyond PIE, not source-change
+reload, Graph apply, rendered appearance or physical mouse input. No unrelated
+managed/full-suite rerun or new performance comparison is claimed.
 
 The composed UI runtime checkpoint passes the UE 5.8.1 Editor build, Demo
 chunk emission and 39 relevant managed tests, including generated C#/C++ output

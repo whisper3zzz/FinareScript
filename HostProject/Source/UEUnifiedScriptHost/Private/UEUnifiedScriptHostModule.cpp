@@ -18,6 +18,7 @@
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UnifiedScriptUMGThunks.h"
+#include "UnifiedScriptAsyncDemoVerification.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -622,6 +623,7 @@ public:
         const bool bRegisteredUMG = FUnifiedScriptGeneratedThunkRegistry::RegisterTable(
             TEXT("UEUnifiedScriptHost.UMG"), UE::UnifiedScript::Generated::UI::Table());
         checkf(bRegisteredUMG, TEXT("Could not register the generated UMG bindings."));
+        UE::UnifiedScript::AsyncDemoVerification::Start();
         if (FParse::Param(FCommandLine::Get(), TEXT("UnifiedScriptSmoke")))
         {
             SmokeDelegateHandle = FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
@@ -648,6 +650,7 @@ public:
 
     virtual void ShutdownModule() override
     {
+        UE::UnifiedScript::AsyncDemoVerification::Stop();
         FUnifiedScriptGeneratedThunkRegistry::UnregisterTable(TEXT("UEUnifiedScriptHost.UMG"));
         if (SmokeDelegateHandle.IsValid())
         {

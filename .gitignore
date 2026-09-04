@@ -29,6 +29,9 @@ HostProject/DerivedDataCache/
 HostProject/Intermediate/
 HostProject/Saved/
 HostProject/Content/UnifiedScript/
+# Reproducible, locally editable sample scene produced by the Demo preparer.
+HostProject/Content/UnifiedScriptDemo/BP_AsyncUiDemo.uasset
+HostProject/Content/UnifiedScriptDemo/L_AsyncUiDemo.umap
 HostProject/Plugins/*/Binaries/
 HostProject/Plugins/*/Intermediate/
 HostProject/*.sln

@@ -104,6 +104,14 @@ if (!(Test-Path -LiteralPath $compiledChunk)) {
 }
 New-Item -ItemType Directory -Force -Path $stageDirectory | Out-Null
 Copy-Item -LiteralPath $compiledChunk -Destination $stagedChunk -Force
+$declarationName = 'UnifiedScript.Unreal.Demo.asset.json'
+$compiledDeclaration = Join-Path $outputDirectory $declarationName
+if (!(Test-Path -LiteralPath $compiledDeclaration)) {
+    throw "Chunk compiler did not produce '$compiledDeclaration'."
+}
+# Keep editor materialization on the declaration emitted with this chunk, not
+# the older checked-in authoring fixture copied by the managed project build.
+Copy-Item -LiteralPath $compiledDeclaration -Destination (Join-Path $stageDirectory $declarationName) -Force
 
 & $dotnetExe run `
     --project $cliProject `

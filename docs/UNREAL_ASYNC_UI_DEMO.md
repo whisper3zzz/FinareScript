@@ -52,6 +52,51 @@ forwarding Actor is needed. Mouse/input-mode policy remains with the game.
 
 ## Current runnable verification
 
+### Launch the saved Demo
+
+From the repository root, with the HostProject editor/game closed:
+
+```powershell
+.\tools\launch-unreal-async-demo.ps1 -EngineRoot D:\UE_5.8
+```
+
+The launcher builds the Editor host, emits the Release managed chunk and its
+matching declaration, creates the Script Class and scene if absent, then opens
+the scene as a standalone game. Click **Load & spawn cube** to create a visible
+preview; the mouse cursor and fixed camera are supplied by a presentation-only
+GameMode/PlayerController. No engine association or project input/map ini edit is
+needed. `-SkipBuild` reuses already current native and managed outputs.
+
+| Mode | Result |
+| --- | --- |
+| `Play` (default) | Open the saved scene with `-game` |
+| `Editor` | Open the saved scene in Unreal Editor for scene/default editing |
+| `Prepare` | Create missing assets and synchronize the generated class, without launching a game |
+| `Verify` | Exercise the saved scene in a separate CMD/NullRHI game, including cancel, mesh spawn, chunk reload and teardown |
+| `Package` | Build/cook/archive Win64 Development, exercise the packaged game, and add `StartAsyncDemo.cmd` beside its executable |
+
+The prepared assets are `/Game/UnifiedScriptDemo/BP_AsyncUiDemo` and
+`/Game/UnifiedScriptDemo/L_AsyncUiDemo`. They are locally generated and ignored by
+Git, not checked-in binary fixtures. Preparation rejects conflicting class/map
+identities and never rewrites an existing scene. Generated class synchronization
+uses the standard materializer, preserving intentional default overrides. A
+repeated preparation of unchanged inputs leaves both saved files unchanged.
+
+Package output and logs are printed under `artifacts/ue/async-demo/<run>/`.
+Distribute the entire `package/Windows` directory, not the executable alone;
+launch `StartAsyncDemo.cmd` to select the Demo map without changing project-wide
+defaults. Cube and Sphere are explicit native cook dependencies; custom mesh
+paths must also be included in the project's cook inputs.
+
+For source iteration, edit `AsyncUiDemoScript.cs`, close the game/editor and
+rerun the launcher without `-SkipBuild`. `Editor` mode is a scene-editing entry,
+not yet an integrated C#/Graph authoring session: the sample's native
+Build & Reload/deployment discovery and transactional Graph surface still need
+to be connected and verified. The runtime verifier reloads the deployed chunk;
+it does not claim a source-change or Graph-apply test.
+
+### Focused Automation
+
 From the repository, build `UEUnifiedScriptHostEditor` and run
 `tools/emit-unreal-demo-chunk.ps1 -EngineRoot D:\UE_5.8 -Configuration Release`.
 The CMD Automation filter `UnifiedScript.Unreal.UI` runs:
@@ -65,12 +110,12 @@ The CMD Automation filter `UnifiedScript.Unreal.UI` runs:
   block, while non-empty signatures still reject missing memory.
 - `GeneratedByteEnum`: out-of-range byte-wrapped enums cannot mutate native state.
 
-The gameplay test refuses to overwrite an existing
-`/Game/UnifiedScriptDemo/BP_AsyncUiDemo` and removes only its own generated test
-asset afterward. It is a runnable integration example, not a persistent Demo
-installer. A consumer-facing launch path, ordinary authoring acceptance and
-cooked execution of this composed example remain the next part of the batch.
-NullRHI tests do not establish visual appearance or physical mouse interaction.
+When the persistent Demo class exists, the gameplay test validates its exact
+identity/declaration and reuses it read-only. Test-specific paths are set on its
+temporary instance before BeginPlay, not on saved defaults. Without an existing
+class, it creates, saves/reloads and removes only its own test asset. The test
+never modifies the persistent Demo scene. NullRHI tests do not establish visual
+appearance or physical mouse interaction.
 
 The example does not establish complete UMG/latent/delegate coverage, remote
 multiplayer UI, arbitrary .NET worker-thread UObject access, or a Puerts

@@ -69,12 +69,29 @@ struct FScenario
 
     bool Build()
     {
-        if (!Test.TestFalse(TEXT("Do not overwrite an existing Demo asset"),
-            FindObject<UObject>(nullptr, BlueprintPath) != nullptr || FPackageName::DoesPackageExist(PackageName))) return false;
         FString Declaration;
         const FString DeclarationPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() /
             TEXT("../artifacts/ue/compiled-chunks/release/UnifiedScript.Unreal.Demo.asset.json"));
         if (!Test.TestTrue(TEXT("Read emitted C# declaration"), FFileHelper::LoadFileToString(Declaration, *DeclarationPath))) return false;
+        if (FindObject<UObject>(nullptr, BlueprintPath) != nullptr || FPackageName::DoesPackageExist(PackageName))
+        {
+            Blueprint.Reset(LoadObject<UUnifiedScriptBlueprint>(nullptr, BlueprintPath));
+            FGuid ExpectedId;
+            FGuid::ParseExact(TEXT("762043152e714d68b05a31426591ee03"), EGuidFormats::Digits, ExpectedId);
+            if (!Test.TestTrue(TEXT("Reuse only the exact persistent Demo class without modifying it"),
+                Blueprint.IsValid() && Blueprint->ScriptAsset && Blueprint->ScriptAsset->ScriptClassId == ExpectedId &&
+                Blueprint->ScriptAsset->ScriptTypeName == TEXT("UnifiedScript.Unreal.Demo.AsyncUiDemoScript") &&
+                Blueprint->ScriptAsset->GeneratedClassPath.ToString() == FString(BlueprintPath) + TEXT("_C"))) return false;
+            FUnifiedScriptBlueprintClassSyncResult Result;
+            FString Error;
+            if (!FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *Blueprint->ScriptAsset, *Blueprint, Declaration, true, Result, Error))
+            {
+                Test.AddError(Error);
+                return false;
+            }
+            return Test.TestFalse(TEXT("Persistent Demo class matches emitted declarations; run the Demo preparer if stale"), Result.bChanged);
+        }
         UPackage* Package = CreatePackage(PackageName);
         bOwnsPackage = true;
         Blueprint.Reset(Cast<UUnifiedScriptBlueprint>(FKismetEditorUtilities::CreateBlueprint(
@@ -151,8 +168,15 @@ public:
         if (!World || !World->HasBegunPlay()) return false;
         if (Phase == 0)
         {
-            Actor = World->SpawnActor<AUnifiedScriptActor>(S.Blueprint->GeneratedClass);
+            FActorSpawnParameters Spawn;
+            Spawn.bDeferConstruction = true;
+            Actor = World->SpawnActor<AUnifiedScriptActor>(S.Blueprint->GeneratedClass, FTransform::Identity, Spawn);
             if (!S.Test.TestNotNull(TEXT("Spawn saved Script Class"), Actor.Get())) { Scenario.Reset(); return true; }
+            // Fixture inputs belong to this instance, never the user's saved CDO.
+            MeshPath(TEXT("/Engine/BasicShapes/Cube.Cube"));
+            FindFProperty<FStrProperty>(Actor->GetClass(), TEXT("WidgetClassPath"))->SetPropertyValue_InContainer(
+                Actor.Get(), TEXT("/Script/UEUnifiedScriptHost.UnifiedScriptAsyncDemoWidget"));
+            Actor->FinishSpawning(FTransform::Identity);
             Phase = 1;
         }
         auto* Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
