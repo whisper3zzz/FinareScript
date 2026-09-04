@@ -963,6 +963,9 @@ public sealed class RoslynSemanticBinder
             ITypeParameterSymbol => (UnifiedTypeKind.TypeParameter, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Enum } =>
                 (UnifiedTypeKind.Enum, nullability, true),
+            INamedTypeSymbol { TypeKind: TypeKind.Interface } context
+                when context.ToDisplayString() == "UnifiedScript.Unreal.IUnrealInvocationBridge" =>
+                (UnifiedTypeKind.Interface, nullability, true),
             INamedTypeSymbol { TypeKind: TypeKind.Interface } =>
                 (UnifiedTypeKind.Interface, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Delegate } =>
@@ -973,7 +976,7 @@ public sealed class RoslynSemanticBinder
             INamedTypeSymbol { TypeKind: TypeKind.Struct } =>
                 (UnifiedTypeKind.Struct, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Class } unrealType
-                when IsUnrealReflectedType(unrealType) =>
+                when IsUnrealReflectedType(unrealType) || IsUnrealNativeObjectType(unrealType) =>
                 (UnifiedTypeKind.Object, nullability, true),
             INamedTypeSymbol { TypeKind: TypeKind.Class } =>
                 (UnifiedTypeKind.Object, nullability, false),
@@ -994,6 +997,13 @@ public sealed class RoslynSemanticBinder
                 attribute.AttributeClass?.ToDisplayString(),
                 "UnifiedScript.Unreal.UnrealValueAttribute",
                 StringComparison.Ordinal));
+
+    // Native wrappers carry opaque generation-owned leases, not UObject identities.
+    // Accept them as call-boundary values without changing Script Class state types.
+    private static bool IsUnrealNativeObjectType(INamedTypeSymbol type) =>
+        type.BaseType?.ToDisplayString() == "UnifiedScript.Unreal.UnrealNativeObject" &&
+        type.GetAttributes().Any(static attribute =>
+            attribute.AttributeClass?.ToDisplayString() == "UnifiedScript.Unreal.UnrealNativeObjectTypeAttribute");
 
     private static bool TryGetEnumerableElementType(
         ITypeSymbol type,

@@ -49,20 +49,15 @@ public sealed class UnrealBindingGenerator
         source.Append("namespace ").Append(options.Namespace).AppendLine(";");
         source.AppendLine();
 
-        var emittedNames = new HashSet<string>(StringComparer.Ordinal);
-        var managedTypeNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (UnrealReflectedType type in normalized.Types)
-        {
-            string candidate = type.Kind == UnrealReflectedTypeKind.Struct
-                ? ToIdentifier(TrimNativeStructPrefix(type.NativeName))
-                : ToIdentifier(type.Name);
-            managedTypeNames.Add(
-                type.Path,
-                MakeUniqueTypeName(candidate, type.Path, emittedNames));
-        }
+        var managedTypeNames = CreateManagedTypeNames(normalized.Types);
 
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (type.Kind == UnrealReflectedTypeKind.NativeObject)
+            {
+                UnrealNativeObjectBindingGenerator.Emit(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
+                continue;
+            }
             if (type.Kind == UnrealReflectedTypeKind.Struct)
             {
                 EmitStruct(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
@@ -729,7 +724,7 @@ public sealed class UnrealBindingGenerator
             .ToArray();
     }
 
-    private static string? GetManagedType(
+    internal static string? GetManagedType(
         UnrealTypeReference type,
         IReadOnlyDictionary<string, string> managedTypeNames) => type.Kind switch
         {
@@ -750,6 +745,7 @@ public sealed class UnrealBindingGenerator
             UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
             UnrealValueKind.Object =>
                 "global::UnifiedScript.Unreal.UnrealObjectHandle",
+            UnrealValueKind.NativeObject when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? nativeName) => nativeName,
             UnrealValueKind.Class =>
                 "global::UnifiedScript.Unreal.UnrealClassHandle",
             UnrealValueKind.SoftObject =>
@@ -777,6 +773,19 @@ public sealed class UnrealBindingGenerator
                 $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
             _ => null,
         };
+
+    internal static IReadOnlyDictionary<string, string> CreateManagedTypeNames(IReadOnlyList<UnrealReflectedType> types)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in types)
+        {
+            string candidate = type.Kind == UnrealReflectedTypeKind.Struct
+                ? ToIdentifier(TrimNativeStructPrefix(type.NativeName)) : ToIdentifier(type.Name);
+            names.Add(type.Path, MakeUniqueTypeName(candidate, type.Path, used));
+        }
+        return names;
+    }
 
     private static string TrimNativeStructPrefix(string nativeName) =>
         nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName;

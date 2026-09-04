@@ -32,6 +32,24 @@ using FUnifiedScriptNativeObjectMember = EUnifiedScriptNativeObjectStatus (*)(
     TConstArrayView<FUnifiedScriptNativeValueV3>, FUnifiedScriptNativeValueV3&,
     FUnifiedScriptNativeObjectHandle&);
 
+struct FUnifiedScriptNativeObjectMemberEntry
+{
+    uint64 MemberId;
+    FUnifiedScriptNativeObjectMember Invoke;
+};
+
+/** Generated module-lifetime registration, usable by existing and future Worlds. */
+class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptNativeObjectLibrary final
+{
+public:
+    explicit FUnifiedScriptNativeObjectLibrary(TConstArrayView<FUnifiedScriptNativeObjectMemberEntry> Members);
+    ~FUnifiedScriptNativeObjectLibrary();
+    FUnifiedScriptNativeObjectLibrary(const FUnifiedScriptNativeObjectLibrary&) = delete;
+    FUnifiedScriptNativeObjectLibrary& operator=(const FUnifiedScriptNativeObjectLibrary&) = delete;
+private:
+    uint64 Id = 0;
+};
+
 /**
  * Game-thread-only native ownership domain, owned by one World bridge context.
  * Scope IDs and object IDs are process-unique, never recycled. Owned objects are
@@ -67,6 +85,8 @@ public:
     int32 NumScopes() const;
 
 private:
+    friend class FUnifiedScriptNativeObjectLibrary;
+    void ReleaseLibrary(uint64 LibraryId);
     struct FImpl;
     TUniquePtr<FImpl> Impl;
 };

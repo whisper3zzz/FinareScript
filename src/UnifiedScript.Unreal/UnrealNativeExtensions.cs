@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace UnifiedScript.Unreal;
@@ -10,22 +11,41 @@ public enum UnrealNativeParameterPassing
     Reference,
 }
 
+public enum UnrealNativeOperation { Method, Constructor }
+public enum UnrealNativeReturnOwnership { Value, Owned, Borrowed }
+
 public sealed record UnrealNativeFunctionBinding(
     string Extension,
     bool Const,
-    IReadOnlyList<UnrealNativeParameterPassing> Parameters);
+    IReadOnlyList<UnrealNativeParameterPassing> Parameters)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public UnrealNativeOperation Operation { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public UnrealNativeReturnOwnership ReturnOwnership { get; init; }
+}
 
 public sealed record UnrealNativeExtensionFunction(
     UnrealReflectedFunction Declaration,
     bool Const,
-    IReadOnlyList<UnrealNativeParameterPassing> Parameters);
+    IReadOnlyList<UnrealNativeParameterPassing> Parameters)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public UnrealNativeOperation Operation { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public UnrealNativeReturnOwnership ReturnOwnership { get; init; }
+}
 
 public sealed record UnrealNativeExtensionType(
     string Path,
     string NativeName,
     string HeaderPath,
     IReadOnlyList<UnrealReflectedProperty> Properties,
-    IReadOnlyList<UnrealNativeExtensionFunction> Functions);
+    IReadOnlyList<UnrealNativeExtensionFunction> Functions)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public UnrealReflectedTypeKind Kind { get; init; } = UnrealReflectedTypeKind.Class;
+}
 
 /// <summary>Explicit public C++ declarations, not claims of UHT reflection.</summary>
 public sealed record UnrealNativeExtensionManifest(
@@ -33,14 +53,15 @@ public sealed record UnrealNativeExtensionManifest(
     string Name,
     IReadOnlyList<UnrealNativeExtensionType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-native-extensions/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-native-extensions/v0.2";
+    public const string LegacySchemaVersion = "unifiedscript.unreal-native-extensions/v0.1";
 }
 
 public static class UnrealNativeExtensions
 {
     public static UnrealNativeExtensionManifest Normalize(UnrealNativeExtensionManifest manifest)
     {
-        if (manifest.SchemaVersion != UnrealNativeExtensionManifest.CurrentSchemaVersion ||
+        if (manifest.SchemaVersion is not (UnrealNativeExtensionManifest.CurrentSchemaVersion or UnrealNativeExtensionManifest.LegacySchemaVersion) ||
             string.IsNullOrWhiteSpace(manifest.Name) ||
             !Regex.IsMatch(manifest.Name, @"\A[A-Za-z_][A-Za-z0-9_.-]*\z") ||
             manifest.Types is null || manifest.Types.Count == 0)
@@ -52,9 +73,13 @@ public static class UnrealNativeExtensions
         foreach (UnrealNativeExtensionType? type in manifest.Types)
         {
             if (type is null || type.Path is null ||
-                !Regex.IsMatch(type.Path, @"\A/Script/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\z") ||
+                !Regex.IsMatch(type.Path, type.Kind == UnrealReflectedTypeKind.NativeObject
+                    ? @"\A/Native/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\z"
+                    : @"\A/Script/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\z") ||
+                type.Kind is not (UnrealReflectedTypeKind.Class or UnrealReflectedTypeKind.NativeObject) ||
+                type.Kind == UnrealReflectedTypeKind.NativeObject && manifest.SchemaVersion == UnrealNativeExtensionManifest.LegacySchemaVersion ||
                 !paths.Add(type.Path) || string.IsNullOrWhiteSpace(type.NativeName) ||
-                !Regex.IsMatch(type.NativeName, @"\A[A-Za-z_][A-Za-z0-9_]*\z") ||
+                !Regex.IsMatch(type.NativeName, @"\A[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*\z") ||
                 string.IsNullOrWhiteSpace(type.HeaderPath) ||
                 !Regex.IsMatch(type.HeaderPath.Replace('\\', '/'), @"\A[A-Za-z0-9_./-]+\.h\z") ||
                 type.Properties is null || type.Functions is null ||
@@ -71,7 +96,7 @@ public static class UnrealNativeExtensions
             var signatures = new HashSet<string>(StringComparer.Ordinal);
             foreach (UnrealReflectedFunction function in projected.Functions)
             {
-                string signature = function.Name + "(" + string.Join(",", function.Parameters.Select(parameter =>
+                string signature = (function.NativeBinding?.Operation == UnrealNativeOperation.Constructor ? "$constructor" : function.Name) + "(" + string.Join(",", function.Parameters.Select(parameter =>
                     ManagedTypeKey(parameter.Type) + (parameter.Direction == UnrealParameterDirection.Input ? "" : "&"))) + ")";
                 if (!signatures.Add(signature) || projected.Properties.Any(field => field.Name == function.Name))
                     throw new JsonException($"USUE5403: Native overload '{function.Path}' cannot have a distinct managed signature or collides with a field.");
@@ -94,6 +119,12 @@ public static class UnrealNativeExtensions
         var types = reflection.Types.ToDictionary(static type => type.Path, StringComparer.Ordinal);
         foreach (UnrealNativeExtensionType extension in manifest.Types)
         {
+            if (extension.Kind == UnrealReflectedTypeKind.NativeObject)
+            {
+                if (!types.TryAdd(extension.Path, MakeType(extension, manifest.Name)))
+                    throw new JsonException($"USUE5403: Native object type '{extension.Path}' is already declared.");
+                continue;
+            }
             if (!types.TryGetValue(extension.Path, out UnrealReflectedType? owner) ||
                 owner.Kind != UnrealReflectedTypeKind.Class || owner.Traits.Interface ||
                 owner.NativeName != extension.NativeName ||
@@ -117,7 +148,13 @@ public static class UnrealNativeExtensions
                 Functions = owner.Functions.Concat(added.Functions).ToArray(),
             };
         }
-        return UnrealReflectionJson.NormalizeAndValidate(reflection with { Types = types.Values.ToArray() });
+        var result = UnrealReflectionJson.NormalizeAndValidate(reflection with
+        {
+            Modules = reflection.Modules.Concat(types.Values.Select(type => type.Module)).Distinct().ToArray(),
+            Types = types.Values.ToArray(),
+        });
+        UnrealNativeObjectBindings.ValidateReferences(result);
+        return result;
     }
 
     internal static void ValidateBinding(UnrealReflectedType owner, UnrealReflectedFunction function)
@@ -125,6 +162,13 @@ public static class UnrealNativeExtensions
         UnrealNativeFunctionBinding? binding = function.NativeBinding;
         if (binding is null) return;
         ValidateOwner(owner, binding.Extension);
+        if (!Enum.IsDefined(binding.Operation) || !Enum.IsDefined(binding.ReturnOwnership))
+            throw new JsonException($"USUE5404: Invalid native operation/ownership for '{function.Path}'.");
+        if (owner.Kind == UnrealReflectedTypeKind.NativeObject)
+            UnrealNativeObjectBindings.ValidateFunction(owner, function);
+        else if (binding.Operation != UnrealNativeOperation.Method || binding.ReturnOwnership != UnrealNativeReturnOwnership.Value ||
+                 function.ReturnType.Kind == UnrealValueKind.NativeObject || function.Parameters.Any(p => p.Type.Kind == UnrealValueKind.NativeObject))
+            throw new JsonException("USUE5404: Native object ownership requires a native-object owner, not a UObject declaration.");
         if (function.Traits.NativeAccess != UnrealNativeAccess.Public ||
             function.Traits.Static && binding.Const || function.Metadata.Latent ||
             binding.Parameters is null || binding.Parameters.Count != function.Parameters.Count)
@@ -166,8 +210,8 @@ public static class UnrealNativeExtensions
 
     private static void ValidateOwner(UnrealReflectedType owner, string extension)
     {
-        if (string.IsNullOrWhiteSpace(extension) || owner.Kind != UnrealReflectedTypeKind.Class ||
-            owner.Traits.Interface || !owner.Path.StartsWith("/Script/", StringComparison.Ordinal) ||
+        if (string.IsNullOrWhiteSpace(extension) || owner.Kind is not (UnrealReflectedTypeKind.Class or UnrealReflectedTypeKind.NativeObject) ||
+            owner.Traits.Interface || !owner.Path.StartsWith(owner.Kind == UnrealReflectedTypeKind.NativeObject ? "/Native/" : "/Script/", StringComparison.Ordinal) ||
             string.IsNullOrWhiteSpace(owner.HeaderPath))
         {
             throw new JsonException("USUE5404: Native bindings require an explicit extension and native UObject owner.");
@@ -180,11 +224,14 @@ public static class UnrealNativeExtensions
 
     private static UnrealReflectedType MakeType(UnrealNativeExtensionType type, string extension) =>
         new(type.Path, type.Path[(type.Path.IndexOf('.') + 1)..], type.NativeName,
-            type.Path["/Script/".Length..type.Path.IndexOf('.')], UnrealReflectedTypeKind.Class,
+            type.Path["/Script/".Length..type.Path.IndexOf('.')], type.Kind,
             null, new UnrealTypeTraits(false, false),
             type.Properties.Select(field => field with { NativeExtension = extension }).ToArray(),
             type.Functions.Select(method => method.Declaration with
             {
-                NativeBinding = new UnrealNativeFunctionBinding(extension, method.Const, method.Parameters),
+                NativeBinding = new UnrealNativeFunctionBinding(extension, method.Const, method.Parameters)
+                {
+                    Operation = method.Operation, ReturnOwnership = method.ReturnOwnership,
+                },
             }).ToArray(), type.HeaderPath);
 }

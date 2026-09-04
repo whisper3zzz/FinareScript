@@ -47,6 +47,7 @@ public sealed class UnrealNativeThunkGenerator
 
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (type.Kind == UnrealReflectedTypeKind.NativeObject) continue;
             if (!type.Path.StartsWith("/Script/", StringComparison.Ordinal))
             {
                 foreach (UnrealReflectedProperty property in type.Properties)
@@ -183,6 +184,7 @@ public sealed class UnrealNativeThunkGenerator
         EmitInvokeDispatcher(source, functions, options.CppNamespace);
         EmitInvokeInt32x2Dispatcher(source, functions, options.CppNamespace);
         EmitInvokeFixedDispatcher(source, functions, options.CppNamespace);
+        UnrealNativeObjectThunkGenerator.Emit(source, normalized, options.CppNamespace, diagnostics);
 
         return new UnrealNativeThunkGenerationResult(
             source.ToString().TrimEnd().ReplaceLineEndings("\n") + "\n",

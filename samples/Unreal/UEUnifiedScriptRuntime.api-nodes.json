@@ -10,6 +10,1696 @@
   },
   "types": [
     {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "name": "NativeCounter",
+      "managedTypeName": "NativeCounter",
+      "category": "Unreal API|NativeCounter",
+      "properties": [
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias",
+          "name": "Bias",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeExtension": "Demo.Native"
+        }
+      ],
+      "functions": [
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Clone()",
+          "name": "Clone",
+          "returnType": {
+            "kind": "nativeObject",
+            "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+            "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UnifiedScriptNativeCounter.h"
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [],
+            "returnOwnership": "owned"
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create()",
+          "name": "Create",
+          "returnType": {
+            "kind": "nativeObject",
+            "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+            "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UnifiedScriptNativeCounter.h"
+          },
+          "parameters": [],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [],
+            "operation": "constructor",
+            "returnOwnership": "owned"
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(int32)",
+          "name": "Create",
+          "returnType": {
+            "kind": "nativeObject",
+            "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+            "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UnifiedScriptNativeCounter.h"
+          },
+          "parameters": [
+            {
+              "name": "Initial",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [
+              "value"
+            ],
+            "operation": "constructor",
+            "returnOwnership": "owned"
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Flip(bool)",
+          "name": "Flip",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:GetChild()",
+          "name": "GetChild",
+          "returnType": {
+            "kind": "nativeObject",
+            "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+            "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UnifiedScriptNativeCounter.h"
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [],
+            "returnOwnership": "borrowed"
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:InvalidOwnedAliasForTest()",
+          "name": "InvalidOwnedAliasForTest",
+          "returnType": {
+            "kind": "nativeObject",
+            "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+            "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UnifiedScriptNativeCounter.h"
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [],
+            "returnOwnership": "owned"
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Multiply(int32,int32)",
+          "name": "Multiply",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Left",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Right",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [
+              "value",
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()",
+          "name": "Reset",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": []
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(double)",
+          "name": "Scale",
+          "returnType": {
+            "kind": "float64",
+            "nativeName": "double",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(int32)",
+          "name": "Scale",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "value"
+            ]
+          }
+        },
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Shift(FVectorconst\u0026)",
+          "name": "Shift",
+          "returnType": {
+            "kind": "struct",
+            "nativeName": "FVector",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Math/Vector.h"
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Math/Vector.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": true,
+            "parameters": [
+              "constReference"
+            ]
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|NativeCounter|Clone",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Clone()",
+          "memberId": "0x0A14AF11DAE662D4",
+          "kind": "function",
+          "title": "Clone",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Clone(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "owned",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Create|1E238BBF8A4F6005",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(int32)",
+          "memberId": "0x1E238BBF8A4F6005",
+          "kind": "function",
+          "title": "Create",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Create(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "invocationContext",
+                "nativeName": "UnifiedScript.Unreal.IUnrealInvocationBridge",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Initial",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "constructor",
+          "returnOwnership": "owned",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Create|C7FB3979E2537381",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create()",
+          "memberId": "0xC7FB3979E2537381",
+          "kind": "function",
+          "title": "Create",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Create(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "invocationContext",
+                "nativeName": "UnifiedScript.Unreal.IUnrealInvocationBridge",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "constructor",
+          "returnOwnership": "owned",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Flip",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Flip(bool)",
+          "memberId": "0xBD419863586ED57A",
+          "kind": "function",
+          "title": "Flip",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Flip(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|GetChild",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:GetChild()",
+          "memberId": "0x4AC35189F0573E27",
+          "kind": "function",
+          "title": "GetChild",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.GetChild(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "borrowed",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|InvalidOwnedAliasForTest",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:InvalidOwnedAliasForTest()",
+          "memberId": "0x4819FCD2D84238E2",
+          "kind": "function",
+          "title": "InvalidOwnedAliasForTest",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.InvalidOwnedAliasForTest(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "owned",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Multiply",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Multiply(int32,int32)",
+          "memberId": "0x9E6B4803C8D0E235",
+          "kind": "function",
+          "title": "Multiply",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Multiply(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "invocationContext",
+                "nativeName": "UnifiedScript.Unreal.IUnrealInvocationBridge",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Left",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Right",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Reset",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()",
+          "memberId": "0x65004780946EA712",
+          "kind": "function",
+          "title": "Reset",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Reset(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Scale|1DB552A3F63B54D4",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(double)",
+          "memberId": "0x1DB552A3F63B54D4",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Scale(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float64",
+                "nativeName": "double",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Scale|4699DD1B1F305F07",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(int32)",
+          "memberId": "0x4699DD1B1F305F07",
+          "kind": "function",
+          "title": "Scale",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Scale(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|NativeCounter|Shift",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Shift(FVectorconst\u0026)",
+          "memberId": "0xFAA4C2DBD80FDF4F",
+          "kind": "function",
+          "title": "Shift",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Shift(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Math/Vector.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Math/Vector.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|NativeCounter|Bias",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias",
+          "memberId": "0x98C7549723AFB3DF",
+          "kind": "propertyRead",
+          "title": "Bias",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Read NativeCounter.Bias.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|NativeCounter|Bias",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias",
+          "memberId": "0x98C7549723AFB3DF",
+          "kind": "propertyWrite",
+          "title": "Set Bias",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Write NativeCounter.Bias.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+      "name": "NativeCounterChild",
+      "managedTypeName": "NativeCounterChild",
+      "category": "Unreal API|NativeCounterChild",
+      "properties": [
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Value",
+          "name": "Value",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeExtension": "Demo.Native"
+        }
+      ],
+      "functions": [
+        {
+          "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Add(int32)",
+          "name": "Add",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Delta",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": null,
+            "category": null,
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          },
+          "nativeBinding": {
+            "extension": "Demo.Native",
+            "const": false,
+            "parameters": [
+              "value"
+            ]
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|NativeCounterChild|Add",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Add(int32)",
+          "memberId": "0x5F5612A76C182766",
+          "kind": "function",
+          "title": "Add",
+          "category": "Unreal API|NativeCounterChild",
+          "tooltip": "Call NativeCounterChild.Add(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Delta",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "nativeOperation": "method",
+          "returnOwnership": "value",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|NativeCounterChild|Value",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Value",
+          "memberId": "0x203B3544D96D52A9",
+          "kind": "propertyRead",
+          "title": "Value",
+          "category": "Unreal API|NativeCounterChild|Properties",
+          "tooltip": "Read NativeCounterChild.Value.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|NativeCounterChild|Value",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Value",
+          "memberId": "0x203B3544D96D52A9",
+          "kind": "propertyWrite",
+          "title": "Set Value",
+          "category": "Unreal API|NativeCounterChild|Properties",
+          "tooltip": "Write NativeCounterChild.Value.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "nativeExtension": "Demo.Native",
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
       "path": "/Script/Engine.HitResult",
       "name": "HitResult",
       "managedTypeName": "HitResult",

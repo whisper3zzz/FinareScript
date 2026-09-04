@@ -3,6 +3,83 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealNativeObjectTypeAttribute("/Native/UEUnifiedScriptRuntime.NativeCounter")]
+public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealNativeObject
+{
+    internal NativeCounter(global::UnifiedScript.Unreal.UnrealNativeObjectLease lease) : base(lease) { }
+    public int @Bias
+    {
+        get => global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0xB4A70487C31468D0UL, []).Value);
+        set => Lease.Invoke(0x4BC018878763C95CUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(value)]);
+    }
+    public NativeCounter @Clone()
+    {
+        return new NativeCounter(Lease.Acquire(0x0A14AF11DAE662D4UL, []));
+    }
+    public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge)
+        : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).Construct(0xC7FB3979E2537381UL, [])) { }
+    public static NativeCounter @Create(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        return new NativeCounter(__scope.Construct(0xC7FB3979E2537381UL, []));
+    }
+    public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, int @Initial)
+        : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).Construct(0x1E238BBF8A4F6005UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Initial)])) { }
+    public static NativeCounter @Create(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, int @Initial)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        return new NativeCounter(__scope.Construct(0x1E238BBF8A4F6005UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Initial)]));
+    }
+    public bool @Flip(bool @Value)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<bool>(Lease.Invoke(0xBD419863586ED57AUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
+    }
+    public NativeCounterChild @GetChild()
+    {
+        return new NativeCounterChild(Lease.Acquire(0x4AC35189F0573E27UL, []));
+    }
+    public NativeCounter @InvalidOwnedAliasForTest()
+    {
+        return new NativeCounter(Lease.Acquire(0x4819FCD2D84238E2UL, []));
+    }
+    public static int @Multiply(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, int @Left, int @Right)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(__scope.Invoke(default, 0x9E6B4803C8D0E235UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Left), global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Right)]).Value);
+    }
+    public void @Reset()
+    {
+        Lease.Invoke(0x65004780946EA712UL, []);
+    }
+    public double @Scale(double @Value)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<double>(Lease.Invoke(0x1DB552A3F63B54D4UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
+    }
+    public int @Scale(int @Value)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x4699DD1B1F305F07UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
+    }
+    public global::UnifiedScript.Unreal.UnrealVector @Shift(global::UnifiedScript.Unreal.UnrealVector @Value)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<global::UnifiedScript.Unreal.UnrealVector>(Lease.Invoke(0xFAA4C2DBD80FDF4FUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
+    }
+}
+
+[global::UnifiedScript.Unreal.UnrealNativeObjectTypeAttribute("/Native/UEUnifiedScriptRuntime.NativeCounterChild")]
+public sealed partial class NativeCounterChild : global::UnifiedScript.Unreal.UnrealNativeObject
+{
+    internal NativeCounterChild(global::UnifiedScript.Unreal.UnrealNativeObjectLease lease) : base(lease) { }
+    public int @Value
+    {
+        get => global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x087CC455F186614AUL, []).Value);
+        set => Lease.Invoke(0xA2FCC855B8BA82A6UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(value)]);
+    }
+    public int @Add(int @Delta)
+    {
+        return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x5F5612A76C182766UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Delta)]).Value);
+    }
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u547D\u4E2D\u7ED3\u679C", Tooltip = "\u5305\u542B\u68C0\u6D4B\u4E00\u4E2A\u547D\u4E2D\u4FE1\u606F\u7684\u7ED3\u6784\uFF0C\u5982\u5F71\u54CD\u7684\u4E00\u4E2A\u70B9\u548C\u6B64\u70B9\u4E0A\u7684\u8868\u9762\u6CD5\u7EBF\u3002")]
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]

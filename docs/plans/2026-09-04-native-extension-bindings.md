@@ -6,19 +6,25 @@ Status: in-progress
 
 Make public, non-reflected native APIs usable through the same contract-driven
 C#, C++ and visual-node generation as reflected APIs. This is M13.5 capability
-work, not a prerequisite to completing the entire Script Class model.
+work. M13.5 capability breadth precedes the remaining M13.3 Script Class work
+and M13.4 external pilot. After a usable native-binding batch, reassess the
+cross-family gaps in [the roadmap](../ROADMAP.md#puerts-comparison-and-capability-breadth-target);
+do not require every native signature, inheritance case or callback form before
+addressing another missing common capability.
 
 Puerts explicitly supports non-UFUNCTION/UPROPERTY members through
 [static binding declarations](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/template_binding.md).
-Our existing generator can call public native members, but contract selection
-only admits reflected input. Reuse that generator instead of adding facades.
+Before this module, the generator could call public native members, but contract
+selection only admitted reflected input. This work extends the shared generation
+path instead of adding facades.
 
 ## Decisions and remaining work
 
 - Add an optional, independently versioned native-extension declaration to the
   existing API contract. Existing contracts keep their canonical representation.
-  The owner must be an exported native UObject class with matching C++ identity
-  and header; an extension cannot replace a reflected member.
+  A UObject owner must match its exported C++ identity and header; an extension
+  cannot replace a reflected member. V0.2 also admits explicitly declared
+  `/Native/Module.Type` ordinary C++ owners without claiming reflection metadata.
 - Preserve exact overload identity, const methods and value/const-reference/
   mutable-reference parameter passing. Generate exact C++ member pointers.
 - Native-only members must never fall back to reflection. Record their origin
@@ -28,10 +34,10 @@ only admits reflected input. Reuse that generator instead of adding facades.
   generated C# calls against real native members lacking reflection metadata.
   Implemented through the normal API contract; native-only origin survives
   proposal, generation, runtime generation views, coverage and node metadata.
-- Ordinary C++ object construction, owned/borrowed opaque handles, inheritance,
-  converters and native callbacks remain subsequent parts of this module. They
-  require a distinct ownership contract; do not pretend they are UObjects or
-  close the full native-extension roadmap item after the first implementation.
+- Ordinary C++ construction and owned/borrowed handles now have a distinct
+  ownership contract and generated calls. Inheritance, richer codecs, converters
+  and callbacks remain follow-ups; do not close the full native-extension roadmap
+  item after the generated fixed-value batch.
 
 ### Ordinary C++ runtime checkpoint
 
@@ -60,11 +66,34 @@ only admits reflected input. Reuse that generator instead of adding facades.
   arena-backed values and UObject cells. Rich value/container/ref/out codecs and
   native-object argument contracts remain to be connected, not silently mapped
   to scalars or UObject handles.
-- **Next:** extend declarations and shared generation to native object types,
-  constructors, member/field calls and ownership-qualified return values.
-  Generate native registration, typed C# wrappers, coverage and visual nodes.
-  The current manual member registrations exist only inside the CMD test fixture;
-  they are not a new project-facade authoring workflow or a claim of parity.
+- This runtime checkpoint is now consumed by the generated bindings below.
+
+### Generated ordinary C++ bindings
+
+- V0.2 declares ordinary native types, constructor operations and explicit
+  owned/borrowed returns. Legacy v0.1 UObject extensions still round-trip.
+  Constructor signatures must be distinct in C#; method overloads use exact
+  native function/member pointers. Constructors use normal C++ overload resolution.
+- One description generates C# constructors/factories, field accessors and
+  methods, fixed-value native thunks, automatic library registration and visual
+  metadata. Native type dependencies expose wrapper shells, not extra members.
+  Contract policy still rejects unsupported routes before artifact publication.
+- Generated `NativeCounter` and `NativeCounterChild` replace manual registration
+  in the managed lifecycle example. They exercise overloads, static/void calls,
+  vector const references, fields, independent owned clones and borrowed children.
+  Duplicate owned returns fail without deleting or invalidating the original.
+- The semantic binder accepts generated native wrappers and the bridge context
+  as Visual call-boundary values. Tests project construction, calls, fields and
+  disposal; the Demo chunk emits. They are not UObject/state handles. Interactive
+  palette insertion still has existing receiver/shape limits and is not claimed.
+- Module registration serves old/new Worlds, rejects collisions and retires
+  its objects/aliases before code unload. Arbitrary unload from within an active
+  invocation and cross-module inheritance are not supported.
+- **Remaining:** native-object arguments, richer value/container/ref/out routes,
+  defaults, inheritance, callbacks/converters and cooked execution. This is a
+  usable generated-call batch, not completion of the whole native-extension family.
+  The next M13.5 family is general binary payload interop; follow the roadmap
+  rather than extending every native signature first.
 
 ## Relevant verification
 
@@ -86,4 +115,12 @@ reload rollback, old-handle retention, explicit/forgotten Dispose, World teardow
 deep borrowed chains and many independent owned objects. See
 `artifacts/m13-5-native-objects/managed/managed-complete.trx` and
 `artifacts/m13-5-native-objects/unreal-suite.log`. The Demo chunk was regenerated.
-Ordinary C++ generated authoring, richer codecs and cooked execution remain open.
+The generated-object batch subsequently passes 744 managed tests and 35 CMD
+tests in `artifacts/m13-5-native-generated/`. A final duplicate-owned-return fix
+has its own focused rerun rather than relabeling that full-suite evidence.
+That rerun passes 23 managed tests and four native-object CMD tests, including
+the invalid owned factory and subsequent access to the surviving parent/child.
+Results: `managed/native-objects-final.trx` and `native-objects-final.log` under
+the same artifact directory. The affected UE rebuild, final Demo chunk emission
+and deterministic generation (nine outputs) succeed.
+Richer codecs, interactive palette acceptance and cooked execution remain open.

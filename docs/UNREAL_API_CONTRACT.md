@@ -22,8 +22,9 @@ silently exposing different Unreal members.
 
 An optional `nativeExtensions` object in the API contract admits public C++
 members that are not marked `UFUNCTION` or `UPROPERTY`. It uses its own schema,
-`unifiedscript.unreal-native-extensions/v0.1`, while contracts without this
-object retain their existing canonical representation. The extension is applied
+`unifiedscript.unreal-native-extensions/v0.2`. Legacy v0.1 UObject extensions
+remain readable and retain their canonical representation; ordinary C++ types
+require v0.2. Contracts without this object remain unchanged. The extension is applied
 before member selection, dependency closure, source-driven expansion and all
 generators. The normal `ue-bindings --contract` and project setup commands need
 no separate native-extension step.
@@ -31,7 +32,7 @@ no separate native-extension step.
 The checked-in
 [Demo contract](../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json)
 contains the complete example. Each extension has a `name` and `types`. A type
-declares the exact exported UObject `path`, `nativeName`, `headerPath`,
+declares its `path`, `nativeName`, `headerPath`,
 `properties`, and `functions`. Properties reuse the typed property declaration;
 each function contains a typed `declaration`, a `const` method flag, and an
 ordered `parameters` list of C++ passing modes:
@@ -49,7 +50,7 @@ the sample's combined container/ref/out path ends in
 not in generated C++. A single function can be selected by name; overloaded
 functions require the exact signature selector.
 
-Generated C++ uses typed member/function pointers to select the exact overload,
+Generated C++ methods use typed member/function pointers to select the exact overload,
 including const qualification, and compile-time assertions for field types.
 Declarations that disagree with the real header cannot silently convert to a
 different member signature. Value and const-reference overloads with the same
@@ -72,9 +73,9 @@ zero-argument void method, and a container/ref/out method. CMD tests
 `UnifiedScript.Unreal.NativeExtensions.ManagedRoundTrip` exercise the real
 generated native table, CoreCLR calls, generation replacement and World teardown.
 
-Current boundary: owners are existing native UObject classes. Ordinary C++
-constructors, opaque owned/borrowed handles, non-UObject inheritance, custom
-converters and native callbacks are not implemented by this declaration version.
+With `kind` omitted (or `class`), owners must match existing exported native
+UObject classes. Ordinary C++ declarations use `kind: "nativeObject"` and the
+separate ownership rules below; they do not extend UObject reflection.
 The normal value codecs and their bounds still apply; this is not arbitrary
 pointer/reference interop. A non-UPROPERTY field does not acquire GC rooting,
 serialization, replication or a reflected Blueprint property merely because it
@@ -84,11 +85,50 @@ acceptance evidence.
 
 ## Ordinary C++ object runtime
 
-The ownership/dispatch runtime for non-UObject C++ objects is implemented, but
-**the v0.1 declarations above do not yet generate ordinary C++ object bindings**.
-`NativeObjectLifetimeDemoScript` is a CMD integration fixture whose native members
-are registered by `UnifiedScriptNativeObjectTests.cpp`; it is not an author-facing
-facade or a generally installed native library.
+The v0.2 declarations generate ordinary C++ constructors, fields, instance/static
+methods, overloads and ownership-qualified object returns. The checked-in
+[native header](../HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptNativeCounter.h)
+has no UObject or reflection macros. The same Demo contract generates its native
+dispatch/registration, typed C# classes, coverage and visual node descriptions.
+The real CoreCLR
+[example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectLifetimeDemoScript.cs)
+uses those generated APIs, with no per-World test-member registration:
+
+```csharp
+using var counter = new NativeCounter(context.Bridge, 10);
+using var child = counter.GetChild();   // Borrowed from counter; never deletes C++ storage.
+child.Add(5);
+int scaled = counter.Scale(2);          // 30; exact int32 overload.
+double fractional = counter.Scale(0.5); // 7.5; exact double overload.
+using var clone = counter.Clone();     // Independent owned result.
+counter.Bias = 3;
+```
+
+Declare an ordinary type with `kind: "nativeObject"`, a stable
+`/Native/Module.Type` path, its exact namespace-qualified C++ `nativeName` and
+header. Object references use the same path/header and `nativeName` ending in
+`*`. Native class declarations are not UHT exports and cannot claim UObject
+traits, Blueprint inheritance or reflected state.
+
+- A constructor declaration is static, has `operation: "constructor"` and
+  `returnOwnership: "owned"`, and returns its own native type. It emits both
+  a C# constructor and a named static factory for visual calls. Native
+  constructors use normal C++ overload resolution; exact member-pointer
+  validation applies to methods, not constructors.
+- An object-returning method explicitly selects `owned` or `borrowed`.
+  Owned results must be newly transferred deleting ownership; a duplicate
+  registered address is rejected without deleting its existing owner. Borrowed
+  results require a non-static receiver whose lifetime owns the storage.
+  Such calls are effectful even when the C++ method is const: they publish leases.
+- Scalar/enum/vector/rotator fields and methods use fixed values. A dependency
+  on a native return type emits its wrapper shell, not unselected members.
+  Static calls require the generation's `IUnrealInvocationBridge`; no fabricated
+  UObject receiver or process-global managed scope is used.
+- Generated wrappers and that context can cross `[Visual]` call boundaries.
+  Semantic/Graph projection and chunk emission are tested. This does not make
+  native handles serializable Script Class state or reflected Blueprint pins.
+  Full interactive palette insertion is not established: the current palette
+  still has receiver/type/return-shape restrictions beyond the generated catalog.
 
 `FUnifiedScriptNativeObjectRegistry` belongs to one native World context. Its
 opaque object and scope tokens are process-unique and non-recycled. An owned
@@ -97,14 +137,23 @@ address cannot acquire two deleting owners. A borrowed registration requires a
 live same-scope owner and never deletes the borrowed pointer. Releasing an owner
 invalidates all descendant aliases first. Before native code moves/replaces child
 storage, it must call `InvalidateBorrowed`; merely retaining an unrelated object
-does not make an arbitrary pointer safe. Binding/destructor code must remain
-loaded until the context is detached; dynamic native module unloading is not
-supported by this checkpoint.
+does not make an arbitrary pointer safe.
+
+Generated `FUnifiedScriptNativeObjectLibrary` registration serves existing and
+future Worlds. Conflicting member IDs fail closed, including conflicts with
+explicit registrations. Library retirement removes its dispatch entries and
+retires its allocations and aliases while destructor code is still loaded.
+Registration/retirement with live Worlds is game-thread-only. This does not
+promise arbitrary hot unloading during an active native invocation, cross-module
+inheritance lifetime management or automatic cleanup of manually registered
+objects outside that library. Their native code must remain loaded until they
+are released or their context detaches.
 
 Managed code obtains a generation scope through
 `UnrealNativeObjectScope.FromBridge(context.Bridge)`. Construction returns an
-`UnrealNativeObjectLease`; `Borrow` creates a dependent alias, `Invoke` uses a
-stable member ID, and `Dispose` releases the lease. The registry owns the actual
+`UnrealNativeObjectLease`; `Acquire` wraps an object return, `Invoke` uses a
+stable member ID, and `Dispose` releases the lease. Generated wrappers hide
+these IDs and low-level calls. The registry owns the actual
 ownership policy, not a caller-provided managed Boolean. Forgotten leases are
 released when their generation/transport is disposed or their World detaches.
 Explicit calls and disposal are game-thread-only. Worker disposal fails before
@@ -125,12 +174,17 @@ Its initial synchronous lane accepts up to 16 fixed scalar/enum/vector/rotator
 inputs and returns one fixed value plus an optional native-object handle. It
 rejects strings, containers, other arena values and UObject cells; it does not
 fall back to reflection. Failed factories discard unpublished allocations and
-outputs, not arbitrary native side effects. Rich codecs, native-object parameters,
-ref/out and generated wrapper/node surfaces remain follow-up implementation.
+outputs, not arbitrary native side effects. Native-object arguments, strings,
+containers, richer structs, ref/out, default arguments, inheritance, converters
+and native callbacks remain unsupported on this ordinary-object lane. They
+must not silently use UObject codecs or reflection fallback. The broader
+UObject-member call-frame support above is a different route.
 
-`UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation` and
-`.ManagedLifetime` verify the native registry, ABI rejection rules and actual
-CoreCLR startup/rollback/reload/teardown. The 10,000-level borrow-chain test checks
+`UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation`,
+`.GeneratedLibrary` and `.ManagedLifetime` verify the native registry, ABI
+rejection, automatic dispatch, library retirement and actual generated CoreCLR
+startup/rollback/reload/teardown. The sample also injects a duplicate owned return
+to prove that rejection preserves the existing object. The 10,000-level borrow-chain test checks
 iterative invalidation, not Puerts performance. No cooked result is claimed yet.
 
 ## Contract schema
@@ -138,7 +192,8 @@ iterative invalidation, not Puerts performance. No cooked result is claimed yet.
 `unifiedscript.unreal-api-contract/v0.2` requires a contract name, managed
 namespace, generated-thunk header and C++ namespace, plus one or more exact
 type/member selectors. Type paths and member names must exist in the supplied
-`unifiedscript.unreal-reflection/v0.5` document. Unknown fields, duplicate
+`unifiedscript.unreal-reflection/v0.5` document or explicit native extensions.
+Unknown fields, duplicate
 selectors, stale types, and stale members fail generation.
 
 ```json

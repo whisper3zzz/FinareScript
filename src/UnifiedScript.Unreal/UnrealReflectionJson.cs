@@ -85,7 +85,9 @@ public static class UnrealReflectionJson
             !IsIdentifier(type.Name) ||
             string.IsNullOrWhiteSpace(type.NativeName) ||
             !modules.Contains(type.Module, StringComparer.Ordinal) ||
-            !IsReflectedPath(type.Path, type.Module) ||
+            !(type.Kind == UnrealReflectedTypeKind.NativeObject
+                ? type.Path.StartsWith($"/Native/{type.Module}.", StringComparison.Ordinal)
+                : IsReflectedPath(type.Path, type.Module)) ||
             !IsValidHeaderPath(type.HeaderPath) ||
             type.Traits is null || type.Properties is null || type.Functions is null ||
             type.Delegates is null || type.InterfacePaths is null || type.EnumValues is null ||
@@ -105,6 +107,11 @@ public static class UnrealReflectionJson
             throw new JsonException($"Unreal type '{type.Path}' has invalid interface paths.");
         }
         ValidateMetadata(type.Metadata, $"type '{type.Path}'");
+        if (type.Kind == UnrealReflectedTypeKind.NativeObject &&
+            (type.BaseTypePath is not null || type.Traits.Abstract || type.Traits.BlueprintType || type.Traits.Interface ||
+             type.InterfacePaths.Count != 0 || type.Delegates.Count != 0 ||
+             type.Properties.Any(p => p.NativeExtension is null) || type.Functions.Any(f => f.NativeBinding is null)))
+            throw new JsonException("USUE5404: Ordinary C++ types require explicit native bindings and cannot claim UObject traits or inheritance.");
         if (type.Kind == UnrealReflectedTypeKind.Enum)
         {
             if (type.Properties.Count != 0 || type.Functions.Count != 0 || type.Delegates.Count != 0 ||
@@ -270,6 +277,9 @@ public static class UnrealReflectionJson
                 UnrealValueKind.Struct or UnrealValueKind.Enum
                 when hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
                     !hasElement && !hasKey && !hasValue:
+                return;
+            case UnrealValueKind.NativeObject when hasTypePath && type.TypePath!.StartsWith("/Native/", StringComparison.Ordinal) &&
+                IsReflectedObjectPath(type.TypePath) && !hasElement && !hasKey && !hasValue:
                 return;
             case UnrealValueKind.Array or UnrealValueKind.Set
                 when !hasTypePath && hasElement && !hasKey && !hasValue:

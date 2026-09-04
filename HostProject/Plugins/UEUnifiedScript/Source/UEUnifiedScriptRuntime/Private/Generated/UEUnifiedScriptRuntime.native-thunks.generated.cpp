@@ -5465,3 +5465,261 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
         return FailUnknownMember(OutResult, MemberId);
     }
 }
+#include "UnifiedScriptNativeObjectValues.h"
+#include "Engine/HitResult.h"
+#include "UnifiedScriptActor.h"
+#include "UnifiedScriptComponent.h"
+#include "UnifiedScriptInteropFixture.h"
+#include "UnifiedScriptNativeCounter.h"
+#include "UnifiedScriptNativeExtensionFixture.h"
+#include "UnifiedScriptWorldLibrary.h"
+namespace UE::UnifiedScript::Generated::NativeObjects
+{
+using Status = EUnifiedScriptNativeObjectStatus;
+namespace Values = UE::UnifiedScript::NativeObjectValues;
+static_assert(!std::is_base_of_v<UObject, UE::UnifiedScript::NativeExample::FCounter>, "Native object bindings cannot own UObjects");
+static Status Member_B4A70487C31468D0(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Bias)>, int32>, "Native field declaration mismatch");
+    OutValue = Values::Write(TypedTarget->Bias, 0);
+    return Status::Success;
+}
+static Status Member_4BC018878763C95C(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Bias)>, int32>, "Native field declaration mismatch");
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    TypedTarget->Bias = Argument0;
+    return Status::Success;
+}
+static Status Member_0A14AF11DAE662D4(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object((TypedTarget->*static_cast<UE::UnifiedScript::NativeExample::FCounter* (UE::UnifiedScript::NativeExample::FCounter::*)() const>(&UE::UnifiedScript::NativeExample::FCounter::Clone))());
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
+static Status Member_C7FB3979E2537381(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object(new UE::UnifiedScript::NativeExample::FCounter());
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
+static Status Member_1E238BBF8A4F6005(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object(new UE::UnifiedScript::NativeExample::FCounter(Argument0));
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
+static Status Member_BD419863586ED57A(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    bool Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((TypedTarget->*static_cast<bool (UE::UnifiedScript::NativeExample::FCounter::*)(bool) const>(&UE::UnifiedScript::NativeExample::FCounter::Flip))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_4AC35189F0573E27(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    auto* Object = (TypedTarget->*static_cast<UE::UnifiedScript::NativeExample::FCounterChild* (UE::UnifiedScript::NativeExample::FCounter::*)()>(&UE::UnifiedScript::NativeExample::FCounter::GetChild))();
+    return Registry.RegisterBorrowed(Scope, 0x988618A984C7E632ull, Object, Target, OutHandle);
+}
+static Status Member_4819FCD2D84238E2(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object((TypedTarget->*static_cast<UE::UnifiedScript::NativeExample::FCounter* (UE::UnifiedScript::NativeExample::FCounter::*)()>(&UE::UnifiedScript::NativeExample::FCounter::InvalidOwnedAliasForTest))());
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
+static Status Member_9E6B4803C8D0E235(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 2) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    int32 Argument1{};
+    if (!Values::Read(Arguments[1], Argument1, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((static_cast<int32 (*)(int32, int32)>(&UE::UnifiedScript::NativeExample::FCounter::Multiply))(Argument0, Argument1), 0);
+    return Status::Success;
+}
+static Status Member_65004780946EA712(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    (TypedTarget->*static_cast<void (UE::UnifiedScript::NativeExample::FCounter::*)()>(&UE::UnifiedScript::NativeExample::FCounter::Reset))();
+    return Status::Success;
+}
+static Status Member_1DB552A3F63B54D4(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    double Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((TypedTarget->*static_cast<double (UE::UnifiedScript::NativeExample::FCounter::*)(double) const>(&UE::UnifiedScript::NativeExample::FCounter::Scale))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_4699DD1B1F305F07(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounter::*)(int32) const>(&UE::UnifiedScript::NativeExample::FCounter::Scale))(Argument0), 0);
+    return Status::Success;
+}
+static Status Member_FAA4C2DBD80FDF4F(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    FVector Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((TypedTarget->*static_cast<FVector (UE::UnifiedScript::NativeExample::FCounter::*)(FVector const&) const>(&UE::UnifiedScript::NativeExample::FCounter::Shift))(Argument0), 0);
+    return Status::Success;
+}
+static_assert(!std::is_base_of_v<UObject, UE::UnifiedScript::NativeExample::FCounterChild>, "Native object bindings cannot own UObjects");
+static Status Member_087CC455F186614A(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0x988618A984C7E632ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Value)>, int32>, "Native field declaration mismatch");
+    OutValue = Values::Write(TypedTarget->Value, 0);
+    return Status::Success;
+}
+static Status Member_A2FCC855B8BA82A6(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0x988618A984C7E632ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->Value)>, int32>, "Native field declaration mismatch");
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    TypedTarget->Value = Argument0;
+    return Status::Success;
+}
+static Status Member_5F5612A76C182766(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0x988618A984C7E632ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounterChild*>(Pointer);
+    int32 Argument0{};
+    if (!Values::Read(Arguments[0], Argument0, 0)) return Status::InvalidArgument;
+    OutValue = Values::Write((TypedTarget->*static_cast<int32 (UE::UnifiedScript::NativeExample::FCounterChild::*)(int32)>(&UE::UnifiedScript::NativeExample::FCounterChild::Add))(Argument0), 0);
+    return Status::Success;
+}
+static const FUnifiedScriptNativeObjectMemberEntry Members[] =
+{
+    {0xB4A70487C31468D0ull, &Member_B4A70487C31468D0},
+    {0x4BC018878763C95Cull, &Member_4BC018878763C95C},
+    {0x0A14AF11DAE662D4ull, &Member_0A14AF11DAE662D4},
+    {0xC7FB3979E2537381ull, &Member_C7FB3979E2537381},
+    {0x1E238BBF8A4F6005ull, &Member_1E238BBF8A4F6005},
+    {0xBD419863586ED57Aull, &Member_BD419863586ED57A},
+    {0x4AC35189F0573E27ull, &Member_4AC35189F0573E27},
+    {0x4819FCD2D84238E2ull, &Member_4819FCD2D84238E2},
+    {0x9E6B4803C8D0E235ull, &Member_9E6B4803C8D0E235},
+    {0x65004780946EA712ull, &Member_65004780946EA712},
+    {0x1DB552A3F63B54D4ull, &Member_1DB552A3F63B54D4},
+    {0x4699DD1B1F305F07ull, &Member_4699DD1B1F305F07},
+    {0xFAA4C2DBD80FDF4Full, &Member_FAA4C2DBD80FDF4F},
+    {0x087CC455F186614Aull, &Member_087CC455F186614A},
+    {0xA2FCC855B8BA82A6ull, &Member_A2FCC855B8BA82A6},
+    {0x5F5612A76C182766ull, &Member_5F5612A76C182766},
+};
+static FUnifiedScriptNativeObjectLibrary Library(MakeArrayView(Members));
+}

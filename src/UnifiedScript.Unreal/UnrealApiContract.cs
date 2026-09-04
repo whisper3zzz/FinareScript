@@ -289,7 +289,8 @@ public static class UnrealApiContractProjector
         if (paths.Count == 0) return;
         foreach (string path in paths)
         {
-            if (evaluation.For(path).Route is UnrealBindingRoute.ReflectionFallback or UnrealBindingRoute.DataPlaneOperation)
+            if (evaluation.For(path).Route is UnrealBindingRoute.ReflectionFallback or UnrealBindingRoute.DataPlaneOperation ||
+                path.StartsWith("/Native/", StringComparison.Ordinal) && evaluation.For(path).Route == UnrealBindingRoute.CallFrame)
             {
                 throw new JsonException($"USUE5405: Native-only member '{path}' requires a generated native route, not reflection or a data-plane substitution.");
             }
@@ -351,7 +352,7 @@ public static class UnrealApiContractProjector
     internal static string FunctionSelector(UnrealReflectedFunction function)
     {
         int open = function.Path.IndexOf('(', StringComparison.Ordinal);
-        return open >= 0 ? function.Path[(function.Path.LastIndexOf(':') + 1)..] :
+        return open >= 0 ? function.Path[(function.Path.IndexOf(':') + 1)..] :
             $"{function.Name}({string.Join(',', function.Parameters.Select(static parameter => parameter.Type.NativeName))})";
     }
 
@@ -368,7 +369,9 @@ public static class UnrealApiContractProjector
             {
                 continue;
             }
-            selectedTypes.Add(dependency);
+            selectedTypes.Add(dependency.Kind == UnrealReflectedTypeKind.NativeObject
+                ? dependency with { Properties = [], Functions = [] } : dependency);
+            if (dependency.Kind == UnrealReflectedTypeKind.NativeObject) continue;
             foreach (string nested in EnumerateDependencies(dependency))
             {
                 pending.Enqueue(nested);
@@ -393,7 +396,7 @@ public static class UnrealApiContractProjector
             .Concat(type.Delegates.SelectMany(static item => item.Parameters.Select(static parameter => parameter.Type)));
         foreach (UnrealTypeReference reference in references.SelectMany(EnumerateTypeReferences))
         {
-            if (reference.TypePath is not null && reference.Kind is UnrealValueKind.Struct or UnrealValueKind.Enum)
+            if (reference.TypePath is not null && reference.Kind is UnrealValueKind.Struct or UnrealValueKind.Enum or UnrealValueKind.NativeObject)
             {
                 yield return reference.TypePath;
             }
@@ -472,6 +475,11 @@ public sealed record UnrealApiNodeDescriptor(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? NativeExtension { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealNativeOperation? NativeOperation { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealNativeReturnOwnership? ReturnOwnership { get; init; }
+
     public bool Deprecated { get; init; }
 
     public string? DeprecationMessage { get; init; }
@@ -514,7 +522,7 @@ public static class UnrealApiNodeCatalogGenerator
     public static UnrealApiNodeCatalog Generate(UnrealApiContractProjection projection)
     {
         ArgumentNullException.ThrowIfNull(projection);
-        IReadOnlyDictionary<string, string> managedNames = CreateManagedTypeNames(
+        IReadOnlyDictionary<string, string> managedNames = UnrealBindingGenerator.CreateManagedTypeNames(
             projection.Reflection.Types);
         UnrealApiNodeType[] types = projection.Reflection.Types.Select(type =>
         {
@@ -522,7 +530,7 @@ public static class UnrealApiNodeCatalogGenerator
             string category = type.Metadata.Category ?? $"Unreal API|{type.Name}";
             var nodes = new List<UnrealApiNodeDescriptor>();
             UnrealTypeReference receiverType = new(
-                UnrealValueKind.Object,
+                type.Kind == UnrealReflectedTypeKind.NativeObject ? UnrealValueKind.NativeObject : UnrealValueKind.Object,
                 type.NativeName + "*",
                 type.Path);
             if (type.Kind == UnrealReflectedTypeKind.Struct)
@@ -623,7 +631,9 @@ public static class UnrealApiNodeCatalogGenerator
                     "input",
                     "data",
                     function.Traits.Static
-                        ? new UnrealTypeReference(
+                        ? type.Kind == UnrealReflectedTypeKind.NativeObject
+                            ? new UnrealTypeReference(UnrealValueKind.InvocationContext, "UnifiedScript.Unreal.IUnrealInvocationBridge")
+                            : new UnrealTypeReference(
                             UnrealValueKind.Object,
                             "UObject*",
                             "/Script/CoreUObject.Object")
@@ -698,6 +708,10 @@ public static class UnrealApiNodeCatalogGenerator
                 {
                     NativeExtension = type.Properties.FirstOrDefault(field => field.Path == node.MemberPath)?.NativeExtension
                         ?? type.Functions.FirstOrDefault(method => method.Path == node.MemberPath)?.NativeBinding?.Extension,
+                    NativeOperation = type.Kind == UnrealReflectedTypeKind.NativeObject
+                        ? type.Functions.FirstOrDefault(method => method.Path == node.MemberPath)?.NativeBinding?.Operation : null,
+                    ReturnOwnership = type.Kind == UnrealReflectedTypeKind.NativeObject
+                        ? type.Functions.FirstOrDefault(method => method.Path == node.MemberPath)?.NativeBinding?.ReturnOwnership : null,
                 }).OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray());
         }).ToArray();
         return new UnrealApiNodeCatalog(

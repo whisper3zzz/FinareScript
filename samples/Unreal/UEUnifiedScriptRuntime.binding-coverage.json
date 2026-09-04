@@ -7,14 +7,14 @@
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
-    "typeCount": 8,
-    "memberCount": 117,
-    "directThunkCount": 33,
+    "typeCount": 10,
+    "memberCount": 131,
+    "directThunkCount": 47,
     "callFrameCount": 81,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 114,
+    "nativeThunkCount": 128,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -30,6 +30,132 @@
     "diagnostics": []
   },
   "entries": [
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Clone()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Flip(bool)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:GetChild()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:InvalidOwnedAliasForTest()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Multiply(int32,int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(double)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Shift(FVectorconst\u0026)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Add(int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Value",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
     {
       "path": "/Script/Engine.HitResult:BoneName",
       "ownerPath": "/Script/Engine.HitResult",

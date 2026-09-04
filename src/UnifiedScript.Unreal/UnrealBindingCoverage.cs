@@ -105,6 +105,24 @@ public sealed record UnrealBindingCoverageReport(
         var entries = new List<UnrealBindingCoverageEntry>();
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (type.Kind == UnrealReflectedTypeKind.NativeObject)
+            {
+                foreach (var member in type.Properties.Select(p => (p.Path, Kind: "property"))
+                             .Concat(type.Functions.Select(f => (f.Path, Kind: "function"))))
+                {
+                    var decision = policy.For(member.Path);
+                    var managedErrors = managedDiagnostics.GetValueOrDefault(member.Path) ?? [];
+                    var nativeErrors = nativeDiagnostics.GetValueOrDefault(member.Path) ?? [];
+                    bool allowed = decision.Action == UnrealApiPolicyAction.Allow && managedErrors.Length == 0 && nativeErrors.Length == 0 &&
+                        decision.Route is UnrealBindingRoute.Auto or UnrealBindingRoute.DirectThunk;
+                    AddEntry(entries, member.Path, type.Path, member.Kind,
+                        allowed ? UnrealBindingDisposition.DirectThunk : UnrealBindingDisposition.Rejected,
+                        managedErrors, nativeErrors, allowed ? null : decision.DiagnosticCode ?? "USUE5410",
+                        allowed ? "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback."
+                            : decision.Reason ?? "Native object member requires a supported generated ownership/value route.");
+                }
+                continue;
+            }
             foreach (UnrealReflectedProperty property in type.Properties)
             {
                 AddMember(

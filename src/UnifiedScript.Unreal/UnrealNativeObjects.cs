@@ -12,6 +12,39 @@ public enum UnrealNativeObjectStatus : byte
 /// <summary>Non-UObject identity. Never a pointer and never interchangeable with UnrealObjectHandle.</summary>
 public readonly record struct UnrealNativeObjectHandle(ulong Value);
 
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class UnrealNativeObjectTypeAttribute(string path) : Attribute
+{
+    public string Path { get; } = path;
+}
+
+/// <summary>Base for generated ordinary C++ wrappers, deliberately not an UnrealObject.</summary>
+public abstract class UnrealNativeObject : IDisposable
+{
+    protected UnrealNativeObject(UnrealNativeObjectLease lease) => Lease = lease ?? throw new ArgumentNullException(nameof(lease));
+    protected UnrealNativeObjectLease Lease { get; }
+    public UnrealNativeObjectHandle Handle => Lease.Handle;
+    public void Dispose() => Lease.Dispose();
+}
+
+public static class UnrealNativeObjectValues
+{
+    public static UnrealNativeValueV3 Encode<T>(T value)
+    {
+        int bytes = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(value, Span<byte>.Empty, ref bytes, out var result, out _) && bytes == 0 && IsFixed(result))
+            return result;
+        throw new NotSupportedException($"'{typeof(T)}' is not a native-object fixed value.");
+    }
+    public static T Decode<T>(UnrealNativeValueV3 value) =>
+        IsFixed(value) && UnrealNativeValueCodecV3.TryDecode<T>(value, ReadOnlySpan<byte>.Empty, 0, out var result)
+            ? result : throw new InvalidOperationException($"Native-object result is not '{typeof(T)}'.");
+    private static bool IsFixed(UnrealNativeValueV3 value) =>
+        value.Flags == 0 && value.Reserved16 == 0 && value.Auxiliary == 0 &&
+        (value.Kind is >= UnrealNativeValueKindV3.Boolean and <= UnrealNativeValueKindV3.Enum or
+            UnrealNativeValueKindV3.Vector3 or UnrealNativeValueKindV3.Rotator3);
+}
+
 public readonly record struct UnrealNativeObjectCallResult(
     UnrealNativeValueV3 Value, UnrealNativeObjectHandle Handle);
 
@@ -144,6 +177,10 @@ public sealed class UnrealNativeObjectLease : IDisposable
     }
 
     public UnrealNativeObjectLease Borrow(ulong memberId, ReadOnlySpan<UnrealNativeValueV3> arguments)
+        => Acquire(memberId, arguments);
+
+    /// <summary>Acquire a returned object; the native declaration determines owned vs borrowed.</summary>
+    public UnrealNativeObjectLease Acquire(ulong memberId, ReadOnlySpan<UnrealNativeValueV3> arguments)
     {
         lock (_gate)
         {

@@ -17,6 +17,18 @@ uint64 AllocateNativeToken()
     return 0;
 }
 using EStatus = EUnifiedScriptNativeObjectStatus;
+struct FLibraryEntry { uint64 Library; FUnifiedScriptNativeObjectMember Invoke; };
+struct FLibraries
+{
+    TMap<uint64, TArray<FLibraryEntry>> Members;
+    TSet<FUnifiedScriptNativeObjectRegistry*> Registries;
+};
+FLibraries& Libraries()
+{
+    // Module static destructors may run in any order; the process owns this index.
+    static FLibraries* Value = new FLibraries();
+    return *Value;
+}
 bool IsFixedCell(const FUnifiedScriptNativeValueV3& Value, bool bAllowVoid)
 {
     return Value.Flags == EUnifiedScriptNativeValueFlagsV3::None && !Value.Reserved16 && !Value.Auxiliary &&
@@ -36,6 +48,7 @@ struct FUnifiedScriptNativeObjectRegistry::FImpl
         FUnifiedScriptNativeObjectDestroy Destroy;
         uint64 Owner;
         TSet<uint64> Children;
+        uint64 Library = 0;
     };
     bool bAttached = true;
     TMap<uint64, TSet<uint64>> Scopes;
@@ -43,6 +56,7 @@ struct FUnifiedScriptNativeObjectRegistry::FImpl
     TMap<void*, int32> PointerCounts;
     TMap<uint64, FUnifiedScriptNativeObjectMember> Members;
     TArray<uint64>* Allocations = nullptr;
+    uint64 CurrentLibrary = 0;
 
     EStatus Check(uint64 Scope) const
     {
@@ -72,7 +86,11 @@ struct FUnifiedScriptNativeObjectRegistry::FImpl
     }
 };
 
-FUnifiedScriptNativeObjectRegistry::FUnifiedScriptNativeObjectRegistry() : Impl(MakeUnique<FImpl>()) {}
+FUnifiedScriptNativeObjectRegistry::FUnifiedScriptNativeObjectRegistry() : Impl(MakeUnique<FImpl>())
+{
+    check(IsInGameThread());
+    Libraries().Registries.Add(this);
+}
 FUnifiedScriptNativeObjectRegistry::~FUnifiedScriptNativeObjectRegistry()
 {
     // A retained detached context may finally be released on a managed worker.
@@ -115,6 +133,7 @@ EStatus FUnifiedScriptNativeObjectRegistry::RegisterOwned(uint64 Scope, uint64 T
     const uint64 Token = AllocateNativeToken();
     if (!Token) return EStatus::Exhausted;
     Impl->Entries.Add(Token, {Scope, TypeId, Pointer, Destroy, 0});
+    Impl->Entries.FindChecked(Token).Library = Impl->CurrentLibrary;
     Impl->Scopes.FindChecked(Scope).Add(Token);
     Impl->PointerCounts.Add(Pointer, 1);
     if (Impl->Allocations) Impl->Allocations->Add(Token);
@@ -136,6 +155,7 @@ EStatus FUnifiedScriptNativeObjectRegistry::RegisterBorrowed(uint64 Scope, uint6
     if (!Token) return EStatus::Exhausted;
     Parent->Children.Add(Token);
     Impl->Entries.Add(Token, {Scope, TypeId, Pointer, nullptr, Owner.Value});
+    Impl->Entries.FindChecked(Token).Library = Impl->CurrentLibrary;
     Impl->Scopes.FindChecked(Scope).Add(Token);
     ++Impl->PointerCounts.FindOrAdd(Pointer);
     if (Impl->Allocations) Impl->Allocations->Add(Token);
@@ -185,7 +205,7 @@ EStatus FUnifiedScriptNativeObjectRegistry::RegisterMember(uint64 MemberId, FUni
     if (!IsInGameThread()) return EStatus::WrongThread;
     if (!Impl->bAttached) return EStatus::Unavailable;
     if (!MemberId || !Member) return EStatus::InvalidArgument;
-    if (Impl->Members.Contains(MemberId)) return EStatus::DuplicateMember;
+    if (Impl->Members.Contains(MemberId) || Libraries().Members.Contains(MemberId)) return EStatus::DuplicateMember;
     Impl->Members.Add(MemberId, Member);
     return EStatus::Success;
 }
@@ -198,7 +218,14 @@ EStatus FUnifiedScriptNativeObjectRegistry::Invoke(uint64 Scope, FUnifiedScriptN
     OutHandle = {};
     EStatus Status = Impl->Check(Scope);
     if (Status != EStatus::Success) return Status;
-    const auto* Member = Impl->Members.Find(MemberId);
+    FUnifiedScriptNativeObjectMember Member = Impl->Members.FindRef(MemberId);
+    uint64 LibraryId = 0;
+    if (const auto* Generated = Libraries().Members.Find(MemberId))
+    {
+        if (Member || Generated->Num() != 1) return EStatus::DuplicateMember;
+        Member = (*Generated)[0].Invoke;
+        LibraryId = (*Generated)[0].Library;
+    }
     if (!Member) return EStatus::UnknownMember;
     if (Target.Value)
     {
@@ -214,8 +241,11 @@ EStatus FUnifiedScriptNativeObjectRegistry::Invoke(uint64 Scope, FUnifiedScriptN
     FUnifiedScriptNativeObjectHandle Handle;
     TArray<uint64> Allocations;
     TArray<uint64>* ParentAllocations = Impl->Allocations;
+    const uint64 PreviousLibrary = Impl->CurrentLibrary;
     Impl->Allocations = &Allocations;
-    Status = (*Member)(*this, Scope, Target, Arguments, Value, Handle);
+    Impl->CurrentLibrary = LibraryId;
+    Status = Member(*this, Scope, Target, Arguments, Value, Handle);
+    Impl->CurrentLibrary = PreviousLibrary;
     Impl->Allocations = ParentAllocations;
     if (Status == EStatus::Success && !IsFixedCell(Value, true)) Status = EStatus::InvalidArgument;
     // A failed constructor/factory must not leak unpublished native ownership.
@@ -241,6 +271,7 @@ void FUnifiedScriptNativeObjectRegistry::Detach()
     check(IsInGameThread());
     if (!Impl->bAttached) return;
     Impl->bAttached = false;
+    Libraries().Registries.Remove(this);
     Impl->Scopes.Reset();
     TArray<uint64> Handles;
     Impl->Entries.GenerateKeyArray(Handles);
@@ -250,3 +281,40 @@ void FUnifiedScriptNativeObjectRegistry::Detach()
 
 int32 FUnifiedScriptNativeObjectRegistry::Num() const { check(IsInGameThread()); return Impl->Entries.Num(); }
 int32 FUnifiedScriptNativeObjectRegistry::NumScopes() const { check(IsInGameThread()); return Impl->Scopes.Num(); }
+
+FUnifiedScriptNativeObjectLibrary::FUnifiedScriptNativeObjectLibrary(TConstArrayView<FUnifiedScriptNativeObjectMemberEntry> Members)
+{
+    check(IsInGameThread() || Libraries().Registries.IsEmpty());
+    Id = AllocateNativeToken();
+    check(Id);
+    for (const auto& Member : Members)
+    {
+        check(Member.MemberId && Member.Invoke);
+        Libraries().Members.FindOrAdd(Member.MemberId).Add({Id, Member.Invoke});
+    }
+}
+
+FUnifiedScriptNativeObjectLibrary::~FUnifiedScriptNativeObjectLibrary()
+{
+    // Unregister before invoking destructors, while the module's code is still loaded.
+    check(IsInGameThread() || Libraries().Registries.IsEmpty());
+    for (auto It = Libraries().Members.CreateIterator(); It; ++It)
+    {
+        It.Value().RemoveAll([&](const auto& Entry) { return Entry.Library == Id; });
+        if (It.Value().IsEmpty()) It.RemoveCurrent();
+    }
+    // User destructors may detach another World. Do not iterate a mutated set
+    // or call a registry that disappeared during an earlier destructor.
+    const auto Registries = Libraries().Registries.Array();
+    for (auto* Registry : Registries)
+        if (Libraries().Registries.Contains(Registry)) Registry->ReleaseLibrary(Id);
+}
+
+void FUnifiedScriptNativeObjectRegistry::ReleaseLibrary(uint64 LibraryId)
+{
+    check(IsInGameThread());
+    TArray<uint64> Handles;
+    for (const auto& Entry : Impl->Entries)
+        if (Entry.Value.Library == LibraryId) Handles.Add(Entry.Key);
+    for (uint64 Handle : Handles) Impl->Retire(Handle);
+}

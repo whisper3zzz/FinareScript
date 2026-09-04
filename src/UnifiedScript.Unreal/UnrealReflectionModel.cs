@@ -7,6 +7,7 @@ public enum UnrealReflectedTypeKind
     Class,
     Struct,
     Enum,
+    NativeObject,
 }
 
 public enum UnrealValueKind
@@ -36,6 +37,8 @@ public enum UnrealValueKind
     Set,
     Map,
     Unsupported,
+    NativeObject,
+    InvocationContext,
 }
 
 public sealed record UnrealBlueprintMetadata(

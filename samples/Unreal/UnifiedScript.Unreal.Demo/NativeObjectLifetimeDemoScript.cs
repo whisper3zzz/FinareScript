@@ -1,16 +1,22 @@
+using UnifiedScript;
+using UnifiedScript.Unreal.Generated;
+
 namespace UnifiedScript.Unreal.Demo;
 
 /// <summary>
-/// Runtime integration fixture for native-object ownership. The native CMD test
-/// installs the ordinary C++ members; this is not yet a generated authoring API.
+/// Generated ordinary C++ bindings; the API contract owns every native member
+/// and the native table installs automatically when its module loads.
 /// </summary>
 public sealed class NativeObjectLifetimeDemoScript : IUnrealManagedScript
 {
-    private static readonly ulong ConstructId = UnrealMemberId.FromPath("/Native/Tests.Counter:Construct(int32)");
-    private static readonly ulong ChildId = UnrealMemberId.FromPath("/Native/Tests.Counter:Child()");
-    private static readonly ulong AddId = UnrealMemberId.FromPath("/Native/Tests.CounterChild:Add(int32)");
-    private UnrealNativeObjectLease? _owner;
-    private UnrealNativeObjectLease? _child;
+    private NativeCounter? _owner;
+    private NativeCounterChild? _child;
+
+    [Visual]
+    public int Preview(NativeCounter counter, int value)
+    {
+        return counter.Scale(value);
+    }
 
     public void OnStart(UnrealScriptContext context)
     {
@@ -18,34 +24,54 @@ public sealed class NativeObjectLifetimeDemoScript : IUnrealManagedScript
         // must still be usable until commit actually retires that generation.
         if (_owner is not null)
         {
-            _child!.Invoke(AddId, [Integer(0)]);
+            _child!.Add(0);
             return;
         }
-        var scope = UnrealNativeObjectScope.FromBridge(context.Bridge);
-        _owner = scope.Construct(ConstructId, [Integer(10)]);
-        _child = _owner.Borrow(ChildId, []);
-        if (_child.Invoke(AddId, [Integer(5)]).Value.Payload0 != 15)
+        _owner = new NativeCounter(context.Bridge, 10);
+        _child = _owner.GetChild();
+        if (_child.Add(5) != 15 || Preview(_owner, 2) != 30 || _owner.Scale(0.5) != 7.5 ||
+            NativeCounter.Multiply(context.Bridge, 3, 4) != 12 || _owner.Flip(true))
             throw new InvalidOperationException("Native borrowed member did not update the owned C++ object.");
+        _owner.Bias = 3;
+        if (_owner.Bias != 3 || _owner.Shift(new(1, 2, 3)) != new UnrealVector(4, 5, 6))
+            throw new InvalidOperationException("Generated field or const-vector-reference binding failed.");
+        try
+        {
+            using var invalid = _owner.InvalidOwnedAliasForTest();
+            throw new InvalidOperationException("Duplicate owned pointer was accepted.");
+        }
+        catch (UnrealNativeObjectException exception) when (exception.Status == UnrealNativeObjectStatus.WrongOwner) { }
+        if (_owner.Scale(2) != 30 || _child.Value != 15)
+            throw new InvalidOperationException("Rejected duplicate ownership damaged the original object.");
+        using (var clone = _owner.Clone())
+        {
+            using var child = clone.GetChild();
+            child.Value = 99;
+            if (child.Value != 99 || _child.Value != 15)
+                throw new InvalidOperationException("Owned native clone unexpectedly aliases its original.");
+            clone.Reset();
+            if (child.Value != 0) throw new InvalidOperationException("Void native method failed.");
+        }
+        using (var empty = NativeCounter.Create(context.Bridge))
+            if (empty.Scale(2) != 2) throw new InvalidOperationException("Default native constructor failed.");
         // Explicit disposal is safe and invalidates already-created borrowed aliases.
         _owner.Dispose();
         try
         {
-            _child.Invoke(AddId, [Integer(1)]);
+            _child.Add(1);
             throw new InvalidOperationException("A borrowed object survived its native owner.");
         }
         catch (UnrealNativeObjectException exception) when (exception.Status == UnrealNativeObjectStatus.InvalidHandle) { }
         _child.Dispose();
-        _owner = scope.Construct(ConstructId, [Integer(20)]);
-        _child = _owner.Borrow(ChildId, []);
+        _owner = NativeCounter.Create(context.Bridge, 20);
+        _child = _owner.GetChild();
     }
 
-    public void OnTick(float deltaSeconds) => _child!.Invoke(AddId, [Integer(1)]);
+    public void OnTick(float deltaSeconds) => _child!.Add(1);
 
     // Intentionally omit lease disposal: generation shutdown must retire both.
     public void OnStop() { }
 
-    private static UnrealNativeValueV3 Integer(int value) =>
-        new() { Kind = UnrealNativeValueKindV3.Int32, Payload0 = unchecked((uint)value) };
 }
 
 public sealed class NativeObjectStartFailureDemoScript : IUnrealManagedScript

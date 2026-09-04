@@ -6,6 +6,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
+#include "UnifiedScriptNativeCounter.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptWorldSubsystem.h"
 
@@ -165,6 +166,66 @@ bool FUnifiedScriptNativeObjectRegistryTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectLibraryTest,
+    "UnifiedScript.Unreal.NativeObjects.GeneratedLibrary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUnifiedScriptNativeObjectLibraryTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::NativeObjectTests;
+    const int32 InitialLive = LiveCount;
+    FUnifiedScriptNativeObjectRegistry Existing, Future, LocalCollision;
+    uint64 Scope = 0, FutureScope = 0, CollisionScope = 0;
+    Existing.OpenScope(Scope);
+    LocalCollision.OpenScope(CollisionScope);
+    LocalCollision.RegisterMember(ConstructId, &Construct);
+    FUnifiedScriptNativeValueV3 Value;
+    FUnifiedScriptNativeObjectHandle Owner, Borrowed, FutureOwner, ManualOwner, ManualBorrowed, Unused;
+    const auto Argument = Integer(12);
+    const auto Arguments = MakeArrayView(&Argument, 1);
+    const FUnifiedScriptNativeObjectMemberEntry Entries[] = {{ConstructId, &Construct}, {ChildId, &Child}, {AddId, &Add}};
+    TestTrue(TEXT("Not registered before module load"), Existing.Invoke(Scope, {}, ConstructId, Arguments, Value, Unused) == EStatus::UnknownMember);
+    auto Manual = MakeUnique<FCounter>(4);
+    TestTrue(TEXT("Independent native owner"), Existing.RegisterOwned(Scope, OwnerType, Manual.Get(), &Destroy, ManualOwner) == EStatus::Success);
+    static_cast<void>(Manual.Release());
+    {
+        FUnifiedScriptNativeObjectLibrary Library(MakeArrayView(Entries));
+        TestTrue(TEXT("Existing World sees late registration"), Existing.Invoke(Scope, {}, ConstructId, Arguments, Value, Owner) == EStatus::Success);
+        TestTrue(TEXT("Generated borrowed return"), Existing.Invoke(Scope, Owner, ChildId, {}, Value, Borrowed) == EStatus::Success);
+        TestTrue(TEXT("Library-owned alias on independent owner"), Existing.Invoke(Scope, ManualOwner, ChildId, {}, Value, ManualBorrowed) == EStatus::Success);
+        TestTrue(TEXT("Explicit registration cannot overwrite generated member"), Existing.RegisterMember(AddId, &Add) == EStatus::DuplicateMember);
+        TestTrue(TEXT("Earlier explicit registration cannot silently shadow library"), LocalCollision.Invoke(CollisionScope, {}, ConstructId, Arguments, Value, Unused) == EStatus::DuplicateMember);
+        Future.OpenScope(FutureScope);
+        TestTrue(TEXT("New generation sees registration"), Future.Invoke(FutureScope, {}, ConstructId, Arguments, Value, FutureOwner) == EStatus::Success);
+        {
+            FUnifiedScriptNativeObjectRegistry NewWorld;
+            uint64 NewScope = 0;
+            NewWorld.OpenScope(NewScope);
+            TestTrue(TEXT("New World sees installed library"), NewWorld.Invoke(NewScope, {}, ConstructId, Arguments, Value, Unused) == EStatus::Success);
+        }
+        const int32 BeforeDuplicate = LiveCount;
+        {
+            FUnifiedScriptNativeObjectLibrary Duplicate(MakeArrayView(Entries));
+            TestTrue(TEXT("Conflicting libraries fail closed"), Existing.Invoke(Scope, {}, ConstructId, Arguments, Value, Unused) == EStatus::DuplicateMember);
+            TestEqual(TEXT("Collision has no constructor side effects"), LiveCount, BeforeDuplicate);
+        }
+        TestTrue(TEXT("Removing conflicting library restores original member"), Existing.Invoke(Scope, Borrowed, AddId, Arguments, Value, Unused) == EStatus::Success);
+        TestEqual(TEXT("Original object survives collision"), Value.Payload0, uint64(24));
+    }
+    void* Pointer = nullptr;
+    TestEqual(TEXT("Module retirement deletes only its owned allocations"), LiveCount, InitialLive + 1);
+    TestTrue(TEXT("Retired member unavailable"), Existing.Invoke(Scope, {}, ConstructId, Arguments, Value, Unused) == EStatus::UnknownMember);
+    TestTrue(TEXT("Owned handle retired"), Existing.Resolve(Scope, Owner, OwnerType, Pointer) == EStatus::InvalidHandle);
+    TestTrue(TEXT("Borrowed handle retired"), Existing.Resolve(Scope, Borrowed, ChildType, Pointer) == EStatus::InvalidHandle);
+    TestTrue(TEXT("Other generation owner retired"), Future.Resolve(FutureScope, FutureOwner, OwnerType, Pointer) == EStatus::InvalidHandle);
+    TestTrue(TEXT("Library alias retired even when its parent is independent"), Existing.Resolve(Scope, ManualBorrowed, ChildType, Pointer) == EStatus::InvalidHandle);
+    TestTrue(TEXT("Independent parent survives library retirement"), Existing.Resolve(Scope, ManualOwner, OwnerType, Pointer) == EStatus::Success);
+    TestEqual(TEXT("Generation scope remains open"), Existing.NumScopes(), 1);
+    TestTrue(TEXT("Local member becomes callable after collision removed"), LocalCollision.Invoke(CollisionScope, {}, ConstructId, Arguments, Value, Unused) == EStatus::Success);
+    LocalCollision.CloseScope(CollisionScope);
+    Existing.CloseScope(Scope);
+    TestEqual(TEXT("No native leak"), LiveCount, InitialLive);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectAbiTest,
     "UnifiedScript.Unreal.NativeObjects.TransportValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FUnifiedScriptNativeObjectAbiTest::RunTest(const FString& Parameters)
@@ -220,7 +281,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectManagedTest,
 bool FUnifiedScriptNativeObjectManagedTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::NativeObjectTests;
-    const int32 InitialLive = LiveCount;
+    const int32& GeneratedLive = UE::UnifiedScript::NativeExample::FCounter::LiveCount;
+    const int32 InitialLive = GeneratedLive;
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (!TestNotNull(TEXT("World"), World)) return false;
     auto* Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
@@ -230,7 +292,7 @@ bool FUnifiedScriptNativeObjectManagedTest::RunTest(const FString& Parameters)
         auto* Context = Host->GetNativeInvocationContext();
         if (TestNotNull(TEXT("Native context"), Context))
         {
-            Context->ExecuteNativeObjects([](auto& Registry) { Register(Registry); });
+            // No fixture registration: the generated native library is module-owned.
             auto* Target = NewObject<UUnifiedScriptNativeExtensionFixture>(World);
             FUnifiedScriptObjectHandleResult Result;
             const auto Handle = Host->RegisterObject(Target, Result);
@@ -241,29 +303,29 @@ bool FUnifiedScriptNativeObjectManagedTest::RunTest(const FString& Parameters)
             TestFalse(TEXT("Failure after native allocation rejects script creation"),
                 Host->CreateManagedScript(7010, Handle, Handle, Assembly, FailureType, Error));
             TestTrue(TEXT("Startup failure reached managed OnStart"), Error.Contains(TEXT("expected startup failure")));
-            TestEqual(TEXT("Failed start releases allocated native objects"), LiveCount, InitialLive);
+            TestEqual(TEXT("Failed start releases allocated native objects"), GeneratedLive, InitialLive);
             bool Started = Host->CreateManagedScript(7011, Handle, Handle, Assembly, Type, Error);
             TestTrue(*FString::Printf(TEXT("Managed construction and borrow: %s"), *Error), Started);
             if (Started)
             {
-                TestEqual(TEXT("One owned object, child does not own"), LiveCount, InitialLive + 1);
+                TestEqual(TEXT("One owned object, child does not own"), GeneratedLive, InitialLive + 1);
                 TestTrue(TEXT("Managed instance call"), Host->TickManagedScript(7011, 0.016f, Error));
                 int32 Generation = 0;
                 TestFalse(TEXT("Failed candidate rolls back"), Host->ReloadManagedScript(7011, Assembly, FailureType, Generation, Error));
                 TestTrue(TEXT("Candidate failure reached managed OnStart"), Error.Contains(TEXT("expected startup failure")));
-                TestEqual(TEXT("Only previous native owner survives rollback"), LiveCount, InitialLive + 1);
+                TestEqual(TEXT("Only previous native owner survives rollback"), GeneratedLive, InitialLive + 1);
                 TestTrue(TEXT("Retained generation native handle still works"), Host->TickManagedScript(7011, 0.016f, Error));
                 TestTrue(TEXT("Replace generation"), Host->ReloadManagedScript(7011, Assembly, Type, Generation, Error));
-                TestEqual(TEXT("Old generation cleaned despite missing Dispose"), LiveCount, InitialLive + 1);
+                TestEqual(TEXT("Old generation cleaned despite missing Dispose"), GeneratedLive, InitialLive + 1);
                 TestTrue(TEXT("Destroy managed script"), Host->DestroyManagedScript(7011, Error));
-                TestEqual(TEXT("Script destroy cleans native ownership"), LiveCount, InitialLive);
+                TestEqual(TEXT("Script destroy cleans native ownership"), GeneratedLive, InitialLive);
                 TestTrue(TEXT("Second script for World teardown"), Host->CreateManagedScript(7012, Handle, Handle, Assembly, Type, Error));
             }
         }
     }
     World->RemoveFromRoot();
     World->DestroyWorld(false);
-    TestEqual(TEXT("World teardown cleans forgotten ownership"), LiveCount, InitialLive);
+    TestEqual(TEXT("World teardown cleans forgotten ownership"), GeneratedLive, InitialLive);
     return true;
 }
 #endif

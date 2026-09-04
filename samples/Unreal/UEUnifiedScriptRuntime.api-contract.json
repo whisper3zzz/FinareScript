@@ -6,6 +6,14 @@
   "nativeNamespace": "UE::UnifiedScript::Generated",
   "types": [
     {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "members": ["Create()", "Create(int32)", "Bias", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset"]
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+      "members": ["Value", "Add"]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
       "members": ["Counter", "Scale(int32)", "Scale(double)", "Multiply", "Accumulate", "Reset"]
     },
@@ -152,9 +160,114 @@
     }
   ],
   "nativeExtensions": {
-    "schemaVersion": "unifiedscript.unreal-native-extensions/v0.1",
+    "schemaVersion": "unifiedscript.unreal-native-extensions/v0.2",
     "name": "Demo.Native",
     "types": [
+      {
+        "kind": "nativeObject",
+        "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+        "nativeName": "UE::UnifiedScript::NativeExample::FCounter",
+        "headerPath": "UnifiedScriptNativeCounter.h",
+        "properties": [
+          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias", "name": "Bias", "type": {"kind": "int32", "nativeName": "int32"}, "access": {"readable": true, "writable": true, "editorVisible": false}}
+        ],
+        "functions": [
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create()", "name": "Create",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounter*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [], "traits": {"static": true, "pure": false, "callable": true}
+            },
+            "const": false, "parameters": [], "operation": "constructor", "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(int32)", "name": "Create",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounter*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [{"name": "Initial", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}],
+              "traits": {"static": true, "pure": false, "callable": true}
+            },
+            "const": false, "parameters": ["value"], "operation": "constructor", "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:GetChild()", "name": "GetChild",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
+            },
+            "const": false, "parameters": [], "returnOwnership": "borrowed"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Clone()", "name": "Clone",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounter*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
+            },
+            "const": true, "parameters": [], "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:InvalidOwnedAliasForTest()", "name": "InvalidOwnedAliasForTest",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounter*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": [], "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(int32)", "name": "Scale", "returnType": {"kind": "int32", "nativeName": "int32"},
+              "parameters": [{"name": "Value", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}], "traits": {"static": false, "pure": true, "callable": true}
+            }, "const": true, "parameters": ["value"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Scale(double)", "name": "Scale", "returnType": {"kind": "float64", "nativeName": "double"},
+              "parameters": [{"name": "Value", "type": {"kind": "float64", "nativeName": "double"}, "direction": "input"}], "traits": {"static": false, "pure": true, "callable": true}
+            }, "const": true, "parameters": ["value"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Multiply(int32,int32)", "name": "Multiply", "returnType": {"kind": "int32", "nativeName": "int32"},
+              "parameters": [{"name": "Left", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}, {"name": "Right", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}],
+              "traits": {"static": true, "pure": true, "callable": true}
+            }, "const": false, "parameters": ["value", "value"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Flip(bool)", "name": "Flip", "returnType": {"kind": "boolean", "nativeName": "bool"},
+              "parameters": [{"name": "Value", "type": {"kind": "boolean", "nativeName": "bool"}, "direction": "input"}], "traits": {"static": false, "pure": true, "callable": true}
+            }, "const": true, "parameters": ["value"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Shift(FVectorconst&)", "name": "Shift", "returnType": {"kind": "struct", "nativeName": "FVector", "typePath": "/Script/CoreUObject.Vector", "headerPath": "Math/Vector.h"},
+              "parameters": [{"name": "Value", "type": {"kind": "struct", "nativeName": "FVector", "typePath": "/Script/CoreUObject.Vector", "headerPath": "Math/Vector.h"}, "direction": "input"}], "traits": {"static": false, "pure": true, "callable": true}
+            }, "const": true, "parameters": ["constReference"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Reset()", "name": "Reset", "returnType": {"kind": "void", "nativeName": "void"},
+              "parameters": [], "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": []
+          }
+        ]
+      },
+      {
+        "kind": "nativeObject",
+        "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+        "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild",
+        "headerPath": "UnifiedScriptNativeCounter.h",
+        "properties": [
+          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Value", "name": "Value", "type": {"kind": "int32", "nativeName": "int32"}, "access": {"readable": true, "writable": true, "editorVisible": false}}
+        ],
+        "functions": [
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild:Add(int32)", "name": "Add", "returnType": {"kind": "int32", "nativeName": "int32"},
+              "parameters": [{"name": "Delta", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}], "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": false, "parameters": ["value"]
+          }
+        ]
+      },
       {
         "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
         "nativeName": "UUnifiedScriptNativeExtensionFixture",
