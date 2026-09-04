@@ -104,9 +104,16 @@ output without blocking the game thread. **Build & Reload** runs the same
 dependency graph in `dailyEditor` mode while the Editor stays open. A compatible
 C# body change rebuilds and publishes only the managed assembly/chunk stages,
 defers Editor-owned asset sync and Automation, then passes one build receipt to
-the all-instance two-phase reload coordinator. A native, reflection, deployment
-schema, or missing-baseline change returns `restartRequired` with the exact
+the all-instance two-phase reload coordinator. A shared managed-toolchain/native,
+reflection, deployment schema, or missing-baseline change returns `restartRequired` with the exact
 stage and `restartEditor` action before any live generation changes.
+
+An editor-attached gameplay build passes `UnifiedScriptSkipManagedHostStaging=true`.
+The shared host has already been checked by the dependency graph, so this build
+must not copy its project-reference DLLs over the assemblies loaded by UE.
+Ordinary closed-editor setup still stages the shared host. Successful Build &
+Reload also refreshes connected native C#/Graph authoring from current project
+inputs; see [external source refresh](AUTHORING_TRANSACTIONS.md#import-external-edits-without-restarting).
 
 **Build, Restart & Continue** remains the explicit fallback. It saves
 dirty packages, launches the deferred helper with the current Editor process

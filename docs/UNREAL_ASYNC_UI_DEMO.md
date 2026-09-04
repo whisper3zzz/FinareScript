@@ -111,16 +111,25 @@ read-only in this session. Only the supported Visual profile is graph-editable.
 See [project session boundaries](AUTHORING_TRANSACTIONS.md#project-backed-sessions-and-runtime-chunks).
 
 The native Apply & Reload entry still routes through the daily-build coordinator.
-The source/Graph transaction and live chunk-consumer path below are verified;
-this is not yet acceptance of the entire toolbar-triggered build/deployment path,
-installed-consumer authoring, or physical editor interaction. External IDE edits
-currently require restarting the authoring session. For an immediate full rebuild,
-close the game/editor and rerun the launcher without `-SkipBuild`.
+External IDE saves can now be imported using **Refresh C#** without restarting
+the session. The refresh reevaluates the project and preserves external edits
+if compilation or publication fails. Native Build & Reload refreshes the open
+authoring tab after a successful build and live component swap; unsaved C# buffers
+are not overwritten. New dependency/native-host outputs still follow the existing
+build/restart requirements. For a full rebuild, close the game/editor and rerun
+the launcher without `-SkipBuild`.
+
+This does not establish installed-consumer authoring, live class-shape/default
+deployment, physical editor interaction or a new cooked-source-edit result.
 
 ### Source/Graph to live runtime verification
 
 ```powershell
 .\tools\test-unreal-async-authoring.ps1 -EngineRoot D:\UE_5.8
+# Use an external C# save followed by refresh for the first edit:
+.\tools\test-unreal-async-authoring.ps1 -EngineRoot D:\UE_5.8 -SkipBuild -ExternalSourceEdit
+# Exercise the native coordinator, a live PIE Actor and automatic Slate refresh:
+.\tools\test-unreal-async-authoring.ps1 -EngineRoot D:\UE_5.8 -NativeDailyBuild
 ```
 
 With the sample editor/game and other writers closed, this runs the actual Demo
@@ -130,6 +139,25 @@ same running game to reload the published chunk. The native verifier checks the
 new Actor's height, HUD, cancellation, subscriptions and teardown. Transactional
 Undo restores the two test edits and their matching chunk; concurrent external
 edits are never force-restored. `-SkipBuild` requires current prepared outputs.
+
+`-NativeDailyBuild` instead changes the source from 100 to 120 outside the
+Workbench, then asks the real native daily-build coordinator to rebuild and
+reload a live PIE Script Class. It checks the changed return value, component
+generation, automatic Graph-tab refresh, stale-tab recovery and unsaved-buffer
+protection. Its initial preparation uses ordinary onboarding so attached builds
+have a compatible receipt; `-SkipBuild` reuses that preparation when current.
+It does not simulate a physical toolbar click or test class-shape deployment.
+
+The external-save/Graph path passes in
+`artifacts/ue/async-authoring/20260904-184826-724/runtime.log`; the native
+Build & Reload path passes in
+`artifacts/ue/async-authoring/20260904-190743-946/runtime.log`. Both restore their
+test edits through Undo. The latter exposed a real loaded-DLL overwrite in the
+shared-host staging target; editor-attached builds now reuse that validated host.
+The Demo target also seeds `.usgraph` only when missing, preserving authored
+layout on later builds. Refresh failure and project-context changes are covered
+by the 31 managed tests in
+`artifacts/m13-5-ui/authoring-tests/project-refresh-final.trx`.
 
 The 2026-09-04 run passed at
 `artifacts/ue/async-authoring/20260904-182118-640/runtime.log`. This proves a real

@@ -2563,7 +2563,11 @@ internal static class Program
                 sourceFiles,
                 apiBrowser,
                 readOnlySources,
-                options.PublishInitial);
+                options.PublishInitial,
+                options.ProjectPath is null ? null : () => ProjectAuthoringInput.Load(
+                    options.ProjectPath, fullInputPath, options.IdentityPath,
+                    new CSharpProjectLoadOptions(options.Configuration, options.TargetFramework, Restore: false, Build: false),
+                    LoadEffectCatalog(options.EffectCatalogPath)));
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {

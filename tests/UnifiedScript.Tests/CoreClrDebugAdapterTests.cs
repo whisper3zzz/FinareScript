@@ -104,6 +104,23 @@ public sealed class CoreClrDebugAdapterTests
     }
 
     [Fact]
+    public async Task PublicationFailureKeepsTheOriginalLoadedProgramAndGeneration()
+    {
+        using var adapter = new CoreClrDebugAdapter();
+        CoreClrDebugReloadResult original = adapter.Reload(CSharpCompilationRequest.Single(Source, Path));
+        WeakReference? originalContext = adapter.CurrentLoadContextReference;
+        Assert.Throws<IOException>(() => adapter.Reload(CSharpCompilationRequest.Single(
+            Source.Replace("offset = 1", "offset = 9", StringComparison.Ordinal), Path),
+            () => throw new IOException("Cannot publish the new artifacts.")));
+        Assert.Equal(original.Generation, adapter.CurrentGeneration);
+        Assert.Same(originalContext, adapter.CurrentLoadContextReference);
+        CoreClrDebugExecution execution = adapter.Start(new ExecutionInvocation(
+            adapter.ResolveVisualMethodId("Tests.Debug.Rules.Run"), [new ExecutionArgument("41")]));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        Assert.Equal("42", (await adapter.WaitForCompletionAsync(execution.ExecutionId, timeout.Token)).ReturnValue!.Json);
+    }
+
+    [Fact]
     public async Task Breakpoint_ReallySuspendsCoreClrAndExposesStackAndLocalsThenSteps()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);

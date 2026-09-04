@@ -63,7 +63,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
         }
     }
 
-    public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request)
+    public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request, Action? beforeCommit = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         lock (gate)
@@ -94,6 +94,9 @@ public sealed class CoreClrDebugAdapter : IDisposable
                     imageKey,
                     image.Semantics.SourceCompilationId,
                     image.Semantics.ConfigurationId);
+                // Publication can fail after dependencies have changed on disk.
+                // Keep the old loaded program alive until the candidate's outputs commit.
+                beforeCommit?.Invoke();
                 BreakpointBindingSnapshot bound = breakpointManager.Bind(
                     nextGeneration,
                     image.SourceMap);
@@ -403,6 +406,9 @@ public sealed class CoreClrDebugLoopbackTransport : ICoreClrDebugTransport
 
     public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request) =>
         adapter.Reload(request);
+
+    public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request, Action beforeCommit) =>
+        adapter.Reload(request, beforeCommit);
 
     public BreakpointBindingSnapshot SetBreakpoint(SemanticBreakpoint breakpoint) =>
         adapter.SetBreakpoint(breakpoint);

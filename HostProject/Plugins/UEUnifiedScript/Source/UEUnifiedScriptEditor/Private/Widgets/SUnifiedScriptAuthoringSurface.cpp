@@ -914,6 +914,8 @@ private:
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 {
     InitialSurfacePath = InArgs._InitialSurfacePath;
+    DailyBuildCompletedHandle = IUEUnifiedScriptEditorModule::Get().OnDailyBuildCompleted().AddSP(
+        this, &SUnifiedScriptAuthoringSurface::HandleDailyBuildCompleted);
     LoadNodePalettePreferences();
     LoadCanvasPreferences();
 
@@ -1930,6 +1932,8 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 
 SUnifiedScriptAuthoringSurface::~SUnifiedScriptAuthoringSurface()
 {
+    if (FModuleManager::Get().IsModuleLoaded(TEXT("UEUnifiedScriptEditor")))
+        IUEUnifiedScriptEditorModule::Get().OnDailyBuildCompleted().Remove(DailyBuildCompletedHandle);
     PersistCanvasView(true);
     PersistCurrentLayout(true);
 }
@@ -1954,7 +1958,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleSetViewMode(
 
 FReply SUnifiedScriptAuthoringSurface::HandleRefreshSourceSnapshot()
 {
-    RequestWorkspaceRefresh();
+    RequestWorkspaceRefresh(true);
     return FReply::Handled();
 }
 
@@ -4707,7 +4711,13 @@ FReply SUnifiedScriptAuthoringSurface::HandleQuickFix(FString Kind)
     return FReply::Handled();
 }
 
-void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
+void SUnifiedScriptAuthoringSurface::HandleDailyBuildCompleted(const FUnifiedScriptDailyBuildResult& Result)
+{
+    if (Result.IsSuccess() && (bHasCanonicalSourceSnapshot || LoadedScriptAsset.IsValid()))
+        RequestWorkspaceRefresh(true);
+}
+
+void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh(bool bReadDisk, bool bHasFreshRevision)
 {
     if (bPatchRequestPending)
     {
@@ -4721,8 +4731,12 @@ void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
             true);
         return;
     }
-    const FString Url = FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(
-        ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString());
+    // Refresh is also the recovery action for a stale client. Fetch the latest
+    // revision before importing disk inputs; a concurrent commit still conflicts.
+    const bool bImportDisk = bReadDisk && bHasFreshRevision;
+    const FString ServerUrl = ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString();
+    const FString Url = bImportDisk ? FUnifiedScriptAuthoringWorkbench::BuildRefreshUrl(ServerUrl)
+        : FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(ServerUrl);
     if (Url.IsEmpty())
     {
         SetStatus(TEXT("Enter a Workbench loopback URL before refreshing."), true);
@@ -4732,21 +4746,32 @@ void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
         FHttpModule::Get().CreateRequest();
     Request->SetURL(Url);
-    Request->SetVerb(TEXT("GET"));
+    Request->SetVerb(bImportDisk ? TEXT("POST") : TEXT("GET"));
+    if (bImportDisk)
+    {
+        Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+        Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Id"), FGuid::NewGuid().ToString(EGuidFormats::Digits));
+        if (bHasCanonicalSourceSnapshot)
+            Request->SetHeader(TEXT("X-UnifiedScript-Baseline-Revision"), LexToString(WorkbenchRevision));
+        Request->SetContentAsString(TEXT("{}"));
+    }
     const TWeakPtr<SUnifiedScriptAuthoringSurface> WeakThis = SharedThis(this);
     Request->OnProcessRequestComplete().BindLambda(
-        [WeakThis](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
+        [WeakThis, bFetchBeforeImport = bReadDisk && !bHasFreshRevision](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
         {
             if (const TSharedPtr<SUnifiedScriptAuthoringSurface> Pinned = WeakThis.Pin())
             {
-                Pinned->HandleWorkspaceRefreshResponse(
+                const bool bAdopted = Pinned->HandleWorkspaceRefreshResponse(
                     bSucceeded && Response.IsValid(),
                     Response.IsValid() ? Response->GetResponseCode() : 0,
                     Response.IsValid() ? Response->GetContentAsString() : FString());
+                if (bFetchBeforeImport && bAdopted)
+                    Pinned->RequestWorkspaceRefresh(true, true);
             }
         });
     bPatchRequestPending = true;
-    SetStatus(TEXT("Refreshing the Authoring Surface from the Workbench ..."), false);
+    SetStatus(bReadDisk ? TEXT("Reading current project sources and refreshing the Authoring Surface ...")
+        : TEXT("Refreshing the Authoring Surface from the Workbench ..."), false);
     if (!Request->ProcessRequest())
     {
         bPatchRequestPending = false;
@@ -4754,7 +4779,7 @@ void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
     }
 }
 
-void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
+bool SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
     bool bRequestSucceeded,
     int32 StatusCode,
     FString ResponseJson)
@@ -4767,7 +4792,7 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
             StatusCode,
             ResponseJson,
             TEXT("The Workbench refresh request failed; verify that the authoring host is running."));
-        return;
+        return false;
     }
     FUnifiedScriptAuthoringWorkspaceResult Workspace;
     FString Error;
@@ -4777,7 +4802,7 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
             Error))
     {
         SetStatus(MoveTemp(Error), true);
-        return;
+        return false;
     }
     const int64 Revision = Workspace.Revision;
     const int64 Generation = Workspace.Generation;
@@ -4790,6 +4815,7 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
             Revision,
             Generation),
         false);
+    return true;
 }
 
 FUnifiedScriptReloadBatchResult

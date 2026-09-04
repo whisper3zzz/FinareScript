@@ -1605,6 +1605,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/workspace")));
     TestEqual(
+        TEXT("Workbench disk refresh endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildRefreshUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/refresh")));
+    TestEqual(
         TEXT("Workbench undo endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/undo")));

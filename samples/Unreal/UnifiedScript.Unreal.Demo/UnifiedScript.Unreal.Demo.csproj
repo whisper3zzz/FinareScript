@@ -21,7 +21,9 @@
                               Condition="Exists('$(TargetDir)UnifiedScript.Unreal.Demo.deps.json')" />
       <_UnifiedScriptDemoFile Include="$(MSBuildProjectDirectory)/UnifiedScript.Unreal.Demo.asset.json" />
       <_UnifiedScriptDemoFile Include="$(MSBuildProjectDirectory)/UnifiedScript.Unreal.Demo.surface.json" />
-      <_UnifiedScriptDemoFile Include="$(MSBuildProjectDirectory)/UnifiedScript.Unreal.Demo.usgraph" />
+      <!-- Seed the layout once; authoring owns it after first deployment. -->
+      <_UnifiedScriptDemoFile Include="$(MSBuildProjectDirectory)/UnifiedScript.Unreal.Demo.usgraph"
+                              Condition="!Exists('$(UnifiedScriptDemoStageDir)/UnifiedScript.Unreal.Demo.usgraph')" />
     </ItemGroup>
     <MakeDir Directories="$(UnifiedScriptDemoStageDir)" />
     <Copy SourceFiles="@(_UnifiedScriptDemoFile)"

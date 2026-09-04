@@ -27,6 +27,7 @@ class UEdGraphNode;
 class UUnifiedScriptAsset;
 class UUnifiedScriptEdGraph;
 class UUnifiedScriptEdGraphNode;
+struct FUnifiedScriptDailyBuildResult;
 template <typename ItemType> class STreeView;
 template <typename ItemType> class SListView;
 
@@ -142,6 +143,9 @@ public:
 
 private:
     friend class SUnifiedScriptCanvasMinimap;
+#if WITH_DEV_AUTOMATION_TESTS
+    friend class FUnifiedScriptProjectRefreshCommand;
+#endif
 
     FReply HandleLoad();
     FReply HandleBrowse();
@@ -253,8 +257,10 @@ private:
     void RebuildDiagnosticsPanel();
     FReply HandleQuickFix(FString Kind);
     FReply HandleCopyDiagnostic(FUnifiedScriptAuthoringDiagnostic Diagnostic);
-    void RequestWorkspaceRefresh();
-    void HandleWorkspaceRefreshResponse(
+    void RequestWorkspaceRefresh(bool bReadDisk = false, bool bHasFreshRevision = false);
+    void HandleDailyBuildCompleted(const FUnifiedScriptDailyBuildResult& Result);
+    FDelegateHandle DailyBuildCompletedHandle;
+    bool HandleWorkspaceRefreshResponse(
         bool bRequestSucceeded,
         int32 StatusCode,
         FString ResponseJson);

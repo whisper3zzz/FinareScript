@@ -35,6 +35,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Transition rule: **usable common gameplay coverage, not full Puerts parity**.
   Compare enough to choose the next missing capability, implement it through the
   public workflow, and return to M13.3/M13.4 once the breadth target below is met.
+- Execution focus: **close common Puerts capability gaps, not complete every
+  detail of the current Demo or subsystem**. Finish workflow fixes needed to use
+  a capability, then select the next practical gap. Full Script Class depth and
+  external-project validation remain later milestones.
 - Latest capability checkpoint delivered: **basic Actor/ActorComponent networking**.
   Saved generated classes run on one server and two connected clients, including
   a dynamically attached component. Both paths cover RepNotify, explicit RPC,
@@ -72,15 +76,27 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Graph; the same game process reloads and observes height 180. Undo restores the
   original source/chunk. Native Slate loads the full project surface and focuses
   the selected Demo class. The launcher now has an `Author` entry.
-- Next work: **finish the ordinary native Build & Reload/deployment path and
-  installed-consumer authoring for the composed Demo**. The verified HTTP
-  publication plus component reload is not yet proof of the complete native
-  toolbar workflow. External IDE edits currently require session restart;
-  project/dependency reevaluation and source refresh need integration. Keep this
-  in the same capability batch. Visual appearance and physical mouse input remain
-  unreviewed by the CMD/NullRHI checks.
-  Push-model, travel and richer native-object forms remain follow-ups; do not
-  resume the full M13.3 scope before the M13.5 breadth target is met.
+- Current daily-authoring checkpoint: **external source refresh and native
+  Build & Reload**. Refresh reevaluates project inputs without restarting the
+  authoring session. Failed compilation/publication and concurrent saves preserve
+  the old loaded debug program and external edits. The actual native coordinator
+  rebuilds a C# body, changes a live PIE Actor's result from 100 to 120 and
+  refreshes its Graph-only tab. Stale tabs recover; unsaved buffers are retained.
+  Attached gameplay builds no longer overwrite loaded shared-host DLLs, and Demo
+  staging no longer replaces an existing Graph layout.
+- Next work: **generated ordinary C++ object arguments**. Constructors, methods,
+  fields and owned/borrowed returns already work, but passing those generated
+  objects to another native call is still rejected by the fixed-value input lane.
+  Compare the common pointer/reference forms, then carry typed object inputs
+  through contracts, managed/native generation, ownership validation and a
+  working public example. Preserve World/generation and borrowed-owner lifetimes;
+  do not pull in the entire inheritance/converter/callback backlog.
+- Remaining workflow scope: installed-consumer authoring and live class-shape/
+  default deployment are still open. The latest native test invokes the real
+  coordinator, not a physical toolbar click; CMD/NullRHI does not establish visual
+  appearance or mouse interaction. Retain these follow-ups without turning Demo
+  polish into a prerequisite for the next capability batch. Full M13.3 still waits
+  for the M13.5 breadth target.
 
 Existing in-flight work, **M13.3C-1c-b**, is implemented through declaration lowering, typed container
 arguments, Blueprint pins and native/managed ABI v3 calls. The five Demo exchange
@@ -105,7 +121,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods and owned/borrowed returns, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Ordinary-object arguments, richer signatures, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
-| Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph edits now publish matching chunks and change behavior after live reload | Native toolbar build/deployment and installed-consumer authoring still need verification/integration; external IDE refresh is not live; no physical mouse or visual appearance acceptance, and no general UMG/latent parity claim |
+| Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph publication, external IDE refresh and native body build/live reload with automatic Slate synchronization | Installed-consumer authoring and live class-shape/default deployment remain open; no physical toolbar/mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
 | Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; container and Soft Reference exchange now passes generated-class save/reload and ProcessEvent | The new container/Soft Reference paths still need broader negative/VM and cooked execution coverage before closing C-1c-b |
@@ -127,6 +143,11 @@ M13.5 is an implementation phase guided by comparison, not a documentation-only
 audit. Identify practical gaps against Puerts, deliver reusable capability
 batches, and keep the comparison current as those batches land. Do not wait for
 an exhaustive inventory before implementing a clearly missing common capability.
+The selection question is **what ordinary Puerts use case still cannot be
+implemented through UnifiedScript's public surface, and what reusable capability
+would enable it?** Prioritize those blockers over rare combinations, Demo polish
+or completing M13.3/M13.4 in advance. A concrete class prerequisite can be part of
+the selected batch; it does not pull forward the rest of those milestones.
 
 | Order | Deliverable | Why it comes next |
 | --- | --- | --- |
@@ -179,7 +200,7 @@ not an exhaustive signature audit or a claim of parity.
 | Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns have generated C#/C++/node descriptions and runtime examples. Ordinary-object arguments, rich signatures, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
-| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example composes these routes, with a saved scene, cooked runtime checkpoint and project-backed C#/Graph-to-live-reload proof. Finish native daily-workflow and installed-consumer integration, then audit other common callback, latent and subsystem gaps | M13.5 |
+| Delegates, interfaces and async gameplay | A generated UMG/async load/spawn example composes these routes, with a saved scene, cooked runtime checkpoint, C#/Graph-to-live-reload proof and native body build/source refresh. Installed-consumer authoring, other common callbacks, latent and subsystem gaps remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -250,8 +271,9 @@ an external project requires the user's authorization.
   The composed UMG/async/SpawnActor runtime checkpoint is implemented, including
   cancel/retry, saved-class reload and teardown. Persistent launch and cooked
   execution are verified. Project-backed C#/Graph transactions now change the
-  live Demo through chunk reload; native toolbar build/deployment and
-  installed-consumer authoring remain open, as described by the current cursor.
+  live Demo through chunk reload; external refresh and the native body-build/live
+  reload path are verified. Installed-consumer authoring and class-shape/default
+  deployment remain open, as described by the current cursor.
 - [ ] Audit and complete bounded byte-buffer interop for ordinary binary payloads,
   with explicit copy/borrow/ownership rules and generation-safe callbacks. Reuse
   existing transports and data-plane contracts where applicable.
@@ -403,6 +425,21 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The external-refresh/native-build checkpoint passes 31 focused managed tests in
+`artifacts/m13-5-ui/authoring-tests/project-refresh-final.trx`, including project
+membership/settings changes, concurrent saves, failed publication and retention
+of the exact old loaded debug program. UE 5.8.1 builds and configured CMD checks
+pass in `artifacts/m13-5-ui/authoring-tests/onboarding-live-build-verified.json`.
+The opt-in native project test separately passes with its real live fixture in
+`artifacts/ue/async-authoring/20260904-190743-946/runtime.log`: native Build & Reload
+changes the existing PIE Actor from 100 to 120 and refreshes the Graph-only tab.
+The earlier failed attempt exposed shared-host DLL copying into a live Editor;
+the final run skips host staging and successfully rebuilds gameplay/chunks.
+The external-save/Graph/live-game 100-to-180 path passes in
+`artifacts/ue/async-authoring/20260904-184826-724/runtime.log`. Both drivers undo
+their edits. A direct `StageUnrealManagedDemo` check preserves an existing layout.
+These are not new installed-consumer, class-shape, cooked or physical UI results.
 
 The project-backed authoring checkpoint passes 88 focused managed tests in
 `artifacts/m13-5-ui/authoring-tests/project-authoring.trx`, the UE 5.8.1 Editor

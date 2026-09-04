@@ -207,6 +207,8 @@ public:
 
     static FString BuildWorkspaceUrl(const FString& ServerUrl);
 
+    static FString BuildRefreshUrl(const FString& ServerUrl);
+
     static FString BuildUndoUrl(const FString& ServerUrl);
 
     static FString BuildRedoUrl(const FString& ServerUrl);

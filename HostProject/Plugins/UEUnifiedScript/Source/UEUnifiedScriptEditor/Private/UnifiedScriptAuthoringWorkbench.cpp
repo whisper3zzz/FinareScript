@@ -356,6 +356,12 @@ FString FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(const FString& Serve
         : Normalized + TEXT("/api/authoring/workspace");
 }
 
+FString FUnifiedScriptAuthoringWorkbench::BuildRefreshUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty() ? FString() : Normalized + TEXT("/api/authoring/refresh");
+}
+
 FString FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(const FString& ServerUrl)
 {
     const FString Normalized = NormalizeServerUrl(ServerUrl);

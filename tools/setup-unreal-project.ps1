@@ -1393,6 +1393,7 @@ try {
             }) `
             -PathInputs ([ordered]@{ toolchain = $toolchainInputs }) `
             -OutputPaths $toolchainOutputs `
+            -EditorAttachedPolicy 'restart' `
             -Action {
             New-Item -ItemType Directory -Force -Path $resolved.managedStage | Out-Null
             if ($sdkLayout -eq 'repository') {
@@ -1724,12 +1725,15 @@ try {
             -Action {
             foreach ($managedProject in $resolved.managedProjects) {
                 $safeName = [IO.Path]::GetFileNameWithoutExtension($managedProject)
+                # The shared host was validated above; never copy over assemblies
+                # loaded by UE while rebuilding only gameplay with the Editor open.
                 Invoke-LoggedCommand `
                     -FilePath $resolved.dotnet `
                     -Arguments @(
                         'build', $managedProject,
                         '-c', $resolved.managedConfiguration,
                         '--nologo',
+                        "-p:UnifiedScriptSkipManagedHostStaging=$($EditorAttached.IsPresent)",
                         "-p:UnifiedScriptManagedStageDir=$($resolved.managedStage)") `
                     -LogPath (Join-Path $script:RunDirectory "managed-$safeName.log") `
                     -FailureCode 'USONB2301' `

@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$EngineRoot = 'D:\UE_5.8',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$ExternalSourceEdit,
+    [switch]$NativeDailyBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +17,13 @@ $originalSource = [IO.File]::ReadAllText($sourcePath)
 if ([regex]::Matches($originalSource, 'return 100\.0f;').Count -ne 1) {
     throw 'The authoring example requires its single original PreviewHeight return value (100.0f). No source was changed.'
 }
-& (Join-Path $PSScriptRoot 'launch-unreal-async-demo.ps1') -EngineRoot $EngineRoot -Mode Prepare -SkipBuild:$SkipBuild
+$preparedBuild = $SkipBuild.IsPresent
+if ($NativeDailyBuild -and !$SkipBuild) {
+    # The attached build requires the ordinary setup receipt, not only UBT outputs.
+    & (Join-Path $PSScriptRoot 'setup-unreal-project.ps1') -Project $project -EngineRoot $EngineRoot
+    $preparedBuild = $true
+}
+& (Join-Path $PSScriptRoot 'launch-unreal-async-demo.ps1') -EngineRoot $EngineRoot -Mode Prepare -SkipBuild:$preparedBuild
 
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start()
@@ -65,6 +73,29 @@ try {
     if ($workspace.sourceText -cne $originalSource) { throw 'Source changed during startup; no test edit was applied.' }
     $runtimeLog = Join-Path $logs 'runtime.log'
     $signal = Join-Path $logs 'reload.ready'
+    if ($NativeDailyBuild) {
+        $game = Start-Process -FilePath (Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe') `
+            -ArgumentList @(('"' + $project + '"'),
+                '-ExecCmds="Automation RunTests UnifiedScript.Unreal.Editor.ProjectRefresh"',
+                '-TestExit="Automation Test Queue Empty"', ('-UnifiedScriptAuthoringTestUrl=' + $url),
+                ('-UnifiedScriptAuthoringTestSignal="' + $signal + '"'),
+                '-unattended', '-nop4', '-nosplash', '-NullRHI', ('-abslog="' + $runtimeLog + '"')) `
+            -WindowStyle Hidden -PassThru
+        Wait-For { (Test-Path -LiteralPath $runtimeLog) -and
+            (Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_PROJECT_REFRESH_READY_FOR_EDIT' -Quiet) } 'native authoring and the initial managed Actor'
+        if ([IO.File]::ReadAllText($sourcePath) -cne $workspace.sourceText) { throw 'Source changed before the simulated IDE save.' }
+        [IO.File]::WriteAllText($sourcePath, $workspace.sourceText.Replace('return 100.0f;', 'return 120.0f;'), [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($signal, 'Build the external edit through the native coordinator.')
+        try { Wait-For { $game.HasExited } 'native Build & Reload and automatic Slate refresh' 180 }
+        finally {
+            $workspace = Invoke-RestMethod "$url/api/authoring/workspace" -TimeoutSec 10
+            if ($workspace.sourceText -match 'return 120\.0f;') { $edits++ }
+        }
+        if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_PROJECT_REFRESH PASS' -Quiet)) {
+            throw "Native Build & Reload verification failed. See $runtimeLog"
+        }
+        Write-Host 'Verified: external C# save -> native Build & Reload -> changed live Actor -> automatic Slate refresh; stale-tab recovery and dirty-buffer preservation.'
+    } else {
     $game = Start-Process -FilePath (Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe') `
         -ArgumentList @(('"' + $project + '"'), '/Game/UnifiedScriptDemo/L_AsyncUiDemo',
             '-game', '-UnifiedScriptAsyncUiVerify', '-UnifiedScriptAsyncUiHeight=100',
@@ -77,12 +108,21 @@ try {
     $digest = [Security.Cryptography.SHA256]::Create()
     try { $hash = [BitConverter]::ToString($digest.ComputeHash([Text.Encoding]::UTF8.GetBytes($workspace.sourceText))).Replace('-', '').ToLowerInvariant() }
     finally { $digest.Dispose() }
-    Send-Edit 'source-text' @{
+    $sourceEdit = @{
         schemaVersion = 'unifiedscript.csharp-source-text-patch/v0.1'
         sourcePath = $workspace.sourcePath
         baselineContentDigest = 'sha256:' + $hash
         sourceText = $workspace.sourceText.Replace('return 100.0f;', 'return 120.0f;')
     }
+    if ($ExternalSourceEdit) {
+        if ([IO.File]::ReadAllText($sourcePath) -cne $workspace.sourceText) { throw 'Source changed before the simulated IDE save.' }
+        [IO.File]::WriteAllText($sourcePath, $sourceEdit.sourceText, [Text.UTF8Encoding]::new($false))
+        $workspace = Invoke-RestMethod "$url/api/authoring/refresh" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 45 -Headers @{
+            'X-UnifiedScript-Baseline-Revision' = [string]$workspace.revision
+            'X-UnifiedScript-Transaction-Id' = [guid]::NewGuid().ToString('N')
+        }
+        $edits++
+    } else { Send-Edit 'source-text' $sourceEdit }
     $function = @($workspace.surface.assets | Where-Object assetPath -EQ 'Unreal/AsyncUiDemo').functions |
         Where-Object name -EQ 'PreviewHeight'
     $literal = @($workspace.graph.functions | Where-Object id -EQ $function.id).nodes |
@@ -106,7 +146,8 @@ try {
     if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_VERIFY PASS' -Quiet)) {
         throw "Authored runtime verification failed. See $runtimeLog"
     }
-    Write-Host 'Verified: C# edit -> Graph edit -> chunk publication -> live World reload -> changed preview height and teardown.'
+    Write-Host "Verified: C# edit (external=$ExternalSourceEdit) -> Graph edit -> chunk publication -> live World reload -> changed preview height and teardown."
+    }
 } finally {
     if ($null -ne $game) {
         if (!$game.HasExited) { Stop-Process -Id $game.Id -Force }

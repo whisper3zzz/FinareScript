@@ -32,11 +32,42 @@ unchanged compilation inputs.
 
 `tools/start-unifiedscript-authoring.ps1` uses the configured project and chunk
 stage path and requires normal build outputs to exist. It does not rebuild or
-replace shared native-host dependencies during Editor use. Restart the session
-after external source edits or changes to project membership, settings or
-dependencies; live MSBuild reevaluation and external-editor refresh are not yet
-provided by this project session. Native World/component reload remains a
-separate consumer of the published artifacts, not an HTTP commit side effect.
+replace shared native-host dependencies during Editor use. Native World/component
+reload remains a separate consumer of the published artifacts, not an HTTP
+commit side effect.
+
+### Import external edits without restarting
+
+`POST /api/authoring/refresh` with `{}` and the ordinary transaction headers
+reevaluates the selected MSBuild project and reads its current Compile items,
+settings, prepared references and adjacent identities. File-only sessions reread
+their known input files. This does not restore packages or build dependencies;
+use the normal build workflow when those outputs need updating.
+
+Refresh compiles the complete candidate and publishes matching artifacts without
+rewriting the external C# inputs. It rereads inputs before publication to reject
+a concurrent save. Invalid sources, changed inputs or publication failure leave
+the old loaded debug program, revision and chunk active and preserve disk edits
+(`UAW1018`). A no-op leaves the revision and generation unchanged. Active debug
+execution, grouped drafts and stale explicit revisions retain their existing
+conflict rules.
+
+A primary-source-only import becomes an ordinary Undo entry. A change to project
+configuration, source membership or other compilation inputs starts a new Undo
+context because old primary-source snapshots cannot restore those external
+inputs. When persisted history is nonempty, the previous journal is retained
+under `<history-path>.retired/` in the same publication transaction. Revision
+ordering and committed operation-ID replay protection survive this transition.
+External text uses conservative sidecar reconciliation: unchanged function IDs
+can survive, but an edited literal need not retain its old node ID as it would
+with an explicit Graph patch.
+
+Native **Refresh C#** fetches the current workspace revision before importing
+disk inputs, so a stale tab can recover without bypassing the server's conflict
+checks. Unsaved native C# buffers block refresh. Successful native Build & Reload
+also refreshes an open Script Asset, including Graph-only tabs that have not yet
+opened the C# snapshot. The diagnostic **Refresh Surface** quick fix remains a
+read-only GET; neither action retries an earlier rejected source mutation.
 
 ## Request contract
 
@@ -64,6 +95,7 @@ The write endpoints are:
 - `POST /api/authoring/semantic-patch`;
 - `POST /api/authoring/semantic-patch-plan`;
 - `POST /api/authoring/source-text`;
+- `POST /api/authoring/refresh`;
 - `POST /api/authoring/ai-semantic-proposal`;
 - `POST /api/authoring/group/begin`;
 - `POST /api/authoring/group/commit`;
@@ -141,7 +173,7 @@ revision.
 
 ## Commit order
 
-Every endpoint runs under the authoring/debug session gate:
+Source/Graph edits and history navigation run under the authoring/debug session gate:
 
 1. reject edits while a debug execution is active;
 2. validate the client revision and operation identity;
@@ -157,6 +189,9 @@ Every endpoint runs under the authoring/debug session gate:
 
 Publication failure reloads the previous snapshot and leaves history unchanged.
 The client never mutates compiler-owned nodes or wires optimistically.
+Disk refresh uses the same gate but keeps the previous loaded debug program
+alive until candidate artifacts commit; publication failure does not require
+recompiling the old source against potentially changed dependencies.
 
 ## History semantics
 

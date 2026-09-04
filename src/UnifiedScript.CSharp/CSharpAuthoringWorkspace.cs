@@ -281,6 +281,27 @@ public sealed class CSharpAuthoringWorkspace
             analysis.Diagnostics));
     }
 
+    /// <summary>Analyze an externally supplied project snapshot without changing the live workspace.</summary>
+    public CSharpAuthoringMutation PrepareRefresh(CSharpCompilationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        CSharpAnalysisResult analysis = pipeline.Analyze(request);
+        return CreateMutation(new CSharpPatchResult(
+            analysis.Succeeded ? request : null,
+            analysis.Succeeded ? analysis : null,
+            analysis.Diagnostics));
+    }
+
+    /// <summary>Start history at a new project context while retaining revision and replay protection.</summary>
+    public CSharpAuthoringWorkspace Rebase(CSharpAuthoringMutation mutation, string transactionId, string description)
+    {
+        var rebased = new CSharpAuthoringWorkspace(this);
+        rebased.Commit(mutation, transactionId, description);
+        rebased.undoHistory.Clear();
+        rebased.redoHistory.Clear();
+        return rebased;
+    }
+
     public void Commit(CSharpAuthoringMutation mutation) => Commit(
         mutation,
         $"local-{Guid.NewGuid():N}",

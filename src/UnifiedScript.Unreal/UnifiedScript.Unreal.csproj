@@ -11,7 +11,7 @@
     <InternalsVisibleTo Include="UnifiedScript.Tests" />
   </ItemGroup>
   <Target Name="StageUnrealManagedHost" AfterTargets="Build"
-          Condition="'$(DesignTimeBuild)' != 'true'">
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(UnifiedScriptSkipManagedHostStaging)' != 'true'">
     <ItemGroup>
       <_UnifiedScriptManagedHostFile Include="$(TargetPath)" />
       <_UnifiedScriptManagedHostFile Include="$(TargetDir)UnifiedScript.Unreal.deps.json"
