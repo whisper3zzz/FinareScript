@@ -370,6 +370,54 @@ exist when startup binding runs. Zero-argument events such as `Button.OnClicked`
 are supported. Verify viewport creation, event delivery, reload unsubscription
 and map teardown; viewport ownership, not a C# handle, keeps the view alive.
 
+## .NET libraries and reload
+
+Gameplay is a .NET class library hosted by CoreCLR. The shipped project template
+targets `net10.0`; the reviewed Unreal distribution is UE 5.8.1 on Win64. Choose
+managed libraries compatible with that target and their own platform requirements.
+This runtime does not provide Node/npm APIs or a NativeAOT/iOS/console execution
+path. See the current [release scope](UNREAL_RELEASE.md).
+
+Add `ProjectReference` or `PackageReference` entries to the gameplay project.
+The [MSBuild project loader](PROJECT_LOADING.md) reads both compilation references
+and copy-local managed runtime dependencies. For package dependencies in an
+SDK-style class library, explicitly request runtime copies:
+
+```xml
+<PropertyGroup>
+  <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+</PropertyGroup>
+```
+
+This copies transitive package runtime assemblies to the build output, as
+documented by [Microsoft](https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props#copylocallockfileassemblies).
+The shipped gameplay template builds directly into the plugin's managed script
+directory. If a custom project stages its output elsewhere, its runtime DLLs
+must accompany the staged chunk; copying only the main assembly or `.uschunk`
+does not deploy those dependencies. Reference assemblies from `ref/` are for
+compilation, not runtime deployment.
+
+Run the normal **Build & Reload** after changing a dependency. A chunk records
+managed dependency identities and content digests; the World loader verifies
+resolved runtime assemblies against that manifest. Replacing a dependency DLL
+without rebuilding the corresponding chunk can fail verification. The shared
+UnifiedScript contract/runtime assemblies belong to the host and are not private
+copies for each script generation. Follow `restartRequired` when those change.
+
+Each generation has a collectible assembly load context. Cancel owned work and
+dispose timers, subscriptions and callback leases when the generation stops.
+An external event handler, task or cached delegate that still references an old
+script can keep that generation alive. Persistent state belongs in the supported
+Script Class state contract, not a dependency's process-global cache.
+
+Library compilation does not expand the editable Graph language. Keep code that
+uses unsupported visual syntax in ordinary C# helper bodies. Compiler analyzers
+and source generators are not replayed by the UnifiedScript compilation host;
+see the project-loading restrictions before adopting a package that generates
+required source. Native dependencies and P/Invoke additionally need a matching
+OS/architecture, deployment and lifetime strategy; the managed dependency loader
+does not establish general native-package support.
+
 ## Async work
 
 Derive from `UnrealObjectScript` or `UnrealActorScript` to use the World-scoped
@@ -401,8 +449,28 @@ private async Task LoadHudAsync()
 ```
 
 Start the task from `OnBeginPlay`/`OnInitialized` and intentionally discard it
-only when all exceptions are handled. Do not use `Task.Run` for UObject work.
-Verify timeout, manual cancellation, reload, deletion, travel, and PIE stop.
+only when all exceptions are handled. Keep UObject access on the supported
+World invocation route. Verify timeout, manual cancellation, reload, deletion,
+travel, and PIE stop.
+
+`Task.Delay`, network/file awaits and arbitrary library tasks are not the
+World-scoped Async Service. Do not assume that their continuations resume on the
+UE game thread or that reload cancels them. Pass the generation's cancellation
+token where the API accepts one, observe exceptions, and return results through
+the script's Tick/lifecycle path before updating Unreal. Pure managed background
+work can use `Task.Run`; never block the game thread waiting for unfinished work
+that may need the World invocation queue.
+
+Supported worker-originated generated calls are a specific transport route: the
+World host executes them on the game thread. The
+[callback worker example](../samples/Unreal/UnifiedScript.Unreal.Demo/CallbackGameplayDemoScript.cs)
+starts two workers, performs generated UE calls with nested callbacks, and only
+reads their completion from Tick after `IsCompleted` is true. This is not a
+general UObject thread-safety or synchronization-context guarantee. Register and
+dispose native callback leases on the game thread, retain them for the required
+native lifetime, and follow the
+[callback contract](UNREAL_API_CONTRACT.md#reflected-callback-arguments) for
+generation ownership, reentry, errors and supported signatures.
 
 ## Replicated state and RPC
 

@@ -369,9 +369,14 @@ an external project requires the user's authorization.
   replacement. This does not close the remaining network scope or prove every
   accepted RPC signature. The common path codecs now include integer widths,
   enums and core transforms; next compose other common gameplay families.
-- [ ] Publish usable .NET library, async/threading and native-callback guidance,
+- [x] Publish usable .NET library, async/threading and native-callback guidance,
   with explicit runtime/platform restrictions. Do not imply npm/Node ecosystem
   compatibility or unrestricted dynamic-language behavior.
+  The [gameplay recipes](UNREAL_GAMEPLAY_RECIPES.md#net-libraries-and-reload)
+  now cover MSBuild runtime copies, chunk dependency verification, reload
+  ownership, World-scoped async work and the worker-originated callback route.
+  Native packages, source-generator replay and additional execution platforms
+  remain outside the documented runtime support.
 
 **Done when:** the capability breadth target above is met through reusable
 contracts and working examples. Unsupported edge cases have clear diagnostics;
