@@ -31,7 +31,22 @@ internal static class UnrealNativeObjectThunkGenerator
                 foreach (bool write in new[] { false, true })
                 {
                     if (write ? !field.Access.Writable : !field.Access.Readable) continue;
-                    Begin(source, entries, field.Path + (write ? "#set" : "#get"), write ? 1 : 0);
+                    string memberPath = field.Path + (write ? "#set" : "#get");
+                    if (UnrealNativeObjectBindings.IsText(field.Type))
+                    {
+                        BeginText(source, entries, memberPath, write ? 1 : 0);
+                        Target(source, type);
+                        source.AppendLine($"    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->{field.Name})>, {UnrealNativeObjectBindings.CppType(field.Type)}>, \"Native field declaration mismatch\");");
+                        if (write)
+                        {
+                            DecodeText(source, field.Type, 0);
+                            source.AppendLine($"    TypedTarget->{field.Name} = Argument0;");
+                        }
+                        else source.AppendLine($"    if (!Values::WriteText(TypedTarget->{field.Name}, OutBytes, OutValue)) return Status::InvalidArgument;");
+                        End(source);
+                        continue;
+                    }
+                    Begin(source, entries, memberPath, write ? 1 : 0);
                     Target(source, type);
                     string cpp = UnrealNativeObjectBindings.CppType(field.Type);
                     source.AppendLine($"    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->{field.Name})>, {cpp}>, \"Native field declaration mismatch\");");
@@ -51,11 +66,15 @@ internal static class UnrealNativeObjectThunkGenerator
                     diagnostics.Add(new("USUE5410", reason, function.Path));
                     continue;
                 }
-                Begin(source, entries, function.Path, function.Parameters.Count);
+                bool text = UnrealNativeObjectBindings.IsText(function.ReturnType) || function.Parameters.Any(p => UnrealNativeObjectBindings.IsText(p.Type));
+                if (text) BeginText(source, entries, function.Path, function.Parameters.Count);
+                else Begin(source, entries, function.Path, function.Parameters.Count);
                 if (!function.Traits.Static) Target(source, type);
                 else source.AppendLine("    if (Target.Value) return Status::InvalidArgument;");
                 for (int index = 0; index < function.Parameters.Count; index++)
-                    Decode(source, function.Parameters[index].Type, index, function.NativeBinding!.Parameters[index]);
+                    if (UnrealNativeObjectBindings.IsText(function.Parameters[index].Type))
+                        DecodeText(source, function.Parameters[index].Type, index);
+                    else Decode(source, function.Parameters[index].Type, index, function.NativeBinding!.Parameters[index]);
                 var binding = function.NativeBinding!;
                 string args = string.Join(", ", Enumerable.Range(0, function.Parameters.Count).Select(i =>
                     (UnrealNativeObjectBindings.IsObjectReference(binding.Parameters[i]) ? "*" : "") + $"Argument{i}"));
@@ -94,7 +113,9 @@ internal static class UnrealNativeObjectThunkGenerator
                 }
                 else
                 {
-                    source.AppendLine(function.ReturnType.Kind == UnrealValueKind.Void
+                    if (UnrealNativeObjectBindings.IsText(function.ReturnType))
+                        source.AppendLine($"    if (!Values::WriteText({invocation}, OutBytes, OutValue)) return Status::InvalidArgument;");
+                    else source.AppendLine(function.ReturnType.Kind == UnrealValueKind.Void
                         ? $"    {invocation};" : $"    OutValue = Values::Write({invocation}, {TypeId(function.ReturnType)});");
                     End(source);
                 }
@@ -123,6 +144,19 @@ internal static class UnrealNativeObjectThunkGenerator
         source.AppendLine("{");
         source.AppendLine($"    if (Arguments.Num() != {count}) return Status::InvalidArgument;");
     }
+    private static void BeginText(StringBuilder source, List<string> entries, string path, int count)
+    {
+        string id = Id(path), name = $"TextMember_{UnrealMemberId.FromPath(path):X16}";
+        string entry = $"    {{{id}, nullptr, &{name}}},";
+        if (entries.Contains(entry)) throw new InvalidOperationException("Native object member ID collision.");
+        entries.Add(entry);
+        source.AppendLine($"static Status {name}(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,");
+        source.AppendLine("    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,");
+        source.AppendLine("    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,");
+        source.AppendLine("    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)");
+        source.AppendLine("{");
+        source.AppendLine($"    if (Arguments.Num() != {count}) return Status::InvalidArgument;");
+    }
     private static void Target(StringBuilder source, UnrealReflectedType owner)
     {
         source.AppendLine("    void* Pointer = nullptr;");
@@ -144,6 +178,12 @@ internal static class UnrealNativeObjectThunkGenerator
         }
         source.AppendLine($"    {UnrealNativeObjectBindings.CppType(type)} Argument{index}{{}};");
         source.AppendLine($"    if (!Values::Read(Arguments[{index}], Argument{index}, {TypeId(type)})) return Status::InvalidArgument;");
+    }
+    private static void DecodeText(StringBuilder source, UnrealTypeReference type, int index)
+    {
+        source.AppendLine($"    {UnrealNativeObjectBindings.CppType(type)} Argument{index}{{}};");
+        source.AppendLine($"    const Status ArgumentStatus{index} = Values::ReadText(Input, Arguments[{index}], Argument{index});");
+        source.AppendLine($"    if (ArgumentStatus{index} != Status::Success) return ArgumentStatus{index};");
     }
     private static void End(StringBuilder source) { source.AppendLine("    return Status::Success;"); source.AppendLine("}"); }
     private static string TypeId(UnrealTypeReference type) => type.Kind is UnrealValueKind.Enum or UnrealValueKind.NativeObject ? Id(type.TypePath!) : "0";

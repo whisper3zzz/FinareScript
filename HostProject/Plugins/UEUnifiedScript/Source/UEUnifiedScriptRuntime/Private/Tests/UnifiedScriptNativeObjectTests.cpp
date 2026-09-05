@@ -7,6 +7,7 @@
 #include "Misc/Paths.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
 #include "UnifiedScriptNativeCounter.h"
+#include "UnifiedScriptNativeObjectValues.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptWorldSubsystem.h"
 
@@ -19,6 +20,15 @@ constexpr uint64 ConstructId = UnifiedScriptMemberId("/Native/Tests.Counter:Cons
 constexpr uint64 ChildId = UnifiedScriptMemberId("/Native/Tests.Counter:Child()");
 constexpr uint64 AddId = UnifiedScriptMemberId("/Native/Tests.CounterChild:Add(int32)");
 constexpr uint64 FailedConstructId = UnifiedScriptMemberId("/Native/Tests.Counter:FailedConstruct()");
+constexpr uint64 TextEchoId = UnifiedScriptMemberId("/Native/Tests.Text:Echo(FStringconst&)");
+constexpr uint64 TextDetachId = UnifiedScriptMemberId("/Native/Tests.Text:Detach(FStringconst&)");
+constexpr uint64 TextFactoryId = UnifiedScriptMemberId("/Native/Tests.Text:Factory(FStringconst&)");
+constexpr uint64 TextOuterReadFailId = UnifiedScriptMemberId("/Native/Tests.Text:OuterReadFail(FStringconst&)");
+constexpr uint64 TextOuterUnreadFailId = UnifiedScriptMemberId("/Native/Tests.Text:OuterUnreadFail(FStringconst&)");
+constexpr uint64 TextRetireScalarId = UnifiedScriptMemberId("/Native/Tests.Text:RetireScalar(FStringconst&)");
+constexpr uint64 TextRetireFactoryId = UnifiedScriptMemberId("/Native/Tests.Text:RetireFactory(FStringconst&)");
+constexpr uint64 TextCapacityId = UnifiedScriptMemberId("/Native/Tests.Text:Capacity(FStringconst&)");
+int32 TextEchoCalls = 0;
 int32 LiveCount = 0;
 int32 DestroyCount = 0;
 struct FChild { int32 Value = 0; };
@@ -86,6 +96,64 @@ void Register(FUnifiedScriptNativeObjectRegistry& Registry)
     check(Registry.RegisterMember(AddId, &Add) == EStatus::Success);
     check(Registry.RegisterMember(FailedConstructId, &FailedConstruct) == EStatus::Success);
 }
+EStatus EchoText(FUnifiedScriptNativeObjectRegistry&, uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle&, TArray<uint8>& OutBytes)
+{
+    if (Scope == 0 || Target.Value || Arguments.Num() != 1) return EStatus::InvalidArgument;
+    ++TextEchoCalls;
+    FString Text;
+    const EStatus Status = UE::UnifiedScript::NativeObjectValues::ReadText(Input, Arguments[0], Text);
+    if (Status != EStatus::Success) return Status;
+    return UE::UnifiedScript::NativeObjectValues::WriteText(Text, OutBytes, OutValue)
+        ? EStatus::Success : EStatus::InvalidArgument;
+}
+EStatus DetachText(FUnifiedScriptNativeObjectRegistry& Registry, uint64, FUnifiedScriptNativeObjectHandle,
+    TConstArrayView<FUnifiedScriptNativeValueV3>, TConstArrayView<uint8>, FUnifiedScriptNativeValueV3&,
+    FUnifiedScriptNativeObjectHandle&, TArray<uint8>&)
+{
+    Registry.Detach();
+    return EStatus::Success;
+}
+EStatus TextFactory(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+    FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Target.Value || !Arguments.IsEmpty() || !Input.IsEmpty()) return EStatus::InvalidArgument;
+    auto Object = MakeUnique<FCounter>(123);
+    const EStatus Status = Registry.RegisterOwned(Scope, OwnerType, Object.Get(), &Destroy, OutHandle);
+    if (Status != EStatus::Success) return Status;
+    static_cast<void>(Object.Release());
+    return UE::UnifiedScript::NativeObjectValues::WriteText(FString(TEXT("owned")), OutBytes, OutValue)
+        ? EStatus::Success : EStatus::InvalidArgument;
+}
+EStatus NestedReadThenFail(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope, FUnifiedScriptNativeObjectHandle,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+    FUnifiedScriptNativeValueV3&, FUnifiedScriptNativeObjectHandle&, TArray<uint8>&)
+{
+    if (!Arguments.IsEmpty() || !Input.IsEmpty()) return EStatus::InvalidArgument;
+    uint64 Token = 0;
+    uint32 Required = 0;
+    EStatus Status = Registry.BeginText(Scope, {}, TextFactoryId, {}, {}, Token, Required);
+    if (Status != EStatus::Success) return Status;
+    TArray<uint8> Bytes;
+    Bytes.SetNumZeroed(Required);
+    FUnifiedScriptNativeValueV3 Value;
+    FUnifiedScriptNativeObjectHandle Handle;
+    uint32 Reported = 0;
+    Status = Registry.ReadText(Scope, Token, Bytes.GetData(), Bytes.Num(), Reported, Value, Handle);
+    return Status == EStatus::Success ? EStatus::InvalidArgument : Status;
+}
+EStatus NestedBeginThenFail(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope, FUnifiedScriptNativeObjectHandle,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+    FUnifiedScriptNativeValueV3&, FUnifiedScriptNativeObjectHandle&, TArray<uint8>&)
+{
+    if (!Arguments.IsEmpty() || !Input.IsEmpty()) return EStatus::InvalidArgument;
+    uint64 Token = 0;
+    uint32 Required = 0;
+    const EStatus Status = Registry.BeginText(Scope, {}, TextFactoryId, {}, {}, Token, Required);
+    return Status == EStatus::Success ? EStatus::InvalidArgument : Status;
+}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectRegistryTest,
@@ -93,6 +161,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectRegistryTest,
 bool FUnifiedScriptNativeObjectRegistryTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::NativeObjectTests;
+    TextEchoCalls = 0;
     const int32 InitialLive = LiveCount;
     const int32 InitialDestroyed = DestroyCount;
     FUnifiedScriptNativeObjectRegistry Registry, OtherWorld;
@@ -163,6 +232,158 @@ bool FUnifiedScriptNativeObjectRegistryTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("World releases all native objects"), Registry.Num(), 0);
     TestEqual(TEXT("No live owned objects remain"), LiveCount, InitialLive);
     TestTrue(TEXT("Detached World refuses scopes"), Registry.OpenScope(Scope) == EStatus::Unavailable);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectTextTest,
+    "UnifiedScript.Unreal.NativeObjects.TextSnapshots", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUnifiedScriptNativeObjectTextTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::NativeObjectTests;
+    FUnifiedScriptNativeObjectRegistry Registry;
+    const FUnifiedScriptNativeObjectMemberEntry Entry{TextEchoId, nullptr, &EchoText};
+    FUnifiedScriptNativeObjectLibrary Library(MakeArrayView(&Entry, 1));
+    uint64 Scope = 0;
+    TestTrue(TEXT("Open text scope"), Registry.OpenScope(Scope) == EStatus::Success);
+    const uint8 Source[] = {'h', 0xC3, 0xA9, 0, 0xE4, 0xB8, 0x96, 0xE7, 0x95, 0x8C};
+    TArray<uint8> Input;
+    Input.SetNumUninitialized(static_cast<int32>(sizeof(Source)));
+    FMemory::Memcpy(Input.GetData(), Source, sizeof(Source));
+    FUnifiedScriptNativeValueV3 Cell;
+    Cell.Kind = EUnifiedScriptNativeValueKindV3::String;
+    Cell.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+    Cell.Payload1 = Input.Num();
+    uint64 Token = 0;
+    uint32 Required = 0;
+    TestTrue(TEXT("Begin snapshots without publishing"), Registry.BeginText(Scope, {}, TextEchoId,
+        MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), Token, Required) == EStatus::Success);
+    TestEqual(TEXT("Begin invokes text member once"), TextEchoCalls, 1);
+    Input[0] = 'X';
+    FUnifiedScriptNativeValueV3 Value;
+    FUnifiedScriptNativeObjectHandle Handle;
+    uint8 Small[1] = {};
+    uint32 Reported = 0;
+    TestTrue(TEXT("Insufficient read preserves token"), Registry.ReadText(Scope, Token, Small, 1, Reported, Value, Handle) == EStatus::TextBufferTooSmall);
+    TArray<uint8> Output;
+    Output.SetNumZeroed(Required);
+    TestTrue(TEXT("Read publishes once"), Registry.ReadText(Scope, Token, Output.GetData(), Output.Num(), Reported, Value, Handle) == EStatus::Success);
+    TestEqual(TEXT("Text output size"), Reported, Required);
+    TestTrue(TEXT("Text output bytes"), Output.Num() == sizeof(Source) && FMemory::Memcmp(Output.GetData(), Source, sizeof(Source)) == 0);
+    TestEqual(TEXT("Reads do not invoke text member again"), TextEchoCalls, 1);
+    TestTrue(TEXT("Duplicate read rejects token"), Registry.ReadText(Scope, Token, Output.GetData(), Output.Num(), Reported, Value, Handle) == EStatus::InvalidTextToken);
+    TestEqual(TEXT("Duplicate read keeps side effects at one"), TextEchoCalls, 1);
+    TestTrue(TEXT("Fixed invoke rejects rich-only member"), Registry.Invoke(Scope, {}, TextEchoId, {}, Value, Handle) == EStatus::UnknownMember);
+    const uint8 Invalid[] = {0xC0, 0x80};
+    Cell.Payload1 = UE_ARRAY_COUNT(Invalid);
+    Token = 0;
+    TestTrue(TEXT("Invalid UTF8 rejected before callback"), Registry.BeginText(Scope, {}, TextEchoId, MakeArrayView(&Cell, 1),
+        MakeArrayView(Invalid, UE_ARRAY_COUNT(Invalid)), Token, Required) == EStatus::InvalidArgument);
+    Cell.Payload1 = Input.Num();
+    uint64 OtherScope = 0;
+    TestTrue(TEXT("Open wrong-scope text scope"), Registry.OpenScope(OtherScope) == EStatus::Success);
+    uint64 ForeignToken = 0;
+    uint32 ForeignRequired = 0;
+    TestTrue(TEXT("Begin second pending text"), Registry.BeginText(Scope, {}, TextEchoId, MakeArrayView(&Cell, 1),
+        MakeArrayView(Input.GetData(), Input.Num()), ForeignToken, ForeignRequired) == EStatus::Success);
+    TArray<uint8> ForeignOutput;
+    ForeignOutput.SetNumZeroed(ForeignRequired);
+    FUnifiedScriptNativeValueV3 ForeignValue;
+    FUnifiedScriptNativeObjectHandle ForeignHandle;
+    uint32 ForeignReported = 0;
+    TestTrue(TEXT("Wrong-scope read preserves token"), Registry.ReadText(OtherScope, ForeignToken, ForeignOutput.GetData(),
+        ForeignOutput.Num(), ForeignReported, ForeignValue, ForeignHandle) == EStatus::WrongOwner);
+    TestTrue(TEXT("Wrong-scope discard preserves token"), Registry.DiscardText(OtherScope, ForeignToken) == EStatus::WrongOwner);
+    TestTrue(TEXT("Owner can read after wrong-scope attempts"), Registry.ReadText(Scope, ForeignToken, ForeignOutput.GetData(),
+        ForeignOutput.Num(), ForeignReported, ForeignValue, ForeignHandle) == EStatus::Success);
+    Registry.CloseScope(OtherScope);
+    Registry.CloseScope(Scope);
+
+    FUnifiedScriptNativeObjectRegistry ReentrantRegistry;
+    FUnifiedScriptNativeObjectMemberEntry DetachEntry{TextDetachId, nullptr, &DetachText};
+    FUnifiedScriptNativeObjectLibrary DetachLibrary(MakeArrayView(&DetachEntry, 1));
+    uint64 ReentrantScope = 0;
+    TestTrue(TEXT("Open reentrant detach scope"), ReentrantRegistry.OpenScope(ReentrantScope) == EStatus::Success);
+    TestTrue(TEXT("Reentrant detach unwinds pending reservation"), ReentrantRegistry.BeginText(
+        ReentrantScope, {}, TextDetachId, {}, {}, Token, Required) == EStatus::InvalidScope);
+    TestEqual(TEXT("Reentrant detach closes scopes"), ReentrantRegistry.NumScopes(), 0);
+
+    FUnifiedScriptNativeObjectRegistry NestedRegistry;
+    const FUnifiedScriptNativeObjectMemberEntry NestedEntries[] = {
+        {TextFactoryId, nullptr, &TextFactory},
+        {TextOuterReadFailId, nullptr, &NestedReadThenFail},
+        {TextOuterUnreadFailId, nullptr, &NestedBeginThenFail},
+    };
+    FUnifiedScriptNativeObjectLibrary NestedLibrary(MakeArrayView(NestedEntries));
+    uint64 NestedScope = 0;
+    TestTrue(TEXT("Open nested rollback scope"), NestedRegistry.OpenScope(NestedScope) == EStatus::Success);
+    const int32 NestedInitialLive = LiveCount;
+    TestTrue(TEXT("Read nested factory then outer failure rolls back ownership"), NestedRegistry.BeginText(
+        NestedScope, {}, TextOuterReadFailId, {}, {}, Token, Required) == EStatus::InvalidArgument);
+    TestEqual(TEXT("Read nested factory leaves no owner"), LiveCount, NestedInitialLive);
+    TestTrue(TEXT("Unconsumed nested factory then outer failure rolls back ownership"), NestedRegistry.BeginText(
+        NestedScope, {}, TextOuterUnreadFailId, {}, {}, Token, Required) == EStatus::InvalidArgument);
+    TestEqual(TEXT("Unconsumed nested factory leaves no owner"), LiveCount, NestedInitialLive);
+    NestedRegistry.CloseScope(NestedScope);
+
+    FUnifiedScriptNativeObjectRegistry DiscardRegistry, ScopeCloseRegistry;
+    const FUnifiedScriptNativeObjectMemberEntry DiscardEntries[] = {
+        {TextRetireScalarId, nullptr, &EchoText},
+        {TextRetireFactoryId, nullptr, &TextFactory},
+    };
+    uint64 DiscardScope = 0;
+    uint64 ScopeClose = 0;
+    FUnifiedScriptNativeObjectHandle UnusedHandle;
+    uint32 DiscardRequired = 0;
+    {
+        FUnifiedScriptNativeObjectLibrary DiscardLibrary(MakeArrayView(DiscardEntries));
+        TestTrue(TEXT("Open explicit discard scope"), DiscardRegistry.OpenScope(DiscardScope) == EStatus::Success);
+        TestTrue(TEXT("Open scope-close pending scope"), ScopeCloseRegistry.OpenScope(ScopeClose) == EStatus::Success);
+        TestTrue(TEXT("Begin unread scope-close scalar result"), ScopeCloseRegistry.BeginText(ScopeClose, {}, TextRetireScalarId,
+            MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), Token, DiscardRequired) == EStatus::Success);
+        ScopeCloseRegistry.CloseScope(ScopeClose);
+        TestTrue(TEXT("Scope close removes unread scalar token"), ScopeCloseRegistry.ReadText(ScopeClose, Token,
+            nullptr, 0, DiscardRequired, Value, UnusedHandle) == EStatus::InvalidScope);
+        const int32 BeforeDiscard = LiveCount;
+        TestTrue(TEXT("Begin unpublished factory"), DiscardRegistry.BeginText(DiscardScope, {}, TextRetireFactoryId,
+            {}, {}, Token, DiscardRequired) == EStatus::Success);
+        TestEqual(TEXT("Factory owner exists before discard"), LiveCount, BeforeDiscard + 1);
+        TestTrue(TEXT("Discard retires unpublished factory owner"), DiscardRegistry.DiscardText(DiscardScope, Token) == EStatus::Success);
+        TestEqual(TEXT("Discard removes factory owner"), LiveCount, BeforeDiscard);
+        TestTrue(TEXT("Duplicate discard rejects retired token"), DiscardRegistry.DiscardText(DiscardScope, Token) == EStatus::InvalidTextToken);
+        TestTrue(TEXT("Begin unread scalar result"), DiscardRegistry.BeginText(DiscardScope, {}, TextRetireScalarId,
+            MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), Token, DiscardRequired) == EStatus::Success);
+    }
+    TestTrue(TEXT("Library retirement removes unread scalar token"), DiscardRegistry.ReadText(DiscardScope, Token,
+        nullptr, 0, DiscardRequired, Value, UnusedHandle) == EStatus::InvalidTextToken);
+    DiscardRegistry.CloseScope(DiscardScope);
+
+    FUnifiedScriptNativeObjectRegistry CapacityRegistry;
+    const FUnifiedScriptNativeObjectMemberEntry CapacityEntry{TextCapacityId, nullptr, &EchoText};
+    FUnifiedScriptNativeObjectLibrary CapacityLibrary(MakeArrayView(&CapacityEntry, 1));
+    uint64 CapacityScope = 0;
+    TestTrue(TEXT("Open pending capacity scope"), CapacityRegistry.OpenScope(CapacityScope) == EStatus::Success);
+    TextEchoCalls = 0;
+    TArray<uint64> CapacityTokens;
+    for (int32 Index = 0; Index < 64; ++Index)
+    {
+        uint64 CapacityToken = 0;
+        uint32 CapacityRequired = 0;
+        TestTrue(TEXT("Fill pending capacity"), CapacityRegistry.BeginText(CapacityScope, {}, TextCapacityId,
+            MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), CapacityToken, CapacityRequired) == EStatus::Success);
+        CapacityTokens.Add(CapacityToken);
+    }
+    uint64 RecoveredToken = 0;
+    uint32 RecoveredRequired = 0;
+    TestTrue(TEXT("Pending capacity refuses before callback"), CapacityRegistry.BeginText(CapacityScope, {}, TextCapacityId,
+        MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), RecoveredToken, RecoveredRequired) == EStatus::Exhausted);
+    TestEqual(TEXT("Exhausted begin did not invoke callback"), TextEchoCalls, 64);
+    TestTrue(TEXT("Discard frees pending capacity"), CapacityRegistry.DiscardText(CapacityScope, CapacityTokens[0]) == EStatus::Success);
+    TestTrue(TEXT("Pending capacity recovers after discard"), CapacityRegistry.BeginText(CapacityScope, {}, TextCapacityId,
+        MakeArrayView(&Cell, 1), MakeArrayView(Input.GetData(), Input.Num()), RecoveredToken, RecoveredRequired) == EStatus::Success);
+    CapacityTokens[0] = RecoveredToken;
+    for (const uint64 CapacityToken : CapacityTokens)
+        CapacityRegistry.DiscardText(CapacityScope, CapacityToken);
+    CapacityRegistry.CloseScope(CapacityScope);
     return true;
 }
 
@@ -370,10 +591,17 @@ bool FUnifiedScriptNativeObjectAbiTest::RunTest(const FString& Parameters)
         FUnifiedScriptInvocationBridge Bridge(Objects);
         auto* Context = new FUnifiedScriptNativeBridgeContext(Bridge);
         const auto* Table = UEUnifiedScript_GetNativeObjectTransportV1();
-        TestEqual(TEXT("Object table advertises optional tail"), Table->TableSize, uint32(sizeof(FUnifiedScriptNativeObjectTransportWithCapabilities)));
-        TestEqual(TEXT("Object input capability"), reinterpret_cast<const FUnifiedScriptNativeObjectTransportWithCapabilities*>(Table)->Capabilities & 1, uint64(1));
+        const auto* Extended = reinterpret_cast<const FUnifiedScriptNativeObjectTransportWithText*>(Table);
+        TestEqual(TEXT("Object table advertises text tail"), Table->TableSize, uint32(sizeof(FUnifiedScriptNativeObjectTransportWithText)));
+        TestEqual(TEXT("Object input capability"), Extended->Base.Capabilities & 1, uint64(1));
+        TestEqual(TEXT("Object text capability"), Extended->Base.Capabilities & 2, uint64(2));
+        TestNotNull(TEXT("Text transport tail"), Extended->TextTransport);
+        TestEqual(TEXT("Text transport ABI"), Extended->TextTransport->AbiVersion, uint32(1));
+        TestEqual(TEXT("Text transport value size"), Extended->TextTransport->ValueSize, uint32(sizeof(FUnifiedScriptNativeValueV3)));
         TestEqual(TEXT("Optional table uses same lifetime guard"), Table->RetainContext, UEUnifiedScript_GetNativeTransportV1()->RetainContext);
         TestTrue(TEXT("Retain native context"), Table->RetainContext(Context) != 0);
+        const FUnifiedScriptNativeObjectMemberEntry TextEntry{TextEchoId, nullptr, &EchoText};
+        FUnifiedScriptNativeObjectLibrary TextLibrary(MakeArrayView(&TextEntry, 1));
         Context->ExecuteNativeObjects([](auto& Registry) { Register(Registry); });
         uint64 Scope = 0, Handle = 0;
         Table->OpenScope(Context, &Scope);
@@ -391,6 +619,24 @@ bool FUnifiedScriptNativeObjectAbiTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Invalid ABI calls did not construct"), LiveCount, InitialLive);
         TestTrue(TEXT("Valid construction crosses table"),
             Table->Invoke(Context, Scope, 0, ConstructId, &Argument, 1, &Value, &Handle) == EStatus::Success);
+        const uint8 TextInput[] = {'o', 'k'};
+        FUnifiedScriptNativeValueV3 TextArgument;
+        TextArgument.Kind = EUnifiedScriptNativeValueKindV3::String;
+        TextArgument.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        TextArgument.Payload1 = UE_ARRAY_COUNT(TextInput);
+        uint64 TextToken = 0;
+        uint32 TextRequired = 0;
+        TestTrue(TEXT("Exported text tail begins rich call"), Extended->TextTransport->Begin(Context, Scope, 0,
+            TextEchoId, &TextArgument, 1, TextInput, UE_ARRAY_COUNT(TextInput), &TextToken, &TextRequired) == EStatus::Success);
+        TArray<uint8> TextOutput;
+        TextOutput.SetNumZeroed(TextRequired);
+        FUnifiedScriptNativeValueV3 TextValue;
+        uint64 TextHandle = 0;
+        uint32 TextReported = 0;
+        TestTrue(TEXT("Exported text tail reads rich result"), Extended->TextTransport->Read(Context, Scope, TextToken,
+            TextOutput.GetData(), TextOutput.Num(), &TextReported, &TextValue, &TextHandle) == EStatus::Success);
+        TestTrue(TEXT("Exported text tail preserves bytes"), TextOutput.Num() == UE_ARRAY_COUNT(TextInput) &&
+            FMemory::Memcmp(TextOutput.GetData(), TextInput, UE_ARRAY_COUNT(TextInput)) == 0);
         TestTrue(TEXT("Wrong-thread dispatch rejected"), Async(EAsyncExecution::ThreadPool, [&]
         {
             FUnifiedScriptNativeValueV3 WorkerValue;
@@ -459,6 +705,50 @@ bool FUnifiedScriptNativeObjectManagedTest::RunTest(const FString& Parameters)
     World->RemoveFromRoot();
     World->DestroyWorld(false);
     TestEqual(TEXT("World teardown cleans forgotten ownership"), GeneratedLive, InitialLive);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnifiedScriptNativeObjectTextManagedTest,
+    "UnifiedScript.Unreal.NativeObjects.ManagedTextLifetime", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUnifiedScriptNativeObjectTextManagedTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::NativeObjectTests;
+    const int32& GeneratedLive = UE::UnifiedScript::NativeExample::FCounter::LiveCount;
+    const int32 InitialLive = GeneratedLive;
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("World"), World)) return false;
+    auto* Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    auto Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (TestNotNull(TEXT("Host"), Host) && TestTrue(TEXT("Plugin"), Plugin.IsValid()))
+    {
+        auto* Target = NewObject<UUnifiedScriptNativeExtensionFixture>(World);
+        FUnifiedScriptObjectHandleResult Result;
+        const auto Handle = Host->RegisterObject(Target, Result);
+        const FString Assembly = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll"));
+        const FString Type = TEXT("UnifiedScript.Unreal.Demo.NativeObjectTextGameplayDemoScript");
+        FString Error;
+        bool Started = Host->CreateManagedScript(7013, Handle, Handle, Assembly, Type, Error);
+        TestTrue(*FString::Printf(TEXT("Managed text startup: %s"), *Error), Started);
+        if (Started)
+        {
+            TestEqual(TEXT("Text script owns one native counter"), GeneratedLive, InitialLive + 1);
+            TestTrue(*FString::Printf(TEXT("Managed text tick: %s"), *Error), Host->TickManagedScript(7013, 0.016f, Error));
+            int32 Generation = 0;
+            TestTrue(*FString::Printf(TEXT("Managed text reload: %s"), *Error),
+                Host->ReloadManagedScript(7013, Assembly, Type, Generation, Error));
+            TestTrue(TEXT("Managed text reload advances generation"), Generation > 0);
+            TestEqual(TEXT("Reload leaves one native counter"), GeneratedLive, InitialLive + 1);
+            TestTrue(*FString::Printf(TEXT("Reloaded managed text tick: %s"), *Error), Host->TickManagedScript(7013, 0.016f, Error));
+            TestTrue(TEXT("Destroy managed text script"), Host->DestroyManagedScript(7013, Error));
+            TestEqual(TEXT("Text script destroy cleans native ownership"), GeneratedLive, InitialLive);
+            TestTrue(*FString::Printf(TEXT("Start text script for World teardown: %s"), *Error),
+                Host->CreateManagedScript(7014, Handle, Handle, Assembly, Type, Error));
+            TestEqual(TEXT("World teardown script owns one native counter"), GeneratedLive, InitialLive + 1);
+        }
+    }
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(TEXT("Text World teardown cleans forgotten ownership"), GeneratedLive, InitialLive);
     return true;
 }
 #endif

@@ -8,13 +8,13 @@
   },
   "summary": {
     "typeCount": 13,
-    "memberCount": 167,
-    "directThunkCount": 57,
+    "memberCount": 173,
+    "directThunkCount": 63,
     "callFrameCount": 107,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 164,
+    "nativeThunkCount": 170,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -76,6 +76,15 @@
       "nativeExtension": "Demo.Native"
     },
     {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(FStringconst\u0026)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
@@ -86,6 +95,24 @@
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(int32)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoStdText(std::stringconst\u0026)",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoText(FStringconst\u0026)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
       "disposition": "directThunk",
@@ -113,6 +140,15 @@
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:InvalidOwnedAliasForTest()",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:MixText(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026,FStringconst\u0026,int32)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
       "disposition": "directThunk",
@@ -202,9 +238,27 @@
       "nativeExtension": "Demo.Native"
     },
     {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:StdTextValue",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Sum(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026,UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
       "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
       "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:TextValue",
+      "ownerPath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+      "kind": "property",
       "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",

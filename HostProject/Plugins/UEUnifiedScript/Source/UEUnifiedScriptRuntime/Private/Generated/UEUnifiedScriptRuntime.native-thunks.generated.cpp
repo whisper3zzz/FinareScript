@@ -7232,6 +7232,68 @@ static Status Member_4BC018878763C95C(FUnifiedScriptNativeObjectRegistry& Regist
     TypedTarget->Bias = Argument0;
     return Status::Success;
 }
+static Status TextMember_1C8AB72C70EB71AE(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->StdTextValue)>, std::string>, "Native field declaration mismatch");
+    if (!Values::WriteText(TypedTarget->StdTextValue, OutBytes, OutValue)) return Status::InvalidArgument;
+    return Status::Success;
+}
+static Status TextMember_8497932CABE25232(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->StdTextValue)>, std::string>, "Native field declaration mismatch");
+    std::string Argument0{};
+    const Status ArgumentStatus0 = Values::ReadText(Input, Arguments[0], Argument0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    TypedTarget->StdTextValue = Argument0;
+    return Status::Success;
+}
+static Status TextMember_E259BF8BF2193B51(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 0) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->TextValue)>, FString>, "Native field declaration mismatch");
+    if (!Values::WriteText(TypedTarget->TextValue, OutBytes, OutValue)) return Status::InvalidArgument;
+    return Status::Success;
+}
+static Status TextMember_8CEEF38C51F66FFD(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->TextValue)>, FString>, "Native field declaration mismatch");
+    FString Argument0{};
+    const Status ArgumentStatus0 = Values::ReadText(Input, Arguments[0], Argument0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    TypedTarget->TextValue = Argument0;
+    return Status::Success;
+}
 static Status Member_59E239DEF207F1CF(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
     FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
@@ -7292,6 +7354,23 @@ static Status Member_C7FB3979E2537381(FUnifiedScriptNativeObjectRegistry& Regist
     if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
     return Result;
 }
+static Status TextMember_6D24AC1F3FF38B85(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    if (Target.Value) return Status::InvalidArgument;
+    FString Argument0{};
+    const Status ArgumentStatus0 = Values::ReadText(Input, Arguments[0], Argument0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    TUniquePtr<UE::UnifiedScript::NativeExample::FCounter> Object(new UE::UnifiedScript::NativeExample::FCounter(Argument0));
+    const Status Result = Registry.RegisterOwned(Scope, 0xC902906A6BD165E4ull, Object.Get(),
+        [](void* Pointer) { delete static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer); }, OutHandle);
+    // A rejected duplicate address still belongs to its existing owner.
+    if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
+    return Result;
+}
 static Status Member_B53253FE54579082(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
     FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
@@ -7323,6 +7402,38 @@ static Status Member_1E238BBF8A4F6005(FUnifiedScriptNativeObjectRegistry& Regist
     // A rejected duplicate address still belongs to its existing owner.
     if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
     return Result;
+}
+static Status TextMember_C4A4D88A366595A7(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    std::string Argument0{};
+    const Status ArgumentStatus0 = Values::ReadText(Input, Arguments[0], Argument0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    if (!Values::WriteText((TypedTarget->*static_cast<std::string (UE::UnifiedScript::NativeExample::FCounter::*)(std::string const&) const>(&UE::UnifiedScript::NativeExample::FCounter::EchoStdText))(Argument0), OutBytes, OutValue)) return Status::InvalidArgument;
+    return Status::Success;
+}
+static Status TextMember_6DEEDFD0955D5C87(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 1) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    FString Argument0{};
+    const Status ArgumentStatus0 = Values::ReadText(Input, Arguments[0], Argument0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    if (!Values::WriteText((TypedTarget->*static_cast<FString (UE::UnifiedScript::NativeExample::FCounter::*)(FString const&) const>(&UE::UnifiedScript::NativeExample::FCounter::EchoText))(Argument0), OutBytes, OutValue)) return Status::InvalidArgument;
+    return Status::Success;
 }
 static Status Member_BD419863586ED57A(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
@@ -7365,6 +7476,28 @@ static Status Member_4819FCD2D84238E2(FUnifiedScriptNativeObjectRegistry& Regist
     // A rejected duplicate address still belongs to its existing owner.
     if (Result == Status::Success || Result == Status::WrongOwner) static_cast<void>(Object.Release());
     return Result;
+}
+static Status TextMember_9B9FB1D05412E0BD(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
+    FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    TConstArrayView<uint8> Input, FUnifiedScriptNativeValueV3& OutValue,
+    FUnifiedScriptNativeObjectHandle& OutHandle, TArray<uint8>& OutBytes)
+{
+    if (Arguments.Num() != 3) return Status::InvalidArgument;
+    void* Pointer = nullptr;
+    const Status Resolved = Registry.Resolve(Scope, Target, 0xC902906A6BD165E4ull, Pointer);
+    if (Resolved != Status::Success) return Resolved;
+    auto* TypedTarget = static_cast<UE::UnifiedScript::NativeExample::FCounter*>(Pointer);
+    void* ArgumentPointer0 = nullptr;
+    const Status ArgumentStatus0 = Values::ReadObject(Registry, Scope, Arguments[0], 0x988618A984C7E632ull, false, ArgumentPointer0);
+    if (ArgumentStatus0 != Status::Success) return ArgumentStatus0;
+    auto* Argument0 = static_cast<UE::UnifiedScript::NativeExample::FCounterChild const*>(ArgumentPointer0);
+    FString Argument1{};
+    const Status ArgumentStatus1 = Values::ReadText(Input, Arguments[1], Argument1);
+    if (ArgumentStatus1 != Status::Success) return ArgumentStatus1;
+    int32 Argument2{};
+    if (!Values::Read(Arguments[2], Argument2, 0)) return Status::InvalidArgument;
+    if (!Values::WriteText((TypedTarget->*static_cast<FString (UE::UnifiedScript::NativeExample::FCounter::*)(UE::UnifiedScript::NativeExample::FCounterChild const&, FString const&, int32) const>(&UE::UnifiedScript::NativeExample::FCounter::MixText))(*Argument0, Argument1, Argument2), OutBytes, OutValue)) return Status::InvalidArgument;
+    return Status::Success;
 }
 static Status Member_9E6B4803C8D0E235(FUnifiedScriptNativeObjectRegistry& Registry, uint64 Scope,
     FUnifiedScriptNativeObjectHandle Target, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
@@ -7561,15 +7694,23 @@ static const FUnifiedScriptNativeObjectMemberEntry Members[] =
 {
     {0xB4A70487C31468D0ull, &Member_B4A70487C31468D0},
     {0x4BC018878763C95Cull, &Member_4BC018878763C95C},
+    {0x1C8AB72C70EB71AEull, nullptr, &TextMember_1C8AB72C70EB71AE},
+    {0x8497932CABE25232ull, nullptr, &TextMember_8497932CABE25232},
+    {0xE259BF8BF2193B51ull, nullptr, &TextMember_E259BF8BF2193B51},
+    {0x8CEEF38C51F66FFDull, nullptr, &TextMember_8CEEF38C51F66FFD},
     {0x59E239DEF207F1CFull, &Member_59E239DEF207F1CF},
     {0xB0CAB788728796ABull, &Member_B0CAB788728796AB},
     {0x0A14AF11DAE662D4ull, &Member_0A14AF11DAE662D4},
     {0xC7FB3979E2537381ull, &Member_C7FB3979E2537381},
+    {0x6D24AC1F3FF38B85ull, nullptr, &TextMember_6D24AC1F3FF38B85},
     {0xB53253FE54579082ull, &Member_B53253FE54579082},
     {0x1E238BBF8A4F6005ull, &Member_1E238BBF8A4F6005},
+    {0xC4A4D88A366595A7ull, nullptr, &TextMember_C4A4D88A366595A7},
+    {0x6DEEDFD0955D5C87ull, nullptr, &TextMember_6DEEDFD0955D5C87},
     {0xBD419863586ED57Aull, &Member_BD419863586ED57A},
     {0x4AC35189F0573E27ull, &Member_4AC35189F0573E27},
     {0x4819FCD2D84238E2ull, &Member_4819FCD2D84238E2},
+    {0x9B9FB1D05412E0BDull, nullptr, &TextMember_9B9FB1D05412E0BD},
     {0x9E6B4803C8D0E235ull, &Member_9E6B4803C8D0E235},
     {0x7D8B79A1C3B70F2Eull, &Member_7D8B79A1C3B70F2E},
     {0xC764190318412901ull, &Member_C764190318412901},

@@ -25,15 +25,16 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — ordinary native object text values**. Puerts' native
-  binding example accepts `std::string`, while UnifiedScript's ordinary C++
-  object lane still accepts only fixed values and qualified object references.
-  Enable practical string fields, constructor/method inputs and returned text
-  through generated bindings and a gameplay example, preserving ownership,
-  generation lifetime and compatibility of the existing fixed-call prefix.
-  Stay in M13.5; this does not start M13.3/M13.4.
-- Latest delivered M13.5 checkpoint: **typed reference containers**, following
-  reflected interface references (`bffb2d8`) and callbacks (`2827216`).
+- Current tranche: **M13.5 — service/subsystem access comparison**. Check common
+  World, GameInstance and LocalPlayer subsystem lookup and invocation through
+  generated public APIs. Identify a concrete missing operation before changing
+  the runtime; a type absent from the Demo contract is not necessarily a missing
+  capability. Implement a reusable blocker if found, otherwise use the existing
+  breadth transition rule to decide whether to resume M13.3. Do not continue
+  expanding ordinary-object text signatures just because that batch is complete.
+- Latest delivered M13.5 checkpoint: **ordinary native object text values**,
+  following typed reference containers (`7c250c5`), reflected interface references
+  (`bffb2d8`) and callbacks (`2827216`).
 - Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
 - Container/Soft Reference implementation checkpoint: `46f912d`; the full
   M13.3C-1c-b acceptance scope remains open.
@@ -101,6 +102,18 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   objects without losing alias identity, including reload and failed-candidate
   rollback. Invalid type/scope/null/borrowed-owner inputs are rejected before
   native side effects; old transport prefixes remain usable for fixed calls.
+- Latest native-value checkpoint: **copied ordinary C++ text**. Exact `FString`
+  and `std::string` fields, constructors and method inputs/results generate C#,
+  C++ and node descriptions, including text mixed with qualified object inputs.
+  The [text example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
+  observes construction before writing different field values and exercises
+  empty text, embedded NUL and Unicode through real CoreCLR reload and World
+  teardown. The optional Begin/Read/Discard transport keeps old ABI prefixes,
+  executes native calls once, bounds pending results and retires unpublished
+  allocations on failure or cancellation. Current affected managed tests (141)
+  and all seven NativeObjects CMD tests passed with an Editor target build.
+  Borrowed character pointers, mutable string references, signature-alias
+  disambiguation and cooked text execution remain outside this checkpoint.
 - Latest callback checkpoint: **generated reflected callback arguments,
   synchronous return/ref/out and callback-to-native reentry**. Typed leases,
   native proxies and the public C#/node contract cover immediate and retained
@@ -174,7 +187,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
 | Typed reference containers — M13.5 | Canonical transport for generated object/class/Soft Reference Array, Set and Map values; exact native/node types, subclass validation, real engine Actor query and managed reload/cleanup example | This fixes generated calls into native APIs; interface containers and the full Script Class property/default/cooked matrix remain open |
 | Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
-| Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns and qualified object inputs, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Richer values, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
+| Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns, qualified object inputs and copied `FString`/`std::string` values; typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Containers/richer structs, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
 | Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph publication, external IDE refresh and native body build/live reload with automatic Slate synchronization | Installed-consumer authoring and live class-shape/default deployment remain open; no physical toolbar/mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
@@ -267,7 +280,7 @@ not an exhaustive signature audit or a claim of parity.
 | Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
 | Containers and Soft References | The typed-reference transport mismatch is closed for generated native calls: Actor arrays, class sets, named Soft Object maps and Soft Class arrays have native/CoreCLR exchange and reload evidence. Generated Blueprint functions retain their earlier initial exchange path; their broader negative/VM/cooked and common state/default acceptance remains open | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
-| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Next common gap: ordinary-object string fields, constructors, method inputs and results cannot use the fixed-only transport. Richer values, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
+| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Exact `FString`/`std::string` fields, constructor/method inputs and returned snapshots now use an optional bounded text transport, including mixed object arguments and generation/World cleanup. Containers/richer structs, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
 | Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters now support synchronous results/ref/out, native retention and generated UE reentry with a real worker-originated example. Installed-consumer authoring, broader latent/interface/subsystem gaps and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
@@ -283,9 +296,12 @@ Puerts runtime result or a requirement to complete all Script Class interface
 state, container or callback combinations in the same batch.
 
 The [same pinned upstream revision's native binding example](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/doc/unreal/zhcn/template_binding.md)
-includes a `std::string` overload. The next batch addresses that ordinary text
-use case in non-UObject bindings; the existing UObject-member string codecs do
-not make the separate fixed-only native-object lane support it.
+includes a `std::string` overload. The ordinary-object text batch addresses that
+use case with generated exact native declarations, copied UTF-8 inputs/results
+and a separately negotiated transport tail. It preserves the old fixed-call
+prefix and tests empty text, embedded NUL, Unicode and result collection without
+repeating native side effects. Selecting overloads that both project to the same
+C# signature is rejected; automatic overload renaming is not part of this batch.
 
 For each family, distinguish **available for the reviewed scope**, **partial**,
 **missing**, **not yet audited**, and **intentional difference**. Before declaring
@@ -355,8 +371,10 @@ an external project requires the user's authorization.
   The first UObject-member implementation is available; it does not close this
   broader item. Ordinary C++ fixed-value and owned/borrowed-return generation is
   now implemented with an actual generated CoreCLR example, as are qualified
-  pointer/reference inputs with exact scope and null policy; richer forms remain
-  open. Manual member registration remains only in low-level registry tests.
+  pointer/reference inputs with exact scope and null policy. Exact native text
+  fields, construction and method exchange now work through the same generated
+  workflow; containers, richer structs and the other forms above remain open.
+  Manual member registration remains only in low-level registry tests.
   See [native extension declarations](UNREAL_API_CONTRACT.md#native-extension-declarations)
   and the [ordinary C++ runtime](UNREAL_API_CONTRACT.md#ordinary-c-object-runtime).
 - [ ] Close common latent, delegate, interface, subsystem, UI and asset-loading

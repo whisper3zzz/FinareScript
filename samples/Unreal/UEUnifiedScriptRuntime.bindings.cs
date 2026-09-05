@@ -15,6 +15,38 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
         get => global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0xB4A70487C31468D0UL, []).Value);
         set => Lease.Invoke(0x4BC018878763C95CUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(value)]);
     }
+    public string @StdTextValue
+    {
+        get
+        {
+            var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+            using var __call = Lease.BeginText(0x1C8AB72C70EB71AEUL, __text.ToValues(), __text.ToBytes());
+            return __call.Read().DecodeString();
+        }
+        set
+        {
+            var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+            __text.AddValue(__text.Add(value));
+            using var __call = Lease.BeginText(0x8497932CABE25232UL, __text.ToValues(), __text.ToBytes());
+            _ = __call.Read();
+        }
+    }
+    public string @TextValue
+    {
+        get
+        {
+            var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+            using var __call = Lease.BeginText(0xE259BF8BF2193B51UL, __text.ToValues(), __text.ToBytes());
+            return __call.Read().DecodeString();
+        }
+        set
+        {
+            var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+            __text.AddValue(__text.Add(value));
+            using var __call = Lease.BeginText(0x8CEEF38C51F66FFDUL, __text.ToValues(), __text.ToBytes());
+            _ = __call.Read();
+        }
+    }
     public int @AddFrom(NativeCounterChild @Other)
     {
         return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<int>(Lease.Invoke(0x59E239DEF207F1CFUL, [Lease.EncodeObject(@Other, 0x988618A984C7E632UL, false)]).Value);
@@ -35,6 +67,21 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
         var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
         return new NativeCounter(__scope.Construct(0xC7FB3979E2537381UL, []));
     }
+    private static global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments __BuildTextArguments(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, string @Initial)
+    {
+        var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+        __text.AddValue(__text.Add(@Initial));
+        return __text;
+    }
+    public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, string @Initial)
+        : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).ConstructText(0x6D24AC1F3FF38B85UL, __BuildTextArguments(__bridge, @Initial))) { }
+    public static NativeCounter @Create(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, string @Initial)
+    {
+        var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
+        var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+        __text.AddValue(__text.Add(@Initial));
+        return new NativeCounter(__scope.AcquireText(default, 0x6D24AC1F3FF38B85UL, __text.ToValues(), __text.ToBytes()));
+    }
     public NativeCounter(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Initial)
         : base(global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).Construct(0xB53253FE54579082UL, [global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge).EncodeObject(@Initial, 0x988618A984C7E632UL, false)])) { }
     public static NativeCounter @Create(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, NativeCounterChild @Initial)
@@ -49,6 +96,22 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
         var __scope = global::UnifiedScript.Unreal.UnrealNativeObjectScope.FromBridge(__bridge);
         return new NativeCounter(__scope.Construct(0x1E238BBF8A4F6005UL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Initial)]));
     }
+    public string @EchoStdText(string @Value)
+    {
+        var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+        __text.AddValue(__text.Add(@Value));
+        using var __call = Lease.BeginText(0xC4A4D88A366595A7UL, __text.ToValues(), __text.ToBytes());
+        var __result = __call.Read();
+        return __result.DecodeString();
+    }
+    public string @EchoText(string @Value)
+    {
+        var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+        __text.AddValue(__text.Add(@Value));
+        using var __call = Lease.BeginText(0x6DEEDFD0955D5C87UL, __text.ToValues(), __text.ToBytes());
+        var __result = __call.Read();
+        return __result.DecodeString();
+    }
     public bool @Flip(bool @Value)
     {
         return global::UnifiedScript.Unreal.UnrealNativeObjectValues.Decode<bool>(Lease.Invoke(0xBD419863586ED57AUL, [global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Value)]).Value);
@@ -60,6 +123,16 @@ public sealed partial class NativeCounter : global::UnifiedScript.Unreal.UnrealN
     public NativeCounter @InvalidOwnedAliasForTest()
     {
         return new NativeCounter(Lease.Acquire(0x4819FCD2D84238E2UL, []));
+    }
+    public string @MixText(NativeCounterChild @Other, string @Value, int @Delta)
+    {
+        var __text = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();
+        __text.AddValue(Lease.EncodeObject(@Other, 0x988618A984C7E632UL, false));
+        __text.AddValue(__text.Add(@Value));
+        __text.AddValue(global::UnifiedScript.Unreal.UnrealNativeObjectValues.Encode(@Delta));
+        using var __call = Lease.BeginText(0x9B9FB1D05412E0BDUL, __text.ToValues(), __text.ToBytes());
+        var __result = __call.Read();
+        return __result.DecodeString();
     }
     public static int @Multiply(global::UnifiedScript.Unreal.IUnrealInvocationBridge __bridge, int @Left, int @Right)
     {

@@ -35,5 +35,32 @@ struct alignas(8) FUnifiedScriptNativeObjectTransportWithCapabilities
 static_assert(sizeof(FUnifiedScriptNativeObjectTransportWithCapabilities) == 72);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeObjectTransportWithCapabilities, Capabilities) == 64);
 
+struct alignas(8) FUnifiedScriptNativeObjectTextTransportV1
+{
+    uint32 AbiVersion = 1;
+    uint32 TableSize = 0;
+    uint32 ValueSize = 0;
+    uint32 Reserved = 0;
+    uint32 MaxInputBytes = 0;
+    uint32 MaxOutputBytes = 0;
+    uint32 MaxPendingBytes = 0;
+    uint32 MaxPendingCount = 0;
+    EUnifiedScriptNativeObjectStatus (*Begin)(void*, uint64, uint64, uint64,
+        const FUnifiedScriptNativeValueV3*, uint32, const uint8*, uint32, uint64*, uint32*) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*Read)(void*, uint64, uint64, uint8*, uint32, uint32*,
+        FUnifiedScriptNativeValueV3*, uint64*) = nullptr;
+    EUnifiedScriptNativeObjectStatus (*Discard)(void*, uint64, uint64) = nullptr;
+};
+static_assert(sizeof(FUnifiedScriptNativeObjectTextTransportV1) == 56);
+
+/** Optional v1 tail: bit 1 advertises the bounded UTF-8 text lane. */
+struct alignas(8) FUnifiedScriptNativeObjectTransportWithText
+{
+    FUnifiedScriptNativeObjectTransportWithCapabilities Base;
+    const FUnifiedScriptNativeObjectTextTransportV1* TextTransport = nullptr;
+};
+static_assert(sizeof(FUnifiedScriptNativeObjectTransportWithText) == 80);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeObjectTransportWithText, TextTransport) == 72);
+
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeObjectTransportV1*
 UEUnifiedScript_GetNativeObjectTransportV1();

@@ -101,7 +101,7 @@ public sealed class UnrealNativeObjectGenerationTests
             Assert.Single(owner.Nodes, n => n.MemberPath == Owner + ":GetChild()").ReturnOwnership);
         var coverage = UnrealBindingCoverageReport.Create(projection, managed, native);
         var entries = coverage.Entries.Where(e => e.Path.StartsWith("/Native/", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(22, entries.Length);
+        Assert.Equal(28, entries.Length);
         Assert.All(entries, e => Assert.Equal(UnrealBindingDisposition.DirectThunk, e.Disposition));
         Assert.Equal(native.Source, new UnrealNativeThunkGenerator().Generate(projection.NativeReflection).Source);
         Assert.Contains("Values::ReadObject(Registry, Scope", native.Source);
@@ -111,6 +111,56 @@ public sealed class UnrealNativeObjectGenerationTests
         Assert.Equal(UnrealNativeParameterPassing.NullablePointer,
             Assert.Single(optional.Pins, p => p.Name == "Other").NativePassing);
         Assert.Contains("nullable, caller-owned", optional.Tooltip);
+    }
+
+    [Fact]
+    public void TextBindingsUseExactDeclarationsAndUniqueGeneratedTemporaries()
+    {
+        var contract = Contract();
+        var types = contract.NativeExtensions!.Types.ToArray();
+        int typeIndex = Array.FindIndex(types, static type => type.Path == Owner);
+        var functions = types[typeIndex].Functions.ToArray();
+        int functionIndex = Array.FindIndex(functions, static function => function.Declaration.Name == "EchoText");
+        var function = functions[functionIndex];
+        var parameter = function.Declaration.Parameters[0] with { Name = "__text" };
+        functions[functionIndex] = function with
+        {
+            Declaration = function.Declaration with { Parameters = [parameter] },
+        };
+        types[typeIndex] = types[typeIndex] with { Functions = functions };
+        contract = contract with { NativeExtensions = contract.NativeExtensions with { Types = types } };
+
+        var projection = UnrealApiContractProjector.Project(Reflection(), contract);
+        var managed = new UnrealBindingGenerator().Generate(projection.Reflection);
+        var native = new UnrealNativeThunkGenerator().Generate(projection.NativeReflection);
+        Assert.Empty(managed.Diagnostics);
+        Assert.Empty(native.Diagnostics);
+        Compile(managed.Source);
+        Assert.Contains("public string @EchoText(string @__text)", managed.Source);
+        Assert.Contains("var __text_ = new global::UnifiedScript.Unreal.UnrealNativeObjectTextArguments();", managed.Source);
+        Assert.Contains("Values::ReadText(Input, Arguments[0]", native.Source);
+        Assert.Contains("static_cast<FString (UE::UnifiedScript::NativeExample::FCounter::*)(FString const&) const>", native.Source);
+    }
+
+    [Fact]
+    public void TextOverloadCollisionEmitsFailClosedDiagnostic()
+    {
+        var projection = UnrealApiContractProjector.Project(Reflection(), Contract());
+        var types = projection.Reflection.Types.ToArray();
+        int typeIndex = Array.FindIndex(types, static type => type.Path == Owner);
+        var type = types[typeIndex];
+        var function = type.Functions.Single(static item => item.Name == "EchoStdText");
+        var duplicate = function with
+        {
+            Name = "EchoText",
+            Path = Owner + ":EchoText(std::stringconst&)",
+        };
+        types[typeIndex] = type with { Functions = [.. type.Functions, duplicate] };
+        var reflection = projection.Reflection with { Types = types };
+
+        var managed = new UnrealBindingGenerator().Generate(reflection);
+        Assert.Contains(managed.Diagnostics, diagnostic => diagnostic.Code == "USUE5414" &&
+            diagnostic.MemberPath == Owner + ":EchoText(std::stringconst&)");
     }
 
     [Fact]
@@ -150,8 +200,8 @@ public sealed class UnrealNativeObjectGenerationTests
     [InlineData("pure-factory")]
     [InlineData("legacy-schema")]
     [InlineData("unknown-type")]
-    [InlineData("wrong-cpp-name")]
     [InlineData("unsupported-return")]
+    [InlineData("wrong-cpp-name")]
     [InlineData("fallback")]
     [InlineData("callframe")]
     public void InvalidObjectContractsFailBeforeGeneration(string change)
@@ -170,8 +220,8 @@ public sealed class UnrealNativeObjectGenerationTests
             case "pure-factory": function = function with { Declaration = function.Declaration with { Traits = function.Declaration.Traits with { Pure = true } } }; break;
             case "legacy-schema": contract = contract with { NativeExtensions = contract.NativeExtensions with { SchemaVersion = UnrealNativeExtensionManifest.LegacySchemaVersion } }; break;
             case "unknown-type": function = function with { Declaration = function.Declaration with { ReturnType = function.Declaration.ReturnType with { TypePath = "/Native/Missing.Type" } } }; break;
+            case "unsupported-return": function = function with { Declaration = function.Declaration with { ReturnType = new UnrealTypeReference(UnrealValueKind.Name, "FName") } }; break;
             case "wrong-cpp-name": type = type with { NativeName = "UE::WrongCounter" }; break;
-            case "unsupported-return": function = function with { ReturnOwnership = UnrealNativeReturnOwnership.Value, Declaration = function.Declaration with { ReturnType = new(UnrealValueKind.String, "FString") } }; break;
             case "fallback": case "callframe": contract = contract with { Policy = new(UnrealApiPolicyAction.Allow,
                 [new(function.Declaration.Path, UnrealApiPolicyAction.Allow, change == "fallback" ? UnrealBindingRoute.ReflectionFallback : UnrealBindingRoute.CallFrame)]) }; break;
         }

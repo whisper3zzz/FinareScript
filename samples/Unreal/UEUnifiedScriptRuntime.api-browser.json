@@ -12,13 +12,13 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "e1274e89f995a921ac1db2ace0ebb0c662d921a3fd386e8cc5c19fd5a1693110"
+    "inputSha256": "bc4e3035270ea1d926dde49ebbae61f9556a976283f82a4a73c32ed64af5fe27"
   },
   "summary": {
     "typeCount": 13,
-    "memberCount": 167,
-    "nodeCount": 188,
-    "directThunkCount": 57,
+    "memberCount": 173,
+    "nodeCount": 196,
+    "directThunkCount": 63,
     "callFrameCount": 107,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
@@ -272,6 +272,67 @@
           "diagnosticCodes": []
         },
         {
+          "id": "ue.call|NativeCounter|Create|6D24AC1F3FF38B85",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(FStringconst\u0026)",
+          "memberId": "0x6D24AC1F3FF38B85",
+          "kind": "function",
+          "title": "Create",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.Create(...).",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "invocationContext",
+                "nativeName": "UnifiedScript.Unreal.IUnrealInvocationBridge"
+              }
+            },
+            {
+              "name": "Initial",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
           "id": "ue.call|NativeCounter|Create|B53253FE54579082",
           "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026)",
           "memberId": "0xB53253FE54579082",
@@ -377,6 +438,126 @@
                 "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
                 "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
                 "headerPath": "UnifiedScriptNativeCounter.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|NativeCounter|EchoStdText",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoStdText(std::stringconst\u0026)",
+          "memberId": "0xC4A4D88A366595A7",
+          "kind": "function",
+          "title": "EchoStdText",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.EchoStdText(...).",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "std::string"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "std::string"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|NativeCounter|EchoText",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoText(FStringconst\u0026)",
+          "memberId": "0x6DEEDFD0955D5C87",
+          "kind": "function",
+          "title": "EchoText",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.EchoText(...).",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
               }
             },
             {
@@ -533,6 +714,87 @@
                 "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
                 "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter",
                 "headerPath": "UnifiedScriptNativeCounter.h"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|NativeCounter|MixText",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:MixText(UE::UnifiedScript::NativeExample::FCounterChildconst\u0026,FStringconst\u0026,int32)",
+          "memberId": "0x9B9FB1D05412E0BD",
+          "kind": "function",
+          "title": "MixText",
+          "category": "Unreal API|NativeCounter",
+          "tooltip": "Call NativeCounter.MixText(...).\nOther: UE::UnifiedScript::NativeExample::FCounterChild const\u0026; non-null, caller-owned, synchronous use only.",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Other",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
+                "headerPath": "UnifiedScriptNativeCounter.h"
+              },
+              "nativePassing": "constObjectReference"
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
+            },
+            {
+              "name": "Delta",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
               }
             },
             {
@@ -1211,6 +1473,190 @@
               "name": "Out",
               "direction": "output",
               "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.set|NativeCounter|StdTextValue",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:StdTextValue",
+          "memberId": "0x5F816D853EBF5175",
+          "kind": "propertyWrite",
+          "title": "Set StdTextValue",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Write NativeCounter.StdTextValue.",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "std::string"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.set|NativeCounter|TextValue",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:TextValue",
+          "memberId": "0xD99F96C279530F5E",
+          "kind": "propertyWrite",
+          "title": "Set TextValue",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Write NativeCounter.TextValue.",
+          "pure": false,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.get|NativeCounter|StdTextValue",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:StdTextValue",
+          "memberId": "0x5F816D853EBF5175",
+          "kind": "propertyRead",
+          "title": "StdTextValue",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Read NativeCounter.StdTextValue.",
+          "pure": true,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "std::string"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.get|NativeCounter|TextValue",
+          "memberPath": "/Native/UEUnifiedScriptRuntime.NativeCounter:TextValue",
+          "memberId": "0xD99F96C279530F5E",
+          "kind": "propertyRead",
+          "title": "TextValue",
+          "category": "Unreal API|NativeCounter|Properties",
+          "tooltip": "Read NativeCounter.TextValue.",
+          "pure": true,
+          "disposition": "directThunk",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "nativeObject",
+                "nativeName": "UE::UnifiedScript::NativeExample::FCounter*",
+                "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString"
+              }
             }
           ],
           "diagnosticCodes": []

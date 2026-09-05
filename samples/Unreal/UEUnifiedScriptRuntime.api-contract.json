@@ -11,7 +11,7 @@
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounter",
-      "members": ["Create()", "Create(int32)", "Create(UE::UnifiedScript::NativeExample::FCounterChildconst&)", "Bias", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset", "ReadPointer", "ReadConstPointer", "ReadOptional", "ReadOptionalConst", "AddFrom", "AddTo", "Sum"]
+      "members": ["Create()", "Create(int32)", "Create(FStringconst&)", "Create(UE::UnifiedScript::NativeExample::FCounterChildconst&)", "Bias", "TextValue", "StdTextValue", "GetChild", "Clone", "InvalidOwnedAliasForTest", "Scale(int32)", "Scale(double)", "Multiply", "Flip", "Shift", "Reset", "ReadPointer", "ReadConstPointer", "ReadOptional", "ReadOptionalConst", "AddFrom", "AddTo", "Sum", "EchoText", "MixText", "EchoStdText"]
     },
     {
       "path": "/Native/UEUnifiedScriptRuntime.NativeCounterChild",
@@ -192,7 +192,9 @@
         "nativeName": "UE::UnifiedScript::NativeExample::FCounter",
         "headerPath": "UnifiedScriptNativeCounter.h",
         "properties": [
-          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias", "name": "Bias", "type": {"kind": "int32", "nativeName": "int32"}, "access": {"readable": true, "writable": true, "editorVisible": false}}
+          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Bias", "name": "Bias", "type": {"kind": "int32", "nativeName": "int32"}, "access": {"readable": true, "writable": true, "editorVisible": false}},
+          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounter:TextValue", "name": "TextValue", "type": {"kind": "string", "nativeName": "FString"}, "access": {"readable": true, "writable": true, "editorVisible": false}},
+          {"path": "/Native/UEUnifiedScriptRuntime.NativeCounter:StdTextValue", "name": "StdTextValue", "type": {"kind": "string", "nativeName": "std::string"}, "access": {"readable": true, "writable": true, "editorVisible": false}}
         ],
         "functions": [
           {
@@ -543,6 +545,47 @@
               "constObjectReference",
               "constObjectReference"
             ]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:Create(FStringconst&)",
+              "name": "Create",
+              "returnType": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounter*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounter", "headerPath": "UnifiedScriptNativeCounter.h"},
+              "parameters": [{"name": "Initial", "type": {"kind": "string", "nativeName": "FString"}, "direction": "input"}],
+              "traits": {"static": true, "pure": false, "callable": true}
+            },
+            "const": false,
+            "parameters": ["constReference"],
+            "operation": "constructor",
+            "returnOwnership": "owned"
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoText(FStringconst&)", "name": "EchoText",
+              "returnType": {"kind": "string", "nativeName": "FString"},
+              "parameters": [{"name": "Value", "type": {"kind": "string", "nativeName": "FString"}, "direction": "input"}],
+              "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": true, "parameters": ["constReference"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:MixText(UE::UnifiedScript::NativeExample::FCounterChildconst&,FStringconst&,int32)", "name": "MixText",
+              "returnType": {"kind": "string", "nativeName": "FString"},
+              "parameters": [
+                {"name": "Other", "type": {"kind": "nativeObject", "nativeName": "UE::UnifiedScript::NativeExample::FCounterChild*", "typePath": "/Native/UEUnifiedScriptRuntime.NativeCounterChild", "headerPath": "UnifiedScriptNativeCounter.h"}, "direction": "input"},
+                {"name": "Value", "type": {"kind": "string", "nativeName": "FString"}, "direction": "input"},
+                {"name": "Delta", "type": {"kind": "int32", "nativeName": "int32"}, "direction": "input"}
+              ],
+              "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": true, "parameters": ["constObjectReference", "constReference", "value"]
+          },
+          {
+            "declaration": {
+              "path": "/Native/UEUnifiedScriptRuntime.NativeCounter:EchoStdText(std::stringconst&)", "name": "EchoStdText",
+              "returnType": {"kind": "string", "nativeName": "std::string"},
+              "parameters": [{"name": "Value", "type": {"kind": "string", "nativeName": "std::string"}, "direction": "input"}],
+              "traits": {"static": false, "pure": false, "callable": true}
+            }, "const": true, "parameters": ["constReference"]
           }
         ]
       },

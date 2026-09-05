@@ -421,6 +421,11 @@ traits, Blueprint inheritance or reflected state.
   on a native argument or return type emits its wrapper shell, not unselected members.
   Static calls require the generation's `IUnrealInvocationBridge`; no fabricated
   UObject receiver or process-global managed scope is used.
+- Text fields, constructor inputs and method inputs/value results can declare exactly
+  `FString` or `std::string`. Both project to C# `string`; the native declaration
+  and overload identity retain the selected C++ type. Inputs use value or const
+  reference passing. Mutable string references, `char*`, `string_view` and
+  retained pointers into a caller's text require separate lifetime contracts.
 - Generated wrappers and that context can cross `[Visual]` call boundaries.
   Semantic/Graph projection and chunk emission are tested. This does not make
   native handles serializable Script Class state or reflected Blueprint pins.
@@ -481,23 +486,73 @@ not itself clear that retained scope. If `OnStart` allocates replacement resourc
 when restarting, script code must dispose or reuse the previous leases. Native
 handles are not transferable between generation scopes or Worlds.
 
+Text exchange copies length-delimited UTF-8. Empty strings, non-ASCII text and
+embedded NUL characters are values, not terminators. A null managed string is
+rejected before native invocation. The native decoder validates the complete
+input byte range and encoding before assigning a field or entering a method.
+Returned text is an owned snapshot; later native field changes cannot alter a
+previously returned C# string.
+
+The [text example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
+uses the same generated `NativeCounter` type for string construction, both
+native field types and a method combining text with a native-object argument:
+
+```csharp
+const string label = "héllo\0世界😀";
+using var counter = NativeCounter.Create(context.Bridge, label);
+counter.TextValue = label;    // FString field.
+counter.StdTextValue = label; // std::string field; still UTF-8 text.
+string snapshot = counter.EchoStdText(label);
+using var child = counter.GetChild();
+string combined = counter.MixText(child, label, 2);
+```
+
+The optional text transport separates execution from result collection. A
+native call executes once and stores its result under an opaque token in the
+calling generation. A collection attempt with insufficient capacity reports
+the required size without invoking the method again or publishing its handle.
+Successful collection consumes the token; cancellation discards its unpublished
+allocations. Scope close, World detach and native-library retirement also clear
+pending results. The managed transport collects or discards the result within
+the generated call, so application code does not manage these tokens.
+Input/output byte limits and pending-result limits bound retained memory.
+Failure can discard unpublished allocations; it cannot undo arbitrary native
+method side effects and never retries their execution automatically.
+
 Native Object ABI v1 has an optional 64-byte table prefix appended to the v2 transport.
 It shares context retain/release functions and the existing 48-byte value cell,
 without changing the existing UObject transport prefixes or call-frame layout.
-The current table adds an optional capability word at byte 64 (72 bytes total);
+An optional capability word at byte 64 extends that prefix to 72 bytes;
 bit 0 enables object inputs. Old 64-byte tables still serve fixed calls, while
-new object calls fail explicitly when the capability is absent. The synchronous
-lane accepts up to 16 fixed scalar/enum/vector/rotator or typed object inputs and
+new object calls fail explicitly when the capability is absent. The original
+entrypoint accepts up to 16 fixed scalar/enum/vector/rotator or typed object inputs and
 returns one fixed value plus an optional native-object handle. Object input
 cells use the distinct `NativeObject` tag (26), a type ID and an opaque token,
 never a raw pointer. Null uses the explicit Null flag and a zero token; spare
-fields must be zero. UObject codecs reject this tag, and the native-object lane
-rejects UObject cells and arena-backed values. Neither falls back to the other.
+fields must be zero. UObject codecs reject this tag, and the original native-object
+entrypoint rejects UObject cells and arena-backed values. Text calls require the
+separately negotiated text extension; an older table cannot execute them through
+the fixed entrypoint. Neither route falls back to UObject reflection.
+
+Bit 1 enables a text-table pointer at byte 72, extending the ownership table to
+80 bytes. The pointed-to table has its own version, size and value-cell-size
+header, advertised byte/count limits and `Begin`, `Read` and `Discard` functions.
+Readers inspect each tail only when the enclosing table is large enough. A
+missing text capability leaves the older calls available; an incompatible
+advertised text table is rejected. The current limits are 16 MiB per input or
+result arena, 16 MiB of retained result bytes and 64 pending/in-flight results
+per World context. Managed code also enforces the per-call bound before buffer
+allocation. Text status values extend the existing status enumeration without
+renumbering its earlier values.
+
 Failed factories discard unpublished allocations and outputs, not arbitrary
-native side effects. Strings, containers, richer structs, ref/out, default arguments, inheritance, converters
+native side effects. Containers, richer structs, ref/out, default arguments, inheritance, converters
 and native callbacks remain unsupported on this ordinary-object lane. They
 must not silently use UObject codecs or reflection fallback. The broader
 UObject-member call-frame support above is a different route.
+Since `FString` and `std::string` both project to C# `string`, selecting overloads
+that collapse to the same managed signature requires disambiguation and is
+rejected by this version rather than emitting duplicate C# members.
 
 `UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation`,
 `.GeneratedLibrary`, `.ObjectArguments` and `.ManagedLifetime` verify the native registry, ABI
@@ -505,8 +560,14 @@ rejection, automatic dispatch, library retirement and actual generated CoreCLR
 startup/rollback/reload/teardown. Object-argument tests exercise all six passing
 modes, constructors, static/instance calls, alias mutation, explicit null and
 rejection before native side effects. The sample also injects a duplicate owned return
-to prove that rejection preserves the existing object. The 10,000-level borrow-chain test checks
-iterative invalidation, not Puerts performance. No cooked result is claimed yet.
+to prove that rejection preserves the existing object. `.TextSnapshots` covers
+copied UTF-8, collection retries, scope ownership, cancellation, pending limits
+and nested allocation rollback. `.ManagedTextLifetime` exercises the generated
+text constructor, fields and mixed arguments through CoreCLR reload and World
+cleanup. Managed ABI tests also keep old fixed-call tables usable and reject
+incompatible text tails before invoking native code. The 10,000-level borrow-chain
+test checks iterative invalidation, not Puerts performance. No cooked result is
+claimed yet.
 
 ## Contract schema
 

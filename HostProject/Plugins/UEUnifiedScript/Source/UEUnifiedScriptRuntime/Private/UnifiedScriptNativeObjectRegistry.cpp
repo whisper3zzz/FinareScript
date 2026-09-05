@@ -18,7 +18,7 @@ uint64 AllocateNativeToken()
     return 0;
 }
 using EStatus = EUnifiedScriptNativeObjectStatus;
-struct FLibraryEntry { uint64 Library; FUnifiedScriptNativeObjectMember Invoke; };
+struct FLibraryEntry { uint64 Library; FUnifiedScriptNativeObjectMember Invoke; FUnifiedScriptNativeObjectTextMember TextInvoke; };
 struct FLibraries
 {
     TMap<uint64, TArray<FLibraryEntry>> Members;
@@ -41,6 +41,10 @@ bool IsFixedCell(const FUnifiedScriptNativeValueV3& Value, bool bAllowVoid)
 
 struct FUnifiedScriptNativeObjectRegistry::FImpl
 {
+    static constexpr uint32 MaxTextInputBytes = 16u * 1024u * 1024u;
+    static constexpr uint32 MaxTextOutputBytes = 16u * 1024u * 1024u;
+    static constexpr uint32 MaxTextPendingBytes = 16u * 1024u * 1024u;
+    static constexpr uint32 MaxTextPendingCount = 64;
     struct FEntry
     {
         uint64 Scope;
@@ -51,13 +55,40 @@ struct FUnifiedScriptNativeObjectRegistry::FImpl
         TSet<uint64> Children;
         uint64 Library = 0;
     };
+    struct FPendingText
+    {
+        uint64 Scope = 0;
+        uint64 Library = 0;
+        FUnifiedScriptNativeValueV3 Value;
+        FUnifiedScriptNativeObjectHandle Handle;
+        TArray<uint8> Bytes;
+        TArray<uint64> Allocations;
+    };
     bool bAttached = true;
     TMap<uint64, TSet<uint64>> Scopes;
     TMap<uint64, FEntry> Entries;
     TMap<void*, int32> PointerCounts;
     TMap<uint64, FUnifiedScriptNativeObjectMember> Members;
+    TMap<uint64, FUnifiedScriptNativeObjectTextMember> TextMembers;
+    TMap<uint64, FPendingText> PendingText;
+    uint32 PendingTextBytes = 0;
+    uint32 PendingTextReservations = 0;
     TArray<uint64>* Allocations = nullptr;
     uint64 CurrentLibrary = 0;
+
+    void RetireUnpublished(uint64 Token)
+    {
+        if (PendingText.Contains(Token)) RetirePending(Token);
+        else Retire(Token);
+    }
+
+    void RetirePending(uint64 Token)
+    {
+        FPendingText Pending;
+        if (!PendingText.RemoveAndCopyValue(Token, Pending)) return;
+        PendingTextBytes -= FMath::Min<uint32>(PendingTextBytes, Pending.Bytes.Num());
+        for (int32 Index = Pending.Allocations.Num() - 1; Index >= 0; --Index) RetireUnpublished(Pending.Allocations[Index]);
+    }
 
     EStatus Check(uint64 Scope) const
     {
@@ -118,6 +149,10 @@ EStatus FUnifiedScriptNativeObjectRegistry::CloseScope(uint64 Scope)
     if (Status != EStatus::Success) return Status;
     TSet<uint64> Handles;
     Impl->Scopes.RemoveAndCopyValue(Scope, Handles); // Reject reentrant calls into this generation.
+    TArray<uint64> Pending;
+    for (const auto& Entry : Impl->PendingText)
+        if (Entry.Value.Scope == Scope) Pending.Add(Entry.Key);
+    for (uint64 Token : Pending) Impl->RetirePending(Token);
     for (uint64 Handle : Handles) Impl->Retire(Handle);
     return EStatus::Success;
 }
@@ -206,8 +241,151 @@ EStatus FUnifiedScriptNativeObjectRegistry::RegisterMember(uint64 MemberId, FUni
     if (!IsInGameThread()) return EStatus::WrongThread;
     if (!Impl->bAttached) return EStatus::Unavailable;
     if (!MemberId || !Member) return EStatus::InvalidArgument;
-    if (Impl->Members.Contains(MemberId) || Libraries().Members.Contains(MemberId)) return EStatus::DuplicateMember;
+    if (Impl->Members.Contains(MemberId) || Impl->TextMembers.Contains(MemberId) || Libraries().Members.Contains(MemberId)) return EStatus::DuplicateMember;
     Impl->Members.Add(MemberId, Member);
+    return EStatus::Success;
+}
+
+EStatus FUnifiedScriptNativeObjectRegistry::BeginText(uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
+    uint64 MemberId, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+    uint64& OutToken, uint32& OutRequiredBytes)
+{
+    OutToken = 0; OutRequiredBytes = 0;
+    EStatus Status = Impl->Check(Scope);
+    if (Status != EStatus::Success) return Status;
+    if (Input.Num() > FImpl::MaxTextInputBytes || Arguments.Num() > 16) return EStatus::InvalidArgument;
+    FUnifiedScriptNativeObjectTextMember Member = Impl->TextMembers.FindRef(MemberId);
+    uint64 LibraryId = 0;
+    if (const auto* Generated = Libraries().Members.Find(MemberId))
+    {
+        if (Generated->Num() != 1 || Member) return EStatus::DuplicateMember;
+        Member = (*Generated)[0].TextInvoke;
+        LibraryId = (*Generated)[0].Library;
+    }
+    if (!Member) return EStatus::UnknownMember;
+    if (Target.Value)
+    {
+        const auto* Entry = Impl->Entries.Find(Target.Value);
+        if (!Entry) return EStatus::InvalidHandle;
+        if (Entry->Scope != Scope) return EStatus::WrongOwner;
+    }
+    for (const auto& Value : Arguments)
+    {
+        if (Value.Kind == EUnifiedScriptNativeValueKindV3::NativeObject)
+        {
+            void* Pointer = nullptr;
+            Status = UE::UnifiedScript::NativeObjectValues::ReadObject(*this, Scope, Value, Value.TypeId, true, Pointer);
+            if (Status != EStatus::Success) return Status;
+        }
+        else if (Value.Kind == EUnifiedScriptNativeValueKindV3::String)
+        {
+            if (!UE::UnifiedScript::NativeObjectValues::IsTextCell(Value) || Value.Payload0 > static_cast<uint64>(Input.Num()) ||
+                Value.Payload1 > static_cast<uint64>(Input.Num()) - Value.Payload0)
+                return EStatus::InvalidArgument;
+            if (Value.Payload1)
+            {
+                const TConstArrayView<uint8> Bytes(Input.GetData() + Value.Payload0, static_cast<int32>(Value.Payload1));
+                if (!UE::UnifiedScript::NativeObjectValues::IsValidUtf8(Bytes)) return EStatus::InvalidArgument;
+            }
+        }
+        else if (!IsFixedCell(Value, false)) return EStatus::InvalidArgument;
+    }
+    if (Impl->PendingText.Num() + Impl->PendingTextReservations >= FImpl::MaxTextPendingCount ||
+        Impl->PendingTextBytes >= FImpl::MaxTextPendingBytes) return EStatus::Exhausted;
+    const uint64 ReservedToken = AllocateNativeToken();
+    if (!ReservedToken) return EStatus::Exhausted;
+    ++Impl->PendingTextReservations;
+    auto ReleaseReservation = [&]() { check(Impl->PendingTextReservations); --Impl->PendingTextReservations; };
+    FUnifiedScriptNativeValueV3 Value;
+    FUnifiedScriptNativeObjectHandle Handle;
+    TArray<uint8> Bytes;
+    TArray<uint64> Allocations;
+    TArray<uint64>* ParentAllocations = Impl->Allocations;
+    const uint64 PreviousLibrary = Impl->CurrentLibrary;
+    Impl->Allocations = &Allocations;
+    Impl->CurrentLibrary = LibraryId;
+    Status = Member(*this, Scope, Target, Arguments, Input, Value, Handle, Bytes);
+    Impl->CurrentLibrary = PreviousLibrary;
+    Impl->Allocations = ParentAllocations;
+    if (Status == EStatus::Success)
+    {
+        if (Bytes.Num() > FImpl::MaxTextOutputBytes ||
+            Value.Kind == EUnifiedScriptNativeValueKindV3::String &&
+                (!UE::UnifiedScript::NativeObjectValues::IsTextCell(Value) || Value.Payload0 > static_cast<uint64>(Bytes.Num()) ||
+                 Value.Payload1 > static_cast<uint64>(Bytes.Num()) - Value.Payload0 ||
+                 Value.Payload1 && !UE::UnifiedScript::NativeObjectValues::IsValidUtf8(TConstArrayView<uint8>(Bytes.GetData() + Value.Payload0, static_cast<int32>(Value.Payload1)))) ||
+            Value.Kind != EUnifiedScriptNativeValueKindV3::String &&
+                (!IsFixedCell(Value, true) || Bytes.Num() != 0))
+            Status = EStatus::InvalidArgument;
+        if (Handle.Value)
+        {
+            const auto* Entry = Impl->Entries.Find(Handle.Value);
+            if (!Entry) Status = EStatus::InvalidHandle;
+            else if (Entry->Scope != Scope) Status = EStatus::WrongOwner;
+        }
+        if (Impl->Check(Scope) != EStatus::Success) Status = EStatus::InvalidScope;
+    }
+    if (Status != EStatus::Success)
+    {
+        ReleaseReservation();
+        for (int32 Index = Allocations.Num() - 1; Index >= 0; --Index) Impl->RetireUnpublished(Allocations[Index]);
+        return Status;
+    }
+    if (static_cast<uint32>(Bytes.Num()) > FImpl::MaxTextPendingBytes - Impl->PendingTextBytes)
+    {
+        ReleaseReservation();
+        for (int32 Index = Allocations.Num() - 1; Index >= 0; --Index) Impl->RetireUnpublished(Allocations[Index]);
+        return EStatus::Exhausted;
+    }
+    FImpl::FPendingText Pending;
+    Pending.Scope = Scope; Pending.Library = LibraryId; Pending.Value = Value; Pending.Handle = Handle;
+    Pending.Bytes = MoveTemp(Bytes); Pending.Allocations = MoveTemp(Allocations);
+    Impl->PendingTextBytes += Pending.Bytes.Num();
+    Impl->PendingText.Add(ReservedToken, MoveTemp(Pending));
+    ReleaseReservation();
+    if (ParentAllocations) ParentAllocations->Add(ReservedToken);
+    OutToken = ReservedToken; OutRequiredBytes = Impl->PendingText.FindChecked(ReservedToken).Bytes.Num();
+    return EStatus::Success;
+}
+
+EStatus FUnifiedScriptNativeObjectRegistry::ReadText(uint64 Scope, uint64 Token, uint8* Output, uint32 Capacity,
+    uint32& OutRequiredBytes, FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle)
+{
+    OutRequiredBytes = 0; OutValue = {}; OutHandle = {};
+    const EStatus Status = Impl->Check(Scope);
+    if (Status != EStatus::Success) return Status;
+    FImpl::FPendingText* Pending = Impl->PendingText.Find(Token);
+    if (!Pending) return EStatus::InvalidTextToken;
+    if (Pending->Scope != Scope) return EStatus::WrongOwner;
+    if (Pending->Handle.Value)
+    {
+        const auto* Entry = Impl->Entries.Find(Pending->Handle.Value);
+        if (!Entry || Entry->Scope != Scope)
+        {
+            Impl->RetirePending(Token);
+            return Entry ? EStatus::WrongOwner : EStatus::InvalidHandle;
+        }
+    }
+    OutRequiredBytes = Pending->Bytes.Num();
+    if (Capacity < static_cast<uint32>(Pending->Bytes.Num())) return EStatus::TextBufferTooSmall;
+    if (Pending->Bytes.Num() && !Output) return EStatus::InvalidArgument;
+    if (Pending->Bytes.Num()) FMemory::Memcpy(Output, Pending->Bytes.GetData(), Pending->Bytes.Num());
+    OutValue = Pending->Value; OutHandle = Pending->Handle;
+    TArray<uint64> Allocations = MoveTemp(Pending->Allocations);
+    if (Impl->Allocations) Impl->Allocations->Append(Allocations);
+    Impl->PendingTextBytes -= Pending->Bytes.Num();
+    Impl->PendingText.Remove(Token);
+    return EStatus::Success;
+}
+
+EStatus FUnifiedScriptNativeObjectRegistry::DiscardText(uint64 Scope, uint64 Token)
+{
+    const EStatus Status = Impl->Check(Scope);
+    if (Status != EStatus::Success) return Status;
+    FImpl::FPendingText* Pending = Impl->PendingText.Find(Token);
+    if (!Pending) return EStatus::InvalidTextToken;
+    if (Pending->Scope != Scope) return EStatus::WrongOwner;
+    Impl->RetirePending(Token);
     return EStatus::Success;
 }
 
@@ -271,7 +449,7 @@ EStatus FUnifiedScriptNativeObjectRegistry::Invoke(uint64 Scope, FUnifiedScriptN
         OutHandle = Handle;
     }
     else
-        for (int32 Index = Allocations.Num() - 1; Index >= 0; --Index) Impl->Retire(Allocations[Index]);
+        for (int32 Index = Allocations.Num() - 1; Index >= 0; --Index) Impl->RetireUnpublished(Allocations[Index]);
     return Status;
 }
 
@@ -286,6 +464,10 @@ void FUnifiedScriptNativeObjectRegistry::Detach()
     Impl->Entries.GenerateKeyArray(Handles);
     for (uint64 Handle : Handles) Impl->Retire(Handle);
     Impl->Members.Reset();
+    Impl->TextMembers.Reset();
+    TArray<uint64> Pending;
+    Impl->PendingText.GenerateKeyArray(Pending);
+    for (uint64 Token : Pending) Impl->RetirePending(Token);
 }
 
 int32 FUnifiedScriptNativeObjectRegistry::Num() const { check(IsInGameThread()); return Impl->Entries.Num(); }
@@ -298,8 +480,8 @@ FUnifiedScriptNativeObjectLibrary::FUnifiedScriptNativeObjectLibrary(TConstArray
     check(Id);
     for (const auto& Member : Members)
     {
-        check(Member.MemberId && Member.Invoke);
-        Libraries().Members.FindOrAdd(Member.MemberId).Add({Id, Member.Invoke});
+        check(Member.MemberId && (Member.Invoke || Member.TextInvoke));
+        Libraries().Members.FindOrAdd(Member.MemberId).Add({Id, Member.Invoke, Member.TextInvoke});
     }
 }
 
@@ -326,4 +508,8 @@ void FUnifiedScriptNativeObjectRegistry::ReleaseLibrary(uint64 LibraryId)
     for (const auto& Entry : Impl->Entries)
         if (Entry.Value.Library == LibraryId) Handles.Add(Entry.Key);
     for (uint64 Handle : Handles) Impl->Retire(Handle);
+    TArray<uint64> Pending;
+    for (const auto& Entry : Impl->PendingText)
+        if (Entry.Value.Library == LibraryId) Pending.Add(Entry.Key);
+    for (uint64 Token : Pending) Impl->RetirePending(Token);
 }

@@ -4,6 +4,7 @@ namespace UnifiedScript.Unreal;
 
 public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNativeObjectTransport
 {
+    private const uint MaximumTextBytes = 16u * 1024u * 1024u;
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate UnrealNativeObjectStatus NativeOpenScope(nint context, out ulong scope);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -14,6 +15,15 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
     private unsafe delegate UnrealNativeObjectStatus NativeInvokeObject(nint context, ulong scope,
         ulong target, ulong memberId, UnrealNativeValueV3* arguments, uint count,
         out UnrealNativeValueV3 value, out ulong handle);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate UnrealNativeObjectStatus NativeBeginText(nint context, ulong scope,
+        ulong target, ulong memberId, UnrealNativeValueV3* arguments, uint count, byte* input, uint inputBytes,
+        out ulong token, out uint requiredBytes);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate UnrealNativeObjectStatus NativeReadText(nint context, ulong scope, ulong token,
+        byte* output, uint capacity, out uint requiredBytes, out UnrealNativeValueV3 value, out ulong handle);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate UnrealNativeObjectStatus NativeDiscardText(nint context, ulong scope, ulong token);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeTransportTableV2NativeObjects
@@ -29,6 +39,10 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
     private NativeReleaseObject? _nativeReleaseObject;
     private NativeInvokeObject? _nativeInvokeObject;
     private bool _nativeObjectArguments;
+    private NativeBeginText? _nativeBeginText;
+    private NativeReadText? _nativeReadText;
+    private NativeDiscardText? _nativeDiscardText;
+    private uint _nativeTextMaxInputBytes, _nativeTextMaxOutputBytes;
     private readonly HashSet<ulong> _nativeObjectScopes = [];
 
     private void LoadNativeObjects(nint tablePointer, NativeTransportTableV1 parent)
@@ -50,10 +64,35 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
         _nativeInvokeObject = Marshal.GetDelegateForFunctionPointer<NativeInvokeObject>(table.Invoke);
         if (header.TableSize >= Marshal.SizeOf<UnrealNativeObjectTransportTableWithCapabilities>())
             _nativeObjectArguments = (Marshal.PtrToStructure<UnrealNativeObjectTransportTableWithCapabilities>(extension.NativeObjectTransport).Capabilities & 1UL) != 0;
+        if (header.TableSize >= Marshal.SizeOf<UnrealNativeObjectTransportTableWithText>())
+        {
+            var extended = Marshal.PtrToStructure<UnrealNativeObjectTransportTableWithText>(extension.NativeObjectTransport);
+            if ((extended.Base.Capabilities & 2UL) != 0 && extended.TextTransport != 0)
+            {
+                var textHeader = Marshal.PtrToStructure<NativeObjectHeader>(extended.TextTransport);
+                if (textHeader.AbiVersion != 1 || textHeader.TableSize < Marshal.SizeOf<UnrealNativeObjectTextTransportTableV1>() ||
+                    textHeader.ValueSize != UnrealNativeAbiV3.ValueSize || textHeader.Reserved != 0)
+                    throw new InvalidOperationException("The native text tail has an incompatible layout.");
+                var text = Marshal.PtrToStructure<UnrealNativeObjectTextTransportTableV1>(extended.TextTransport);
+                if (text.MaxInputBytes == 0 || text.MaxOutputBytes == 0 || text.MaxPendingBytes == 0 || text.MaxPendingCount == 0 ||
+                    text.MaxInputBytes > MaximumTextBytes || text.MaxOutputBytes > MaximumTextBytes || text.MaxPendingBytes > MaximumTextBytes ||
+                    text.Begin == 0 || text.Read == 0 || text.Discard == 0)
+                    throw new InvalidOperationException("The native text tail is incomplete or unbounded.");
+                _nativeBeginText = Marshal.GetDelegateForFunctionPointer<NativeBeginText>(text.Begin);
+                _nativeReadText = Marshal.GetDelegateForFunctionPointer<NativeReadText>(text.Read);
+                _nativeDiscardText = Marshal.GetDelegateForFunctionPointer<NativeDiscardText>(text.Discard);
+                _nativeTextMaxInputBytes = text.MaxInputBytes;
+                _nativeTextMaxOutputBytes = text.MaxOutputBytes;
+            }
+        }
     }
 
     public bool SupportsNativeObjects => !_disposed && _nativeOpenScope is not null;
     public bool SupportsNativeObjectArguments => SupportsNativeObjects && _nativeObjectArguments;
+    public bool SupportsNativeObjectText => SupportsNativeObjects && _nativeBeginText is not null &&
+        _nativeReadText is not null && _nativeDiscardText is not null;
+    public uint NativeObjectTextMaxInputBytes => _nativeTextMaxInputBytes;
+    public uint NativeObjectTextMaxOutputBytes => _nativeTextMaxOutputBytes;
 
     public UnrealNativeObjectStatus OpenNativeObjectScope(out ulong scope)
     {
@@ -109,6 +148,67 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
                 if (status == UnrealNativeObjectStatus.Success) result = new(value, new(handle));
                 return status;
             }
+        }
+    }
+
+    public unsafe UnrealNativeObjectStatus BeginNativeObjectText(ulong scope, UnrealNativeObjectHandle target, ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments, ReadOnlySpan<byte> input, out ulong token, out uint requiredBytes)
+    {
+        lock (_lifetimeGate)
+        {
+            token = 0; requiredBytes = 0;
+            if (_disposed || _nativeBeginText is null) return UnrealNativeObjectStatus.TextUnavailable;
+            if (!_nativeObjectScopes.Contains(scope) || arguments.Length > 16 || input.Length > _nativeTextMaxInputBytes)
+                return !_nativeObjectScopes.Contains(scope) ? UnrealNativeObjectStatus.InvalidScope : UnrealNativeObjectStatus.InvalidArgument;
+            if (!_nativeObjectArguments)
+                foreach (var argument in arguments)
+                    if (argument.Kind == UnrealNativeValueKindV3.NativeObject) return UnrealNativeObjectStatus.TextUnavailable;
+            fixed (UnrealNativeValueV3* argumentPointer = arguments)
+            fixed (byte* inputPointer = input)
+            {
+                var status = _nativeBeginText(_context, scope, target.Value, memberId, argumentPointer,
+                    (uint)arguments.Length, inputPointer, (uint)input.Length, out token, out requiredBytes);
+                if (status == UnrealNativeObjectStatus.Success)
+                {
+                    if (requiredBytes > _nativeTextMaxOutputBytes || token == 0)
+                    {
+                        if (token != 0 && _nativeDiscardText is not null)
+                            _nativeDiscardText(_context, scope, token);
+                        token = 0;
+                        return UnrealNativeObjectStatus.InvalidArgument;
+                    }
+                }
+                return status;
+            }
+        }
+    }
+
+    public unsafe UnrealNativeObjectStatus ReadNativeObjectText(ulong scope, ulong token, Span<byte> output,
+        out uint requiredBytes, out UnrealNativeObjectCallResult result)
+    {
+        lock (_lifetimeGate)
+        {
+            requiredBytes = 0; result = default;
+            if (_disposed || _nativeReadText is null) return UnrealNativeObjectStatus.TextUnavailable;
+            if (!_nativeObjectScopes.Contains(scope) || output.Length > _nativeTextMaxOutputBytes)
+                return !_nativeObjectScopes.Contains(scope) ? UnrealNativeObjectStatus.InvalidScope : UnrealNativeObjectStatus.InvalidArgument;
+            fixed (byte* outputPointer = output)
+            {
+                var status = _nativeReadText(_context, scope, token, outputPointer, (uint)output.Length,
+                    out requiredBytes, out var value, out var handle);
+                if (status == UnrealNativeObjectStatus.Success) result = new(value, new(handle));
+                return status;
+            }
+        }
+    }
+
+    public UnrealNativeObjectStatus DiscardNativeObjectText(ulong scope, ulong token)
+    {
+        lock (_lifetimeGate)
+        {
+            if (_disposed || _nativeDiscardText is null) return UnrealNativeObjectStatus.TextUnavailable;
+            if (!_nativeObjectScopes.Contains(scope)) return UnrealNativeObjectStatus.InvalidScope;
+            return _nativeDiscardText(_context, scope, token);
         }
     }
 

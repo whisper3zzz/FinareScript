@@ -10,6 +10,8 @@ public sealed class UnrealNativeObjectTests
     {
         Assert.Equal(64, Marshal.SizeOf<UnrealNativeObjectTransportTableV1>());
         Assert.Equal(72, Marshal.SizeOf<UnrealNativeObjectTransportTableWithCapabilities>());
+        Assert.Equal(80, Marshal.SizeOf<UnrealNativeObjectTransportTableWithText>());
+        Assert.Equal(56, Marshal.SizeOf<UnrealNativeObjectTextTransportTableV1>());
         Assert.Equal(64, Marshal.OffsetOf<UnrealNativeObjectTransportTableWithCapabilities>(nameof(UnrealNativeObjectTransportTableWithCapabilities.Capabilities)).ToInt32());
         Assert.Equal(56, Marshal.OffsetOf<UnrealNativeObjectTransportTableV1>(nameof(UnrealNativeObjectTransportTableV1.Invoke)).ToInt32());
         Assert.Equal(48, Marshal.SizeOf<UnrealNativeValueV3>());
@@ -132,6 +134,39 @@ public sealed class UnrealNativeObjectTests
         Assert.Throws<NotSupportedException>(() => scope.EncodeObject(null, 42, true));
     }
 
+    [Fact]
+    public void TextCodecPreservesUnicodeNulAndRejectsInvalidDescriptors()
+    {
+        var arena = new List<byte>();
+        string expected = "héllo\0世界😀";
+        var cell = UnrealNativeObjectValues.EncodeText(expected, arena);
+        Assert.Equal(expected, UnrealNativeObjectValues.DecodeText(cell, CollectionsMarshal.AsSpan(arena)));
+        Assert.Throws<ArgumentNullException>(() => UnrealNativeObjectValues.EncodeText(null!, arena));
+        var invalidRange = cell;
+        invalidRange.Payload1 = (ulong)arena.Count + 1;
+        Assert.Throws<InvalidOperationException>(() => UnrealNativeObjectValues.DecodeText(invalidRange, CollectionsMarshal.AsSpan(arena)));
+        var invalidSpare = cell;
+        invalidSpare.Payload2 = 1;
+        Assert.Throws<InvalidOperationException>(() => UnrealNativeObjectValues.DecodeText(invalidSpare, CollectionsMarshal.AsSpan(arena)));
+        invalidSpare = cell;
+        invalidSpare.Payload3 = 1;
+        Assert.Throws<InvalidOperationException>(() => UnrealNativeObjectValues.DecodeText(invalidSpare, CollectionsMarshal.AsSpan(arena)));
+    }
+
+    [Fact]
+    public void TextPendingReadPreservesTokenUntilSuccessfulCollection()
+    {
+        var transport = new FixtureTransport();
+        using var scope = new UnrealNativeObjectScope(transport);
+        using var pending = scope.BeginText(default, 99, [], []);
+        Assert.Equal(3u, pending.RequiredBytes);
+        var tooSmall = new byte[1];
+        Assert.Equal(UnrealNativeObjectStatus.TextBufferTooSmall,
+            Assert.Throws<UnrealNativeObjectException>(() => pending.Read(tooSmall)).Status);
+        Assert.Equal("abc", pending.Read().DecodeString());
+        Assert.Throws<ObjectDisposedException>(() => pending.Read());
+    }
+
     private sealed class Wrapped(UnrealNativeObjectLease lease) : UnrealNativeObject(lease);
 
     [Theory]
@@ -163,6 +198,10 @@ public sealed class UnrealNativeObjectTests
         public int Releases { get; private set; }
         public bool SupportsNativeObjects { get; init; } = true;
         public bool SupportsNativeObjectArguments { get; init; } = true;
+        public bool SupportsNativeObjectText => true;
+        public uint NativeObjectTextMaxInputBytes => UnrealNativeObjectValues.MaximumTextArenaBytes;
+        public uint NativeObjectTextMaxOutputBytes => UnrealNativeObjectValues.MaximumTextArenaBytes;
+        private readonly HashSet<ulong> _pendingText = [];
         public UnrealNativeObjectStatus ReleaseStatus { get; set; }
         public UnrealNativeObjectStatus CloseStatus { get; set; }
         public UnrealNativeObjectStatus OpenNativeObjectScope(out ulong scope)
@@ -186,6 +225,25 @@ public sealed class UnrealNativeObjectTests
             result = new(default, new(++_next));
             return Scopes.Contains(scope) ? UnrealNativeObjectStatus.Success : UnrealNativeObjectStatus.InvalidScope;
         }
+        public UnrealNativeObjectStatus BeginNativeObjectText(ulong scope, UnrealNativeObjectHandle target, ulong memberId,
+            ReadOnlySpan<UnrealNativeValueV3> arguments, ReadOnlySpan<byte> input, out ulong token, out uint requiredBytes)
+        {
+            token = ++_next; requiredBytes = 3; _pendingText.Add(token);
+            return UnrealNativeObjectStatus.Success;
+        }
+        public UnrealNativeObjectStatus ReadNativeObjectText(ulong scope, ulong token, Span<byte> output,
+            out uint requiredBytes, out UnrealNativeObjectCallResult result)
+        {
+            requiredBytes = 3; result = default;
+            if (!_pendingText.Contains(token)) return UnrealNativeObjectStatus.InvalidTextToken;
+            if (output.Length < 3) return UnrealNativeObjectStatus.TextBufferTooSmall;
+            "abc"u8.CopyTo(output[..3]);
+            _pendingText.Remove(token);
+            result = new(new() { Kind = UnrealNativeValueKindV3.String, Flags = UnrealNativeValueFlagsV3.ArenaBacked, Payload1 = 3 }, default);
+            return UnrealNativeObjectStatus.Success;
+        }
+        public UnrealNativeObjectStatus DiscardNativeObjectText(ulong scope, ulong token) =>
+            _pendingText.Remove(token) ? UnrealNativeObjectStatus.Success : UnrealNativeObjectStatus.InvalidTextToken;
         public UnrealInvocationResponse ReadProperty(UnrealObjectHandle target, string path) => throw new NotSupportedException();
         public UnrealInvocationResponse WriteProperty(UnrealObjectHandle target, string path, UnrealInvocationValue value) => throw new NotSupportedException();
         public UnrealInvocationResponse Invoke(UnrealObjectHandle target, string path, IReadOnlyList<UnrealInvocationValue> arguments) => throw new NotSupportedException();

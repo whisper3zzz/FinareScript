@@ -23,6 +23,9 @@ enum class EUnifiedScriptNativeObjectStatus : uint8
     UnknownMember = 8,
     DuplicateMember = 9,
     Exhausted = 10,
+    InvalidTextToken = 11,
+    TextBufferTooSmall = 12,
+    TextUnavailable = 13,
 };
 
 class FUnifiedScriptNativeObjectRegistry;
@@ -31,11 +34,16 @@ using FUnifiedScriptNativeObjectMember = EUnifiedScriptNativeObjectStatus (*)(
     FUnifiedScriptNativeObjectRegistry&, uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
     TConstArrayView<FUnifiedScriptNativeValueV3>, FUnifiedScriptNativeValueV3&,
     FUnifiedScriptNativeObjectHandle&);
+using FUnifiedScriptNativeObjectTextMember = EUnifiedScriptNativeObjectStatus (*)(
+    FUnifiedScriptNativeObjectRegistry&, uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
+    TConstArrayView<FUnifiedScriptNativeValueV3>, TConstArrayView<uint8>, FUnifiedScriptNativeValueV3&,
+    FUnifiedScriptNativeObjectHandle&, TArray<uint8>&);
 
 struct FUnifiedScriptNativeObjectMemberEntry
 {
     uint64 MemberId;
     FUnifiedScriptNativeObjectMember Invoke;
+    FUnifiedScriptNativeObjectTextMember TextInvoke = nullptr;
 };
 
 /** Generated module-lifetime registration, usable by existing and future Worlds. */
@@ -80,6 +88,12 @@ public:
     EUnifiedScriptNativeObjectStatus Invoke(uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
         uint64 MemberId, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
         FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle);
+    EUnifiedScriptNativeObjectStatus BeginText(uint64 Scope, FUnifiedScriptNativeObjectHandle Target,
+        uint64 MemberId, TConstArrayView<FUnifiedScriptNativeValueV3> Arguments, TConstArrayView<uint8> Input,
+        uint64& OutToken, uint32& OutRequiredBytes);
+    EUnifiedScriptNativeObjectStatus ReadText(uint64 Scope, uint64 Token, uint8* Output, uint32 Capacity,
+        uint32& OutRequiredBytes, FUnifiedScriptNativeValueV3& OutValue, FUnifiedScriptNativeObjectHandle& OutHandle);
+    EUnifiedScriptNativeObjectStatus DiscardText(uint64 Scope, uint64 Token);
     void Detach();
     int32 Num() const;
     int32 NumScopes() const;

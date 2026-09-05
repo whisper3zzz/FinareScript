@@ -34,6 +34,8 @@ internal static class UnrealNativeObjectBindings
             {
                 if (IsFixed(reference, true) && reference.NativeName != CppType(reference))
                     throw new JsonException($"USUE5412: Native value kind and C++ name disagree for '{reference.NativeName}'.");
+                if (reference.Kind == UnrealValueKind.String && !IsText(reference))
+                    throw new JsonException($"USUE5413: Native object text must use the exact FString or std::string spelling, not '{reference.NativeName}'.");
                 if (reference.Kind == UnrealValueKind.Enum &&
                     (!types.TryGetValue(reference.TypePath!, out var enumType) || enumType.Kind != UnrealReflectedTypeKind.Enum ||
                      enumType.NativeName != reference.NativeName || !Regex.IsMatch(reference.NativeName, @"\A[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*\z")))
@@ -65,6 +67,12 @@ internal static class UnrealNativeObjectBindings
             UnrealValueKind.Int64 or UnrealValueKind.UInt64 or UnrealValueKind.Float32 or UnrealValueKind.Float64 or UnrealValueKind.Enum ||
         type.Kind == UnrealValueKind.Struct && type.TypePath is "/Script/CoreUObject.Vector" or "/Script/CoreUObject.Rotator" ||
         allowVoid && type.Kind == UnrealValueKind.Void;
+
+    internal static bool IsText(UnrealTypeReference type) =>
+        type.Kind == UnrealValueKind.String && type.NativeName is ("FString" or "std::string");
+
+    internal static bool IsTextPassing(UnrealTypeReference type, UnrealNativeParameterPassing passing) =>
+        IsText(type) && passing is (UnrealNativeParameterPassing.Value or UnrealNativeParameterPassing.ConstReference);
 
     internal static bool IsObjectPassing(UnrealNativeParameterPassing passing) => passing is
         UnrealNativeParameterPassing.Pointer or UnrealNativeParameterPassing.ConstPointer or
@@ -100,14 +108,14 @@ internal static class UnrealNativeObjectBindings
 
     internal static string? Unsupported(UnrealReflectedFunction function) =>
         function.Parameters.Count > 16 || function.Parameters.Where((p, i) => p.Direction != UnrealParameterDirection.Input ||
-            p.DefaultValue is not null || !(IsFixed(p.Type) || p.Type.Kind == UnrealValueKind.NativeObject &&
-                IsObjectPassing(function.NativeBinding!.Parameters[i]))).Any() ||
-        !(IsFixed(function.ReturnType, true) || function.ReturnType.Kind == UnrealValueKind.NativeObject)
-            ? "Native-object calls support up to 16 fixed or explicitly qualified object inputs and a fixed or ownership-qualified object return. Defaults, containers, implicit object passing and ref/out require another codec path."
+            p.DefaultValue is not null || !(IsFixed(p.Type) || IsText(p.Type) && IsTextPassing(p.Type, function.NativeBinding!.Parameters[i]) ||
+                p.Type.Kind == UnrealValueKind.NativeObject && IsObjectPassing(function.NativeBinding!.Parameters[i]))).Any() ||
+        !(IsFixed(function.ReturnType, true) || IsText(function.ReturnType) || function.ReturnType.Kind == UnrealValueKind.NativeObject)
+            ? "Native-object calls support up to 16 fixed, exact text, or explicitly qualified object inputs and fixed, text, or ownership-qualified object returns. Defaults, containers and ref/out require another codec path."
             : null;
 
     internal static string? Unsupported(UnrealReflectedProperty field) =>
-        !IsFixed(field.Type) || field.Name is "Dispose" or "Handle" or "Scope" or "Lease"
-            ? "Native-object fields currently require fixed value types and names distinct from generated lifecycle members."
+        !(IsFixed(field.Type) || IsText(field.Type)) || field.Name is "Dispose" or "Handle" or "Scope" or "Lease"
+            ? "Native-object fields currently require fixed values or exact FString/std::string text and names distinct from generated lifecycle members."
             : null;
 }
