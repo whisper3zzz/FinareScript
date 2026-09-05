@@ -123,6 +123,31 @@ TMap<int32, int32> UUnifiedScriptInteropFixture::EchoMap(
     return Values;
 }
 
+TArray<AActor*> UUnifiedScriptInteropFixture::EchoActorArray(
+    const TArray<AActor*>& Values) const
+{
+    return Values;
+}
+
+TSet<TSubclassOf<AActor>> UUnifiedScriptInteropFixture::EchoActorClassSet(
+    const TSet<TSubclassOf<AActor>>& Values) const
+{
+    return Values;
+}
+
+TMap<FName, TSoftObjectPtr<UObject>> UUnifiedScriptInteropFixture::EchoSoftObjectMap(
+    const TMap<FName, TSoftObjectPtr<UObject>>& Values) const
+{
+    return Values;
+}
+
+TArray<TSoftClassPtr<AActor>> UUnifiedScriptInteropFixture::EchoSoftClassArray(
+    const TArray<TSoftClassPtr<AActor>>& Values) const
+{
+    return Values;
+}
+
+
 TArray<int32> UUnifiedScriptInteropFixture::MakeArray(int32 Count) const
 {
     TArray<int32> Values;
@@ -144,6 +169,53 @@ bool UUnifiedScriptInteropFixture::MutateValues(
     Accumulator += Input;
     return true;
 }
+
+bool UUnifiedScriptInteropFixture::MutateActorArray(
+    const TArray<AActor*>& Input,
+    TArray<AActor*>& OutActors,
+    TArray<AActor*>& Accumulator) const
+{
+    OutActors = Input;
+    Accumulator.Append(Input);
+    return true;
+}
+
+bool UUnifiedScriptInteropFixture::MutateActorClasses(
+    const TSet<TSubclassOf<AActor>>& Input,
+    TSet<TSubclassOf<AActor>>& OutClasses,
+    TSet<TSubclassOf<AActor>>& Accumulator) const
+{
+    OutClasses = Input;
+    for (const TSubclassOf<AActor>& Class : Input)
+    {
+        Accumulator.Add(Class);
+    }
+    return true;
+}
+
+bool UUnifiedScriptInteropFixture::MutateSoftObjectMap(
+    const TMap<FName, TSoftObjectPtr<UObject>>& Input,
+    TMap<FName, TSoftObjectPtr<UObject>>& OutPaths,
+    TMap<FName, TSoftObjectPtr<UObject>>& Accumulator) const
+{
+    OutPaths = Input;
+    for (const TPair<FName, TSoftObjectPtr<UObject>>& Entry : Input)
+    {
+        Accumulator.Add(Entry.Key, Entry.Value);
+    }
+    return true;
+}
+
+bool UUnifiedScriptInteropFixture::MutateSoftClassArray(
+    const TArray<TSoftClassPtr<AActor>>& Input,
+    TArray<TSoftClassPtr<AActor>>& OutPaths,
+    TArray<TSoftClassPtr<AActor>>& Accumulator) const
+{
+    OutPaths = Input;
+    Accumulator.Append(Input);
+    return true;
+}
+
 
 bool UUnifiedScriptInteropFixture::MutateInterfaces(
     TScriptInterface<IUnifiedScriptInteropContract> Input,

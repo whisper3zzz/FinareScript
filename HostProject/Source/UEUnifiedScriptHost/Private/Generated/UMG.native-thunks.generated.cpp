@@ -157,6 +157,29 @@ bool DecodeObject(
 }
 
 template <typename TObjectType>
+bool DecodeObject(
+    FUnifiedScriptObjectRegistry& Registry,
+    const FUnifiedScriptValue& Value,
+    bool bClass,
+    TSubclassOf<TObjectType>& OutClass,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    UClass* ResolvedClass = nullptr;
+    if (!DecodeObject(Registry, Value, bClass, ResolvedClass, OutResult))
+    {
+        return false;
+    }
+    if (ResolvedClass != nullptr &&
+        !ResolvedClass->IsChildOf(TObjectType::StaticClass()))
+    {
+        return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated native class argument has an incompatible class type."));
+    }
+    OutClass = ResolvedClass;
+    return true;
+}
+
+template <typename TObjectType>
 bool DecodeFixedObject(
     FUnifiedScriptObjectRegistry& Registry,
     const FUnifiedScriptNativeValueV3& Value,
@@ -592,7 +615,7 @@ bool UE::UnifiedScript::Generated::UI::Invoke(
         {
             return false;
         }
-        UClass* Argument1 = nullptr;
+        TSubclassOf<UUserWidget> Argument1 = nullptr;
         if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
         {
             return false;

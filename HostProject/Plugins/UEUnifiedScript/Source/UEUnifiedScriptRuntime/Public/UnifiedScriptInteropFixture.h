@@ -11,8 +11,10 @@
 
 #include "CoreMinimal.h"
 #include "InputAction.h"
+#include "GameFramework/Actor.h"
 #include "UObject/Interface.h"
 #include "UObject/Object.h"
+#include "UObject/SoftObjectPath.h"
 #include "UnifiedScriptInteropFixture.generated.h"
 
 UENUM(BlueprintType)
@@ -130,6 +132,19 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
     TMap<int32, int32> IntMapValue;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop|References")
+    TArray<AActor*> ActorArrayValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop|References")
+    TSet<TSubclassOf<AActor>> ActorClassSetValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop|References")
+    TMap<FName, TSoftObjectPtr<UObject>> SoftObjectMapValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop|References")
+    TArray<TSoftClassPtr<AActor>> SoftClassArrayValue;
+
+
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     FVector AddVector(FVector Left, FVector Right) const;
 
@@ -186,11 +201,52 @@ public:
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     TMap<int32, int32> EchoMap(const TMap<int32, int32>& Values) const;
 
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|References")
+    TArray<AActor*> EchoActorArray(const TArray<AActor*>& Values) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|References")
+    TSet<TSubclassOf<AActor>> EchoActorClassSet(
+        const TSet<TSubclassOf<AActor>>& Values) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|References")
+    TMap<FName, TSoftObjectPtr<UObject>> EchoSoftObjectMap(
+        const TMap<FName, TSoftObjectPtr<UObject>>& Values) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|References")
+    TArray<TSoftClassPtr<AActor>> EchoSoftClassArray(
+        const TArray<TSoftClassPtr<AActor>>& Values) const;
+
+
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     TArray<int32> MakeArray(int32 Count) const;
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
     bool MutateValues(int32 Input, int32& OutDoubled, UPARAM(ref) int32& Accumulator) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop|References")
+    bool MutateActorArray(
+        const TArray<AActor*>& Input,
+        TArray<AActor*>& OutActors,
+        UPARAM(ref) TArray<AActor*>& Accumulator) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop|References")
+    bool MutateActorClasses(
+        const TSet<TSubclassOf<AActor>>& Input,
+        TSet<TSubclassOf<AActor>>& OutClasses,
+        UPARAM(ref) TSet<TSubclassOf<AActor>>& Accumulator) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop|References")
+    bool MutateSoftObjectMap(
+        const TMap<FName, TSoftObjectPtr<UObject>>& Input,
+        TMap<FName, TSoftObjectPtr<UObject>>& OutPaths,
+        UPARAM(ref) TMap<FName, TSoftObjectPtr<UObject>>& Accumulator) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop|References")
+    bool MutateSoftClassArray(
+        const TArray<TSoftClassPtr<AActor>>& Input,
+        TArray<TSoftClassPtr<AActor>>& OutPaths,
+        UPARAM(ref) TArray<TSoftClassPtr<AActor>>& Accumulator) const;
+
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
     bool MutateInterfaces(

@@ -133,6 +133,35 @@ public sealed partial class Interface : global::UnifiedScript.Unreal.UnrealObjec
     }
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Gameplay\u9759\u6001", Tooltip = "\u62E5\u6709\u5B9E\u7528gameplay\u6548\u7528\u51FD\u6570\uFF08\u53EF\u4ECE\u84DD\u56FE\u548CC\u002B\u002B\u8FDB\u884C\u8C03\u7528\uFF09\u7684\u9759\u6001\u7C7B")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.GameplayStatics")]
+public sealed partial class GameplayStatics : global::UnifiedScript.Unreal.UnrealStaticService
+{
+    public GameplayStatics(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get All Actors Of Class", Category = "Actor", Tooltip = "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public void GetAllActorsOfClass(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealClassHandle actorClass, out global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> outActors)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x373F7E65F4E2E77BUL,
+            "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
+            typeof(void),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, worldContextObject),
+                new(typeof(global::UnifiedScript.Unreal.UnrealClassHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, actorClass),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        outActors = (global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[0]!;
+    }
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u547D\u4E2D\u7ED3\u679C", Tooltip = "\u5305\u542B\u68C0\u6D4B\u4E00\u4E2A\u547D\u4E2D\u4FE1\u606F\u7684\u7ED3\u6784\uFF0C\u5982\u5F71\u54CD\u7684\u4E00\u4E2A\u70B9\u548C\u6B64\u70B9\u4E0A\u7684\u8868\u9762\u6CD5\u7EBF\u3002")]
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]
@@ -555,6 +584,20 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     {
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor Array Value", Category = "UnifiedScript|Interop|References")]
+    public global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> ActorArrayValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>>(0x210E5BDFBD8D1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue");
+        set => WriteProperty(0x210E5BDFBD8D1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue", value);
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor Class Set Value", Category = "UnifiedScript|Interop|References")]
+    public global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> ActorClassSetValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>>(0xD7204A68E5EB37E2UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue");
+        set => WriteProperty(0xD7204A68E5EB37E2UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue", value);
+    }
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Byte Value", Category = "UnifiedScript|Interop")]
     public byte ByteValue
     {
@@ -653,11 +696,25 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
         set => WriteProperty(0xE9FD870223025846UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Class Array Value", Category = "UnifiedScript|Interop|References")]
+    public global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> SoftClassArrayValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>>(0xF55059444E9F7B7EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue");
+        set => WriteProperty(0xF55059444E9F7B7EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue", value);
+    }
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Class Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealSoftClassHandle SoftClassValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealSoftClassHandle>(0xC3274F8A399CE7F5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue");
         set => WriteProperty(0xC3274F8A399CE7F5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue", value);
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Object Map Value", Category = "UnifiedScript|Interop|References")]
+    public global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> SoftObjectMapValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>>(0x3B90026A347A8570UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue");
+        set => WriteProperty(0x3B90026A347A8570UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue", value);
     }
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Object Value", Category = "UnifiedScript|Interop")]
@@ -735,6 +792,14 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     public int CountSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlySet<int>>(0x3CDA489A528A7F59UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Actor Array", Category = "UnifiedScript|Interop|References", Tooltip = "Echo Actor Array")]
+    public global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> EchoActorArray(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>, global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>>(0x04EF4FF882F496CBUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorArray", values);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Actor Class Set", Category = "UnifiedScript|Interop|References", Tooltip = "Echo Actor Class Set")]
+    public global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> EchoActorClassSet(global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>, global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>>(0xED1AD3103C4B107AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorClassSet", values);
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Array", Category = "UnifiedScript|Interop", Tooltip = "Echo Array")]
     public global::System.Collections.Generic.IReadOnlyList<int> EchoArray(global::System.Collections.Generic.IReadOnlyList<int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, global::System.Collections.Generic.IReadOnlyList<int>>(0x6DB8F58355D32AD6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray", values);
@@ -758,6 +823,14 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Set", Category = "UnifiedScript|Interop", Tooltip = "Echo Set")]
     public global::System.Collections.Generic.IReadOnlySet<int> EchoSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlySet<int>, global::System.Collections.Generic.IReadOnlySet<int>>(0x051035FFB77D4FB3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet", values);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Soft Class Array", Category = "UnifiedScript|Interop|References", Tooltip = "Echo Soft Class Array")]
+    public global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> EchoSoftClassArray(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>, global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>>(0xD74DD0BE8AF086FCUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray", values);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Soft Object Map", Category = "UnifiedScript|Interop|References", Tooltip = "Echo Soft Object Map")]
+    public global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> EchoSoftObjectMap(global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>, global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>>(0x8E8E5029359E6244UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap", values);
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Transform", Category = "UnifiedScript|Interop", Tooltip = "Echo Transform")]
     public global::UnifiedScript.Unreal.UnrealTransform EchoTransform(global::UnifiedScript.Unreal.UnrealTransform value)
@@ -787,6 +860,40 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     public global::System.Collections.Generic.IReadOnlyList<int> MakeArray(int count)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0x8A8BAE19690D9AB7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray", count);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Actor Array", Category = "UnifiedScript|Interop|References", Tooltip = "Mutate Actor Array")]
+    public bool MutateActorArray(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> input, out global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> outActors, ref global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle> accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x79BE864F04274744UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray",
+            typeof(bool),
+            [
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outActors = (global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Actor Classes", Category = "UnifiedScript|Interop|References", Tooltip = "Mutate Actor Classes")]
+    public bool MutateActorClasses(global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> input, out global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> outClasses, ref global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle> accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0xD0E07FB3F17BDA95UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses",
+            typeof(bool),
+            [
+                new(typeof(global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outClasses = (global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::System.Collections.Generic.IReadOnlySet<global::UnifiedScript.Unreal.UnrealClassHandle>)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Interfaces", Category = "UnifiedScript|Interop", Tooltip = "Mutate Interfaces")]
     public bool MutateInterfaces(global::UnifiedScript.Unreal.UnrealObjectHandle input, out global::UnifiedScript.Unreal.UnrealObjectHandle outInterface, ref global::UnifiedScript.Unreal.UnrealObjectHandle accumulator)
     {
@@ -801,6 +908,40 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
             ]);
         outInterface = (global::UnifiedScript.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[0]!;
         accumulator = (global::UnifiedScript.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Soft Class Array", Category = "UnifiedScript|Interop|References", Tooltip = "Mutate Soft Class Array")]
+    public bool MutateSoftClassArray(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> input, out global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> outPaths, ref global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle> accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0xB166A4BDBAA32B6BUL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray",
+            typeof(bool),
+            [
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outPaths = (global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::System.Collections.Generic.IReadOnlyList<global::UnifiedScript.Unreal.UnrealSoftClassHandle>)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Soft Object Map", Category = "UnifiedScript|Interop|References", Tooltip = "Mutate Soft Object Map")]
+    public bool MutateSoftObjectMap(global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> input, out global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> outPaths, ref global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle> accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x88197E19BE988DCDUL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap",
+            typeof(bool),
+            [
+                new(typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outPaths = (global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::System.Collections.Generic.IReadOnlyDictionary<global::UnifiedScript.Unreal.UnrealName, global::UnifiedScript.Unreal.UnrealSoftObjectHandle>)__unifiedScriptResult.Outputs[1]!;
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 

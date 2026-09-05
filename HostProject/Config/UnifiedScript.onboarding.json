@@ -6,9 +6,26 @@
   "pluginPath": "../Plugins/UEUnifiedScript",
   "reflection": {
     "modules": [
+      "Engine",
       "UEUnifiedScriptRuntime"
     ],
-    "classes": [],
+    "classes": [
+      "/Script/Engine.GameplayStatics",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem"
+    ],
     "output": "../../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"
   },
   "bindings": {

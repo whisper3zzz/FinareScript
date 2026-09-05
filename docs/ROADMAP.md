@@ -25,13 +25,15 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — typed reference containers**. Reproduce and close
-  the transport identity mismatch between managed handle collections and native
-  containers declared with specific UObject or Soft Reference element types.
-  Carry the selected Actor-reference use case through generated calls and a
-  gameplay example. Stay in M13.5; this does not start M13.3/M13.4.
-- Latest delivered M13.5 checkpoint: **reflected interface references**, following
-  the generated reflected callbacks checkpoint (`2827216`).
+- Current tranche: **M13.5 — ordinary native object text values**. Puerts' native
+  binding example accepts `std::string`, while UnifiedScript's ordinary C++
+  object lane still accepts only fixed values and qualified object references.
+  Enable practical string fields, constructor/method inputs and returned text
+  through generated bindings and a gameplay example, preserving ownership,
+  generation lifetime and compatibility of the existing fixed-call prefix.
+  Stay in M13.5; this does not start M13.3/M13.4.
+- Latest delivered M13.5 checkpoint: **typed reference containers**, following
+  reflected interface references (`bffb2d8`) and callbacks (`2827216`).
 - Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
 - Container/Soft Reference implementation checkpoint: `46f912d`; the full
   M13.3C-1c-b acceptance scope remains open.
@@ -129,6 +131,18 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Interface containers, interface-bearing structs/callbacks, Blueprint-defined
   interface types, Script Class interface state/defaults and cooked execution
   remain outside this scalar batch.
+- Latest collection checkpoint: **typed object/class and Soft Reference
+  containers**. Generated descriptors, input decoding and output encoding now
+  share the managed/Blueprint codec's canonical transport identity while native
+  storage and node pins retain their exact declared types. `TSubclassOf` inputs
+  validate the required base class, including fields inside supported structs.
+  The [collection example](../samples/Unreal/UnifiedScript.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
+  calls the real `UGameplayStatics::GetAllActorsOfClass`, exchanges Actor arrays,
+  Actor-class sets, named Soft Object maps and Soft Class arrays, and refreshes
+  from two matching Actors to three after reload. Native and CoreCLR CMD tests
+  cover the query, collection exchange, rejection and World cleanup. Existing
+  UMG bindings are regenerated for the stricter class input conversion.
+  Interface containers and full Script Class state/cook acceptance remain open.
 - Remaining workflow scope: installed-consumer authoring and live class-shape/
   default deployment are still open. The latest native test invokes the real
   coordinator, not a physical toolbar click; CMD/NullRHI does not establish visual
@@ -158,6 +172,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
+| Typed reference containers — M13.5 | Canonical transport for generated object/class/Soft Reference Array, Set and Map values; exact native/node types, subclass validation, real engine Actor query and managed reload/cleanup example | This fixes generated calls into native APIs; interface containers and the full Script Class property/default/cooked matrix remain open |
 | Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns and qualified object inputs, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Richer values, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
@@ -250,9 +265,9 @@ not an exhaustive signature audit or a claim of parity.
 | Capability family | Current UnifiedScript gap or next comparison | Owner |
 | --- | --- | --- |
 | Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
-| Containers and Soft References | Generated Blueprint functions have the initial native/managed exchange path. Next common-use comparison: Puerts documents arrays of Actor references, while current managed handle containers infer `UObject*` identities and generated native containers retain their declared element type. Reproduce and close that typed-reference exchange gap; continue the existing function/state acceptance afterward | M13.5; reuse M13.3C-1 work |
+| Containers and Soft References | The typed-reference transport mismatch is closed for generated native calls: Actor arrays, class sets, named Soft Object maps and Soft Class arrays have native/CoreCLR exchange and reload evidence. Generated Blueprint functions retain their earlier initial exchange path; their broader negative/VM/cooked and common state/default acceptance remains open | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
-| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Rich values, ref/out, retention/transfer, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
+| Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Next common gap: ordinary-object string fields, constructors, method inputs and results cannot use the fixed-only transport. Richer values, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
 | Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters now support synchronous results/ref/out, native retention and generated UE reentry with a real worker-originated example. Installed-consumer authoring, broader latent/interface/subsystem gaps and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
@@ -266,6 +281,11 @@ its World-local object handles and validates the required interface before nativ
 mutation. This comparison guided the scalar value batch; it is not a matched
 Puerts runtime result or a requirement to complete all Script Class interface
 state, container or callback combinations in the same batch.
+
+The [same pinned upstream revision's native binding example](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/doc/unreal/zhcn/template_binding.md)
+includes a `std::string` overload. The next batch addresses that ordinary text
+use case in non-UObject bindings; the existing UObject-member string codecs do
+not make the separate fixed-only native-object lane support it.
 
 For each family, distinguish **available for the reviewed scope**, **partial**,
 **missing**, **not yet audited**, and **intentional difference**. Before declaring

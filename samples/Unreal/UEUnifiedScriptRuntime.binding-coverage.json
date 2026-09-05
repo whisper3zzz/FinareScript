@@ -7,14 +7,14 @@
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
-    "typeCount": 12,
-    "memberCount": 154,
+    "typeCount": 13,
+    "memberCount": 167,
     "directThunkCount": 57,
-    "callFrameCount": 94,
+    "callFrameCount": 107,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 151,
+    "nativeThunkCount": 164,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -227,6 +227,14 @@
       "diagnosticCodes": [],
       "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
       "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
+      "ownerPath": "/Script/Engine.GameplayStatics",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
     },
     {
       "path": "/Script/Engine.HitResult:BoneName",
@@ -785,6 +793,22 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
@@ -849,6 +873,22 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorArray",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorClassSet",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
@@ -890,6 +930,22 @@
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
       "disposition": "callFrame",
@@ -1017,7 +1073,39 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
       "disposition": "callFrame",
@@ -1067,7 +1155,23 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
       "disposition": "callFrame",

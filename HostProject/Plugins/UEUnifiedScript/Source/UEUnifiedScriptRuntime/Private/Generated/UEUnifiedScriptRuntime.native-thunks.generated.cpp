@@ -7,6 +7,7 @@
 #include "Engine/NetSerialization.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/NoExportTypes.h"
 #include "UObject/Object.h"
 #include "UnifiedScriptActor.h"
@@ -219,6 +220,29 @@ bool DecodeObject(
         OutResult,
         EUnifiedScriptInvocationError::ValueTypeMismatch,
         TEXT("Generated native object argument has an incompatible object type."));
+}
+
+template <typename TObjectType>
+bool DecodeObject(
+    FUnifiedScriptObjectRegistry& Registry,
+    const FUnifiedScriptValue& Value,
+    bool bClass,
+    TSubclassOf<TObjectType>& OutClass,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    UClass* ResolvedClass = nullptr;
+    if (!DecodeObject(Registry, Value, bClass, ResolvedClass, OutResult))
+    {
+        return false;
+    }
+    if (ResolvedClass != nullptr &&
+        !ResolvedClass->IsChildOf(TObjectType::StaticClass()))
+    {
+        return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated native class argument has an incompatible class type."));
+    }
+    OutClass = ResolvedClass;
+    return true;
 }
 
 template <typename TObjectType>
@@ -603,6 +627,14 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::Boolean;
         OutTypeId = 0ull;
         return true;
+    case 0x210E5BDFBD8D1B8Full:
+        OutKind = EUnifiedScriptValueKind::Array;
+        OutTypeId = 0x2447224514B36D50ull;
+        return true;
+    case 0xD7204A68E5EB37E2ull:
+        OutKind = EUnifiedScriptValueKind::Set;
+        OutTypeId = 0x9B018F0964833ABEull;
+        return true;
     case 0xB9AF036F8D9D7B1Full:
         OutKind = EUnifiedScriptValueKind::UInt8;
         OutTypeId = 0ull;
@@ -659,9 +691,17 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::Rotator;
         OutTypeId = 0ull;
         return true;
+    case 0xF55059444E9F7B7Eull:
+        OutKind = EUnifiedScriptValueKind::Array;
+        OutTypeId = 0x7D359DE26B5185E5ull;
+        return true;
     case 0xC3274F8A399CE7F5ull:
         OutKind = EUnifiedScriptValueKind::String;
         OutTypeId = 0ull;
+        return true;
+    case 0x3B90026A347A8570ull:
+        OutKind = EUnifiedScriptValueKind::Map;
+        OutTypeId = 0x5DC57E5D000BDB26ull;
         return true;
     case 0x6F0135EE1F0ABDC0ull:
         OutKind = EUnifiedScriptValueKind::String;
@@ -706,6 +746,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
 {
     switch (MemberId)
     {
+    case 0x373F7E65F4E2E77Bull:
+        OutResultCount = 1;
+        return true;
     case 0x7AF8502717707C7Bull:
         OutResultCount = 1;
         return true;
@@ -817,6 +860,12 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0x3CDA489A528A7F59ull:
         OutResultCount = 1;
         return true;
+    case 0x04EF4FF882F496CBull:
+        OutResultCount = 1;
+        return true;
+    case 0xED1AD3103C4B107Aull:
+        OutResultCount = 1;
+        return true;
     case 0x6DB8F58355D32AD6ull:
         OutResultCount = 1;
         return true;
@@ -833,6 +882,12 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         OutResultCount = 1;
         return true;
     case 0x051035FFB77D4FB3ull:
+        OutResultCount = 1;
+        return true;
+    case 0xD74DD0BE8AF086FCull:
+        OutResultCount = 1;
+        return true;
+    case 0x8E8E5029359E6244ull:
         OutResultCount = 1;
         return true;
     case 0xAF29371D42BA1F6Bull:
@@ -856,7 +911,19 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0x8A8BAE19690D9AB7ull:
         OutResultCount = 1;
         return true;
+    case 0x79BE864F04274744ull:
+        OutResultCount = 3;
+        return true;
+    case 0xD0E07FB3F17BDA95ull:
+        OutResultCount = 3;
+        return true;
     case 0x977B08F052F6DF52ull:
+        OutResultCount = 3;
+        return true;
+    case 0xB166A4BDBAA32B6Bull:
+        OutResultCount = 3;
+        return true;
+    case 0x88197E19BE988DCDull:
         OutResultCount = 3;
         return true;
     case 0x077EBB77D39DD224ull:
@@ -932,6 +999,16 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
 {
     switch (MemberId)
     {
+    case 0x373F7E65F4E2E77Bull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x2447224514B36D50ull;
+            return true;
+        default:
+            return false;
+        }
     case 0x7AF8502717707C7Bull:
         switch (ResultIndex)
         {
@@ -1230,6 +1307,26 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x04EF4FF882F496CBull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x2447224514B36D50ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xED1AD3103C4B107Aull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Set;
+            OutTypeId = 0x9B018F0964833ABEull;
+            return true;
+        default:
+            return false;
+        }
     case 0x6DB8F58355D32AD6ull:
         switch (ResultIndex)
         {
@@ -1286,6 +1383,26 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         case 0:
             OutKind = EUnifiedScriptValueKind::Set;
             OutTypeId = 0x4C46F790BE2AE435ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xD74DD0BE8AF086FCull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x7D359DE26B5185E5ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x8E8E5029359E6244ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Map;
+            OutTypeId = 0x5DC57E5D000BDB26ull;
             return true;
         default:
             return false;
@@ -1360,6 +1477,42 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x79BE864F04274744ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x2447224514B36D50ull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x2447224514B36D50ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xD0E07FB3F17BDA95ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Set;
+            OutTypeId = 0x9B018F0964833ABEull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Set;
+            OutTypeId = 0x9B018F0964833ABEull;
+            return true;
+        default:
+            return false;
+        }
     case 0x977B08F052F6DF52ull:
         switch (ResultIndex)
         {
@@ -1374,6 +1527,42 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         case 2:
             OutKind = EUnifiedScriptValueKind::Object;
             OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xB166A4BDBAA32B6Bull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x7D359DE26B5185E5ull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x7D359DE26B5185E5ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x88197E19BE988DCDull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Map;
+            OutTypeId = 0x5DC57E5D000BDB26ull;
+            return true;
+        case 2:
+            OutKind = EUnifiedScriptValueKind::Map;
+            OutTypeId = 0x5DC57E5D000BDB26ull;
             return true;
         default:
             return false;
@@ -1810,6 +1999,50 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0x210E5BDFBD8D1B8Full:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TArray<FUnifiedScriptValue> OutValueCells;
+        OutValueCells.Reserve(TypedTarget->ActorArrayValue.Num());
+        for (const auto& OutValueElement : TypedTarget->ActorArrayValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(OutValueElement), false, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            OutValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutValue = FUnifiedScriptValue::FromArray(MoveTemp(OutValueCells), 0x2447224514B36D50ull);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xD7204A68E5EB37E2ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TArray<FUnifiedScriptValue> OutValueCells;
+        OutValueCells.Reserve(TypedTarget->ActorClassSetValue.Num());
+        for (const auto& OutValueElement : TypedTarget->ActorClassSetValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(OutValueElement), true, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            OutValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutValue = FUnifiedScriptValue::FromSet(MoveTemp(OutValueCells), 0x9B018F0964833ABEull);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xB9AF036F8D9D7B1Full:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -2000,6 +2233,25 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xF55059444E9F7B7Eull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TArray<FUnifiedScriptValue> OutValueCells;
+        OutValueCells.Reserve(TypedTarget->SoftClassArrayValue.Num());
+        for (const auto& OutValueElement : TypedTarget->SoftClassArrayValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            EncodedElement = FUnifiedScriptValue::FromString(OutValueElement.ToSoftObjectPath().ToString());
+            OutValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutValue = FUnifiedScriptValue::FromArray(MoveTemp(OutValueCells), 0x7D359DE26B5185E5ull);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xC3274F8A399CE7F5ull:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -2008,6 +2260,28 @@ bool UE::UnifiedScript::Generated::ReadProperty(
             return false;
         }
         OutValue = FUnifiedScriptValue::FromString(TypedTarget->SoftClassValue.ToSoftObjectPath().ToString());
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x3B90026A347A8570ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TArray<FUnifiedScriptValue> OutValueCells;
+        OutValueCells.Reserve(TypedTarget->SoftObjectMapValue.Num() * 2);
+        for (const auto& OutValueEntry : TypedTarget->SoftObjectMapValue)
+        {
+            FUnifiedScriptValue EncodedKey;
+            EncodedKey = FUnifiedScriptValue::FromName(OutValueEntry.Key);
+            FUnifiedScriptValue EncodedMappedValue;
+            EncodedMappedValue = FUnifiedScriptValue::FromString(OutValueEntry.Value.ToSoftObjectPath().ToString());
+            OutValueCells.Add(MoveTemp(EncodedKey));
+            OutValueCells.Add(MoveTemp(EncodedMappedValue));
+        }
+        OutValue = FUnifiedScriptValue::FromMap(MoveTemp(OutValueCells), 0x5DC57E5D000BDB26ull);
         Succeed(OutResult);
         return true;
     }
@@ -2339,6 +2613,66 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0x210E5BDFBD8D1B8Full:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TConstArrayView<FUnifiedScriptValue> NativeValueValues;
+        if (!Value.TryGetArray(0x2447224514B36D50ull, NativeValueValues))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue' received an incompatible container value."));
+        }
+        TArray<AActor*> NativeValue;
+        NativeValue.Reserve(NativeValueValues.Num());
+        for (const FUnifiedScriptValue& NativeValueCell : NativeValueValues)
+        {
+            AActor* NativeValueElement = nullptr;
+            if (!DecodeObject(Registry, NativeValueCell, false, NativeValueElement, OutResult))
+            {
+                return false;
+            }
+            NativeValue.Add(MoveTemp(NativeValueElement));
+        }
+        TypedTarget->ActorArrayValue = MoveTemp(NativeValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xD7204A68E5EB37E2ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TConstArrayView<FUnifiedScriptValue> NativeValueValues;
+        if (!Value.TryGetSet(0x9B018F0964833ABEull, NativeValueValues))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue' received an incompatible container value."));
+        }
+        TSet<TSubclassOf<AActor>> NativeValue;
+        NativeValue.Reserve(NativeValueValues.Num());
+        for (const FUnifiedScriptValue& NativeValueCell : NativeValueValues)
+        {
+            TSubclassOf<AActor> NativeValueElement = nullptr;
+            if (!DecodeObject(Registry, NativeValueCell, true, NativeValueElement, OutResult))
+            {
+                return false;
+            }
+            NativeValue.Add(MoveTemp(NativeValueElement));
+        }
+        TypedTarget->ActorClassSetValue = MoveTemp(NativeValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xB9AF036F8D9D7B1Full:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -2647,6 +2981,40 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xF55059444E9F7B7Eull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TConstArrayView<FUnifiedScriptValue> NativeValueValues;
+        if (!Value.TryGetArray(0x7D359DE26B5185E5ull, NativeValueValues))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue' received an incompatible container value."));
+        }
+        TArray<TSoftClassPtr<AActor> > NativeValue;
+        NativeValue.Reserve(NativeValueValues.Num());
+        for (const FUnifiedScriptValue& NativeValueCell : NativeValueValues)
+        {
+            FString NativeValueElementPath;
+            if (!NativeValueCell.TryGetString(NativeValueElementPath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue' received an incompatible soft path."));
+            }
+            TSoftClassPtr<AActor> NativeValueElement{FSoftObjectPath(NativeValueElementPath)};
+            NativeValue.Add(MoveTemp(NativeValueElement));
+        }
+        TypedTarget->SoftClassArrayValue = MoveTemp(NativeValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xC3274F8A399CE7F5ull:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -2664,6 +3032,48 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         }
         TSoftClassPtr<UObject> NativeValue{FSoftObjectPath(NativeValuePath)};
         TypedTarget->SoftClassValue = NativeValue;
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x3B90026A347A8570ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        TConstArrayView<FUnifiedScriptValue> NativeValueValues;
+        if (!Value.TryGetMap(0x5DC57E5D000BDB26ull, NativeValueValues))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue' received an incompatible container value."));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> NativeValue;
+        NativeValue.Reserve(NativeValueValues.Num() / 2);
+        for (int32 NativeValueIndex = 0; NativeValueIndex < NativeValueValues.Num(); NativeValueIndex += 2)
+        {
+            FName NativeValueKey = {};
+            if (!NativeValueValues[NativeValueIndex].TryGetName(NativeValueKey))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue' received an incompatible value."));
+            }
+            FString NativeValueMappedValuePath;
+            if (!NativeValueValues[NativeValueIndex + 1].TryGetString(NativeValueMappedValuePath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue' received an incompatible soft path."));
+            }
+            TSoftObjectPtr<UObject> NativeValueMappedValue{FSoftObjectPath(NativeValueMappedValuePath)};
+            NativeValue.Add(MoveTemp(NativeValueKey), MoveTemp(NativeValueMappedValue));
+        }
+        TypedTarget->SoftObjectMapValue = MoveTemp(NativeValue);
         Succeed(OutResult);
         return true;
     }
@@ -2827,6 +3237,44 @@ bool UE::UnifiedScript::Generated::Invoke(
     using namespace UE::UnifiedScript::Generated::Private;
     switch (MemberId)
     {
+    case 0x373F7E65F4E2E77Bull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(1);
+        UObject* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        TSubclassOf<AActor> Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
+        {
+            return false;
+        }
+        TArray<AActor*> Argument2 = {};
+        UGameplayStatics::GetAllActorsOfClass(Argument0, Argument1, Argument2);
+        OutReturnValue = {};
+        FUnifiedScriptValue EncodedOutput0;
+        TArray<FUnifiedScriptValue> EncodedOutput0Cells;
+        EncodedOutput0Cells.Reserve(Argument2.Num());
+        for (const auto& EncodedOutput0Element : Argument2)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(EncodedOutput0Element), false, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            EncodedOutput0Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput0 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput0Cells), 0x2447224514B36D50ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        Succeed(OutResult);
+        return true;
+    }
     case 0x7AF8502717707C7Bull:
     {
         if (!RequireArgumentCount(Arguments, 0, OutResult))
@@ -3855,6 +4303,100 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x04EF4FF882F496CBull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetArray(0x2447224514B36D50ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorArray' received an incompatible container value."));
+        }
+        TArray<AActor*> Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            AActor* Argument0Element = nullptr;
+            if (!DecodeObject(Registry, Argument0Cell, false, Argument0Element, OutResult))
+            {
+                return false;
+            }
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TArray<AActor*> ReturnValue = TypedTarget->EchoActorArray(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num());
+        for (const auto& OutReturnValueElement : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(OutReturnValueElement), false, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            OutReturnValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromArray(MoveTemp(OutReturnValueCells), 0x2447224514B36D50ull);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xED1AD3103C4B107Aull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetSet(0x9B018F0964833ABEull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorClassSet' received an incompatible container value."));
+        }
+        TSet<TSubclassOf<AActor>> Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            TSubclassOf<AActor> Argument0Element = nullptr;
+            if (!DecodeObject(Registry, Argument0Cell, true, Argument0Element, OutResult))
+            {
+                return false;
+            }
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TSet<TSubclassOf<AActor>> ReturnValue = TypedTarget->EchoActorClassSet(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num());
+        for (const auto& OutReturnValueElement : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(OutReturnValueElement), true, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            OutReturnValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromSet(MoveTemp(OutReturnValueCells), 0x9B018F0964833ABEull);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x6DB8F58355D32AD6ull:
     {
         if (!RequireArgumentCount(Arguments, 1, OutResult))
@@ -4082,6 +4624,113 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0xD74DD0BE8AF086FCull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetArray(0x7D359DE26B5185E5ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray' received an incompatible container value."));
+        }
+        TArray<TSoftClassPtr<AActor> > Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            FString Argument0ElementPath;
+            if (!Argument0Cell.TryGetString(Argument0ElementPath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray' received an incompatible soft path."));
+            }
+            TSoftClassPtr<AActor> Argument0Element{FSoftObjectPath(Argument0ElementPath)};
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TArray<TSoftClassPtr<AActor> > ReturnValue = TypedTarget->EchoSoftClassArray(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num());
+        for (const auto& OutReturnValueElement : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            EncodedElement = FUnifiedScriptValue::FromString(OutReturnValueElement.ToSoftObjectPath().ToString());
+            OutReturnValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromArray(MoveTemp(OutReturnValueCells), 0x7D359DE26B5185E5ull);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x8E8E5029359E6244ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetMap(0x5DC57E5D000BDB26ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap' received an incompatible container value."));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> Argument0;
+        Argument0.Reserve(Argument0Values.Num() / 2);
+        for (int32 Argument0Index = 0; Argument0Index < Argument0Values.Num(); Argument0Index += 2)
+        {
+            FName Argument0Key = {};
+            if (!Argument0Values[Argument0Index].TryGetName(Argument0Key))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap' received an incompatible value."));
+            }
+            FString Argument0MappedValuePath;
+            if (!Argument0Values[Argument0Index + 1].TryGetString(Argument0MappedValuePath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap' received an incompatible soft path."));
+            }
+            TSoftObjectPtr<UObject> Argument0MappedValue{FSoftObjectPath(Argument0MappedValuePath)};
+            Argument0.Add(MoveTemp(Argument0Key), MoveTemp(Argument0MappedValue));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> ReturnValue = TypedTarget->EchoSoftObjectMap(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num() * 2);
+        for (const auto& OutReturnValueEntry : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedKey;
+            EncodedKey = FUnifiedScriptValue::FromName(OutReturnValueEntry.Key);
+            FUnifiedScriptValue EncodedMappedValue;
+            EncodedMappedValue = FUnifiedScriptValue::FromString(OutReturnValueEntry.Value.ToSoftObjectPath().ToString());
+            OutReturnValueCells.Add(MoveTemp(EncodedKey));
+            OutReturnValueCells.Add(MoveTemp(EncodedMappedValue));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromMap(MoveTemp(OutReturnValueCells), 0x5DC57E5D000BDB26ull);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xAF29371D42BA1F6Bull:
     {
         if (!RequireArgumentCount(Arguments, 1, OutResult))
@@ -4305,6 +4954,176 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x79BE864F04274744ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetArray(0x2447224514B36D50ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray' received an incompatible container value."));
+        }
+        TArray<AActor*> Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            AActor* Argument0Element = nullptr;
+            if (!DecodeObject(Registry, Argument0Cell, false, Argument0Element, OutResult))
+            {
+                return false;
+            }
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TArray<AActor*> Argument1 = {};
+        TConstArrayView<FUnifiedScriptValue> Argument2Values;
+        if (!Arguments[1].TryGetArray(0x2447224514B36D50ull, Argument2Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray' received an incompatible container value."));
+        }
+        TArray<AActor*> Argument2;
+        Argument2.Reserve(Argument2Values.Num());
+        for (const FUnifiedScriptValue& Argument2Cell : Argument2Values)
+        {
+            AActor* Argument2Element = nullptr;
+            if (!DecodeObject(Registry, Argument2Cell, false, Argument2Element, OutResult))
+            {
+                return false;
+            }
+            Argument2.Add(MoveTemp(Argument2Element));
+        }
+        bool ReturnValue = TypedTarget->MutateActorArray(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        TArray<FUnifiedScriptValue> EncodedOutput0Cells;
+        EncodedOutput0Cells.Reserve(Argument1.Num());
+        for (const auto& EncodedOutput0Element : Argument1)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(EncodedOutput0Element), false, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            EncodedOutput0Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput0 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput0Cells), 0x2447224514B36D50ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        TArray<FUnifiedScriptValue> EncodedOutput1Cells;
+        EncodedOutput1Cells.Reserve(Argument2.Num());
+        for (const auto& EncodedOutput1Element : Argument2)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(EncodedOutput1Element), false, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            EncodedOutput1Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput1 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput1Cells), 0x2447224514B36D50ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xD0E07FB3F17BDA95ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetSet(0x9B018F0964833ABEull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses' received an incompatible container value."));
+        }
+        TSet<TSubclassOf<AActor>> Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            TSubclassOf<AActor> Argument0Element = nullptr;
+            if (!DecodeObject(Registry, Argument0Cell, true, Argument0Element, OutResult))
+            {
+                return false;
+            }
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TSet<TSubclassOf<AActor>> Argument1 = {};
+        TConstArrayView<FUnifiedScriptValue> Argument2Values;
+        if (!Arguments[1].TryGetSet(0x9B018F0964833ABEull, Argument2Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses' received an incompatible container value."));
+        }
+        TSet<TSubclassOf<AActor>> Argument2;
+        Argument2.Reserve(Argument2Values.Num());
+        for (const FUnifiedScriptValue& Argument2Cell : Argument2Values)
+        {
+            TSubclassOf<AActor> Argument2Element = nullptr;
+            if (!DecodeObject(Registry, Argument2Cell, true, Argument2Element, OutResult))
+            {
+                return false;
+            }
+            Argument2.Add(MoveTemp(Argument2Element));
+        }
+        bool ReturnValue = TypedTarget->MutateActorClasses(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        TArray<FUnifiedScriptValue> EncodedOutput0Cells;
+        EncodedOutput0Cells.Reserve(Argument1.Num());
+        for (const auto& EncodedOutput0Element : Argument1)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(EncodedOutput0Element), true, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            EncodedOutput0Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput0 = FUnifiedScriptValue::FromSet(MoveTemp(EncodedOutput0Cells), 0x9B018F0964833ABEull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        TArray<FUnifiedScriptValue> EncodedOutput1Cells;
+        EncodedOutput1Cells.Reserve(Argument2.Num());
+        for (const auto& EncodedOutput1Element : Argument2)
+        {
+            FUnifiedScriptValue EncodedElement;
+            if (!EncodeObject(Registry, GetObjectPointer(EncodedOutput1Element), true, EncodedElement, OutResult))
+            {
+                return false;
+            }
+            EncodedOutput1Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput1 = FUnifiedScriptValue::FromSet(MoveTemp(EncodedOutput1Cells), 0x9B018F0964833ABEull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
     case 0x977B08F052F6DF52ull:
     {
         if (!RequireArgumentCount(Arguments, 2, OutResult))
@@ -4342,6 +5161,202 @@ bool UE::UnifiedScript::Generated::Invoke(
         {
             return false;
         }
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xB166A4BDBAA32B6Bull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetArray(0x7D359DE26B5185E5ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray' received an incompatible container value."));
+        }
+        TArray<TSoftClassPtr<AActor> > Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            FString Argument0ElementPath;
+            if (!Argument0Cell.TryGetString(Argument0ElementPath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray' received an incompatible soft path."));
+            }
+            TSoftClassPtr<AActor> Argument0Element{FSoftObjectPath(Argument0ElementPath)};
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TArray<TSoftClassPtr<AActor> > Argument1 = {};
+        TConstArrayView<FUnifiedScriptValue> Argument2Values;
+        if (!Arguments[1].TryGetArray(0x7D359DE26B5185E5ull, Argument2Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray' received an incompatible container value."));
+        }
+        TArray<TSoftClassPtr<AActor> > Argument2;
+        Argument2.Reserve(Argument2Values.Num());
+        for (const FUnifiedScriptValue& Argument2Cell : Argument2Values)
+        {
+            FString Argument2ElementPath;
+            if (!Argument2Cell.TryGetString(Argument2ElementPath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray' received an incompatible soft path."));
+            }
+            TSoftClassPtr<AActor> Argument2Element{FSoftObjectPath(Argument2ElementPath)};
+            Argument2.Add(MoveTemp(Argument2Element));
+        }
+        bool ReturnValue = TypedTarget->MutateSoftClassArray(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        TArray<FUnifiedScriptValue> EncodedOutput0Cells;
+        EncodedOutput0Cells.Reserve(Argument1.Num());
+        for (const auto& EncodedOutput0Element : Argument1)
+        {
+            FUnifiedScriptValue EncodedElement;
+            EncodedElement = FUnifiedScriptValue::FromString(EncodedOutput0Element.ToSoftObjectPath().ToString());
+            EncodedOutput0Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput0 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput0Cells), 0x7D359DE26B5185E5ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        TArray<FUnifiedScriptValue> EncodedOutput1Cells;
+        EncodedOutput1Cells.Reserve(Argument2.Num());
+        for (const auto& EncodedOutput1Element : Argument2)
+        {
+            FUnifiedScriptValue EncodedElement;
+            EncodedElement = FUnifiedScriptValue::FromString(EncodedOutput1Element.ToSoftObjectPath().ToString());
+            EncodedOutput1Cells.Add(MoveTemp(EncodedElement));
+        }
+        EncodedOutput1 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput1Cells), 0x7D359DE26B5185E5ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput1));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x88197E19BE988DCDull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(2);
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetMap(0x5DC57E5D000BDB26ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible container value."));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> Argument0;
+        Argument0.Reserve(Argument0Values.Num() / 2);
+        for (int32 Argument0Index = 0; Argument0Index < Argument0Values.Num(); Argument0Index += 2)
+        {
+            FName Argument0Key = {};
+            if (!Argument0Values[Argument0Index].TryGetName(Argument0Key))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible value."));
+            }
+            FString Argument0MappedValuePath;
+            if (!Argument0Values[Argument0Index + 1].TryGetString(Argument0MappedValuePath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible soft path."));
+            }
+            TSoftObjectPtr<UObject> Argument0MappedValue{FSoftObjectPath(Argument0MappedValuePath)};
+            Argument0.Add(MoveTemp(Argument0Key), MoveTemp(Argument0MappedValue));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> Argument1 = {};
+        TConstArrayView<FUnifiedScriptValue> Argument2Values;
+        if (!Arguments[1].TryGetMap(0x5DC57E5D000BDB26ull, Argument2Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible container value."));
+        }
+        TMap<FName,TSoftObjectPtr<UObject>> Argument2;
+        Argument2.Reserve(Argument2Values.Num() / 2);
+        for (int32 Argument2Index = 0; Argument2Index < Argument2Values.Num(); Argument2Index += 2)
+        {
+            FName Argument2Key = {};
+            if (!Argument2Values[Argument2Index].TryGetName(Argument2Key))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible value."));
+            }
+            FString Argument2MappedValuePath;
+            if (!Argument2Values[Argument2Index + 1].TryGetString(Argument2MappedValuePath))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap' received an incompatible soft path."));
+            }
+            TSoftObjectPtr<UObject> Argument2MappedValue{FSoftObjectPath(Argument2MappedValuePath)};
+            Argument2.Add(MoveTemp(Argument2Key), MoveTemp(Argument2MappedValue));
+        }
+        bool ReturnValue = TypedTarget->MutateSoftObjectMap(Argument0, Argument1, Argument2);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        TArray<FUnifiedScriptValue> EncodedOutput0Cells;
+        EncodedOutput0Cells.Reserve(Argument1.Num() * 2);
+        for (const auto& EncodedOutput0Entry : Argument1)
+        {
+            FUnifiedScriptValue EncodedKey;
+            EncodedKey = FUnifiedScriptValue::FromName(EncodedOutput0Entry.Key);
+            FUnifiedScriptValue EncodedMappedValue;
+            EncodedMappedValue = FUnifiedScriptValue::FromString(EncodedOutput0Entry.Value.ToSoftObjectPath().ToString());
+            EncodedOutput0Cells.Add(MoveTemp(EncodedKey));
+            EncodedOutput0Cells.Add(MoveTemp(EncodedMappedValue));
+        }
+        EncodedOutput0 = FUnifiedScriptValue::FromMap(MoveTemp(EncodedOutput0Cells), 0x5DC57E5D000BDB26ull);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        FUnifiedScriptValue EncodedOutput1;
+        TArray<FUnifiedScriptValue> EncodedOutput1Cells;
+        EncodedOutput1Cells.Reserve(Argument2.Num() * 2);
+        for (const auto& EncodedOutput1Entry : Argument2)
+        {
+            FUnifiedScriptValue EncodedKey;
+            EncodedKey = FUnifiedScriptValue::FromName(EncodedOutput1Entry.Key);
+            FUnifiedScriptValue EncodedMappedValue;
+            EncodedMappedValue = FUnifiedScriptValue::FromString(EncodedOutput1Entry.Value.ToSoftObjectPath().ToString());
+            EncodedOutput1Cells.Add(MoveTemp(EncodedKey));
+            EncodedOutput1Cells.Add(MoveTemp(EncodedMappedValue));
+        }
+        EncodedOutput1 = FUnifiedScriptValue::FromMap(MoveTemp(EncodedOutput1Cells), 0x5DC57E5D000BDB26ull);
         OutOutputValues.Add(MoveTemp(EncodedOutput1));
         Succeed(OutResult);
         return true;
@@ -6175,6 +7190,7 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
 }
 #include "UnifiedScriptNativeObjectValues.h"
 #include "Engine/HitResult.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/Interface.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptCallbackService.h"

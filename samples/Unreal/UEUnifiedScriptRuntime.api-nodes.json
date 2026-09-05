@@ -2822,6 +2822,199 @@
       "nodes": []
     },
     {
+      "path": "/Script/Engine.GameplayStatics",
+      "name": "GameplayStatics",
+      "managedTypeName": "GameplayStatics",
+      "category": "Unreal API|GameplayStatics",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
+          "name": "GetAllActorsOfClass",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ActorClass",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CAActor\u003E",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutActors",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get All Actors Of Class",
+            "category": "Actor",
+            "tooltip": "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|GameplayStatics|GetAllActorsOfClass",
+          "memberPath": "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
+          "memberId": "0x373F7E65F4E2E77B",
+          "kind": "function",
+          "title": "Get All Actors Of Class",
+          "category": "Actor",
+          "tooltip": "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ActorClass",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CAActor\u003E",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutActors",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "WorldContextObject",
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
       "path": "/Script/Engine.HitResult",
       "name": "HitResult",
       "managedTypeName": "HitResult",
@@ -10161,6 +10354,76 @@
       "category": "Unreal API|UnifiedScriptInteropFixture",
       "properties": [
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue",
+          "name": "ActorArrayValue",
+          "type": {
+            "kind": "array",
+            "nativeName": "TArray\u003CAActor*\u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "object",
+              "nativeName": "AActor*",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Actor Array Value",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue",
+          "name": "ActorClassSetValue",
+          "type": {
+            "kind": "set",
+            "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "class",
+              "nativeName": "TSubclassOf\u003CAActor\u003E",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Actor Class Set Value",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue",
           "name": "ByteValue",
           "type": {
@@ -10571,6 +10834,41 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue",
+          "name": "SoftClassArrayValue",
+          "type": {
+            "kind": "array",
+            "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "softClass",
+              "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Soft Class Array Value",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
           "name": "SoftClassValue",
           "type": {
@@ -10591,6 +10889,49 @@
           "metadata": {
             "displayName": "Soft Class Value",
             "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue",
+          "name": "SoftObjectMapValue",
+          "type": {
+            "kind": "map",
+            "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+            "typePath": null,
+            "elementType": null,
+            "keyType": {
+              "kind": "name",
+              "nativeName": "FName",
+              "typePath": null,
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": null
+            },
+            "valueType": {
+              "kind": "softObject",
+              "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+              "typePath": "/Script/CoreUObject.Object",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "UObject/Object.h"
+            },
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Soft Object Map Value",
+            "category": "UnifiedScript|Interop|References",
             "tooltip": null,
             "deprecated": false,
             "deprecationMessage": null,
@@ -11014,6 +11355,124 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorArray",
+          "name": "EchoActorArray",
+          "returnType": {
+            "kind": "array",
+            "nativeName": "TArray\u003CAActor*\u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "object",
+              "nativeName": "AActor*",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Values",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Actor Array",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Echo Actor Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorClassSet",
+          "name": "EchoActorClassSet",
+          "returnType": {
+            "kind": "set",
+            "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "class",
+              "nativeName": "TSubclassOf\u003CAActor\u003E",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Values",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Actor Class Set",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Echo Actor Class Set",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray",
           "name": "EchoArray",
           "returnType": {
@@ -11330,6 +11789,140 @@
             "displayName": "Echo Set",
             "category": "UnifiedScript|Interop",
             "tooltip": "Echo Set",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray",
+          "name": "EchoSoftClassArray",
+          "returnType": {
+            "kind": "array",
+            "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+            "typePath": null,
+            "elementType": {
+              "kind": "softClass",
+              "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+              "typePath": "/Script/Engine.Actor",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "GameFramework/Actor.h"
+            },
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Values",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Soft Class Array",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Echo Soft Class Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap",
+          "name": "EchoSoftObjectMap",
+          "returnType": {
+            "kind": "map",
+            "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+            "typePath": null,
+            "elementType": null,
+            "keyType": {
+              "kind": "name",
+              "nativeName": "FName",
+              "typePath": null,
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": null
+            },
+            "valueType": {
+              "kind": "softObject",
+              "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+              "typePath": "/Script/CoreUObject.Object",
+              "elementType": null,
+              "keyType": null,
+              "valueType": null,
+              "headerPath": "UObject/Object.h"
+            },
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Values",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Soft Object Map",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Echo Soft Object Map",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -11714,6 +12307,196 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray",
+          "name": "MutateActorArray",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Input",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutActors",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "inputOutput",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mutate Actor Array",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Mutate Actor Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses",
+          "name": "MutateActorClasses",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Input",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutClasses",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "inputOutput",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mutate Actor Classes",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Mutate Actor Classes",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
           "name": "MutateInterfaces",
           "returnType": {
@@ -11779,6 +12562,220 @@
             "displayName": "Mutate Interfaces",
             "category": "UnifiedScript|Interop",
             "tooltip": "Mutate Interfaces",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray",
+          "name": "MutateSoftClassArray",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Input",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutPaths",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "inputOutput",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mutate Soft Class Array",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Mutate Soft Class Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap",
+          "name": "MutateSoftObjectMap",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Input",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutPaths",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "direction": "inputOutput",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mutate Soft Object Map",
+            "category": "UnifiedScript|Interop|References",
+            "tooltip": "Mutate Soft Object Map",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -12464,6 +13461,168 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.call|UnifiedScriptInteropFixture|EchoActorArray",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorArray",
+          "memberId": "0x04EF4FF882F496CB",
+          "kind": "function",
+          "title": "Echo Actor Array",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Echo Actor Array",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|EchoActorClassSet",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoActorClassSet",
+          "memberId": "0xED1AD3103C4B107A",
+          "kind": "function",
+          "title": "Echo Actor Class Set",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Echo Actor Class Set",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoArray",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray",
           "memberId": "0x6DB8F58355D32AD6",
@@ -12903,6 +14062,184 @@
                 },
                 "keyType": null,
                 "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|EchoSoftClassArray",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftClassArray",
+          "memberId": "0xD74DD0BE8AF086FC",
+          "kind": "function",
+          "title": "Echo Soft Class Array",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Echo Soft Class Array",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|EchoSoftObjectMap",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSoftObjectMap",
+          "memberId": "0x8E8E5029359E6244",
+          "kind": "function",
+          "title": "Echo Soft Object Map",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Echo Soft Object Map",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Values",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
                 "headerPath": null
               },
               "defaultValue": null
@@ -13456,6 +14793,290 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.call|UnifiedScriptInteropFixture|MutateActorArray",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorArray",
+          "memberId": "0x79BE864F04274744",
+          "kind": "function",
+          "title": "Mutate Actor Array",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Mutate Actor Array",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutActors",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|MutateActorClasses",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateActorClasses",
+          "memberId": "0xD0E07FB3F17BDA95",
+          "kind": "function",
+          "title": "Mutate Actor Classes",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Mutate Actor Classes",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutClasses",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.call|UnifiedScriptInteropFixture|MutateInterfaces",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
           "memberId": "0x977B08F052F6DF52",
@@ -13537,6 +15158,322 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UnifiedScriptInteropFixture.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|MutateSoftClassArray",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftClassArray",
+          "memberId": "0xB166A4BDBAA32B6B",
+          "kind": "function",
+          "title": "Mutate Soft Class Array",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Mutate Soft Class Array",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutPaths",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|MutateSoftObjectMap",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateSoftObjectMap",
+          "memberId": "0x88197E19BE988DCD",
+          "kind": "function",
+          "title": "Mutate Soft Object Map",
+          "category": "UnifiedScript|Interop|References",
+          "tooltip": "Mutate Soft Object Map",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutPaths",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Accumulator",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
               },
               "defaultValue": null
             },
@@ -13938,6 +15875,122 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|UnifiedScriptInteropFixture|ActorArrayValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue",
+          "memberId": "0x210E5BDFBD8D1B8F",
+          "kind": "propertyRead",
+          "title": "Actor Array Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.ActorArrayValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|UnifiedScriptInteropFixture|ActorClassSetValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue",
+          "memberId": "0xD7204A68E5EB37E2",
+          "kind": "propertyRead",
+          "title": "Actor Class Set Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.ActorClassSetValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
               },
               "defaultValue": null
             }
@@ -14684,6 +16737,64 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.get|UnifiedScriptInteropFixture|SoftClassArrayValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue",
+          "memberId": "0xF55059444E9F7B7E",
+          "kind": "propertyRead",
+          "title": "Soft Class Array Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.SoftClassArrayValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.get|UnifiedScriptInteropFixture|SoftClassValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
           "memberId": "0xC3274F8A399CE7F5",
@@ -14720,6 +16831,72 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|UnifiedScriptInteropFixture|SoftObjectMapValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue",
+          "memberId": "0x3B90026A347A8570",
+          "kind": "propertyRead",
+          "title": "Soft Object Map Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.SoftObjectMapValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
               },
               "defaultValue": null
             }
@@ -14971,6 +17148,150 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|ActorArrayValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorArrayValue",
+          "memberId": "0x210E5BDFBD8D1B8F",
+          "kind": "propertyWrite",
+          "title": "Set Actor Array Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.ActorArrayValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CAActor*\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "object",
+                  "nativeName": "AActor*",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|ActorClassSetValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ActorClassSetValue",
+          "memberId": "0xD7204A68E5EB37E2",
+          "kind": "propertyWrite",
+          "title": "Set Actor Class Set Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.ActorClassSetValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "set",
+                "nativeName": "TSet\u003CTSubclassOf\u003CAActor\u003E\u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "class",
+                  "nativeName": "TSubclassOf\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
               "defaultValue": null
             }
           ],
@@ -15912,6 +18233,78 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.set|UnifiedScriptInteropFixture|SoftClassArrayValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassArrayValue",
+          "memberId": "0xF55059444E9F7B7E",
+          "kind": "propertyWrite",
+          "title": "Set Soft Class Array Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.SoftClassArrayValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "array",
+                "nativeName": "TArray\u003CTSoftClassPtr\u003CAActor\u003E \u003E",
+                "typePath": null,
+                "elementType": {
+                  "kind": "softClass",
+                  "nativeName": "TSoftClassPtr\u003CAActor\u003E",
+                  "typePath": "/Script/Engine.Actor",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "GameFramework/Actor.h"
+                },
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.set|UnifiedScriptInteropFixture|SoftClassValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
           "memberId": "0xC3274F8A399CE7F5",
@@ -15955,6 +18348,86 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|SoftObjectMapValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectMapValue",
+          "memberId": "0x3B90026A347A8570",
+          "kind": "propertyWrite",
+          "title": "Set Soft Object Map Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.SoftObjectMapValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "map",
+                "nativeName": "TMap\u003CFName,TSoftObjectPtr\u003CUObject\u003E\u003E",
+                "typePath": null,
+                "elementType": null,
+                "keyType": {
+                  "kind": "name",
+                  "nativeName": "FName",
+                  "typePath": null,
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": null
+                },
+                "valueType": {
+                  "kind": "softObject",
+                  "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                  "typePath": "/Script/CoreUObject.Object",
+                  "elementType": null,
+                  "keyType": null,
+                  "valueType": null,
+                  "headerPath": "UObject/Object.h"
+                },
+                "headerPath": null
               },
               "defaultValue": null
             },

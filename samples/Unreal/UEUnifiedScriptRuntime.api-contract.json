@@ -115,6 +115,10 @@
         "CountSet",
         "DoubleValue",
         "EchoArray",
+        "EchoActorArray",
+        "EchoActorClassSet",
+        "EchoSoftObjectMap",
+        "EchoSoftClassArray",
         "EchoClass",
         "EchoInterface",
         "EchoMap",
@@ -131,11 +135,19 @@
         "Int64Value",
         "IntArrayValue",
         "IntMapValue",
+        "ActorArrayValue",
+        "ActorClassSetValue",
+        "SoftObjectMapValue",
+        "SoftClassArrayValue",
         "IntSetValue",
         "InterfaceValue",
         "MakeArray",
         "Mode",
         "MutateInterfaces",
+        "MutateActorArray",
+        "MutateActorClasses",
+        "MutateSoftObjectMap",
+        "MutateSoftClassArray",
         "MutateValues",
         "NameValue",
         "ObjectValue",
@@ -151,6 +163,10 @@
         "TransformValue",
         "VectorValue"
       ]
+    },
+    {
+      "path": "/Script/Engine.GameplayStatics",
+      "members": ["GetAllActorsOfClass"]
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",

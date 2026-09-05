@@ -18,6 +18,62 @@ selected UClass reflection
 This prevents managed code, the native dispatcher, and the visual palette from
 silently exposing different Unreal members.
 
+## Typed reference containers
+
+Generated reference collections use `IReadOnlyList<T>`, `IReadOnlySet<T>` and
+`IReadOnlyDictionary<TKey, TValue>`. UObject, class and Soft Reference values use
+their existing managed handle types. The collection is a transferred snapshot;
+changing a managed collection does not mutate a native property until it is
+assigned or passed through a generated call. Supported `ref`/`out` calls publish
+their decoded output collections through the normal call-frame result path.
+
+For example, the selected engine API can return the Actors of a class directly
+to C#. Here `context.Target` belongs to the World being queried:
+
+```csharp
+var world = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+var gameplay = new GameplayStatics(context.Target, context.Bridge);
+UnrealClassHandle actorClass = world.LoadClassByPath(
+    context.Target, "/Script/Engine.StaticMeshActor");
+gameplay.GetAllActorsOfClass(context.Target, actorClass,
+    out IReadOnlyList<UnrealObjectHandle> actors);
+```
+
+Container transport identity describes the managed value representation. The
+exact declared Unreal type remains in reflection, the selected Contract, node
+pins and generated C++ storage:
+
+| Declared element family | Transport name used inside a container |
+| --- | --- |
+| UObject references, including `AActor*` and `TObjectPtr<AActor>` | `UObject*` |
+| Class references, including `TSubclassOf<AActor>` | `UClass*` |
+| `TSoftObjectPtr<T>` | `FSoftObjectPath` |
+| `TSoftClassPtr<T>` | `FSoftClassPath` |
+
+Array, Set and Map identities apply this mapping to their element/key/value
+types. For example, a declared `TArray<AActor*>` and an
+`IReadOnlyList<UnrealObjectHandle>` use the same `TArray<UObject*>` transport ID.
+This agrees with the managed codec and the native Blueprint function codec.
+The generated decoder still resolves each non-null object in its World and
+checks the declared object or class constraint before committing a property
+write or invoking native code. An invalid element does not publish a partial
+replacement collection. Soft References remain paths; transport does not load
+an asset to resolve or validate its runtime class.
+
+ABI tags, layouts and member IDs are unchanged, as are existing primitive
+container identities. Previously generated thunks for typed reference
+containers must be regenerated with the selected bindings: their old
+declared-type container IDs are not aliases for the canonical transport IDs.
+Interface containers remain outside this capability.
+
+The [reference collection example](../samples/Unreal/UnifiedScript.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
+combines the engine Actor query with generated Actor arrays, Actor-class sets,
+named Soft Object maps and Soft Class arrays. The focused CMD tests
+`UnifiedScript.Unreal.ReferenceContainers.GeneratedRoundTrip` and
+`UnifiedScript.Unreal.ReferenceContainers.ManagedRoundTrip` exercise native
+exchange and the CoreCLR startup/reload/World-cleanup path. The latter observes
+a newly spawned matching Actor after reload while excluding a plain Actor.
+
 ## Reflected interface references
 
 A reflected `TScriptInterface<I...>` value retains its exact UInterface path in
@@ -727,12 +783,12 @@ Functions with more than four parameters use the generic ABI v3 CallFrame
 path, including names and enums. Fixed signatures with zero to four parameters
 retain the specialized fast path.
 
-The current runtime product contract selects 103 members across seven generated
-types. It includes the World static-service surface and a supported 17-field
-`FHitResult` projection, producing 25 direct thunks, 76 CallFrame members, two
-safe delegate fallbacks, 101 native paths, and zero rejected members. Operations
-that suspend across frames use Async Service ABI v5 instead of pretending to be
-synchronous reflected calls.
+The checked-in runtime Contract includes World services, a supported `FHitResult`
+projection and the interop examples. Its generated
+[coverage report](../samples/Unreal/UEUnifiedScriptRuntime.binding-coverage.json)
+records the current selection and disposition of each member. Operations that
+suspend across frames use Async Service ABI v5 instead of synchronous reflected
+calls.
 
 ## BlockBreaker slice
 
