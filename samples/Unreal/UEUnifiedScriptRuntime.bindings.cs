@@ -120,6 +120,19 @@ public sealed partial class NativeCounterChild : global::UnifiedScript.Unreal.Un
     }
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Interface", Tooltip = "Interface")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/CoreUObject.Interface")]
+public sealed partial class Interface : global::UnifiedScript.Unreal.UnrealObject
+{
+    public Interface(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u547D\u4E2D\u7ED3\u679C", Tooltip = "\u5305\u542B\u68C0\u6D4B\u4E00\u4E2A\u547D\u4E2D\u4FE1\u606F\u7684\u7ED3\u6784\uFF0C\u5982\u5F71\u54CD\u7684\u4E00\u4E2A\u70B9\u548C\u6B64\u70B9\u4E0A\u7684\u8868\u9762\u6CD5\u7EBF\u3002")]
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
 [global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]
@@ -605,6 +618,13 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
         set => WriteProperty(0x5D8F4F14AD4EBB78UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Interface Value", Category = "UnifiedScript|Interop")]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle InterfaceValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealObjectHandle>(0xED96BAE6F2A3E05CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue");
+        set => WriteProperty(0xED96BAE6F2A3E05CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue", value);
+    }
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mode", Category = "UnifiedScript|Interop")]
     public EUnifiedScriptInteropMode Mode
     {
@@ -723,6 +743,10 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     public global::UnifiedScript.Unreal.UnrealClassHandle EchoClass(global::UnifiedScript.Unreal.UnrealClassHandle value)
         => Invoke<global::UnifiedScript.Unreal.UnrealClassHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x56941DB0D2A9DCEFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoClass", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Interface", Category = "UnifiedScript|Interop", Tooltip = "Echo Interface")]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle EchoInterface(global::UnifiedScript.Unreal.UnrealObjectHandle value)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle>(0xEA2016071F0C9560UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface", value);
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Map", Category = "UnifiedScript|Interop", Tooltip = "Echo Map")]
     public global::System.Collections.Generic.IReadOnlyDictionary<int, int> EchoMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<int, int>, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xA01428000F098AC1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap", values);
@@ -762,6 +786,23 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Make Array", Category = "UnifiedScript|Interop", Tooltip = "Make Array")]
     public global::System.Collections.Generic.IReadOnlyList<int> MakeArray(int count)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0x8A8BAE19690D9AB7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray", count);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Interfaces", Category = "UnifiedScript|Interop", Tooltip = "Mutate Interfaces")]
+    public bool MutateInterfaces(global::UnifiedScript.Unreal.UnrealObjectHandle input, out global::UnifiedScript.Unreal.UnrealObjectHandle outInterface, ref global::UnifiedScript.Unreal.UnrealObjectHandle accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x977B08F052F6DF52UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
+            typeof(bool),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outInterface = (global::UnifiedScript.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::UnifiedScript.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Values", Category = "UnifiedScript|Interop", Tooltip = "Mutate Values")]
     public bool MutateValues(int input, out int outDoubled, ref int accumulator)

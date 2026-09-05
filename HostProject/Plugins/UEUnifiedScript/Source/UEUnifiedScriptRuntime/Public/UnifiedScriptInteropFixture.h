@@ -107,6 +107,9 @@ public:
     TObjectPtr<UObject> ObjectValue = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
+    TScriptInterface<IUnifiedScriptInteropContract> InterfaceValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
     TObjectPtr<UClass> ClassValue = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
@@ -156,6 +159,10 @@ public:
     UObject* EchoObject(UObject* Value) const;
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
+    TScriptInterface<IUnifiedScriptInteropContract> EchoInterface(
+        TScriptInterface<IUnifiedScriptInteropContract> Value) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     UClass* EchoClass(UClass* Value) const;
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
@@ -184,6 +191,12 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
     bool MutateValues(int32 Input, int32& OutDoubled, UPARAM(ref) int32& Accumulator) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
+    bool MutateInterfaces(
+        TScriptInterface<IUnifiedScriptInteropContract> Input,
+        TScriptInterface<IUnifiedScriptInteropContract>& OutInterface,
+        UPARAM(ref) TScriptInterface<IUnifiedScriptInteropContract>& Accumulator) const;
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     int64 AddInt64(int64 Left, int64 Right) const;

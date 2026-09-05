@@ -8,10 +8,37 @@
 		"branch": "//UE5/Release-5.8"
 	},
 	"modules": [
+		"CoreUObject",
 		"Engine",
 		"UEUnifiedScriptRuntime"
 	],
 	"types": [
+		{
+			"path": "/Script/CoreUObject.Interface",
+			"name": "Interface",
+			"nativeName": "UInterface",
+			"module": "CoreUObject",
+			"headerPath": "UObject/Interface.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Object",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": false,
+				"interface": true
+			},
+			"metadata":
+			{
+				"displayName": "Interface",
+				"tooltip": "Interface",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
 		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
 			"name": "UnifiedScriptActor",
@@ -2322,6 +2349,30 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue",
+					"name": "InterfaceValue",
+					"type":
+					{
+						"kind": "interface",
+						"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+						"headerPath": "UnifiedScriptInteropFixture.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Interface Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue",
 					"name": "IntMapValue",
 					"type":
@@ -2967,6 +3018,44 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface",
+					"name": "EchoInterface",
+					"returnType":
+					{
+						"kind": "interface",
+						"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+						"headerPath": "UnifiedScriptInteropFixture.h"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "interface",
+								"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+								"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+								"headerPath": "UnifiedScriptInteropFixture.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Interface",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Interface",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap",
 					"name": "EchoMap",
 					"returnType":
@@ -3398,6 +3487,64 @@
 						"displayName": "Make Array",
 						"category": "UnifiedScript|Interop",
 						"tooltip": "Make Array",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
+					"name": "MutateInterfaces",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Input",
+							"type":
+							{
+								"kind": "interface",
+								"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+								"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+								"headerPath": "UnifiedScriptInteropFixture.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutInterface",
+							"type":
+							{
+								"kind": "interface",
+								"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+								"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+								"headerPath": "UnifiedScriptInteropFixture.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "Accumulator",
+							"type":
+							{
+								"kind": "interface",
+								"nativeName": "TScriptInterface<IUnifiedScriptInteropContract>",
+								"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+								"headerPath": "UnifiedScriptInteropFixture.h"
+							},
+							"direction": "inputOutput"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Mutate Interfaces",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Mutate Interfaces",
 						"deprecated": false
 					}
 				},

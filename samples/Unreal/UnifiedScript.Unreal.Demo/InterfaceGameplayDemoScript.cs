@@ -1,0 +1,78 @@
+using System;
+using UnifiedScript;
+using UnifiedScript.Unreal.Generated;
+
+namespace UnifiedScript.Unreal.Demo;
+
+[ScriptAsset("Unreal/InterfaceGameplay")]
+public sealed class InterfaceGameplayDemoScript : IUnrealManagedScript
+{
+    private IUnrealInvocationBridge _bridge = null!;
+    private UnifiedScriptInteropFixture _fixture = null!;
+    private UnifiedScriptInteropContract _selectedInterface = null!;
+
+    [Expose(InstanceEditable = true, SaveGame = true, Category = "Interop")]
+    public UnrealObjectHandle InterfaceTarget { get; set; } = default;
+
+    [Expose(Category = "Interop")]
+    public int LastInterfaceResult { get; private set; } = 0;
+
+    [Visual]
+    public int CallSelectedInterface(int value)
+    {
+        if (InterfaceTarget.IsNull)
+        {
+            return 0;
+        }
+
+        LastInterfaceResult = _selectedInterface.TransformManagedValue(value);
+        return LastInterfaceResult;
+    }
+
+    public void OnStart(UnrealScriptContext context)
+    {
+        _bridge = context.Bridge;
+        _fixture = new UnifiedScriptInteropFixture(context.Target, _bridge);
+
+        if (InterfaceTarget.IsNull)
+        {
+            InterfaceTarget = _fixture.InterfaceValue;
+        }
+
+        if (InterfaceTarget.IsNull)
+        {
+            LastInterfaceResult = 0;
+            return;
+        }
+
+        _selectedInterface = new(InterfaceTarget, _bridge);
+        UnrealObjectHandle echoed = _fixture.EchoInterface(InterfaceTarget);
+        UnrealObjectHandle accumulator = default;
+        bool mutated = _fixture.MutateInterfaces(echoed, out UnrealObjectHandle output, ref accumulator);
+        if (!mutated || output != echoed || accumulator != echoed)
+        {
+            InterfaceTarget = default;
+            LastInterfaceResult = 0;
+            return;
+        }
+
+        _fixture.InterfaceValue = output;
+        InterfaceTarget = _fixture.InterfaceValue;
+        _fixture.Int32Value = CallSelectedInterface(3);
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+        if (deltaSeconds < 0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        }
+    }
+
+    public void OnStop()
+    {
+        _fixture = null!;
+        _selectedInterface = null!;
+        _bridge = null!;
+    }
+}

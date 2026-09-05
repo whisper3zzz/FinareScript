@@ -396,7 +396,7 @@ public static class UnrealApiContractProjector
             .Concat(type.Delegates.SelectMany(static item => item.Parameters.Select(static parameter => parameter.Type)));
         foreach (UnrealTypeReference reference in references.SelectMany(EnumerateTypeReferences))
         {
-            if (reference.TypePath is not null && reference.Kind is UnrealValueKind.Struct or UnrealValueKind.Enum or UnrealValueKind.NativeObject)
+            if (reference.TypePath is not null && reference.Kind is UnrealValueKind.Struct or UnrealValueKind.Enum or UnrealValueKind.NativeObject or UnrealValueKind.Interface)
             {
                 yield return reference.TypePath;
             }

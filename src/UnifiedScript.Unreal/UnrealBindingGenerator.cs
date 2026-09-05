@@ -191,19 +191,23 @@ public sealed class UnrealBindingGenerator
             }
 
             string? returnType = GetManagedType(reflectedDelegate.ReturnType, managedTypeNames);
+            bool unsupportedReturn = ContainsInterfaceValue(reflectedDelegate.ReturnType);
             string? unsupportedParameter = reflectedDelegate.Parameters
-                .FirstOrDefault(parameter => GetManagedType(parameter.Type, managedTypeNames) is null)
+                .FirstOrDefault(parameter => ContainsInterfaceValue(parameter.Type) ||
+                    GetManagedType(parameter.Type, managedTypeNames) is null)
                 ?.Name;
             string? outputParameter = reflectedDelegate.Parameters
                 .FirstOrDefault(parameter =>
                     parameter.Direction != UnrealParameterDirection.Input)
                 ?.Name;
-            if (returnType is null || unsupportedParameter is not null || outputParameter is not null)
+            if (returnType is null || unsupportedReturn || unsupportedParameter is not null || outputParameter is not null)
             {
                 diagnostics.Add(new UnrealBindingDiagnostic(
                     "USUE2007",
                     outputParameter is not null
                         ? $"Delegate parameter '{outputParameter}' is not input-only; reverse output propagation is not supported by event ABI v4."
+                        : unsupportedReturn
+                        ? $"Delegate return type '{reflectedDelegate.ReturnType.NativeName}' contains an interface value, which event ABI v4 does not support."
                         : unsupportedParameter is null
                         ? $"Delegate return type '{reflectedDelegate.ReturnType.NativeName}' is not supported by binding v0.2."
                         : $"Delegate parameter '{unsupportedParameter}' has a type not supported by binding v0.2.",
@@ -639,7 +643,7 @@ public sealed class UnrealBindingGenerator
                 $"new global::UnifiedScript.Unreal.UnrealSoftObjectHandle({Literal(value)})",
             UnrealValueKind.SoftClass =>
                 $"new global::UnifiedScript.Unreal.UnrealSoftClassHandle({Literal(value)})",
-            UnrealValueKind.Object or UnrealValueKind.Class when value is "None" or "null" => "default",
+            UnrealValueKind.Object or UnrealValueKind.Class or UnrealValueKind.Interface when value is "None" or "null" => "default",
             UnrealValueKind.Enum when parameter.Type.TypePath is not null &&
                 managedTypeNames.TryGetValue(parameter.Type.TypePath, out string? enumName) &&
                 long.TryParse(value,
@@ -773,10 +777,14 @@ public sealed class UnrealBindingGenerator
             UnrealValueKind.ByteBuffer => "global::UnifiedScript.Unreal.UnrealByteBuffer",
             UnrealValueKind.Callback when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? callbackName) &&
                 type.CallbackSignature is { } signature &&
+                !ContainsInterfaceValue(signature.ReturnType) &&
+                signature.Parameters.All(parameter => !ContainsInterfaceValue(parameter.Type)) &&
                 signature.Parameters.Select(p => p.Type).Append(signature.ReturnType).All(t =>
                     t.Kind is not (UnrealValueKind.NativeObject or UnrealValueKind.InvocationContext) && GetManagedType(t, managedTypeNames) is not null) =>
                 $"global::UnifiedScript.Unreal.UnrealCallback<{callbackName}>",
             UnrealValueKind.Object =>
+                "global::UnifiedScript.Unreal.UnrealObjectHandle",
+            UnrealValueKind.Interface =>
                 "global::UnifiedScript.Unreal.UnrealObjectHandle",
             UnrealValueKind.NativeObject when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? nativeName) => nativeName,
             UnrealValueKind.Class =>
@@ -796,12 +804,13 @@ public sealed class UnrealBindingGenerator
                 "global::UnifiedScript.Unreal.UnrealTransform",
             UnrealValueKind.Struct when type.TypePath is not null &&
                 managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
-            UnrealValueKind.Array when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+            UnrealValueKind.Array when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames) is string element =>
                 $"global::System.Collections.Generic.IReadOnlyList<{element}>",
-            UnrealValueKind.Set when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+            UnrealValueKind.Set when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames) is string element =>
                 $"global::System.Collections.Generic.IReadOnlySet<{element}>",
             UnrealValueKind.Map
-                when GetManagedType(type.KeyType!, managedTypeNames) is string key &&
+                when !ContainsInterfaceValue(type) &&
+                     GetManagedType(type.KeyType!, managedTypeNames) is string key &&
                      GetManagedType(type.ValueType!, managedTypeNames) is string value =>
                 $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
             _ => null,
@@ -824,6 +833,15 @@ public sealed class UnrealBindingGenerator
 
     private static string TrimNativeStructPrefix(string nativeName) =>
         nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName;
+
+    private static bool ContainsInterfaceValue(UnrealTypeReference type) =>
+        type.Kind == UnrealValueKind.Interface ||
+        type.ElementType is not null && ContainsInterfaceValue(type.ElementType) ||
+        type.KeyType is not null && ContainsInterfaceValue(type.KeyType) ||
+        type.ValueType is not null && ContainsInterfaceValue(type.ValueType) ||
+        type.CallbackSignature is { } signature &&
+            (ContainsInterfaceValue(signature.ReturnType) ||
+             signature.Parameters.Any(parameter => ContainsInterfaceValue(parameter.Type)));
 
     private static string MakeUniqueTypeName(string candidate, string path, ISet<string> used) =>
         used.Add(candidate) ? candidate : AddStableSuffix(candidate, path, used);

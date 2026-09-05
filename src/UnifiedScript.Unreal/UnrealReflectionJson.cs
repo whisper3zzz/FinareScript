@@ -310,6 +310,11 @@ public static class UnrealReflectionJson
                 when hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
                     !hasElement && !hasKey && !hasValue:
                 return;
+            case UnrealValueKind.Interface
+                when hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
+                    !hasElement && !hasKey && !hasValue &&
+                    IsScriptInterfaceNativeName(type.NativeName):
+                return;
             case UnrealValueKind.ByteBuffer when depth > 0:
                 throw new JsonException($"Unreal {context}: ByteBuffer is supported as a direct member or parameter, not a container element/key/value.");
             case UnrealValueKind.ByteBuffer when !hasTypePath && !hasElement && !hasKey && !hasValue &&
@@ -396,6 +401,12 @@ public static class UnrealReflectionJson
         !string.IsNullOrWhiteSpace(value) &&
         (char.IsLetter(value[0]) || value[0] == '_') &&
         value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+
+    private static bool IsScriptInterfaceNativeName(string value) =>
+        value.StartsWith("TScriptInterface<I", StringComparison.Ordinal) &&
+        value.EndsWith('>') &&
+        value.Length > "TScriptInterface<I>".Length &&
+        IsIdentifier(value["TScriptInterface<".Length..^1]);
 
     private static bool IsReflectedObjectPath(string path) =>
         path.StartsWith("/", StringComparison.Ordinal) &&

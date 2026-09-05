@@ -114,6 +114,10 @@ bool FUnifiedScriptInvocationBridgePrimitivesTest::RunTest(const FString& Parame
         const FUnifiedScriptObjectHandle InteropHandle =
             Registry.RegisterObject(Interop, HandleResult);
         TestTrue(TEXT("Common-type fixture registration succeeds"), HandleResult.IsSuccess());
+        UUnifiedScriptInteropFixture* InterfaceCandidate = NewObject<UUnifiedScriptInteropFixture>(World);
+        const FUnifiedScriptObjectHandle InterfaceCandidateHandle =
+            Registry.RegisterObject(InterfaceCandidate, HandleResult);
+        TestTrue(TEXT("Native interface candidate registration succeeds"), HandleResult.IsSuccess());
 
         constexpr uint64 VectorValueId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue");
@@ -125,6 +129,138 @@ bool FUnifiedScriptInvocationBridgePrimitivesTest::RunTest(const FString& Parame
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector");
         constexpr uint64 EchoTransformId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform");
+        constexpr uint64 InterfaceValueId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue");
+        constexpr uint64 EchoInterfaceId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface");
+        constexpr uint64 MutateInterfacesId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces");
+        static const FString InterfaceValuePath =
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue");
+        static const FString EchoInterfacePath =
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface");
+
+        TestTrue(
+            TEXT("Null interface property read succeeds"),
+            Bridge.ReadPropertyById(InteropHandle, InterfaceValueId, Value, Result));
+        FUnifiedScriptObjectHandle DecodedInterfaceHandle;
+        TestTrue(
+            TEXT("Null interface property uses the object ABI kind"),
+            Value.TryGetObjectHandle(DecodedInterfaceHandle) && DecodedInterfaceHandle.IsNull());
+
+        const FUnifiedScriptValue InterfaceValue =
+            FUnifiedScriptValue::FromObjectHandle(InterfaceCandidateHandle);
+        TestTrue(
+            TEXT("Interface property write succeeds"),
+            Bridge.WriteProperty(InteropHandle, InterfaceValuePath, InterfaceValue, Result));
+        TestTrue(
+            TEXT("Interface property write preserves its object identity"),
+            Interop->InterfaceValue.GetObject() == InterfaceCandidate);
+        TestTrue(
+            TEXT("Interface property read returns its object handle"),
+            Bridge.ReadProperty(InteropHandle, InterfaceValuePath, Value, Result) &&
+                Value.TryGetObjectHandle(DecodedInterfaceHandle) &&
+                DecodedInterfaceHandle == InterfaceCandidateHandle);
+
+        const TArray<FUnifiedScriptValue> EchoInterfaceArguments = {InterfaceValue};
+        TestTrue(
+            TEXT("Scalar interface return invocation succeeds"),
+            Bridge.Invoke(InteropHandle, EchoInterfacePath, EchoInterfaceArguments, Value, Result));
+        TestTrue(
+            TEXT("Scalar interface return uses the object ABI kind"),
+            Value.TryGetObjectHandle(DecodedInterfaceHandle) &&
+                DecodedInterfaceHandle == InterfaceCandidateHandle);
+
+        const FString InterfaceConcreteOnlyPath =
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract:VectorValue");
+        const TConstArrayView<FUnifiedScriptValue> NoInterfaceArguments;
+        TestFalse(
+            TEXT("Interface fallback rejects members absent from the interface declaration"),
+            Bridge.Invoke(InteropHandle, InterfaceConcreteOnlyPath, NoInterfaceArguments, Value, Result));
+        TestTrue(
+            TEXT("Interface fallback reports an invalid interface member"),
+            Result.Error == EUnifiedScriptInvocationError::InvalidMemberPath);
+
+        const TArray<FUnifiedScriptValue> MutateInterfaceArguments = {InterfaceValue, InterfaceValue};
+        TArray<FUnifiedScriptValue> MutateInterfaceOutputs;
+        TestTrue(
+            TEXT("Interface ref/out invocation succeeds"),
+            Bridge.InvokeById(
+                InteropHandle,
+                MutateInterfacesId,
+                MutateInterfaceArguments,
+                Value,
+                MutateInterfaceOutputs,
+                Result));
+        bool bMutated = false;
+        TestTrue(TEXT("Interface ref/out return decodes"), Value.TryGetBoolean(bMutated) && bMutated);
+        TestEqual(TEXT("Interface ref/out returns both output cells"), MutateInterfaceOutputs.Num(), 2);
+        FUnifiedScriptObjectHandle OutInterfaceHandle;
+        FUnifiedScriptObjectHandle AccumulatorHandle;
+        TestTrue(
+            TEXT("Interface out value preserves its object identity"),
+            MutateInterfaceOutputs.Num() == 2 &&
+                MutateInterfaceOutputs[0].TryGetObjectHandle(OutInterfaceHandle) &&
+                OutInterfaceHandle == InterfaceCandidateHandle);
+        TestTrue(
+            TEXT("Interface ref value preserves its object identity"),
+            MutateInterfaceOutputs.Num() == 2 &&
+                MutateInterfaceOutputs[1].TryGetObjectHandle(AccumulatorHandle) &&
+                AccumulatorHandle == InterfaceCandidateHandle);
+
+        TestTrue(
+            TEXT("Interface property can be explicitly cleared"),
+            Bridge.WritePropertyById(
+                InteropHandle,
+                InterfaceValueId,
+                FUnifiedScriptValue::FromObjectHandle({}),
+                Result) &&
+                Interop->InterfaceValue.GetObject() == nullptr);
+        TestTrue(
+            TEXT("Interface property can be assigned again after null"),
+            Bridge.WritePropertyById(InteropHandle, InterfaceValueId, InterfaceValue, Result) &&
+                Interop->InterfaceValue.GetObject() == InterfaceCandidate);
+
+        UUnifiedScriptComponent* NonImplementer = NewObject<UUnifiedScriptComponent>(World);
+        const FUnifiedScriptObjectHandle NonImplementerHandle =
+            Registry.RegisterObject(NonImplementer, HandleResult);
+        TestTrue(TEXT("Non-implementer registration succeeds"), HandleResult.IsSuccess());
+        TestFalse(
+            TEXT("Non-implementer interface write is rejected"),
+            Bridge.WritePropertyById(
+                InteropHandle,
+                InterfaceValueId,
+                FUnifiedScriptValue::FromObjectHandle(NonImplementerHandle),
+                Result));
+        TestTrue(
+            TEXT("Non-implementer rejection preserves the interface property"),
+            Result.Error == EUnifiedScriptInvocationError::ValueTypeMismatch &&
+                Interop->InterfaceValue.GetObject() == InterfaceCandidate);
+
+        UWorld* OtherWorld = UWorld::CreateWorld(EWorldType::Game, false);
+        TestNotNull(TEXT("Wrong-world fixture world exists"), OtherWorld);
+        if (OtherWorld != nullptr)
+        {
+            OtherWorld->AddToRoot();
+            FUnifiedScriptObjectRegistry OtherRegistry(OtherWorld);
+            UUnifiedScriptInteropFixture* OtherInterop = NewObject<UUnifiedScriptInteropFixture>(OtherWorld);
+            const FUnifiedScriptObjectHandle OtherHandle =
+                OtherRegistry.RegisterObject(OtherInterop, HandleResult);
+            TestTrue(TEXT("Wrong-world fixture registration succeeds"), HandleResult.IsSuccess());
+            TestFalse(
+                TEXT("Wrong-world interface write is rejected"),
+                Bridge.WritePropertyById(
+                    InteropHandle,
+                    InterfaceValueId,
+                    FUnifiedScriptValue::FromObjectHandle(OtherHandle),
+                    Result));
+            TestTrue(
+                TEXT("Wrong-world rejection preserves the interface property"),
+                Result.Error == EUnifiedScriptInvocationError::ObjectHandleFailure &&
+                    Interop->InterfaceValue.GetObject() == InterfaceCandidate);
+            OtherWorld->RemoveFromRoot();
+            OtherWorld->DestroyWorld(false);
+        }
 
         TestTrue(
             TEXT("Generated FVector read succeeds"),
@@ -240,6 +376,25 @@ bool FUnifiedScriptInvocationBridgePrimitivesTest::RunTest(const FString& Parame
             TEXT("Stale handle failure preserves the lifecycle category"),
             Result.Error == EUnifiedScriptInvocationError::ObjectHandleFailure &&
                 Result.HandleError == EUnifiedScriptObjectHandleError::StaleHandle);
+
+        UUnifiedScriptInteropFixture* StaleCandidate = NewObject<UUnifiedScriptInteropFixture>(World);
+        const FUnifiedScriptObjectHandle StaleCandidateHandle =
+            Registry.RegisterObject(StaleCandidate, HandleResult);
+        TestTrue(TEXT("Stale interface candidate registration succeeds"), HandleResult.IsSuccess());
+        TestTrue(
+            TEXT("Stale interface candidate release succeeds"),
+            Registry.ReleaseObject(StaleCandidateHandle, HandleResult));
+        TestFalse(
+            TEXT("Stale interface value handle cannot write a property"),
+            Bridge.WritePropertyById(
+                InteropHandle,
+                InterfaceValueId,
+                FUnifiedScriptValue::FromObjectHandle(StaleCandidateHandle),
+                Result));
+        TestTrue(
+            TEXT("Stale interface value write preserves the native property"),
+            Result.Error == EUnifiedScriptInvocationError::ObjectHandleFailure &&
+                Interop->InterfaceValue.GetObject() == InterfaceCandidate);
     }
 
     World->RemoveFromRoot();

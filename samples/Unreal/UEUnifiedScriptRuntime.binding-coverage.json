@@ -7,14 +7,14 @@
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
-    "typeCount": 11,
-    "memberCount": 151,
+    "typeCount": 12,
+    "memberCount": 154,
     "directThunkCount": 57,
-    "callFrameCount": 91,
+    "callFrameCount": 94,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 148,
+    "nativeThunkCount": 151,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -865,6 +865,14 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
@@ -985,6 +993,14 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
@@ -996,6 +1012,14 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
       "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""

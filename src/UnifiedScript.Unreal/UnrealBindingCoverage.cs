@@ -133,6 +133,7 @@ public sealed record UnrealBindingCoverageReport(
                     property.Type,
                     function: null,
                     supportsReflectionFallback: type.Kind == UnrealReflectedTypeKind.Class &&
+                        !type.Traits.Interface &&
                         property.NativeExtension is null &&
                         SupportsReflectionType(property.Type, allowVoid: false),
                     property.NativeExtension is null ? "Safe reflection fallback cannot marshal this property type."
@@ -156,7 +157,8 @@ public sealed record UnrealBindingCoverageReport(
                     function.Path,
                     function.ReturnType,
                     function,
-                    function.NativeBinding is null && !hasOutputs && reflectionTypesSupported,
+                    function.NativeBinding is null && !type.Traits.Interface &&
+                        !hasOutputs && reflectionTypesSupported,
                     function.NativeBinding is not null ? "Native-only functions have no reflected fallback." : hasOutputs
                         ? "Safe reflection fallback cannot preserve output or reference parameters."
                         : "Safe reflection fallback cannot marshal one or more function value types.",
@@ -352,7 +354,7 @@ public sealed record UnrealBindingCoverageReport(
             UnrealValueKind.Int64 or UnrealValueKind.UInt64 or
             UnrealValueKind.Float32 or UnrealValueKind.Float64 or
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
-            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or
+            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or UnrealValueKind.Interface or
             UnrealValueKind.SoftObject or UnrealValueKind.SoftClass ||
         type.Kind == UnrealValueKind.Struct && type.TypePath is
             "/Script/CoreUObject.Vector" or

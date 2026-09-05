@@ -1,6 +1,6 @@
 # UnifiedScript product roadmap
 
-Last reviewed: **2026-09-04**
+Last reviewed: **2026-09-05**
 
 This document owns current priorities, capability boundaries, and delivery
 order. Detailed implementation logs and earlier acceptance results live in
@@ -25,11 +25,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — select the next common capability gap after
-  generated reflected callbacks**. Stay in M13.5; callback completion alone
-  does not establish the breadth target or start M13.3/M13.4.
-- Previous committed M13.5 checkpoint: **ordinary native object arguments**,
-  local commit `7d6e0c0`.
+- Current tranche: **M13.5 — typed reference containers**. Reproduce and close
+  the transport identity mismatch between managed handle collections and native
+  containers declared with specific UObject or Soft Reference element types.
+  Carry the selected Actor-reference use case through generated calls and a
+  gameplay example. Stay in M13.5; this does not start M13.3/M13.4.
+- Latest delivered M13.5 checkpoint: **reflected interface references**, following
+  the generated reflected callbacks checkpoint (`2827216`).
 - Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
 - Container/Soft Reference implementation checkpoint: `46f912d`; the full
   M13.3C-1c-b acceptance scope remains open.
@@ -112,6 +114,21 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Handler bodies remain C#-only; cooked callback execution, arbitrary native
   `std::function` and every signature combination are not claimed. Choose the
   next practical gap across families, not an exhaustive callback expansion.
+- Latest reflected-value checkpoint: **scalar `TScriptInterface` exchange**.
+  Properties and function input/return/ref/out preserve the implementing UObject
+  through World-local handles; generated interface calls use `Execute_` for both
+  native and Blueprint-only implementations. Discovery, selected contracts,
+  bindings and node pins retain the exact interface identity. The dedicated
+  [interface example](../samples/Unreal/UnifiedScript.Unreal.Demo/InterfaceGameplayDemoScript.cs)
+  exchanges the target, invokes its Blueprint implementation, reloads and cleans
+  up its World. Invalid type, stale and foreign-World arguments are rejected.
+  Managed tests passed (891 total), normal UE Editor compilation and the focused
+  InvocationBridge/Blueprint-only CMD Automation passed; regenerated outputs
+  match the checked-in artifacts. See the
+  [interface contract](UNREAL_API_CONTRACT.md#reflected-interface-references).
+  Interface containers, interface-bearing structs/callbacks, Blueprint-defined
+  interface types, Script Class interface state/defaults and cooked execution
+  remain outside this scalar batch.
 - Remaining workflow scope: installed-consumer authoring and live class-shape/
   default deployment are still open. The latest native test invokes the real
   coordinator, not a physical toolbar click; CMD/NullRHI does not establish visual
@@ -140,6 +157,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Daily workflow — M13.2 | Native create/open/build entrypoints, dependency-aware Play, compatible all-instance reload, unified diagnostics, IDE setup, one C#/Graph asset | Reviewed fixtures demonstrate the workflow; they are not proof that an arbitrary project is equally easy to use |
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
+| Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
 | Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns and qualified object inputs, typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Richer values, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
 | Binary payloads — M13.5 | Generated UObject-member properties, input/return/ref/out using contiguous bytes; owned snapshots, local borrow/slicing, bounded large calls and exact-once output retries, with a CoreCLR lifecycle example | Cross-language transfers copy; reflected state, nested buffers, ordinary-object buffer arguments, callbacks, zero-copy views and cooked/interactive acceptance remain open |
@@ -162,7 +180,7 @@ class integration and external-project validation. Do not restore numeric order
 just because M13.3 or M13.4 still has unfinished work.
 
 M13.5 stays active across multiple capability batches. Completing the reflected
-callback batch is a checkpoint within M13.5, not permission to switch to M13.3
+interface batch is a checkpoint within M13.5, not permission to switch to M13.3
 or M13.4. Their full scopes remain deferred until the breadth target below is
 met; only a concrete dependency of a selected common use case is pulled forward.
 
@@ -231,14 +249,23 @@ not an exhaustive signature audit or a claim of parity.
 
 | Capability family | Current UnifiedScript gap or next comparison | Owner |
 | --- | --- | --- |
-| Reflected API and value types | On-demand generation exists; audit common native/Blueprint member forms, references, defaults and discovery gaps beyond the existing fixtures | M13.1B / M13.3 / M13.5 |
-| Containers and Soft References | Generated Blueprint functions now have the initial native/managed exchange path; compare both call directions and common state shapes, then complete the missing paths needed by everyday code | M13.5; reuse M13.3C-1 work |
+| Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
+| Containers and Soft References | Generated Blueprint functions have the initial native/managed exchange path. Next common-use comparison: Puerts documents arrays of Actor references, while current managed handle containers infer `UObject*` identities and generated native containers retain their declared element type. Reproduce and close that typed-reference exchange gap; continue the existing function/state acceptance afterward | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Rich values, ref/out, retention/transfer, inheritance, callbacks and converters remain partial/missing; do not exhaust this family before expanding breadth | M13.5 |
 | Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters now support synchronous results/ref/out, native retention and generated UE reentry with a real worker-originated example. Installed-consumer authoring, broader latent/interface/subsystem gaps and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
+
+The selected interface use case is grounded in Puerts
+[`FInterfacePropertyTranslator`](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/unreal/Puerts/Source/JsEnv/Private/PropertyTranslator.cpp),
+reviewed on 2026-09-05. Its property conversion exposes the implementing UObject
+and reconstructs the script interface from that object. UnifiedScript now reuses
+its World-local object handles and validates the required interface before native
+mutation. This comparison guided the scalar value batch; it is not a matched
+Puerts runtime result or a requirement to complete all Script Class interface
+state, container or callback combinations in the same batch.
 
 For each family, distinguish **available for the reviewed scope**, **partial**,
 **missing**, **not yet audited**, and **intentional difference**. Before declaring

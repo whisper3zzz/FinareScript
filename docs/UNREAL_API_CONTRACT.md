@@ -18,6 +18,56 @@ selected UClass reflection
 This prevents managed code, the native dispatcher, and the visual palette from
 silently exposing different Unreal members.
 
+## Reflected interface references
+
+A reflected `TScriptInterface<I...>` value retains its exact UInterface path in
+the reflection manifest and generated API node signature. Its managed value is
+an `UnrealObjectHandle`, consistent with generated UObject parameters. Construct
+the generated interface wrapper around that handle to call its methods. The
+wrapper uses Unreal's generated `Execute_` route, which can reach both native
+implementations and Blueprint implementations of that native interface.
+
+For the checked-in interop fixture, `context.Target` is the fixture object and
+`target` is the implementing object's handle:
+
+```csharp
+var fixture = new UnifiedScriptInteropFixture(context.Target, context.Bridge);
+fixture.InterfaceValue = fixture.EchoInterface(target);
+UnrealObjectHandle selected = fixture.InterfaceValue;
+if (!selected.IsNull)
+{
+    var targetInterface = new UnifiedScriptInteropContract(selected, context.Bridge);
+    int result = targetInterface.TransformManagedValue(7);
+}
+```
+
+The [interface gameplay example](../samples/Unreal/UnifiedScript.Unreal.Demo/InterfaceGameplayDemoScript.cs)
+composes these generated bindings with `ref`/`out` exchange and a Visual method.
+
+The value represents the implementing UObject, not a C++ interface address.
+Before a generated property write or function call, native conversion resolves
+the handle in the current World and checks `ImplementsInterface`. A default
+handle is explicit null; a non-null stale, foreign-World or non-implementing
+object is rejected before the write or invocation. `ref`/`out` use the existing
+generated call-frame path and output publication rules. The object ABI tag and
+transport table layouts are unchanged.
+
+A Blueprint-only implementation may have no native interface pointer. Its
+UObject still crosses the bridge and can receive generated interface calls.
+The managed handle does not keep the target alive; native references such as
+the receiving `UPROPERTY` retain their ordinary Unreal GC semantics. Method
+calls still belong to the generation's bridge and become unavailable when that
+generation retires.
+
+Reflection fallback can marshal scalar interface properties and values on
+ordinary UObject functions. An interface method with only a native
+`_Implementation` requires its generated `Execute_` binding; the interface's
+declaration is not a safe `ProcessEvent` target. Interface containers, structs
+containing interface fields, callback signatures, Blueprint-defined interface
+types and Script Class interface state/default materialization are separate
+capability work. Do not infer their support from a generated scalar interface
+declaration.
+
 ## Reflected callback arguments
 
 A reflected `UFUNCTION` can accept a dynamic single-cast delegate whose body is

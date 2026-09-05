@@ -66,6 +66,12 @@ UObject* UUnifiedScriptInteropFixture::EchoObject(UObject* Value) const
     return Value;
 }
 
+TScriptInterface<IUnifiedScriptInteropContract> UUnifiedScriptInteropFixture::EchoInterface(
+    TScriptInterface<IUnifiedScriptInteropContract> Value) const
+{
+    return Value;
+}
+
 UClass* UUnifiedScriptInteropFixture::EchoClass(UClass* Value) const
 {
     return Value;
@@ -137,6 +143,16 @@ bool UUnifiedScriptInteropFixture::MutateValues(
     OutDoubled = Input * 2;
     Accumulator += Input;
     return true;
+}
+
+bool UUnifiedScriptInteropFixture::MutateInterfaces(
+    TScriptInterface<IUnifiedScriptInteropContract> Input,
+    TScriptInterface<IUnifiedScriptInteropContract>& OutInterface,
+    TScriptInterface<IUnifiedScriptInteropContract>& Accumulator) const
+{
+    OutInterface = Input;
+    Accumulator = Input;
+    return Input.GetObject() != nullptr;
 }
 
 int64 UUnifiedScriptInteropFixture::AddInt64(int64 Left, int64 Right) const

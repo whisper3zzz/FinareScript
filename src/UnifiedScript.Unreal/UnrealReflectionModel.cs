@@ -41,6 +41,7 @@ public enum UnrealValueKind
     InvocationContext,
     ByteBuffer,
     Callback,
+    Interface,
 }
 
 public sealed record UnrealBlueprintMetadata(

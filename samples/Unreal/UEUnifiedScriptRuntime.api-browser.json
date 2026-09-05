@@ -12,14 +12,14 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "b7f5b39ce9ab9735fd17794445ebe88ae5a9deb97998f99165ed80d4821300dd"
+    "inputSha256": "91172c75c27bad41c41d8662c22a86b6d8c221129702d414cc4c5bfea2e1b940"
   },
   "summary": {
-    "typeCount": 11,
-    "memberCount": 151,
-    "nodeCount": 167,
+    "typeCount": 12,
+    "memberCount": 154,
+    "nodeCount": 171,
     "directThunkCount": 57,
-    "callFrameCount": 91,
+    "callFrameCount": 94,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
@@ -1376,6 +1376,13 @@
           "diagnosticCodes": []
         }
       ]
+    },
+    {
+      "path": "/Script/CoreUObject.Interface",
+      "name": "Interface",
+      "managedTypeName": "Interface",
+      "category": "Unreal API|Interface",
+      "members": []
     },
     {
       "path": "/Script/Engine.HitResult",
@@ -5405,6 +5412,60 @@
           "diagnosticCodes": []
         },
         {
+          "id": "ue.call|UnifiedScriptInteropFixture|EchoInterface",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoInterface",
+          "memberId": "0xEA2016071F0C9560",
+          "kind": "function",
+          "title": "Echo Interface",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Interface",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoMap",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap",
           "memberId": "0xA01428000F098AC1",
@@ -5734,6 +5795,91 @@
                   "kind": "int32",
                   "nativeName": "int32"
                 }
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|MutateInterfaces",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateInterfaces",
+          "memberId": "0x977B08F052F6DF52",
+          "kind": "function",
+          "title": "Mutate Interfaces",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Mutate Interfaces",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+              }
+            },
+            {
+              "name": "Input",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            },
+            {
+              "name": "OutInterface",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            },
+            {
+              "name": "Accumulator",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            },
+            {
+              "name": "Accumulator",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
               }
             }
           ],
@@ -6669,6 +6815,49 @@
           "diagnosticCodes": []
         },
         {
+          "id": "ue.get|UnifiedScriptInteropFixture|InterfaceValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue",
+          "memberId": "0xED96BAE6F2A3E05C",
+          "kind": "propertyRead",
+          "title": "Interface Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.InterfaceValue.",
+          "pure": true,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
+              }
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
           "id": "ue.get|UnifiedScriptInteropFixture|Mode",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode",
           "memberId": "0x8B89BE30CF9161D7",
@@ -7305,6 +7494,59 @@
                   "kind": "int32",
                   "nativeName": "int32"
                 }
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|InterfaceValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:InterfaceValue",
+          "memberId": "0xED96BAE6F2A3E05C",
+          "kind": "propertyWrite",
+          "title": "Set Interface Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.InterfaceValue.",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "interface",
+                "nativeName": "TScriptInterface\u003CIUnifiedScriptInteropContract\u003E",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+                "headerPath": "UnifiedScriptInteropFixture.h"
               }
             },
             {

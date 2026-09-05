@@ -10,7 +10,7 @@
 namespace
 {
 using Status = EUnifiedScriptCallbackStatus;
-constexpr uint32 MaximumBytes = 16u * 1024u * 1024u;
+constexpr uint32 CallbackMaximumBytes = 16u * 1024u * 1024u;
 uint64 NextScope = 0; // Game-thread-only; never recycled across Worlds.
 }
 
@@ -145,7 +145,7 @@ bool UUnifiedScriptCallbackProxy::Dispatch(UFunction* Function, void* Parameters
     TArray<uint8> Bytes;
     uint32 ByteCount = 0;
     bool bEncoded = false;
-    for (uint32 Capacity = 4096; Capacity <= MaximumBytes; Capacity *= 2)
+    for (uint32 Capacity = 4096; Capacity <= CallbackMaximumBytes; Capacity *= 2)
     {
         Bytes.SetNumUninitialized(Capacity);
         FUnifiedScriptNativeCallFrameV3 Frame;
@@ -175,7 +175,7 @@ bool UUnifiedScriptCallbackProxy::Dispatch(UFunction* Function, void* Parameters
     ON_SCOPE_EXIT { if (Response.Release && Response.Owner) Response.Release(Response.Owner); };
     if (Response.AbiVersion != 1 || Response.Size != sizeof(Response) || Response.Status != Status::Success ||
         Response.Reserved0 || Response.Reserved1 || Response.Reserved2 || Response.ResultCount > 17 ||
-        Response.ByteCount > MaximumBytes || (Response.ResultCount && !Response.Results) ||
+        Response.ByteCount > CallbackMaximumBytes || (Response.ResultCount && !Response.Results) ||
         (Response.ByteCount && !Response.ByteBuffer) || !Response.Owner || !Response.Release)
     {
         UE_LOG(LogTemp, Error, TEXT("UnifiedScript callback failed or returned an invalid response (status %d)."), int32(Response.Status));

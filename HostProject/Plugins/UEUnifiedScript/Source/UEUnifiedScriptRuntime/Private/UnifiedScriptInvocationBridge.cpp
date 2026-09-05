@@ -89,6 +89,39 @@ bool ResolveMemberIdentity(
             FString::Printf(TEXT("UnifiedScript target type '%s' is not loaded."), *ClassPath));
         return false;
     }
+    if (TargetClass->HasAnyClassFlags(CLASS_Interface))
+    {
+        const FName InterfaceMemberName(*MemberName);
+        if (TargetClass->FindFunctionByName(InterfaceMemberName) == nullptr)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::InvalidMemberPath,
+                FString::Printf(
+                    TEXT("Member '%s' is not declared by interface '%s'."),
+                    *MemberName,
+                    *ClassPath));
+            return false;
+        }
+        if (!Target->GetClass()->ImplementsInterface(TargetClass))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(
+                    TEXT("Object '%s' does not implement interface '%s'."),
+                    *Target->GetPathName(),
+                    *ClassPath));
+            return false;
+        }
+
+        // Interface UFunctions are declarations. Reflection fallback must resolve
+        // the concrete object's UFunction before ProcessEvent so native and
+        // Blueprint implementations receive the correct owner and exec frame.
+        OutTargetClass = Target->GetClass();
+        OutMemberName = InterfaceMemberName;
+        return true;
+    }
     if (!Target->IsA(TargetClass))
     {
         Fail(
@@ -246,6 +279,28 @@ bool ReadValue(
             return false;
         }
         OutValue = FUnifiedScriptValue::FromObjectHandle(Handle, true);
+        return true;
+    }
+    if (const FInterfaceProperty* TypedProperty = CastField<FInterfaceProperty>(Property))
+    {
+        const FScriptInterface* InterfaceValue =
+            TypedProperty->ContainerPtrToValuePtr<FScriptInterface>(Container);
+        UObject* Object = InterfaceValue == nullptr ? nullptr : InterfaceValue->GetObject();
+        if (Object == nullptr)
+        {
+            OutValue = FUnifiedScriptValue::FromObjectHandle({});
+            return true;
+        }
+        FUnifiedScriptObjectHandleResult HandleResult;
+        const FUnifiedScriptObjectHandle Handle = Registry.RegisterObject(Object, HandleResult);
+        if (!HandleResult.IsSuccess())
+        {
+            OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;
+            OutResult.HandleError = HandleResult.Error;
+            OutResult.Message = MoveTemp(HandleResult.Message);
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromObjectHandle(Handle);
         return true;
     }
     if (const FObjectPropertyBase* TypedProperty = CastField<FObjectPropertyBase>(Property))
@@ -493,6 +548,61 @@ bool WriteValue(
                 return true;
             }
         }
+    }
+    if (FInterfaceProperty* TypedProperty = CastField<FInterfaceProperty>(Property))
+    {
+        FUnifiedScriptObjectHandle Handle;
+        if (!Value.TryGetObjectHandle(Handle))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' requires an interface object handle."), *Property->GetName()));
+            return false;
+        }
+
+        UObject* Object = nullptr;
+        if (!Handle.IsNull())
+        {
+            FUnifiedScriptObjectHandleResult HandleResult;
+            Object = Registry.ResolveObject(Handle, HandleResult);
+            if (!HandleResult.IsSuccess())
+            {
+                OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;
+                OutResult.HandleError = HandleResult.Error;
+                OutResult.Message = MoveTemp(HandleResult.Message);
+                return false;
+            }
+            if (Object == nullptr || TypedProperty->InterfaceClass == nullptr ||
+                !Object->GetClass()->ImplementsInterface(TypedProperty->InterfaceClass))
+            {
+                Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    FString::Printf(
+                        TEXT("Property '%s' received an object that does not implement interface '%s'."),
+                        *Property->GetName(),
+                        TypedProperty->InterfaceClass == nullptr
+                            ? TEXT("<unknown>")
+                            : *TypedProperty->InterfaceClass->GetPathName()));
+                return false;
+            }
+        }
+
+        FScriptInterface* Destination =
+            TypedProperty->ContainerPtrToValuePtr<FScriptInterface>(Container);
+        if (Handle.IsNull())
+        {
+            *Destination = FScriptInterface();
+        }
+        else
+        {
+            Destination->SetObject(Object);
+            // A Blueprint-only implementer legitimately has no native interface
+            // address. The object identity remains the valid interface value.
+            Destination->SetInterface(Object->GetInterfaceAddress(TypedProperty->InterfaceClass));
+        }
+        return true;
     }
     if (FObjectPropertyBase* TypedProperty = CastField<FObjectPropertyBase>(Property))
     {

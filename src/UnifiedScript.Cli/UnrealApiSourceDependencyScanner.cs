@@ -770,7 +770,7 @@ public sealed class UnrealApiSourceDependencyScanner
         if (expression.IsKind(SyntaxKind.NullLiteralExpression))
         {
             return expected.Kind is UnrealValueKind.String or UnrealValueKind.Object or
-                UnrealValueKind.Class or UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or
+                UnrealValueKind.Class or UnrealValueKind.Interface or UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or
                 UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map;
         }
         if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
@@ -815,6 +815,7 @@ public sealed class UnrealApiSourceDependencyScanner
             UnrealValueKind.Name => actualName == "UnrealName",
             UnrealValueKind.Text => actualName == "UnrealText",
             UnrealValueKind.Object => actualName == "UnrealObjectHandle",
+            UnrealValueKind.Interface => actualName == "UnrealObjectHandle",
             UnrealValueKind.Class => actualName == "UnrealClassHandle",
             UnrealValueKind.SoftObject => actualName == "UnrealSoftObjectHandle",
             UnrealValueKind.SoftClass => actualName == "UnrealSoftClassHandle",

@@ -122,6 +122,15 @@ FString CanonicalNativeName(const FProperty* Property)
             *CanonicalNativeName(Map->KeyProp),
             *CanonicalNativeName(Map->ValueProp));
     }
+    if (const FInterfaceProperty* Interface = CastField<FInterfaceProperty>(Property))
+    {
+        // UClass::GetName() omits the reflected U prefix, so the generated
+        // C++ interface is the I-prefixed form of that stable name.
+        const FString InterfaceName = Interface->InterfaceClass != nullptr
+            ? Interface->InterfaceClass->GetName()
+            : FString();
+        return FString::Printf(TEXT("TScriptInterface<I%s>"), *InterfaceName);
+    }
     return Property->GetCPPType();
 }
 
@@ -262,6 +271,14 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property, int32 D
             NativeName,
             SoftObject->PropertyClass->GetPathName(),
             ReflectedHeaderPath(SoftObject->PropertyClass));
+    }
+    if (const FInterfaceProperty* Interface = CastField<FInterfaceProperty>(Property))
+    {
+        return TypeReference(
+            TEXT("interface"),
+            NativeName,
+            Interface->InterfaceClass->GetPathName(),
+            ReflectedHeaderPath(Interface->InterfaceClass));
     }
     if (CastField<FWeakObjectProperty>(Property) || CastField<FLazyObjectProperty>(Property) ||
         CastField<FInterfaceProperty>(Property))
@@ -679,6 +696,107 @@ void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums
     }
 }
 
+void CollectReferencedClasses(const FProperty* Property, TSet<const UClass*>& Classes, int32 Depth = 0)
+{
+    if (Property == nullptr || Depth > 16) return;
+    if (const FInterfaceProperty* Interface = CastField<FInterfaceProperty>(Property))
+    {
+        if (Interface->InterfaceClass != nullptr)
+        {
+            Classes.Add(Interface->InterfaceClass);
+        }
+        return;
+    }
+    if (const FObjectPropertyBase* Object = CastField<FObjectPropertyBase>(Property))
+    {
+        if (Object->PropertyClass != nullptr &&
+            Object->PropertyClass->HasAnyClassFlags(CLASS_Interface))
+        {
+            Classes.Add(Object->PropertyClass);
+        }
+        return;
+    }
+    if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
+    {
+        CollectReferencedClasses(Array->Inner, Classes, Depth + 1);
+    }
+    else if (const FSetProperty* Set = CastField<FSetProperty>(Property))
+    {
+        CollectReferencedClasses(Set->ElementProp, Classes, Depth + 1);
+    }
+    else if (const FMapProperty* Map = CastField<FMapProperty>(Property))
+    {
+        CollectReferencedClasses(Map->KeyProp, Classes, Depth + 1);
+        CollectReferencedClasses(Map->ValueProp, Classes, Depth + 1);
+    }
+    else if (const FStructProperty* Struct = CastField<FStructProperty>(Property))
+    {
+        for (TFieldIterator<FProperty> It(Struct->Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            CollectReferencedClasses(*It, Classes, Depth + 1);
+        }
+    }
+    else if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property); Delegate && Delegate->SignatureFunction)
+    {
+        for (TFieldIterator<FProperty> It(Delegate->SignatureFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            if (It->HasAnyPropertyFlags(CPF_Parm))
+            {
+                CollectReferencedClasses(*It, Classes, Depth + 1);
+            }
+        }
+    }
+}
+
+void CollectClassDependencies(const UClass* Class, TSet<const UClass*>& Classes)
+{
+    if (Class == nullptr) return;
+    // Preserve interface declaration inheritance while avoiding wholesale
+    // discovery of engine base APIs for ordinary selected classes.
+    if (Class->HasAnyClassFlags(CLASS_Interface))
+    {
+        if (const UClass* Super = Class->GetSuperClass();
+            Super != nullptr && Super->HasAnyClassFlags(CLASS_Interface))
+        {
+            Classes.Add(Super);
+        }
+    }
+    for (const FImplementedInterface& Interface : Class->Interfaces)
+    {
+        if (Interface.Class != nullptr)
+        {
+            Classes.Add(Interface.Class);
+        }
+    }
+    for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const FProperty* Property = *It;
+        if ((!Property->HasAnyPropertyFlags(CPF_Parm) &&
+             Property->HasAnyPropertyFlags(CPF_BlueprintVisible)) ||
+            DelegateSignature(Property) != nullptr)
+        {
+            CollectReferencedClasses(Property, Classes);
+        }
+    }
+    for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const UFunction* Function = *It;
+        if (!Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+        {
+            continue;
+        }
+        for (TFieldIterator<FProperty> ParameterIt(Function, EFieldIteratorFlags::ExcludeSuper);
+             ParameterIt;
+             ++ParameterIt)
+        {
+            if (ParameterIt->HasAnyPropertyFlags(CPF_Parm))
+            {
+                CollectReferencedClasses(*ParameterIt, Classes);
+            }
+        }
+    }
+}
+
 TSharedRef<FJsonObject> ExportStruct(
     const UScriptStruct* Struct,
     FUnifiedScriptReflectionExportResult& Result)
@@ -1043,6 +1161,38 @@ bool FUnifiedScriptReflectionExporter::Export(
             return false;
         }
     }
+
+    // A class allowlist still needs the UInterface and base declarations that
+    // appear in its reflected inheritance and signatures. Close this set before
+    // exporting so contract projection can resolve those stable paths locally.
+    TSet<const UClass*> KnownClasses;
+    for (const UClass* Class : Classes)
+    {
+        KnownClasses.Add(Class);
+    }
+    for (int32 Index = 0; Index < Classes.Num(); ++Index)
+    {
+        TSet<const UClass*> Dependencies;
+        CollectClassDependencies(Classes[Index], Dependencies);
+        for (const UClass* Dependency : Dependencies)
+        {
+            if (Dependency == nullptr ||
+                Dependency->HasMetaData(InternalBindingMetadata) ||
+                ModuleName(Dependency).IsEmpty() ||
+                KnownClasses.Contains(Dependency))
+            {
+                continue;
+            }
+            KnownClasses.Add(Dependency);
+            Classes.Add(Dependency);
+            Modules.AddUnique(ModuleName(Dependency));
+        }
+    }
+    Classes.Sort([](const UClass& Left, const UClass& Right)
+    {
+        return Left.GetPathName() < Right.GetPathName();
+    });
+    Modules.Sort();
 
     TSet<const UScriptStruct*> ReferencedStructSet;
     TSet<const UEnum*> ReferencedEnumSet;
