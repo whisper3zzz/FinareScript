@@ -29,6 +29,8 @@ public enum UnrealInvocationValueKind : byte
     Vector = 18,
     Rotator = 19,
     Transform = 20,
+    SoftObject = 27,
+    SoftClass = 28,
 }
 
 public enum UnrealObjectHandleError : byte
@@ -126,6 +128,12 @@ public readonly record struct UnrealInvocationValue
         new(
             UnrealInvocationValueKind.String,
             stringValue: value ?? throw new ArgumentNullException(nameof(value)));
+
+    public static UnrealInvocationValue FromSoftObject(UnrealSoftObjectHandle value) =>
+        new(UnrealInvocationValueKind.SoftObject, stringValue: value.AssetPath ?? string.Empty);
+
+    public static UnrealInvocationValue FromSoftClass(UnrealSoftClassHandle value) =>
+        new(UnrealInvocationValueKind.SoftClass, stringValue: value.AssetPath ?? string.Empty);
 
     public static UnrealInvocationValue FromInt8(sbyte value) =>
         new(UnrealInvocationValueKind.Int8, signedIntegerValue: value);
@@ -503,7 +511,7 @@ public sealed class NativeUnrealInvocationBridge
                 target,
                 null,
                 propertyPath);
-            return ConvertFromNative<T>(value, propertyPath);
+            return ConvertFromNative<T>(value, propertyPath, useSoftKinds: true);
         }
         finally
         {
@@ -521,7 +529,7 @@ public sealed class NativeUnrealInvocationBridge
         long profilerStart = BeginProfilerSample();
         try
         {
-            UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
+            UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath, useSoftKinds: true);
             UnrealInvocationValue result = RequireSuccess(
                 _transport.WriteProperty(target, propertyPath, nativeValue),
                 target,
@@ -1859,7 +1867,10 @@ public sealed class NativeUnrealInvocationBridge
         return converted;
     }
 
-    private static UnrealInvocationValue ConvertToNative<T>(T value, string memberPath) =>
+    private static UnrealInvocationValue ConvertToNative<T>(
+        T value,
+        string memberPath,
+        bool useSoftKinds = false) =>
         value switch
         {
             bool booleanValue => UnrealInvocationValue.FromBoolean(booleanValue),
@@ -1874,6 +1885,10 @@ public sealed class NativeUnrealInvocationBridge
             float float32Value => UnrealInvocationValue.FromFloat32(float32Value),
             double float64Value => UnrealInvocationValue.FromFloat64(float64Value),
             string stringValue => UnrealInvocationValue.FromString(stringValue),
+            UnrealSoftObjectHandle softObject when useSoftKinds =>
+                UnrealInvocationValue.FromSoftObject(softObject),
+            UnrealSoftClassHandle softClass when useSoftKinds =>
+                UnrealInvocationValue.FromSoftClass(softClass),
             UnrealSoftObjectHandle softObject =>
                 UnrealInvocationValue.FromString(softObject.AssetPath ?? string.Empty),
             UnrealSoftClassHandle softClass =>
@@ -1895,7 +1910,8 @@ public sealed class NativeUnrealInvocationBridge
 
     private static T ConvertFromNative<T>(
         UnrealInvocationValue value,
-        string memberPath)
+        string memberPath,
+        bool useSoftKinds = false)
     {
         if (value.Kind == UnrealInvocationValueKind.Enum &&
             TryGetEnumPath(typeof(T), out string expectedEnumPath) &&
@@ -1935,9 +1951,13 @@ public sealed class NativeUnrealInvocationBridge
                 value.FloatingPointValue,
             UnrealInvocationValueKind.String when typeof(T) == typeof(string) =>
                 value.StringValue,
-            UnrealInvocationValueKind.String when typeof(T) == typeof(UnrealSoftObjectHandle) =>
+            UnrealInvocationValueKind.String when !useSoftKinds && typeof(T) == typeof(UnrealSoftObjectHandle) =>
                 new UnrealSoftObjectHandle(value.StringValue ?? string.Empty),
-            UnrealInvocationValueKind.String when typeof(T) == typeof(UnrealSoftClassHandle) =>
+            UnrealInvocationValueKind.String when !useSoftKinds && typeof(T) == typeof(UnrealSoftClassHandle) =>
+                new UnrealSoftClassHandle(value.StringValue ?? string.Empty),
+            UnrealInvocationValueKind.SoftObject when typeof(T) == typeof(UnrealSoftObjectHandle) =>
+                new UnrealSoftObjectHandle(value.StringValue ?? string.Empty),
+            UnrealInvocationValueKind.SoftClass when typeof(T) == typeof(UnrealSoftClassHandle) =>
                 new UnrealSoftClassHandle(value.StringValue ?? string.Empty),
             UnrealInvocationValueKind.Name when typeof(T) == typeof(UnrealName) =>
                 new UnrealName(value.StringValue ?? string.Empty),

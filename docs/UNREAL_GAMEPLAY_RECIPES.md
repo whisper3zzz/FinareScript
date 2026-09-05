@@ -140,6 +140,37 @@ materialization requires a declared UEnum value, and Blueprint enum fields also
 require a value in their byte storage range. Ordinary CLR enums retain the
 existing member-name contract.
 
+For persistent asset configuration, declare soft-reference state instead of
+storing a runtime object handle:
+
+```csharp
+[Expose(InstanceEditable = true, SaveGame = true)]
+public UnrealSoftObjectHandle Mesh { get; set; } =
+    new("/Engine/BasicShapes/Cube.Cube");
+
+[Expose(InstanceEditable = true, SaveGame = true)]
+public UnrealSoftClassHandle ActorClass { get; set; } =
+    new("/Script/Engine.StaticMeshActor");
+```
+
+These fields appear as native soft-object and soft-class properties. Their
+defaults and overrides store paths across reload; creating or hydrating the
+script does not load the assets. `default`, `new()` and an empty path are null
+references. Use absolute Unreal object paths, including the object name after
+the dot. A valid path can refer to an asset that is currently missing, so handle
+failure when explicitly loading it.
+
+In an asynchronous helper on an `UnrealObjectScript`, use
+`await LoadObjectAsync(Mesh)` and `await LoadClassAsync(ActorClass)`. These typed
+overloads use the existing World-owned async service. The result is a runtime
+handle for generated native calls; it is not a replacement for the persistent
+soft-reference field. Keep cancellation, failed-load recovery and spawned Actor
+cleanup in the same lifecycle scope as other asynchronous gameplay work.
+
+[SoftReferenceGameplayDemoScript](../samples/Unreal/UnifiedScript.Unreal.Demo/SoftReferenceGameplayDemoScript.cs)
+uses editable mesh and Actor-class references to load assets and create a
+preview Actor through generated native APIs.
+
 Attach the Script Asset to a `UnifiedScriptActor` or to a
 `UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,
 Tick, overlap, EndPlay, level travel, and one Build & Reload. `TargetHandle` is

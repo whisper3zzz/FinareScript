@@ -1,4 +1,5 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
+#include "UnifiedScriptSoftObjectPath.h"
 
 #include "Dom/JsonObject.h"
 #include "EdGraph/EdGraph.h"
@@ -22,6 +23,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/EnumProperty.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
@@ -302,6 +304,22 @@ bool ResolvePinType(
         MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle"))
     {
         OutType.PinCategory = UEdGraphSchema_K2::PC_Class;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    if (TypeKind == TEXT("softObject") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle") &&
+        (UnrealType == nullptr || UnrealType->Kind == EFunctionValueTypeKind::None))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+        OutType.PinSubCategoryObject = UObject::StaticClass();
+        return true;
+    }
+    if (TypeKind == TEXT("softClass") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle") &&
+        (UnrealType == nullptr || UnrealType->Kind == EFunctionValueTypeKind::None))
+    {
+        OutType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
         OutType.PinSubCategoryObject = UObject::StaticClass();
         return true;
     }
@@ -1008,6 +1026,24 @@ bool ReadCanonicalDefault(
     {
         OutDefault = Value->AsString();
         return true;
+    }
+    if ((MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle") ||
+         MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle")) &&
+        Value->Type == EJson::String &&
+        (UnrealType == nullptr || UnrealType->Kind == EFunctionValueTypeKind::None))
+    {
+        const FString PathText = Value->AsString();
+        if (UnifiedScriptSoftObjectPath::IsValid(PathText))
+        {
+            const FSoftObjectPath Path(PathText);
+            if (PathText.IsEmpty() || (Path.IsValid() && Path.ToString() == PathText))
+            {
+                OutDefault = PathText.IsEmpty()
+                    ? TEXT("None")
+                    : FString::Printf(TEXT("\"%s\""), *PathText);
+                return true;
+            }
+        }
     }
     if (TypeKind == TEXT("enum") && UnrealType != nullptr &&
         UnrealType->Kind == EFunctionValueTypeKind::Enum && Value->Type == EJson::String)
@@ -2425,6 +2461,18 @@ bool CanonicalCurrentDefault(
     if (const FTextProperty* Typed = CastField<FTextProperty>(Property))
     {
         OutValue = Typed->GetPropertyValue_InContainer(Cdo).ToString();
+        return true;
+    }
+    if (const FSoftClassProperty* Typed = CastField<FSoftClassProperty>(Property))
+    {
+        const FString Path = Typed->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().ToString();
+        OutValue = Path.IsEmpty() ? TEXT("None") : FString::Printf(TEXT("\"%s\""), *Path);
+        return true;
+    }
+    if (const FSoftObjectProperty* Typed = CastField<FSoftObjectProperty>(Property))
+    {
+        const FString Path = Typed->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().ToString();
+        OutValue = Path.IsEmpty() ? TEXT("None") : FString::Printf(TEXT("\"%s\""), *Path);
         return true;
     }
     if (const FStructProperty* Typed = CastField<FStructProperty>(Property);

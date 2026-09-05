@@ -1,4 +1,5 @@
 #include "UnifiedScriptInvocationBridge.h"
+#include "UnifiedScriptSoftObjectPath.h"
 
 #include "Containers/StringConv.h"
 #include "UnifiedScriptGeneratedThunkRegistry.h"
@@ -10,6 +11,7 @@
 #include "UObject/Class.h"
 #include "UObject/EnumProperty.h"
 #include "UObject/StrProperty.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/TextProperty.h"
 #include "UObject/UObjectGlobals.h"
@@ -230,6 +232,18 @@ bool ReadValue(
     {
         OutValue = FUnifiedScriptValue::FromText(
             TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FSoftClassProperty* TypedProperty = CastField<FSoftClassProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromSoftClassPath(
+            TypedProperty->GetPropertyValue_InContainer(Container).ToSoftObjectPath().ToString());
+        return true;
+    }
+    if (const FSoftObjectProperty* TypedProperty = CastField<FSoftObjectProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromSoftObjectPath(
+            TypedProperty->GetPropertyValue_InContainer(Container).ToSoftObjectPath().ToString());
         return true;
     }
     if (const FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
@@ -509,6 +523,56 @@ bool WriteValue(
             return true;
         }
     }
+    if (FSoftClassProperty* TypedProperty = CastField<FSoftClassProperty>(Property))
+    {
+        FString PathText;
+        if (!Value.TryGetSoftClassPath(PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' requires a soft class path."), *Property->GetName()));
+            return false;
+        }
+        if (!UnifiedScriptSoftObjectPath::IsValid(PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' received an invalid soft class path."), *Property->GetName()));
+            return false;
+        }
+        const FSoftObjectPath Path(PathText);
+        if (!PathText.IsEmpty() && (!Path.IsValid() || Path.ToString() != PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' received an incompatible soft class path."), *Property->GetName()));
+            return false;
+        }
+        TypedProperty->SetPropertyValue_InContainer(Container, FSoftObjectPtr(Path));
+        return true;
+    }
+    if (FSoftObjectProperty* TypedProperty = CastField<FSoftObjectProperty>(Property))
+    {
+        FString PathText;
+        if (!Value.TryGetSoftObjectPath(PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' requires a soft object path."), *Property->GetName()));
+            return false;
+        }
+        if (!UnifiedScriptSoftObjectPath::IsValid(PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' received an invalid soft object path."), *Property->GetName()));
+            return false;
+        }
+        const FSoftObjectPath Path(PathText);
+        if (!PathText.IsEmpty() && (!Path.IsValid() || Path.ToString() != PathText))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' received an incompatible soft object path."), *Property->GetName()));
+            return false;
+        }
+        TypedProperty->SetPropertyValue_InContainer(Container, FSoftObjectPtr(Path));
+        return true;
+    }
     if (FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
     {
         int64 NativeValue = 0;
@@ -700,6 +764,22 @@ FUnifiedScriptValue FUnifiedScriptValue::FromString(FString Value)
     return Result;
 }
 
+FUnifiedScriptValue FUnifiedScriptValue::FromSoftObjectPath(FString Value)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = EUnifiedScriptValueKind::SoftObject;
+    Result.StringValue = MoveTemp(Value);
+    return Result;
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromSoftClassPath(FString Value)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = EUnifiedScriptValueKind::SoftClass;
+    Result.StringValue = MoveTemp(Value);
+    return Result;
+}
+
 #define UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Name, KindName, Type, Field) \
     FUnifiedScriptValue FUnifiedScriptValue::From##Name(Type Value)         \
     {                                                                      \
@@ -829,6 +909,20 @@ bool FUnifiedScriptValue::TryGetString(FString& OutValue) const
     {
         return false;
     }
+    OutValue = StringValue;
+    return true;
+}
+
+bool FUnifiedScriptValue::TryGetSoftObjectPath(FString& OutValue) const
+{
+    if (Kind != EUnifiedScriptValueKind::SoftObject) return false;
+    OutValue = StringValue;
+    return true;
+}
+
+bool FUnifiedScriptValue::TryGetSoftClassPath(FString& OutValue) const
+{
+    if (Kind != EUnifiedScriptValueKind::SoftClass) return false;
     OutValue = StringValue;
     return true;
 }

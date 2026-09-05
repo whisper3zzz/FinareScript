@@ -253,6 +253,59 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyUpdatesSoftReferenceDefaultAndPreservesIdentityOnRoundTrip()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/SoftPatch")]
+            public sealed class SoftPatch
+            {
+                [Expose(SaveGame = true)]
+                public UnrealSoftObjectHandle Mesh { get; set; } =
+                    new("/Game/Props/OldMesh.OldMesh");
+            }
+            """;
+        CSharpCompilationRequest request = new(
+            "SoftPatch",
+            [new CSharpSourceDocument("Game/SoftPatch.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptStateDeclaration state = Assert.Single(Assert.Single(original.ScriptAssets!.Assets).States);
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new UpdateScriptStatePatchOperation(
+                state.Id,
+                Expected(state),
+                Spec(
+                    "Mesh",
+                    "UnifiedScript.Unreal.UnrealSoftObjectHandle",
+                    ScriptStateTypeKind.SoftObject,
+                    "/Game/Props/NewMesh.NewMesh",
+                    state.Exposure)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "new UnifiedScript.Unreal.UnrealSoftObjectHandle(\"/Game/Props/NewMesh.NewMesh\")",
+            patchedSource,
+            StringComparison.Ordinal);
+        ScriptStateDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.ScriptAssets!.Assets).States);
+        Assert.Equal(state.Id, changed.Id);
+        Assert.Equal(ScriptStateTypeKind.SoftObject, changed.TypeKind);
+        Assert.Equal("/Game/Props/NewMesh.NewMesh", changed.DefaultValue.GetString());
+
+        CSharpAnalysisResult roundTripped = Analyze(result.PatchedRequest!);
+        ScriptStateDeclaration roundTrippedState =
+            Assert.Single(Assert.Single(roundTripped.ScriptAssets!.Assets).States);
+        Assert.Equal(state.Id, roundTrippedState.Id);
+        Assert.Equal("/Game/Props/NewMesh.NewMesh", roundTrippedState.DefaultValue.GetString());
+    }
+
+    [Fact]
     public void ApplyRejectsStaleSourceConfigurationAndStatePreconditions()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);

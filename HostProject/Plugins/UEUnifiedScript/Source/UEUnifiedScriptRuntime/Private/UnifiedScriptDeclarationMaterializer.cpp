@@ -8,6 +8,7 @@
  * @Description:
  */
 #include "UnifiedScriptDeclarationMaterializer.h"
+#include "UnifiedScriptSoftObjectPath.h"
 
 #include "Containers/StringConv.h"
 #include "Dom/JsonObject.h"
@@ -20,6 +21,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptCompiledChunk.h"
+#include "UObject/SoftObjectPath.h"
 
 namespace UE::UnifiedScript::Declaration::Private
 {
@@ -165,6 +167,22 @@ bool ResolvePropertyType(
         OutTypeObject = UObject::StaticClass();
         return true;
     }
+    if (Kind == TEXT("softObject") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle") &&
+        !UnrealType.bPresent)
+    {
+        OutType = EPropertyBagPropertyType::SoftObject;
+        OutTypeObject = UObject::StaticClass();
+        return true;
+    }
+    if (Kind == TEXT("softClass") &&
+        MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle") &&
+        !UnrealType.bPresent)
+    {
+        OutType = EPropertyBagPropertyType::SoftClass;
+        OutTypeObject = UObject::StaticClass();
+        return true;
+    }
     if (Kind == TEXT("struct") &&
         MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
         UnrealType.bPresent && UnrealType.Kind == 1 &&
@@ -304,6 +322,22 @@ bool SetDefaultValue(
         if (DefaultValue->Type == EJson::String)
         {
             Result = Bag.SetValueString(Desc.Name, DefaultValue->AsString());
+        }
+        break;
+    case EPropertyBagPropertyType::SoftObject:
+    case EPropertyBagPropertyType::SoftClass:
+        if (DefaultValue->Type == EJson::String)
+        {
+            const FString PathText = DefaultValue->AsString();
+            if (!UnifiedScriptSoftObjectPath::IsValid(PathText))
+            {
+                break;
+            }
+            const FSoftObjectPath Path(PathText);
+            if (PathText.IsEmpty() || (Path.IsValid() && Path.ToString() == PathText))
+            {
+                Result = Bag.SetValueSoftPath(Desc.Name, Path);
+            }
         }
         break;
     case EPropertyBagPropertyType::Enum:
@@ -490,6 +524,8 @@ enum class EBinaryDefaultKind : uint8
     Vector = 9,
     Rotator = 10,
     Transform = 11,
+    SoftObject = 12,
+    SoftClass = 13,
 };
 
 struct FBinaryDefault
@@ -526,7 +562,7 @@ public:
         uint16 Minor = 0;
         uint32 Reserved = 0;
         if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-            Major != 1 || Minor > 2 || Reserved != 0)
+            Major != 1 || Minor > 3 || Reserved != 0)
         {
             OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
             return false;
@@ -626,8 +662,10 @@ public:
     bool ReadDefault(FBinaryDefault& OutDefault)
     {
         uint8 Kind = 0;
-        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Transform) ||
-            Kind >= static_cast<uint8>(EBinaryDefaultKind::Rotator) && MinorVersion < 2)
+        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::SoftClass) ||
+            Kind >= static_cast<uint8>(EBinaryDefaultKind::Rotator) &&
+                Kind < static_cast<uint8>(EBinaryDefaultKind::SoftObject) && MinorVersion < 2 ||
+            Kind >= static_cast<uint8>(EBinaryDefaultKind::SoftObject) && MinorVersion < 3)
         {
             return false;
         }
@@ -672,6 +710,8 @@ public:
         case EBinaryDefaultKind::Enum:
         case EBinaryDefaultKind::Name:
         case EBinaryDefaultKind::Text:
+        case EBinaryDefaultKind::SoftObject:
+        case EBinaryDefaultKind::SoftClass:
             return ReadString(OutDefault.Text);
         case EBinaryDefaultKind::Vector:
         {
@@ -831,6 +871,10 @@ bool ResolveBinaryPropertyType(
         return ResolvePropertyType(TEXT("class"), MetadataName, UnrealType, OutType, OutTypeObject);
     case 9:
         return ResolvePropertyType(TEXT("struct"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 10:
+        return ResolvePropertyType(TEXT("softObject"), MetadataName, UnrealType, OutType, OutTypeObject);
+    case 11:
+        return ResolvePropertyType(TEXT("softClass"), MetadataName, UnrealType, OutType, OutTypeObject);
     default:
         return false;
     }
@@ -925,6 +969,22 @@ bool SetBinaryDefaultValue(
         if (Default.Kind == EBinaryDefaultKind::Text)
         {
             Result = Bag.SetValueText(Desc.Name, FText::FromString(Default.Text));
+        }
+        break;
+    case EPropertyBagPropertyType::SoftObject:
+    case EPropertyBagPropertyType::SoftClass:
+        if (Default.Kind == (Desc.ValueType == EPropertyBagPropertyType::SoftObject
+                ? EBinaryDefaultKind::SoftObject : EBinaryDefaultKind::SoftClass))
+        {
+            if (!UnifiedScriptSoftObjectPath::IsValid(Default.Text))
+            {
+                break;
+            }
+            const FSoftObjectPath Path(Default.Text);
+            if (Default.Text.IsEmpty() || (Path.IsValid() && Path.ToString() == Default.Text))
+            {
+                Result = Bag.SetValueSoftPath(Desc.Name, Path);
+            }
         }
         break;
     case EPropertyBagPropertyType::Struct:
@@ -1141,6 +1201,13 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             {
                 OutError = FString::Printf(
                     TEXT("Compiled declaration asset '%s' uses a typed enum without the required payload version."),
+                    *AssetPath);
+                return false;
+            }
+            if ((TypeKind == 10 || TypeKind == 11) && Reader.GetMinorVersion() < 3)
+            {
+                OutError = FString::Printf(
+                    TEXT("Compiled declaration asset '%s' uses a soft reference without the required payload version."),
                     *AssetPath);
                 return false;
             }

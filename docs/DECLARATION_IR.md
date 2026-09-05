@@ -95,7 +95,8 @@ pipeline.
 
 Declaration IR v0.1 accepts booleans, signed/unsigned integers, finite
 floating-point values, decimal, string, enum, `UnrealName`, `UnrealText`,
-`UnrealObjectHandle`, `UnrealClassHandle`, and the reviewed `UnrealVector`,
+`UnrealObjectHandle`, `UnrealClassHandle`, `UnrealSoftObjectHandle`,
+`UnrealSoftClassHandle`, and the reviewed `UnrealVector`,
 `UnrealRotator` and `UnrealTransform` struct state. Every state requires an
 explicit deterministic default. The value
 may come from the property initializer or from a direct, unconditional simple
@@ -203,6 +204,38 @@ The default chunk entry list includes declared Script Asset types as well as HIR
 types. A gameplay class with only lifecycle overrides does not need a dummy
 `Visual` method to load. An explicitly supplied entry-type list remains
 authoritative.
+
+### Asset-reference state and binary v1.3
+
+`UnrealSoftObjectHandle` and `UnrealSoftClassHandle` state use distinct
+`softObject` and `softClass` kinds. Their defaults are persistent path strings,
+not World registry handles. `default`, `new()` and an empty-path constructor
+produce the empty JSON string. A nonempty default may use a constant path in
+the initializer or the same supported unconditional constructor assignment.
+
+Paths use absolute Unreal object syntax, such as
+`/Game/Props/Crate.Crate` or `/Script/Engine.StaticMeshActor`. Plugin mount paths
+and valid soft-object subobject suffixes are accepted. Relative paths, operating
+system paths, export-text class prefixes, malformed delimiters and illegal
+characters are rejected before state mutation. The engine-neutral declaration
+layer validates syntax without looking up mount points, resolving an object or
+loading its package. The package prefix and asset name each fit Unreal's
+1023-character name limit. A syntactically valid missing asset remains a valid
+stored reference; an explicit load reports whether it can be used.
+
+The binary extension uses major 1, minor 3 when soft-reference state is present.
+It appends state kinds and default kinds without renumbering prior values;
+older payloads keep their existing version and encoding. Soft references do
+not masquerade as arbitrary struct state and carry no synthetic struct
+descriptor. Object and class references remain distinct through JSON, binary,
+native properties, managed hydration and patch preconditions.
+
+The Unreal adapter materializes native soft-object/soft-class properties and
+Property Bag entries. It compares stored paths when reconciling defaults and
+overrides; Blueprint's `None` import text represents the empty reference.
+Materialization and state synchronization do not eagerly load the referenced
+asset. Compatible explicit overrides retain their semantic identity across
+source-default changes and reload.
 
 ## Declaration patch v0.2
 

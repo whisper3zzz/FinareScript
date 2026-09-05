@@ -1874,6 +1874,12 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 UnrealInvocationValue.FromFloat64(BitConverter.Int64BitsToDouble(unchecked((long)ReadUInt64Payload(stringData, stringLength)))),
             UnrealInvocationValueKind.String =>
                 UnrealInvocationValue.FromString(ReadUtf8(stringData, stringLength)),
+            UnrealInvocationValueKind.SoftObject =>
+                UnrealInvocationValue.FromSoftObject(
+                    new UnrealSoftObjectHandle(ReadUtf8(stringData, stringLength))),
+            UnrealInvocationValueKind.SoftClass =>
+                UnrealInvocationValue.FromSoftClass(
+                    new UnrealSoftClassHandle(ReadUtf8(stringData, stringLength))),
             UnrealInvocationValueKind.Name =>
                 UnrealInvocationValue.FromName(new UnrealName(ReadUtf8(stringData, stringLength))),
             UnrealInvocationValueKind.Text =>
@@ -2206,6 +2212,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 },
             };
             if (value.Kind is UnrealInvocationValueKind.String or
+                UnrealInvocationValueKind.SoftObject or UnrealInvocationValueKind.SoftClass or
                 UnrealInvocationValueKind.Name or UnrealInvocationValueKind.Text)
             {
                 _string = new Utf8Buffer(value.StringValue ?? string.Empty);

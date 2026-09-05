@@ -213,6 +213,12 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             cancellationToken);
     }
 
+    protected Task<UnrealObjectHandle> LoadObjectAsync(
+        UnrealSoftObjectHandle objectReference,
+        float timeoutSeconds = 0.0f,
+        CancellationToken cancellationToken = default) =>
+        LoadObjectAsync(objectReference.AssetPath, timeoutSeconds, cancellationToken);
+
     /// <summary>Loads a class through the World-owned async asset service.</summary>
     protected Task<UnrealObjectHandle> LoadClassAsync(
         string classPath,
@@ -225,6 +231,12 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             timeoutSeconds,
             cancellationToken);
     }
+
+    protected Task<UnrealObjectHandle> LoadClassAsync(
+        UnrealSoftClassHandle classReference,
+        float timeoutSeconds = 0.0f,
+        CancellationToken cancellationToken = default) =>
+        LoadClassAsync(classReference.AssetPath, timeoutSeconds, cancellationToken);
 
     private UnrealScriptContext RequireRunning() => _running
         ? Context

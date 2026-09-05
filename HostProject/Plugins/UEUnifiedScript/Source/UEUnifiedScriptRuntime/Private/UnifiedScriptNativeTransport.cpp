@@ -491,6 +491,8 @@ void Complete(
     switch (Value.Kind)
     {
     case EUnifiedScriptValueKind::String:
+    case EUnifiedScriptValueKind::SoftObject:
+    case EUnifiedScriptValueKind::SoftClass:
         StringValue = Value.StringValue;
         break;
     case EUnifiedScriptValueKind::Name:
@@ -505,6 +507,8 @@ void Complete(
     const FTCHARToUTF8 StringUtf8(*StringValue);
     const FTCHARToUTF8 MessageUtf8(*Result.Message);
     const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String ||
+        Value.Kind == EUnifiedScriptValueKind::SoftObject ||
+        Value.Kind == EUnifiedScriptValueKind::SoftClass ||
         Value.Kind == EUnifiedScriptValueKind::Name ||
         Value.Kind == EUnifiedScriptValueKind::Text;
     uint8 BinaryPayload[sizeof(double) * 10] = {};
@@ -758,6 +762,8 @@ bool DecodeValue(
         OutValue = FUnifiedScriptValue::FromFloat64(std::bit_cast<double>(ReadUInt64LittleEndian(NativeValue.StringData)));
         return true;
     case EUnifiedScriptValueKind::String:
+    case EUnifiedScriptValueKind::SoftObject:
+    case EUnifiedScriptValueKind::SoftClass:
     {
         FString StringValue;
         if (!TryDecodeUtf8(
@@ -772,7 +778,13 @@ bool DecodeValue(
                 TEXT("The UnifiedScript native string slice is invalid."));
             return false;
         }
-        OutValue = FUnifiedScriptValue::FromString(MoveTemp(StringValue));
+        OutValue = static_cast<EUnifiedScriptValueKind>(NativeValue.Kind) ==
+                EUnifiedScriptValueKind::SoftObject
+            ? FUnifiedScriptValue::FromSoftObjectPath(MoveTemp(StringValue))
+            : static_cast<EUnifiedScriptValueKind>(NativeValue.Kind) ==
+                EUnifiedScriptValueKind::SoftClass
+                ? FUnifiedScriptValue::FromSoftClassPath(MoveTemp(StringValue))
+                : FUnifiedScriptValue::FromString(MoveTemp(StringValue));
         return true;
     }
     case EUnifiedScriptValueKind::Name:

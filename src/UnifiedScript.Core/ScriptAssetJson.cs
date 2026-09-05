@@ -162,6 +162,21 @@ public static class ScriptAssetJson
                     $"Enum state '{state.Name}' has an invalid Unreal enum identity.");
             }
         }
+        else if (state.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass)
+        {
+            if (state.UnrealType is not null ||
+                state.TypeMetadataName is not
+                    ("UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+                     "UnifiedScript.Unreal.UnrealSoftClassHandle") ||
+                state.TypeKind == ScriptStateTypeKind.SoftObject &&
+                    state.TypeMetadataName != "UnifiedScript.Unreal.UnrealSoftObjectHandle" ||
+                state.TypeKind == ScriptStateTypeKind.SoftClass &&
+                    state.TypeMetadataName != "UnifiedScript.Unreal.UnrealSoftClassHandle")
+            {
+                throw new JsonException(
+                    $"Soft reference state '{state.Name}' requires its exact managed handle type and no Unreal type identity.");
+            }
+        }
         else if (state.UnrealType is not null)
         {
             throw new JsonException(
@@ -192,6 +207,9 @@ public static class ScriptAssetJson
                 state.DefaultValue.ValueKind == JsonValueKind.String,
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 state.DefaultValue.ValueKind == JsonValueKind.Null,
+            ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass =>
+                state.DefaultValue.ValueKind == JsonValueKind.String &&
+                UnrealObjectPathValidator.IsValid(state.DefaultValue.GetString()),
             ScriptStateTypeKind.Struct => IsValidStructDefault(state),
             _ => false,
         };

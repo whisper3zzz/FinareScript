@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "UnifiedScriptInvocationBridge.h"
+#include "UnifiedScriptSoftObjectPath.h"
 
 #include "Async/Async.h"
 #include "Engine/World.h"
@@ -8,6 +9,45 @@
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UObject/UObjectGlobals.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptSoftObjectPathValidationTest,
+    "UnifiedScript.Unreal.InvocationBridge.SoftObjectPathValidation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptSoftObjectPathValidationTest::RunTest(const FString& Parameters)
+{
+    struct FCase
+    {
+        const TCHAR* Path;
+        bool bExpected;
+    };
+    const FCase Cases[] = {
+        {TEXT("/Game/Props/Cube.Cube"), true},
+        {TEXT("/Game/Foo(Bar)/Cube.Cube:Mesh.Nested"), true},
+        {TEXT("/Script/Engine.StaticMeshActor"), true},
+        {TEXT("/Game/A.A:Sub/Object"), false},
+        {TEXT("/Game/A.A?B"), false},
+        {TEXT("/Game/A.A#B"), false},
+        {TEXT("/Game/A.A/:Sub"), false},
+        {TEXT("/Game/A"), false},
+    };
+    for (const FCase& Case : Cases)
+    {
+        TestEqual(
+            FString::Printf(TEXT("Soft path validation: %s"), Case.Path),
+            UnifiedScriptSoftObjectPath::IsValid(Case.Path),
+            Case.bExpected);
+    }
+
+    const FString TooLongPackage = TEXT("/Game/") + FString::ChrN(1024, TEXT('A')) + TEXT(".A");
+    TestFalse(TEXT("Soft path rejects an overlong package FName"),
+        UnifiedScriptSoftObjectPath::IsValid(TooLongPackage));
+    const FString TooLongAsset = TEXT("/Game/A.") + FString::ChrN(1024, TEXT('A'));
+    TestFalse(TEXT("Soft path rejects an overlong asset FName"),
+        UnifiedScriptSoftObjectPath::IsValid(TooLongAsset));
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptInvocationBridgePrimitivesTest,

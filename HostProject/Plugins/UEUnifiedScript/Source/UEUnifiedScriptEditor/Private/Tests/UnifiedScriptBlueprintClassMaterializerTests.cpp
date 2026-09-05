@@ -6,7 +6,10 @@
 #include "EdGraphSchema_K2.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Actor.h"
 #include "InputAction.h"
@@ -37,6 +40,7 @@
 #include "Interfaces/IPluginManager.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -2763,6 +2767,694 @@ bool FUnifiedScriptCommonStateMaterializationTest::RunTest(const FString& Parame
     World->DestroyWorld(false);
     TestEqual(TEXT("Common State World cleanup releases the managed context"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(), InitialManagedWorldCount);
+    return true;
+}
+
+namespace UE::UnifiedScript::SoftReferenceTests
+{
+class FScenario final
+{
+public:
+    FAutomationTestBase& Test;
+    const FString PackageName = TEXT("/Game/UnifiedScriptDemo/BP_SoftReferenceGameplay");
+    const FString AssetName = TEXT("BP_SoftReferenceGameplay");
+    const FString BlueprintPath = PackageName + TEXT(".") + AssetName;
+    UPackage* Package = nullptr;
+    UUnifiedScriptBlueprint* Blueprint = nullptr;
+    UWorld* World = nullptr;
+    AUnifiedScriptActor* Actor = nullptr;
+    UUnifiedScriptWorldSubsystem* Host = nullptr;
+    FString PackageFilename;
+    FString DeclarationPath;
+    FString ChunkPath;
+    FString AssemblyPath;
+    bool bHadOriginalPackage = false;
+    bool bOriginalPackageReadOnly = false;
+    bool bMayRestorePackage = false;
+    bool bOwnsTemporaryPackage = false;
+    TArray<uint8> OriginalPackageBytes;
+    int32 InitialManagedWorldCount = 0;
+
+    explicit FScenario(FAutomationTestBase& InTest)
+        : Test(InTest)
+    {
+    }
+
+    ~FScenario()
+    {
+        if (Actor != nullptr && !Actor->IsActorBeingDestroyed())
+        {
+            Actor->Destroy();
+        }
+        if (World != nullptr)
+        {
+            World->RemoveFromRoot();
+            World->DestroyWorld(false);
+            World = nullptr;
+        }
+        Blueprint = nullptr;
+        if (Package != nullptr)
+        {
+            Package->SetDirtyFlag(false);
+            TArray<UPackage*> Packages{Package};
+            UPackageTools::UnloadPackages(Packages);
+            Package = nullptr;
+        }
+
+        IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+        if (bMayRestorePackage && !PackageFilename.IsEmpty() && bHadOriginalPackage)
+        {
+            PlatformFile.SetReadOnly(*PackageFilename, false);
+            if (!FFileHelper::SaveArrayToFile(OriginalPackageBytes, *PackageFilename))
+            {
+                Test.AddError(TEXT("Soft reference fixture failed to restore the existing Blueprint bytes."));
+            }
+            if (!PlatformFile.SetReadOnly(*PackageFilename, bOriginalPackageReadOnly))
+            {
+                Test.AddError(TEXT("Soft reference fixture failed to restore the Blueprint read-only flag."));
+            }
+        }
+        else if (bMayRestorePackage && bOwnsTemporaryPackage && !PackageFilename.IsEmpty() &&
+            IFileManager::Get().FileExists(*PackageFilename) &&
+            !IFileManager::Get().Delete(*PackageFilename, false, true, true))
+        {
+            Test.AddError(TEXT("Soft reference fixture failed to remove its temporary Blueprint."));
+        }
+    }
+
+    bool Build()
+    {
+        const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+        if (!Test.TestTrue(TEXT("Soft reference plugin is installed"), Plugin.IsValid()))
+        {
+            return false;
+        }
+        const FString DemoDirectory = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"));
+        DeclarationPath = FPaths::Combine(DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.asset.json"));
+        ChunkPath = FPaths::Combine(DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.uschunk"));
+        AssemblyPath = FPaths::Combine(DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.dll"));
+        FString DeclarationJson;
+        if (!Test.TestTrue(TEXT("Soft reference declaration is staged"),
+                FFileHelper::LoadFileToString(DeclarationJson, *DeclarationPath)) ||
+            !Test.TestTrue(TEXT("Soft reference chunk is staged"), IFileManager::Get().FileExists(*ChunkPath)) ||
+            !Test.TestTrue(TEXT("Soft reference assembly is staged"), IFileManager::Get().FileExists(*AssemblyPath)))
+        {
+            return false;
+        }
+
+        PackageFilename = FPackageName::LongPackageNameToFilename(
+            PackageName, FPackageName::GetAssetPackageExtension());
+        if (!Test.TestTrue(TEXT("Soft reference fixture has a valid package filename"),
+                !PackageFilename.IsEmpty()))
+        {
+            return false;
+        }
+        if (!Test.TestTrue(TEXT("Soft reference fixture has no loaded user Blueprint"),
+                FindPackage(nullptr, *PackageName) == nullptr))
+        {
+            return false;
+        }
+        bHadOriginalPackage = IFileManager::Get().FileExists(*PackageFilename);
+        IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+        bOriginalPackageReadOnly = bHadOriginalPackage && PlatformFile.IsReadOnly(*PackageFilename);
+        if (bHadOriginalPackage &&
+            !Test.TestTrue(TEXT("Soft reference fixture can read the existing Blueprint bytes"),
+                FFileHelper::LoadFileToArray(OriginalPackageBytes, *PackageFilename)))
+        {
+            return false;
+        }
+        if (bHadOriginalPackage && bOriginalPackageReadOnly &&
+            !Test.TestTrue(TEXT("Soft reference fixture can make the existing Blueprint writable"),
+                PlatformFile.SetReadOnly(*PackageFilename, false)))
+        {
+            return false;
+        }
+        bMayRestorePackage = true;
+        bOwnsTemporaryPackage = !bHadOriginalPackage;
+
+        Package = CreatePackage(*PackageName);
+        Blueprint = Cast<UUnifiedScriptBlueprint>(FKismetEditorUtilities::CreateBlueprint(
+            AUnifiedScriptActor::StaticClass(),
+            Package,
+            FName(*AssetName),
+            BPTYPE_Normal,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptSoftReferenceMaterialization"))));
+        if (!Test.TestNotNull(TEXT("Soft reference Blueprint is created"), Blueprint) ||
+            !Test.TestNotNull(TEXT("Soft reference Blueprint has a generated class"),
+                Blueprint != nullptr ? Blueprint->GeneratedClass.Get() : nullptr))
+        {
+            return false;
+        }
+
+        UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
+        FGuid::ParseExact(TEXT("12cc5b929c9135b650045fa1ef9d0797"), EGuidFormats::Digits, ScriptAsset->ScriptClassId);
+        ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+        ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+        ScriptAsset->CompiledChunkPath = ChunkPath;
+        ScriptAsset->ScriptAssemblyPath = AssemblyPath;
+        ScriptAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.SoftReferenceGameplayDemoScript");
+        ScriptAsset->DeclarationPath = DeclarationPath;
+        ScriptAsset->DeclarationAssetPath = TEXT("Unreal/SoftReferenceGameplay");
+        Blueprint->ScriptAsset = ScriptAsset;
+
+        FUnifiedScriptBlueprintClassSyncResult Result;
+        FString Error;
+        if (!Test.TestTrue(*FString::Printf(TEXT("Soft reference states materialize: %s"), *Error),
+                FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                    *ScriptAsset, *Blueprint, DeclarationJson, false, Result, Error)))
+        {
+            return false;
+        }
+
+        FSoftObjectProperty* Mesh = FindFProperty<FSoftObjectProperty>(
+            Blueprint->GeneratedClass, TEXT("PreviewMesh"));
+        FSoftClassProperty* ActorClass = FindFProperty<FSoftClassProperty>(
+            Blueprint->GeneratedClass, TEXT("PreviewActorClass"));
+        UObject* Cdo = Blueprint->GeneratedClass->GetDefaultObject();
+        Test.TestTrue(TEXT("Soft object state materializes as FSoftObjectProperty"), Mesh != nullptr);
+        Test.TestTrue(TEXT("Soft class state materializes as FSoftClassProperty"), ActorClass != nullptr);
+        if (Mesh == nullptr || ActorClass == nullptr)
+        {
+            return false;
+        }
+
+        // Exercise the JSON PropertyBag consumer separately from the Blueprint
+        // class materializer. Soft paths must remain paths in this phase; this
+        // call must not resolve either asset.
+        FInstancedPropertyBag SoftJsonState;
+        TArray<FGuid> SoftJsonOverrideIds;
+        FUnifiedScriptStateMigrationReport SoftJsonMigration;
+        FString SoftJsonAssetPath;
+        FString SoftJsonError;
+        const bool bSoftJsonMaterialized =
+            FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+                DeclarationJson,
+                TEXT("Unreal/SoftReferenceGameplay"),
+                FInstancedPropertyBag(),
+                {},
+                SoftJsonState,
+                SoftJsonOverrideIds,
+                SoftJsonMigration,
+                SoftJsonAssetPath,
+                SoftJsonError);
+        Test.TestTrue(*FString::Printf(TEXT("Soft reference JSON PropertyBag materializes: %s"), *SoftJsonError),
+            bSoftJsonMaterialized);
+        if (!bSoftJsonMaterialized)
+        {
+            return false;
+        }
+        const FPropertyBagPropertyDesc* SoftMeshDesc =
+            SoftJsonState.FindPropertyDescByName(TEXT("PreviewMesh"));
+        const FPropertyBagPropertyDesc* SoftClassDesc =
+            SoftJsonState.FindPropertyDescByName(TEXT("PreviewActorClass"));
+        const TValueOrError<FSoftObjectPath, EPropertyBagResult> SoftMeshPath =
+            SoftJsonState.GetValueSoftPath(TEXT("PreviewMesh"));
+        const TValueOrError<FSoftObjectPath, EPropertyBagResult> SoftClassPath =
+            SoftJsonState.GetValueSoftPath(TEXT("PreviewActorClass"));
+        Test.TestTrue(TEXT("Soft JSON PropertyBag keeps exact soft object/class descriptors"),
+            SoftMeshDesc != nullptr && SoftClassDesc != nullptr &&
+            SoftMeshDesc->ValueType == EPropertyBagPropertyType::SoftObject &&
+            SoftClassDesc->ValueType == EPropertyBagPropertyType::SoftClass);
+        Test.TestTrue(TEXT("Soft JSON PropertyBag keeps the object path without loading"),
+            SoftMeshPath.IsValid() &&
+            SoftMeshPath.GetValue().ToString() == TEXT("/Engine/BasicShapes/Cube.Cube"));
+        Test.TestTrue(TEXT("Soft JSON PropertyBag keeps the class path without loading"),
+            SoftClassPath.IsValid() &&
+            SoftClassPath.GetValue().ToString() == TEXT("/Script/Engine.StaticMeshActor"));
+
+        TSharedPtr<FJsonObject> SoftInvalidRoot;
+        const TSharedRef<TJsonReader<>> SoftInvalidReader = TJsonReaderFactory<>::Create(DeclarationJson);
+        if (!Test.TestTrue(TEXT("Soft reference JSON parses for transactional validation"),
+                FJsonSerializer::Deserialize(SoftInvalidReader, SoftInvalidRoot) && SoftInvalidRoot.IsValid()))
+        {
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* SoftInvalidAssets = nullptr;
+        if (!SoftInvalidRoot->TryGetArrayField(TEXT("assets"), SoftInvalidAssets) || SoftInvalidAssets == nullptr)
+        {
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& AssetValue : *SoftInvalidAssets)
+        {
+            const TSharedPtr<FJsonObject> Asset = AssetValue->AsObject();
+            FString QualifiedName;
+            if (!Asset.IsValid() || !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+                QualifiedName != TEXT("UnifiedScript.Unreal.Demo.SoftReferenceGameplayDemoScript"))
+            {
+                continue;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* States = nullptr;
+            if (!Asset->TryGetArrayField(TEXT("states"), States) || States == nullptr)
+            {
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& StateValue : *States)
+            {
+                const TSharedPtr<FJsonObject> State = StateValue->AsObject();
+                FString Name;
+                if (State.IsValid() && State->TryGetStringField(TEXT("name"), Name) &&
+                    Name == TEXT("PreviewMesh"))
+                {
+                    State->SetStringField(TEXT("defaultValue"), TEXT("Game/Invalid.Cube"));
+                }
+            }
+        }
+        FString InvalidSoftJsonDeclaration;
+        {
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&InvalidSoftJsonDeclaration);
+            if (!Test.TestTrue(TEXT("Invalid soft JSON serializes for rejection"),
+                    FJsonSerializer::Serialize(SoftInvalidRoot.ToSharedRef(), Writer)))
+            {
+                return false;
+            }
+        }
+        FInstancedPropertyBag RejectedSoftJsonState;
+        TArray<FGuid> RejectedSoftJsonOverrideIds;
+        FUnifiedScriptStateMigrationReport RejectedSoftJsonMigration;
+        FString RejectedSoftJsonAssetPath;
+        FString RejectedSoftJsonError;
+        Test.TestFalse(TEXT("Invalid soft JSON path is rejected transactionally"),
+            FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+                InvalidSoftJsonDeclaration,
+                TEXT("Unreal/SoftReferenceGameplay"),
+                SoftJsonState,
+                {},
+                RejectedSoftJsonState,
+                RejectedSoftJsonOverrideIds,
+                RejectedSoftJsonMigration,
+                RejectedSoftJsonAssetPath,
+                RejectedSoftJsonError));
+        const TValueOrError<FSoftObjectPath, EPropertyBagResult> PreservedSoftMeshPath =
+            SoftJsonState.GetValueSoftPath(TEXT("PreviewMesh"));
+        Test.TestTrue(TEXT("Rejected soft JSON leaves the prior PropertyBag path and overrides unchanged"),
+            PreservedSoftMeshPath.IsValid() &&
+            PreservedSoftMeshPath.GetValue().ToString() == TEXT("/Engine/BasicShapes/Cube.Cube") &&
+            RejectedSoftJsonOverrideIds == SoftJsonOverrideIds);
+
+        const FString LazySoftPath = TEXT("/Game/UnifiedScriptDemo/__NeverLoadedSoftReference.Asset");
+        const FString LazyDeclaration = DeclarationJson.Replace(
+            TEXT("/Engine/BasicShapes/Cube.Cube"), *LazySoftPath);
+        FInstancedPropertyBag LazyJsonState;
+        TArray<FGuid> LazyJsonOverrideIds;
+        FUnifiedScriptStateMigrationReport LazyJsonMigration;
+        FString LazyJsonAssetPath;
+        FString LazyJsonError;
+        Test.TestTrue(TEXT("A legal missing soft path materializes without loading an asset"),
+            FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+                LazyDeclaration,
+                TEXT("Unreal/SoftReferenceGameplay"),
+                FInstancedPropertyBag(),
+                {},
+                LazyJsonState,
+                LazyJsonOverrideIds,
+                LazyJsonMigration,
+                LazyJsonAssetPath,
+                LazyJsonError));
+        const TValueOrError<FSoftObjectPath, EPropertyBagResult> LazyPathValue =
+            LazyJsonState.GetValueSoftPath(TEXT("PreviewMesh"));
+        Test.TestTrue(TEXT("Legal missing soft path remains exact and unresolved"),
+            LazyPathValue.IsValid() && LazyPathValue.GetValue().ToString() == LazySoftPath &&
+            FindPackage(nullptr, TEXT("/Game/UnifiedScriptDemo/__NeverLoadedSoftReference")) == nullptr);
+
+        TSharedPtr<FJsonObject> SoftWrongKindRoot;
+        const TSharedRef<TJsonReader<>> SoftWrongKindReader = TJsonReaderFactory<>::Create(DeclarationJson);
+        if (!Test.TestTrue(TEXT("Soft reference JSON parses for wrong-kind validation"),
+                FJsonSerializer::Deserialize(SoftWrongKindReader, SoftWrongKindRoot) && SoftWrongKindRoot.IsValid()))
+        {
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* SoftWrongKindAssets = nullptr;
+        if (!SoftWrongKindRoot->TryGetArrayField(TEXT("assets"), SoftWrongKindAssets) || SoftWrongKindAssets == nullptr)
+        {
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& AssetValue : *SoftWrongKindAssets)
+        {
+            const TSharedPtr<FJsonObject> Asset = AssetValue->AsObject();
+            FString QualifiedName;
+            if (!Asset.IsValid() || !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+                QualifiedName != TEXT("UnifiedScript.Unreal.Demo.SoftReferenceGameplayDemoScript"))
+            {
+                continue;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* States = nullptr;
+            if (!Asset->TryGetArrayField(TEXT("states"), States) || States == nullptr)
+            {
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& StateValue : *States)
+            {
+                const TSharedPtr<FJsonObject> State = StateValue->AsObject();
+                FString Name;
+                if (State.IsValid() && State->TryGetStringField(TEXT("name"), Name) &&
+                    Name == TEXT("PreviewMesh"))
+                {
+                    State->SetNumberField(TEXT("defaultValue"), 7.0);
+                }
+            }
+        }
+        FString WrongKindDeclaration;
+        {
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&WrongKindDeclaration);
+            if (!Test.TestTrue(TEXT("Wrong-kind soft JSON serializes for rejection"),
+                    FJsonSerializer::Serialize(SoftWrongKindRoot.ToSharedRef(), Writer)))
+            {
+                return false;
+            }
+        }
+        FInstancedPropertyBag WrongKindState;
+        TArray<FGuid> WrongKindOverrideIds;
+        FUnifiedScriptStateMigrationReport WrongKindMigration;
+        FString WrongKindAssetPath;
+        FString WrongKindError;
+        Test.TestFalse(TEXT("Wrong-kind soft JSON is rejected transactionally"),
+            FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+                WrongKindDeclaration,
+                TEXT("Unreal/SoftReferenceGameplay"),
+                SoftJsonState,
+                {},
+                WrongKindState,
+                WrongKindOverrideIds,
+                WrongKindMigration,
+                WrongKindAssetPath,
+                WrongKindError));
+
+        Test.TestEqual(TEXT("Soft object default remains an unloaded path"),
+            Mesh->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().ToString(),
+            FString(TEXT("/Engine/BasicShapes/Cube.Cube")));
+        Test.TestEqual(TEXT("Soft class default remains an unloaded path"),
+            ActorClass->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().ToString(),
+            FString(TEXT("/Script/Engine.StaticMeshActor")));
+
+        Mesh->SetPropertyValue_InContainer(
+            Cdo,
+            FSoftObjectPtr(FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere"))));
+        FString ChangedDeclaration = DeclarationJson;
+        TSharedPtr<FJsonObject> Root;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeclarationJson);
+        if (!Test.TestTrue(TEXT("Soft reference declaration parses for override test"),
+                FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid()))
+        {
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+        if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+        {
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+        {
+            const TSharedPtr<FJsonObject> Asset = AssetValue->AsObject();
+            FString QualifiedName;
+            if (!Asset.IsValid() || !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+                QualifiedName != TEXT("UnifiedScript.Unreal.Demo.SoftReferenceGameplayDemoScript"))
+            {
+                continue;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* States = nullptr;
+            if (!Asset->TryGetArrayField(TEXT("states"), States) || States == nullptr)
+            {
+                return false;
+            }
+            for (const TSharedPtr<FJsonValue>& StateValue : *States)
+            {
+                const TSharedPtr<FJsonObject> State = StateValue->AsObject();
+                FString Name;
+                if (!State.IsValid() || !State->TryGetStringField(TEXT("name"), Name))
+                {
+                    continue;
+                }
+                if (Name == TEXT("PreviewMesh"))
+                {
+                    State->SetStringField(TEXT("defaultValue"), TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+                }
+                else if (Name == TEXT("PreviewActorClass"))
+                {
+                    State->SetStringField(TEXT("defaultValue"), TEXT(""));
+                }
+            }
+        }
+        {
+            FString Output;
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+            if (!Test.TestTrue(TEXT("Soft reference source update serializes"),
+                    FJsonSerializer::Serialize(Root.ToSharedRef(), Writer)))
+            {
+                return false;
+            }
+            ChangedDeclaration = MoveTemp(Output);
+        }
+        Error.Reset();
+        if (!Test.TestTrue(*FString::Printf(TEXT("Soft reference source update succeeds: %s"), *Error),
+                FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                    *ScriptAsset, *Blueprint, ChangedDeclaration, false, Result, Error)))
+        {
+            return false;
+        }
+        Cdo = Blueprint->GeneratedClass->GetDefaultObject();
+        Mesh = FindFProperty<FSoftObjectProperty>(Blueprint->GeneratedClass, TEXT("PreviewMesh"));
+        ActorClass = FindFProperty<FSoftClassProperty>(Blueprint->GeneratedClass, TEXT("PreviewActorClass"));
+        Test.TestEqual(TEXT("Soft object CDO override survives source update"),
+            Mesh->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().ToString(),
+            FString(TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+        Test.TestTrue(TEXT("Soft class source default propagates to an untouched property"),
+            ActorClass->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath().IsNull());
+
+        FSoftObjectPath PreservedPath = Mesh->GetPropertyValue_InContainer(Cdo).ToSoftObjectPath();
+        FString InvalidDeclaration = ChangedDeclaration.Replace(
+            TEXT("/Engine/BasicShapes/Cylinder.Cylinder"), TEXT("Game/Invalid.Cube"));
+        Error.Reset();
+        Test.TestFalse(TEXT("Invalid soft default is rejected transactionally"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset, *Blueprint, InvalidDeclaration, false, Result, Error));
+        Mesh = FindFProperty<FSoftObjectProperty>(Blueprint->GeneratedClass, TEXT("PreviewMesh"));
+        Test.TestEqual(TEXT("Rejected soft default preserves the CDO override"),
+            Mesh->GetPropertyValue_InContainer(Blueprint->GeneratedClass->GetDefaultObject())
+                .ToSoftObjectPath(), PreservedPath);
+
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(PackageFilename), true);
+        FSavePackageArgs SaveArguments;
+        SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+        SaveArguments.SaveFlags = SAVE_NoError;
+        if (!Test.TestTrue(TEXT("Soft reference generated Blueprint saves"),
+                UPackage::SavePackage(Package, Blueprint, *PackageFilename, SaveArguments)))
+        {
+            return false;
+        }
+
+        UClass* GeneratedClass = Blueprint->GeneratedClass;
+        InitialManagedWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+        World = UWorld::CreateWorld(EWorldType::Game, false);
+        if (!Test.TestNotNull(TEXT("Soft reference gameplay World is created"), World))
+        {
+            return false;
+        }
+        World->AddToRoot();
+        World->InitializeActorsForPlay(FURL());
+        Actor = Cast<AUnifiedScriptActor>(World->SpawnActor(GeneratedClass));
+        Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+        if (!Test.TestNotNull(TEXT("Soft reference gameplay Actor spawns"), Actor) ||
+            !Test.TestNotNull(TEXT("Soft reference gameplay host exists"), Host))
+        {
+            return false;
+        }
+        Mesh = FindFProperty<FSoftObjectProperty>(GeneratedClass, TEXT("PreviewMesh"));
+        ActorClass = FindFProperty<FSoftClassProperty>(GeneratedClass, TEXT("PreviewActorClass"));
+        Mesh->SetPropertyValue_InContainer(
+            Actor,
+            FSoftObjectPtr(FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere"))));
+        ActorClass->SetPropertyValue_InContainer(
+            Actor,
+            FSoftObjectPtr(FSoftObjectPath(TEXT("/Script/Engine.StaticMeshActor"))));
+        Actor->GetUnifiedScriptComponent()->ScriptAsset = ScriptAsset;
+        Actor->GetUnifiedScriptComponent()->BeginPlay();
+        Test.TestTrue(TEXT("Soft reference instance override is present before managed hydrate"),
+            Mesh->GetPropertyValue_InContainer(Actor).ToSoftObjectPath().ToString() ==
+                TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+        Test.TestEqual(TEXT("Soft reference managed World is registered"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(), InitialManagedWorldCount + 1);
+        return true;
+    }
+
+    void Pump()
+    {
+        if (Host != nullptr && Actor != nullptr && Actor->GetUnifiedScriptComponent() != nullptr)
+        {
+            Host->BeginManagedFrame();
+            Actor->GetUnifiedScriptComponent()->TickComponent(0.016f, LEVELTICK_All, nullptr);
+            Host->EndManagedFrame();
+        }
+    }
+
+    int32 PreviewCount() const
+    {
+        int32 Count = 0;
+        if (World != nullptr)
+        {
+            for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
+            {
+                ++Count;
+            }
+        }
+        return Count;
+    }
+
+    FString PreviewPath() const
+    {
+        if (World == nullptr)
+        {
+            return FString();
+        }
+        for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
+        {
+            if (It->GetStaticMeshComponent()->GetStaticMesh() != nullptr)
+            {
+                return It->GetStaticMeshComponent()->GetStaticMesh()->GetPathName();
+            }
+        }
+        return FString();
+    }
+
+    bool FinishWorld()
+    {
+        if (Actor != nullptr)
+        {
+            Actor->GetUnifiedScriptComponent()->EndPlay(EEndPlayReason::Destroyed);
+            Actor->Destroy();
+            Actor = nullptr;
+        }
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        World = nullptr;
+        Test.TestEqual(TEXT("Soft reference World cleanup releases managed state"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(), InitialManagedWorldCount);
+        return !Test.HasAnyErrors();
+    }
+};
+
+class FRun final : public IAutomationLatentCommand
+{
+    TSharedPtr<FScenario> Scenario;
+    FAutomationTestBase& Test;
+    double Started = FPlatformTime::Seconds();
+    int32 Phase = 0;
+
+public:
+    FRun(const TSharedPtr<FScenario>& InScenario, FAutomationTestBase& InTest)
+        : Scenario(InScenario), Test(InTest)
+    {
+    }
+
+    virtual bool Update() override
+    {
+        FScenario& S = *Scenario;
+        if (FPlatformTime::Seconds() - Started > 45.0)
+        {
+            Test.AddError(FString::Printf(
+                TEXT("Soft reference gameplay timed out in phase %d (state=%s,error=%s)."),
+                Phase,
+                S.Actor != nullptr ? *S.Actor->GetUnifiedScriptComponent()->ManagedState : TEXT("<none>"),
+                S.Actor != nullptr ? *S.Actor->GetUnifiedScriptComponent()->LastScriptError : TEXT("<none>")));
+            Scenario.Reset();
+            return true;
+        }
+        S.Pump();
+        UUnifiedScriptComponent* Component = S.Actor != nullptr
+            ? S.Actor->GetUnifiedScriptComponent()
+            : nullptr;
+        if (Component == nullptr)
+        {
+            Scenario.Reset();
+            return true;
+        }
+        const FString State = Component->ManagedState;
+        if (Phase == 0)
+        {
+            if (State != TEXT("SoftReferences:Loaded"))
+            {
+                return false;
+            }
+            Test.TestEqual(TEXT("Instance soft override loads the requested Sphere"),
+                S.PreviewPath(), FString(TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+            Test.TestEqual(TEXT("One preview Actor is spawned after async load"), S.PreviewCount(), 1);
+            FUnifiedScriptManagedFunctionValueV1 Value;
+            FString Error;
+            Test.TestTrue(TEXT("Managed soft state mutator is callable"),
+                Component->InvokeManagedScriptFunction(TEXT("UseAlternatePreviewMesh"), {}, Value, Error));
+            Phase = 1;
+            return false;
+        }
+        if (Phase == 1)
+        {
+            if (State != TEXT("SoftReferences:Loaded"))
+            {
+                return false;
+            }
+            Test.TestEqual(TEXT("Managed flush and retry replace the preview with Cube"),
+                S.PreviewPath(), FString(TEXT("/Engine/BasicShapes/Cube.Cube")));
+            Test.TestEqual(TEXT("Retry keeps exactly one preview Actor"), S.PreviewCount(), 1);
+            FSoftObjectProperty* Mesh = FindFProperty<FSoftObjectProperty>(
+                S.Actor->GetClass(), TEXT("PreviewMesh"));
+            Test.TestEqual(TEXT("Managed flush writes the alternate soft object path"),
+                Mesh->GetPropertyValue_InContainer(S.Actor).ToSoftObjectPath().ToString(),
+                FString(TEXT("/Engine/BasicShapes/Cube.Cube")));
+            Mesh->SetPropertyValue_InContainer(
+                S.Actor,
+                FSoftObjectPtr(FSoftObjectPath(TEXT("/Script/Engine.Actor"))));
+            Test.TestTrue(TEXT("Reload is accepted for the invalid asset type retry"), Component->ReloadScript());
+            Phase = 2;
+            return false;
+        }
+        if (Phase == 2)
+        {
+            if (!State.StartsWith(TEXT("SoftReferences:Error:")))
+            {
+                return false;
+            }
+            Test.TestEqual(TEXT("Failed soft load cleans the previous preview Actor"), S.PreviewCount(), 0);
+            FSoftObjectProperty* Mesh = FindFProperty<FSoftObjectProperty>(
+                S.Actor->GetClass(), TEXT("PreviewMesh"));
+            Mesh->SetPropertyValue_InContainer(
+                S.Actor,
+                FSoftObjectPtr(FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere"))));
+            Test.TestTrue(TEXT("Reload retries after correcting the soft object path"), Component->ReloadScript());
+            Phase = 3;
+            return false;
+        }
+        if (Phase == 3)
+        {
+            if (State != TEXT("SoftReferences:Loaded"))
+            {
+                return false;
+            }
+            Test.TestEqual(TEXT("Corrected soft path loads again"),
+                S.PreviewPath(), FString(TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+            Test.TestEqual(TEXT("Corrected retry leaves one preview Actor"), S.PreviewCount(), 1);
+            Test.TestTrue(TEXT("Managed soft reference cleanup reaches World teardown"), S.FinishWorld());
+            Scenario.Reset();
+            return true;
+        }
+        return false;
+    }
+};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptSoftReferenceMaterializationTest,
+    "UnifiedScript.Unreal.ScriptClass.SoftReferenceMaterialization",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptSoftReferenceMaterializationTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::SoftReferenceTests;
+    TSharedPtr<FScenario> Scenario = MakeShared<FScenario>(*this);
+    if (!Scenario->Build())
+    {
+        return false;
+    }
+    ADD_LATENT_AUTOMATION_COMMAND(FRun(Scenario, *this));
     return true;
 }
 

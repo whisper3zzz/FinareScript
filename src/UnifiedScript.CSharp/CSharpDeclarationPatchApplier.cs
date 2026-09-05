@@ -1164,6 +1164,15 @@ public sealed class CSharpDeclarationPatchApplier
             return "default";
         }
 
+        if (spec.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass)
+        {
+            string path = spec.DefaultValue.GetString() ?? string.Empty;
+            return path.Length == 0
+                ? "default"
+                : $"new {spec.TypeName}(" +
+                    Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(path, quote: true) + ")";
+        }
+
         if (spec.TypeKind == ScriptStateTypeKind.Struct)
         {
             if (spec.DefaultValue.TryGetProperty("pitch", out JsonElement pitch) &&

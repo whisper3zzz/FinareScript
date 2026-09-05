@@ -223,6 +223,66 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Fact]
+    public void SoftReferenceStatesLowerAsExactHandlesAndPaths()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/SoftReferenceState")]
+            public sealed class SoftReferenceState
+            {
+                public UnrealSoftObjectHandle Mesh { get; set; } =
+                    new("/Engine/BasicShapes/Cube.Cube");
+                public UnrealSoftClassHandle ActorClass { get; set; } =
+                    new("/Script/Engine.StaticMeshActor");
+                public UnrealSoftObjectHandle Empty { get; set; } = new();
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SoftReferenceState",
+                [new CSharpSourceDocument("Game/SoftReferenceState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = Assert.Single(
+                result.ScriptAssets!.Assets)
+            .States.ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Assert.Equal(ScriptStateTypeKind.SoftObject, states["Mesh"].TypeKind);
+        Assert.Equal("UnifiedScript.Unreal.UnrealSoftObjectHandle", states["Mesh"].TypeMetadataName);
+        Assert.Null(states["Mesh"].UnrealType);
+        Assert.Equal("/Engine/BasicShapes/Cube.Cube", states["Mesh"].DefaultValue.GetString());
+        Assert.Equal(ScriptStateTypeKind.SoftClass, states["ActorClass"].TypeKind);
+        Assert.Equal("/Script/Engine.StaticMeshActor", states["ActorClass"].DefaultValue.GetString());
+        Assert.Equal(string.Empty, states["Empty"].DefaultValue.GetString());
+    }
+
+    [Fact]
+    public void SoftReferenceDefaultRejectsNonCanonicalPath()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/InvalidSoftReference")]
+            public sealed class InvalidSoftReference
+            {
+                public UnrealSoftObjectHandle Mesh { get; set; } = new("Game/BasicShapes/Cube.Cube");
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InvalidSoftReference",
+                [new CSharpSourceDocument("Game/InvalidSoftReference.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired);
+    }
+
+    [Fact]
     public void CommonUnrealFunctionValuesAndDirectionsLowerIntoDeclarationIr()
     {
         const string source = """

@@ -214,6 +214,28 @@ public sealed class NativeUnrealInvocationBridgeTests
     }
 
     [Fact]
+    public void ReflectedSoftPropertiesUseTypedPathKindsWhileGeneratedCallsKeepStringEncoding()
+    {
+        const string propertyPath = "/Script/FixtureRuntime.FixtureObject:SoftObject";
+        const string functionPath = "/Script/FixtureRuntime.FixtureObject:EchoSoftObject";
+        var transport = new SoftPropertyTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport);
+        var expected = new UnrealSoftObjectHandle("/Game/Items/Cube.Cube");
+
+        bridge.WriteProperty(Handle, propertyPath, expected);
+        Assert.Equal(UnrealInvocationValueKind.SoftObject, transport.LastWrite.Kind);
+        Assert.Equal(expected, bridge.ReadProperty<UnrealSoftObjectHandle>(Handle, propertyPath));
+
+        Assert.Equal(expected, bridge.Invoke<UnrealSoftObjectHandle>(Handle, functionPath, [expected]));
+        Assert.Equal(UnrealInvocationValueKind.String, transport.LastArguments.Single().Kind);
+
+        transport.ReadValue = UnrealInvocationValue.FromString(expected.AssetPath);
+        UnrealInvocationException mismatch = Assert.Throws<UnrealInvocationException>(
+            () => bridge.ReadProperty<UnrealSoftObjectHandle>(Handle, propertyPath));
+        Assert.Equal(UnrealInvocationError.ValueTypeMismatch, mismatch.Error);
+    }
+
+    [Fact]
     public void GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations()
     {
         var transport = new CallFrameFixtureTransport();
@@ -300,6 +322,39 @@ public sealed class NativeUnrealInvocationBridgeTests
                 : UnrealInvocationResponse.Failed(
                     UnrealInvocationError.ArgumentCountMismatch,
                     "Echo requires one argument.");
+    }
+
+    private sealed class SoftPropertyTransport : IUnrealNativeInvocationTransport
+    {
+        public UnrealInvocationValue ReadValue { get; set; } =
+            UnrealInvocationValue.FromSoftObject(new UnrealSoftObjectHandle("/Game/Items/Cube.Cube"));
+
+        public UnrealInvocationValue LastWrite { get; private set; }
+
+        public IReadOnlyList<UnrealInvocationValue> LastArguments { get; private set; } = [];
+
+        public UnrealInvocationResponse ReadProperty(
+            UnrealObjectHandle target,
+            string propertyPath) => UnrealInvocationResponse.Succeeded(ReadValue);
+
+        public UnrealInvocationResponse WriteProperty(
+            UnrealObjectHandle target,
+            string propertyPath,
+            UnrealInvocationValue value)
+        {
+            LastWrite = value;
+            ReadValue = value;
+            return UnrealInvocationResponse.Succeeded(UnrealInvocationValue.Void);
+        }
+
+        public UnrealInvocationResponse Invoke(
+            UnrealObjectHandle target,
+            string functionPath,
+            IReadOnlyList<UnrealInvocationValue> arguments)
+        {
+            LastArguments = arguments;
+            return UnrealInvocationResponse.Succeeded(arguments.Single());
+        }
     }
 
     private sealed class CallFrameFixtureTransport

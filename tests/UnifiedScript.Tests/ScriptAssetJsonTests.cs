@@ -98,6 +98,57 @@ public sealed class ScriptAssetJsonTests
         Assert.Throws<JsonException>(() => ScriptAssetJson.Deserialize(wrongDefault));
     }
 
+    [Fact]
+    public void SoftReferenceStatesRoundTripAndRejectMalformedPaths()
+    {
+        ScriptAssetDeclaration asset = new(
+            SemanticId.FromKey("soft-state-asset"),
+            "Game.SoftState",
+            "Game/SoftState",
+            SourceSpan.Unknown("SoftState.cs"),
+            [new ScriptStateDeclaration(
+                SemanticId.FromKey("soft-state"),
+                "Mesh",
+                "UnrealSoftObjectHandle",
+                "UnifiedScript.Unreal.UnrealSoftObjectHandle",
+                ScriptStateTypeKind.SoftObject,
+                JsonSerializer.SerializeToElement("/Game/Props/Cube.Cube:Mesh"),
+                SourceSpan.Unknown("SoftState.cs"),
+                ScriptExposure.None)],
+            []);
+        ScriptAssetDocument document = ScriptAssetDocument.Create(
+            SemanticId.FromKey("soft-compilation"),
+            SemanticId.FromKey("soft-configuration"),
+            [asset]);
+
+        ScriptStateDeclaration state = Assert.Single(
+            ScriptAssetJson.Deserialize(ScriptAssetJson.Serialize(document)).Assets).States.Single();
+        Assert.Equal(ScriptStateTypeKind.SoftObject, state.TypeKind);
+        Assert.Equal("/Game/Props/Cube.Cube:Mesh", state.DefaultValue.GetString());
+
+        string malformed = ScriptAssetJson.Serialize(document, writeIndented: false)
+            .Replace("/Game/Props/Cube.Cube:Mesh", "Game/Props/Cube.Cube", StringComparison.Ordinal);
+        Assert.Throws<JsonException>(() => ScriptAssetJson.Deserialize(malformed));
+    }
+
+    [Theory]
+    [InlineData("/Game/A.A:Sub/Object")]
+    [InlineData("/Game/A.A?B")]
+    [InlineData("/Game/A.A#B")]
+    [InlineData("/Game/A")]
+    [InlineData("/Game/A.A.")]
+    public void SoftReferencePathValidatorRejectsUnrealInvalidNames(string path)
+    {
+        Assert.False(UnrealObjectPathValidator.IsValid(path));
+    }
+
+    [Fact]
+    public void SoftReferencePathValidatorAcceptsNestedSubobjects()
+    {
+        Assert.True(UnrealObjectPathValidator.IsValid("/Game/Props/Cube.Cube:Mesh.Nested"));
+        Assert.True(UnrealObjectPathValidator.IsValid("/Game/Foo(Bar)/Cube.Cube"));
+    }
+
     private static ScriptStateDeclaration State(string name, int defaultValue) => new(
         SemanticId.FromKey($"state:{name}"),
         name,

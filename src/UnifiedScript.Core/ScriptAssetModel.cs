@@ -15,6 +15,8 @@ public enum ScriptStateTypeKind
     Object,
     Class,
     Struct,
+    SoftObject,
+    SoftClass,
 }
 
 public sealed record ScriptExposure(

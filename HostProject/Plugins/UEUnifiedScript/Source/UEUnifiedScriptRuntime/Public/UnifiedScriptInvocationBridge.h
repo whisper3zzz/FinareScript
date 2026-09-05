@@ -52,6 +52,8 @@ enum class EUnifiedScriptValueKind : uint8
     Map = 24,
     ByteBuffer = 25,
     Callback = 26,
+    SoftObject = 27,
+    SoftClass = 28,
 };
 
 /** Owned value transport. No address into UObject or UFunction storage escapes. */
@@ -109,6 +111,8 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     static FUnifiedScriptValue FromBoolean(bool Value);
     static FUnifiedScriptValue FromInt32(int32 Value);
     static FUnifiedScriptValue FromString(FString Value);
+    static FUnifiedScriptValue FromSoftObjectPath(FString Value);
+    static FUnifiedScriptValue FromSoftClassPath(FString Value);
     static FUnifiedScriptValue FromInt8(int8 Value);
     static FUnifiedScriptValue FromUInt8(uint8 Value);
     static FUnifiedScriptValue FromInt16(int16 Value);
@@ -144,6 +148,8 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     bool TryGetBoolean(bool& OutValue) const;
     bool TryGetInt32(int32& OutValue) const;
     bool TryGetString(FString& OutValue) const;
+    bool TryGetSoftObjectPath(FString& OutValue) const;
+    bool TryGetSoftClassPath(FString& OutValue) const;
     bool TryGetInt8(int8& OutValue) const;
     bool TryGetUInt8(uint8& OutValue) const;
     bool TryGetInt16(int16& OutValue) const;

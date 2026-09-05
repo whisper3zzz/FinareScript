@@ -404,6 +404,9 @@ public static class DeclarationPatchJson
                 value.ValueKind == JsonValueKind.String,
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 value.ValueKind == JsonValueKind.Null,
+            ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass =>
+                value.ValueKind == JsonValueKind.String &&
+                UnrealObjectPathValidator.IsValid(value.GetString()),
             ScriptStateTypeKind.Struct => IsFiniteCommonValue(value),
             _ => false,
         };

@@ -304,7 +304,8 @@ baseline fails generation with stable `USUE51xx` diagnostics.
 coverage a build gate. Runtime member-ID
 misses select the exact ABI v1 reflected path. Its runtime codec now covers
 bool, all supported integer widths, float/double, string/name/text, object/class
-handles, typed enums and Vector/Rotator/Transform. The common-value coverage test
+handles, typed enums and Vector/Rotator/Transform. Reflected property access
+also carries typed soft-object/soft-class paths. The common-value coverage test
 keeps property/function fallback classification aligned with these families.
 The report rejects missing direct
 thunks for containers or `out`/`ref` functions because the legacy value contract
@@ -325,6 +326,11 @@ struct layout, common values use the following encoding:
 | Vector / Rotator | Three binary64 cells: XYZ / Pitch-Yaw-Roll |
 | Transform | Ten binary64 cells: quaternion XYZW, translation XYZ, scale XYZ |
 | Enum | Signed 64-bit value, unsigned 64-bit stable type ID, optional UTF-8 path |
+| SoftObject / SoftClass | UTF-8 asset path with distinct owned-value kinds 27 / 28; empty path is null |
+
+The appended soft kinds apply to reflected property access. Existing generated
+soft-reference calls retain their published path-string encoding and ABI v3
+descriptors; the new state path does not change that protocol.
 
 Enum paths are limited to 4096 bytes, cannot contain a null byte, and must agree
 with the type ID when present. Generated results can carry an ID without a path:
@@ -380,7 +386,8 @@ and entry point is compatible.
 `UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
 asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
 `unifiedscript.script-asset/v0.1`, maps the reviewed scalar/enum plus `FName`,
-`FText`, `UObject`, `UClass`, `FVector`, `FRotator` and `FTransform` state matrix into a fixed-layout
+`FText`, `UObject`, `UClass`, soft-object/soft-class paths, `FVector`, `FRotator`
+and `FTransform` state matrix into a fixed-layout
 `FInstancedPropertyBag`, and applies C# defaults plus Details metadata and
 Edit/SaveGame/Net flags. The C# declaration remains authoritative; Blueprint
 does not own duplicate field declarations.
@@ -403,8 +410,9 @@ non-deterministic constructor shapes fail before native class mutation. This
 keeps generated CDO defaults, managed state hydration, compatible override
 migration, and packaged reload on one typed declaration contract.
 
-The compiled declaration payload uses v1.2 for generated Unreal enum wrappers,
-Rotator and Transform state. Older shapes retain v1.1 encoding, and v1.0 scalar
+The compiled declaration payload uses v1.3 for soft-reference state and v1.2
+for generated Unreal enum wrappers, Rotator and Transform state. Older shapes
+retain v1.1 encoding, and v1.0 scalar
 decoding remains supported. The optional Unreal type descriptor identifies each
 reflected enum or struct exactly. The generated class projects the common shapes to native
 `FNameProperty`, `FTextProperty`, `FObjectProperty`, `FClassProperty`, and
@@ -422,6 +430,22 @@ without a facade field. Transform defaults retain quaternion, translation and
 scale in Declaration IR and the binary payload. The Blueprint adapter translates
 that value into Unreal's specialized Transform default text, shared with CDO
 readback so untouched defaults and explicit overrides compare consistently.
+
+Soft-reference defaults persist Unreal asset paths and materialize as
+`FSoftObjectProperty` or `FSoftClassProperty`, with the corresponding Property
+Bag value type. The ordinary managed state synchronizer reads and writes these
+through the reflection property bridge. Its owned values distinguish soft
+objects from soft classes; they do not become untyped strings or generation
+handles. The frozen native table and value layouts are unchanged, and existing
+value-kind numbers are preserved. Update managed and native parts together to
+use these appended kinds.
+
+Declaration validation, CDO reconciliation, hydration, flush and reload only
+store and compare paths. They do not load referenced packages. Null paths use
+the empty string in the declaration and `None` for Blueprint default import;
+raw stored paths determine whether a value follows its source default or is an
+explicit override. Actual asset loading uses the existing World-owned async
+service, with the same cancellation and generation-lifetime rules.
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, obtains the declared value 10 from `DemoScript()`, overrides

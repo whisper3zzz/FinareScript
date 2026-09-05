@@ -279,6 +279,43 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void DeclarationBinary_UsesMinor3ForSoftReferenceStatesAndRejectsOlderReaders()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Tests/SoftReferenceState")]
+            public sealed class SoftReferenceState
+            {
+                public UnrealSoftObjectHandle Mesh { get; set; } = new("/Game/Props/Cube.Cube");
+                public UnrealSoftClassHandle ActorClass { get; set; } = new("/Script/Engine.StaticMeshActor");
+            }
+            """;
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(source, [typeof(UnrealObjectScript).Assembly.Location]));
+        byte[] payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.ToArray();
+        Assert.Equal((byte)3, payload[10]);
+        UnifiedScriptRuntimeDeclarationDocument decoded =
+            UnifiedScriptRuntimeDeclarationBinary.Decode(payload);
+        IReadOnlyDictionary<string, UnifiedScriptRuntimeStateDeclaration> states =
+            Assert.Single(decoded.Assets).States.ToDictionary(
+                static state => state.Name,
+                StringComparer.Ordinal);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.SoftObject, states["Mesh"].DefaultValue.Kind);
+        Assert.Equal("/Game/Props/Cube.Cube", states["Mesh"].DefaultValue.TextValue);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.SoftClass, states["ActorClass"].DefaultValue.Kind);
+        Assert.Equal("/Script/Engine.StaticMeshActor", states["ActorClass"].DefaultValue.TextValue);
+
+        byte[] lowered = payload.ToArray();
+        lowered[10] = 2;
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            UnifiedScriptRuntimeDeclarationBinary.Decode(lowered));
+        Assert.Contains("requires declaration minor version 3", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BindingAndDependencyPayloads_AreSortedAndStrictlyRoundTrip()
     {
         var bindings = new UnifiedScriptRuntimeBindingManifest(

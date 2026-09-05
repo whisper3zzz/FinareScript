@@ -25,17 +25,19 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — common asset-reference state and defaults**.
-  Puerts exposes Soft Object/Class Reference fields on script classes. Our
-  generated calls and Blueprint function exchange already transport these
-  references, but ordinary Script Class state/default materialization still
-  rejects them. Reuse that transport to carry persistent asset paths through
-  declaration, native editable properties, managed state and compatible reload,
-  then use the configuration in the existing asset-loading gameplay route.
-  Preserve lazy loading, exact reference identity and explicit overrides; do not
+- Current tranche: **M13.5 — common collection state and defaults**.
+  The pinned Puerts class example exposes Array, Set and Map fields. Generated
+  calls already exchange these shapes here, while ordinary Script Class state
+  still rejects collection declarations. Support editable gameplay configuration
+  such as lists of asset references and keyed spawn choices through the existing
+  collection types, declarations, native properties and managed state. Preserve
+  element/key/value identities, deterministic defaults, explicit overrides and
+  transactional reload, then exercise the configuration in ordinary gameplay.
+  Reuse the current collection transport and Property Bag facilities; do not
   pull forward the full inheritance/subobject/composition scope of M13.3.
-- Latest delivered M13.5 checkpoint: **common value state and defaults**,
-  following native interface/subsystem gameplay (`53e0bd3`),
+- Latest delivered M13.5 checkpoint: **soft-reference state and defaults**,
+  following common value state/defaults (`2397d75`),
+  native interface/subsystem gameplay (`53e0bd3`),
   ordinary native object text values (`4f68d09`),
   typed reference containers (`7c250c5`), reflected interface references
   (`bffb2d8`) and callbacks (`2827216`).
@@ -206,7 +208,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
 | Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only event `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
 | Native interfaces and services — M13.5 | Generated native virtual interface calls, World/GameInstance/LocalPlayer subsystem lookup and Enhanced Input mapping operations; real getter identity, rejection, reload and World cleanup checks | General native default constructors, travel, cooked execution and platform-specific subsystem behavior remain open |
-| Common Script Class state — M13.5 | Generated Unreal enum, Rotator and Transform state/defaults; typed JSON/binary Property Bags and Blueprint fields, saved class, source-default/CDO/instance override checks, Actor Tick and managed reload/cleanup | Soft References, collections, broader struct state, inheritance/subobjects and cooked acceptance for these new shapes remain open |
+| Common Script Class state — M13.5 | Generated Unreal enum, Rotator, Transform and Soft Reference state/defaults; typed JSON/binary Property Bags and Blueprint fields, saved class, source-default/CDO/instance overrides, Actor Tick, async asset loading/spawn and managed reload/cleanup | Collections, broader struct state, inheritance/subobjects and cooked acceptance for these new shapes remain open |
 | Typed reference containers — M13.5 | Canonical transport for generated object/class/Soft Reference Array, Set and Map values; exact native/node types, subclass validation, real engine Actor query and managed reload/cleanup example | This fixes generated calls into native APIs; interface containers and the full Script Class property/default/cooked matrix remain open |
 | Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns, qualified object inputs and copied `FString`/`std::string` values; typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Containers/richer structs, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
@@ -300,8 +302,8 @@ not an exhaustive signature audit or a claim of parity.
 | Capability family | Current UnifiedScript gap or next comparison | Owner |
 | --- | --- | --- |
 | Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
-| Containers and Soft References | The typed-reference transport mismatch is closed for generated native calls: Actor arrays, class sets, named Soft Object maps and Soft Class arrays have native/CoreCLR exchange and reload evidence. Generated Blueprint functions retain their earlier initial exchange path; their broader negative/VM/cooked and common state/default acceptance remains open | M13.5; reuse M13.3C-1 work |
-| Script classes and extension | Typed Unreal enum, Rotator and Transform defaults/state now use the existing class foundation and have real Actor reload evidence. Next close common asset-reference state/defaults; complete deeper extension, inheritance, default subobjects and composition later | M13.5; M13.3C-2 through C-4 after capability breadth |
+| Containers and Soft References | Generated native calls exchange Actor arrays, class sets, named Soft Object maps and Soft Class arrays. Soft Reference class state now keeps editable persistent paths through reload and explicit async loading/spawn. Collection state/defaults remain the next ordinary configuration gap; generated Blueprint functions retain their broader negative/VM/cooked follow-ups | M13.5; reuse M13.3C-1 work |
+| Script classes and extension | Typed Unreal enum, Rotator, Transform and Soft Reference defaults/state use the existing class foundation and have real Actor reload evidence. Next close common collection configuration; complete deeper extension, inheritance, default subobjects and composition later | M13.5; M13.3C-2 through C-4 after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Exact `FString`/`std::string` fields, constructor/method inputs and returned snapshots now use an optional bounded text transport, including mixed object arguments and generation/World cleanup. Containers/richer structs, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
 | Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters support synchronous results/ref/out, native retention and worker-originated generated UE reentry. Native interface methods and generated World/GameInstance/LocalPlayer lookup now support Enhanced Input mapping with reload/cleanup. Installed-consumer authoring, broader latent/service use cases and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
@@ -350,10 +352,21 @@ requiring a dummy Visual method. These checks establish the selected Editor
 runtime scope, not cooked execution or general class inheritance.
 
 The same upstream page shows `TSoftObjectPtr` and `TSoftClassPtr` class members.
-Those values already have generated-call transport here, while state lowering
-and materialization still reject them. Persistent asset configuration is the
-next common use to close; collections and deeper class integration remain
-separate follow-ups.
+The delivered soft-state batch carries persistent paths through binary declaration
+v1.3, JSON/binary Property Bags, native soft properties and managed state.
+Reflection property access distinguishes soft-object and soft-class values;
+existing generated calls keep their published string-path protocol. The
+`SoftReferenceGameplayDemoScript` uses editable mesh/class references with the
+existing async loader and generated Actor APIs. CMD Automation verifies class
+save, default updates, CDO/instance overrides, unresolved-path materialization,
+invalid JSON rejection, actual loading/spawn, managed mutation, failed-use retry,
+reload and World cleanup. These are Editor/CMD results, not new cooked acceptance.
+
+The same example also declares an object array, a string set and a string/number
+map. Such editable configuration still cannot be declared as ordinary Script
+Class state here, even though native call transport already exists. This is the
+next selected use case; it does not require every nested container or class
+inheritance combination.
 
 For each family, distinguish **available for the reviewed scope**, **partial**,
 **missing**, **not yet audited**, and **intentional difference**. Before declaring
@@ -417,8 +430,9 @@ an external project requires the user's authorization.
   both call directions and normal state usage. Reuse the unfinished M13.3C-1c-b
   work where relevant rather than restarting it or treating it as all of parity.
   Generated enum, Rotator and Transform state/defaults now pass native
-  materialization and Actor runtime checks. Common Soft Reference state/defaults
-  are next; this does not complete the whole property or container matrix.
+  materialization and Actor runtime checks. Soft Reference defaults/state now
+  retain persistent paths and compose with async loading/spawn. Common collection
+  state/defaults are next; this does not complete the whole property matrix.
 - [ ] Extend the versioned generation model to common non-reflected C++
   constructors, methods, fields, overloads and inheritance, including callbacks,
   conversion and explicit ownership. Generate C# declarations and visual nodes
@@ -440,7 +454,7 @@ an external project requires the user's authorization.
   execution are verified. Project-backed C#/Graph transactions now change the
   live Demo through chunk reload; external refresh and the native body-build/live
   reload path are verified. Installed-consumer authoring and class-shape/default
-  deployment remain open, as described by the current cursor.
+  deployment remain separate follow-ups.
   Reflected callbacks now have generated typed leases and synchronous return/ref/out,
   including retained native calls and worker-originated reentry. This closes that
   callback batch, not all latent/interface/subsystem or native callback support.

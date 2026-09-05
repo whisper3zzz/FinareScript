@@ -948,6 +948,8 @@ internal sealed class CSharpScriptAssetLowerer
             _ when metadataName == "UnifiedScript.Unreal.UnrealText" => ScriptStateTypeKind.Text,
             _ when metadataName == "UnifiedScript.Unreal.UnrealObjectHandle" => ScriptStateTypeKind.Object,
             _ when metadataName == "UnifiedScript.Unreal.UnrealClassHandle" => ScriptStateTypeKind.Class,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealSoftObjectHandle" => ScriptStateTypeKind.SoftObject,
+            _ when metadataName == "UnifiedScript.Unreal.UnrealSoftClassHandle" => ScriptStateTypeKind.SoftClass,
             _ when metadataName is "UnifiedScript.Unreal.UnrealVector" or
                 "UnifiedScript.Unreal.UnrealRotator" or
                 "UnifiedScript.Unreal.UnrealTransform" => ScriptStateTypeKind.Struct,
@@ -964,6 +966,8 @@ internal sealed class CSharpScriptAssetLowerer
                 "UnifiedScript.Unreal.UnrealText" or
                 "UnifiedScript.Unreal.UnrealObjectHandle" or
                 "UnifiedScript.Unreal.UnrealClassHandle" or
+                "UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+                "UnifiedScript.Unreal.UnrealSoftClassHandle" or
                 "UnifiedScript.Unreal.UnrealVector" or
                 "UnifiedScript.Unreal.UnrealRotator" or
                 "UnifiedScript.Unreal.UnrealTransform";
@@ -1351,6 +1355,39 @@ internal sealed class CSharpScriptAssetLowerer
             if (isNull)
             {
                 value = JsonSerializer.SerializeToElement<object?>(null);
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (metadataName is "UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+            "UnifiedScript.Unreal.UnrealSoftClassHandle")
+        {
+            if (IsDefaultValueExpression(expression))
+            {
+                value = JsonSerializer.SerializeToElement(string.Empty);
+                return true;
+            }
+            if (TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> arguments))
+            {
+                string path = string.Empty;
+                bool valid = arguments.Count == 0 ||
+                    arguments.Count == 1 &&
+                    TryReadStringConstant(arguments[0], semanticModel, out path) &&
+                    UnrealObjectPathValidator.IsValid(path);
+                if (!valid)
+                {
+                    value = default;
+                    return false;
+                }
+                value = JsonSerializer.SerializeToElement(
+                    arguments.Count == 0 ? string.Empty : path);
                 return true;
             }
 

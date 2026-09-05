@@ -198,6 +198,14 @@ internal static class UnrealScriptStateSynchronizer
             {
                 return StateBinding<UnrealClassHandle>.CreateTyped(property, memberPath);
             }
+            if (type == typeof(UnrealSoftObjectHandle))
+            {
+                return StateBinding<UnrealSoftObjectHandle>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealSoftClassHandle))
+            {
+                return StateBinding<UnrealSoftClassHandle>.CreateTyped(property, memberPath);
+            }
             if (type == typeof(UnrealVector))
             {
                 return StateBinding<UnrealVector>.CreateTyped(property, memberPath);

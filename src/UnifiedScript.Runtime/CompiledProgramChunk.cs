@@ -60,6 +60,8 @@ public enum UnifiedScriptRuntimeStateValueKind : byte
     Vector = 9,
     Rotator = 10,
     Transform = 11,
+    SoftObject = 12,
+    SoftClass = 13,
 }
 
 public sealed record UnifiedScriptRuntimeStateValue(
@@ -322,14 +324,20 @@ public static class UnifiedScriptRuntimeDeclarationBinary
     public static byte[] Encode(UnifiedScriptRuntimeDeclarationDocument document)
     {
         UnifiedScriptRuntimeDeclarationDocument normalized = Normalize(document);
-        ushort minorVersion = normalized.Assets
+        UnifiedScriptRuntimeStateDeclaration[] allStates = normalized.Assets
             .SelectMany(static asset => asset.States)
-            .Any(static state =>
+            .ToArray();
+        ushort minorVersion = allStates.Any(static state =>
+                state.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass ||
+                state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.SoftObject or
+                    UnifiedScriptRuntimeStateValueKind.SoftClass)
+            ? (ushort)3
+            : allStates.Any(static state =>
                 state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.Rotator or
                     UnifiedScriptRuntimeStateValueKind.Transform ||
                 state.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum)
-            ? (ushort)2
-            : (ushort)1;
+                ? (ushort)2
+                : (ushort)1;
         var writer = new ChunkPayloadWriter(Magic, minorVersion);
         writer.WriteSemanticId(normalized.SourceCompilationId);
         writer.WriteSemanticId(normalized.SemanticConfigurationId);
@@ -362,7 +370,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     public static UnifiedScriptRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 2);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 3);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -389,6 +397,12 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 {
                     throw new InvalidDataException(
                         $"Typed Unreal enum state '{name}' requires declaration minor version 2.");
+                }
+                if (typeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass &&
+                    reader.MinorVersion < 3)
+                {
+                    throw new InvalidDataException(
+                        $"Soft reference state '{name}' requires declaration minor version 3.");
                 }
                 UnifiedScriptRuntimeStateValue defaultValue = ReadDefault(ref reader);
                 byte exposureFlags = reader.ReadByte();
@@ -482,6 +496,12 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 TextValue: state.DefaultValue.GetString()),
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 new UnifiedScriptRuntimeStateValue(UnifiedScriptRuntimeStateValueKind.Null),
+            ScriptStateTypeKind.SoftObject => new UnifiedScriptRuntimeStateValue(
+                UnifiedScriptRuntimeStateValueKind.SoftObject,
+                TextValue: state.DefaultValue.GetString()),
+            ScriptStateTypeKind.SoftClass => new UnifiedScriptRuntimeStateValue(
+                UnifiedScriptRuntimeStateValueKind.SoftClass,
+                TextValue: state.DefaultValue.GetString()),
             ScriptStateTypeKind.Struct when
                 state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" =>
                 new UnifiedScriptRuntimeStateValue(
@@ -608,6 +628,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             case UnifiedScriptRuntimeStateValueKind.Enum:
             case UnifiedScriptRuntimeStateValueKind.Name:
             case UnifiedScriptRuntimeStateValueKind.Text:
+            case UnifiedScriptRuntimeStateValueKind.SoftObject:
+            case UnifiedScriptRuntimeStateValueKind.SoftClass:
                 writer.WriteString(value.TextValue ?? throw new InvalidDataException(
                     "A runtime textual default requires text."));
                 break;
@@ -684,6 +706,10 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 TransformScaleX: reader.ReadDouble(),
                 TransformScaleY: reader.ReadDouble(),
                 TransformScaleZ: reader.ReadDouble()),
+            UnifiedScriptRuntimeStateValueKind.SoftObject or
+                UnifiedScriptRuntimeStateValueKind.SoftClass when reader.MinorVersion >= 3 => new(
+                    kind,
+                    TextValue: reader.ReadString()),
             _ => throw new InvalidDataException($"Unsupported runtime state value '{kind}'."),
         };
     }
@@ -769,6 +795,23 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             throw new InvalidDataException(
                 $"Runtime enum state '{state.Name}' has an incompatible Unreal type identity.");
         }
+        if (state.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass)
+        {
+            string expectedMetadata = state.TypeKind == ScriptStateTypeKind.SoftObject
+                ? "UnifiedScript.Unreal.UnrealSoftObjectHandle"
+                : "UnifiedScript.Unreal.UnrealSoftClassHandle";
+            UnifiedScriptRuntimeStateValueKind expectedValueKind =
+                state.TypeKind == ScriptStateTypeKind.SoftObject
+                    ? UnifiedScriptRuntimeStateValueKind.SoftObject
+                    : UnifiedScriptRuntimeStateValueKind.SoftClass;
+            if (state.TypeMetadataName != expectedMetadata || state.UnrealType is not null ||
+                state.DefaultValue.Kind != expectedValueKind ||
+                !UnrealObjectPathValidator.IsValid(state.DefaultValue.TextValue))
+            {
+                throw new InvalidDataException(
+                    $"Runtime soft reference state '{state.Name}' has an incompatible identity or path.");
+            }
+        }
         if (state.TypeKind is not (ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct) &&
             state.UnrealType is not null)
         {
@@ -799,6 +842,12 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 state.DefaultValue.TextValue is not null,
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Null,
+            ScriptStateTypeKind.SoftObject =>
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.SoftObject &&
+                UnrealObjectPathValidator.IsValid(state.DefaultValue.TextValue),
+            ScriptStateTypeKind.SoftClass =>
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.SoftClass &&
+                UnrealObjectPathValidator.IsValid(state.DefaultValue.TextValue),
             ScriptStateTypeKind.Struct =>
                 IsValidStructDefault(state),
             _ => false,
