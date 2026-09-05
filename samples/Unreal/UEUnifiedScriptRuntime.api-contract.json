@@ -180,6 +180,35 @@
         "LoadObjectByPath",
         "SpawnActor"
       ]
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary",
+      "members": [
+        "GetWorldSubsystem",
+        "GetGameInstanceSubsystem",
+        "GetLocalPlayerSubsystem",
+        "GetLocalPlayerSubSystemFromPlayerController"
+      ]
+    },
+    {
+      "path": "/Script/Engine.ReplaySubsystem",
+      "members": ["GetActiveReplayName", "IsPlaying", "IsRecording"]
+    },
+    {
+      "path": "/Script/Engine.WorldPartitionSubsystem",
+      "members": ["IsAllStreamingCompleted"]
+    },
+    {
+      "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "members": ["AddMappingContext", "RemoveMappingContext", "HasMappingContext"]
+    },
+    {
+      "path": "/Script/EnhancedInput.ModifyContextOptions",
+      "members": [
+        "bForceImmediately",
+        "bIgnoreAllPressedKeysUntilRelease",
+        "bNotifyUserSettings"
+      ]
     }
   ],
   "nativeExtensions": {

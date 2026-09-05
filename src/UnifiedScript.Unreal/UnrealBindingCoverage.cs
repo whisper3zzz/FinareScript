@@ -243,7 +243,8 @@ public sealed record UnrealBindingCoverageReport(
                 [], [], "USUE4102", "The selected member is served by the generated gameplay data plane.");
             return;
         }
-        if (managed.Length > 0)
+        bool hasBlockingManagedDiagnostic = managed.Any(static diagnostic => diagnostic.Code != "USUE2008");
+        if (hasBlockingManagedDiagnostic)
         {
             AddEntry(entries, path, ownerPath, kind, UnrealBindingDisposition.Rejected, managed, native);
             return;

@@ -80,8 +80,9 @@ A reflected `TScriptInterface<I...>` value retains its exact UInterface path in
 the reflection manifest and generated API node signature. Its managed value is
 an `UnrealObjectHandle`, consistent with generated UObject parameters. Construct
 the generated interface wrapper around that handle to call its methods. The
-wrapper uses Unreal's generated `Execute_` route, which can reach both native
-implementations and Blueprint implementations of that native interface.
+wrapper uses Unreal's generated `Execute_` route for Blueprint event methods,
+which can reach both native implementations and Blueprint implementations of
+that native interface.
 
 For the checked-in interop fixture, `context.Target` is the fixture object and
 `target` is the implementing object's handle:
@@ -115,6 +116,25 @@ the receiving `UPROPERTY` retain their ordinary Unreal GC semantics. Method
 calls still belong to the generation's bridge and become unavailable when that
 generation retires.
 
+Native callable interface methods are a different declaration shape. For
+example, Enhanced Input's `AddMappingContext`, `RemoveMappingContext` and
+`HasMappingContext` are native virtual methods without generated `Execute_`
+wrappers. Reflection preserves this distinction in
+`traits.nativeInterfaceCall`. A true value applies only to a non-static reflected
+interface method; it is invalid on ordinary class methods or explicit native
+extensions. Generated thunks validate the interface, resolve its native interface
+address and call the virtual method through that pointer. A missing native
+implementation fails before invocation. Blueprint event methods continue to use
+`Execute_`, including Blueprint-only implementations with no native interface
+address. The managed wrapper and World-local handle representation are the same
+for both call forms.
+
+The optional trait defaults to false in older reflection manifests, retaining
+their existing event dispatch. Re-export affected native interfaces with the
+current exporter before regenerating bindings; do not infer native dispatch from
+a function name or rewrite a generated thunk by hand. Member paths and IDs do
+not change when this source declaration detail is added.
+
 Reflection fallback can marshal scalar interface properties and values on
 ordinary UObject functions. An interface method with only a native
 `_Implementation` requires its generated `Execute_` binding; the interface's
@@ -123,6 +143,49 @@ containing interface fields, callback signatures, Blueprint-defined interface
 types and Script Class interface state/default materialization are separate
 capability work. Do not infer their support from a generated scalar interface
 declaration.
+
+## Subsystem lookup and native interfaces
+
+Select the reflected `USubsystemBlueprintLibrary` methods in the API contract to
+obtain existing engine subsystems. World and GameInstance lookups use a context
+object from the desired World. LocalPlayer lookup needs a LocalPlayer, its
+PlayerController, or another context supported by Unreal's lookup method; an
+arbitrary World context does not select a local player. A missing subsystem is
+returned as a null handle. The generated `TSubclassOf` argument conversion
+checks the declared subsystem base class before invoking the lookup.
+
+Wrap the returned handle in the selected subsystem or interface wrapper to call
+its API. For Enhanced Input, the selected mapping methods belong to
+`EnhancedInputSubsystemInterface`, which the LocalPlayer subsystem implements.
+They use native interface dispatch, including `HasMappingContext`'s output
+priority. This requires no handwritten subsystem accessor or separate managed
+service object. The World owns handle resolution; Unreal retains ownership of
+the subsystem itself. Discarding a managed wrapper does not destroy the service.
+
+Pass `ModifyContextOptions` explicitly when adding or removing a mapping.
+Unreal's `()` default literal denotes a native constructor; for this type that
+constructor sets `bIgnoreAllPressedKeysUntilRelease` to true. It is not equivalent
+to a zero-initialized C# struct. When a reflected default cannot be projected
+safely, the generator retains the full parameter method and reports `USUE2008`
+for the missing convenience overload. Coverage still describes the usable full
+call, while node/browser defaults and palette insertion expose only the defaults
+that the managed generator can actually omit. Other binding failures remain
+rejections. General native struct-default projection is separate follow-up work.
+
+Input mappings added by a script are native state. The script must remove its
+registration on stop/reload while the bridge is still usable; collecting the
+wrapper alone does not undo the mapping. Reacquire wrappers from the replacement
+generation's bridge. Subsystem lifetime across travel and platform-specific
+subsystems need their own usage checks; this example does not establish those
+broader paths.
+
+The [subsystem gameplay example](../samples/Unreal/UnifiedScript.Unreal.Demo/SubsystemGameplayDemoScript.cs)
+uses a live PlayerController as `context.Target`, queries World Partition and
+Replay subsystems, then adds, queries and removes an Enhanced Input mapping at
+priority 37. It leaves its final registration active until `OnStop` so reload
+and World teardown exercise native-state cleanup. Its host fixture supplies only
+the test mapping asset; subsystem lookup and operations use generated engine
+APIs. An already-installed mapping is rejected before mutation.
 
 ## Reflected callback arguments
 

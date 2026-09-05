@@ -58,6 +58,44 @@
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptAuthoringSurface"
 
+bool SUnifiedScriptAuthoringSurface::HasProjectableInputDefault(
+    const TSharedPtr<FJsonObject>& GeneratedNode,
+    const TSharedPtr<FJsonObject>& ReflectedParameter,
+    const FString& ParameterName)
+{
+    if (GeneratedNode.IsValid())
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Pins = nullptr;
+        if (!GeneratedNode->TryGetArrayField(TEXT("pins"), Pins) || Pins == nullptr)
+        {
+            return false;
+        }
+
+        for (const TSharedPtr<FJsonValue>& PinValue : *Pins)
+        {
+            const TSharedPtr<FJsonObject> Pin =
+                PinValue.IsValid() ? PinValue->AsObject() : nullptr;
+            FString PinName;
+            FString PinDirection;
+            FString GeneratedDefault;
+            if (Pin.IsValid() &&
+                Pin->TryGetStringField(TEXT("name"), PinName) &&
+                PinName.Equals(ParameterName, ESearchCase::IgnoreCase) &&
+                Pin->TryGetStringField(TEXT("direction"), PinDirection) &&
+                PinDirection == TEXT("input") &&
+                Pin->TryGetStringField(TEXT("defaultValue"), GeneratedDefault))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    FString ReflectedDefault;
+    return ReflectedParameter.IsValid() &&
+        ReflectedParameter->TryGetStringField(TEXT("defaultValue"), ReflectedDefault);
+}
+
 namespace UE::UnifiedScript::AuthoringSurface::Slate::Private
 {
 const TCHAR* NodePaletteConfigSection = TEXT("UnifiedScript.AuthoringSurface.NodePalette");
@@ -6937,7 +6975,6 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     ParameterValue.IsValid() ? ParameterValue->AsObject() : nullptr;
                 FString Name;
                 FString Direction;
-                FString DefaultValue;
                 const TSharedPtr<FJsonObject>* ParameterType = nullptr;
                 if (!ParameterObject.IsValid() ||
                     !ParameterObject->TryGetStringField(TEXT("name"), Name) ||
@@ -6954,8 +6991,10 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     MissingArgument = Name + TEXT(" (") + Direction + TEXT(")");
                     break;
                 }
-                const bool bHasDefault =
-                    ParameterObject->TryGetStringField(TEXT("defaultValue"), DefaultValue);
+                const bool bHasDefault = HasProjectableInputDefault(
+                    GeneratedNode,
+                    ParameterObject,
+                    Name);
                 if (bOmittingTrailingDefaults)
                 {
                     if (!bHasDefault)

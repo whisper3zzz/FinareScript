@@ -8,6 +8,60 @@ namespace UnifiedScript.Tests;
 public sealed class UnrealBindingGeneratorTests
 {
     [Fact]
+    public void UnsupportedNativeStructDefaultsKeepExplicitMethodAndDiagnostic()
+    {
+        UnrealReflectedType type = CreateManifest().Types[0];
+        UnrealReflectedFunction function = new(
+            $"{type.Path}:WithOptions",
+            "WithOptions",
+            new UnrealTypeReference(UnrealValueKind.Void, "void"),
+            [new UnrealReflectedParameter(
+                "Options",
+                new UnrealTypeReference(
+                    UnrealValueKind.Struct,
+                    "FVector",
+                    "/Script/CoreUObject.Vector"),
+                UnrealParameterDirection.Input)
+            {
+                DefaultValue = "()",
+            }],
+            new UnrealFunctionTraits(Static: false, Pure: false, Callable: true));
+        UnrealReflectionManifest manifest = CreateManifest() with
+        {
+            Types = [type with { Functions = [.. type.Functions, function] }],
+        };
+
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(manifest);
+        Assert.Contains(managed.Diagnostics, diagnostic => diagnostic.Code == "USUE2008");
+        Assert.Contains("public void WithOptions(global::UnifiedScript.Unreal.UnrealVector options)", managed.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("public void WithOptions()", managed.Source, StringComparison.Ordinal);
+
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(manifest);
+        UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(manifest, managed, native);
+        UnrealBindingCoverageEntry entry = Assert.Single(
+            coverage.Entries,
+            candidate => candidate.Path.EndsWith(":WithOptions", StringComparison.Ordinal));
+        Assert.Equal(UnrealBindingDisposition.DirectThunk, entry.Disposition);
+        Assert.Contains("USUE2008", entry.DiagnosticCodes);
+        Assert.Equal(0, coverage.Summary.RejectedCount);
+        Assert.True(coverage.Gate.Passed);
+
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            manifest,
+            new UnrealApiContract(
+                UnrealApiContract.CurrentSchemaVersion,
+                "DefaultProjection",
+                "UnifiedScript.Tests.Generated",
+                "DefaultProjection.h",
+                "UE::UnifiedScript::Generated::DefaultProjection",
+                [new UnrealApiContractType(type.Path, ["WithOptions"])]));
+        UnrealApiNodeDescriptor node = Assert.Single(
+            UnrealApiNodeCatalogGenerator.Generate(projection).Types.SelectMany(static item => item.Nodes));
+        UnrealApiNodePin optionPin = Assert.Single(node.Pins, static pin => pin.Name == "Options");
+        Assert.Null(optionPin.DefaultValue);
+    }
+
+    [Fact]
     public void GenerateProducesDeterministicCompilableManagedWrapper()
     {
         UnrealReflectionManifest manifest = CreateManifest();
@@ -305,7 +359,15 @@ public sealed class UnrealBindingGeneratorTests
             projection.Reflection,
             new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
 
-        Assert.Empty(generated.Diagnostics);
+        Assert.DoesNotContain(
+            generated.Diagnostics,
+            static diagnostic => diagnostic.Code != "USUE2008");
+        Assert.Equal(
+            [
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+            ],
+            generated.Diagnostics.Select(static diagnostic => diagnostic.MemberPath));
         Assert.Equal(expected.ReplaceLineEndings("\n"), generated.Source);
         Assert.Contains("public string ScriptAssemblyPath", generated.Source, StringComparison.Ordinal);
         Assert.Contains("public string ScriptTypeName", generated.Source, StringComparison.Ordinal);

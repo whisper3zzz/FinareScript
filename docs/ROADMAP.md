@@ -25,15 +25,17 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.5 in progress — Puerts comparison and common capability completion**
-- Current tranche: **M13.5 — service/subsystem access comparison**. Check common
-  World, GameInstance and LocalPlayer subsystem lookup and invocation through
-  generated public APIs. Identify a concrete missing operation before changing
-  the runtime; a type absent from the Demo contract is not necessarily a missing
-  capability. Implement a reusable blocker if found, otherwise use the existing
-  breadth transition rule to decide whether to resume M13.3. Do not continue
-  expanding ordinary-object text signatures just because that batch is complete.
-- Latest delivered M13.5 checkpoint: **ordinary native object text values**,
-  following typed reference containers (`7c250c5`), reflected interface references
+- Current tranche: **M13.5 — common value state and defaults**.
+  Puerts exposes enum and UStruct fields on script classes. Our generated calls
+  already transport typed enums and Rotator/Transform, but Script Class state
+  materialization still accepts only the reviewed scalar/reference types and
+  FVector. Carry those common values through declaration, editable defaults,
+  managed/native state exchange and reload in a configurable gameplay example.
+  Reuse the existing class foundation and default-override rules; this does not
+  pull forward the full inheritance/subobject/composition scope of M13.3.
+- Latest delivered M13.5 checkpoint: **native interface calls and subsystem
+  gameplay**, following ordinary native object text values (`4f68d09`),
+  typed reference containers (`7c250c5`), reflected interface references
   (`bffb2d8`) and callbacks (`2827216`).
 - Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
 - Container/Soft Reference implementation checkpoint: `46f912d`; the full
@@ -114,6 +116,22 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   and all seven NativeObjects CMD tests passed with an Editor target build.
   Borrowed character pointers, mutable string references, signature-alias
   disambiguation and cooked text execution remain outside this checkpoint.
+- Latest service checkpoint: **native interface dispatch and subsystem gameplay**.
+  Reflection distinguishes native virtual interface functions from Blueprint
+  events. Generated calls resolve the native interface address for the former
+  and retain `Execute_` for the latter. The
+  [subsystem example](../samples/Unreal/UnifiedScript.Unreal.Demo/SubsystemGameplayDemoScript.cs)
+  obtains World/GameInstance/LocalPlayer services through engine bindings and
+  performs Enhanced Input add/query/remove, including output priority, reload
+  and stop. CMD Automation verifies getter identity, invalid class/foreign-World
+  rejection and live mapping removal during World teardown before GameInstance
+  shutdown. Editor compilation, 44 affected managed tests, Release/chunk emission,
+  AuthoringSurface CMD and current generated-output comparison passed.
+  Unsupported native struct defaults retain explicit full-parameter methods and
+  visible `USUE2008` diagnostics; generated nodes and Slate agree on which inputs
+  may be omitted. General native default construction, travel and cooked
+  subsystem execution remain follow-ups. See the
+  [subsystem contract](UNREAL_API_CONTRACT.md#subsystem-lookup-and-native-interfaces).
 - Latest callback checkpoint: **generated reflected callback arguments,
   synchronous return/ref/out and callback-to-native reentry**. Typed leases,
   native proxies and the public C#/node contract cover immediate and retained
@@ -131,7 +149,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   next practical gap across families, not an exhaustive callback expansion.
 - Latest reflected-value checkpoint: **scalar `TScriptInterface` exchange**.
   Properties and function input/return/ref/out preserve the implementing UObject
-  through World-local handles; generated interface calls use `Execute_` for both
+  through World-local handles; generated interface event calls use `Execute_` for both
   native and Blueprint-only implementations. Discovery, selected contracts,
   bindings and node pins retain the exact interface identity. The dedicated
   [interface example](../samples/Unreal/UnifiedScript.Unreal.Demo/InterfaceGameplayDemoScript.cs)
@@ -184,7 +202,8 @@ scope, not universal support for every Unreal type, project, or platform.
 | Daily workflow — M13.2 | Native create/open/build entrypoints, dependency-aware Play, compatible all-instance reload, unified diagnostics, IDE setup, one C#/Graph asset | Reviewed fixtures demonstrate the workflow; they are not proof that an arbitrary project is equally easy to use |
 | C# / Graph — M0–M8, M12.3 | Structured round-trip editing, stable IDs/comments/layout, semantic review, typed AI proposals | Only the published visual language profile is editable; opaque helper bodies are not graph-editable |
 | Managed calls into UE — M6/M7, M13.1B | Reflection-driven discovery and typed bindings for reviewed values, containers, services, assets, SpawnActor, Trace, events and async flows | Calling UE APIs is a different surface from exposing managed methods as generated Blueprint functions; neither implies unlimited signature coverage |
-| Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
+| Reflected interface references — M13.5 | Scalar properties and input/return/ref/out via World-local object handles, native and Blueprint-only event `Execute_` calls, exact contract/node identity and a managed reload/cleanup example | Interface containers, interface-bearing structs/callbacks, Blueprint-defined interface types, Script Class interface state/defaults and cooked execution remain open |
+| Native interfaces and services — M13.5 | Generated native virtual interface calls, World/GameInstance/LocalPlayer subsystem lookup and Enhanced Input mapping operations; real getter identity, rejection, reload and World cleanup checks | General native default constructors, travel, cooked execution and platform-specific subsystem behavior remain open |
 | Typed reference containers — M13.5 | Canonical transport for generated object/class/Soft Reference Array, Set and Map values; exact native/node types, subclass validation, real engine Actor query and managed reload/cleanup example | This fixes generated calls into native APIs; interface containers and the full Script Class property/default/cooked matrix remain open |
 | Reflected callbacks — M13.5 | Generated typed callback leases, synchronous return/ref/out, native retention and generation/World cleanup; generated UE reentry from two worker-originated calls with correlated result retries | Handler bodies are not graph-editable; callback properties/returns, nested callbacks, ordinary C++ std::function and cooked callback execution remain outside the delivered scope |
 | Native extensions — M13.5 | Generated non-reflected UObject members; ordinary C++ constructors/fields/methods, owned/borrowed returns, qualified object inputs and copied `FString`/`std::string` values; typed wrappers and visual descriptions, automatic native registration and generation/World cleanup | Containers/richer structs, ownership transfer/retention, ref/out, inheritance, converters and callbacks remain unfinished; cooked execution and full interactive palette insertion are not established |
@@ -281,7 +300,7 @@ not an exhaustive signature audit or a claim of parity.
 | Containers and Soft References | The typed-reference transport mismatch is closed for generated native calls: Actor arrays, class sets, named Soft Object maps and Soft Class arrays have native/CoreCLR exchange and reload evidence. Generated Blueprint functions retain their earlier initial exchange path; their broader negative/VM/cooked and common state/default acceptance remains open | M13.5; reuse M13.3C-1 work |
 | Script classes and extension | Reuse the four proxy kinds and reviewed events; pull forward only dependencies of selected capability batches. Complete deeper extension, inheritance, default subobjects and composition later | M13.3C-2 through C-4, after capability breadth |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Exact `FString`/`std::string` fields, constructor/method inputs and returned snapshots now use an optional bounded text transport, including mixed object arguments and generation/World cleanup. Containers/richer structs, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
-| Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters now support synchronous results/ref/out, native retention and generated UE reentry with a real worker-originated example. Installed-consumer authoring, broader latent/interface/subsystem gaps and richer callback forms remain follow-ups | M13.5 |
+| Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters support synchronous results/ref/out, native retention and worker-originated generated UE reentry. Native interface methods and generated World/GameInstance/LocalPlayer lookup now support Enhanced Input mapping with reload/cleanup. Installed-consumer authoring, broader latent/service use cases and richer callback forms remain follow-ups | M13.5 |
 | Replication and RPC | Actor and dynamic ActorComponent examples cover the five exposed conditions, RepNotify, mixed/common-value RPC and ownership/reload. Broader combinations and state/default shapes, push-model, travel and cooked coverage remain unfinished | M13.5 |
 | Binary and bulk data | World-scoped schema channels and general generated UObject-member byte-buffer exchange now exist. Public copy/borrow/snapshot semantics and a real payload example are implemented; reflected state, nested buffers, native callbacks and zero-copy lifetime contracts remain follow-ups | M13.5; reuse M7 data-plane foundations |
 | Daily development and runtime integration | Preserve the working create/build/Play/reload/debug/package path as the families above expand; separate ergonomic gaps from intentional C#/.NET differences | M13.1 / M13.2, with M13.5 ecosystem guidance |
@@ -302,6 +321,24 @@ and a separately negotiated transport tail. It preserves the old fixed-call
 prefix and tests empty text, embedded NUL, Unicode and result collection without
 repeating native side effects. Selecting overloads that both project to the same
 C# signature is rejected; automatic overload renaming is not part of this batch.
+
+The subsystem follow-up uses the same pinned Puerts revision's
+[`FunctionTranslator.cpp`](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/unreal/Puerts/Source/JsEnv/Private/FunctionTranslator.cpp).
+It resolves interface functions against the receiving object's class and selects
+native or reflected invocation. The UE 5.8 source/export check exposed a concrete
+gap: `IEnhancedInputSubsystemInterface::HasMappingContext` is a native callable,
+not a Blueprint event, but our generated thunk requested a nonexistent `Execute_`
+wrapper. The delivered native-interface trait and vtable dispatch repair that
+path for ordinary LocalPlayer input mapping, alongside World and GameInstance
+service lookup. This source comparison is not a matched Puerts runtime result.
+
+The next common-state use case comes from the pinned upstream
+[`uclass_extends.md`](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/doc/unreal/zhcn/uclass_extends.md),
+which lists enum/UStruct fields and demonstrates an `ETickingGroup` member.
+Our native `ResolvePinType` state path currently rejects typed enums and common
+Rotator/Transform values even though generated function calls support them.
+The selected batch is editable gameplay configuration and state exchange for
+these values, not general Script Class inheritance or every property shape.
 
 For each family, distinguish **available for the reviewed scope**, **partial**,
 **missing**, **not yet audited**, and **intentional difference**. Before declaring
@@ -389,6 +426,9 @@ an external project requires the user's authorization.
   Reflected callbacks now have generated typed leases and synchronous return/ref/out,
   including retained native calls and worker-originated reentry. This closes that
   callback batch, not all latent/interface/subsystem or native callback support.
+  The native interface/subsystem batch also delivers generated LocalPlayer input
+  mapping and World/GameInstance service queries with reload/cleanup. Broader
+  service use cases and default-constructor projection remain separate work.
 - [ ] Audit and complete bounded byte-buffer interop for ordinary binary payloads,
   with explicit copy/borrow/ownership rules and generation-safe callbacks. Reuse
   existing transports and data-plane contracts where applicable.

@@ -624,6 +624,8 @@ public static class UnrealApiNodeCatalogGenerator
             foreach (UnrealReflectedFunction function in type.Functions)
             {
                 string managedFunctionName = UnrealManagedNaming.FunctionName(function);
+                (int FirstDefault, string?[] Expressions)? projectedDefaults =
+                    UnrealBindingGenerator.GetProjectableDefaultExpressions(function, managedNames);
                 bool overloaded = type.Functions.Count(candidate =>
                     string.Equals(
                         UnrealManagedNaming.FunctionName(candidate),
@@ -653,7 +655,11 @@ public static class UnrealApiNodeCatalogGenerator
                     {
                         pins.Add(new(parameter.Name, "input", "data", parameter.Type)
                         {
-                            DefaultValue = parameter.DefaultValue,
+                            DefaultValue = projectedDefaults is { } defaults &&
+                                parameterIndex >= defaults.FirstDefault &&
+                                defaults.Expressions[parameterIndex] is not null
+                                ? parameter.DefaultValue
+                                : null,
                             NativePassing = parameter.Type.Kind == UnrealValueKind.NativeObject
                                 ? function.NativeBinding?.Parameters[parameterIndex] : null,
                         });

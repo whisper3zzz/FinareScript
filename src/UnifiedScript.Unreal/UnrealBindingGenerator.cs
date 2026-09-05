@@ -568,19 +568,20 @@ public sealed class UnrealBindingGenerator
         {
             return;
         }
-        string?[] defaults = function.Parameters
-            .Select(parameter => GetDefaultExpression(parameter, managedTypeNames))
-            .ToArray();
-        if (defaults.Skip(firstDefault).Any(static value => value is null))
+        (int FirstDefault, string?[] Expressions)? projectedDefaults =
+            GetProjectableDefaultExpressions(function, managedTypeNames);
+        if (projectedDefaults is null)
         {
             diagnostics.Add(new UnrealBindingDiagnostic(
                 "USUE2008",
-                "One or more reflected default parameter literals cannot be projected safely to C#.",
+                "One or more reflected default parameter literals cannot be projected safely to C#; callers must pass those parameters explicitly.",
                 function.Path));
             return;
         }
+        int firstProjectedDefault = projectedDefaults.Value.FirstDefault;
+        string?[] defaults = projectedDefaults.Value.Expressions;
 
-        for (int count = function.Parameters.Count - 1; count >= firstDefault; --count)
+        for (int count = function.Parameters.Count - 1; count >= firstProjectedDefault; --count)
         {
             source.AppendLine();
             source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
@@ -609,6 +610,32 @@ public sealed class UnrealBindingGenerator
             }
             source.AppendLine(");");
         }
+    }
+
+    internal static (int FirstDefault, string?[] Expressions)? GetProjectableDefaultExpressions(
+        UnrealReflectedFunction function,
+        IReadOnlyDictionary<string, string> managedTypeNames)
+    {
+        ArgumentNullException.ThrowIfNull(function);
+        ArgumentNullException.ThrowIfNull(managedTypeNames);
+        int firstDefault = function.Parameters.Count;
+        while (firstDefault > 0 &&
+               function.Parameters[firstDefault - 1].Direction == UnrealParameterDirection.Input &&
+               function.Parameters[firstDefault - 1].DefaultValue is not null)
+        {
+            --firstDefault;
+        }
+        if (firstDefault == function.Parameters.Count)
+        {
+            return null;
+        }
+
+        string?[] expressions = function.Parameters
+            .Select(parameter => GetDefaultExpression(parameter, managedTypeNames))
+            .ToArray();
+        return expressions.Skip(firstDefault).Any(static value => value is null)
+            ? null
+            : (firstDefault, expressions);
     }
 
     private static string? GetDefaultExpression(

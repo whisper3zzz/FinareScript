@@ -5,9 +5,16 @@
 #include "Components/ActorComponent.h"
 #include "Engine/HitResult.h"
 #include "Engine/NetSerialization.h"
+#include "EnhancedInputSubsystemInterface.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
+#include "ReplaySubsystem.h"
+#include "Subsystems/GameInstanceSubsystem.h"
+#include "Subsystems/LocalPlayerSubsystem.h"
+#include "Subsystems/SubsystemBlueprintLibrary.h"
+#include "Subsystems/WorldSubsystem.h"
 #include "UObject/NoExportTypes.h"
 #include "UObject/Object.h"
 #include "UnifiedScriptActor.h"
@@ -17,6 +24,7 @@
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
 #include "UnifiedScriptWorldLibrary.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
 
 namespace UE::UnifiedScript::Generated::Private
 {
@@ -315,6 +323,15 @@ bool DecodeStruct_825BF17B3272CC56(
     FUnifiedScriptObjectRegistry& Registry,
     FHitResult& OutValue,
     FUnifiedScriptInvocationResult& OutResult);
+bool EncodeStruct_8EE6C12BE967E937(const FModifyContextOptions& Value,
+    FUnifiedScriptObjectRegistry& Registry,
+    FUnifiedScriptValue& OutValue,
+    FUnifiedScriptInvocationResult& OutResult);
+bool DecodeStruct_8EE6C12BE967E937(
+    const FUnifiedScriptValue& Value,
+    FUnifiedScriptObjectRegistry& Registry,
+    FModifyContextOptions& OutValue,
+    FUnifiedScriptInvocationResult& OutResult);
 
 bool EncodeStruct_825BF17B3272CC56(const FHitResult& Value,
     FUnifiedScriptObjectRegistry& Registry,
@@ -546,6 +563,68 @@ bool DecodeStruct_825BF17B3272CC56(
     return true;
 }
 
+bool EncodeStruct_8EE6C12BE967E937(const FModifyContextOptions& Value,
+    FUnifiedScriptObjectRegistry& Registry,
+    FUnifiedScriptValue& OutValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    TArray<FUnifiedScriptValue> Fields;
+    Fields.Reserve(3);
+    FUnifiedScriptValue Field0;
+    Field0 = FUnifiedScriptValue::FromBoolean(Value.bForceImmediately);
+    Fields.Add(MoveTemp(Field0));
+    FUnifiedScriptValue Field1;
+    Field1 = FUnifiedScriptValue::FromBoolean(Value.bIgnoreAllPressedKeysUntilRelease);
+    Fields.Add(MoveTemp(Field1));
+    FUnifiedScriptValue Field2;
+    Field2 = FUnifiedScriptValue::FromBoolean(Value.bNotifyUserSettings);
+    Fields.Add(MoveTemp(Field2));
+    OutValue = FUnifiedScriptValue::FromStruct(MoveTemp(Fields), 0x8EE6C12BE967E937ull);
+    return true;
+}
+
+bool DecodeStruct_8EE6C12BE967E937(
+    const FUnifiedScriptValue& Value,
+    FUnifiedScriptObjectRegistry& Registry,
+    FModifyContextOptions& OutValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    TConstArrayView<FUnifiedScriptValue> Fields;
+    if (!Value.TryGetStruct(0x8EE6C12BE967E937ull, Fields) || Fields.Num() != 3)
+    {
+        return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated struct '/Script/EnhancedInput.ModifyContextOptions' received an incompatible field layout."));
+    }
+    bool DecodedField0 = false;
+    if (!Fields[0].TryGetBoolean(DecodedField0))
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated native member '/Script/EnhancedInput.ModifyContextOptions:bForceImmediately' received an incompatible value."));
+    }
+    OutValue.bForceImmediately = DecodedField0;
+    bool DecodedField1 = false;
+    if (!Fields[1].TryGetBoolean(DecodedField1))
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated native member '/Script/EnhancedInput.ModifyContextOptions:bIgnoreAllPressedKeysUntilRelease' received an incompatible value."));
+    }
+    OutValue.bIgnoreAllPressedKeysUntilRelease = DecodedField1;
+    bool DecodedField2 = false;
+    if (!Fields[2].TryGetBoolean(DecodedField2))
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ValueTypeMismatch,
+            TEXT("Generated native member '/Script/EnhancedInput.ModifyContextOptions:bNotifyUserSettings' received an incompatible value."));
+    }
+    OutValue.bNotifyUserSettings = DecodedField2;
+    return true;
+}
+
 }
 
 bool UE::UnifiedScript::Generated::DescribeReadResult(
@@ -748,6 +827,39 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     {
     case 0x373F7E65F4E2E77Bull:
         OutResultCount = 1;
+        return true;
+    case 0xC04A7D0A6F66D2B8ull:
+        OutResultCount = 1;
+        return true;
+    case 0x73416F1BB610AC54ull:
+        OutResultCount = 1;
+        return true;
+    case 0x899D1D62B656ED89ull:
+        OutResultCount = 1;
+        return true;
+    case 0x42E04F4834C375CFull:
+        OutResultCount = 1;
+        return true;
+    case 0x81E45AF78119039Dull:
+        OutResultCount = 1;
+        return true;
+    case 0x6CBE9559DB0FD3ACull:
+        OutResultCount = 1;
+        return true;
+    case 0x2401498FBF61013Eull:
+        OutResultCount = 1;
+        return true;
+    case 0x7F31DA79156A9F6Bull:
+        OutResultCount = 1;
+        return true;
+    case 0xDE98945928C593E2ull:
+        OutResultCount = 0;
+        return true;
+    case 0x6B45E6BF64B268B5ull:
+        OutResultCount = 2;
+        return true;
+    case 0xAE4AECB5DAB4A4E5ull:
+        OutResultCount = 0;
         return true;
     case 0x7AF8502717707C7Bull:
         OutResultCount = 1;
@@ -1009,6 +1121,104 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0xC04A7D0A6F66D2B8ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::String;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x73416F1BB610AC54ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x899D1D62B656ED89ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x42E04F4834C375CFull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Object;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x81E45AF78119039Dull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Object;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x6CBE9559DB0FD3ACull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Object;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x2401498FBF61013Eull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Object;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x7F31DA79156A9F6Bull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xDE98945928C593E2ull:
+        return false;
+    case 0x6B45E6BF64B268B5ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Int32;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xAE4AECB5DAB4A4E5ull:
+        return false;
     case 0x7AF8502717707C7Bull:
         switch (ResultIndex)
         {
@@ -3272,6 +3482,293 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         EncodedOutput0 = FUnifiedScriptValue::FromArray(MoveTemp(EncodedOutput0Cells), 0x2447224514B36D50ull);
         OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xC04A7D0A6F66D2B8ull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UReplaySubsystem* TypedTarget = ResolveTarget<UReplaySubsystem>(Target, TEXT("/Script/Engine.ReplaySubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FString ReturnValue = TypedTarget->GetActiveReplayName();
+        OutReturnValue = FUnifiedScriptValue::FromString(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x73416F1BB610AC54ull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UReplaySubsystem* TypedTarget = ResolveTarget<UReplaySubsystem>(Target, TEXT("/Script/Engine.ReplaySubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        bool ReturnValue = TypedTarget->IsPlaying();
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x899D1D62B656ED89ull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UReplaySubsystem* TypedTarget = ResolveTarget<UReplaySubsystem>(Target, TEXT("/Script/Engine.ReplaySubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        bool ReturnValue = TypedTarget->IsRecording();
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x42E04F4834C375CFull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        UObject* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        TSubclassOf<UGameInstanceSubsystem> Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
+        {
+            return false;
+        }
+        UGameInstanceSubsystem* ReturnValue = USubsystemBlueprintLibrary::GetGameInstanceSubsystem(Argument0, Argument1);
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x81E45AF78119039Dull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        APlayerController* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        TSubclassOf<ULocalPlayerSubsystem> Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
+        {
+            return false;
+        }
+        ULocalPlayerSubsystem* ReturnValue = USubsystemBlueprintLibrary::GetLocalPlayerSubSystemFromPlayerController(Argument0, Argument1);
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x6CBE9559DB0FD3ACull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        UObject* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        TSubclassOf<ULocalPlayerSubsystem> Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
+        {
+            return false;
+        }
+        ULocalPlayerSubsystem* ReturnValue = USubsystemBlueprintLibrary::GetLocalPlayerSubsystem(Argument0, Argument1);
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x2401498FBF61013Eull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        UObject* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        TSubclassOf<UWorldSubsystem> Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], true, Argument1, OutResult))
+        {
+            return false;
+        }
+        UWorldSubsystem* ReturnValue = USubsystemBlueprintLibrary::GetWorldSubsystem(Argument0, Argument1);
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
+        {
+            return false;
+        }
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x7F31DA79156A9F6Bull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UWorldPartitionSubsystem* TypedTarget = ResolveTarget<UWorldPartitionSubsystem>(Target, TEXT("/Script/Engine.WorldPartitionSubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        bool ReturnValue = TypedTarget->IsAllStreamingCompleted();
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xDE98945928C593E2ull:
+    {
+        if (!RequireArgumentCount(Arguments, 3, OutResult))
+        {
+            return false;
+        }
+        if (Target == nullptr || !Target->GetClass()->ImplementsInterface(UEnhancedInputSubsystemInterface::StaticClass()))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' does not implement generated thunk interface '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        IEnhancedInputSubsystemInterface* NativeInterface = static_cast<IEnhancedInputSubsystemInterface*>(Target->GetNativeInterfaceAddress(UEnhancedInputSubsystemInterface::StaticClass()));
+        if (NativeInterface == nullptr)
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' has no native interface address for '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        OutOutputValues.Reset();
+        UInputMappingContext* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        int32 Argument1 = 0;
+        if (!Arguments[1].TryGetInt32(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext' received an incompatible value."));
+        }
+        FModifyContextOptions Argument2 = {};
+        if (!DecodeStruct_8EE6C12BE967E937(Arguments[2], Registry, Argument2, OutResult))
+        {
+            return false;
+        }
+        NativeInterface->AddMappingContext(Argument0, Argument1, Argument2);
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x6B45E6BF64B268B5ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        if (Target == nullptr || !Target->GetClass()->ImplementsInterface(UEnhancedInputSubsystemInterface::StaticClass()))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' does not implement generated thunk interface '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        IEnhancedInputSubsystemInterface* NativeInterface = static_cast<IEnhancedInputSubsystemInterface*>(Target->GetNativeInterfaceAddress(UEnhancedInputSubsystemInterface::StaticClass()));
+        if (NativeInterface == nullptr)
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' has no native interface address for '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(1);
+        UInputMappingContext* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        int32 Argument1 = 0;
+        bool ReturnValue = NativeInterface->HasMappingContext(Argument0, Argument1);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        EncodedOutput0 = FUnifiedScriptValue::FromInt32(Argument1);
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xAE4AECB5DAB4A4E5ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        if (Target == nullptr || !Target->GetClass()->ImplementsInterface(UEnhancedInputSubsystemInterface::StaticClass()))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' does not implement generated thunk interface '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        IEnhancedInputSubsystemInterface* NativeInterface = static_cast<IEnhancedInputSubsystemInterface*>(Target->GetNativeInterfaceAddress(UEnhancedInputSubsystemInterface::StaticClass()));
+        if (NativeInterface == nullptr)
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(TEXT("Object '%s' has no native interface address for '%s'."), *GetNameSafe(Target), TEXT("/Script/EnhancedInput.EnhancedInputSubsystemInterface")));
+        }
+        OutOutputValues.Reset();
+        UInputMappingContext* Argument0 = nullptr;
+        if (!DecodeObject(Registry, Arguments[0], false, Argument0, OutResult))
+        {
+            return false;
+        }
+        FModifyContextOptions Argument1 = {};
+        if (!DecodeStruct_8EE6C12BE967E937(Arguments[1], Registry, Argument1, OutResult))
+        {
+            return false;
+        }
+        NativeInterface->RemoveMappingContext(Argument0, Argument1);
+        OutReturnValue = {};
         Succeed(OutResult);
         return true;
     }
@@ -6047,6 +6544,78 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
     using namespace UE::UnifiedScript::Generated::Private;
     switch (MemberId)
     {
+    case 0x73416F1BB610AC54ull:
+    {
+        if (Arguments.Num() != 0)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 0 arguments."));
+        }
+        UReplaySubsystem* TypedTarget = ResolveTarget<UReplaySubsystem>(Target, TEXT("/Script/Engine.ReplaySubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Boolean)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        bool ReturnValue = TypedTarget->IsPlaying();
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        (*OutReturnValue).Payload0 = ReturnValue ? 1 : 0;
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x899D1D62B656ED89ull:
+    {
+        if (Arguments.Num() != 0)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 0 arguments."));
+        }
+        UReplaySubsystem* TypedTarget = ResolveTarget<UReplaySubsystem>(Target, TEXT("/Script/Engine.ReplaySubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Boolean)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        bool ReturnValue = TypedTarget->IsRecording();
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        (*OutReturnValue).Payload0 = ReturnValue ? 1 : 0;
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x7F31DA79156A9F6Bull:
+    {
+        if (Arguments.Num() != 0)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 0 arguments."));
+        }
+        UWorldPartitionSubsystem* TypedTarget = ResolveTarget<UWorldPartitionSubsystem>(Target, TEXT("/Script/Engine.WorldPartitionSubsystem"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Boolean)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        bool ReturnValue = TypedTarget->IsAllStreamingCompleted();
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        (*OutReturnValue).Payload0 = ReturnValue ? 1 : 0;
+        Succeed(OutResult);
+        return true;
+    }
     case 0x7AF8502717707C7Bull:
     {
         if (Arguments.Num() != 0)
@@ -7190,7 +7759,11 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
 }
 #include "UnifiedScriptNativeObjectValues.h"
 #include "Engine/HitResult.h"
+#include "EnhancedInputSubsystemInterface.h"
 #include "Kismet/GameplayStatics.h"
+#include "ReplaySubsystem.h"
+#include "Streaming/StreamingWorldSubsystemInterface.h"
+#include "Subsystems/SubsystemBlueprintLibrary.h"
 #include "UObject/Interface.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptCallbackService.h"
@@ -7199,6 +7772,7 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
 #include "UnifiedScriptNativeCounter.h"
 #include "UnifiedScriptNativeExtensionFixture.h"
 #include "UnifiedScriptWorldLibrary.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
 namespace UE::UnifiedScript::Generated::NativeObjects
 {
 using Status = EUnifiedScriptNativeObjectStatus;

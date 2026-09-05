@@ -2279,6 +2279,47 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Generated pin default reaches the Palette tooltip"),
         DefaultApiAction.Tooltip.Contains(TEXT("Defaults: Amount=1")));
 
+    TSharedPtr<FJsonObject> ReflectedDefaultParameter;
+    TSharedPtr<FJsonObject> GeneratedDefaultNode;
+    TSharedPtr<FJsonObject> GeneratedMissingDefaultNode;
+    const auto ParseJsonObject = [this](const TCHAR* Json, TSharedPtr<FJsonObject>& OutObject)
+    {
+        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+        return TestTrue(
+            TEXT("Authoring default regression fixture parses"),
+            FJsonSerializer::Deserialize(Reader, OutObject));
+    };
+    if (!ParseJsonObject(
+            TEXT("{\"name\":\"Amount\",\"defaultValue\":\"()\"}"),
+            ReflectedDefaultParameter) ||
+        !ParseJsonObject(
+            TEXT("{\"pins\":[{\"name\":\"Amount\",\"direction\":\"input\",\"defaultValue\":\"1\"}]}"),
+            GeneratedDefaultNode) ||
+        !ParseJsonObject(
+            TEXT("{\"pins\":[{\"name\":\"Amount\",\"direction\":\"input\"}]}"),
+            GeneratedMissingDefaultNode))
+    {
+        return false;
+    }
+    TestTrue(
+        TEXT("Generated input pin default enables omission"),
+        SUnifiedScriptAuthoringSurface::HasProjectableInputDefault(
+            GeneratedDefaultNode,
+            ReflectedDefaultParameter,
+            TEXT("Amount")));
+    TestFalse(
+        TEXT("Missing generated input default does not fall back to reflected metadata"),
+        SUnifiedScriptAuthoringSurface::HasProjectableInputDefault(
+            GeneratedMissingDefaultNode,
+            ReflectedDefaultParameter,
+            TEXT("Amount")));
+    TestTrue(
+        TEXT("Legacy surfaces still use reflected input defaults"),
+        SUnifiedScriptAuthoringSurface::HasProjectableInputDefault(
+            nullptr,
+            ReflectedDefaultParameter,
+            TEXT("Amount")));
+
     // Opt into a freshly emitted project fixture without making the checked-in
     // single-asset regression depend on a running authoring server.
     FString ProjectSurfacePath;

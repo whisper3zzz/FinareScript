@@ -25,6 +25,110 @@ public sealed class UnrealInterfaceSupportTests
     }
 
     [Fact]
+    public void NativeInterfaceFunctionsUseTheNativeInterfaceVtable()
+    {
+        UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: false);
+        UnrealReflectedType interfaceType = manifest.Types.Single(static type => type.Traits.Interface);
+        UnrealReflectedFunction nativeFunction = interfaceType.Functions.Single() with
+        {
+            Traits = interfaceType.Functions.Single().Traits with { NativeInterfaceCall = true },
+        };
+        manifest = manifest with
+        {
+            Types = manifest.Types.Select(type => type.Path == interfaceType.Path
+                ? type with { Functions = [nativeFunction] }
+                : type).ToArray(),
+        };
+
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(manifest);
+
+        Assert.Empty(native.Diagnostics);
+        Assert.Contains("IUnifiedScriptInteropContract* NativeInterface", native.Source, StringComparison.Ordinal);
+        Assert.Contains("NativeInterface->Transform(Argument0)", native.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Execute_Transform", native.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NativeInterfaceCallTraitRejectsInvalidOwnersAndBindings()
+    {
+        UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: false);
+        UnrealReflectedType owner = manifest.Types.Single(static type => !type.Traits.Interface);
+        UnrealReflectedFunction function = owner.Functions.Single() with
+        {
+            Traits = owner.Functions.Single().Traits with { NativeInterfaceCall = true },
+        };
+        UnrealReflectionManifest invalidOwner = manifest with
+        {
+            Types = manifest.Types.Select(type => type.Path == owner.Path
+                ? type with { Functions = [function] }
+                : type).ToArray(),
+        };
+
+        Assert.Throws<System.Text.Json.JsonException>(
+            () => UnrealReflectionJson.NormalizeAndValidate(invalidOwner));
+
+        UnrealReflectedType interfaceType = manifest.Types.Single(static type => type.Traits.Interface);
+        UnrealReflectedFunction invalidStatic = interfaceType.Functions.Single() with
+        {
+            Traits = interfaceType.Functions.Single().Traits with
+            {
+                Static = true,
+                NativeInterfaceCall = true,
+            },
+        };
+        UnrealReflectionManifest invalidStaticManifest = manifest with
+        {
+            Types = manifest.Types.Select(type => type.Path == interfaceType.Path
+                ? type with { Functions = [invalidStatic] }
+                : type).ToArray(),
+        };
+
+        Assert.Throws<System.Text.Json.JsonException>(
+            () => UnrealReflectionJson.NormalizeAndValidate(invalidStaticManifest));
+
+        UnrealReflectedFunction invalidBinding = interfaceType.Functions.Single() with
+        {
+            Traits = interfaceType.Functions.Single().Traits with { NativeInterfaceCall = true },
+            NativeBinding = new UnrealNativeFunctionBinding("FixtureExtension", false, []),
+        };
+        UnrealReflectionManifest invalidBindingManifest = manifest with
+        {
+            Types = manifest.Types.Select(type => type.Path == interfaceType.Path
+                ? type with { Functions = [invalidBinding] }
+                : type).ToArray(),
+        };
+
+        Assert.Throws<System.Text.Json.JsonException>(
+            () => UnrealReflectionJson.NormalizeAndValidate(invalidBindingManifest));
+    }
+
+    [Fact]
+    public void NativeInterfaceCallTraitRoundTripsAndDefaultsToOmitted()
+    {
+        UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: false);
+        string legacyJson = UnrealReflectionJson.Serialize(manifest);
+        Assert.DoesNotContain("nativeInterfaceCall", legacyJson, StringComparison.Ordinal);
+
+        UnrealReflectedType interfaceType = manifest.Types.Single(static type => type.Traits.Interface);
+        UnrealReflectedFunction nativeFunction = interfaceType.Functions.Single() with
+        {
+            Traits = interfaceType.Functions.Single().Traits with { NativeInterfaceCall = true },
+        };
+        UnrealReflectionManifest nativeManifest = manifest with
+        {
+            Types = manifest.Types.Select(type => type.Path == interfaceType.Path
+                ? type with { Functions = [nativeFunction] }
+                : type).ToArray(),
+        };
+
+        string json = UnrealReflectionJson.Serialize(nativeManifest);
+        Assert.Contains("nativeInterfaceCall", json, StringComparison.Ordinal);
+        UnrealReflectionManifest roundTrip = UnrealReflectionJson.Deserialize(json);
+        Assert.True(roundTrip.Types.Single(static type => type.Traits.Interface).Functions.Single()
+            .Traits.NativeInterfaceCall);
+    }
+
+    [Fact]
     public void UnsupportedInterfaceContainersAndCallbacksRemainParseableButAreRejected()
     {
         UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: true);

@@ -4945,6 +4945,1632 @@
       ]
     },
     {
+      "path": "/Script/Engine.ReplaySubsystem",
+      "name": "ReplaySubsystem",
+      "managedTypeName": "ReplaySubsystem",
+      "category": "Unreal API|ReplaySubsystem",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/Engine.ReplaySubsystem:GetActiveReplayName",
+          "name": "GetActiveReplayName",
+          "returnType": {
+            "kind": "string",
+            "nativeName": "FString",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Active Replay Name",
+            "category": "Replay",
+            "tooltip": "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.ReplaySubsystem:IsPlaying",
+          "name": "IsPlaying",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Is Playing",
+            "category": "Replay",
+            "tooltip": "Is Playing",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.ReplaySubsystem:IsRecording",
+          "name": "IsRecording",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Is Recording",
+            "category": "Replay",
+            "tooltip": "Is Recording",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|ReplaySubsystem|GetActiveReplayName",
+          "memberPath": "/Script/Engine.ReplaySubsystem:GetActiveReplayName",
+          "memberId": "0xC04A7D0A6F66D2B8",
+          "kind": "function",
+          "title": "Get Active Replay Name",
+          "category": "Replay",
+          "tooltip": "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UReplaySubsystem*",
+                "typePath": "/Script/Engine.ReplaySubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|ReplaySubsystem|IsPlaying",
+          "memberPath": "/Script/Engine.ReplaySubsystem:IsPlaying",
+          "memberId": "0x73416F1BB610AC54",
+          "kind": "function",
+          "title": "Is Playing",
+          "category": "Replay",
+          "tooltip": "Is Playing",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UReplaySubsystem*",
+                "typePath": "/Script/Engine.ReplaySubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|ReplaySubsystem|IsRecording",
+          "memberPath": "/Script/Engine.ReplaySubsystem:IsRecording",
+          "memberId": "0x899D1D62B656ED89",
+          "kind": "function",
+          "title": "Is Recording",
+          "category": "Replay",
+          "tooltip": "Is Recording",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UReplaySubsystem*",
+                "typePath": "/Script/Engine.ReplaySubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/Engine.StreamingWorldSubsystemInterface",
+      "name": "StreamingWorldSubsystemInterface",
+      "managedTypeName": "StreamingWorldSubsystemInterface",
+      "category": "Unreal API|StreamingWorldSubsystemInterface",
+      "properties": [],
+      "functions": [],
+      "delegates": [],
+      "nodes": []
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary",
+      "name": "SubsystemBlueprintLibrary",
+      "managedTypeName": "SubsystemBlueprintLibrary",
+      "category": "Unreal API|SubsystemBlueprintLibrary",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem",
+          "name": "GetGameInstanceSubsystem",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UGameInstanceSubsystem*",
+            "typePath": "/Script/Engine.GameInstanceSubsystem",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Subsystems/GameInstanceSubsystem.h"
+          },
+          "parameters": [
+            {
+              "name": "ContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUGameInstanceSubsystem\u003E",
+                "typePath": "/Script/Engine.GameInstanceSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/GameInstanceSubsystem.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Game Instance Subsystem",
+            "category": "GameInstance Subsystems",
+            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "ContextObject"
+          }
+        },
+        {
+          "path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController",
+          "name": "GetLocalPlayerSubSystemFromPlayerController",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "ULocalPlayerSubsystem*",
+            "typePath": "/Script/Engine.LocalPlayerSubsystem",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+          },
+          "parameters": [
+            {
+              "name": "PlayerController",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CULocalPlayerSubsystem\u003E",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Local Player Sub System from Player Controller",
+            "category": "LocalPlayer Subsystems",
+            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem",
+          "name": "GetLocalPlayerSubsystem",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "ULocalPlayerSubsystem*",
+            "typePath": "/Script/Engine.LocalPlayerSubsystem",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+          },
+          "parameters": [
+            {
+              "name": "ContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CULocalPlayerSubsystem\u003E",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Local Player Subsystem",
+            "category": "LocalPlayer Subsystems",
+            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "ContextObject"
+          }
+        },
+        {
+          "path": "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem",
+          "name": "GetWorldSubsystem",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UWorldSubsystem*",
+            "typePath": "/Script/Engine.WorldSubsystem",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Subsystems/WorldSubsystem.h"
+          },
+          "parameters": [
+            {
+              "name": "ContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUWorldSubsystem\u003E",
+                "typePath": "/Script/Engine.WorldSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/WorldSubsystem.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get World Subsystem",
+            "category": "GameInstance Subsystems",
+            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "ContextObject"
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|SubsystemBlueprintLibrary|GetGameInstanceSubsystem",
+          "memberPath": "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem",
+          "memberId": "0x42E04F4834C375CF",
+          "kind": "function",
+          "title": "Get Game Instance Subsystem",
+          "category": "GameInstance Subsystems",
+          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUGameInstanceSubsystem\u003E",
+                "typePath": "/Script/Engine.GameInstanceSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/GameInstanceSubsystem.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UGameInstanceSubsystem*",
+                "typePath": "/Script/Engine.GameInstanceSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/GameInstanceSubsystem.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "ContextObject",
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|SubsystemBlueprintLibrary|GetLocalPlayerSubSystemFromPlayerController",
+          "memberPath": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController",
+          "memberId": "0x81E45AF78119039D",
+          "kind": "function",
+          "title": "Get Local Player Sub System from Player Controller",
+          "category": "LocalPlayer Subsystems",
+          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "PlayerController",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CULocalPlayerSubsystem\u003E",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "ULocalPlayerSubsystem*",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|SubsystemBlueprintLibrary|GetLocalPlayerSubsystem",
+          "memberPath": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem",
+          "memberId": "0x6CBE9559DB0FD3AC",
+          "kind": "function",
+          "title": "Get Local Player Subsystem",
+          "category": "LocalPlayer Subsystems",
+          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CULocalPlayerSubsystem\u003E",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "ULocalPlayerSubsystem*",
+                "typePath": "/Script/Engine.LocalPlayerSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/LocalPlayerSubsystem.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "ContextObject",
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|SubsystemBlueprintLibrary|GetWorldSubsystem",
+          "memberPath": "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem",
+          "memberId": "0x2401498FBF61013E",
+          "kind": "function",
+          "title": "Get World Subsystem",
+          "category": "GameInstance Subsystems",
+          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Class",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "TSubclassOf\u003CUWorldSubsystem\u003E",
+                "typePath": "/Script/Engine.WorldSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/WorldSubsystem.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWorldSubsystem*",
+                "typePath": "/Script/Engine.WorldSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Subsystems/WorldSubsystem.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "ContextObject",
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/Engine.WorldPartitionSubsystem",
+      "name": "WorldPartitionSubsystem",
+      "managedTypeName": "WorldPartitionSubsystem",
+      "category": "Unreal API|WorldPartitionSubsystem",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted",
+          "name": "IsAllStreamingCompleted",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Is All Streaming Completed",
+            "category": "Streaming",
+            "tooltip": "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|WorldPartitionSubsystem|IsAllStreamingCompleted",
+          "memberPath": "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted",
+          "memberId": "0x7F31DA79156A9F6B",
+          "kind": "function",
+          "title": "Is All Streaming Completed",
+          "category": "Streaming",
+          "tooltip": "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UWorldPartitionSubsystem*",
+                "typePath": "/Script/Engine.WorldPartitionSubsystem",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "name": "EnhancedInputSubsystemInterface",
+      "managedTypeName": "EnhancedInputSubsystemInterface",
+      "category": "Unreal API|EnhancedInputSubsystemInterface",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+          "name": "AddMappingContext",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "MappingContext",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Priority",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Options",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "EnhancedInputSubsystemInterface.h"
+              },
+              "direction": "input",
+              "defaultValue": "()"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public",
+            "nativeInterfaceCall": true
+          },
+          "metadata": {
+            "displayName": "Add Mapping Context",
+            "category": "Input",
+            "tooltip": "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
+          "name": "HasMappingContext",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "MappingContext",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutFoundPriority",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "output",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public",
+            "nativeInterfaceCall": true
+          },
+          "metadata": {
+            "displayName": "Has Mapping Context",
+            "category": "Input|Mapping Queries",
+            "tooltip": "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+          "name": "RemoveMappingContext",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "MappingContext",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Options",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "EnhancedInputSubsystemInterface.h"
+              },
+              "direction": "input",
+              "defaultValue": "()"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public",
+            "nativeInterfaceCall": true
+          },
+          "metadata": {
+            "displayName": "Remove Mapping Context",
+            "category": "Input",
+            "tooltip": "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|EnhancedInputSubsystemInterface|AddMappingContext",
+          "memberPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+          "memberId": "0xDE98945928C593E2",
+          "kind": "function",
+          "title": "Add Mapping Context",
+          "category": "Input",
+          "tooltip": "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UEnhancedInputSubsystemInterface*",
+                "typePath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MappingContext",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Priority",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Options",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "EnhancedInputSubsystemInterface.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|EnhancedInputSubsystemInterface|HasMappingContext",
+          "memberPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
+          "memberId": "0x6B45E6BF64B268B5",
+          "kind": "function",
+          "title": "Has Mapping Context",
+          "category": "Input|Mapping Queries",
+          "tooltip": "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UEnhancedInputSubsystemInterface*",
+                "typePath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MappingContext",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutFoundPriority",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|EnhancedInputSubsystemInterface|RemoveMappingContext",
+          "memberPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+          "memberId": "0xAE4AECB5DAB4A4E5",
+          "kind": "function",
+          "title": "Remove Mapping Context",
+          "category": "Input",
+          "tooltip": "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UEnhancedInputSubsystemInterface*",
+                "typePath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MappingContext",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UInputMappingContext*",
+                "typePath": "/Script/EnhancedInput.InputMappingContext",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "InputMappingContext.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Options",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "EnhancedInputSubsystemInterface.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
+      "path": "/Script/EnhancedInput.ModifyContextOptions",
+      "name": "ModifyContextOptions",
+      "managedTypeName": "ModifyContextOptions",
+      "category": "Unreal API|ModifyContextOptions",
+      "properties": [
+        {
+          "path": "/Script/EnhancedInput.ModifyContextOptions:bForceImmediately",
+          "name": "bForceImmediately",
+          "type": {
+            "kind": "boolean",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u7ACB\u5373\u5F3A\u5236",
+            "category": "Input",
+            "tooltip": "\u6620\u5C04\u53D8\u66F4\u5C06\u540C\u6B65\u5E94\u7528\uFF0C\u800C\u4E0D\u662F\u5728\u5E27\u672B\u5C3E\u5E94\u7528\uFF0C\n\u4ECE\u800C\u4F7F\u5B83\u4EEC\u53EF\u7528\u4E8E\u540C\u4E00\u5E27\u4E0A\u7684\u8F93\u5165\u7CFB\u7EDF\u3002\n\n\u5982\u679C\u4F60\u8981\u6DFB\u52A0\u591A\u4E2A\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u4E0D\u5EFA\u8BAE\u5C06\u5176\u8BBE\u4E3Atrue\uFF0C\n\u56E0\u4E3A\u8FD9\u4F1A\u964D\u4F4E\u6027\u80FD\u3002\n\n\u9ED8\u8BA4\uFF1Afalse",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/EnhancedInput.ModifyContextOptions:bIgnoreAllPressedKeysUntilRelease",
+          "name": "bIgnoreAllPressedKeysUntilRelease",
+          "type": {
+            "kind": "boolean",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u5FFD\u7565\u6240\u6709\u6309\u4E0B\u7684\u952E\u76F4\u5230\u677E\u5F00",
+            "category": "Input",
+            "tooltip": "\u5982\u4E3Atrue\uFF0C\u5219\u5728\u63A7\u5236\u6620\u5C04\u91CD\u5EFA\u8FC7\u7A0B\u4E2D\u201C\u6309\u4E0B\u201D\u6216\u201C\u6309\u4E0B\u201D\u7684\u4EFB\u4F55\u952E\n\u5728\u201C\u91CA\u653E\u201D\u4E4B\u524D\u90FD\u4E0D\u4F1A\u88AB\u589E\u5F3A\u8F93\u5165\u5904\u7406\u3002\n\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4F60\u8981\u6DFB\u52A0\u952E\u6620\u5C04\u5230\u201CX\u201D\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\n\u5E76\u4E14\u73A9\u5BB6\u5728\u6DFB\u52A0IMC\u65F6\u6309\u4F4F\u201CX\u201D\uFF0C\n\u5219\u5728\u73A9\u5BB6\u91CA\u653E\u201CX\u201D\u4E4B\u524D\u4E0D\u4F1A\u51FA\u73B0\u201C\u89E6\u53D1\u201D\u4E8B\u4EF6\u5E76\u518D\u6B21\u6309\u4E0B\u5B83\u3002\n\n\u5982\u679C\u5728\u4E0A\u9762\u7684\u793A\u4F8B\u4E2D\u5C06\u5176\u8BBE\u4E3Afalse\uFF0C\u5219\u4E00\u65E6IMC\u6DFB\u52A0\u5B8C\u6210\uFF0C\n\u201C\u5DF2\u89E6\u53D1\u201D\u5C06\u7ACB\u5373\u89E6\u53D1\u3002\n\n\u9ED8\u8BA4\uFF1ATrue\n\n\u6CE8\u610F\uFF1A\u8FD9\u53EA\u4F1A\u5BF9\u7ED1\u5B9A\u5230\u5E03\u5C14\u8F93\u5165\u64CD\u4F5C\u7C7B\u578B\u7684\u952E\u6267\u884C\u67D0\u4E9B\u64CD\u4F5C\u3002\n\u6CE8\u610F\uFF1A\u8FD9\u5305\u62EC\u73A9\u5BB6\u6309\u4E0B\u7684\u6240\u6709\u6309\u952E\uFF0C\u800C\u4E0D\u4EC5\u4EC5\u662F\u4E4B\u524D\u5728\u8C03\u7528RebuildControlMappings\u4E4B\u524D\n\u5728\u589E\u5F3A\u8F93\u5165\u4E2D\u6620\u5C04\u7684\u6309\u952E\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/EnhancedInput.ModifyContextOptions:bNotifyUserSettings",
+          "name": "bNotifyUserSettings",
+          "type": {
+            "kind": "boolean",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u901A\u77E5\u7528\u6237\u8BBE\u7F6E",
+            "category": "Input",
+            "tooltip": "\u5982\u4E3Atrue\uFF0C\u90A3\u4E48\u8FD9\u4E2A\u6620\u5C04\u4E0A\u4E0B\u6587\u5C06\u4F1A\n\u5728\u8FD9\u4E2A\u5B50\u7CFB\u7EDF\u4E0A\u6CE8\u518C\u6216\u53D6\u6D88\u6CE8\u518C\u5230\u589E\u5F3A\u8F93\u5165\u7528\u6237\u8BBE\u7F6E\u4E2D\uFF08\u5982\u679C\u5176\u5B58\u5728\uFF09\u3002\u9ED8\u8BA4\uFF1AFalse\n\n\u6CE8\u610F\uFF1A\u4F60\u9700\u8981\u5728\u9879\u76EE\u8BBE\u7F6E\u4E2D\u542F\u7528\u5E76\u914D\u7F6EUEnhancedInputUserSettings\u7C7B\u624D\u80FD\u6267\u884C\u4EFB\u4F55\u64CD\u4F5C\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "functions": [],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.struct.break|ModifyContextOptions",
+          "memberPath": "/Script/EnhancedInput.ModifyContextOptions:__Break",
+          "memberId": "0x02EB244E959D6A58",
+          "kind": "structBreak",
+          "title": "Break ModifyContextOptions",
+          "category": "Unreal API|ModifyContextOptions|Structs",
+          "tooltip": "Expose the reflected fields of ModifyContextOptions.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bForceImmediately",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bIgnoreAllPressedKeysUntilRelease",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bNotifyUserSettings",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.struct.make|ModifyContextOptions",
+          "memberPath": "/Script/EnhancedInput.ModifyContextOptions:__Make",
+          "memberId": "0xEA7794BBA2D42C6F",
+          "kind": "structMake",
+          "title": "Make ModifyContextOptions",
+          "category": "Unreal API|ModifyContextOptions|Structs",
+          "tooltip": "Construct ModifyContextOptions from reflected fields.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "bForceImmediately",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bIgnoreAllPressedKeysUntilRelease",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bNotifyUserSettings",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FModifyContextOptions",
+                "typePath": "/Script/EnhancedInput.ModifyContextOptions",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        }
+      ]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
       "name": "EUnifiedScriptInteropMode",
       "managedTypeName": "EUnifiedScriptInteropMode",

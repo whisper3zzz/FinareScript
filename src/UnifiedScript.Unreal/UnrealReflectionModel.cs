@@ -151,7 +151,15 @@ public sealed record UnrealFunctionTraits(
     bool Static,
     bool Pure,
     bool Callable,
-    UnrealNativeAccess NativeAccess = UnrealNativeAccess.Public);
+    UnrealNativeAccess NativeAccess = UnrealNativeAccess.Public)
+{
+    /// <summary>
+    /// Calls a non-event UInterface function through its native C++ interface
+    /// vtable. Blueprint events retain the Execute_ dispatch path.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool NativeInterfaceCall { get; init; }
+}
 
 public sealed record UnrealReflectedFunction(
     string Path,

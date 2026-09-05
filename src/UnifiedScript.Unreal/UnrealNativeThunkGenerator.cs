@@ -842,7 +842,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        }");
             if (!function.Traits.Static)
             {
-                EmitResolveFunctionTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, function, 8);
             }
             source.AppendLine("        OutOutputValues.Reset();");
             if (outputCount > 0)
@@ -946,7 +946,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("    {");
             if (!function.Traits.Static)
             {
-                EmitResolveFunctionTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, function, 8);
             }
             source.Append("        OutReturnValue = ")
                 .Append(FunctionInvocation(type, function, "Argument0, Argument1"))
@@ -1008,7 +1008,7 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        }");
             if (!function.Traits.Static)
             {
-                EmitResolveFunctionTarget(source, type, 8);
+                EmitResolveFunctionTarget(source, type, function, 8);
             }
             EmitFixedResultValidation(source, function.ReturnType);
             for (int index = 0; index < function.Parameters.Count; index++)
@@ -1214,6 +1214,7 @@ public sealed class UnrealNativeThunkGenerator
     private static void EmitResolveFunctionTarget(
         StringBuilder source,
         UnrealReflectedType type,
+        UnrealReflectedFunction function,
         int indent)
     {
         if (!type.Traits.Interface)
@@ -1232,6 +1233,20 @@ public sealed class UnrealNativeThunkGenerator
         source.Append(padding).Append("        FString::Printf(TEXT(\"Object '%s' does not implement generated thunk interface '%s'.\"), *GetNameSafe(Target), TEXT(")
             .Append(CppStringLiteral(type.Path)).AppendLine(")));");
         source.Append(padding).AppendLine("}");
+        if (function.Traits.NativeInterfaceCall)
+        {
+            string interfaceName = InterfaceCppName(type);
+            source.Append(padding).Append(interfaceName).Append("* NativeInterface = static_cast<")
+                .Append(interfaceName).AppendLine("*>(Target->GetNativeInterfaceAddress(" + type.NativeName + "::StaticClass()));");
+            source.Append(padding).AppendLine("if (NativeInterface == nullptr)");
+            source.Append(padding).AppendLine("{");
+            source.Append(padding).AppendLine("    return Fail(");
+            source.Append(padding).AppendLine("        OutResult,");
+            source.Append(padding).AppendLine("        EUnifiedScriptInvocationError::TargetTypeMismatch,");
+            source.Append(padding).Append("        FString::Printf(TEXT(\"Object '%s' has no native interface address for '%s'.\"), *GetNameSafe(Target), TEXT(")
+                .Append(CppStringLiteral(type.Path)).AppendLine(")));");
+            source.Append(padding).AppendLine("}");
+        }
     }
 
     private static string FunctionInvocation(
@@ -1265,14 +1280,21 @@ public sealed class UnrealNativeThunkGenerator
             return $"TypedTarget->{function.Name}({arguments})";
         }
 
-        string interfaceName = type.NativeName.Length > 1 && type.NativeName[0] == 'U'
-            ? $"I{type.NativeName[1..]}"
-            : $"I{type.NativeName}";
+        string interfaceName = InterfaceCppName(type);
+        if (function.Traits.NativeInterfaceCall)
+        {
+            return $"NativeInterface->{function.Name}({arguments})";
+        }
         string forwardedArguments = string.IsNullOrEmpty(arguments)
             ? "Target"
             : $"Target, {arguments}";
         return $"{interfaceName}::Execute_{function.Name}({forwardedArguments})";
     }
+
+    private static string InterfaceCppName(UnrealReflectedType type) =>
+        type.NativeName.Length > 1 && type.NativeName[0] == 'U'
+            ? $"I{type.NativeName[1..]}"
+            : $"I{type.NativeName}";
 
     private static void EmitValueRead(
         StringBuilder source,

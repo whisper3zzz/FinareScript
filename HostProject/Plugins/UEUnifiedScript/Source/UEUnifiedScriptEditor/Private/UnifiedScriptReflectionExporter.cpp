@@ -420,6 +420,11 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
     Traits->SetBoolField(
         TEXT("callable"),
         Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure));
+    if (Class->HasAnyClassFlags(CLASS_Interface) &&
+        !Function->HasAnyFunctionFlags(FUNC_Static | FUNC_BlueprintEvent))
+    {
+        Traits->SetBoolField(TEXT("nativeInterfaceCall"), true);
+    }
     Traits->SetStringField(TEXT("nativeAccess"), FunctionNativeAccess(Function));
     Json->SetObjectField(TEXT("traits"), Traits);
     TSharedRef<FJsonObject> Metadata = BlueprintMetadata(Function);

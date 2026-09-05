@@ -27,6 +27,7 @@ class UEdGraphNode;
 class UUnifiedScriptAsset;
 class UUnifiedScriptEdGraph;
 class UUnifiedScriptEdGraphNode;
+class FJsonObject;
 struct FUnifiedScriptDailyBuildResult;
 template <typename ItemType> class STreeView;
 template <typename ItemType> class SListView;
@@ -122,6 +123,15 @@ public:
     bool GetNodePaletteAction(
         const FString& ActionId,
         FUnifiedScriptGraphPaletteAction& OutAction) const;
+    /**
+     * Reports whether a reflected input may be omitted from an authoring call.
+     * Generated node pins are authoritative when present; the reflected default
+     * is retained only for legacy surfaces without generated node metadata.
+     */
+    static bool HasProjectableInputDefault(
+        const TSharedPtr<FJsonObject>& GeneratedNode,
+        const TSharedPtr<FJsonObject>& ReflectedParameter,
+        const FString& ParameterName);
     bool ToggleDebugBreakpoint(const FString& ActionId);
     bool IsDebugBreakpointEnabled(const FString& ActionId) const;
     void SetViewMode(EUnifiedScriptAuthoringViewMode InViewMode);

@@ -10,6 +10,9 @@
 	"modules": [
 		"CoreUObject",
 		"Engine",
+		"EnhancedInput",
+		"GameplayTags",
+		"InputCore",
 		"PhysicsCore",
 		"UEUnifiedScriptRuntime"
 	],
@@ -9695,6 +9698,2262 @@
 						"displayName": "Un Retain All Sounds in Sound Class",
 						"category": "Audio",
 						"tooltip": "遍历所有声波并释放保留文件块的柄。（如果文件块没有被播放，它将被收回）",
+						"deprecated": false
+					}
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.ReplaySubsystem",
+			"name": "ReplaySubsystem",
+			"nativeName": "UReplaySubsystem",
+			"module": "Engine",
+			"headerPath": "ReplaySubsystem.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.GameInstanceSubsystem",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "重播子系统",
+				"tooltip": "重播子系统",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": [
+				{
+					"path": "/Script/Engine.ReplaySubsystem:GetActiveReplayName",
+					"name": "GetActiveReplayName",
+					"returnType":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Active Replay Name",
+						"category": "Replay",
+						"tooltip": "获取当前的录制/播放重播名称\n\n@return 返回回放的FString名称（会话id、文件名等）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.ReplaySubsystem:GetReplayCurrentTime",
+					"name": "GetReplayCurrentTime",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Replay Current Time",
+						"category": "Replay",
+						"tooltip": "获取当前录制/播放回放时间\n\n@return 返回浮点当前录制/播放时间（以秒为单位）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.ReplaySubsystem:GetReplayTotalTime",
+					"name": "GetReplayTotalTime",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Replay Total Time",
+						"category": "Replay",
+						"tooltip": "获取当前录制/播放的总播放时间\n\n@return 返回浮动总录制/播放时间（秒）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.ReplaySubsystem:IsPlaying",
+					"name": "IsPlaying",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Playing",
+						"category": "Replay",
+						"tooltip": "Is Playing",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.ReplaySubsystem:IsRecording",
+					"name": "IsRecording",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Recording",
+						"category": "Replay",
+						"tooltip": "Is Recording",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.ReplaySubsystem:RequestCheckpoint",
+					"name": "RequestCheckpoint",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Request Checkpoint",
+						"category": "Replay",
+						"tooltip": "如果当前正在录制，则请求一个检查点写入。",
+						"deprecated": false
+					}
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.StreamingWorldSubsystemInterface",
+			"name": "StreamingWorldSubsystemInterface",
+			"nativeName": "UStreamingWorldSubsystemInterface",
+			"module": "Engine",
+			"headerPath": "Streaming/StreamingWorldSubsystemInterface.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Interface",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": false,
+				"interface": true
+			},
+			"metadata":
+			{
+				"displayName": "流送世界子系统接口",
+				"tooltip": "流送世界子系统接口",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/Engine.SubsystemBlueprintLibrary",
+			"name": "SubsystemBlueprintLibrary",
+			"nativeName": "USubsystemBlueprintLibrary",
+			"module": "Engine",
+			"headerPath": "Subsystems/SubsystemBlueprintLibrary.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintFunctionLibrary",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "子系统蓝图库",
+				"tooltip": "子系统蓝图库",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": [
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetAudioEngineSubsystem",
+					"name": "GetAudioEngineSubsystem",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UAudioEngineSubsystem*",
+						"typePath": "/Script/Engine.AudioEngineSubsystem",
+						"headerPath": "Subsystems/AudioEngineSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "ContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UAudioEngineSubsystem>",
+								"typePath": "/Script/Engine.AudioEngineSubsystem",
+								"headerPath": "Subsystems/AudioEngineSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Audio Engine Subsystem",
+						"category": "AudioEngine Subsystems",
+						"tooltip": "从与提供上下文关联的AudioDevice获取AudioEngine子系统",
+						"deprecated": false,
+						"worldContextParameter": "ContextObject"
+					}
+				},
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetEngineSubsystem",
+					"name": "GetEngineSubsystem",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UEngineSubsystem*",
+						"typePath": "/Script/Engine.EngineSubsystem",
+						"headerPath": "Subsystems/EngineSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UEngineSubsystem>",
+								"typePath": "/Script/Engine.EngineSubsystem",
+								"headerPath": "Subsystems/EngineSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Engine Subsystem",
+						"category": "Engine Subsystems",
+						"tooltip": "从与提供的情境相关的游戏实例处获取一个游戏实例子系统",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem",
+					"name": "GetGameInstanceSubsystem",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UGameInstanceSubsystem*",
+						"typePath": "/Script/Engine.GameInstanceSubsystem",
+						"headerPath": "Subsystems/GameInstanceSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "ContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UGameInstanceSubsystem>",
+								"typePath": "/Script/Engine.GameInstanceSubsystem",
+								"headerPath": "Subsystems/GameInstanceSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Game Instance Subsystem",
+						"category": "GameInstance Subsystems",
+						"tooltip": "从与提供的情境相关的游戏实例处获取一个游戏实例子系统",
+						"deprecated": false,
+						"worldContextParameter": "ContextObject"
+					}
+				},
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem",
+					"name": "GetLocalPlayerSubsystem",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "ULocalPlayerSubsystem*",
+						"typePath": "/Script/Engine.LocalPlayerSubsystem",
+						"headerPath": "Subsystems/LocalPlayerSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "ContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<ULocalPlayerSubsystem>",
+								"typePath": "/Script/Engine.LocalPlayerSubsystem",
+								"headerPath": "Subsystems/LocalPlayerSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Local Player Subsystem",
+						"category": "LocalPlayer Subsystems",
+						"tooltip": "从与提供的情境相关的本地玩家处获取一个本地玩家子系统",
+						"deprecated": false,
+						"worldContextParameter": "ContextObject"
+					}
+				},
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController",
+					"name": "GetLocalPlayerSubSystemFromPlayerController",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "ULocalPlayerSubsystem*",
+						"typePath": "/Script/Engine.LocalPlayerSubsystem",
+						"headerPath": "Subsystems/LocalPlayerSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "PlayerController",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "APlayerController*",
+								"typePath": "/Script/Engine.PlayerController",
+								"headerPath": "GameFramework/PlayerController.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<ULocalPlayerSubsystem>",
+								"typePath": "/Script/Engine.LocalPlayerSubsystem",
+								"headerPath": "Subsystems/LocalPlayerSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Local Player Sub System from Player Controller",
+						"category": "LocalPlayer Subsystems",
+						"tooltip": "从与提供的情境相关的LocalPlayer处获取一个本地玩家子系统\n如玩家控制器未关联到一个LocalPlayer，则返回nullptr",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem",
+					"name": "GetWorldSubsystem",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UWorldSubsystem*",
+						"typePath": "/Script/Engine.WorldSubsystem",
+						"headerPath": "Subsystems/WorldSubsystem.h"
+					},
+					"parameters": [
+						{
+							"name": "ContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UWorldSubsystem>",
+								"typePath": "/Script/Engine.WorldSubsystem",
+								"headerPath": "Subsystems/WorldSubsystem.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get World Subsystem",
+						"category": "GameInstance Subsystems",
+						"tooltip": "从与提供的情境相关的场景处获取场景子系统",
+						"deprecated": false,
+						"worldContextParameter": "ContextObject"
+					}
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.WorldPartitionSubsystem",
+			"name": "WorldPartitionSubsystem",
+			"nativeName": "UWorldPartitionSubsystem",
+			"module": "Engine",
+			"headerPath": "WorldPartition/WorldPartitionSubsystem.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.TickableWorldSubsystem",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "世界分区子系统",
+				"tooltip": "UWorldPartitionSubsystem",
+				"deprecated": false
+			},
+			"interfacePaths": [
+				"/Script/Engine.StreamingWorldSubsystemInterface"
+			],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": [
+				{
+					"path": "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted",
+					"name": "IsAllStreamingCompleted",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is All Streaming Completed",
+						"category": "Streaming",
+						"tooltip": "如果世界分区完成流送关卡，并将它们添加到世界或从世界移除，则返回true。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionSubsystem:IsStreamingCompleted",
+					"name": "IsStreamingCompleted",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "QueryState",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EWorldPartitionRuntimeCellState",
+								"typePath": "/Script/Engine.EWorldPartitionRuntimeCellState",
+								"headerPath": "WorldPartition/WorldPartitionRuntimeCell.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "QuerySources",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<FWorldPartitionStreamingQuerySource>",
+								"elementType":
+								{
+									"kind": "struct",
+									"nativeName": "FWorldPartitionStreamingQuerySource",
+									"typePath": "/Script/Engine.WorldPartitionStreamingQuerySource",
+									"headerPath": "WorldPartition/WorldPartitionStreamingSource.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bExactState",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Streaming Completed",
+						"category": "Streaming",
+						"tooltip": "Is Streaming Completed",
+						"deprecated": false
+					}
+				}
+			]
+		},
+		{
+			"path": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem",
+			"name": "EnhancedInputLocalPlayerSubsystem",
+			"nativeName": "UEnhancedInputLocalPlayerSubsystem",
+			"module": "EnhancedInput",
+			"headerPath": "EnhancedInputSubsystems.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.LocalPlayerSubsystem",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "增强输入本地玩家子系统",
+				"tooltip": "每个本地玩家输入子系统",
+				"deprecated": false
+			},
+			"interfacePaths": [
+				"/Script/EnhancedInput.EnhancedInputSubsystemInterface"
+			],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:ControlMappingsRebuiltDelegate",
+					"name": "ControlMappingsRebuiltDelegate",
+					"signaturePath": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnControlMappingsRebuilt__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "OnControlMappingsRebuilt",
+						"category": "Input",
+						"tooltip": "在控制映射已重新构建的任何帧的末尾调用的蓝图事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnMappingContextAdded",
+					"name": "OnMappingContextAdded",
+					"signaturePath": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnMappingContextAdded__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "映射上下文已添加时",
+						"category": "Input",
+						"tooltip": "添加映射上下文时触发的回调（在此子系统上调用AddMappingContext）。\n\n注意：这不保证控制映射一定会被重建。\n如果需要，请改为监听ControlMappingsRebuiltDelegate。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnMappingContextRemoved",
+					"name": "OnMappingContextRemoved",
+					"signaturePath": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnMappingContextRemoved__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "映射上下文移除时",
+						"category": "Input",
+						"tooltip": "移除映射上下文时触发的回调（在此子系统上调用RemoveMappingContext）。\n\n注意：这不保证控制映射一定会被重建。\n如果需要，请改为监听ControlMappingsRebuiltDelegate。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnPostUserSettingsInitialized",
+					"name": "OnPostUserSettingsInitialized",
+					"signaturePath": "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem:OnUserSettingsPostInitialized__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Settings",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UEnhancedInputUserSettings*",
+								"typePath": "/Script/EnhancedInput.EnhancedInputUserSettings",
+								"headerPath": "UserSettings/EnhancedInputUserSettings.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "On Post User Settings Initialized",
+						"category": "Input",
+						"tooltip": "在此本地玩家的用户设置Object首次创建并加载后触发的委托。",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": []
+		},
+		{
+			"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+			"name": "EnhancedInputSubsystemInterface",
+			"nativeName": "UEnhancedInputSubsystemInterface",
+			"module": "EnhancedInput",
+			"headerPath": "EnhancedInputSubsystemInterface.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Interface",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": false,
+				"interface": true
+			},
+			"metadata":
+			{
+				"displayName": "增强输入子系统接口",
+				"tooltip": "增强输入子系统接口",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": [
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+					"name": "AddMappingContext",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Priority",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Mapping Context",
+						"category": "Input",
+						"tooltip": "添加一个控制点映射上下文。\n@param MappingContext                应用到此播放器的操作映射的一组键\n@param Priority                              高优先级的映射将首先应用，如果他们消耗输入，将阻挡低优先级的映射。\n@param Options                               添加此映射上下文时要考虑的选项。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddTagToInputMode",
+					"name": "AddTagToInputMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TagToAdd",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FGameplayTag",
+								"typePath": "/Script/GameplayTags.GameplayTag",
+								"headerPath": "GameplayTagContainer.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Tag to Input Mode",
+						"category": "Input",
+						"tooltip": "将给定的“TagToAdd”添加到当前输入模式标签容器，并触发控制映射的重建。\n\n@param TagToAdd      要添加到当前输入模式标签容器的Gameplay标签\n@param Options       用于控制如何处理控制映射重建的选项",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AppendTagsToInputMode",
+					"name": "AppendTagsToInputMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TagsToAdd",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FGameplayTagContainer",
+								"typePath": "/Script/GameplayTags.GameplayTagContainer",
+								"headerPath": "GameplayTagContainer.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Append Tags to Input Mode",
+						"category": "Input",
+						"tooltip": "将给定的“TagsToAdd”附加到当前输入模式标签容器，并触发控制映射的重建。\n\n@param TagsToAdd     要附加的Gameplay标签容器\n@param Options       用于控制映射重建的选项",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:ClearAllMappings",
+					"name": "ClearAllMappings",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Clear All Mappings",
+						"category": "Input",
+						"tooltip": "移除所有应用的映射上下文。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:GetAllPlayerMappableActionKeyMappings",
+					"name": "GetAllPlayerMappableActionKeyMappings",
+					"returnType":
+					{
+						"kind": "array",
+						"nativeName": "TArray<FEnhancedActionKeyMapping>",
+						"elementType":
+						{
+							"kind": "struct",
+							"nativeName": "FEnhancedActionKeyMapping",
+							"typePath": "/Script/EnhancedInput.EnhancedActionKeyMapping",
+							"headerPath": "EnhancedActionKeyMapping.h"
+						}
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get All Player Mappable Action Key Mappings",
+						"category": "Input|Mapping Queries",
+						"tooltip": "获取被标记为玩家可映射的当前应用的键映射的数组。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:GetInputMode",
+					"name": "GetInputMode",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FGameplayTagContainer",
+						"typePath": "/Script/GameplayTags.GameplayTagContainer",
+						"headerPath": "GameplayTagContainer.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Input Mode",
+						"category": "Input",
+						"tooltip": "返回增强输入上设置的当前输入模式。此模式将控制播放器\n当前正在处理的映射。如果输入映射上下文的InputModeQuery不为空\n且与此标签容器不匹配，则不会处理其映射。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:GetUserSettings",
+					"name": "GetUserSettings",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UEnhancedInputUserSettings*",
+						"typePath": "/Script/EnhancedInput.EnhancedInputUserSettings",
+						"headerPath": "UserSettings/EnhancedInputUserSettings.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Enhanced Input User Settings",
+						"category": "Enhanced Input|User Settings",
+						"tooltip": "Get Enhanced Input User Settings",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
+					"name": "HasMappingContext",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "MappingContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutFoundPriority",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Has Mapping Context",
+						"category": "Input|Mapping Queries",
+						"tooltip": "检查映射上下文是否应用于此子系统的拥有者。\n\n@param MappingContext                在子系统的拥有者上要搜索的映射上下文。\n@param OutFoundPriority              应用映射上下文时，其的优先级。如未应用上下文，-1\n@return      如应用映射上下文，则返回True",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:InjectInputForAction",
+					"name": "InjectInputForAction",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Inject Input for Action",
+						"category": "Input",
+						"tooltip": "通过注入输入模拟。假设输入作为FKey通过下层输入系统进入，运行修改器和触发器委托。在顶部应用操作修改器和触发器。\n\n@param Action                为其设置注入输入的输入操作\n@param RawValue              用于设置操作的值\n@param Modifiers             应用于注入输入的修改器。\n@param Triggers              应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:InjectInputForPlayerMapping",
+					"name": "InjectInputForPlayerMapping",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Inject Input for Player Mapping",
+						"category": "Input",
+						"tooltip": "通过注入输入模拟。运行修饰符和触发器委托，就好像输入已经作为FKeys通过下层输入系统。\n在上面应用操作修饰符和触发器。\n@param MappingName           可用于查找关联的UInputAction Object的玩家映射的名称。\n@param RawValue                      要将操作设为的值\n@param Modifiers                     应用到注入输入的修饰符。\n@param Triggers                      应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:InjectInputVectorForAction",
+					"name": "InjectInputVectorForAction",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Inject Input Vector for Action",
+						"category": "Input",
+						"tooltip": "通过注入输入模拟。假设输入作为FKey通过下层输入系统进入，运行修改器和触发器委托。在顶部应用操作修改器和触发器。\n\n@param Action                为其设置注入输入的输入操作\n@param Value                 用于设置操作的值（类型将由操作控制）\n@param Modifiers             应用于注入输入的修改器。\n@param Triggers              应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:InjectInputVectorForPlayerMapping",
+					"name": "InjectInputVectorForPlayerMapping",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Inject Input Vector for Player Mapping",
+						"category": "Input",
+						"tooltip": "通过注入输入模拟。运行修饰符和触发器委托，就好像输入已经作为FKeys通过下层输入系统。\n在上面应用操作修饰符和触发器。\n@param MappingName           可用于查找关联的UInputAction Object的玩家映射的名称。\n@param Value                         要将操作设为的值（类型将由操作控制）\n@param Modifiers                     应用到注入输入的修饰符。\n@param Triggers                      应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:QueryKeysMappedToAction",
+					"name": "QueryKeysMappedToAction",
+					"returnType":
+					{
+						"kind": "array",
+						"nativeName": "TArray<FKey>",
+						"elementType":
+						{
+							"kind": "struct",
+							"nativeName": "FKey",
+							"typePath": "/Script/InputCore.Key",
+							"headerPath": "InputCoreTypes.h"
+						}
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Query Keys Mapped to Action",
+						"category": "Input|Mapping Queries",
+						"tooltip": "返回在激活输入映射上下文中映射到给定操作的键。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:QueryMapKeyInActiveContextSet",
+					"name": "QueryMapKeyInActiveContextSet",
+					"returnType":
+					{
+						"kind": "enum",
+						"nativeName": "EMappingQueryResult",
+						"typePath": "/Script/EnhancedInput.EMappingQueryResult",
+						"headerPath": "InputMappingQuery.h"
+					},
+					"parameters": [
+						{
+							"name": "InputContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Key",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutIssues",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<FMappingQueryIssue>",
+								"elementType":
+								{
+									"kind": "struct",
+									"nativeName": "FMappingQueryIssue",
+									"typePath": "/Script/EnhancedInput.MappingQueryIssue",
+									"headerPath": "InputMappingQuery.h"
+								}
+							},
+							"direction": "output"
+						},
+						{
+							"name": "BlockingIssues",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EMappingQueryIssue",
+								"typePath": "/Script/EnhancedInput.EMappingQueryIssue",
+								"headerPath": "InputMappingQuery.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Query Map Key in Active Context Set",
+						"category": "Input|Mapping Queries",
+						"tooltip": "= DefaultMappingIssues::StandardFatal",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:QueryMapKeyInContextSet",
+					"name": "QueryMapKeyInContextSet",
+					"returnType":
+					{
+						"kind": "enum",
+						"nativeName": "EMappingQueryResult",
+						"typePath": "/Script/EnhancedInput.EMappingQueryResult",
+						"headerPath": "InputMappingQuery.h"
+					},
+					"parameters": [
+						{
+							"name": "PrioritizedActiveContexts",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputMappingContext*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputMappingContext*",
+									"typePath": "/Script/EnhancedInput.InputMappingContext",
+									"headerPath": "InputMappingContext.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InputContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Key",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutIssues",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<FMappingQueryIssue>",
+								"elementType":
+								{
+									"kind": "struct",
+									"nativeName": "FMappingQueryIssue",
+									"typePath": "/Script/EnhancedInput.MappingQueryIssue",
+									"headerPath": "InputMappingQuery.h"
+								}
+							},
+							"direction": "output"
+						},
+						{
+							"name": "BlockingIssues",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EMappingQueryIssue",
+								"typePath": "/Script/EnhancedInput.EMappingQueryIssue",
+								"headerPath": "InputMappingQuery.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Query Map Key in Context Set",
+						"category": "Input|Mapping Queries",
+						"tooltip": "= DefaultMappingIssues::StandardFatal",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+					"name": "RemoveMappingContext",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputMappingContext*",
+								"typePath": "/Script/EnhancedInput.InputMappingContext",
+								"headerPath": "InputMappingContext.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Remove Mapping Context",
+						"category": "Input",
+						"tooltip": "移除特定控制点上下文。\n如未应用上下文，也可以安全调用。\n@param MappingContext         要从玩家移除的上下文\n@param Options                        移除此输入映射上下文时要考虑的选项",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveTagFromInputMode",
+					"name": "RemoveTagFromInputMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TagToRemove",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FGameplayTag",
+								"typePath": "/Script/GameplayTags.GameplayTag",
+								"headerPath": "GameplayTagContainer.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Remove Tag from Input Mode",
+						"category": "Input",
+						"tooltip": "从当前输入模式中移除给定的标签，并触发控制映射的重建。\n\n@param TagToRemove   要从当前输入模式中移除的标签\n@param Options               如何处理控制映射的选项重建",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveTagsFromInputMode",
+					"name": "RemoveTagsFromInputMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TagsToRemove",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FGameplayTagContainer",
+								"typePath": "/Script/GameplayTags.GameplayTagContainer",
+								"headerPath": "GameplayTagContainer.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Remove Tags from Input Mode",
+						"category": "Input",
+						"tooltip": "从当前输入模式中移除标签，并触发控制映射的重建。\n\n@param TagsToRemove 要从当前输入模式标签容器中移除的标签\n@param Options               如何处理控制映射重建的选项",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RequestRebuildControlMappings",
+					"name": "RequestRebuildControlMappings",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						},
+						{
+							"name": "RebuildType",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EInputMappingRebuildType",
+								"typePath": "/Script/EnhancedInput.EInputMappingRebuildType",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "Rebuild"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Request Rebuild Control Mappings",
+						"category": "Input",
+						"tooltip": "标记玩家，用于在此帧的末尾重应用所有映射上下文。\n添加或移除映射上下文时自动调用此。\n\n@param Options                移除此输入映射上下文时要考虑的选项",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:SetInputMode",
+					"name": "SetInputMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewMode",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FGameplayTagContainer",
+								"typePath": "/Script/GameplayTags.GameplayTagContainer",
+								"headerPath": "GameplayTagContainer.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Options",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FModifyContextOptions",
+								"typePath": "/Script/EnhancedInput.ModifyContextOptions",
+								"headerPath": "EnhancedInputSubsystemInterface.h"
+							},
+							"direction": "input",
+							"defaultValue": "()"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Input Mode",
+						"category": "Input",
+						"tooltip": "设置玩家当前的输入模式并触发控制映射的重建。\n\n@param NewMode 要使用的新输入模式标签容器\n@param Options 用于控制映射重建的选项。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:StartContinuousInputInjectionForAction",
+					"name": "StartContinuousInputInjectionForAction",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Start Continuous Input Injection for Action",
+						"category": "Input",
+						"tooltip": "通过注入开始输入模拟。这将在每次tick时注入给定输入，直到使用StopContinuousInputInjectionForAction停止。\n\n@param Action                要为其设置注入输入的输入操作\n@param RawValue              要将操作设为的值（类型将由操作控制）\n@param Modifiers             应用到注入输入的修饰符。@param Triggers              应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:StartContinuousInputInjectionForPlayerMapping",
+					"name": "StartContinuousInputInjectionForPlayerMapping",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Modifiers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputModifier*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputModifier*",
+									"typePath": "/Script/EnhancedInput.InputModifier",
+									"headerPath": "InputModifiers.h"
+								}
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Triggers",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UInputTrigger*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UInputTrigger*",
+									"typePath": "/Script/EnhancedInput.InputTrigger",
+									"headerPath": "InputTriggers.h"
+								}
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Start Continuous Input Injection for Player Mapping",
+						"category": "Input",
+						"tooltip": "通过注入开始输入模拟。这将在每次tick时注入给定输入，直到使用StopContinuousInputInjectionForAction停止。@param MappingName           可用于查找关联的UInputAction Object的玩家映射的名称。\n@param RawValue                      要将操作设为的值（类型将由操作控制）\n@param Modifiers                     应用到注入输入的修饰符。@param Triggers                      应用于注入输入的触发器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:StopContinuousInputInjectionForAction",
+					"name": "StopContinuousInputInjectionForAction",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Stop Continuous Input Injection for Action",
+						"category": "Input",
+						"tooltip": "停止给定操作的连续输入注入。\n\n@param Action                停止注入输入的操作",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:StopContinuousInputInjectionForPlayerMapping",
+					"name": "StopContinuousInputInjectionForPlayerMapping",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Stop Continuous Input Injection for Player Mapping",
+						"category": "Input",
+						"tooltip": "停止给定玩家映射名称的连续输入注入。\n\n@param MappingName           可用于查找关联的UInputAction Object的玩家映射的名称。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:UpdateValueOfContinuousInputInjectionForAction",
+					"name": "UpdateValueOfContinuousInputInjectionForAction",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Action",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UInputAction*",
+								"typePath": "/Script/EnhancedInput.InputAction",
+								"headerPath": "InputAction.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Update Value Of Continuous Input Injection for Action",
+						"category": "Input",
+						"tooltip": "更新连续输入注入的值，保留触发器和修改器的状态。\n\n@param Action        设置注入输入的输入操作\n@param RawValue      将操作设为的值（类型将由操作控制）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:UpdateValueOfContinuousInputInjectionForPlayerMapping",
+					"name": "UpdateValueOfContinuousInputInjectionForPlayerMapping",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MappingName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RawValue",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FInputActionValue",
+								"typePath": "/Script/EnhancedInput.InputActionValue",
+								"headerPath": "InputActionValue.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeInterfaceCall": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Update Value Of Continuous Input Injection for Player Mapping",
+						"category": "Input",
+						"tooltip": "更新给定玩家映射名称的连续输入注入的值，保留触发器和修改器的状态。\n\n@param MappingName   玩家映射的名称，可用于查找关联的UInputActionObject。\n@param RawValue              将操作设为的值（类型将由操作控制）",
 						"deprecated": false
 					}
 				}
@@ -29216,6 +31475,675 @@
 			"delegates": []
 		},
 		{
+			"path": "/Script/Engine.WorldPartitionStreamingQuerySource",
+			"name": "WorldPartitionStreamingQuerySource",
+			"nativeName": "FWorldPartitionStreamingQuerySource",
+			"module": "Engine",
+			"headerPath": "WorldPartition/WorldPartitionStreamingSource.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "世界分区流送查询源",
+				"tooltip": "包含查询流送状态所需的所有属性的结构",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:bDataLayersOnly",
+					"name": "bDataLayersOnly",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "仅限数据层",
+						"category": "Query",
+						"tooltip": "如为True，查询将只返回在DataLayers属性中找到的数据层中的单元。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:bIncludeAnyDataLayer",
+					"name": "bIncludeAnyDataLayer",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Include Any Data Layer",
+						"category": "Query",
+						"tooltip": "如果为true，则包含拥有DataLayers的单元格，无需关心DataLayers数组中的匹配项。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:bSpatialQuery",
+					"name": "bSpatialQuery",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "空间查询",
+						"category": "Query",
+						"tooltip": "如果为false，则不会使用位置/半径来查找空间单元。查询总是返回非空间单元，但可以由bDataLayersOnly进一步筛选。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:bUseGridLoadingRange",
+					"name": "bUseGridLoadingRange",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "使用网格加载范围",
+						"category": "Query",
+						"tooltip": "如为True，则可以将查询绑定到加载范围半径，而不提供查询半径。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:DataLayers",
+					"name": "DataLayers",
+					"type":
+					{
+						"kind": "array",
+						"nativeName": "TArray<FName>",
+						"elementType":
+						{
+							"kind": "name",
+							"nativeName": "FName"
+						}
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "数据层",
+						"category": "Query",
+						"tooltip": "用于专门化查询的数据层的可选列表。如果为空，则查询将只返回非数据层单元。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:Location",
+					"name": "Location",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "位置",
+						"category": "Query",
+						"tooltip": "要查询的位置。（如bSpatialQuery为false，则不使用）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.WorldPartitionStreamingQuerySource:Radius",
+					"name": "Radius",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "半径",
+						"category": "Query",
+						"tooltip": "要查询的半径。（如bSpatialQuery为false，则不使用）",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/EnhancedInput.EnhancedActionKeyMapping",
+			"name": "EnhancedActionKeyMapping",
+			"nativeName": "FEnhancedActionKeyMapping",
+			"module": "EnhancedInput",
+			"headerPath": "EnhancedActionKeyMapping.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "增强操作键映射",
+				"tooltip": "定义一个键激活和结果增强操作之间的映射\n一个键可以是按钮按下、手柄轴移动等。\n一个增强操作可以是向前移动、跳跃、开火等。",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:Action",
+					"name": "Action",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<UInputAction>",
+						"typePath": "/Script/EnhancedInput.InputAction",
+						"headerPath": "InputAction.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "操作",
+						"category": "Input",
+						"tooltip": "受密钥影响的操作",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:bHasAlwaysTickTrigger",
+					"name": "bHasAlwaysTickTrigger",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "始终拥有Tick触发器",
+						"tooltip": "如果此映射或其关联的UInputAction上的任何触发器\n被标记为“始终tick”触发器，则为True。仅当重建控制映射时\n才设置此值。\n\n@see UInputTrigger::bShouldAlwaysTick\n@see IEnhancedInputSubsystemInterface::ReorderMappings",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:bShouldBeIgnored",
+					"name": "bShouldBeIgnored",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "应该被忽略",
+						"tooltip": "如为true，那么这个键映射应该被忽略。如果键在其\n所属PlayerInput ControlMappings重建时被按下，则这将设为true。\n\n@see 参见IEnhancedInputSubsystemInterface::RebuildControlMappings",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:Key",
+					"name": "Key",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FKey",
+						"typePath": "/Script/InputCore.Key",
+						"headerPath": "InputCoreTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "键",
+						"category": "Input",
+						"tooltip": "影响操作的键。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:Modifiers",
+					"name": "Modifiers",
+					"type":
+					{
+						"kind": "array",
+						"nativeName": "TArray<TObjectPtr<UInputModifier>>",
+						"elementType":
+						{
+							"kind": "object",
+							"nativeName": "TObjectPtr<UInputModifier>",
+							"typePath": "/Script/EnhancedInput.InputModifier",
+							"headerPath": "InputModifiers.h"
+						}
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "修改器",
+						"category": "Input",
+						"tooltip": "对原始键值应用的修饰符。\n这些按照数组顺序依次应用。\n\n注意：在单独键映射中定义的修饰符将在输入操作资产中定义的修饰符之前应用。\n修饰符不会重载任何在输入操作资产上定义的修饰符，它们将在评估期间合并在一起。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.EnhancedActionKeyMapping:Triggers",
+					"name": "Triggers",
+					"type":
+					{
+						"kind": "array",
+						"nativeName": "TArray<TObjectPtr<UInputTrigger>>",
+						"elementType":
+						{
+							"kind": "object",
+							"nativeName": "TObjectPtr<UInputTrigger>",
+							"typePath": "/Script/EnhancedInput.InputTrigger",
+							"headerPath": "InputTriggers.h"
+						}
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "触发器",
+						"category": "Input",
+						"tooltip": "触发器限定符。如果有任何触发器限定符存在，映射将不会触发，除非：\n如果该列表中有任何显式触发器，至少其中一个必须满足。\n该列表中的所有隐式触发器都必须满足。",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/EnhancedInput.InputActionValue",
+			"name": "InputActionValue",
+			"nativeName": "FInputActionValue",
+			"module": "EnhancedInput",
+			"headerPath": "InputActionValue.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "输入操作值",
+				"tooltip": "输入操作值",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/EnhancedInput.MappingQueryIssue",
+			"name": "MappingQueryIssue",
+			"nativeName": "FMappingQueryIssue",
+			"module": "EnhancedInput",
+			"headerPath": "InputMappingQuery.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "映射查询问题",
+				"tooltip": "映射请求引发的潜在问题",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/EnhancedInput.MappingQueryIssue:BlockingAction",
+					"name": "BlockingAction",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<UInputAction>",
+						"typePath": "/Script/EnhancedInput.InputAction",
+						"headerPath": "InputAction.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "阻挡作用",
+						"category": "Result",
+						"tooltip": "导致阻挡的输入上下文中的操作",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.MappingQueryIssue:BlockingContext",
+					"name": "BlockingContext",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<UInputMappingContext>",
+						"typePath": "/Script/EnhancedInput.InputMappingContext",
+						"headerPath": "InputMappingContext.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "阻挡上下文",
+						"category": "Result",
+						"tooltip": "包含绑定到被查询键的阻挡操作的输入上下文",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.MappingQueryIssue:Issue",
+					"name": "Issue",
+					"type":
+					{
+						"kind": "enum",
+						"nativeName": "EMappingQueryIssue",
+						"typePath": "/Script/EnhancedInput.EMappingQueryIssue",
+						"headerPath": "InputMappingQuery.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "问题",
+						"category": "Result",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/EnhancedInput.ModifyContextOptions",
+			"name": "ModifyContextOptions",
+			"nativeName": "FModifyContextOptions",
+			"module": "EnhancedInput",
+			"headerPath": "EnhancedInputSubsystemInterface.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "修改上下文选项",
+				"tooltip": "作为参数传入用于添加/移除上下文",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/EnhancedInput.ModifyContextOptions:bForceImmediately",
+					"name": "bForceImmediately",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "立即强制",
+						"category": "Input",
+						"tooltip": "映射变更将同步应用，而不是在帧末尾应用，\n从而使它们可用于同一帧上的输入系统。\n\n如果你要添加多个映射上下文，则不建议将其设为true，\n因为这会降低性能。\n\n默认：false",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.ModifyContextOptions:bIgnoreAllPressedKeysUntilRelease",
+					"name": "bIgnoreAllPressedKeysUntilRelease",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "忽略所有按下的键直到松开",
+						"category": "Input",
+						"tooltip": "如为true，则在控制映射重建过程中“按下”或“按下”的任何键\n在“释放”之前都不会被增强输入处理。\n\n举例而言，如果你要添加键映射到“X”的映射上下文，\n并且玩家在添加IMC时按住“X”，\n则在玩家释放“X”之前不会出现“触发”事件并再次按下它。\n\n如果在上面的示例中将其设为false，则一旦IMC添加完成，\n“已触发”将立即触发。\n\n默认：True\n\n注意：这只会对绑定到布尔输入操作类型的键执行某些操作。\n注意：这包括玩家按下的所有按键，而不仅仅是之前在调用RebuildControlMappings之前\n在增强输入中映射的按键。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/EnhancedInput.ModifyContextOptions:bNotifyUserSettings",
+					"name": "bNotifyUserSettings",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "通知用户设置",
+						"category": "Input",
+						"tooltip": "如为true，那么这个映射上下文将会\n在这个子系统上注册或取消注册到增强输入用户设置中（如果其存在）。默认：False\n\n注意：你需要在项目设置中启用并配置UEnhancedInputUserSettings类才能执行任何操作。",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/GameplayTags.GameplayTag",
+			"name": "GameplayTag",
+			"nativeName": "FGameplayTag",
+			"module": "GameplayTags",
+			"headerPath": "GameplayTagContainer.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Gameplay标签",
+				"tooltip": "单个gameplay标签，代表在GameplayTagsManager中注册的格式x.y的层级命名\n使用meta = (Categories = \"Tag1.Tag2.Tag3\"))即可过滤编辑器中显示的gameplay标签",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/GameplayTags.GameplayTagContainer",
+			"name": "GameplayTagContainer",
+			"nativeName": "FGameplayTagContainer",
+			"module": "GameplayTags",
+			"headerPath": "GameplayTagContainer.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Gameplay标签容器",
+				"tooltip": "包含一个FGameplayTag集的标签容器，添加标签即可将其显式包含、添加子标签即可隐式包含",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/InputCore.Key",
+			"name": "Key",
+			"nativeName": "FKey",
+			"module": "InputCore",
+			"headerPath": "InputCoreTypes.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "键",
+				"tooltip": "键",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"functions": [],
+			"delegates": []
+		},
+		{
 			"path": "/Script/Engine.EAttachLocation",
 			"name": "EAttachLocation",
 			"nativeName": "EAttachLocation",
@@ -30315,6 +33243,220 @@
 					"name": "EVignetteType_MAX",
 					"value": 3,
 					"displayName": "EVignette Type MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.EWorldPartitionRuntimeCellState",
+			"name": "EWorldPartitionRuntimeCellState",
+			"nativeName": "EWorldPartitionRuntimeCellState",
+			"module": "Engine",
+			"headerPath": "WorldPartition/WorldPartitionRuntimeCell.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EWorld Partition Runtime Cell State",
+				"tooltip": "单元状态",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Unloaded",
+					"value": 0,
+					"displayName": "Unloaded"
+				},
+				{
+					"name": "Loaded",
+					"value": 1,
+					"displayName": "Loaded"
+				},
+				{
+					"name": "Activated",
+					"value": 2,
+					"displayName": "Activated"
+				},
+				{
+					"name": "EWorldPartitionRuntimeCellState_MAX",
+					"value": 3,
+					"displayName": "EWorld Partition Runtime Cell State MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/EnhancedInput.EInputMappingRebuildType",
+			"name": "EInputMappingRebuildType",
+			"nativeName": "EInputMappingRebuildType",
+			"module": "EnhancedInput",
+			"headerPath": "EnhancedInputSubsystemInterface.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EInput Mapping Rebuild Type",
+				"tooltip": "EInput Mapping Rebuild Type",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "None",
+					"value": 0,
+					"displayName": "None"
+				},
+				{
+					"name": "Rebuild",
+					"value": 1,
+					"displayName": "Rebuild"
+				},
+				{
+					"name": "RebuildWithFlush",
+					"value": 2,
+					"displayName": "Rebuild with Flush"
+				},
+				{
+					"name": "EInputMappingRebuildType_MAX",
+					"value": 3,
+					"displayName": "EInput Mapping Rebuild Type MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/EnhancedInput.EMappingQueryIssue",
+			"name": "EMappingQueryIssue",
+			"nativeName": "EMappingQueryIssue",
+			"module": "EnhancedInput",
+			"headerPath": "InputMappingQuery.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EMapping Query Issue",
+				"tooltip": "一次QueryMapKeyIn……调用产生了映射问题",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "NoIssue",
+					"value": 0,
+					"displayName": "No Issue"
+				},
+				{
+					"name": "ReservedByAction",
+					"value": 1,
+					"displayName": "Reserved by Action"
+				},
+				{
+					"name": "HidesExistingMapping",
+					"value": 2,
+					"displayName": "Hides Existing Mapping"
+				},
+				{
+					"name": "HiddenByExistingMapping",
+					"value": 4,
+					"displayName": "Hidden by Existing Mapping"
+				},
+				{
+					"name": "CollisionWithMappingInSameContext",
+					"value": 8,
+					"displayName": "Collision with Mapping in Same Context"
+				},
+				{
+					"name": "ForcesTypePromotion",
+					"value": 16,
+					"displayName": "Forces Type Promotion"
+				},
+				{
+					"name": "ForcesTypeDemotion",
+					"value": 32,
+					"displayName": "Forces Type Demotion"
+				},
+				{
+					"name": "EMappingQueryIssue_MAX",
+					"value": 33,
+					"displayName": "EMapping Query Issue MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/EnhancedInput.EMappingQueryResult",
+			"name": "EMappingQueryResult",
+			"nativeName": "EMappingQueryResult",
+			"module": "EnhancedInput",
+			"headerPath": "InputMappingQuery.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EMapping Query Result",
+				"tooltip": "一次QueryMapKeyIn……调用产生了结果摘要",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Error_EnhancedInputNotEnabled",
+					"value": 0,
+					"displayName": "Error Enhanced Input Not Enabled"
+				},
+				{
+					"name": "Error_InputContextNotInActiveContexts",
+					"value": 1,
+					"displayName": "Error Input Context Not in Active Contexts"
+				},
+				{
+					"name": "Error_InvalidAction",
+					"value": 2,
+					"displayName": "Error Invalid Action"
+				},
+				{
+					"name": "NotMappable",
+					"value": 3,
+					"displayName": "Not Mappable"
+				},
+				{
+					"name": "MappingAvailable",
+					"value": 4,
+					"displayName": "Mapping Available"
+				},
+				{
+					"name": "EMappingQueryResult_MAX",
+					"value": 5,
+					"displayName": "EMapping Query Result MAX"
 				}
 			]
 		},

@@ -166,6 +166,12 @@ public static class UnrealReflectionJson
             {
                 throw new JsonException($"Unreal type '{type.Path}' has an invalid function.");
             }
+            if (function.Traits.NativeInterfaceCall &&
+                (!type.Traits.Interface || function.Traits.Static || function.NativeBinding is not null))
+            {
+                throw new JsonException(
+                    $"Unreal function '{function.Path}' cannot request NativeInterfaceCall unless it is a non-static reflected interface function without a native binding.");
+            }
             ValidateMetadata(function.Metadata, $"function '{function.Path}'");
 
             ValidateTypeReference(function.ReturnType, allowVoid: true, $"function '{function.Path}' return");

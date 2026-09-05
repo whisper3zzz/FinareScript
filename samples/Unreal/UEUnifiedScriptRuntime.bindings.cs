@@ -258,6 +258,139 @@ public readonly record struct HitResult(
     [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(15, "bBlockingHit")] bool bBlockingHit,
     [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(16, "bStartPenetrating")] bool bStartPenetrating);
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u91CD\u64AD\u5B50\u7CFB\u7EDF", Tooltip = "\u91CD\u64AD\u5B50\u7CFB\u7EDF")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.GameInstanceSubsystem")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.ReplaySubsystem")]
+public sealed partial class ReplaySubsystem : global::UnifiedScript.Unreal.UnrealObject
+{
+    public ReplaySubsystem(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Active Replay Name", Category = "Replay", Tooltip = "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09")]
+    public string GetActiveReplayName()
+        => Invoke<string>(0xC04A7D0A6F66D2B8UL, "/Script/Engine.ReplaySubsystem:GetActiveReplayName");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Playing", Category = "Replay", Tooltip = "Is Playing")]
+    public bool IsPlaying()
+        => Invoke<bool>(0x73416F1BB610AC54UL, "/Script/Engine.ReplaySubsystem:IsPlaying");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Recording", Category = "Replay", Tooltip = "Is Recording")]
+    public bool IsRecording()
+        => Invoke<bool>(0x899D1D62B656ED89UL, "/Script/Engine.ReplaySubsystem:IsRecording");
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u6D41\u9001\u4E16\u754C\u5B50\u7CFB\u7EDF\u63A5\u53E3", Tooltip = "\u6D41\u9001\u4E16\u754C\u5B50\u7CFB\u7EDF\u63A5\u53E3")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.StreamingWorldSubsystemInterface")]
+public sealed partial class StreamingWorldSubsystemInterface : global::UnifiedScript.Unreal.UnrealObject
+{
+    public StreamingWorldSubsystemInterface(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u5B50\u7CFB\u7EDF\u84DD\u56FE\u5E93", Tooltip = "\u5B50\u7CFB\u7EDF\u84DD\u56FE\u5E93")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.SubsystemBlueprintLibrary")]
+public sealed partial class SubsystemBlueprintLibrary : global::UnifiedScript.Unreal.UnrealStaticService
+{
+    public SubsystemBlueprintLibrary(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Game Instance Subsystem", Category = "GameInstance Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetGameInstanceSubsystem(global::UnifiedScript.Unreal.UnrealObjectHandle contextObject, global::UnifiedScript.Unreal.UnrealClassHandle @class)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x42E04F4834C375CFUL, "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem", contextObject, @class);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Sub System from Player Controller", Category = "LocalPlayer Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetLocalPlayerSubSystemFromPlayerController(global::UnifiedScript.Unreal.UnrealObjectHandle playerController, global::UnifiedScript.Unreal.UnrealClassHandle @class)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x81E45AF78119039DUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController", playerController, @class);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Subsystem", Category = "LocalPlayer Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetLocalPlayerSubsystem(global::UnifiedScript.Unreal.UnrealObjectHandle contextObject, global::UnifiedScript.Unreal.UnrealClassHandle @class)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x6CBE9559DB0FD3ACUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem", contextObject, @class);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get World Subsystem", Category = "GameInstance Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetWorldSubsystem(global::UnifiedScript.Unreal.UnrealObjectHandle contextObject, global::UnifiedScript.Unreal.UnrealClassHandle @class)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x2401498FBF61013EUL, "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem", contextObject, @class);
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u4E16\u754C\u5206\u533A\u5B50\u7CFB\u7EDF", Tooltip = "UWorldPartitionSubsystem")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.TickableWorldSubsystem", "/Script/Engine.StreamingWorldSubsystemInterface")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.WorldPartitionSubsystem")]
+public sealed partial class WorldPartitionSubsystem : global::UnifiedScript.Unreal.UnrealObject
+{
+    public WorldPartitionSubsystem(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is All Streaming Completed", Category = "Streaming", Tooltip = "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002")]
+    public bool IsAllStreamingCompleted()
+        => Invoke<bool>(0x7F31DA79156A9F6BUL, "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted");
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u589E\u5F3A\u8F93\u5165\u5B50\u7CFB\u7EDF\u63A5\u53E3", Tooltip = "\u589E\u5F3A\u8F93\u5165\u5B50\u7CFB\u7EDF\u63A5\u53E3")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/EnhancedInput.EnhancedInputSubsystemInterface")]
+public sealed partial class EnhancedInputSubsystemInterface : global::UnifiedScript.Unreal.UnrealObject
+{
+    public EnhancedInputSubsystemInterface(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Mapping Context", Category = "Input", Tooltip = "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002")]
+    public void AddMappingContext(global::UnifiedScript.Unreal.UnrealObjectHandle mappingContext, int priority, ModifyContextOptions options)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, int, ModifyContextOptions>(0xDE98945928C593E2UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext", mappingContext, priority, options);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Has Mapping Context", Category = "Input|Mapping Queries", Tooltip = "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue")]
+    public bool HasMappingContext(global::UnifiedScript.Unreal.UnrealObjectHandle mappingContext, out int outFoundPriority)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x6B45E6BF64B268B5UL,
+            "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
+            typeof(bool),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, mappingContext),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        outFoundPriority = (int)__unifiedScriptResult.Outputs[0]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Remove Mapping Context", Category = "Input", Tooltip = "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879")]
+    public void RemoveMappingContext(global::UnifiedScript.Unreal.UnrealObjectHandle mappingContext, ModifyContextOptions options)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, ModifyContextOptions>(0xAE4AECB5DAB4A4E5UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext", mappingContext, options);
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u4FEE\u6539\u4E0A\u4E0B\u6587\u9009\u9879", Tooltip = "\u4F5C\u4E3A\u53C2\u6570\u4F20\u5165\u7528\u4E8E\u6DFB\u52A0/\u79FB\u9664\u4E0A\u4E0B\u6587")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
+[global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/EnhancedInput.ModifyContextOptions", "FModifyContextOptions")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct ModifyContextOptions(
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0, "bForceImmediately")] bool bForceImmediately,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1, "bIgnoreAllPressedKeysUntilRelease")] bool bIgnoreAllPressedKeysUntilRelease,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(2, "bNotifyUserSettings")] bool bNotifyUserSettings);
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EUnified Script Interop Mode", Tooltip = "EUnified Script Interop Mode")]
 [global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", "EUnifiedScriptInteropMode")]
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
