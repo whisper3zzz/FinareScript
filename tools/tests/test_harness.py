@@ -73,6 +73,25 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(8, len(manifest["gates"]))
         self.assertNotIn("script-class-golden-path", harness.expand_gates(manifest, manifest["profiles"]["quick"]))
 
+    def test_project_agent_roles_pin_architect_and_executor_models(self):
+        config = (REPO / ".codex/config.toml").read_text(encoding="utf-8")
+        executor = (REPO / ".codex/agents/executor.toml").read_text(encoding="utf-8")
+        self.assertIn('model = "gpt-6-astra"', config)
+        self.assertIn('model_reasoning_effort = "xhigh"', config)
+        self.assertIn('default_subagent_model = "gpt-5.6-luna"', config)
+        self.assertIn('default_subagent_reasoning_effort = "xhigh"', config)
+        self.assertIn('max_concurrent_threads_per_session = 1', config)
+        self.assertIn('name = "executor"', executor)
+        self.assertIn('model = "gpt-5.6-luna"', executor)
+        self.assertIn('model_reasoning_effort = "xhigh"', executor)
+        plan = harness.make_plan(
+            REPO,
+            harness.load_manifest(REPO),
+            paths=[".codex/config.toml", ".codex/agents/executor.toml"],
+        )
+        self.assertEqual([], plan["unmappedPaths"])
+        self.assertEqual(["harness-tests", "repository"], plan["gates"])
+
     def test_load_manifest_rejects_duplicate_json_keys(self):
         self.write(harness.MANIFEST, '{"gates": {}, "gates": {}}')
         with self.assertRaisesRegex(harness.HarnessError, "Duplicate"):

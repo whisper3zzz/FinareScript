@@ -10,6 +10,13 @@ AI 的执行约束以 [AGENTS.md](../AGENTS.md) 为准。Harness 提供能力，
 必须走一遍 `status -> plan -> run`。清楚上下文时直接实现，知道相关测试时直接运行。
 先按实际行为变化判断风险，再选择命令；不要为了使用框架扩大工作量。
 
+Harness 的 AI 编排采用单架构师、单执行者：项目主会话由 GPT-6 Astra `xhigh`
+负责跨模块设计、Roadmap 切片和最终集成；`executor` 由 GPT-5.6 Luna `xhigh`
+负责边界明确的代码实现、生成和针对性验证。配置入口是
+[`../.codex/config.toml`](../.codex/config.toml) 和
+[`../.codex/agents/executor.toml`](../.codex/agents/executor.toml)。同一工作树不并行
+启动多个写入 Agent；状态说明、只读判断和微小规则修改不为分工而强制委派。
+
 文档改动检查文档，局部逻辑改动测试对应行为，ABI/生命周期改动测试受影响的链路。
 完整 profile 适用于需要其覆盖范围的任务或 milestone/发布收尾，不是普通改动的必选项。
 例如修改 Harness 的输出文案，可以只测输出行为；修改 AI 约束不需要 .NET/UE 验收。

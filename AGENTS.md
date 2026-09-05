@@ -23,6 +23,29 @@ correctness, protection of user files, or necessary testing.
   architectural decisions, or an explicit request. Keep useful decisions and
   unfinished work, not a transcript of execution.
 
+## Architect and executor roles
+
+- The primary project agent is the architecture owner. Project-local Codex
+  configuration selects `gpt-6-astra` with `xhigh` reasoning for this role.
+  It owns cross-module contracts, roadmap slicing, invariants, dependency
+  direction, and the final judgment that an implementation matches the design.
+- Delegate bounded source implementation, generation, and focused verification
+  to the `executor` agent, configured as `gpt-5.6-luna` with `xhigh` reasoning.
+  Give it the desired behavior, relevant architectural constraints, owned file
+  area, and concrete validation target; do not make it rediscover product scope.
+- Use one write-capable executor at a time in this shared checkout. The
+  architect may continue read-only analysis while it runs, but must not edit the
+  same files concurrently. Review the returned diff and evidence rather than
+  repeating every check.
+- Do not delegate status answers, explanations, read-only review, or trivial
+  governance edits merely to satisfy a workflow. Product code changes belong to
+  the executor once the required behavior is sufficiently defined. If no
+  executor is available, the architect may implement instead of blocking.
+- The executor does not choose the next Roadmap module, redesign public
+  contracts, spawn more agents, commit, or push. It returns architectural
+  questions with source evidence to the architect. The architect remains
+  responsible for integration and user communication.
+
 ## Validate according to risk, not ritual
 
 Choose checks that can catch concrete errors introduced by this change. Make
@@ -90,7 +113,8 @@ this judgment internally; a written justification or scorecard is not required.
   `harness.local.json`. Do not edit, regenerate over, stage, or restore those
   files without authorization. Do not commit, push, or expand into external
   projects without authorization.
-- Do not spawn subagents unless explicitly requested. Seek confirmation for
+- Spawn only the `executor` described above for project implementation, or
+  other agents when the user explicitly requests them. Seek confirmation for
   irreversible actions, conflicting requirements, or material scope changes;
   make ordinary implementation choices independently.
 - Keep Core/Graph/Semantics engine-neutral. Contract changes must cover the

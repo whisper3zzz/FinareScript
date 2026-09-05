@@ -1,6 +1,6 @@
 {
   "schemaVersion": "unifiedscript.harness-manifest/v0.1",
-  "documents": ["AGENTS.md", "docs/HARNESS.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "CONTRIBUTING.md", "docs/plans/TEMPLATE.md"],
+  "documents": ["AGENTS.md", ".codex/config.toml", ".codex/agents/executor.toml", "docs/HARNESS.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "CONTRIBUTING.md", "docs/plans/TEMPLATE.md"],
   "gates": {
     "harness-tests": {
       "description": "Harness behavior tests, without Unreal or .NET",
@@ -58,7 +58,7 @@
     "performance": ["workload-performance"]
   },
   "routes": [
-    {"patterns": ["AGENTS.md", "harness/*", "docs/*", "README.md", "CONTRIBUTING.md"], "profile": "quick", "reason": "Instructions, plans and documentation"},
+    {"patterns": ["AGENTS.md", ".codex/*", "harness/*", "docs/*", "README.md", "CONTRIBUTING.md"], "profile": "quick", "reason": "Instructions, agent configuration, plans and documentation"},
     {"patterns": ["tools/*", ".github/*", ".gitignore"], "profile": "precommit", "reason": "Tooling and verification entrypoints"},
     {"patterns": ["src/*", "tests/*", "schemas/*", "samples/*", "global.json", "Directory.Build.*", "UnifiedScript.slnx"], "profile": "precommit", "reason": "Managed contracts, compiler, runtime or generated samples"},
     {"patterns": ["HostProject/*", "src/UnifiedScript.Unreal/*", "src/UnifiedScript.Runtime/*"], "profile": "native", "reason": "Native integration or managed runtime ABI"},
