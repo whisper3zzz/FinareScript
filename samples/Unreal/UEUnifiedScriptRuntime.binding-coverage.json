@@ -7,14 +7,14 @@
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
-    "typeCount": 19,
-    "memberCount": 187,
+    "typeCount": 21,
+    "memberCount": 190,
     "directThunkCount": 66,
-    "callFrameCount": 118,
+    "callFrameCount": 121,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 184,
+    "nativeThunkCount": 187,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -281,6 +281,30 @@
       "diagnosticCodes": [],
       "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
       "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/Engine.Actor:K2_SetActorRotation",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.Actor:K2_SetActorTransform",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.Actor:SetTickGroup",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
     },
     {
       "path": "/Script/Engine.GameplayStatics:GetAllActorsOfClass",

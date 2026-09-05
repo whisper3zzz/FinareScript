@@ -2,6 +2,7 @@
 
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
+#include "Dom/JsonObject.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -14,17 +15,26 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "PackageTools.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptActor.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptDeclarationMaterializer.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "Interfaces/IPluginManager.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/StructOnScope.h"
@@ -2260,6 +2270,500 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
     return bRuntimeReady && !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptCommonStateMaterializationTest,
+    "UnifiedScript.Unreal.ScriptClass.CommonStateMaterialization",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptCommonStateMaterializationTest::RunTest(const FString& Parameters)
+{
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (!TestTrue(TEXT("UEUnifiedScript plugin is installed"), Plugin.IsValid()))
+    {
+        return false;
+    }
+
+    const FString DemoDirectory = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"));
+    const FString DeclarationPath = FPaths::Combine(
+        DemoDirectory,
+        TEXT("UnifiedScript.Unreal.Demo.asset.json"));
+    const FString ChunkPath = FPaths::Combine(
+        DemoDirectory,
+        TEXT("UnifiedScript.Unreal.Demo.uschunk"));
+    const FString AssemblyPath = FPaths::Combine(
+        DemoDirectory,
+        TEXT("UnifiedScript.Unreal.Demo.dll"));
+    FString DeclarationJson;
+    if (!TestTrue(TEXT("Common State declaration is staged"),
+            FFileHelper::LoadFileToString(DeclarationJson, *DeclarationPath)) ||
+        !TestTrue(TEXT("Common State chunk is staged"), IFileManager::Get().FileExists(*ChunkPath)) ||
+        !TestTrue(TEXT("Common State assembly is staged"), IFileManager::Get().FileExists(*AssemblyPath)))
+    {
+        return false;
+    }
+
+    // The managed state bridge resolves member paths from the script's
+    // declared GeneratedClassPath, so the fixture uses that real content
+    // identity instead of a transient class with a different path.
+    const FString AssetName = TEXT("BP_CommonStateGameplay");
+    const FString PackageName = TEXT("/Game/UnifiedScriptDemo/BP_CommonStateGameplay");
+    const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+        PackageName, FPackageName::GetAssetPackageExtension());
+    const bool bHadOriginalPackage = IFileManager::Get().FileExists(*PackageFilename);
+    TArray<uint8> OriginalPackageBytes;
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    const bool bOriginalPackageReadOnly = bHadOriginalPackage &&
+        PlatformFile.IsReadOnly(*PackageFilename);
+    if (bHadOriginalPackage && !FFileHelper::LoadFileToArray(
+            OriginalPackageBytes,
+            *PackageFilename))
+    {
+        TestFalse(TEXT("Common State fixture refuses to overwrite an unreadable existing Blueprint"), true);
+        return false;
+    }
+    if (bHadOriginalPackage && bOriginalPackageReadOnly &&
+        !PlatformFile.SetReadOnly(*PackageFilename, false))
+    {
+        TestFalse(TEXT("Common State fixture can make its existing Blueprint temporarily writable"), true);
+        return false;
+    }
+    ON_SCOPE_EXIT
+    {
+        PlatformFile.SetReadOnly(*PackageFilename, false);
+        if (bHadOriginalPackage)
+        {
+            if (!FFileHelper::SaveArrayToFile(OriginalPackageBytes, *PackageFilename))
+            {
+                AddError(TEXT("Common State fixture failed to restore the existing Blueprint bytes."));
+            }
+            if (!PlatformFile.SetReadOnly(*PackageFilename, bOriginalPackageReadOnly))
+            {
+                AddError(TEXT("Common State fixture failed to restore the existing Blueprint read-only flag."));
+            }
+        }
+        else if (IFileManager::Get().FileExists(*PackageFilename) &&
+            !IFileManager::Get().Delete(*PackageFilename, false, true, true))
+        {
+            AddError(TEXT("Common State fixture failed to remove its temporary Blueprint."));
+        }
+    };
+    UPackage* Package = CreatePackage(*PackageName);
+    UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
+        FKismetEditorUtilities::CreateBlueprint(
+            AUnifiedScriptActor::StaticClass(),
+            Package,
+            FName(*AssetName),
+            BPTYPE_Normal,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptCommonStateMaterialization"))));
+    if (!TestNotNull(TEXT("Common State Blueprint is created"), Blueprint) ||
+        !TestNotNull(TEXT("Common State Blueprint has a generated class"),
+            Blueprint != nullptr ? Blueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+
+    UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
+    FGuid ScriptClassId;
+    FGuid::ParseExact(
+        TEXT("8a75f32a3390590852cb9611129bfd08"),
+        EGuidFormats::Digits,
+        ScriptClassId);
+    ScriptAsset->ScriptClassId = ScriptClassId;
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    ScriptAsset->CompiledChunkPath = ChunkPath;
+    ScriptAsset->ScriptAssemblyPath = AssemblyPath;
+    ScriptAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.CommonStateGameplayDemoScript");
+    ScriptAsset->DeclarationPath = DeclarationPath;
+    ScriptAsset->DeclarationAssetPath = TEXT("Unreal/CommonStateGameplay");
+    Blueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult Result;
+    FString Error;
+    const bool bInitial = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *Blueprint,
+        DeclarationJson,
+        false,
+        Result,
+        Error);
+    if (!TestTrue(*FString::Printf(TEXT("Common State defaults materialize: %s"), *Error), bInitial))
+    {
+        return false;
+    }
+
+    const FString SavedBlueprintPath = FPaths::Combine(
+        FPaths::ProjectSavedDir(), TEXT("Automation"), AssetName + TEXT(".uasset"));
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(SavedBlueprintPath), true);
+    FSavePackageArgs SaveArguments;
+    SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArguments.SaveFlags = SAVE_NoError;
+    TestTrue(TEXT("Common State generated Blueprint saves"), UPackage::SavePackage(
+        Package, Blueprint, *SavedBlueprintPath, SaveArguments));
+    IFileManager::Get().Delete(*SavedBlueprintPath, false, true, true);
+
+    UClass* GeneratedClass = Blueprint->GeneratedClass;
+    UObject* Cdo = GeneratedClass->GetDefaultObject();
+    if (AUnifiedScriptActor* CdoActor = Cast<AUnifiedScriptActor>(Cdo))
+    {
+        CdoActor->GetUnifiedScriptComponent()->ScriptAsset = ScriptAsset;
+    }
+    else
+    {
+        TestFalse(TEXT("Common State generated class has an Actor CDO"), true);
+        return false;
+    }
+    FByteProperty* TickGroup = FindFProperty<FByteProperty>(GeneratedClass, TEXT("TickGroup"));
+    FStructProperty* Facing = FindFProperty<FStructProperty>(GeneratedClass, TEXT("Facing"));
+    FStructProperty* Placement = FindFProperty<FStructProperty>(GeneratedClass, TEXT("Placement"));
+    TestNotNull(TEXT("Typed enum state becomes an enum byte property"), TickGroup);
+    TestTrue(TEXT("Rotator state uses the native Rotator struct"),
+        Facing != nullptr && Facing->Struct == TBaseStructure<FRotator>::Get());
+    TestTrue(TEXT("Transform state uses the native Transform struct"),
+        Placement != nullptr && Placement->Struct == TBaseStructure<FTransform>::Get());
+    if (TickGroup == nullptr || Facing == nullptr || Placement == nullptr)
+    {
+        return false;
+    }
+    TestEqual(TEXT("Typed enum default reaches the Blueprint CDO"),
+        static_cast<int32>(TickGroup->GetPropertyValue_InContainer(Cdo)), 2);
+    FRotator* FacingValue = const_cast<FRotator*>(
+        Facing->ContainerPtrToValuePtr<FRotator>(Cdo));
+    const FTransform* PlacementValue = Placement->ContainerPtrToValuePtr<FTransform>(Cdo);
+    TestEqual(TEXT("Rotator default reaches the Blueprint CDO"), FacingValue->Yaw, 45.0);
+    TestTrue(TEXT("Transform default retains a non-identity quaternion"),
+        !PlacementValue->GetRotation().Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
+    TestEqual(TEXT("Transform default retains its translation"), PlacementValue->GetLocation(), FVector(120, 0, 40));
+    TestEqual(TEXT("Transform default retains its non-uniform scale"),
+        PlacementValue->GetScale3D(), FVector(1.25, 0.75, 1.0));
+
+    // A source change updates an untouched transform, while explicit CDO
+    // overrides remain attached to their stable state identities.
+    TickGroup->SetPropertyValue_InContainer(Cdo, 5);
+    FacingValue = const_cast<FRotator*>(
+        Facing->ContainerPtrToValuePtr<FRotator>(Cdo));
+    FacingValue->Yaw = 123.0;
+
+    auto BuildCommonStateDeclaration = [&](const TCHAR* EnumDefault,
+                                           double FacingYaw,
+                                           double PlacementX,
+                                           const TCHAR* EnumPath,
+                                           double RotationW) -> FString
+    {
+        TSharedPtr<FJsonObject> Root;
+        const TSharedRef<TJsonReader<>> Reader =
+            TJsonReaderFactory<>::Create(DeclarationJson);
+        if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+        {
+            return FString();
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+        if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+        {
+            return FString();
+        }
+        for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+        {
+            const TSharedPtr<FJsonObject> Asset = AssetValue->AsObject();
+            FString QualifiedName;
+            if (!Asset.IsValid() ||
+                !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+                QualifiedName != TEXT("UnifiedScript.Unreal.Demo.CommonStateGameplayDemoScript"))
+            {
+                continue;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* States = nullptr;
+            if (!Asset->TryGetArrayField(TEXT("states"), States) || States == nullptr)
+            {
+                return FString();
+            }
+            for (const TSharedPtr<FJsonValue>& StateValue : *States)
+            {
+                const TSharedPtr<FJsonObject> State = StateValue->AsObject();
+                FString Name;
+                if (!State.IsValid() || !State->TryGetStringField(TEXT("name"), Name))
+                {
+                    continue;
+                }
+                if (Name == TEXT("TickGroup"))
+                {
+                    State->SetStringField(TEXT("defaultValue"), EnumDefault);
+                    if (EnumPath != nullptr)
+                    {
+                        const TSharedPtr<FJsonObject> UnrealType =
+                            State->GetObjectField(TEXT("unrealType"));
+                        if (!UnrealType.IsValid())
+                        {
+                            return FString();
+                        }
+                        UnrealType->SetStringField(TEXT("unrealTypePath"), EnumPath);
+                    }
+                }
+                else if (Name == TEXT("Facing"))
+                {
+                    const TSharedPtr<FJsonObject> Default =
+                        State->GetObjectField(TEXT("defaultValue"));
+                    if (!Default.IsValid())
+                    {
+                        return FString();
+                    }
+                    Default->SetNumberField(TEXT("yaw"), FacingYaw);
+                }
+                else if (Name == TEXT("Placement"))
+                {
+                    const TSharedPtr<FJsonObject> Default =
+                        State->GetObjectField(TEXT("defaultValue"));
+                    const TSharedPtr<FJsonObject> Translation =
+                        Default.IsValid()
+                            ? Default->GetObjectField(TEXT("translation"))
+                            : nullptr;
+                    if (!Translation.IsValid())
+                    {
+                        return FString();
+                    }
+                    Translation->SetNumberField(TEXT("x"), PlacementX);
+                    const TSharedPtr<FJsonObject> Rotation =
+                        Default->GetObjectField(TEXT("rotation"));
+                    if (!Rotation.IsValid())
+                    {
+                        return FString();
+                    }
+                    Rotation->SetNumberField(TEXT("w"), RotationW);
+                }
+            }
+            FString Output;
+            const TSharedRef<TJsonWriter<>> Writer =
+                TJsonWriterFactory<>::Create(&Output);
+            return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer)
+                ? Output
+                : FString();
+        }
+        return FString();
+    };
+
+    const FString ChangedDeclaration = BuildCommonStateDeclaration(
+        TEXT("4"), 90.0, 200.0, nullptr, 0.9238795325112867);
+    if (!TestTrue(TEXT("Common State declaration mutation produced JSON"), !ChangedDeclaration.IsEmpty()))
+    {
+        return false;
+    }
+
+    FInstancedPropertyBag JsonState;
+    TArray<FGuid> JsonOverrideIds;
+    FUnifiedScriptStateMigrationReport JsonMigration;
+    FString JsonAssetPath;
+    FString JsonError;
+    const bool bJsonMaterialized =
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+            DeclarationJson,
+            TEXT("Unreal/CommonStateGameplay"),
+            FInstancedPropertyBag(),
+            {},
+            JsonState,
+            JsonOverrideIds,
+            JsonMigration,
+            JsonAssetPath,
+            JsonError);
+    TestTrue(*FString::Printf(TEXT("Common State JSON PropertyBag materializes: %s"), *JsonError),
+        bJsonMaterialized);
+    if (bJsonMaterialized)
+    {
+        UEnum* TickGroupEnum = LoadObject<UEnum>(nullptr, TEXT("/Script/Engine.ETickingGroup"));
+        const FPropertyBagPropertyDesc* TickGroupDesc =
+            JsonState.FindPropertyDescByName(TEXT("TickGroup"));
+        const auto JsonTickGroup = JsonState.GetValueEnumInt64(
+            TEXT("TickGroup"), TickGroupEnum);
+        const auto JsonFacing = JsonState.GetValueStruct<FRotator>(TEXT("Facing"));
+        const auto JsonPlacement = JsonState.GetValueStruct<FTransform>(TEXT("Placement"));
+        TestTrue(TEXT("JSON PropertyBag preserves typed enum identity"),
+            TickGroupEnum != nullptr && TickGroupDesc != nullptr &&
+            TickGroupDesc->ValueType == EPropertyBagPropertyType::Enum &&
+            TickGroupDesc->ValueTypeObject == TickGroupEnum);
+        TestTrue(TEXT("JSON PropertyBag preserves typed enum value 2"),
+            JsonTickGroup.IsValid() && JsonTickGroup.GetValue() == 2);
+        TestTrue(TEXT("JSON PropertyBag preserves Rotator default"),
+            JsonFacing.IsValid() && FMath::IsNearlyEqual(JsonFacing.GetValue()->Yaw, 45.0));
+        TestTrue(TEXT("JSON PropertyBag preserves non-identity Transform"),
+            JsonPlacement.IsValid() &&
+            JsonPlacement.GetValue()->GetRotation().Equals(
+                FQuat(0.0, 0.0, 0.3826834323650898, 0.9238795325112867), 1e-5) &&
+            JsonPlacement.GetValue()->GetLocation().Equals(FVector(120, 0, 40), 1e-4) &&
+            JsonPlacement.GetValue()->GetScale3D().Equals(FVector(1.25, 0.75, 1.0), 1e-4));
+
+        FInstancedPropertyBag RejectedJsonState = JsonState;
+        TArray<FGuid> RejectedOverrideIds;
+        FUnifiedScriptStateMigrationReport RejectedMigration;
+        FString RejectedAssetPath;
+        FString RejectedError;
+        const FString InvalidTransformDeclaration = BuildCommonStateDeclaration(
+            TEXT("2"), 45.0, 120.0, nullptr, 0.5);
+        const bool bInvalidJson =
+            FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+                InvalidTransformDeclaration,
+                TEXT("Unreal/CommonStateGameplay"),
+                JsonState,
+                {},
+                RejectedJsonState,
+                RejectedOverrideIds,
+                RejectedMigration,
+                RejectedAssetPath,
+                RejectedError);
+        TestFalse(TEXT("JSON PropertyBag rejects a non-normalized Transform transactionally"),
+            bInvalidJson);
+        const auto PreservedPlacement = RejectedJsonState.GetValueStruct<FTransform>(
+            TEXT("Placement"));
+        TestTrue(TEXT("Rejected JSON Transform leaves the previous bag value unchanged"),
+            PreservedPlacement.IsValid() && PreservedPlacement.GetValue()->GetLocation().Equals(
+                FVector(120, 0, 40), 1e-4));
+    }
+
+    Error.Reset();
+    const bool bChanged = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *Blueprint,
+        ChangedDeclaration,
+        false,
+        Result,
+        Error);
+    if (!TestTrue(*FString::Printf(TEXT("Common State source update succeeds: %s"), *Error), bChanged))
+    {
+        return false;
+    }
+    GeneratedClass = Blueprint->GeneratedClass;
+    Cdo = GeneratedClass->GetDefaultObject();
+    TickGroup = FindFProperty<FByteProperty>(GeneratedClass, TEXT("TickGroup"));
+    Facing = FindFProperty<FStructProperty>(GeneratedClass, TEXT("Facing"));
+    Placement = FindFProperty<FStructProperty>(GeneratedClass, TEXT("Placement"));
+    TestEqual(TEXT("CDO enum override survives a source default change"),
+        static_cast<int32>(TickGroup->GetPropertyValue_InContainer(Cdo)), 5);
+    TestEqual(TEXT("CDO Rotator override survives a source default change"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Cdo)->Yaw, 123.0);
+    TestEqual(TEXT("Untouched Transform source default propagates"),
+        Placement->ContainerPtrToValuePtr<FTransform>(Cdo)->GetLocation(), FVector(200, 0, 40));
+
+    const uint8 StableTickGroup = TickGroup->GetPropertyValue_InContainer(Cdo);
+    const double StableFacingYaw = Facing->ContainerPtrToValuePtr<FRotator>(Cdo)->Yaw;
+    const int32 StablePropertyCount = Blueprint->NewVariables.Num();
+    const FString InvalidEnumDeclaration = BuildCommonStateDeclaration(
+        TEXT("-1"), 90.0, 200.0, nullptr, 0.9238795325112867);
+    Error.Reset();
+    TestFalse(
+        TEXT("Out-of-range byte enum default is rejected transactionally"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            InvalidEnumDeclaration,
+            false,
+            Result,
+            Error));
+    TickGroup = FindFProperty<FByteProperty>(Blueprint->GeneratedClass, TEXT("TickGroup"));
+    Facing = FindFProperty<FStructProperty>(Blueprint->GeneratedClass, TEXT("Facing"));
+    TestEqual(TEXT("Enum rejection preserves the CDO"),
+        static_cast<uint8>(TickGroup->GetPropertyValue_InContainer(
+            Blueprint->GeneratedClass->GetDefaultObject())), StableTickGroup);
+    TestEqual(TEXT("Enum rejection preserves the Rotator CDO override"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Blueprint->GeneratedClass->GetDefaultObject())->Yaw,
+        StableFacingYaw);
+    TestEqual(TEXT("Enum rejection preserves the Blueprint variable set"),
+        Blueprint->NewVariables.Num(), StablePropertyCount);
+
+    const FString InvalidTypeDeclaration = BuildCommonStateDeclaration(
+        TEXT("4"), 90.0, 200.0, TEXT("/Script/Engine.DoesNotExist"),
+        0.9238795325112867);
+    Error.Reset();
+    TestFalse(
+        TEXT("Unknown typed enum identity is rejected transactionally"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            InvalidTypeDeclaration,
+            false,
+            Result,
+            Error));
+    TestEqual(TEXT("Type rejection preserves the Blueprint variable set"),
+        Blueprint->NewVariables.Num(), StablePropertyCount);
+
+    // A successful recompile can replace the generated CDO. Rebind the
+    // sidecar on the final CDO before exercising the real managed lifecycle.
+    if (AUnifiedScriptActor* FinalCdo = Cast<AUnifiedScriptActor>(
+            Blueprint->GeneratedClass->GetDefaultObject()))
+    {
+        FinalCdo->GetUnifiedScriptComponent()->ScriptAsset = ScriptAsset;
+    }
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Common State gameplay World is created"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    World->InitializeActorsForPlay(FURL());
+    AUnifiedScriptActor* Actor = Cast<AUnifiedScriptActor>(World->SpawnActor(GeneratedClass));
+    UUnifiedScriptWorldSubsystem* Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (!TestNotNull(TEXT("Common State gameplay Actor spawns"), Actor) ||
+        !TestNotNull(TEXT("Common State gameplay World owns a managed host"), Host))
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+    UUnifiedScriptComponent* Component = Actor->ScriptComponent;
+    FRotator* ActorFacingValue = const_cast<FRotator*>(
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor));
+    ActorFacingValue->Yaw = 210.0;
+    Component->BeginPlay();
+    TestTrue(*FString::Printf(TEXT("Common State managed script starts: %s"), *Component->LastScriptError),
+        Component->bScriptRunning);
+    TestEqual(TEXT("Managed BeginPlay applies the configured Transform"),
+        Actor->GetActorLocation(), FVector(200, 0, 40));
+    TestEqual(TEXT("Managed BeginPlay applies the configured Transform scale"),
+        Actor->GetActorScale3D(), FVector(1.25, 0.75, 1.0));
+    TestEqual(TEXT("Managed BeginPlay applies the typed enum TickGroup"),
+        static_cast<uint8>(Actor->PrimaryActorTick.TickGroup), static_cast<uint8>(5));
+    TestEqual(TEXT("Managed BeginPlay hydrates the explicit instance Facing override"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw, 210.0);
+    const double FacingBeforeTick =
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw;
+    Host->BeginManagedFrame();
+    Component->TickComponent(1.0f, LEVELTICK_All, nullptr);
+    Host->EndManagedFrame();
+    TestTrue(*FString::Printf(TEXT("Common State managed tick succeeds: %s"), *Component->LastScriptError),
+        Component->bScriptRunning && Component->LastScriptError.IsEmpty());
+    TestEqual(TEXT("Managed tick changes the native Facing property"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw,
+        FacingBeforeTick + 10.0);
+    TestEqual(TEXT("Managed tick changes the Actor rotation"), Actor->GetActorRotation().Yaw,
+        static_cast<double>(FRotator::NormalizeAxis(static_cast<float>(FacingBeforeTick + 10.0))));
+
+    const double BeforeReloadFacing = Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw;
+    Error.Reset();
+    TestTrue(*FString::Printf(TEXT("Common State managed script reloads: %s"), *Error),
+        Component->ReloadScript());
+    TestEqual(TEXT("Reload preserves the hydrated Facing value before the next tick"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw, BeforeReloadFacing);
+    Host->BeginManagedFrame();
+    Component->TickComponent(1.0f, LEVELTICK_All, nullptr);
+    Host->EndManagedFrame();
+    TestTrue(*FString::Printf(TEXT("Common State reloaded tick succeeds: %s"), *Component->LastScriptError),
+        Component->bScriptRunning && Component->LastScriptError.IsEmpty());
+    TestEqual(TEXT("Reloaded script advances the preserved Facing value exactly once"),
+        Facing->ContainerPtrToValuePtr<FRotator>(Actor)->Yaw, BeforeReloadFacing + 10.0);
+    TestEqual(TEXT("Reloaded script applies the same Facing to Actor rotation"),
+        Actor->GetActorRotation().Yaw,
+        static_cast<double>(FRotator::NormalizeAxis(static_cast<float>(BeforeReloadFacing + 10.0))));
+
+    Component->EndPlay(EEndPlayReason::Destroyed);
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(TEXT("Common State World cleanup releases the managed context"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(), InitialManagedWorldCount);
+    return true;
 }
 
 #endif

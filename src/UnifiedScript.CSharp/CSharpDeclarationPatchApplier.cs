@@ -1141,7 +1141,14 @@ public sealed class CSharpDeclarationPatchApplier
 
         if (spec.TypeKind == ScriptStateTypeKind.Enum)
         {
-            return $"{spec.TypeName}.{spec.DefaultValue.GetString()}";
+            string enumValue = spec.DefaultValue.GetString() ?? string.Empty;
+            return long.TryParse(
+                    enumValue,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out long numericValue)
+                ? $"new {spec.TypeName}({numericValue}L)"
+                : $"{spec.TypeName}.{enumValue}";
         }
 
         if (spec.TypeKind is ScriptStateTypeKind.Name or ScriptStateTypeKind.Text)
@@ -1159,6 +1166,29 @@ public sealed class CSharpDeclarationPatchApplier
 
         if (spec.TypeKind == ScriptStateTypeKind.Struct)
         {
+            if (spec.DefaultValue.TryGetProperty("pitch", out JsonElement pitch) &&
+                spec.DefaultValue.TryGetProperty("yaw", out JsonElement yaw) &&
+                spec.DefaultValue.TryGetProperty("roll", out JsonElement roll))
+            {
+                return $"new {spec.TypeName}({pitch.GetRawText()}d, {yaw.GetRawText()}d, {roll.GetRawText()}d)";
+            }
+            if (spec.DefaultValue.TryGetProperty("rotation", out JsonElement rotation) &&
+                spec.DefaultValue.TryGetProperty("translation", out JsonElement translation) &&
+                spec.DefaultValue.TryGetProperty("scale3D", out JsonElement scale))
+            {
+                string quaternion =
+                    $"new global::UnifiedScript.Unreal.UnrealQuaternion(" +
+                    $"{rotation.GetProperty("x").GetRawText()}d, " +
+                    $"{rotation.GetProperty("y").GetRawText()}d, " +
+                    $"{rotation.GetProperty("z").GetRawText()}d, " +
+                    $"{rotation.GetProperty("w").GetRawText()}d)";
+                string vector(JsonElement value) =>
+                    $"new global::UnifiedScript.Unreal.UnrealVector(" +
+                    $"{value.GetProperty("x").GetRawText()}d, " +
+                    $"{value.GetProperty("y").GetRawText()}d, " +
+                    $"{value.GetProperty("z").GetRawText()}d)";
+                return $"new {spec.TypeName}({quaternion}, {vector(translation)}, {vector(scale)})";
+            }
             string x = spec.DefaultValue.GetProperty("x").GetRawText();
             string y = spec.DefaultValue.GetProperty("y").GetRawText();
             string z = spec.DefaultValue.GetProperty("z").GetRawText();
@@ -1668,9 +1698,14 @@ public sealed class CSharpDeclarationPatchApplier
         }
 
         if (spec.TypeKind == ScriptStateTypeKind.Enum &&
-            !SyntaxFacts.IsValidIdentifier(spec.DefaultValue.GetString()!))
+            !SyntaxFacts.IsValidIdentifier(spec.DefaultValue.GetString()!) &&
+            !long.TryParse(
+                spec.DefaultValue.GetString(),
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out _))
         {
-            failure = InvalidReplacement("The enum default is not a valid member name.", span);
+            failure = InvalidReplacement("The enum default is not a valid member name or integral Unreal value.", span);
             return false;
         }
 

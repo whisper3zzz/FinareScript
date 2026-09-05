@@ -154,6 +154,14 @@ public static class ScriptAssetJson
                     $"Struct state '{state.Name}' requires an exact Unreal struct identity.");
             }
         }
+        else if (state.TypeKind == ScriptStateTypeKind.Enum)
+        {
+            if (state.UnrealType is not null && state.UnrealType.Kind != ScriptFunctionValueTypeKind.Enum)
+            {
+                throw new JsonException(
+                    $"Enum state '{state.Name}' has an invalid Unreal enum identity.");
+            }
+        }
         else if (state.UnrealType is not null)
         {
             throw new JsonException(
@@ -172,7 +180,14 @@ public static class ScriptAssetJson
                 state.DefaultValue.TryGetDouble(out double floatingValue) && double.IsFinite(floatingValue),
             ScriptStateTypeKind.String =>
                 state.DefaultValue.ValueKind is JsonValueKind.String or JsonValueKind.Null,
-            ScriptStateTypeKind.Enum => state.DefaultValue.ValueKind == JsonValueKind.String,
+            ScriptStateTypeKind.Enum => state.DefaultValue.ValueKind == JsonValueKind.String &&
+                (state.UnrealType is not null
+                    ? long.TryParse(
+                        state.DefaultValue.GetString(),
+                        System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out _)
+                    : !string.IsNullOrWhiteSpace(state.DefaultValue.GetString())),
             ScriptStateTypeKind.Name or ScriptStateTypeKind.Text =>
                 state.DefaultValue.ValueKind == JsonValueKind.String,
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
@@ -189,17 +204,59 @@ public static class ScriptAssetJson
 
     private static bool IsValidStructDefault(ScriptStateDeclaration state)
     {
-        if (state.TypeMetadataName != "UnifiedScript.Unreal.UnrealVector" ||
-            state.UnrealType?.UnrealTypePath != "/Script/CoreUObject.Vector" ||
-            state.DefaultValue.ValueKind != JsonValueKind.Object)
+        if (state.DefaultValue.ValueKind != JsonValueKind.Object ||
+            state.UnrealType?.Kind != ScriptFunctionValueTypeKind.Struct)
         {
             return false;
         }
 
-        return TryGetFiniteNumber(state.DefaultValue, "x", out _) &&
-            TryGetFiniteNumber(state.DefaultValue, "y", out _) &&
-            TryGetFiniteNumber(state.DefaultValue, "z", out _) &&
-            state.DefaultValue.EnumerateObject().Count() == 3;
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" &&
+            state.UnrealType.UnrealTypePath == "/Script/CoreUObject.Vector")
+        {
+            return TryGetFiniteNumber(state.DefaultValue, "x", out _) &&
+                TryGetFiniteNumber(state.DefaultValue, "y", out _) &&
+                TryGetFiniteNumber(state.DefaultValue, "z", out _) &&
+                state.DefaultValue.EnumerateObject().Count() == 3;
+        }
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealRotator" &&
+            state.UnrealType.UnrealTypePath == "/Script/CoreUObject.Rotator")
+        {
+            return TryGetFiniteNumber(state.DefaultValue, "pitch", out _) &&
+                TryGetFiniteNumber(state.DefaultValue, "yaw", out _) &&
+                TryGetFiniteNumber(state.DefaultValue, "roll", out _) &&
+                state.DefaultValue.EnumerateObject().Count() == 3;
+        }
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealTransform" &&
+            state.UnrealType.UnrealTypePath == "/Script/CoreUObject.Transform" &&
+            state.DefaultValue.EnumerateObject().Count() == 3 &&
+            TryGetFiniteVector(state.DefaultValue, "translation") &&
+            TryGetFiniteVector(state.DefaultValue, "scale3D") &&
+            state.DefaultValue.TryGetProperty("rotation", out JsonElement rotation) &&
+            rotation.ValueKind == JsonValueKind.Object &&
+            rotation.EnumerateObject().Count() == 4 &&
+            TryGetFiniteNumber(rotation, "x", out double qx) &&
+            TryGetFiniteNumber(rotation, "y", out double qy) &&
+            TryGetFiniteNumber(rotation, "z", out double qz) &&
+            TryGetFiniteNumber(rotation, "w", out double qw))
+        {
+            double lengthSquared = qx * qx + qy * qy + qz * qz + qw * qw;
+            return double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFiniteVector(JsonElement value, string name)
+    {
+        if (!value.TryGetProperty(name, out JsonElement vector) ||
+            vector.ValueKind != JsonValueKind.Object ||
+            vector.EnumerateObject().Count() != 3)
+        {
+            return false;
+        }
+        return TryGetFiniteNumber(vector, "x", out _) &&
+            TryGetFiniteNumber(vector, "y", out _) &&
+            TryGetFiniteNumber(vector, "z", out _);
     }
 
     private static bool TryGetFiniteNumber(JsonElement value, string name, out double number)

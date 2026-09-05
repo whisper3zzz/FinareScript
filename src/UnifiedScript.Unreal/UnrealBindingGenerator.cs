@@ -463,7 +463,9 @@ public sealed class UnrealBindingGenerator
         foreach (UnrealEnumValueDefinition value in type.EnumValues)
         {
             string name = MakeUniqueMemberName(ToIdentifier(value.Name), $"{type.Path}:{value.Name}", names);
-            source.Append("    public static ").Append(enumName).Append(' ')
+            source.Append("    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(")
+                .Append(value.Value).AppendLine(")]")
+                .Append("    public static ").Append(enumName).Append(' ')
                 .Append(name).Append(" { get; } = new(")
                 .Append(value.Value).AppendLine(");");
         }

@@ -44,6 +44,6651 @@
 			"functions": []
 		},
 		{
+			"path": "/Script/Engine.Actor",
+			"name": "Actor",
+			"nativeName": "AActor",
+			"module": "Engine",
+			"headerPath": "GameFramework/Actor.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Object",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Actor",
+				"tooltip": "Actor是可放置在关卡中、或可在关卡中生成的Object的基类。\nActor可能包含Actor组件的一个集合，可用于控制Actor的移动方式、其渲染方式等内容。\nActor的其他主函数是游戏中网络上属性与函数调用的复制。\n\n\nActor初始化拥有多个步骤，以下是重要虚拟函数被调用的顺序：\n- UObject::PostLoad：对关卡中静态放置的Actor而言，普通UObject PostLoad将在编辑器和游戏进程中被调用。\n                     此函数不会为新生成的actor调用。\n- UActorComponent::OnComponentCreated：一个actor在编辑器或游戏进程中生成时，将为所有原生组件调用此函数。\n                                       对蓝图创建的组件而言，这将在该组件的构造中调用。\n                                       此函数不会从关卡中加载的组件进行调用。\n- AActor::PreRegisterAllComponents：对静态放置的actor和拥有原生根组件的已生成actor而言，此函数将在现在被调用。\n                                    对不带原生根组件的蓝图actor而言，这些注册函数将在之后的构造中被调用。\n- UActorComponent::RegisterComponent：所有组件均在编辑器中注册，在运行时这将创建其物理/视觉代表。\n                                      这些调用可能分布在多个帧上，但固定在PreRegisterAllComponents之后。\n                                      在UnregisterComponent调用将其从场景中移除后，它也可以在之后被调用。\n- AActor::PostRegisterAllComponents：为编辑器和游戏进程中的所有actor调用，这是在所有情况中调用的最后一个函数。\n- AActor::PostActorCreated：当一个actor在编辑器或游戏进程中被创建时，这将在构造之前被调用。\n                            这不会为从关卡中加载的组件进行调用。\n- AActor::UserConstructionScript：为实现构造脚本的蓝图而调用。\n- AActor::OnConstruction：在ExecuteConstruction结束后调用，其将调用蓝图构造脚本。\n                          这将在所有蓝图创建的组件完全创建和注册后调用。\n                          这只会为已生成actor在游戏进程中调用，可以在修改蓝图时在编辑器中重新运行。\n- AActor::PreInitializeComponents：在InitializeComponent在actor的组件上被调用之前进行调用。\n                                   这只在游戏进程和特定编辑器预览窗口中调用。\n- UActorComponent::Activate：只在组件设置了bAutoActivate时进行调用。\n                             如组件被手动启用，其也将被调用。\n- UActorComponent::InitializeComponent：这只在组件拥有bWantsInitializeComponentSet时进行调用。\n                                        这只在一个游戏会话中发生一次。\n- AActor::PostInitializeComponents：在actor的组件初始化后调用，只在游戏进程和部分编辑器预览中调用。\n- AActor::BeginPlay：在关卡开始tick时调用，只在实际游戏进程中调用。\n                     这通常在PostInitializeComponents之后发生，但可硬联网或子actor而延迟。\n\n@参见https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors\n@参见https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors/ActorLifecycle\n@参见UActorComponent",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/Engine.Actor:ActorGuid",
+					"name": "ActorGuid",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FGuid",
+						"typePath": "/Script/CoreUObject.Guid",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "Actor Guid",
+						"category": "Actor",
+						"tooltip": "这个Actor的GUID；这个guid对于来自实例化流送关卡的Actor来说为一致。\n@see         ActorInstanceGuid、FActorInstanceGuidMapper\n@note        不要在这里使用VisibleAnywhere，以避免获取CPF_Edit标记并在重设为默认值时重设此属性。\n                     详情请参见FActorDetails::AddActorCategory和EditorUtilities::CopySingleProperty。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:ActorInstanceGuid",
+					"name": "ActorInstanceGuid",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FGuid",
+						"typePath": "/Script/CoreUObject.Guid",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "Actor实例Guid",
+						"category": "Actor",
+						"tooltip": "这个Actor的实例GUID；这个guid对于来自实例化流送关卡的Actor而言为唯一。\n@see         ActorGuid\n@note        这不保证在PostLoad期间有效，但可以安全地从RegisterAllComponents访问。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bAlwaysRelevant",
+					"name": "bAlwaysRelevant",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "固定相关",
+						"category": "Replication",
+						"tooltip": "对网络皆有意义（重载bOnlyRelevantToOwner）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bAutoDestroyWhenFinished",
+					"name": "bAutoDestroyWhenFinished",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "private"
+					},
+					"metadata":
+					{
+						"displayName": "完成时自动销毁",
+						"category": "Actor",
+						"tooltip": "如为true，则在“完成”之后销毁自身，意味着所有相关组件报告皆已完成，没有进行中的时间轴或定时器。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bCanBeDamaged",
+					"name": "bCanBeDamaged",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "private"
+					},
+					"metadata":
+					{
+						"displayName": "可被伤害",
+						"category": "Actor",
+						"tooltip": "此actor是否接收伤害。必须为true才能调用伤害事件（如ReceiveDamage()）。\n@查看https://www.unrealengine.com/blog/damage-in-ue4\n@查看TakeDamage()、ReceiveDamage()",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bEnableAutoLODGeneration",
+					"name": "bEnableAutoLODGeneration",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "在HLOD中包含Actor",
+						"category": "HLOD",
+						"tooltip": "生成HLOD时是否应该考虑此Actor。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bFindCameraComponentWhenViewTarget",
+					"name": "bFindCameraComponentWhenViewTarget",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "查看目标时寻找摄像机组件",
+						"category": "Actor",
+						"tooltip": "如为true，此actor将搜索一个用作查看目标的已拥有摄像机组件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bGenerateOverlapEventsDuringLevelStreaming",
+					"name": "bGenerateOverlapEventsDuringLevelStreaming",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "在关卡流送时生成重叠事件",
+						"category": "Collision",
+						"tooltip": "如为true，此actor在作为关卡流送的一部分生成时将生成重叠开始/结束事件。\n在流送关卡围绕一个actor加载，需要开始/结束重叠事件才能触发时，需要启用此项。\n@see UpdateOverlapsMethodDuringLevelStreaming",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bHidden",
+					"name": "bHidden",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "private"
+					},
+					"metadata":
+					{
+						"displayName": "Actor在游戏中隐藏",
+						"category": "Rendering",
+						"tooltip": "使actor只在编辑器中显示，不在实际游戏中显示。\n@查看SetActorHiddenInGame()",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bIsSpatiallyLoaded",
+					"name": "bIsSpatiallyLoaded",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "已空间加载",
+						"category": "WorldPartition",
+						"tooltip": "确定将此Actor放置在分区世界中时是否将被空间加载。\n     如为true，此Actor在任何流送源范围内且（1）不在任何数据层中，或（2）其一个或多个数据层启用时，此Actor将被加载。\n     如果为false，如果（1）没有在数据层中，或者（2）它的一个或多个数据层中启用，则此Actor将被加载。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bNetUseOwnerRelevancy",
+					"name": "bNetUseOwnerRelevancy",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "网络使用拥有者相关性",
+						"category": "Replication",
+						"tooltip": "如actor拥有有效拥有者，则调用拥有者的IsNetRelevantFor和GetNetPriority",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bOnlyRelevantToOwner",
+					"name": "bOnlyRelevantToOwner",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "仅与拥有者相关",
+						"category": "Replication",
+						"tooltip": "如为true，此actor值与其拥有者相关。如此标记在游戏中发生变化，所有非拥有者通道都需要被显式关闭。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bReplicates",
+					"name": "bReplicates",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "复制",
+						"category": "Replication",
+						"tooltip": "如为true，此actor将复制到远程机\n@查看SetReplicates()",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:bReplicateUsingRegisteredSubObjectList",
+					"name": "bReplicateUsingRegisteredSubObjectList",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "使用注册子Object列表复制",
+						"category": "Replication",
+						"tooltip": "为true时，复制系统将只复制注册的子Object和复制的Actor组件列表\n为false时，复制系统将调用虚拟ReplicateSubobjects()函数，其中子Object和Actor组件需要手动复制。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:ContentBundleGuid",
+					"name": "ContentBundleGuid",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FGuid",
+						"typePath": "/Script/CoreUObject.Guid",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "内容包Guid",
+						"category": "Actor",
+						"tooltip": "这个Actor的内容包的GUID。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:CustomTimeDilation",
+					"name": "CustomTimeDilation",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "自定义时间膨胀",
+						"category": "Actor",
+						"tooltip": "使每个actor在不同的时间速度在运行。一帧的DeltaTime将乘以全局TimeDilation（在WorldSettings中）和此CustomTimeDilation，以便此actor进行tick。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:InitialLifeSpan",
+					"name": "InitialLifeSpan",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "初始生命周期",
+						"category": "Actor",
+						"tooltip": "消亡之前此actor的生命周期，0则为永生。注意：这是初值，游戏开始后便无法修改。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:Instigator",
+					"name": "Instigator",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<APawn>",
+						"typePath": "/Script/Engine.Pawn",
+						"headerPath": "GameFramework/Pawn.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "private"
+					},
+					"metadata":
+					{
+						"displayName": "Instigator",
+						"category": "Actor",
+						"tooltip": "负责处理此actor所产生伤害及其他gameplay事件的Pawn。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:MinNetUpdateFrequency",
+					"name": "MinNetUpdateFrequency",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "最小网络更新频率",
+						"category": "Replication",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:NetCullDistanceSquared",
+					"name": "NetCullDistanceSquared",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "网络剔除距离平方",
+						"category": "Replication",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:NetDormancy",
+					"name": "NetDormancy",
+					"type":
+					{
+						"kind": "enum",
+						"nativeName": "TEnumAsByte<ENetDormancy>",
+						"typePath": "/Script/Engine.ENetDormancy"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "网络休眠",
+						"category": "Replication",
+						"tooltip": "将自身移出复制列表但并未在客户端上进行销毁的actor的休眠设置。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:NetPriority",
+					"name": "NetPriority",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "网络优先级",
+						"category": "Replication",
+						"tooltip": "在低带宽或饱和情形下进行复制检查时此actor的优先级。优先级更高则意味着其复制的可能性更高",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:NetUpdateFrequency",
+					"name": "NetUpdateFrequency",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "网络更新频率",
+						"category": "Replication",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:PivotOffset",
+					"name": "PivotOffset",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "枢轴偏移",
+						"category": "Actor",
+						"tooltip": "actor的本地空间枢轴偏移，只能在编辑器中使用",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:RootComponent",
+					"name": "RootComponent",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<USceneComponent>",
+						"typePath": "/Script/Engine.SceneComponent",
+						"headerPath": "Components/SceneComponent.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": false,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "根组件",
+						"category": "Transformation",
+						"tooltip": "定义此actor在场景中变换（位置、旋转、缩放）的组件，出于某种原因，所有其他组件必须附加到此组件",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:RuntimeGrid",
+					"name": "RuntimeGrid",
+					"type":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "protected"
+					},
+					"metadata":
+					{
+						"displayName": "运行时网格",
+						"category": "WorldPartition",
+						"tooltip": "决定此Actor将放置到分区的哪个分区网格中（如世界已分区）。\n如未设置，则将由分区决定。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SpawnCollisionHandlingMethod",
+					"name": "SpawnCollisionHandlingMethod",
+					"type":
+					{
+						"kind": "enum",
+						"nativeName": "ESpawnActorCollisionHandlingMethod",
+						"typePath": "/Script/Engine.ESpawnActorCollisionHandlingMethod",
+						"headerPath": "Engine/EngineTypes.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "生成碰撞处理方法",
+						"category": "Actor",
+						"tooltip": "控制此actor与其他对象发生碰撞时其生成的处理方式。“默认”则为AlwaysSpawn。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SpriteScale",
+					"name": "SpriteScale",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "编辑器公告板缩放",
+						"category": "Rendering",
+						"tooltip": "应用至编辑器版本中任意公告板组件的缩放（发生在所有WITH_EDITOR版本中，包含未烘焙游戏）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:Tags",
+					"name": "Tags",
+					"type":
+					{
+						"kind": "array",
+						"nativeName": "TArray<FName>",
+						"elementType":
+						{
+							"kind": "name",
+							"nativeName": "FName"
+						}
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "标签",
+						"category": "Actor",
+						"tooltip": "可用于分组和分类的标签数组。",
+						"deprecated": false
+					}
+				}
+			],
+			"delegates": [
+				{
+					"path": "/Script/Engine.Actor:OnActorBeginOverlap",
+					"name": "OnActorBeginOverlap",
+					"signaturePath": "/Script/Engine.ActorBeginOverlapSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OverlappedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Actor开始重叠时",
+						"category": "Collision",
+						"tooltip": "在另一actor开始重叠此actor时调用。例如玩家走进触发器时。\n如需了解对象拥有阻挡碰撞的事件（如玩家与墙壁发生碰撞），请查看“命中”事件。\n@注意：在这个和其他actor上组件的bGenerateOverlapEvents都必须设为true，才能生成重叠事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnActorEndOverlap",
+					"name": "OnActorEndOverlap",
+					"signaturePath": "/Script/Engine.ActorEndOverlapSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OverlappedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Actor结束重叠时",
+						"category": "Collision",
+						"tooltip": "在其他actor停止重叠此actor时调用。\n@注意：在这个和其他actor上组件的bGenerateOverlapEvents都必须设为true，才能生成重叠事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnActorHit",
+					"name": "OnActorHit",
+					"signaturePath": "/Script/Engine.ActorHitSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "SelfActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "NormalImpulse",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Hit",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Actor命中时",
+						"category": "Collision",
+						"tooltip": "在此actor命中（或被命中）固体时调用。角色移动、在启用“扫描”是使用“设置位置”或物理模拟之类的情况都可能导致其发生。\n如需了解对象发生重叠的事件（如走进触发器），请查看“重叠”事件。\n@注意：在生成碰撞事件的物理模拟的碰撞中，必须启用“模拟生成碰撞事件”。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnBeginCursorOver",
+					"name": "OnBeginCursorOver",
+					"signaturePath": "/Script/Engine.ActorBeginCursorOverSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "开始悬停光标时",
+						"category": "Input|Mouse Input",
+						"tooltip": "如果在玩家控制器中启用了鼠标悬停事件，将鼠标指针移动到此actor上时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnClicked",
+					"name": "OnClicked",
+					"signaturePath": "/Script/Engine.ActorOnClickedSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ButtonPressed",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "点击时",
+						"category": "Input|Mouse Input",
+						"tooltip": "在玩家控制器中启用了点击事件后，鼠标悬停在此actor上并点击左键时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnDestroyed",
+					"name": "OnDestroyed",
+					"signaturePath": "/Script/Engine.ActorDestroyedSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DestroyedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "销毁时",
+						"category": "Game",
+						"tooltip": "此actor被显式销毁后触发的事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnEndCursorOver",
+					"name": "OnEndCursorOver",
+					"signaturePath": "/Script/Engine.ActorEndCursorOverSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "结束悬停光标时",
+						"category": "Input|Mouse Input",
+						"tooltip": "如果在玩家控制器中启用了鼠标悬停事件，将鼠标指针从此actor上移开时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnEndPlay",
+					"name": "OnEndPlay",
+					"signaturePath": "/Script/Engine.ActorEndPlaySignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Actor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "EndPlayReason",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<EEndPlayReason::Type>",
+								"typePath": "/Script/Engine.EEndPlayReason"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "结束运行时",
+						"category": "Game",
+						"tooltip": "正在从关卡中删除或移除actor时触发的事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnInputTouchBegin",
+					"name": "OnInputTouchBegin",
+					"signaturePath": "/Script/Engine.ActorOnInputTouchBeginSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "FingerIndex",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ETouchIndex::Type>",
+								"typePath": "/Script/InputCore.ETouchIndex"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "输入触控开始时",
+						"category": "Input|Touch Input",
+						"tooltip": "如果在玩家控制器中启用了触摸事件，此actor上接收到触摸输入时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnInputTouchEnd",
+					"name": "OnInputTouchEnd",
+					"signaturePath": "/Script/Engine.ActorOnInputTouchEndSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "FingerIndex",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ETouchIndex::Type>",
+								"typePath": "/Script/InputCore.ETouchIndex"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "输入触控结束时",
+						"category": "Input|Touch Input",
+						"tooltip": "如果在玩家控制器中启用了触摸事件，此组件上接收到触摸输入时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnInputTouchEnter",
+					"name": "OnInputTouchEnter",
+					"signaturePath": "/Script/Engine.ActorBeginTouchOverSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "FingerIndex",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ETouchIndex::Type>",
+								"typePath": "/Script/InputCore.ETouchIndex"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "输入触控进入时",
+						"category": "Input|Touch Input",
+						"tooltip": "如果在玩家控制器中启用了接触事件，手指接触到此actor时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnInputTouchLeave",
+					"name": "OnInputTouchLeave",
+					"signaturePath": "/Script/Engine.ActorEndTouchOverSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "FingerIndex",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ETouchIndex::Type>",
+								"typePath": "/Script/InputCore.ETouchIndex"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "输入触控离开时",
+						"category": "Input|Touch Input",
+						"tooltip": "如果在玩家控制器中启用了接触事件，手指从此actor上移开时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnReleased",
+					"name": "OnReleased",
+					"signaturePath": "/Script/Engine.ActorOnReleasedSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TouchedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ButtonReleased",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "释放时",
+						"category": "Input|Mouse Input",
+						"tooltip": "在玩家控制器中启用了点击事件后，鼠标悬停在此actor上并松开左键时将进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnTakeAnyDamage",
+					"name": "OnTakeAnyDamage",
+					"signaturePath": "/Script/Engine.TakeAnyDamageSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DamagedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Damage",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageType",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UDamageType*",
+								"typePath": "/Script/Engine.DamageType",
+								"headerPath": "GameFramework/DamageType.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InstigatedBy",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AController*",
+								"typePath": "/Script/Engine.Controller",
+								"headerPath": "GameFramework/Controller.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageCauser",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "受到任意伤害时",
+						"category": "Game|Damage",
+						"tooltip": "Actor受到任何受损时进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnTakePointDamage",
+					"name": "OnTakePointDamage",
+					"signaturePath": "/Script/Engine.TakePointDamageSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DamagedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Damage",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InstigatedBy",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AController*",
+								"typePath": "/Script/Engine.Controller",
+								"headerPath": "GameFramework/Controller.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "HitLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "FHitComponent",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UPrimitiveComponent*",
+								"typePath": "/Script/Engine.PrimitiveComponent",
+								"headerPath": "Components/PrimitiveComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "BoneName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ShotFromDirection",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageType",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UDamageType*",
+								"typePath": "/Script/Engine.DamageType",
+								"headerPath": "GameFramework/DamageType.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageCauser",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "受到点状伤害时",
+						"category": "Game|Damage",
+						"tooltip": "Actor受到点损伤时进行调用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:OnTakeRadialDamage",
+					"name": "OnTakeRadialDamage",
+					"signaturePath": "/Script/Engine.TakeRadialDamageSignature__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DamagedActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Damage",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageType",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UDamageType*",
+								"typePath": "/Script/Engine.DamageType",
+								"headerPath": "GameFramework/DamageType.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Origin",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "HitInfo",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InstigatedBy",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AController*",
+								"typePath": "/Script/Engine.Controller",
+								"headerPath": "GameFramework/Controller.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DamageCauser",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "受到放射状伤害时",
+						"category": "Game|Damage",
+						"tooltip": "Actor收到辐射损伤时进行调用。",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [
+				{
+					"path": "/Script/Engine.Actor:ActorHasTag",
+					"name": "ActorHasTag",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Tag",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Actor Has Tag",
+						"category": "Actor",
+						"tooltip": "查看此actor的标签数组是否包含提供的命名标签",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:AddComponent",
+					"name": "AddComponent",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UActorComponent*",
+						"typePath": "/Script/Engine.ActorComponent",
+						"headerPath": "Components/ActorComponent.h"
+					},
+					"parameters": [
+						{
+							"name": "TemplateName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bManualAttachment",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RelativeTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ComponentTemplateContext",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bDeferredFinish",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "false"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Component",
+						"tooltip": "调用此项的作用是新建一个组件并将所有权指定给Actor。\n自动附加会使创建的首个组件\n成为根组件，之后的所有组件均附加在根组件上。\n设置bManualAttachment后将跳过自动附加，\n用户将决定是否附加结果组件\n（或将其设为根组件）。\n\n@see UK2Node_AddComponent    不可手动调用 - 仅限蓝图内部使用（用于Add Component节点）\n\n@param TemplateName                                  所使用组件模板的命名。\n@param bManualAttachment                             使用手动或自动附加\n@param RelativeTransform                             新组件及其附加父项的相对变换（仅限自动）\n@param ComponentTemplateContext              用于寻找模板所在的任选UBlueprintGeneratedClass引用。如为空（或并非BPGC），便在此Actor的类中寻找组件\n@param bDeferredFinish                               是否立即完成此组件的创建和注册进程。如果正在设置公开的生成属性，则将为false",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:AddComponentByClass",
+					"name": "AddComponentByClass",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UActorComponent*",
+						"typePath": "/Script/Engine.ActorComponent",
+						"headerPath": "Components/ActorComponent.h"
+					},
+					"parameters": [
+						{
+							"name": "Class",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UActorComponent>",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bManualAttachment",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RelativeTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bDeferredFinish",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Component by Class",
+						"tooltip": "调用此项的作用是新建一个组件并将所有权指定给Actor。\n自动附加会使创建的首个组件\n成为根组件，之后的所有组件均附加在根组件上。\n设置bManualAttachment后将跳过自动附加，\n用户将决定是否附加结果组件\n（或将其设为根组件）。\n\n@see UK2Node_AddComponentByClass             不可手动调用 - 仅限蓝图内部使用（用于Add Component节点）\n\n@param Class                                         要创建的组件类\n@param bManualAttachment                             使用手动或自动附加\n@param RelativeTransform                             新组件及其附加父项的相对变换（仅限自动）\n@param bDeferredFinish                               是否立即完成此组件的创建和注册进程。如果正在设置公开的生成属性，则将为false",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:AddTickPrerequisiteActor",
+					"name": "AddTickPrerequisiteActor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PrerequisiteActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Tick Prerequisite Actor",
+						"category": "Actor|Tick",
+						"tooltip": "使此actor在PrerequisiteActor之后进行tick。这只应用到此actor的tick函数；如有需要，必须对拥有组件的依赖性进行单独设置。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:AddTickPrerequisiteComponent",
+					"name": "AddTickPrerequisiteComponent",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PrerequisiteComponent",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UActorComponent*",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Tick Prerequisite Component",
+						"category": "Actor|Tick",
+						"tooltip": "使此actor在PrerequisiteComponent之后进行tick。这只应用到此actor的tick函数；如有需要，必须对拥有组件的依赖性进行单独设置。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:CanTriggerResimulation",
+					"name": "CanTriggerResimulation",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Can Trigger Resimulation",
+						"category": "Physics",
+						"tooltip": "当物理预测启用时，这个形体是否会触发重新模拟",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:CreateInputComponent",
+					"name": "CreateInputComponent",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "InputComponentToCreate",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UInputComponent>",
+								"typePath": "/Script/Engine.InputComponent",
+								"headerPath": "Components/InputComponent.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Create Input Component",
+						"category": "Input",
+						"tooltip": "从传入的输入组件创建一个输入组件\n@param InputComponentToCreate 要创建的UInputComponent。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:DetachRootComponentFromParent",
+					"name": "DetachRootComponentFromParent",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bMaintainWorldPosition",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "DetachActorFromActor (Deprecated)",
+						"category": "Transformation",
+						"tooltip": "DetachActorFromActor (Deprecated)",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:DisableInput",
+					"name": "DisableInput",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PlayerController",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "APlayerController*",
+								"typePath": "/Script/Engine.PlayerController",
+								"headerPath": "GameFramework/PlayerController.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Disable Input",
+						"category": "Input",
+						"tooltip": "从玩家控制器所处理输入的堆栈中移除此actor。\n@paramPlayerController 不再需要接收此玩家控制器的输入事件。如为空，此actor将停止从所有玩家控制器接收输入。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:EnableInput",
+					"name": "EnableInput",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PlayerController",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "APlayerController*",
+								"typePath": "/Script/Engine.PlayerController",
+								"headerPath": "GameFramework/PlayerController.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Enable Input",
+						"category": "Input",
+						"tooltip": "将此actor推至玩家控制器所处理输入的堆栈上。\n@paramPlayerController 需要接收此玩家控制器的输入事件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:FindComponentByTag",
+					"name": "FindComponentByTag",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UActorComponent*",
+						"typePath": "/Script/Engine.ActorComponent",
+						"headerPath": "Components/ActorComponent.h"
+					},
+					"parameters": [
+						{
+							"name": "ComponentClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UActorComponent>",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Tag",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Find Component by Tag",
+						"category": "Actor",
+						"tooltip": "搜索组件数组并返回第一个遇到的拥有给定标签的组件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:FinishAddComponent",
+					"name": "FinishAddComponent",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Component",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UActorComponent*",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bManualAttachment",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RelativeTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Finish Add Component",
+						"tooltip": "完成新Actor组件的创建。\n在设置的生成属性上公开后从蓝图调用，或直接从AddComponent调用。\n\n@see UK2Node_AddComponent    不可手动调用 - 仅限蓝图内部使用（用于Add Component节点）\n\n@param Component                                             在AddComponent中创建，以完成创建的组件\n@param bManualAttachment                             使用手动或自动附加\n@param RelativeTransform                             新组件及其附加父项之间的相对变换（仅自动）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:FlushNetDormancy",
+					"name": "FlushNetDormancy",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Flush Net Dormancy",
+						"category": "Networking",
+						"tooltip": "强制休眠actor进行复制，但不修改NetDormancy状态（其静置后不会进入休眠状态）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:ForceNetUpdate",
+					"name": "ForceNetUpdate",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Force Net Update",
+						"category": "Networking",
+						"tooltip": "强制actor更新至客户端/demo网络驱动",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorBounds",
+					"name": "GetActorBounds",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bOnlyCollidingComponents",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Origin",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "BoxExtent",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bIncludeFromChildActors",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "false"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Bounds",
+						"category": "Collision",
+						"tooltip": "返回组成此actor的所有组件的边界框（ChildActorComponents除外）。\n@param       bOnlyCollidingComponents        如为true，只会返回启用了碰撞的组件的边界框。\n@param       Origin                                          设置场景空间中actor的中央\n@param       BoxExtent                                       设为3D空间中actor大小的一半\n@param       bIncludeFromChildActors         如为true，则递归到子Actor组件中",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorEnableCollision",
+					"name": "GetActorEnableCollision",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Enable Collision",
+						"category": "Collision",
+						"tooltip": "获取整个actor碰撞的当前状态",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorEyesViewPoint",
+					"name": "GetActorEyesViewPoint",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OutLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "OutRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Eyes View Point",
+						"category": "Actor",
+						"tooltip": "返回此actor的视点。\n注意这并非指相机，而是actor的“眼睛”。\n举例而言，对一个Pawn来说，此项将定义眼睛高度位置\n和视图旋转（其与拥有归零pitch组件的pawn旋转有所不同）。\n相机第一人称视图通常使用此视点。多数检测（武器、AI）都将从此视点开始。\n\n@param       OutLocation - 视点位置\n@param       OutRotation - actor的视图旋转。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorForwardVector",
+					"name": "GetActorForwardVector",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Forward Vector",
+						"category": "Transformation",
+						"tooltip": "从场景空间中的此actor获取向前（X）向量（长度1.0）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorLabel",
+					"name": "GetActorLabel",
+					"returnType":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"parameters": [
+						{
+							"name": "bCreateIfNone",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Label",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "返回此actor的当前标签。Actor标签只在开发版本中可用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorRelativeScale3D",
+					"name": "GetActorRelativeScale3D",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Relative Scale 3D",
+						"category": "Transformation",
+						"tooltip": "返回actor的相对3D缩放",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorRightVector",
+					"name": "GetActorRightVector",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Right Vector",
+						"category": "Transformation",
+						"tooltip": "从场景空间中的此actor获取向右（Y）向量（长度1.0）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorScale3D",
+					"name": "GetActorScale3D",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Scale 3D",
+						"category": "Transformation",
+						"tooltip": "返回Actor的场景空间缩放。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorTickInterval",
+					"name": "GetActorTickInterval",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Tick Interval",
+						"category": "Actor|Tick",
+						"tooltip": "返回此actor主tick函数的tick间隔",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorTimeDilation",
+					"name": "GetActorTimeDilation",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Time Dilation",
+						"category": "Actor",
+						"tooltip": "获取ActorTimeDilation - 这可用于慢动作的输入控制或速度控制。\n我们不希望整体缩放输入，因为输入可用于UI，与TimeDilation毫无关系。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetActorUpVector",
+					"name": "GetActorUpVector",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Up Vector",
+						"category": "Transformation",
+						"tooltip": "从场景空间中的此actor获取向右（Z）向量（长度1.0）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetAllChildActors",
+					"name": "GetAllChildActors",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "ChildActors",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<AActor*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "AActor*",
+									"typePath": "/Script/Engine.Actor",
+									"headerPath": "GameFramework/Actor.h"
+								}
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bIncludeDescendants",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get All Child Actors",
+						"category": "Actor",
+						"tooltip": "返回子actor组件生成的所有actor的列表，包含子项的子项。\n这不会返回子数组的内容",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetAttachedActors",
+					"name": "GetAttachedActors",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OutActors",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<AActor*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "AActor*",
+									"typePath": "/Script/Engine.Actor",
+									"headerPath": "GameFramework/Actor.h"
+								}
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bResetArray",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						},
+						{
+							"name": "bRecursivelyIncludeAttachedActors",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "false"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Attached Actors",
+						"category": "Actor",
+						"tooltip": "找到直接附加到此actor中组件的所有actor",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetAttachParentActor",
+					"name": "GetAttachParentActor",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "AActor*",
+						"typePath": "/Script/Engine.Actor",
+						"headerPath": "GameFramework/Actor.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Attach Parent Actor",
+						"category": "Actor",
+						"tooltip": "从RootComponent开始在附加链中上行，直到找到一个不同的actor，然后将其返回。如果未附加到不同actor中的一个组件，则返回nullptr",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetAttachParentSocketName",
+					"name": "GetAttachParentSocketName",
+					"returnType":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Attach Parent Socket Name",
+						"category": "Actor",
+						"tooltip": "从RootComponent开始在附加链中上行，直到找到一个不同的actor，然后返回组件中的套接字名。如果未附加到不同actor中的一个组件，则返回NAME_None",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetComponentByClass",
+					"name": "GetComponentByClass",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UActorComponent*",
+						"typePath": "/Script/Engine.ActorComponent",
+						"headerPath": "Components/ActorComponent.h"
+					},
+					"parameters": [
+						{
+							"name": "ComponentClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UActorComponent>",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Component by Class",
+						"category": "Actor",
+						"tooltip": "搜索组件数组并返回遇到的首个指定类的组件",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetComponentsByInterface",
+					"name": "GetComponentsByInterface",
+					"returnType":
+					{
+						"kind": "array",
+						"nativeName": "TArray<UActorComponent*>",
+						"elementType":
+						{
+							"kind": "object",
+							"nativeName": "UActorComponent*",
+							"typePath": "/Script/Engine.ActorComponent",
+							"headerPath": "Components/ActorComponent.h"
+						}
+					},
+					"parameters": [
+						{
+							"name": "Interface",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UInterface>",
+								"typePath": "/Script/CoreUObject.Interface",
+								"headerPath": "UObject/Interface.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Components by Interface",
+						"category": "Actor",
+						"tooltip": "获取实现给定接口的所有组件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetComponentsByTag",
+					"name": "GetComponentsByTag",
+					"returnType":
+					{
+						"kind": "array",
+						"nativeName": "TArray<UActorComponent*>",
+						"elementType":
+						{
+							"kind": "object",
+							"nativeName": "UActorComponent*",
+							"typePath": "/Script/Engine.ActorComponent",
+							"headerPath": "Components/ActorComponent.h"
+						}
+					},
+					"parameters": [
+						{
+							"name": "ComponentClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UActorComponent>",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Tag",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Components by Tag",
+						"category": "Actor",
+						"tooltip": "获取继承自含给定标签的给定类的所有组件。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetDefaultActorLabel",
+					"name": "GetDefaultActorLabel",
+					"returnType":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Default Actor Label",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "返回此Actor的默认标签（不包括任何数字后缀）。Actor标签仅在开发版本中可用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetDistanceTo",
+					"name": "GetDistanceTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Distance To",
+						"category": "Transformation",
+						"tooltip": "返回从此actor到OtherActor的距离。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetDotProductTo",
+					"name": "GetDotProductTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Dot Product To",
+						"category": "Transformation",
+						"tooltip": "返回此actor到OtherActor的点乘积。失败则返回-2.0。一致的actor则返回0.0。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetFolderPath",
+					"name": "GetFolderPath",
+					"returnType":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Folder Path",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "返回此actor的文件夹路径。Actor文件夹路径只在开发版本中可用。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetGameTimeSinceCreation",
+					"name": "GetGameTimeSinceCreation",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Game Time Since Creation",
+						"category": "Actor",
+						"tooltip": "此actor被创建后的秒数（在游戏时间中），相对于“获取游戏时间（秒）”。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetHorizontalDistanceTo",
+					"name": "GetHorizontalDistanceTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Horizontal Distance To",
+						"category": "Transformation",
+						"tooltip": "返回从此actor到OtherActor的距离，无视Z轴。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetHorizontalDotProductTo",
+					"name": "GetHorizontalDotProductTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Horizontal Dot Product To",
+						"category": "Transformation",
+						"tooltip": "返回此actor到OtherActor的点乘积，无视Z轴。失败则返回-2.0。一致的actor则返回0.0。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetInputAxisKeyValue",
+					"name": "GetInputAxisKeyValue",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "InputAxisKey",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Input Axis Key Value",
+						"tooltip": "如此actor上启用了输入，则获取输入轴键的值。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetInputAxisValue",
+					"name": "GetInputAxisValue",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "InputAxisName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Input Axis Value",
+						"tooltip": "如此actor上启用了输入，则获取输入轴的值。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetInputVectorAxisValue",
+					"name": "GetInputVectorAxisValue",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [
+						{
+							"name": "InputAxisKey",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FKey",
+								"typePath": "/Script/InputCore.Key",
+								"headerPath": "InputCoreTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Input Vector Axis Value",
+						"tooltip": "如此actor上启用了输入，则获取输入轴键的值。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetInstigator",
+					"name": "GetInstigator",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "APawn*",
+						"typePath": "/Script/Engine.Pawn",
+						"headerPath": "GameFramework/Pawn.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Instigator",
+						"category": "Game",
+						"tooltip": "返回此actor的instigator，如为空则返回nullptr。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetInstigatorController",
+					"name": "GetInstigatorController",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "AController*",
+						"typePath": "/Script/Engine.Controller",
+						"headerPath": "GameFramework/Controller.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Instigator Controller",
+						"category": "Game",
+						"tooltip": "返回此actor的instigator的控制器，如为空则返回nullptr。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetLevel",
+					"name": "GetLevel",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "ULevel*",
+						"typePath": "/Script/Engine.Level",
+						"headerPath": "Engine/Level.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Level",
+						"category": "Level",
+						"tooltip": "返回此Actor作为其一部分的ULevel。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetLevelTransform",
+					"name": "GetLevelTransform",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FTransform",
+						"typePath": "/Script/CoreUObject.Transform",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Level Transform",
+						"category": "Level",
+						"tooltip": "返回此Actor作为其一部分的关卡的FTransform。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetLifeSpan",
+					"name": "GetLifeSpan",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Life Span",
+						"category": "Actor",
+						"tooltip": "获取此actor剩余的生命周期。如返回零，则actor将永生。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetLocalRole",
+					"name": "GetLocalRole",
+					"returnType":
+					{
+						"kind": "enum",
+						"nativeName": "TEnumAsByte<ENetRole>",
+						"typePath": "/Script/Engine.ENetRole"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Local Role",
+						"category": "Networking",
+						"tooltip": "返回本地机对此actor的控制程度。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetMinNetUpdateFrequency",
+					"name": "GetMinNetUpdateFrequency",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Min Net Update Frequency",
+						"tooltip": "当复制的属性不经常变更时，降低频率以节流。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetNetCullDistanceSquared",
+					"name": "GetNetCullDistanceSquared",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Net Cull Distance Squared",
+						"tooltip": "获取距客户端视点与此Actor相关且将被复制的最大距离的平方。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetNetUpdateFrequency",
+					"name": "GetNetUpdateFrequency",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Net Update Frequency",
+						"tooltip": "获取考虑复制此Object的当前频率。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetOverlappingActors",
+					"name": "GetOverlappingActors",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OverlappingActors",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<AActor*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "AActor*",
+									"typePath": "/Script/Engine.Actor",
+									"headerPath": "GameFramework/Actor.h"
+								}
+							},
+							"direction": "output"
+						},
+						{
+							"name": "ClassFilter",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<AActor>",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input",
+							"defaultValue": "None"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Overlapping Actors",
+						"category": "Collision",
+						"tooltip": "返回此actor重叠的actor列表（重叠任意组件的任意组件）。不返回其自身。\n@param OverlappingActors             [输出] 返回的重叠actor列表\n@param ClassFilter                   [任选] 设置后，只返回此类或子类的actor",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetOverlappingComponents",
+					"name": "GetOverlappingComponents",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "OverlappingComponents",
+							"type":
+							{
+								"kind": "array",
+								"nativeName": "TArray<UPrimitiveComponent*>",
+								"elementType":
+								{
+									"kind": "object",
+									"nativeName": "UPrimitiveComponent*",
+									"typePath": "/Script/Engine.PrimitiveComponent",
+									"headerPath": "Components/PrimitiveComponent.h"
+								}
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Overlapping Components",
+						"category": "Collision",
+						"tooltip": "返回此actor重叠的组件列表。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetOwner",
+					"name": "GetOwner",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "AActor*",
+						"typePath": "/Script/Engine.Actor",
+						"headerPath": "GameFramework/Actor.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Owner",
+						"category": "Actor",
+						"tooltip": "获取此actor的拥有者，主要用于网络复制。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetParentActor",
+					"name": "GetParentActor",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "AActor*",
+						"typePath": "/Script/Engine.Actor",
+						"headerPath": "GameFramework/Actor.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Parent Actor",
+						"category": "Actor",
+						"tooltip": "如此actor由子actor组件创建，则返回拥有该子actor组件的actor",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetParentComponent",
+					"name": "GetParentComponent",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UChildActorComponent*",
+						"typePath": "/Script/Engine.ChildActorComponent",
+						"headerPath": "Components/ChildActorComponent.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Parent Component",
+						"category": "Actor",
+						"tooltip": "如此actor由子actor组件创建，则返回该子actor组件",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetPhysicsReplicationMode",
+					"name": "GetPhysicsReplicationMode",
+					"returnType":
+					{
+						"kind": "enum",
+						"nativeName": "EPhysicsReplicationMode",
+						"typePath": "/Script/Engine.EPhysicsReplicationMode",
+						"headerPath": "Engine/EngineTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Physics Replication Mode",
+						"category": "Replication",
+						"tooltip": "通过EPhysicsReplicationMode获取此形体的物理复制模式",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetRayTracingGroupId",
+					"name": "GetRayTracingGroupId",
+					"returnType":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Ray Tracing Group Id",
+						"category": "RayTracing",
+						"tooltip": "返回此Actor的RayTracingGroupId。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetRemoteRole",
+					"name": "GetRemoteRole",
+					"returnType":
+					{
+						"kind": "enum",
+						"nativeName": "TEnumAsByte<ENetRole>",
+						"typePath": "/Script/Engine.ENetRole"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Remote Role",
+						"category": "Networking",
+						"tooltip": "返回远程机对此actor的控制程度。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetResimulationThreshold",
+					"name": "GetResimulationThreshold",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Resimulation Threshold",
+						"category": "Physics",
+						"tooltip": "在该Object应该强制重新模拟以触发之前，获取错误阈值（以cm为单位）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetSquaredDistanceTo",
+					"name": "GetSquaredDistanceTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Squared Distance To",
+						"category": "Transformation",
+						"tooltip": "返回从此actor到OtherActor的平方距离。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetSquaredHorizontalDistanceTo",
+					"name": "GetSquaredHorizontalDistanceTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Squared Horizontal Distance To",
+						"category": "Transformation",
+						"tooltip": "返回从此Actor到OtherActor的平方距离，无视Z轴。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetTickableWhenPaused",
+					"name": "GetTickableWhenPaused",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Tickable when Paused",
+						"category": "Actor|Tick",
+						"tooltip": "获取暂停时此actor是否能够tick。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetTransform",
+					"name": "GetTransform",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FTransform",
+						"typePath": "/Script/CoreUObject.Transform",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Transform",
+						"category": "Transformation",
+						"tooltip": "获取actor到世界的变换。\n@return从actor空间到场景空间的变换。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetVelocity",
+					"name": "GetVelocity",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Velocity",
+						"category": "Transformation",
+						"tooltip": "如rootcomponent使用物理或拥有相关的MovementComponent，则返回其速度（厘米/秒、虚幻单位/秒）",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:GetVerticalDistanceTo",
+					"name": "GetVerticalDistanceTo",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "OtherActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Vertical Distance To",
+						"category": "Transformation",
+						"tooltip": "返回从此actor到OtherActor的距离，无视XY轴。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:HasAuthority",
+					"name": "HasAuthority",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Has Authority",
+						"category": "Networking",
+						"tooltip": "返回此actor是否拥有网络授权",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsActorBeingDestroyed",
+					"name": "IsActorBeingDestroyed",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Actor Being Destroyed",
+						"category": "Game",
+						"tooltip": "如果此actor当前正在被销毁，则返回true，部分gameplay事件可能不安全",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsActorTickEnabled",
+					"name": "IsActorTickEnabled",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Actor Tick Enabled",
+						"category": "Actor|Tick",
+						"tooltip": "返回此actor是否已启用tick",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsChildActor",
+					"name": "IsChildActor",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Child Actor",
+						"category": "Actor",
+						"tooltip": "返回此actor是否已由子actor组件生成",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsEditable",
+					"name": "IsEditable",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Editable",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "如允许此actor被编辑器显示、选择和操纵，则返回true。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsHiddenEd",
+					"name": "IsHiddenEd",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Hidden Ed",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "如果此actor隐藏在编辑器视口中，则返回true；也将勾选临时标签。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsHiddenEdAtStartup",
+					"name": "IsHiddenEdAtStartup",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Hidden Ed at Startup",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "如actor在编辑器启动时（或默认）为隐藏，则返回true，否则返回false",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsOverlappingActor",
+					"name": "IsOverlappingActor",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Other",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Overlapping Actor",
+						"category": "Collision",
+						"tooltip": "检查此actor的任意组件是否与其他actor的任意组件重叠。\n@param 其他 测试针对的其他actor\n@return 此actor的任意组件是否与其他actor的任意组件重叠。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsSelectable",
+					"name": "IsSelectable",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Selectable",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "如果此actor能在编辑器的关卡中被选中，则返回true。可被特定actor覆盖，使其无法被选中。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:IsTemporarilyHiddenInEditor",
+					"name": "IsTemporarilyHiddenInEditor",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "bIncludeParent",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "false"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Temporarily Hidden in Editor",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "返回此actor在当前编辑器会话的时间中是否显式隐藏在编辑器中\n@param bIncludeParent - 是否向上递归子actor层级",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorLocalOffset",
+					"name": "K2_AddActorLocalOffset",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor Local Offset",
+						"category": "Transformation",
+						"tooltip": "向此组件在其本地参考帧中的位置添加一个差量。\n@param DelatLocation         本地空间中位置的变化。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         在不传送的情况下设置位置不会更新模拟子/附加组件的位置。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorLocalRotation",
+					"name": "K2_AddActorLocalRotation",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor Local Rotation",
+						"category": "Transformation",
+						"tooltip": "为此组件在其本地参考帧中的旋转添加一个差量\n@param DeltaRotation         本地空间中旋转的变化。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         设置旋转而不传送将不会更新模拟子/附加组件的旋转。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorLocalTransform",
+					"name": "K2_AddActorLocalTransform",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor Local Transform",
+						"category": "Transformation",
+						"tooltip": "在其本地参考帧中向此组件的变换添加一个差量\n@param NewTransform          本地空间中变换的变化。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         设置变换而不传送将不会更新模拟子/附加组件的变换。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorWorldOffset",
+					"name": "K2_AddActorWorldOffset",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor World Offset",
+						"category": "Transformation",
+						"tooltip": "为这个Actor在世界空间中的位置添加一个差量。\n\n@param DeltaLocation         位置的变化。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         在不传送的情况下设置位置不会更新模拟子/附加组件的位置。\n@param SweepHitResult        扫描时移动的命中结果。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorWorldRotation",
+					"name": "K2_AddActorWorldRotation",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor World Rotation",
+						"category": "Transformation",
+						"tooltip": "为这个Actor在世界空间中的旋转添加一个差量。\n\n@param DeltaRotation         旋转的变化。\n@param bSweep                        是否扫描到目标旋转（当前不支持旋转）。\n@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         设置旋转而不传送将不会更新模拟子/附加组件的旋转。\n@param SweepHitResult        扫描时移动的命中结果。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorWorldTransform",
+					"name": "K2_AddActorWorldTransform",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor World Transform",
+						"category": "Transformation",
+						"tooltip": "为此Actor在世界空间中的变换添加一个差量。无视缩放并将其设为(1,1,1)。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AddActorWorldTransformKeepScale",
+					"name": "K2_AddActorWorldTransformKeepScale",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DeltaTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Actor World Transform Keep Scale",
+						"category": "Transformation",
+						"tooltip": "为此Actor在世界空间中的变换添加一个差量。缩放未发生变化。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AttachRootComponentTo",
+					"name": "K2_AttachRootComponentTo",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "InParent",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "USceneComponent*",
+								"typePath": "/Script/Engine.SceneComponent",
+								"headerPath": "Components/SceneComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InSocketName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input",
+							"defaultValue": "None"
+						},
+						{
+							"name": "AttachLocationType",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<EAttachLocation::Type>",
+								"typePath": "/Script/Engine.EAttachLocation"
+							},
+							"direction": "input",
+							"defaultValue": "KeepRelativeOffset"
+						},
+						{
+							"name": "bWeldSimulatedBodies",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "AttachRootComponentTo (Deprecated)",
+						"category": "Transformation",
+						"tooltip": "AttachRootComponentTo (Deprecated)",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AttachRootComponentToActor",
+					"name": "K2_AttachRootComponentToActor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "InParentActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "InSocketName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input",
+							"defaultValue": "None"
+						},
+						{
+							"name": "AttachLocationType",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<EAttachLocation::Type>",
+								"typePath": "/Script/Engine.EAttachLocation"
+							},
+							"direction": "input",
+							"defaultValue": "KeepRelativeOffset"
+						},
+						{
+							"name": "bWeldSimulatedBodies",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "AttachRootComponentToActor (Deprecated)",
+						"category": "Transformation",
+						"tooltip": "AttachRootComponentToActor (Deprecated)",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AttachToActor",
+					"name": "K2_AttachToActor",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "ParentActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SocketName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LocationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RotationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ScaleRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bWeldSimulatedBodies",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Attach Actor To Actor",
+						"category": "Transformation",
+						"tooltip": "将此Actor的RootComponent附加到所提供的Actor，可选择在命名的插槽处。@param ParentActor                           要将此Actor的RootComponent附加到的Actor\n@param SocketName                            要附加到的插槽名称（如有）\n@param LocationRule                          附加时如何处理平移。@param RotationRule                          附加时如何处理旋转。@param ScaleRule                                     附加时如何处理缩放。@param bWeldSimulatedBodies          是否将模拟物理对象结合在一起。这会将结合的Object中的形状转移到父项中（如果是模拟的），这可能会导致永久变更，即使在随后分离后，这种变更仍然存在。@return                                                      附加是否成功",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_AttachToComponent",
+					"name": "K2_AttachToComponent",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Parent",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "USceneComponent*",
+								"typePath": "/Script/Engine.SceneComponent",
+								"headerPath": "Components/SceneComponent.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SocketName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LocationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RotationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ScaleRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EAttachmentRule",
+								"typePath": "/Script/Engine.EAttachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bWeldSimulatedBodies",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Attach Actor To Component",
+						"category": "Transformation",
+						"tooltip": "将此Actor的RootComponent附加到所提供的组件，可选择在命名的插槽处。在未注册的组件上调用此项为无效操作。\n@param Parent                                        要附加到的父项。\n@param SocketName                            要附加到父项的可选插槽。\n@param LocationRule                          附加时如何处理平移。\n@param RotationRule                          附加时如何处理旋转。\n@param ScaleRule                                     附加时如何处理缩放。\n@param bWeldSimulatedBodies          是否将模拟物理对象结合在一起。这会将结合Object中的形状转移到父项中（如果是模拟），这可能会导致永久变更，即使在随后分离后，这种变更仍然存在。\n@return                                                      返回附加是否成功",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_DestroyActor",
+					"name": "K2_DestroyActor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Destroy Actor",
+						"category": "Actor",
+						"tooltip": "销毁actor",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_DetachFromActor",
+					"name": "K2_DetachFromActor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "LocationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EDetachmentRule",
+								"typePath": "/Script/Engine.EDetachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input",
+							"defaultValue": "KeepRelative"
+						},
+						{
+							"name": "RotationRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EDetachmentRule",
+								"typePath": "/Script/Engine.EDetachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input",
+							"defaultValue": "KeepRelative"
+						},
+						{
+							"name": "ScaleRule",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EDetachmentRule",
+								"typePath": "/Script/Engine.EDetachmentRule",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input",
+							"defaultValue": "KeepRelative"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Detach From Actor",
+						"category": "Transformation",
+						"tooltip": "将此actor的RootComponent与其当前附加的所有SceneComponent分离。\n@param  LocationRule                         分离时如何处理平移。\n@param  RotationRule                         分离时如何处理旋转。\n@param  ScaleRule                            分离时如何处理缩放。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_GetActorLocation",
+					"name": "K2_GetActorLocation",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Location",
+						"category": "Transformation",
+						"tooltip": "返回此Actor的RootComponent的位置",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_GetActorRotation",
+					"name": "K2_GetActorRotation",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FRotator",
+						"typePath": "/Script/CoreUObject.Rotator",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Actor Rotation",
+						"category": "Transformation",
+						"tooltip": "返回此Actor的RootComponent的旋转。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_GetComponentsByClass",
+					"name": "K2_GetComponentsByClass",
+					"returnType":
+					{
+						"kind": "array",
+						"nativeName": "TArray<UActorComponent*>",
+						"elementType":
+						{
+							"kind": "object",
+							"nativeName": "UActorComponent*",
+							"typePath": "/Script/Engine.ActorComponent",
+							"headerPath": "Components/ActorComponent.h"
+						}
+					},
+					"parameters": [
+						{
+							"name": "ComponentClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "TSubclassOf<UActorComponent>",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Components By Class",
+						"category": "Actor",
+						"tooltip": "获取继承自给定类的所有组件。\n当前返回UActorComponent的一个数组，其必须被投射到正确的类型。\n仅适用于蓝图。在C++中使用GetComponents()。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_GetRootComponent",
+					"name": "K2_GetRootComponent",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "USceneComponent*",
+						"typePath": "/Script/Engine.SceneComponent",
+						"headerPath": "Components/SceneComponent.h"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "K2 Get Root Component",
+						"tooltip": "返回此Actor的RootComponent",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorLocation",
+					"name": "K2_SetActorLocation",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "NewLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Location",
+						"category": "Transformation",
+						"tooltip": "将Actor移动到指定位置。\n@param NewLocation   将Actor移动到的新位置。\n@param bSweep                是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                             只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport             是否传送物理状态（如果为此Object启用物理碰撞）。\n                                             如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                     请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                     在不传送的情况下设置位置不会更新模拟子/附加组件的位置。\n@param SweepHitResult        扫描时移动的命中结果。\n@return      返回位置是否已成功设置（如果未扫描），或者是否发生移动（如果扫描）。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorLocationAndRotation",
+					"name": "K2_SetActorLocationAndRotation",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "NewLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "NewRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Location And Rotation",
+						"category": "Transformation",
+						"tooltip": "立即将Actor移动到指定位置和旋转。\n\n@param NewLocation           将Actor传送到的新位置。\n@param NewRotation           Actor的新旋转。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         在不传送的情况下设置位置不会更新模拟子/附加组件的位置。\n@param SweepHitResult        扫描时移动的命中结果。\n@return      返回旋转是否设置成功。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorRelativeLocation",
+					"name": "K2_SetActorRelativeLocation",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewRelativeLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Relative Location",
+						"category": "Transformation",
+						"tooltip": "将Actor的RootComponent设为指定的相对位置。\n@param NewRelativeLocation   Actor根组件的新相对位置\n@param bSweep                                我们是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标位置。\n                                                             只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                             是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                             如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                             请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                             在不传送的情况下设置位置不会更新模拟子/附加组件的位置。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorRelativeRotation",
+					"name": "K2_SetActorRelativeRotation",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewRelativeRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Relative Rotation",
+						"category": "Transformation",
+						"tooltip": "将Actor的RootComponent设为指定的相对旋转\n@param NewRelativeRotation   Actor根组件的新相对旋转\n@param bSweep                                我们是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标位置。\n                                                             只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                             是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                             如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                             请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                             设置旋转而不传送将不会更新模拟子/附加组件的旋转。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorRelativeTransform",
+					"name": "K2_SetActorRelativeTransform",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewRelativeTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Relative Transform",
+						"category": "Transformation",
+						"tooltip": "将Actor的RootComponent设为指定的相对变换\n@param NewRelativeTransform          Actor根组件的新相对变换\n@param bSweep                        我们是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标位置。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         设置变换而不传送将不会更新模拟子/附加组件的变换。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorRotation",
+					"name": "K2_SetActorRotation",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "NewRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bTeleportPhysics",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Rotation",
+						"category": "Transformation",
+						"tooltip": "将Actor的旋转立即设为指定的旋转。\n\n@param       NewRotation     Actor的新旋转。\n@param       bTeleportPhysics 是否传送物理状态（如果为此Object启用物理碰撞）。\n                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n         设置旋转而不传送将不会更新模拟子/附加组件的旋转。\n@return      返回旋转是否设置成功。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_SetActorTransform",
+					"name": "K2_SetActorTransform",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "NewTransform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bSweep",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "SweepHitResult",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "bTeleport",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Transform",
+						"category": "Transformation",
+						"tooltip": "将Actors变换设为指定的变换。\n@param NewTransform          新的变换。\n@param bSweep                        是否扫描到目标位置，沿途触发重叠，并在被某物阻挡时停止到达目标。\n                                                     只有根组件被扫描并检查阻挡碰撞，子组件移动时不进行扫描。如果碰撞关闭，这没有效果。@param bTeleport                     是否传送物理状态（如果为此Object启用物理碰撞）。\n                                                     如为true，则此Object的物理速度不变（因此布娃娃部件不受位置变化的影响）。如为false，则根据位置的变化更新物理速度（影响布娃娃部件）。如果CCD打开且未传送，这将影响整个扫描体积上的Object。\n                         请注意：传送时，任何子/附加组件也将被传送，即使它们正在被模拟，也保持其当前的偏移。\n                         设置变换而不传送将不会更新模拟子/附加组件的变换。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:K2_TeleportTo",
+					"name": "K2_TeleportTo",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "DestLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "DestRotation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FRotator",
+								"typePath": "/Script/CoreUObject.Rotator",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Teleport",
+						"category": "Transformation",
+						"tooltip": "将此actor瞬移到一个新位置。如果actor无法准确匹配指定的新位置，可尝试稍微将其移出墙壁等处。\n\n@paramparam DestLocation 目标的终点\n@param DestRotation 终点的目标旋转\n@return 如果actor被成功移动则返回true，如果无法放置则返回false。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:MakeNoise",
+					"name": "MakeNoise",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Loudness",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input",
+							"defaultValue": "1.000000"
+						},
+						{
+							"name": "NoiseInstigator",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "APawn*",
+								"typePath": "/Script/Engine.Pawn",
+								"headerPath": "GameFramework/Pawn.h"
+							},
+							"direction": "input",
+							"defaultValue": "None"
+						},
+						{
+							"name": "NoiseLocation",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input",
+							"defaultValue": ""
+						},
+						{
+							"name": "MaxRange",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input",
+							"defaultValue": "0.000000"
+						},
+						{
+							"name": "Tag",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input",
+							"defaultValue": "None"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Make Noise",
+						"category": "AI",
+						"tooltip": "在给定位置触发给定Pawn导致的噪音。\n注意：NoiseInstigator Pawn必须拥有一个PawnNoiseEmitterComponent，噪音才能被PawnSensingComponent侦测到.\nMakeNoise的发送者如果并非pawn，则应该拥有一个Instigator，或传递一个NoiseInstigator。\n\n@param Loudness 噪音的相对音量。常规范围在0（无噪音）到1（最大音量）之间。如果使用了MaxRange，其将对最大范围进行缩放，否则其将影响感应器指定的收听范围。\n@param NoiseInstigator 负责此噪音的Pawn。如NoiseInstigator为空，则使用actor的Instigator\n@param NoiseLocation 噪音源的位置。如果为零向量，则使用actor的位置。\n@param MaxRange 声音可以被听到的最大范围。0值则说明无最大范围（但听觉感知可能拥有其自身的范围）。音量会对范围进行缩放。（注意：不支持旧版PawnSensingComponent，只支持AIPerception）\n@param Tag 噪音的辨识符。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:PrestreamTextures",
+					"name": "PrestreamTextures",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Seconds",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bEnableStreaming",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "CinematicTextureGroups",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input",
+							"defaultValue": "0"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Prestream Textures",
+						"category": "Rendering",
+						"tooltip": "为所有actor的网格体组件调用PrestreamTextures()。\n@param Seconds - 强制所有mip等级为常驻的秒数\n@param bEnableStreaming      - 是否开始（true）或停止（false）流送\n@param CinematicTextureGroups - 说明哪些纹理组使用超高分辨率mip的位域",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:RegisterAsFocalPointInPhysicsReplicationLOD",
+					"name": "RegisterAsFocalPointInPhysicsReplicationLOD",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Register as Focal Point in Physics Replication LOD",
+						"category": "Replication",
+						"tooltip": "将此Actor根组件物理Object注册为物理复制LOD中的聚焦粒子",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:RemoveTickPrerequisiteActor",
+					"name": "RemoveTickPrerequisiteActor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PrerequisiteActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Remove Tick Prerequisite Actor",
+						"category": "Actor|Tick",
+						"tooltip": "移除PrerequisiteActor上的tick依赖性。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:RemoveTickPrerequisiteComponent",
+					"name": "RemoveTickPrerequisiteComponent",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "PrerequisiteComponent",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UActorComponent*",
+								"typePath": "/Script/Engine.ActorComponent",
+								"headerPath": "Components/ActorComponent.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Remove Tick Prerequisite Component",
+						"category": "Actor|Tick",
+						"tooltip": "移除PrerequisiteComponent上的tick依赖性。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorEnableCollision",
+					"name": "SetActorEnableCollision",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bNewActorEnableCollision",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Enable Collision",
+						"category": "Collision",
+						"tooltip": "允许启用/禁用整个actor的碰撞",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorHiddenInGame",
+					"name": "SetActorHiddenInGame",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bNewHidden",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Hidden In Game",
+						"category": "Rendering",
+						"tooltip": "将actor设为在游戏中隐藏\n@param  bNewHidden      是否隐藏actor及其所有组件",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorLabel",
+					"name": "SetActorLabel",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewActorLabel",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "bMarkDirty",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input",
+							"defaultValue": "true"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Label",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "将一个新标签指定到此actor。Actor标签只在开发版本中可用。\n@param       NewActorLabel   指定到actor的新标签字符串。如为空，actor将拥有默认标签。\n@param       bMarkDirty              如为true，actor的包将被标记为已修改，以便保存。否则将不执行此操作。如不允许进行修改（如在加载中），则需要为此参数传入false",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorRelativeScale3D",
+					"name": "SetActorRelativeScale3D",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewRelativeScale",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Relative Scale 3D",
+						"category": "Transformation",
+						"tooltip": "将actor的RootComponent设为指定的相对3D缩放\n@param NewRelativeScale      对actor的RootComponent进行设置的新缩放",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorScale3D",
+					"name": "SetActorScale3D",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewScale3D",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Scale 3D",
+						"category": "Transformation",
+						"tooltip": "设置Actor的场景空间缩放。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorTickEnabled",
+					"name": "SetActorTickEnabled",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bEnabled",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Tick Enabled",
+						"category": "Actor|Tick",
+						"tooltip": "将此actor的tick函数设为启用或禁用。只有函数注册后才能生效\n这只会修改actor自身上的tick函数\n@param       bEnabled        其是否应启用",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetActorTickInterval",
+					"name": "SetActorTickInterval",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "TickInterval",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Actor Tick Interval",
+						"category": "Actor|Tick",
+						"tooltip": "设置此actor主tick函数的tick间隙。不会启用一个禁用的tick函数。在下次tick上生效。\n@param TickInterval  此actor的tick率",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetAutoDestroyWhenFinished",
+					"name": "SetAutoDestroyWhenFinished",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bVal",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Auto Destroy when Finished",
+						"tooltip": "Set Auto Destroy when Finished",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetFolderPath",
+					"name": "SetFolderPath",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewFolderPath",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Folder Path",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "将一个新文件夹指定到此actor。Actor文件夹路径只在开发版本中可用。\n@param       NewFolderPath           指定到actor的新文件夹。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetIsTemporarilyHiddenInEditor",
+					"name": "SetIsTemporarilyHiddenInEditor",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bIsHidden",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Is Temporarily Hidden in Editor",
+						"category": "Editor Scripting | Actor Editing",
+						"tooltip": "显式设置在当前编辑器会话的时长中此actor在编辑器中是否为隐藏状态\n@param bIsHidden     如果actor为隐藏，则为True",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetLifeSpan",
+					"name": "SetLifeSpan",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "InLifespan",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Life Span",
+						"category": "Actor",
+						"tooltip": "设置此actor的生命周期。其过期时对象将被销毁。如果请求的生命周期为0，则计时器将被清除，actor将不会被销毁。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetMinNetUpdateFrequency",
+					"name": "SetMinNetUpdateFrequency",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "MinFrequency",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Min Net Update Frequency",
+						"tooltip": "设置当复制的属性不经常变更时，降低频率以节流。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetNetCullDistanceSquared",
+					"name": "SetNetCullDistanceSquared",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "DistanceSq",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Net Cull Distance Squared",
+						"tooltip": "设置距客户端视点与此Actor相关且将被复制的最大距离的平方。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetNetDormancy",
+					"name": "SetNetDormancy",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewDormancy",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ENetDormancy>",
+								"typePath": "/Script/Engine.ENetDormancy"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Net Dormancy",
+						"category": "Networking",
+						"tooltip": "将actor设为休眠网络状态",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetNetUpdateFrequency",
+					"name": "SetNetUpdateFrequency",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Frequency",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Net Update Frequency",
+						"tooltip": "设置考虑复制此Object的频率。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetOwner",
+					"name": "SetOwner",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewOwner",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Owner",
+						"category": "Actor",
+						"tooltip": "设置此actor的拥有者，主要用于网络复制。\n@param NewOwner      接管此Actor拥有权的Actor",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetPhysicsReplicationMode",
+					"name": "SetPhysicsReplicationMode",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "ReplicationMode",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EPhysicsReplicationMode",
+								"typePath": "/Script/Engine.EPhysicsReplicationMode",
+								"headerPath": "Engine/EngineTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Physics Replication Mode",
+						"category": "Replication",
+						"tooltip": "通过EPhysicsReplicationMode设置这个形体的物理复制模式",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetRayTracingGroupId",
+					"name": "SetRayTracingGroupId",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "InRaytracingGroupId",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Ray Tracing Group Id",
+						"category": "RayTracing",
+						"tooltip": "为此Actor指定一个RayTracingGroupId。带有无效RayTracingGroupId的组件将继承Actor。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetReplicateMovement",
+					"name": "SetReplicateMovement",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bInReplicateMovement",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Replicate Movement",
+						"category": "Networking",
+						"tooltip": "设置此actor的移动是否复制到网络客户端。\n@param bInReplicateMovement 此Actor的运动是否复制到客户端。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetReplicates",
+					"name": "SetReplicates",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bInReplicates",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Replicates",
+						"category": "Networking",
+						"tooltip": "设置此actor是否复制到网络客户端。此actor在服务器上生成后，其也将被发送至客户端。\n标记为复制的属性如果在服务器上发生变化，其将在客户端上更新。\n内部修改RemoteRole属性并处理actor需要被添加到网络actor列表的情况。\n@参数 bInReplicates 此Actor是否复制到网络客户端。\n@查看 https://docs.unrealengine.com/InteractiveExperiences/Networking/Actors",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetTickableWhenPaused",
+					"name": "SetTickableWhenPaused",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "bTickableWhenPaused",
+							"type":
+							{
+								"kind": "boolean",
+								"nativeName": "bool"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Tickable when Paused",
+						"category": "Actor|Tick",
+						"tooltip": "设置暂停时此actor是否能够tick。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:SetTickGroup",
+					"name": "SetTickGroup",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewTickGroup",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "TEnumAsByte<ETickingGroup>",
+								"typePath": "/Script/Engine.ETickingGroup"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Tick Group",
+						"category": "Actor|Tick",
+						"tooltip": "设置此actor的ticking组。\n@param NewTickGroup 要进行指定的新值",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:TearOff",
+					"name": "TearOff",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Tear Off",
+						"category": "Networking",
+						"tooltip": "网络 - 服务器 - TearOff 此actor停止复制到客户端。将把bTearOff设为true。",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:UnregisterAsFocalPointInPhysicsReplicationLOD",
+					"name": "UnregisterAsFocalPointInPhysicsReplicationLOD",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Unregister as Focal Point in Physics Replication LOD",
+						"category": "Replication",
+						"tooltip": "取消注册此actors根组件物理Object，使其不再是物理复制LOD中的聚焦粒子",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/Engine.Actor:WasRecentlyRendered",
+					"name": "WasRecentlyRendered",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Tolerance",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input",
+							"defaultValue": "0.200000"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Was Actor Recently Rendered",
+						"category": "Rendering",
+						"tooltip": "如果此actor“最近”被渲染，则返回true，同时显示定义何为“最近”的公差（秒）。\n举例而言：如果使用了0.1的公差，则只有actor在游戏时间的最后0.1秒被渲染时此函数才返回true。\n\n@param Tolerance  Actor最后渲染时间可以在多少秒之前，且仍被视为“最近”渲染。\n@return 此actor是否为最近渲染。",
+						"deprecated": false
+					}
+				}
+			]
+		},
+		{
 			"path": "/Script/Engine.GameplayStatics",
 			"name": "GameplayStatics",
 			"nativeName": "UGameplayStatics",
@@ -12213,6 +18858,110 @@
 			]
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
+			"name": "UnifiedScriptAsset",
+			"nativeName": "UUnifiedScriptAsset",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptAsset.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.DataAsset",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Asset",
+				"tooltip": "Project asset describing one managed UnifiedScript entry point.\n\nThe asset owns program identity only. Start/tick policy remains on each host\ncomponent so multiple instances can run the same script differently.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
+			"name": "UnifiedScriptBlueprint",
+			"nativeName": "UUnifiedScriptBlueprint",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptBlueprint.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.Blueprint",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint",
+				"tooltip": "Product-owned Blueprint proxy for one complete UnifiedScript Class.\n\nThe distinct asset class lets Content Browser route rename and duplicate\nthrough the complete source/sidecar/deployment transaction instead of the\ngeneric Blueprint-only operations.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
+			"name": "UnifiedScriptBlueprintFunctionLibrary",
+			"nativeName": "UUnifiedScriptBlueprintFunctionLibrary",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptClassBases.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintFunctionLibrary",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint Function Library",
+				"tooltip": "Stable native parent for generated managed Blueprint Function Libraries.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
+			"name": "UnifiedScriptBlueprintGeneratedClass",
+			"nativeName": "UUnifiedScriptBlueprintGeneratedClass",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptBlueprint.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintGeneratedClass",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Blueprint Generated Class",
+				"tooltip": "Generated-class carrier for persistent managed function bindings.\n\nBlueprint graphs own the durable typed signature and call-node identity;\nthis class rebinds their implementation to one generic native dispatcher\nafter load, so cooked assets do not require one handwritten thunk per method.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptCallbackService",
 			"name": "UnifiedScriptCallbackService",
 			"nativeName": "UUnifiedScriptCallbackService",
@@ -16192,6 +22941,32 @@
 			"functions": []
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
+			"name": "UnifiedScriptObject",
+			"nativeName": "UUnifiedScriptObject",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptClassBases.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Object",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Object",
+				"tooltip": "Stable native UObject parent for generated managed UObject classes.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
 			"name": "UnifiedScriptWorldLibrary",
 			"nativeName": "UUnifiedScriptWorldLibrary",
@@ -16882,6 +23657,146 @@
 					}
 				}
 			]
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
+			"name": "UnifiedScriptWorldSubsystem",
+			"nativeName": "UUnifiedScriptWorldSubsystem",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptWorldSubsystem.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.WorldSubsystem",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script World Subsystem",
+				"tooltip": "One native UnifiedScript runtime boundary per supported UWorld.\n\nThe subsystem exclusively owns the weak-object registry and invocation\nbridge. Managed transports retain the opaque context, while Deinitialize\ndetaches it before invalidating handles and destroying native state.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/CoreUObject.Guid",
+			"name": "Guid",
+			"nativeName": "FGuid",
+			"module": "CoreUObject",
+			"headerPath": "UObject/NoExportTypes.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "GUID",
+				"tooltip": "全局唯一标识符（镜像自Engine/Source/Runtime/Core/Public/Misc/Guid.h）",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [
+				{
+					"path": "/Script/CoreUObject.Guid:A",
+					"name": "A",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "A",
+						"category": "Guid",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/CoreUObject.Guid:B",
+					"name": "B",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "B",
+						"category": "Guid",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/CoreUObject.Guid:C",
+					"name": "C",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "C",
+						"category": "Guid",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/CoreUObject.Guid:D",
+					"name": "D",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "D",
+						"category": "Guid",
+						"deprecated": false
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
 		},
 		{
 			"path": "/Script/CoreUObject.IntVector",
@@ -32195,6 +39110,52 @@
 			]
 		},
 		{
+			"path": "/Script/Engine.EAttachmentRule",
+			"name": "EAttachmentRule",
+			"nativeName": "EAttachmentRule",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EAttachment Rule",
+				"tooltip": "附加组件的规则，需要与EDetachmentRule保持同步",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "KeepRelative",
+					"value": 0,
+					"displayName": "Keep Relative"
+				},
+				{
+					"name": "KeepWorld",
+					"value": 1,
+					"displayName": "Keep World"
+				},
+				{
+					"name": "SnapToTarget",
+					"value": 2,
+					"displayName": "Snap to Target"
+				},
+				{
+					"name": "EAttachmentRule_MAX",
+					"value": 3,
+					"displayName": "EAttachment Rule MAX"
+				}
+			]
+		},
+		{
 			"path": "/Script/Engine.EAutoExposureMethod",
 			"name": "EAutoExposureMethod",
 			"nativeName": "EAutoExposureMethod",
@@ -32436,6 +39397,47 @@
 					"name": "DOFM_MAX",
 					"value": 3,
 					"displayName": "DOFM MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.EDetachmentRule",
+			"name": "EDetachmentRule",
+			"nativeName": "EDetachmentRule",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EDetachment Rule",
+				"tooltip": "分离组件的规则，需要与EAttachmentRule保持同步",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "KeepRelative",
+					"value": 0,
+					"displayName": "Keep Relative"
+				},
+				{
+					"name": "KeepWorld",
+					"value": 1,
+					"displayName": "Keep World"
+				},
+				{
+					"name": "EDetachmentRule_MAX",
+					"value": 2,
+					"displayName": "EDetachment Rule MAX"
 				}
 			]
 		},
@@ -32690,6 +39692,103 @@
 			]
 		},
 		{
+			"path": "/Script/Engine.ENetDormancy",
+			"name": "ENetDormancy",
+			"nativeName": "ENetDormancy",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "ENet Dormancy",
+				"tooltip": "描述actor是否能进入低网络带宽休眠模式",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "DORM_Never",
+					"value": 0,
+					"displayName": "Never"
+				},
+				{
+					"name": "DORM_Awake",
+					"value": 1,
+					"displayName": "Awake"
+				},
+				{
+					"name": "DORM_DormantAll",
+					"value": 2,
+					"displayName": "Dormant All"
+				},
+				{
+					"name": "DORM_DormantPartial",
+					"value": 3,
+					"displayName": "Dormant Partial"
+				},
+				{
+					"name": "DORM_Initial",
+					"value": 4,
+					"displayName": "Initial"
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.ENetRole",
+			"name": "ENetRole",
+			"nativeName": "ENetRole",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "ENet Role",
+				"tooltip": "本地/远程网络情境上actor的一个网络角色",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "ROLE_None",
+					"value": 0,
+					"displayName": "None"
+				},
+				{
+					"name": "ROLE_SimulatedProxy",
+					"value": 1,
+					"displayName": "Simulated Proxy"
+				},
+				{
+					"name": "ROLE_AutonomousProxy",
+					"value": 2,
+					"displayName": "Autonomous Proxy"
+				},
+				{
+					"name": "ROLE_Authority",
+					"value": 3,
+					"displayName": "Authority"
+				}
+			]
+		},
+		{
 			"path": "/Script/Engine.EObjectTypeQuery",
 			"name": "EObjectTypeQuery",
 			"nativeName": "EObjectTypeQuery",
@@ -32747,6 +39846,57 @@
 					"name": "EObjectTypeQuery_MAX",
 					"value": 65,
 					"displayName": "EObject Type Query MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.EPhysicsReplicationMode",
+			"name": "EPhysicsReplicationMode",
+			"nativeName": "EPhysicsReplicationMode",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EPhysics Replication Mode",
+				"tooltip": "EPhysics Replication Mode",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Default",
+					"value": 0,
+					"displayName": "Default"
+				},
+				{
+					"name": "PredictiveInterpolation",
+					"value": 1,
+					"displayName": "Predictive Interpolation"
+				},
+				{
+					"name": "Resimulation",
+					"value": 2,
+					"displayName": "Resimulation (WIP)"
+				},
+				{
+					"name": "None",
+					"value": 255,
+					"displayName": "None"
+				},
+				{
+					"name": "EPhysicsReplicationMode_MAX",
+					"value": 256,
+					"displayName": "EPhysics Replication Mode MAX"
 				}
 			]
 		},
@@ -33110,6 +40260,57 @@
 					"name": "TEMP_MAX",
 					"value": 2,
 					"displayName": "TEMP MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/Engine.ETickingGroup",
+			"name": "ETickingGroup",
+			"nativeName": "ETickingGroup",
+			"module": "Engine",
+			"headerPath": "Engine/EngineBaseTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "ETicking Group",
+				"tooltip": "决定tick函数所属的tick组。",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "TG_PrePhysics",
+					"value": 0,
+					"displayName": "Pre Physics"
+				},
+				{
+					"name": "TG_DuringPhysics",
+					"value": 2,
+					"displayName": "During Physics"
+				},
+				{
+					"name": "TG_PostPhysics",
+					"value": 4,
+					"displayName": "Post Physics"
+				},
+				{
+					"name": "TG_PostUpdateWork",
+					"value": 5,
+					"displayName": "Post Update Work"
+				},
+				{
+					"name": "TG_MAX",
+					"value": 8,
+					"displayName": "TG MAX"
 				}
 			]
 		},

@@ -825,6 +825,15 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
 {
     switch (MemberId)
     {
+    case 0x91CB9E715E3273B0ull:
+        OutResultCount = 1;
+        return true;
+    case 0xDF26BDB707C29D0Aull:
+        OutResultCount = 2;
+        return true;
+    case 0x6D54E7B208E979BFull:
+        OutResultCount = 0;
+        return true;
     case 0x373F7E65F4E2E77Bull:
         OutResultCount = 1;
         return true;
@@ -1111,6 +1120,32 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
 {
     switch (MemberId)
     {
+    case 0x91CB9E715E3273B0ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xDF26BDB707C29D0Aull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        case 1:
+            OutKind = EUnifiedScriptValueKind::Struct;
+            OutTypeId = 0x825BF17B3272CC56ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0x6D54E7B208E979BFull:
+        return false;
     case 0x373F7E65F4E2E77Bull:
         switch (ResultIndex)
         {
@@ -3447,6 +3482,121 @@ bool UE::UnifiedScript::Generated::Invoke(
     using namespace UE::UnifiedScript::Generated::Private;
     switch (MemberId)
     {
+    case 0x91CB9E715E3273B0ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        AActor* TypedTarget = ResolveTarget<AActor>(Target, TEXT("/Script/Engine.Actor"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FRotator Argument0 = {};
+        if (!Arguments[0].TryGetRotator(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:K2_SetActorRotation' received an incompatible value."));
+        }
+        bool Argument1 = false;
+        if (!Arguments[1].TryGetBoolean(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:K2_SetActorRotation' received an incompatible value."));
+        }
+        bool ReturnValue = TypedTarget->K2_SetActorRotation(Argument0, Argument1);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xDF26BDB707C29D0Aull:
+    {
+        if (!RequireArgumentCount(Arguments, 3, OutResult))
+        {
+            return false;
+        }
+        AActor* TypedTarget = ResolveTarget<AActor>(Target, TEXT("/Script/Engine.Actor"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        OutOutputValues.Reserve(1);
+        FTransform Argument0 = {};
+        if (!Arguments[0].TryGetTransform(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:K2_SetActorTransform' received an incompatible value."));
+        }
+        bool Argument1 = false;
+        if (!Arguments[1].TryGetBoolean(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:K2_SetActorTransform' received an incompatible value."));
+        }
+        FHitResult Argument2 = {};
+        bool Argument3 = false;
+        if (!Arguments[2].TryGetBoolean(Argument3))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:K2_SetActorTransform' received an incompatible value."));
+        }
+        bool ReturnValue = TypedTarget->K2_SetActorTransform(Argument0, Argument1, Argument2, Argument3);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        FUnifiedScriptValue EncodedOutput0;
+        if (!EncodeStruct_825BF17B3272CC56(Argument2, Registry, EncodedOutput0, OutResult))
+        {
+            return false;
+        }
+        OutOutputValues.Add(MoveTemp(EncodedOutput0));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x6D54E7B208E979BFull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        AActor* TypedTarget = ResolveTarget<AActor>(Target, TEXT("/Script/Engine.Actor"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        int64 Argument0Raw = 0;
+        if (!Arguments[0].TryGetEnumById(Argument0Raw, 0x2DE69E1909F61623ull))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/Engine.Actor:SetTickGroup' received an incompatible value."));
+        }
+        if (Argument0Raw < 0 || Argument0Raw > 255)
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("TEnumAsByte value is outside its byte range."));
+        }
+        TEnumAsByte<ETickingGroup> Argument0 = static_cast<ETickingGroup>(Argument0Raw);
+        TypedTarget->SetTickGroup(Argument0);
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
     case 0x373F7E65F4E2E77Bull:
     {
         if (!RequireArgumentCount(Arguments, 2, OutResult))
@@ -7758,8 +7908,10 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
     }
 }
 #include "UnifiedScriptNativeObjectValues.h"
+#include "Engine/EngineBaseTypes.h"
 #include "Engine/HitResult.h"
 #include "EnhancedInputSubsystemInterface.h"
+#include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
 #include "ReplaySubsystem.h"
 #include "Streaming/StreamingWorldSubsystemInterface.h"

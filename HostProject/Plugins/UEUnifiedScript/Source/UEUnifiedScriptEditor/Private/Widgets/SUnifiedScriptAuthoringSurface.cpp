@@ -193,7 +193,7 @@ bool ShowStateAuthoringDialog(
             ]
             + SVerticalBox::Slot().AutoHeight()
             [
-                MakeInspectorLabel(TEXT("DEFAULT  ·  strict JSON scalar; quote strings and enum members"))
+                MakeInspectorLabel(TEXT("DEFAULT  ·  strict JSON value; quote strings and use numeric strings for typed enums"))
             ]
             + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
             [

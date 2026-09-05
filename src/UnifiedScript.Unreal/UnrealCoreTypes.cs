@@ -60,6 +60,13 @@ public sealed class UnrealEnumAttribute(string path, string nativeName) : Attrib
         : nativeName;
 }
 
+/// <summary>Preserves the exact integral value of a generated Unreal enum constant.</summary>
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealEnumConstantAttribute(long value) : Attribute
+{
+    public long Value { get; } = value;
+}
+
 /// <summary>Common value contract implemented by generated strongly typed UEnum wrappers.</summary>
 public interface IUnrealEnumValue
 {

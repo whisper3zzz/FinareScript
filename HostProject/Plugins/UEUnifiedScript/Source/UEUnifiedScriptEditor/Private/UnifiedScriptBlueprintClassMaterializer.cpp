@@ -21,6 +21,7 @@
 #include "UnifiedScriptBlueprint.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/EnumProperty.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
@@ -188,6 +189,19 @@ bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
         FGuid::ParseExact(Digits, EGuidFormats::Digits, OutId);
 }
 
+bool TryCanonicalEnumName(const UEnum* Enum, int64 Value, FString& OutName)
+{
+    OutName.Reset();
+    return Enum != nullptr && Enum->IsValidEnumValue(Value) &&
+        Enum->FindAuthoredNameStringByValue(OutName, Value) && !OutName.IsEmpty();
+}
+
+bool IsBlueprintEnumValue(int64 Value)
+{
+    // K2 exposes reflected UEnums as PC_Byte pins, including enum classes.
+    return Value >= 0 && Value <= 255;
+}
+
 bool IsManagedState(const FBPVariableDescription& Variable)
 {
     return Variable.HasMetaData(ManagedStateKey) &&
@@ -291,10 +305,29 @@ bool ResolvePinType(
         OutType.PinSubCategoryObject = UObject::StaticClass();
         return true;
     }
+    if (TypeKind == TEXT("enum") && UnrealType != nullptr &&
+        UnrealType->Kind == EFunctionValueTypeKind::Enum)
+    {
+        UEnum* Enum = LoadObject<UEnum>(nullptr, *UnrealType->UnrealTypePath);
+        if (Enum == nullptr || Enum->GetPathName() != UnrealType->UnrealTypePath ||
+            Enum->GetName() != UnrealType->UnrealNativeName)
+        {
+            return false;
+        }
+        OutType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+        OutType.PinSubCategoryObject = Enum;
+        return true;
+    }
     if (TypeKind == TEXT("struct") && UnrealType != nullptr &&
         UnrealType->Kind == EFunctionValueTypeKind::Struct &&
-        MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
-        UnrealType->UnrealTypePath == TEXT("/Script/CoreUObject.Vector"))
+        (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealTransform")) &&
+        (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector")
+            ? UnrealType->UnrealTypePath == TEXT("/Script/CoreUObject.Vector")
+            : MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator")
+                ? UnrealType->UnrealTypePath == TEXT("/Script/CoreUObject.Rotator")
+                : UnrealType->UnrealTypePath == TEXT("/Script/CoreUObject.Transform")))
     {
         UScriptStruct* Struct = LoadObject<UScriptStruct>(
             nullptr,
@@ -928,7 +961,9 @@ bool ValidateInterfaceFunctionSignature(
 
 bool ReadCanonicalDefault(
     const FString& StateName,
+    const FString& TypeKind,
     const FString& MetadataName,
+    const FFunctionValueTypeDeclaration* UnrealType,
     const TSharedPtr<FJsonValue>& Value,
     FString& OutDefault,
     FString& OutError)
@@ -974,6 +1009,22 @@ bool ReadCanonicalDefault(
         OutDefault = Value->AsString();
         return true;
     }
+    if (TypeKind == TEXT("enum") && UnrealType != nullptr &&
+        UnrealType->Kind == EFunctionValueTypeKind::Enum && Value->Type == EJson::String)
+    {
+        int64 EnumValue = 0;
+        UEnum* Enum = LoadObject<UEnum>(nullptr, *UnrealType->UnrealTypePath);
+        FString EnumName;
+        if (Enum != nullptr && Enum->GetPathName() == UnrealType->UnrealTypePath &&
+            Enum->GetName() == UnrealType->UnrealNativeName &&
+            LexTryParseString(EnumValue, *Value->AsString()) &&
+            IsBlueprintEnumValue(EnumValue) &&
+            TryCanonicalEnumName(Enum, EnumValue, EnumName))
+        {
+            OutDefault = MoveTemp(EnumName);
+            return true;
+        }
+    }
     if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector") &&
         Value->Type == EJson::Object)
     {
@@ -991,6 +1042,75 @@ bool ReadCanonicalDefault(
                 *LexToString(X),
                 *LexToString(Y),
                 *LexToString(Z));
+            return true;
+        }
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator") &&
+        Value->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        double Pitch = 0.0;
+        double Yaw = 0.0;
+        double Roll = 0.0;
+        if (Object.IsValid() && Object->Values.Num() == 3 &&
+            Object->TryGetNumberField(TEXT("pitch"), Pitch) && FMath::IsFinite(Pitch) &&
+            Object->TryGetNumberField(TEXT("yaw"), Yaw) && FMath::IsFinite(Yaw) &&
+            Object->TryGetNumberField(TEXT("roll"), Roll) && FMath::IsFinite(Roll))
+        {
+            OutDefault = FString::Printf(
+                TEXT("(Pitch=%s,Yaw=%s,Roll=%s)"),
+                *LexToString(Pitch), *LexToString(Yaw), *LexToString(Roll));
+            return true;
+        }
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealTransform") &&
+        Value->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        const TSharedPtr<FJsonObject>* Rotation = nullptr;
+        const TSharedPtr<FJsonObject>* Translation = nullptr;
+        const TSharedPtr<FJsonObject>* Scale = nullptr;
+        double X = 0.0;
+        double Y = 0.0;
+        double Z = 0.0;
+        double W = 0.0;
+        double TX = 0.0;
+        double TY = 0.0;
+        double TZ = 0.0;
+        double SX = 0.0;
+        double SY = 0.0;
+        double SZ = 0.0;
+        if (Object.IsValid() && Object->Values.Num() == 3 &&
+            Object->TryGetObjectField(TEXT("rotation"), Rotation) &&
+            Object->TryGetObjectField(TEXT("translation"), Translation) &&
+            Object->TryGetObjectField(TEXT("scale3D"), Scale) &&
+            Rotation != nullptr && Translation != nullptr && Scale != nullptr &&
+            (*Rotation)->Values.Num() == 4 && (*Translation)->Values.Num() == 3 &&
+            (*Scale)->Values.Num() == 3 &&
+            (*Rotation)->TryGetNumberField(TEXT("x"), X) && FMath::IsFinite(X) &&
+            (*Rotation)->TryGetNumberField(TEXT("y"), Y) && FMath::IsFinite(Y) &&
+            (*Rotation)->TryGetNumberField(TEXT("z"), Z) && FMath::IsFinite(Z) &&
+            (*Rotation)->TryGetNumberField(TEXT("w"), W) && FMath::IsFinite(W) &&
+            (*Translation)->TryGetNumberField(TEXT("x"), TX) && FMath::IsFinite(TX) &&
+            (*Translation)->TryGetNumberField(TEXT("y"), TY) && FMath::IsFinite(TY) &&
+            (*Translation)->TryGetNumberField(TEXT("z"), TZ) && FMath::IsFinite(TZ) &&
+            (*Scale)->TryGetNumberField(TEXT("x"), SX) && FMath::IsFinite(SX) &&
+            (*Scale)->TryGetNumberField(TEXT("y"), SY) && FMath::IsFinite(SY) &&
+            (*Scale)->TryGetNumberField(TEXT("z"), SZ) && FMath::IsFinite(SZ) &&
+            FMath::IsNearlyEqual(X * X + Y * Y + Z * Z + W * W, 1.0, 1e-6))
+        {
+            // BlueprintEditorUtils parses FTransform defaults through
+            // FTransform::InitFromString, whose stable text form is
+            // translation|rotator|scale.  Keep quaternion JSON/ABI intact;
+            // the editor-facing default uses the engine's required Euler
+            // representation and the CDO reader below uses the same form.
+            const FRotator Rotator(FQuat(X, Y, Z, W));
+            OutDefault = FString::Printf(
+                TEXT("%s,%s,%s|%s,%s,%s|%s,%s,%s"),
+                *LexToString(TX), *LexToString(TY), *LexToString(TZ),
+                *LexToString(Rotator.Pitch), *LexToString(Rotator.Yaw),
+                *LexToString(Rotator.Roll), *LexToString(SX),
+                *LexToString(SY), *LexToString(SZ));
             return true;
         }
     }
@@ -1763,7 +1883,9 @@ bool ParseDeclaration(
         }
         if (!ReadCanonicalDefault(
                 Name,
+                TypeKind,
                 MetadataName,
+                &StateUnrealType,
                 State->TryGetField(TEXT("defaultValue")),
                 Declaration.DefaultValue,
                 OutError))
@@ -2237,8 +2359,36 @@ bool CanonicalCurrentDefault(
         OutValue = Typed->GetPropertyValue_InContainer(Cdo) ? TEXT("true") : TEXT("false");
         return true;
     }
+    if (const FEnumProperty* Typed = CastField<FEnumProperty>(Property))
+    {
+        const FNumericProperty* Underlying = Typed->GetUnderlyingProperty();
+        const int64 Value = Underlying->GetSignedIntPropertyValue(
+            Typed->ContainerPtrToValuePtr<void>(Cdo));
+        if (!TryCanonicalEnumName(Typed->GetEnum(), Value, OutValue))
+        {
+            OutError = FString::Printf(
+                TEXT("Generated enum state '%s' has no authored name for value %lld."),
+                *Variable.VarName.ToString(),
+                Value);
+            return false;
+        }
+        return true;
+    }
     if (const FByteProperty* Typed = CastField<FByteProperty>(Property))
     {
+        if (Typed->IsEnum())
+        {
+            const int64 Value = static_cast<int64>(Typed->GetPropertyValue_InContainer(Cdo));
+            if (!TryCanonicalEnumName(Typed->Enum, Value, OutValue))
+            {
+                OutError = FString::Printf(
+                    TEXT("Generated enum state '%s' has no authored name for value %lld."),
+                    *Variable.VarName.ToString(),
+                    Value);
+                return false;
+            }
+            return true;
+        }
         OutValue = LexToString(Typed->GetPropertyValue_InContainer(Cdo));
         return true;
     }
@@ -2286,6 +2436,34 @@ bool CanonicalCurrentDefault(
             *LexToString(Vector.X),
             *LexToString(Vector.Y),
             *LexToString(Vector.Z));
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FRotator>::Get())
+    {
+        const FRotator& Rotator = *Typed->ContainerPtrToValuePtr<FRotator>(Cdo);
+        OutValue = FString::Printf(
+            TEXT("(Pitch=%s,Yaw=%s,Roll=%s)"),
+            *LexToString(Rotator.Pitch),
+            *LexToString(Rotator.Yaw),
+            *LexToString(Rotator.Roll));
+        return true;
+    }
+    if (const FStructProperty* Typed = CastField<FStructProperty>(Property);
+        Typed != nullptr && Typed->Struct == TBaseStructure<FTransform>::Get())
+    {
+        const FTransform& Transform = *Typed->ContainerPtrToValuePtr<FTransform>(Cdo);
+        const FQuat& Rotation = Transform.GetRotation();
+        const FVector& Translation = Transform.GetTranslation();
+        const FVector& Scale = Transform.GetScale3D();
+        const FRotator Rotator(Rotation);
+        OutValue = FString::Printf(
+            TEXT("%s,%s,%s|%s,%s,%s|%s,%s,%s"),
+            *LexToString(Translation.X), *LexToString(Translation.Y),
+            *LexToString(Translation.Z), *LexToString(Rotator.Pitch),
+            *LexToString(Rotator.Yaw), *LexToString(Rotator.Roll),
+            *LexToString(Scale.X), *LexToString(Scale.Y),
+            *LexToString(Scale.Z));
         return true;
     }
     if (const FClassProperty* Typed = CastField<FClassProperty>(Property))

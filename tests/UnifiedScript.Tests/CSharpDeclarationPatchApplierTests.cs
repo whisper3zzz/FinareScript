@@ -148,6 +148,49 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyRendersTypedUnrealEnumNumericDefaultFromDeclarationPatch()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealEnum("/Script/FixtureRuntime.EFixtureMode", "EFixtureMode")]
+            [UnrealValue]
+            public readonly record struct FixtureMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static FixtureMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Game/TypedPatch")]
+            public sealed class TypedPatch
+            {
+                public FixtureMode Mode { get; set; } = FixtureMode.Active;
+            }
+            """;
+        CSharpCompilationRequest request = new(
+            "TypedPatch",
+            [new CSharpSourceDocument("Game/TypedPatch.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        ScriptStateDeclaration state = Assert.Single(asset.States);
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new UpdateScriptStatePatchOperation(
+                state.Id,
+                Expected(state),
+                Spec("Mode", "FixtureMode", ScriptStateTypeKind.Enum, "9", state.Exposure)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "public FixtureMode Mode { get; set; } = new FixtureMode(9L);",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
     public void ApplyAddsCommonUnrealStateShapesWithOrdinaryCSharpDefaults()
     {
         var request = new CSharpCompilationRequest(

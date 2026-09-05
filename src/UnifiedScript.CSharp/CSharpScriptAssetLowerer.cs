@@ -18,6 +18,8 @@ internal sealed class CSharpScriptAssetLowerer
     private const string ScriptAssetAttributeName = "UnifiedScript.ScriptAssetAttribute";
     private const string ExposeAttributeName = "UnifiedScript.ExposeAttribute";
     private const string UnrealEnumAttributeName = "UnifiedScript.Unreal.UnrealEnumAttribute";
+    private const string UnrealEnumConstantAttributeName =
+        "UnifiedScript.Unreal.UnrealEnumConstantAttribute";
     private const string UnrealStructAttributeName = "UnifiedScript.Unreal.UnrealStructAttribute";
     private const string UnrealStructFieldAttributeName =
         "UnifiedScript.Unreal.UnrealStructFieldAttribute";
@@ -920,7 +922,18 @@ internal sealed class CSharpScriptAssetLowerer
     {
         string metadataName = type.ToDisplayString(TypeMetadataFormat);
         unrealType = null;
-        kind = type.SpecialType switch
+        bool isGeneratedUnrealEnum = type is INamedTypeSymbol generatedEnum &&
+            TryReadUnrealTypeIdentity(
+                FindAttribute(generatedEnum, UnrealEnumAttributeName),
+                out _,
+                out _) &&
+            generatedEnum.AllInterfaces.Any(interfaceType =>
+                GetMetadataName(interfaceType) == "UnifiedScript.Unreal.IUnrealEnumValue") &&
+            generatedEnum.GetMembers("Value").OfType<IPropertySymbol>().Any(property =>
+                property.Type.SpecialType == SpecialType.System_Int64);
+        kind = isGeneratedUnrealEnum
+            ? ScriptStateTypeKind.Enum
+            : type.SpecialType switch
         {
             SpecialType.System_Boolean => ScriptStateTypeKind.Boolean,
             SpecialType.System_SByte or SpecialType.System_Byte or
@@ -935,10 +948,12 @@ internal sealed class CSharpScriptAssetLowerer
             _ when metadataName == "UnifiedScript.Unreal.UnrealText" => ScriptStateTypeKind.Text,
             _ when metadataName == "UnifiedScript.Unreal.UnrealObjectHandle" => ScriptStateTypeKind.Object,
             _ when metadataName == "UnifiedScript.Unreal.UnrealClassHandle" => ScriptStateTypeKind.Class,
-            _ when metadataName == "UnifiedScript.Unreal.UnrealVector" => ScriptStateTypeKind.Struct,
+            _ when metadataName is "UnifiedScript.Unreal.UnrealVector" or
+                "UnifiedScript.Unreal.UnrealRotator" or
+                "UnifiedScript.Unreal.UnrealTransform" => ScriptStateTypeKind.Struct,
             _ => default,
         };
-        bool supported = type.SpecialType is SpecialType.System_Boolean or
+        bool supported = isGeneratedUnrealEnum || type.SpecialType is SpecialType.System_Boolean or
             SpecialType.System_SByte or SpecialType.System_Byte or
             SpecialType.System_Int16 or SpecialType.System_UInt16 or
             SpecialType.System_Int32 or SpecialType.System_UInt32 or
@@ -949,18 +964,49 @@ internal sealed class CSharpScriptAssetLowerer
                 "UnifiedScript.Unreal.UnrealText" or
                 "UnifiedScript.Unreal.UnrealObjectHandle" or
                 "UnifiedScript.Unreal.UnrealClassHandle" or
-                "UnifiedScript.Unreal.UnrealVector";
-        if (supported && kind == ScriptStateTypeKind.Struct)
+                "UnifiedScript.Unreal.UnrealVector" or
+                "UnifiedScript.Unreal.UnrealRotator" or
+                "UnifiedScript.Unreal.UnrealTransform";
+        if (supported && kind == ScriptStateTypeKind.Enum && type is INamedTypeSymbol enumType)
         {
+            AttributeData? enumAttribute = FindAttribute(enumType, UnrealEnumAttributeName);
+            if (TryReadUnrealTypeIdentity(
+                    enumAttribute,
+                    out string enumPath,
+                    out string enumNativeName))
+            {
+                unrealType = new ScriptFunctionValueTypeDeclaration(
+                    ScriptFunctionValueTypeKind.Enum,
+                    enumPath,
+                    enumNativeName,
+                    []);
+            }
+        }
+        else if (supported && kind == ScriptStateTypeKind.Struct)
+        {
+            string path = metadataName switch
+            {
+                "UnifiedScript.Unreal.UnrealRotator" => "/Script/CoreUObject.Rotator",
+                "UnifiedScript.Unreal.UnrealTransform" => "/Script/CoreUObject.Transform",
+                _ => "/Script/CoreUObject.Vector",
+            };
+            string nativeName = metadataName switch
+            {
+                "UnifiedScript.Unreal.UnrealRotator" => "Rotator",
+                "UnifiedScript.Unreal.UnrealTransform" => "Transform",
+                _ => "Vector",
+            };
             unrealType = new ScriptFunctionValueTypeDeclaration(
                 ScriptFunctionValueTypeKind.Struct,
-                "/Script/CoreUObject.Vector",
-                "Vector",
-                [
-                    new ScriptFunctionStructFieldDeclaration(0, "X", "System.Double"),
-                    new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
-                    new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
-                ]);
+                path,
+                nativeName,
+                metadataName == "UnifiedScript.Unreal.UnrealVector"
+                    ? [
+                        new ScriptFunctionStructFieldDeclaration(0, "X", "System.Double"),
+                        new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
+                        new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
+                    ]
+                    : []);
         }
         return supported;
     }
@@ -1051,8 +1097,10 @@ internal sealed class CSharpScriptAssetLowerer
                 out value))
         {
             diagnosticNode = expression;
-            diagnosticMessage =
-                "requires a finite, JSON-representable compile-time constant default.";
+            diagnosticMessage = property.Type.ToDisplayString(TypeMetadataFormat) ==
+                "UnifiedScript.Unreal.UnrealTransform"
+                ? "requires finite components and a normalized quaternion; use UnrealTransform.Identity or an explicit valid constant."
+                : "requires a finite, JSON-representable compile-time constant default.";
             return false;
         }
 
@@ -1101,6 +1149,44 @@ internal sealed class CSharpScriptAssetLowerer
         out JsonElement value)
     {
         string metadataName = type.ToDisplayString(TypeMetadataFormat);
+        if (type is INamedTypeSymbol typedEnum &&
+            TryReadUnrealTypeIdentity(
+                FindAttribute(typedEnum, UnrealEnumAttributeName),
+                out string enumPath,
+                out _))
+        {
+            if (IsDefaultValueExpression(expression))
+            {
+                value = JsonSerializer.SerializeToElement("0");
+                return true;
+            }
+            if (TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> enumArguments) &&
+                enumArguments.Count == 1 &&
+                TryReadSignedInteger(enumArguments[0], semanticModel, out long constructorValue))
+            {
+                value = JsonSerializer.SerializeToElement(
+                    constructorValue.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return true;
+            }
+            if (TryReadUnrealEnumConstant(
+                    typedEnum,
+                    expression,
+                    semanticModel,
+                    enumPath,
+                    out long namedValue))
+            {
+                value = JsonSerializer.SerializeToElement(
+                    namedValue.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
         if (metadataName is "UnifiedScript.Unreal.UnrealName" or
             "UnifiedScript.Unreal.UnrealText")
         {
@@ -1162,6 +1248,86 @@ internal sealed class CSharpScriptAssetLowerer
                     value = JsonSerializer.SerializeToElement(new { x, y, z });
                     return true;
                 }
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (metadataName == "UnifiedScript.Unreal.UnrealRotator")
+        {
+            if (IsDefaultValueExpression(expression) || IsNamedStaticValue(
+                    type,
+                    expression,
+                    semanticModel,
+                    "Zero"))
+            {
+                value = JsonSerializer.SerializeToElement(new { pitch = 0.0, yaw = 0.0, roll = 0.0 });
+                return true;
+            }
+            if (TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> arguments) &&
+                (arguments.Count == 0 || arguments.Count == 3))
+            {
+                double pitch = 0.0;
+                double yaw = 0.0;
+                double roll = 0.0;
+                if (arguments.Count == 3 &&
+                    (!TryReadFiniteNumber(arguments[0], semanticModel, out pitch) ||
+                     !TryReadFiniteNumber(arguments[1], semanticModel, out yaw) ||
+                     !TryReadFiniteNumber(arguments[2], semanticModel, out roll)))
+                {
+                    value = default;
+                    return false;
+                }
+                value = JsonSerializer.SerializeToElement(new { pitch, yaw, roll });
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (metadataName == "UnifiedScript.Unreal.UnrealTransform")
+        {
+            double qx = 0.0;
+            double qy = 0.0;
+            double qz = 0.0;
+            double qw = 1.0;
+            double tx = 0.0;
+            double ty = 0.0;
+            double tz = 0.0;
+            double sx = 1.0;
+            double sy = 1.0;
+            double sz = 1.0;
+            bool valid = IsNamedStaticValue(type, expression, semanticModel, "Identity");
+            if (!valid && TryReadConstructorArguments(
+                    type,
+                    expression,
+                    semanticModel,
+                    out IReadOnlyList<ExpressionSyntax> transformArguments))
+            {
+                valid = transformArguments.Count == 3 &&
+                    TryReadQuaternion(transformArguments[0], semanticModel, out qx, out qy,
+                        out qz, out qw) &&
+                    TryReadVector(transformArguments[1], semanticModel, out tx, out ty,
+                        out tz) &&
+                    TryReadVector(transformArguments[2], semanticModel, out sx, out sy,
+                        out sz) &&
+                    IsNormalizedQuaternion(qx, qy, qz, qw);
+            }
+            if (valid)
+            {
+                value = JsonSerializer.SerializeToElement(new
+                {
+                    rotation = new { x = qx, y = qy, z = qz, w = qw },
+                    translation = new { x = tx, y = ty, z = tz },
+                    scale3D = new { x = sx, y = sy, z = sz },
+                });
+                return true;
             }
 
             value = default;
@@ -1231,6 +1397,121 @@ internal sealed class CSharpScriptAssetLowerer
         return true;
     }
 
+    private static bool TryReadUnrealEnumConstant(
+        INamedTypeSymbol type,
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        string enumPath,
+        out long value)
+    {
+        value = default;
+        ISymbol? symbol = semanticModel.GetSymbolInfo(expression).Symbol;
+        if (symbol is not IPropertySymbol property ||
+            !property.IsStatic ||
+            !SymbolEqualityComparer.Default.Equals(property.ContainingType, type))
+        {
+            return false;
+        }
+
+        AttributeData? typeAttribute = FindAttribute(type, UnrealEnumAttributeName);
+        if (!TryReadUnrealTypeIdentity(typeAttribute, out string actualPath, out _) ||
+            !string.Equals(actualPath, enumPath, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        AttributeData? valueAttribute = FindAttribute(property, UnrealEnumConstantAttributeName);
+        if (valueAttribute?.ConstructorArguments.FirstOrDefault().Value is not long constant)
+        {
+            return false;
+        }
+        value = constant;
+        return true;
+    }
+
+    private static bool TryReadSignedInteger(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out long value)
+    {
+        value = default;
+        Optional<object?> constant = semanticModel.GetConstantValue(expression);
+        if (!constant.HasValue || constant.Value is null)
+        {
+            return false;
+        }
+        try
+        {
+            value = Convert.ToInt64(constant.Value, System.Globalization.CultureInfo.InvariantCulture);
+            return true;
+        }
+        catch (Exception exception) when (exception is InvalidCastException or FormatException or OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadVector(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out double x,
+        out double y,
+        out double z)
+    {
+        x = y = z = default;
+        ITypeSymbol? type = semanticModel.GetTypeInfo(expression).Type;
+        if (type is null || type.ToDisplayString(TypeMetadataFormat) != "UnifiedScript.Unreal.UnrealVector")
+        {
+            return false;
+        }
+        if (IsDefaultValueExpression(expression) || IsNamedStaticValue(type, expression, semanticModel, "Zero"))
+        {
+            return true;
+        }
+        if (IsNamedStaticValue(type, expression, semanticModel, "One"))
+        {
+            x = y = z = 1.0;
+            return true;
+        }
+        return TryReadConstructorArguments(type, expression, semanticModel, out IReadOnlyList<ExpressionSyntax> arguments) &&
+            arguments.Count == 3 &&
+            TryReadFiniteNumber(arguments[0], semanticModel, out x) &&
+            TryReadFiniteNumber(arguments[1], semanticModel, out y) &&
+            TryReadFiniteNumber(arguments[2], semanticModel, out z);
+    }
+
+    private static bool TryReadQuaternion(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out double x,
+        out double y,
+        out double z,
+        out double w)
+    {
+        x = y = z = w = default;
+        ITypeSymbol? type = semanticModel.GetTypeInfo(expression).Type;
+        if (type is null || type.ToDisplayString(TypeMetadataFormat) != "UnifiedScript.Unreal.UnrealQuaternion")
+        {
+            return false;
+        }
+        if (IsNamedStaticValue(type, expression, semanticModel, "Identity"))
+        {
+            w = 1.0;
+            return true;
+        }
+        return TryReadConstructorArguments(type, expression, semanticModel, out IReadOnlyList<ExpressionSyntax> arguments) &&
+            arguments.Count == 4 &&
+            TryReadFiniteNumber(arguments[0], semanticModel, out x) &&
+            TryReadFiniteNumber(arguments[1], semanticModel, out y) &&
+            TryReadFiniteNumber(arguments[2], semanticModel, out z) &&
+            TryReadFiniteNumber(arguments[3], semanticModel, out w);
+    }
+
+    private static bool IsNormalizedQuaternion(double x, double y, double z, double w)
+    {
+        double lengthSquared = x * x + y * y + z * z + w * w;
+        return double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6;
+    }
+
     private static bool IsDefaultValueExpression(ExpressionSyntax expression) =>
         expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
         expression is DefaultExpressionSyntax;
@@ -1266,7 +1547,63 @@ internal sealed class CSharpScriptAssetLowerer
         {
             return false;
         }
-        arguments = argumentList.Arguments.Select(static argument => argument.Expression).ToArray();
+        ArgumentSyntax[] syntaxArguments = argumentList.Arguments.ToArray();
+        IMethodSymbol? constructor = semanticModel.GetSymbolInfo(expression).Symbol as IMethodSymbol;
+        if (constructor is not null && syntaxArguments.Any(static argument => argument.NameColon is not null))
+        {
+            if (syntaxArguments.Length != constructor.Parameters.Length)
+            {
+                return false;
+            }
+            var ordered = new ExpressionSyntax?[constructor.Parameters.Length];
+            int nextPositional = 0;
+            foreach (ArgumentSyntax argument in syntaxArguments)
+            {
+                int parameterIndex;
+                if (argument.NameColon is not null)
+                {
+                    parameterIndex = -1;
+                    for (int index = 0; index < constructor.Parameters.Length; index++)
+                    {
+                        if (constructor.Parameters[index].Name == argument.NameColon.Name.Identifier.ValueText)
+                        {
+                            parameterIndex = index;
+                            break;
+                        }
+                    }
+                    if (parameterIndex < 0)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    while (nextPositional < ordered.Length && ordered[nextPositional] is not null)
+                    {
+                        nextPositional++;
+                    }
+                    parameterIndex = nextPositional++;
+                    if (parameterIndex >= ordered.Length)
+                    {
+                        return false;
+                    }
+                }
+                if (ordered[parameterIndex] is not null)
+                {
+                    return false;
+                }
+                ordered[parameterIndex] = argument.Expression;
+            }
+            if (ordered.Any(static argument => argument is null))
+            {
+                return false;
+            }
+            arguments = ordered.Select(static argument => argument!).ToArray();
+        }
+        else
+        {
+            arguments = syntaxArguments.Select(static argument => argument.Expression).ToArray();
+        }
         return true;
     }
 

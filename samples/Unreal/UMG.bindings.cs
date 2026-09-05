@@ -8,9 +8,13 @@ namespace UnifiedScript.Unreal.Generated.UI;
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct EComponentMobility(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
 {
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(0)]
     public static EComponentMobility Static { get; } = new(0);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(1)]
     public static EComponentMobility Stationary { get; } = new(1);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(2)]
     public static EComponentMobility Movable { get; } = new(2);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(3)]
     public static EComponentMobility EComponentMobility_MAX { get; } = new(3);
 
     public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/Engine.EComponentMobility", Value);

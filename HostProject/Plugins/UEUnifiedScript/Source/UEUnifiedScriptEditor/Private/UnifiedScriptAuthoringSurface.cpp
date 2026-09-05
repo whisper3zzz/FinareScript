@@ -183,17 +183,13 @@ FString JsonScalarToString(const TSharedPtr<FJsonValue>& Value)
     {
         return TEXT("null");
     }
-    switch (Value->Type)
+    FString Json;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+    if (FJsonSerializer::Serialize(Value.ToSharedRef(), TEXT(""), Writer))
     {
-    case EJson::String:
-        return FString::Printf(TEXT("\"%s\""), *Value->AsString());
-    case EJson::Number:
-        return FString::SanitizeFloat(Value->AsNumber());
-    case EJson::Boolean:
-        return Value->AsBool() ? TEXT("true") : TEXT("false");
-    default:
-        return TEXT("<complex>");
+        return Json;
     }
+    return TEXT("null");
 }
 
 bool ReadState(
@@ -1064,15 +1060,14 @@ bool TryParseJsonValue(
         !Wrapper.IsValid() || !Wrapper->HasField(TEXT("value")))
     {
         OutError = FString::Printf(
-            TEXT("State default '%s' is not a valid JSON scalar."),
+            TEXT("State default '%s' is not a valid JSON value."),
             *ValueText);
         return false;
     }
     OutValue = Wrapper->TryGetField(TEXT("value"));
-    if (!OutValue.IsValid() || OutValue->Type == EJson::Array ||
-        OutValue->Type == EJson::Object)
+    if (!OutValue.IsValid())
     {
-        OutError = TEXT("A state default must be a JSON boolean, number, string, or null.");
+        OutError = TEXT("A state default must be a valid JSON value.");
         return false;
     }
     return true;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
 using UnifiedScript.CSharp;
@@ -894,6 +895,182 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(
             returnType.Fields.Select(static field => field.NativeName),
             parameterType.Fields.Select(static field => field.NativeName));
+    }
+
+    [Fact]
+    public void GeneratedUnrealEnumDefaultsUseConstantAttributeValuesAndZeroConstructors()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game.Generated;
+
+            [UnrealEnum("/Script/FixtureRuntime.EFixtureMode", "EFixtureMode")]
+            [UnrealValue]
+            public readonly record struct FixtureMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static FixtureMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Game/TypedState")]
+            public sealed class TypedState
+            {
+                public FixtureMode Mode { get; set; } = FixtureMode.Active;
+                public FixtureMode Zero { get; set; } = new(0);
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "TypedEnumState",
+                [new CSharpSourceDocument("Game/TypedState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = Assert.Single(
+                result.ScriptAssets!.Assets).States
+            .ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Assert.Equal(ScriptStateTypeKind.Enum, states["Mode"].TypeKind);
+        Assert.Equal("7", states["Mode"].DefaultValue.GetString());
+        Assert.Equal(ScriptFunctionValueTypeKind.Enum, states["Mode"].UnrealType?.Kind);
+        Assert.Equal("/Script/FixtureRuntime.EFixtureMode", states["Mode"].UnrealType?.UnrealTypePath);
+        Assert.Equal("0", states["Zero"].DefaultValue.GetString());
+    }
+
+    [Fact]
+    public void CommonUnrealStructDefaultsPreserveRotatorAndTransformIdentityShape()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/SpatialState")]
+            public sealed class SpatialState
+            {
+                public UnrealRotator Rotation { get; set; } = new(10, 20, 30);
+                public UnrealTransform Transform { get; set; } = UnrealTransform.Identity;
+                public UnrealTransform Reordered { get; set; } = new(
+                    Scale3D: new UnrealVector(2, 3, 4),
+                    Translation: new UnrealVector(5, 6, 7),
+                    Rotation: new UnrealQuaternion(0, 0, 0.7071067811865475, 0.7071067811865475));
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SpatialState",
+                [new CSharpSourceDocument("Game/SpatialState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = Assert.Single(
+                result.ScriptAssets!.Assets).States
+            .ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Assert.Equal(10, states["Rotation"].DefaultValue.GetProperty("pitch").GetDouble());
+        JsonElement transform = states["Transform"].DefaultValue;
+        Assert.Equal(1, transform.GetProperty("scale3D").GetProperty("x").GetDouble());
+        Assert.Equal(1, transform.GetProperty("scale3D").GetProperty("y").GetDouble());
+        Assert.Equal(1, transform.GetProperty("scale3D").GetProperty("z").GetDouble());
+        Assert.Equal(1, transform.GetProperty("rotation").GetProperty("w").GetDouble());
+        JsonElement reordered = states["Reordered"].DefaultValue;
+        Assert.Equal(0.7071067811865475, reordered.GetProperty("rotation").GetProperty("z").GetDouble());
+        Assert.Equal(5, reordered.GetProperty("translation").GetProperty("x").GetDouble());
+        Assert.Equal(4, reordered.GetProperty("scale3D").GetProperty("z").GetDouble());
+    }
+
+    [Fact]
+    public void InvalidUnrealTransformDefaultsAreRejectedWithoutInventingIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game/InvalidSpatialState")]
+            public sealed class InvalidSpatialState
+            {
+                public UnrealTransform ZeroDefault { get; set; } = default(UnrealTransform);
+                public UnrealTransform EmptyConstructor { get; set; } = new UnrealTransform();
+                public UnrealTransform NonNormalized { get; set; } = new(
+                    new UnrealQuaternion(0, 0, 0, 0.5),
+                    new UnrealVector(0, 0, 0),
+                    new UnrealVector(1, 1, 1));
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InvalidSpatialState",
+                [new CSharpSourceDocument("Game/InvalidSpatialState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(3, result.Diagnostics.Count(static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired));
+        Assert.All(
+            result.Diagnostics.Where(static diagnostic =>
+                diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired),
+            static diagnostic => Assert.Contains(
+                "finite components and a normalized quaternion; use UnrealTransform.Identity",
+                diagnostic.Message,
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GeneratedEnumDefaultCanBeLoweredFromCompiledBindingsAssembly()
+    {
+        const string generatedEnumSource = """
+            using UnifiedScript.Unreal;
+
+            namespace ExternalBindings.Generated;
+
+            [UnrealEnum("/Script/FixtureRuntime.EExternalMode", "EExternalMode")]
+            [UnrealValue]
+            public readonly record struct EExternalMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(17)]
+                public static EExternalMode Active { get; } = new(17);
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(
+            new CSharpCompilationRequest(
+                "ExternalGeneratedBindings",
+                [new CSharpSourceDocument("GeneratedBindings.cs", generatedEnumSource)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        string generatedBindings = Path.Combine(
+            Path.GetTempPath(),
+            $"{Guid.NewGuid():N}.ExternalGeneratedBindings.dll");
+        File.WriteAllBytes(generatedBindings, Assert.IsType<CSharpProgramImage>(emitted.Image).PortableExecutable);
+        const string source = """
+            using UnifiedScript;
+            using ExternalBindings.Generated;
+
+            [ScriptAsset("Game/CompiledEnumState")]
+            public sealed class CompiledEnumState
+            {
+                public EExternalMode Mode { get; set; } = EExternalMode.Active;
+            }
+            """;
+        try
+        {
+            CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+                new CSharpCompilationRequest(
+                    "CompiledEnumState",
+                    [new CSharpSourceDocument("Game/CompiledEnumState.cs", source)],
+                    [unrealAssembly, generatedBindings],
+                    runtimeReferencePaths: [unrealAssembly, generatedBindings]));
+
+            Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+            ScriptStateDeclaration state = Assert.Single(Assert.Single(result.ScriptAssets!.Assets).States);
+            Assert.Equal("17", state.DefaultValue.GetString());
+            Assert.Equal("/Script/FixtureRuntime.EExternalMode", state.UnrealType?.UnrealTypePath);
+            Assert.Equal(ScriptFunctionValueTypeKind.Enum, state.UnrealType?.Kind);
+        }
+        finally
+        {
+            File.Delete(generatedBindings);
+        }
     }
 
     [Theory]

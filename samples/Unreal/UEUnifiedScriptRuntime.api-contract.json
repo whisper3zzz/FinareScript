@@ -169,6 +169,10 @@
       "members": ["GetAllActorsOfClass"]
     },
     {
+      "path": "/Script/Engine.Actor",
+      "members": ["K2_SetActorRotation", "K2_SetActorTransform", "SetTickGroup"]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
       "members": [
         "DestroyActor",

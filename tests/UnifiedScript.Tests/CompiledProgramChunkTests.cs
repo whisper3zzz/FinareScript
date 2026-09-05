@@ -62,6 +62,29 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void Compiler_DefaultEntriesIncludeScriptAssetsWithoutVisualMethods()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Tests.Chunks;
+
+            [ScriptAsset("Tests/ChunkLifecycle")]
+            public sealed class ChunkLifecycle
+            {
+                public int Value { get; set; } = 0;
+            }
+            """;
+
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(source));
+
+        Assert.Contains(
+            "Tests.Chunks.ChunkLifecycle",
+            result.RuntimeManifest.EntryTypeNames);
+    }
+
+    [Fact]
     public void Compiler_CanStripPortablePdbFromRuntimeDeliveryChunk()
     {
         CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
@@ -149,6 +172,110 @@ public sealed class CompiledProgramChunkTests
             UnifiedScriptChunkSectionKind.DeclarationData).Data.Span;
         Assert.Equal((byte)1, payload[10]);
         Assert.Equal((byte)0, payload[11]);
+    }
+
+    [Fact]
+    public void DeclarationBinary_UsesMinor2ForTypedEnumsAndSpatialValues()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealEnum("/Script/FixtureRuntime.EFixtureMode", "EFixtureMode")]
+            [UnrealValue]
+            public readonly record struct FixtureMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static FixtureMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Tests/TypedSpatialState")]
+            public sealed class TypedSpatialState
+            {
+                public FixtureMode Mode { get; set; } = FixtureMode.Active;
+                public UnrealRotator Rotation { get; set; } = new(1, 2, 3);
+                public UnrealTransform Transform { get; set; } = UnrealTransform.Identity;
+            }
+            """;
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(source, [typeof(UnrealObjectScript).Assembly.Location]));
+        UnifiedScriptRuntimeDeclarationDocument declarations =
+            UnifiedScriptRuntimeDeclarationBinary.Decode(result.Chunk.GetRequiredSection(
+                UnifiedScriptChunkSectionKind.DeclarationData).Data.Span);
+        IReadOnlyDictionary<string, UnifiedScriptRuntimeStateDeclaration> states =
+            Assert.Single(declarations.Assets).States.ToDictionary(
+                static state => state.Name,
+                StringComparer.Ordinal);
+
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Enum, states["Mode"].DefaultValue.Kind);
+        Assert.Equal("7", states["Mode"].DefaultValue.TextValue);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Rotator, states["Rotation"].DefaultValue.Kind);
+        Assert.Equal(1, states["Rotation"].DefaultValue.RotatorPitch);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Transform, states["Transform"].DefaultValue.Kind);
+        Assert.Equal(1, states["Transform"].DefaultValue.TransformRotationW);
+        Assert.Equal(1, states["Transform"].DefaultValue.TransformScaleX);
+
+        ReadOnlySpan<byte> payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.Span;
+        Assert.Equal((byte)2, payload[10]);
+        Assert.Equal((byte)0, payload[11]);
+    }
+
+    [Fact]
+    public void DeclarationBinary_RejectsTypedEnumPayloadWhenMinorVersionIsLowered()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealEnum("/Script/FixtureRuntime.EFixtureMode", "EFixtureMode")]
+            [UnrealValue]
+            public readonly record struct FixtureMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static FixtureMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Tests/TypedEnumCompatibility")]
+            public sealed class TypedEnumCompatibility
+            {
+                public FixtureMode Mode { get; set; } = FixtureMode.Active;
+            }
+            """;
+        CSharpProgramImage image = EmitImage(source, [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(image);
+        byte[] payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.ToArray();
+        payload[10] = 1;
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            UnifiedScriptRuntimeDeclarationBinary.Decode(payload));
+        Assert.Contains("requires declaration minor version 2", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DeclarationBinary_RejectsSpatialPayloadWhenMinorVersionIsLowered()
+    {
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Tests/SpatialCompatibility")]
+            public sealed class SpatialCompatibility
+            {
+                public UnrealRotator Rotation { get; set; } = new(1, 2, 3);
+                public UnrealTransform Transform { get; set; } = UnrealTransform.Identity;
+            }
+            """;
+        CSharpProgramImage image = EmitImage(source, [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(image);
+        byte[] payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.ToArray();
+        payload[10] = 1;
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            UnifiedScriptRuntimeDeclarationBinary.Decode(payload));
+        Assert.Contains("Unsupported runtime state value", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

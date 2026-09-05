@@ -12,6 +12,9 @@
 #include "Containers/StringConv.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "Math/Quat.h"
+#include "Math/Rotator.h"
+#include "Math/Transform.h"
 #include "Math/Vector.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
@@ -38,6 +41,35 @@ bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
         return false;
     }
     return FGuid::ParseExact(Digits, EGuidFormats::Digits, OutId);
+}
+
+bool IsLegalEnumValue(const UEnum* Enum, int64 Value)
+{
+    if (Enum == nullptr)
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Enum->NumEnums(); ++Index)
+    {
+        if (Enum->GetValueByIndex(Index) == Value)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsLegalPropertyBagEnumValue(const UEnum* Enum, int64 Value)
+{
+    if (!IsLegalEnumValue(Enum, Value))
+    {
+        return false;
+    }
+
+    // PropertyBag follows UHT here: non enum-class UEnums are represented by
+    // FByteProperty, while enum classes retain their declared integral type.
+    return Enum->GetCppForm() == UEnum::ECppForm::EnumClass ||
+        (Value >= 0 && Value <= 255);
 }
 
 bool ResolvePropertyType(
@@ -88,10 +120,24 @@ bool ResolvePropertyType(
     }
     if (Kind == TEXT("enum"))
     {
-        // Declaration v0.1 does not carry the Unreal UEnum needed by PropertyBag.
-        // Preserve the declared enum token as an editable string until that contract exists.
+        if (UnrealType.bPresent)
+        {
+            if (UnrealType.Kind != 0)
+            {
+                return false;
+            }
+            UEnum* Enum = LoadObject<UEnum>(nullptr, *UnrealType.Path);
+            if (Enum == nullptr || Enum->GetPathName() != UnrealType.Path ||
+                Enum->GetName() != UnrealType.NativeName)
+            {
+                return false;
+            }
+            OutType = EPropertyBagPropertyType::Enum;
+            OutTypeObject = Enum;
+            return true;
+        }
         OutType = EPropertyBagPropertyType::String;
-        return true;
+        return MetadataName == TEXT("System.Enum") || !MetadataName.IsEmpty();
     }
     if (Kind == TEXT("name") &&
         MetadataName == TEXT("UnifiedScript.Unreal.UnrealName"))
@@ -129,6 +175,24 @@ bool ResolvePropertyType(
         OutTypeObject = TBaseStructure<FVector>::Get();
         return true;
     }
+    if (Kind == TEXT("struct") && MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator") &&
+        UnrealType.bPresent && UnrealType.Kind == 1 &&
+        UnrealType.Path == TEXT("/Script/CoreUObject.Rotator") &&
+        UnrealType.NativeName == TEXT("Rotator"))
+    {
+        OutType = EPropertyBagPropertyType::Struct;
+        OutTypeObject = TBaseStructure<FRotator>::Get();
+        return true;
+    }
+    if (Kind == TEXT("struct") && MetadataName == TEXT("UnifiedScript.Unreal.UnrealTransform") &&
+        UnrealType.bPresent && UnrealType.Kind == 1 &&
+        UnrealType.Path == TEXT("/Script/CoreUObject.Transform") &&
+        UnrealType.NativeName == TEXT("Transform"))
+    {
+        OutType = EPropertyBagPropertyType::Struct;
+        OutTypeObject = TBaseStructure<FTransform>::Get();
+        return true;
+    }
     return false;
 }
 
@@ -153,6 +217,15 @@ bool ReadJsonUnrealType(
     }
     if (Kind == TEXT("enum"))
     {
+        if ((*TypeObject)->HasField(TEXT("fields")))
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+            if (!(*TypeObject)->TryGetArrayField(TEXT("fields"), Fields) ||
+                Fields == nullptr || !Fields->IsEmpty())
+            {
+                return false;
+            }
+        }
         OutType.Kind = 0;
         return true;
     }
@@ -233,6 +306,21 @@ bool SetDefaultValue(
             Result = Bag.SetValueString(Desc.Name, DefaultValue->AsString());
         }
         break;
+    case EPropertyBagPropertyType::Enum:
+        if (DefaultValue->Type == EJson::String)
+        {
+            int64 EnumValue = 0;
+            const UEnum* Enum = Cast<UEnum>(Desc.ValueTypeObject);
+            if (LexTryParseString(EnumValue, *DefaultValue->AsString()) &&
+                IsLegalPropertyBagEnumValue(Enum, EnumValue))
+            {
+                Result = Bag.SetValueEnum(
+                    Desc.Name,
+                    EnumValue,
+                    const_cast<UEnum*>(Enum));
+            }
+        }
+        break;
     case EPropertyBagPropertyType::Name:
         if (DefaultValue->Type == EJson::String)
         {
@@ -260,6 +348,68 @@ bool SetDefaultValue(
                 Object->Values.Num() == 3)
             {
                 Result = Bag.SetValueStruct(Desc.Name, FVector(X, Y, Z));
+            }
+        }
+        else if (Desc.ValueTypeObject == TBaseStructure<FRotator>::Get() &&
+            DefaultValue->Type == EJson::Object)
+        {
+            const TSharedPtr<FJsonObject> Object = DefaultValue->AsObject();
+            double Pitch = 0.0;
+            double Yaw = 0.0;
+            double Roll = 0.0;
+            if (Object.IsValid() && Object->Values.Num() == 3 &&
+                Object->TryGetNumberField(TEXT("pitch"), Pitch) && FMath::IsFinite(Pitch) &&
+                Object->TryGetNumberField(TEXT("yaw"), Yaw) && FMath::IsFinite(Yaw) &&
+                Object->TryGetNumberField(TEXT("roll"), Roll) && FMath::IsFinite(Roll))
+            {
+                Result = Bag.SetValueStruct(Desc.Name, FRotator(Pitch, Yaw, Roll));
+            }
+        }
+        else if (Desc.ValueTypeObject == TBaseStructure<FTransform>::Get() &&
+            DefaultValue->Type == EJson::Object)
+        {
+            const TSharedPtr<FJsonObject> Object = DefaultValue->AsObject();
+            const TSharedPtr<FJsonObject>* RotationObject = nullptr;
+            const TSharedPtr<FJsonObject>* TranslationObject = nullptr;
+            const TSharedPtr<FJsonObject>* ScaleObject = nullptr;
+            if (Object.IsValid() && Object->Values.Num() == 3 &&
+                Object->TryGetObjectField(TEXT("rotation"), RotationObject) &&
+                Object->TryGetObjectField(TEXT("translation"), TranslationObject) &&
+                Object->TryGetObjectField(TEXT("scale3D"), ScaleObject) &&
+                RotationObject != nullptr && TranslationObject != nullptr && ScaleObject != nullptr)
+            {
+                double X = 0.0;
+                double Y = 0.0;
+                double Z = 0.0;
+                double W = 0.0;
+                double TX = 0.0;
+                double TY = 0.0;
+                double TZ = 0.0;
+                double SX = 0.0;
+                double SY = 0.0;
+                double SZ = 0.0;
+                if ((*RotationObject)->Values.Num() == 4 &&
+                    (*RotationObject)->TryGetNumberField(TEXT("x"), X) && FMath::IsFinite(X) &&
+                    (*RotationObject)->TryGetNumberField(TEXT("y"), Y) && FMath::IsFinite(Y) &&
+                    (*RotationObject)->TryGetNumberField(TEXT("z"), Z) && FMath::IsFinite(Z) &&
+                    (*RotationObject)->TryGetNumberField(TEXT("w"), W) && FMath::IsFinite(W) &&
+                    (*TranslationObject)->Values.Num() == 3 &&
+                    (*TranslationObject)->TryGetNumberField(TEXT("x"), TX) && FMath::IsFinite(TX) &&
+                    (*TranslationObject)->TryGetNumberField(TEXT("y"), TY) && FMath::IsFinite(TY) &&
+                    (*TranslationObject)->TryGetNumberField(TEXT("z"), TZ) && FMath::IsFinite(TZ) &&
+                    (*ScaleObject)->Values.Num() == 3 &&
+                    (*ScaleObject)->TryGetNumberField(TEXT("x"), SX) && FMath::IsFinite(SX) &&
+                    (*ScaleObject)->TryGetNumberField(TEXT("y"), SY) && FMath::IsFinite(SY) &&
+                    (*ScaleObject)->TryGetNumberField(TEXT("z"), SZ) && FMath::IsFinite(SZ))
+                {
+                    const double LengthSquared = X * X + Y * Y + Z * Z + W * W;
+                    if (FMath::IsNearlyEqual(LengthSquared, 1.0, 1e-6))
+                    {
+                        Result = Bag.SetValueStruct(
+                            Desc.Name,
+                            FTransform(FQuat(X, Y, Z, W), FVector(TX, TY, TZ), FVector(SX, SY, SZ)));
+                    }
+                }
             }
         }
         break;
@@ -338,6 +488,8 @@ enum class EBinaryDefaultKind : uint8
     Name = 7,
     Text = 8,
     Vector = 9,
+    Rotator = 10,
+    Transform = 11,
 };
 
 struct FBinaryDefault
@@ -349,6 +501,8 @@ struct FBinaryDefault
     double FloatingPoint = 0.0;
     FString Text;
     FVector Vector = FVector::ZeroVector;
+    FRotator Rotator = FRotator::ZeroRotator;
+    FTransform Transform = FTransform::Identity;
 };
 
 class FBinaryDeclarationReader
@@ -372,7 +526,7 @@ public:
         uint16 Minor = 0;
         uint32 Reserved = 0;
         if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-            Major != 1 || Minor > 1 || Reserved != 0)
+            Major != 1 || Minor > 2 || Reserved != 0)
         {
             OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
             return false;
@@ -472,7 +626,8 @@ public:
     bool ReadDefault(FBinaryDefault& OutDefault)
     {
         uint8 Kind = 0;
-        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Vector))
+        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Transform) ||
+            Kind >= static_cast<uint8>(EBinaryDefaultKind::Rotator) && MinorVersion < 2)
         {
             return false;
         }
@@ -535,6 +690,54 @@ public:
                 }
             }
             OutDefault.Vector = FVector(Components[0], Components[1], Components[2]);
+            return true;
+        }
+        case EBinaryDefaultKind::Rotator:
+        {
+            double Components[3] = {};
+            for (double& Component : Components)
+            {
+                uint64 Bits = 0;
+                if (!ReadUInt64(Bits))
+                {
+                    return false;
+                }
+                FMemory::Memcpy(&Component, &Bits, sizeof(double));
+                if (!FMath::IsFinite(Component))
+                {
+                    return false;
+                }
+            }
+            OutDefault.Rotator = FRotator(Components[0], Components[1], Components[2]);
+            return true;
+        }
+        case EBinaryDefaultKind::Transform:
+        {
+            double Components[10] = {};
+            for (double& Component : Components)
+            {
+                uint64 Bits = 0;
+                if (!ReadUInt64(Bits))
+                {
+                    return false;
+                }
+                FMemory::Memcpy(&Component, &Bits, sizeof(double));
+                if (!FMath::IsFinite(Component))
+                {
+                    return false;
+                }
+            }
+            const double LengthSquared = Components[0] * Components[0] +
+                Components[1] * Components[1] + Components[2] * Components[2] +
+                Components[3] * Components[3];
+            if (!FMath::IsNearlyEqual(LengthSquared, 1.0, 1e-6))
+            {
+                return false;
+            }
+            OutDefault.Transform = FTransform(
+                FQuat(Components[0], Components[1], Components[2], Components[3]),
+                FVector(Components[4], Components[5], Components[6]),
+                FVector(Components[7], Components[8], Components[9]));
             return true;
         }
         default:
@@ -697,6 +900,21 @@ bool SetBinaryDefaultValue(
             Result = Bag.SetValueString(Desc.Name, Default.Text);
         }
         break;
+    case EPropertyBagPropertyType::Enum:
+        if (Default.Kind == EBinaryDefaultKind::Enum)
+        {
+            int64 EnumValue = 0;
+            const UEnum* Enum = Cast<UEnum>(Desc.ValueTypeObject);
+            if (LexTryParseString(EnumValue, *Default.Text) &&
+                IsLegalPropertyBagEnumValue(Enum, EnumValue))
+            {
+                Result = Bag.SetValueEnum(
+                    Desc.Name,
+                    EnumValue,
+                    const_cast<UEnum*>(Enum));
+            }
+        }
+        break;
     case EPropertyBagPropertyType::Name:
         if (Default.Kind == EBinaryDefaultKind::Name)
         {
@@ -714,6 +932,16 @@ bool SetBinaryDefaultValue(
             Desc.ValueTypeObject == TBaseStructure<FVector>::Get())
         {
             Result = Bag.SetValueStruct(Desc.Name, Default.Vector);
+        }
+        else if (Default.Kind == EBinaryDefaultKind::Rotator &&
+            Desc.ValueTypeObject == TBaseStructure<FRotator>::Get())
+        {
+            Result = Bag.SetValueStruct(Desc.Name, Default.Rotator);
+        }
+        else if (Default.Kind == EBinaryDefaultKind::Transform &&
+            Desc.ValueTypeObject == TBaseStructure<FTransform>::Get())
+        {
+            Result = Bag.SetValueStruct(Desc.Name, Default.Transform);
         }
         break;
     default:
@@ -904,6 +1132,15 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             {
                 OutError = FString::Printf(
                     TEXT("Compiled declaration asset '%s' contains an invalid state."),
+                    *AssetPath);
+                return false;
+            }
+
+            if (TypeKind == 4 && UnrealType.bPresent && UnrealType.Kind == 0 &&
+                Reader.GetMinorVersion() < 2)
+            {
+                OutError = FString::Printf(
+                    TEXT("Compiled declaration asset '%s' uses a typed enum without the required payload version."),
                     *AssetPath);
                 return false;
             }

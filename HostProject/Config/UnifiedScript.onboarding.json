@@ -6,11 +6,23 @@
   "pluginPath": "../Plugins/UEUnifiedScript",
   "reflection": {
     "modules": [
+      "CoreUObject",
       "Engine",
+      "EnhancedInput",
+      "GameplayTags",
+      "InputCore",
+      "PhysicsCore",
       "UEUnifiedScriptRuntime"
     ],
     "classes": [
+      "/Script/Engine.Actor",
       "/Script/Engine.GameplayStatics",
+      "/Script/Engine.ReplaySubsystem",
+      "/Script/Engine.StreamingWorldSubsystemInterface",
+      "/Script/Engine.SubsystemBlueprintLibrary",
+      "/Script/Engine.WorldPartitionSubsystem",
+      "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem",
+      "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",

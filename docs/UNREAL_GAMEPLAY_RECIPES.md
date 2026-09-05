@@ -105,6 +105,41 @@ class handles must remain null: a nonzero handle is valid only for its current
 World registry generation. Assign durable object/class references through the
 normal Blueprint CDO/instance property surface or resolve assets at runtime.
 
+Generated Unreal enum wrappers, `UnrealRotator` and `UnrealTransform` also have
+typed state/default contracts. For example, the
+[CommonStateGameplayDemoScript](../samples/Unreal/UnifiedScript.Unreal.Demo/CommonStateGameplayDemoScript.cs)
+exposes configuration used by ordinary generated Actor calls:
+
+```csharp
+[Expose(InstanceEditable = true, SaveGame = true)]
+public ETickingGroup TickGroup { get; set; } = ETickingGroup.TG_DuringPhysics;
+
+[Expose(InstanceEditable = true, SaveGame = true)]
+public UnrealRotator Facing { get; set; } = new(0.0, 45.0, 0.0);
+
+[Expose(InstanceEditable = true, SaveGame = true)]
+public UnrealTransform Placement { get; set; } = new(
+    UnrealQuaternion.Identity,
+    new UnrealVector(120.0, 0.0, 40.0),
+    UnrealVector.One);
+```
+
+Import `UnifiedScript.Unreal.Generated` for the selected runtime bindings'
+`ETickingGroup` wrapper. BeginPlay applies the configured tick group and
+Transform; each Tick changes `Facing` and applies it to the Actor. The native
+Script Class fields and managed properties exchange the same types. This sample
+configures Actor tick properties; it does not establish managed component tick
+ordering relative to every Unreal tick group.
+
+Use `UnrealTransform.Identity` for an identity default. C# `default` and `new()`
+produce a zero quaternion and are rejected for Transform state. Explicit
+quaternions must be normalized, and all components must be finite constants.
+Named constructor arguments may be reordered. Generated enum defaults may use
+an attributed named member or `new EnumWrapper(constantLong)`; native
+materialization requires a declared UEnum value, and Blueprint enum fields also
+require a value in their byte storage range. Ordinary CLR enums retain the
+existing member-name contract.
+
 Attach the Script Asset to a `UnifiedScriptActor` or to a
 `UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,
 Tick, overlap, EndPlay, level travel, and one Build & Reload. `TargetHandle` is

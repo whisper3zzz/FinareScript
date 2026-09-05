@@ -127,7 +127,9 @@ public sealed partial class FixtureInterface : global::UnifiedScript.Unreal.Unre
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct FixtureMode(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
 {
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(0)]
     public static FixtureMode Idle { get; } = new(0);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(1)]
     public static FixtureMode Active { get; } = new(1);
 
     public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/BindingMatrix.FixtureMode", Value);

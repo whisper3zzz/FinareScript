@@ -404,7 +404,7 @@ public static class DeclarationPatchJson
                 value.ValueKind == JsonValueKind.String,
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 value.ValueKind == JsonValueKind.Null,
-            ScriptStateTypeKind.Struct => IsFiniteVectorValue(value),
+            ScriptStateTypeKind.Struct => IsFiniteCommonValue(value),
             _ => false,
         };
         if (!valid)
@@ -424,6 +424,42 @@ public static class DeclarationPatchJson
         return TryGetFiniteNumber(value, "x") &&
             TryGetFiniteNumber(value, "y") &&
             TryGetFiniteNumber(value, "z");
+    }
+
+    private static bool IsFiniteCommonValue(JsonElement value)
+    {
+        if (IsFiniteVectorValue(value))
+        {
+            return true;
+        }
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+        if (value.EnumerateObject().Count() == 3 &&
+            TryGetFiniteNumber(value, "pitch") &&
+            TryGetFiniteNumber(value, "yaw") &&
+            TryGetFiniteNumber(value, "roll"))
+        {
+            return true;
+        }
+        if (value.EnumerateObject().Count() != 3 ||
+            !value.TryGetProperty("translation", out JsonElement translation) ||
+            !value.TryGetProperty("scale3D", out JsonElement scale) ||
+            !value.TryGetProperty("rotation", out JsonElement rotation) ||
+            !IsFiniteVectorValue(translation) || !IsFiniteVectorValue(scale) ||
+            rotation.ValueKind != JsonValueKind.Object || rotation.EnumerateObject().Count() != 4 ||
+            !TryGetFiniteNumber(rotation, "x") || !TryGetFiniteNumber(rotation, "y") ||
+            !TryGetFiniteNumber(rotation, "z") || !TryGetFiniteNumber(rotation, "w"))
+        {
+            return false;
+        }
+        double x = rotation.GetProperty("x").GetDouble();
+        double y = rotation.GetProperty("y").GetDouble();
+        double z = rotation.GetProperty("z").GetDouble();
+        double w = rotation.GetProperty("w").GetDouble();
+        double lengthSquared = x * x + y * y + z * z + w * w;
+        return double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6;
     }
 
     private static bool TryGetFiniteNumber(JsonElement value, string name) =>

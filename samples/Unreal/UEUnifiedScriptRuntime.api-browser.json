@@ -12,14 +12,14 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "b3658ce133a6638d2985eb6f1bfa95b5667e0d57bc6fae8e454c1a16eda6a81c"
+    "inputSha256": "8b20ccd3e9a9116aa41dcaaf8f3e9768fae8854064624d9b0162ce133db9dd6c"
   },
   "summary": {
-    "typeCount": 19,
-    "memberCount": 187,
-    "nodeCount": 209,
+    "typeCount": 21,
+    "memberCount": 190,
+    "nodeCount": 212,
     "directThunkCount": 66,
-    "callFrameCount": 118,
+    "callFrameCount": 121,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
@@ -1828,6 +1828,235 @@
       "name": "Interface",
       "managedTypeName": "Interface",
       "category": "Unreal API|Interface",
+      "members": []
+    },
+    {
+      "path": "/Script/Engine.Actor",
+      "name": "Actor",
+      "managedTypeName": "Actor",
+      "category": "Unreal API|Actor",
+      "members": [
+        {
+          "id": "ue.call|Actor|SetTickGroup",
+          "memberPath": "/Script/Engine.Actor:SetTickGroup",
+          "memberId": "0x6D54E7B208E979BF",
+          "kind": "function",
+          "title": "Set Tick Group",
+          "category": "Actor|Tick",
+          "tooltip": "\u8BBE\u7F6E\u6B64actor\u7684ticking\u7EC4\u3002\n@param NewTickGroup \u8981\u8FDB\u884C\u6307\u5B9A\u7684\u65B0\u503C",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor"
+              }
+            },
+            {
+              "name": "NewTickGroup",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "enum",
+                "nativeName": "TEnumAsByte\u003CETickingGroup\u003E",
+                "typePath": "/Script/Engine.ETickingGroup"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|Actor|SetActorRotation",
+          "memberPath": "/Script/Engine.Actor:K2_SetActorRotation",
+          "memberId": "0x91CB9E715E3273B0",
+          "kind": "function",
+          "title": "Set Actor Rotation",
+          "category": "Transformation",
+          "tooltip": "\u5C06Actor\u7684\u65CB\u8F6C\u7ACB\u5373\u8BBE\u4E3A\u6307\u5B9A\u7684\u65CB\u8F6C\u3002\n\n@param       NewRotation     Actor\u7684\u65B0\u65CB\u8F6C\u3002\n@param       bTeleportPhysics \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n         \u8BBE\u7F6E\u65CB\u8F6C\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u65CB\u8F6C\u3002\n@return      \u8FD4\u56DE\u65CB\u8F6C\u662F\u5426\u8BBE\u7F6E\u6210\u529F\u3002",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor"
+              }
+            },
+            {
+              "name": "NewRotation",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FRotator",
+                "typePath": "/Script/CoreUObject.Rotator",
+                "headerPath": "UObject/NoExportTypes.h"
+              }
+            },
+            {
+              "name": "bTeleportPhysics",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        },
+        {
+          "id": "ue.call|Actor|SetActorTransform",
+          "memberPath": "/Script/Engine.Actor:K2_SetActorTransform",
+          "memberId": "0xDF26BDB707C29D0A",
+          "kind": "function",
+          "title": "Set Actor Transform",
+          "category": "Transformation",
+          "tooltip": "\u5C06Actors\u53D8\u6362\u8BBE\u4E3A\u6307\u5B9A\u7684\u53D8\u6362\u3002\n@param NewTransform          \u65B0\u7684\u53D8\u6362\u3002\n@param bSweep                        \u662F\u5426\u626B\u63CF\u5230\u76EE\u6807\u4F4D\u7F6E\uFF0C\u6CBF\u9014\u89E6\u53D1\u91CD\u53E0\uFF0C\u5E76\u5728\u88AB\u67D0\u7269\u963B\u6321\u65F6\u505C\u6B62\u5230\u8FBE\u76EE\u6807\u3002\n                                                     \u53EA\u6709\u6839\u7EC4\u4EF6\u88AB\u626B\u63CF\u5E76\u68C0\u67E5\u963B\u6321\u78B0\u649E\uFF0C\u5B50\u7EC4\u4EF6\u79FB\u52A8\u65F6\u4E0D\u8FDB\u884C\u626B\u63CF\u3002\u5982\u679C\u78B0\u649E\u5173\u95ED\uFF0C\u8FD9\u6CA1\u6709\u6548\u679C\u3002@param bTeleport                     \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                                                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u5982\u679CCCD\u6253\u5F00\u4E14\u672A\u4F20\u9001\uFF0C\u8FD9\u5C06\u5F71\u54CD\u6574\u4E2A\u626B\u63CF\u4F53\u79EF\u4E0A\u7684Object\u3002\n                         \u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n                         \u8BBE\u7F6E\u53D8\u6362\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u53D8\u6362\u3002",
+          "pure": false,
+          "disposition": "callFrame",
+          "available": true,
+          "constraints": {
+            "threadRequirement": "gameThread",
+            "worldRequirement": "none",
+            "callableWithoutWorldContext": false,
+            "latent": false,
+            "deprecated": false
+          },
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor"
+              }
+            },
+            {
+              "name": "NewTransform",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FTransform",
+                "typePath": "/Script/CoreUObject.Transform",
+                "headerPath": "UObject/NoExportTypes.h"
+              }
+            },
+            {
+              "name": "bSweep",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            },
+            {
+              "name": "SweepHitResult",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FHitResult",
+                "typePath": "/Script/Engine.HitResult",
+                "headerPath": "Engine/HitResult.h"
+              }
+            },
+            {
+              "name": "bTeleport",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool"
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "diagnosticCodes": []
+        }
+      ]
+    },
+    {
+      "path": "/Script/Engine.ETickingGroup",
+      "name": "ETickingGroup",
+      "managedTypeName": "ETickingGroup",
+      "category": "Unreal API|ETickingGroup",
       "members": []
     },
     {

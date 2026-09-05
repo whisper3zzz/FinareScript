@@ -202,6 +202,27 @@ internal static class UnrealScriptStateSynchronizer
             {
                 return StateBinding<UnrealVector>.CreateTyped(property, memberPath);
             }
+            if (type == typeof(UnrealRotator))
+            {
+                return StateBinding<UnrealRotator>.CreateTyped(property, memberPath);
+            }
+            if (type == typeof(UnrealTransform))
+            {
+                return StateBinding<UnrealTransform>.CreateTyped(property, memberPath);
+            }
+            if (type.IsValueType &&
+                type.GetCustomAttribute<UnrealEnumAttribute>(inherit: false) is not null &&
+                typeof(IUnrealEnumValue).IsAssignableFrom(type))
+            {
+                Type bindingType = typeof(StateBinding<>).MakeGenericType(type);
+                MethodInfo? factory = bindingType.GetMethod(
+                    "CreateTyped",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (factory?.Invoke(null, [property, memberPath]) is StateBinding binding)
+                {
+                    return binding;
+                }
+            }
 
             throw new NotSupportedException(
                 $"Script state '{property.DeclaringType?.FullName}.{property.Name}' uses " +

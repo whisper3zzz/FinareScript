@@ -2568,4 +2568,102 @@ bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptAuthoringSurfaceStructDefaultTest,
+    "UnifiedScript.Unreal.Editor.AuthoringSurface.StructDefaultPrecondition",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptAuthoringSurfaceStructDefaultTest::RunTest(const FString& Parameters)
+{
+    const FString SurfaceJson = TEXT(
+        "{\"schemaVersion\":\"unifiedscript.authoring-surface/v0.4\","
+        "\"sourceCompilationId\":\"us_d9a16db3c198f736637b39c80c423d65\","
+        "\"semanticConfigurationId\":\"us_1e2264a1ca2a4790b19667426236fc4a\","
+        "\"assets\":[{\"id\":\"us_cefc9ee5805e3ed5610154145ea986dd\","
+        "\"qualifiedName\":\"Game.Spatial\",\"assetPath\":\"Game/Spatial\","
+        "\"span\":{\"filePath\":\"Game/Spatial.cs\",\"start\":{\"line\":1,\"column\":1},"
+        "\"end\":{\"line\":20,\"column\":1}},\"states\":[{"
+        "\"id\":\"us_d4463d57397c77264a0e282ca6c29432\",\"name\":\"Placement\","
+        "\"typeDisplayName\":\"UnrealTransform\","
+        "\"typeMetadataName\":\"UnifiedScript.Unreal.UnrealTransform\","
+        "\"typeKind\":\"struct\","
+        "\"defaultValue\":{\"rotation\":{\"x\":0,\"y\":0,\"z\":0,\"w\":1},"
+        "\"translation\":{\"x\":120,\"y\":0,\"z\":40},"
+        "\"scale3D\":{\"x\":1.25,\"y\":0.75,\"z\":1}},"
+        "\"span\":{\"filePath\":\"Game/Spatial.cs\",\"start\":{\"line\":5,\"column\":5},"
+        "\"end\":{\"line\":5,\"column\":70}},\"exposure\":{"
+        "\"instanceEditable\":true,\"saveGame\":false,\"replicated\":false,\"category\":\"Gameplay\"}}],"
+        "\"functions\":[]}]}" );
+
+    FUnifiedScriptAuthoringSurfaceDocument Document;
+    FString Error;
+    TestTrue(
+        TEXT("Structured defaults parse from the authoring surface"),
+        FUnifiedScriptAuthoringSurfaceReader::ParseJson(SurfaceJson, Document, Error));
+    if (Document.Assets.Num() != 1 || Document.Assets[0].States.Num() != 1)
+    {
+        AddError(Error.IsEmpty() ? TEXT("Structured default fixture did not load.") : Error);
+        return false;
+    }
+
+    const FUnifiedScriptAuthoringState& State = Document.Assets[0].States[0];
+    TestTrue(TEXT("Authoring reader keeps structured JSON defaults"),
+        State.DefaultValue.Contains(TEXT("\"rotation\"")) &&
+            State.DefaultValue.Contains(TEXT("\"translation\"")) &&
+            !State.DefaultValue.Contains(TEXT("<complex>")));
+
+    const FString Replacement = TEXT(
+        "{\"rotation\":{\"x\":0,\"y\":0,\"z\":0.3826834323,\"w\":0.9238795325},"
+        "\"translation\":{\"x\":200,\"y\":0,\"z\":40},"
+        "\"scale3D\":{\"x\":1.25,\"y\":0.75,\"z\":1}}" );
+    FString PatchJson;
+    FUnifiedScriptAuthoringExposure Exposure = State.Exposure;
+    TestTrue(
+        TEXT("Structured default update emits a JSON precondition and replacement"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildStateUpdatePatch(
+            Document,
+            State,
+            TEXT("Placement"),
+            TEXT("UnrealTransform"),
+            TEXT("struct"),
+            Replacement,
+            Exposure,
+            PatchJson,
+            Error));
+    TestTrue(TEXT("Structured patch keeps object precondition and replacement"),
+        PatchJson.Contains(TEXT("\"expected\"")) &&
+            PatchJson.Contains(TEXT("\"replacement\"")) &&
+            PatchJson.Contains(TEXT("\"rotation\"")) &&
+            PatchJson.Contains(TEXT("<complex>") ) == false);
+
+    TSharedPtr<FJsonObject> PatchRoot;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PatchJson);
+    TestTrue(TEXT("Structured default patch remains valid JSON"),
+        FJsonSerializer::Deserialize(Reader, PatchRoot) && PatchRoot.IsValid());
+    const TArray<TSharedPtr<FJsonValue>>* Operations = nullptr;
+    TestTrue(TEXT("Structured default patch carries one operation"),
+        PatchRoot.IsValid() && PatchRoot->TryGetArrayField(TEXT("operations"), Operations) &&
+            Operations != nullptr && Operations->Num() == 1);
+    if (Operations != nullptr && Operations->Num() == 1)
+    {
+        const TSharedPtr<FJsonObject> Operation = (*Operations)[0]->AsObject();
+        const TSharedPtr<FJsonObject>* Expected = nullptr;
+        const TSharedPtr<FJsonObject>* ExpectedDefault = nullptr;
+        const TSharedPtr<FJsonObject>* ReplacementObject = nullptr;
+        const bool bHasObjects = Operation.IsValid() &&
+            Operation->TryGetObjectField(TEXT("expected"), Expected) && Expected != nullptr &&
+            (*Expected)->TryGetObjectField(TEXT("defaultValue"), ExpectedDefault) &&
+            ExpectedDefault != nullptr &&
+            Operation->TryGetObjectField(TEXT("replacement"), ReplacementObject) &&
+            ReplacementObject != nullptr;
+        TestTrue(TEXT("Structured default patch preserves object-shaped precondition"), bHasObjects);
+        if (bHasObjects)
+        {
+            TestTrue(TEXT("Structured default patch preserves object-shaped replacement"),
+                (*ReplacementObject)->TryGetObjectField(TEXT("defaultValue"), ExpectedDefault));
+        }
+    }
+    return true;
+}
+
 #endif

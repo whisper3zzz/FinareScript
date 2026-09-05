@@ -95,8 +95,9 @@ pipeline.
 
 Declaration IR v0.1 accepts booleans, signed/unsigned integers, finite
 floating-point values, decimal, string, enum, `UnrealName`, `UnrealText`,
-`UnrealObjectHandle`, `UnrealClassHandle`, and the reviewed `UnrealVector`
-struct state. Every state requires an explicit deterministic default. The value
+`UnrealObjectHandle`, `UnrealClassHandle`, and the reviewed `UnrealVector`,
+`UnrealRotator` and `UnrealTransform` struct state. Every state requires an
+explicit deterministic default. The value
 may come from the property initializer or from a direct, unconditional simple
 assignment in the type's explicit parameterless constructor; an
 expression-bodied constructor is also accepted. Constructor assignments follow
@@ -109,10 +110,11 @@ Common Unreal defaults use a bounded source form: `UnrealName` and `UnrealText`
 accept an empty/default value or one constant string; `UnrealVector` accepts
 default/`Zero` or three finite constant components. Object and class handles
 accept only their zero/null form because their nonzero values identify one
-native registry generation and are not durable asset references. Enum defaults
-serialize by member name, not by underlying integer, so the artifact remains
-readable and rejects unnamed values. Struct state carries its exact Unreal type
-path, native name, and field schema in `unrealType`; scalar and reference state
+native registry generation and are not durable asset references. Ordinary CLR
+enum defaults serialize by member name and reject unnamed values. Generated
+Unreal enum wrappers instead use a decimal string and an exact reflected enum
+descriptor, as described below. Struct state carries its exact Unreal type path,
+native name, and field schema in `unrealType`; other scalar and reference state
 cannot claim that extra identity.
 
 ## Document model
@@ -126,7 +128,7 @@ Each document carries:
 - source spans for assets and state declarations;
 - display and metadata type names;
 - typed JSON defaults;
-- exact reflected type identity for reviewed struct state;
+- exact reflected type identity for generated Unreal enum and reviewed struct state;
 - `instanceEditable`, `saveGame`, `replicated`, and optional `category` policy;
 - Visual function signatures linked to existing HIR method and parameter IDs;
 - explicit `Input`, `Output`, or `InputOutput` direction on every function
@@ -140,7 +142,8 @@ state kind. Serialization normalizes asset, state, and function order before
 writing, so editor and CI artifacts do not depend on source-document order.
 Input-action, delegate, and interface contracts remain input-only. Function
 directions are part of canonical Declaration IR JSON and persistent generated
-class bindings; the state-focused runtime declaration binary remains v1.1.
+class bindings; they do not add function signatures to the state-focused runtime
+declaration binary.
 
 The managed function ABI v3 consumes input and input-output values in source
 parameter order, then returns one ordered result sequence: a non-void return
@@ -148,12 +151,58 @@ value first, followed by every input-output and output parameter in source
 order. Consumers must bind by stable parameter name because Unreal may reorder
 output properties while constructing a UFunction.
 
-The compiled declaration payload remains major version 1 and advances to binary
-minor version 1.1. It adds the optional reflected type descriptor plus typed
+The compiled declaration payload retains major version 1. Binary v1.1 introduced
+the optional reflected type descriptor plus typed
 `FName`, `FText`, and `FVector` defaults. The decoder continues to accept v1.0
 scalar documents; v1.1 readers validate nesting, field order, exact FVector
 identity, finite components, and the null-only object/class default contract
 before native state is mutated.
+
+### Common value state and binary v1.2
+
+The M13.5 common-state batch extends state to generated Unreal enum wrappers,
+`UnrealRotator` and `UnrealTransform`. It keeps the existing state IDs and the
+distinction between a declaration default and a user override. The Common State
+Actor test verifies native defaults, source updates, compatible overrides,
+managed Tick, reload and World cleanup using the emitted Demo chunk.
+
+Generated enum state carries `unrealType.kind = enum` with its exact reflected
+enum path and native name. Its JSON default is an invariant decimal string,
+preserving the wrapper's signed 64-bit value without a JSON floating-point
+conversion. Ordinary CLR enum state retains its existing member-name string
+and has no reflected enum descriptor. These representations must not be confused
+or materialized as an arbitrary integer or editable string for a reflected enum.
+
+Generated named enum constants expose their numeric value through
+`UnrealEnumConstantAttribute` metadata.
+The compiler can therefore lower a named default from a referenced bindings DLL
+without executing its getter or requiring the generated source. The owning enum
+identity remains authoritative; a numeric constant does not imply that a value
+belongs to another UEnum.
+
+Rotator defaults contain exactly `pitch`, `yaw` and `roll`. Transform defaults
+contain `rotation` (`x`, `y`, `z`, `w`), `translation` (`x`, `y`, `z`) and
+`scale3D` (`x`, `y`, `z`). Components are finite constants; a Transform requires
+a valid normalized quaternion. `UnrealTransform.Identity` has unit rotation and
+scale, whereas C# `default(UnrealTransform)` has a zero quaternion and is not a
+substitute for Identity. Invalid defaults fail before native state changes.
+Named constructor arguments bind to their parameter names, regardless of source
+argument order.
+
+The binary declaration extension uses major 1, minor 2 for these new forms,
+preserving existing value-kind numbers and decoding of minor 0 and 1 payloads.
+Legacy state shapes retain their existing encoding where possible. Both the
+runtime Property Bag and generated Blueprint class must resolve the same exact
+type and default; reload must retain compatible explicit overrides. Reflected
+defaults must name a declared UEnum value. Blueprint enum fields use K2 byte
+storage and reject defaults outside 0 through 255; the runtime Property Bag
+retains the reflected underlying type for enum classes. This does not widen
+Blueprint's native enum storage.
+
+The default chunk entry list includes declared Script Asset types as well as HIR
+types. A gameplay class with only lifecycle overrides does not need a dummy
+`Visual` method to load. An explicitly supplied entry-type list remains
+authoritative.
 
 ## Declaration patch v0.2
 
@@ -177,6 +226,11 @@ The JSON reader rejects unknown fields, empty targets, duplicate update/remove
 targets, no-op updates, blank categories, and defaults incompatible with their
 declared kind. A patch never uses display order or canvas coordinates as an
 identity or precondition.
+
+Common struct defaults remain JSON objects in the Authoring Surface and its
+old-value preconditions. The C# applier renders Rotator/Transform constructors
+from those objects. A generated Unreal enum's decimal-string default becomes
+`new EnumWrapper(valueL)`; a CLR enum member remains `EnumType.Member`.
 
 `CSharpDeclarationPatchApplier` analyzes the original compilation, validates
 all operations, annotates the exact Roslyn declarations, renames bound property

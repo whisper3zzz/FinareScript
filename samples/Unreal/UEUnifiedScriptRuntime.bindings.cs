@@ -206,6 +206,63 @@ public sealed partial class Interface : global::UnifiedScript.Unreal.UnrealObjec
     }
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor", Tooltip = "Actor\u662F\u53EF\u653E\u7F6E\u5728\u5173\u5361\u4E2D\u3001\u6216\u53EF\u5728\u5173\u5361\u4E2D\u751F\u6210\u7684Object\u7684\u57FA\u7C7B\u3002\nActor\u53EF\u80FD\u5305\u542BActor\u7EC4\u4EF6\u7684\u4E00\u4E2A\u96C6\u5408\uFF0C\u53EF\u7528\u4E8E\u63A7\u5236Actor\u7684\u79FB\u52A8\u65B9\u5F0F\u3001\u5176\u6E32\u67D3\u65B9\u5F0F\u7B49\u5185\u5BB9\u3002\nActor\u7684\u5176\u4ED6\u4E3B\u51FD\u6570\u662F\u6E38\u620F\u4E2D\u7F51\u7EDC\u4E0A\u5C5E\u6027\u4E0E\u51FD\u6570\u8C03\u7528\u7684\u590D\u5236\u3002\n\n\nActor\u521D\u59CB\u5316\u62E5\u6709\u591A\u4E2A\u6B65\u9AA4\uFF0C\u4EE5\u4E0B\u662F\u91CD\u8981\u865A\u62DF\u51FD\u6570\u88AB\u8C03\u7528\u7684\u987A\u5E8F\uFF1A\n- UObject::PostLoad\uFF1A\u5BF9\u5173\u5361\u4E2D\u9759\u6001\u653E\u7F6E\u7684Actor\u800C\u8A00\uFF0C\u666E\u901AUObject PostLoad\u5C06\u5728\u7F16\u8F91\u5668\u548C\u6E38\u620F\u8FDB\u7A0B\u4E2D\u88AB\u8C03\u7528\u3002\n                     \u6B64\u51FD\u6570\u4E0D\u4F1A\u4E3A\u65B0\u751F\u6210\u7684actor\u8C03\u7528\u3002\n- UActorComponent::OnComponentCreated\uFF1A\u4E00\u4E2Aactor\u5728\u7F16\u8F91\u5668\u6216\u6E38\u620F\u8FDB\u7A0B\u4E2D\u751F\u6210\u65F6\uFF0C\u5C06\u4E3A\u6240\u6709\u539F\u751F\u7EC4\u4EF6\u8C03\u7528\u6B64\u51FD\u6570\u3002\n                                       \u5BF9\u84DD\u56FE\u521B\u5EFA\u7684\u7EC4\u4EF6\u800C\u8A00\uFF0C\u8FD9\u5C06\u5728\u8BE5\u7EC4\u4EF6\u7684\u6784\u9020\u4E2D\u8C03\u7528\u3002\n                                       \u6B64\u51FD\u6570\u4E0D\u4F1A\u4ECE\u5173\u5361\u4E2D\u52A0\u8F7D\u7684\u7EC4\u4EF6\u8FDB\u884C\u8C03\u7528\u3002\n- AActor::PreRegisterAllComponents\uFF1A\u5BF9\u9759\u6001\u653E\u7F6E\u7684actor\u548C\u62E5\u6709\u539F\u751F\u6839\u7EC4\u4EF6\u7684\u5DF2\u751F\u6210actor\u800C\u8A00\uFF0C\u6B64\u51FD\u6570\u5C06\u5728\u73B0\u5728\u88AB\u8C03\u7528\u3002\n                                    \u5BF9\u4E0D\u5E26\u539F\u751F\u6839\u7EC4\u4EF6\u7684\u84DD\u56FEactor\u800C\u8A00\uFF0C\u8FD9\u4E9B\u6CE8\u518C\u51FD\u6570\u5C06\u5728\u4E4B\u540E\u7684\u6784\u9020\u4E2D\u88AB\u8C03\u7528\u3002\n- UActorComponent::RegisterComponent\uFF1A\u6240\u6709\u7EC4\u4EF6\u5747\u5728\u7F16\u8F91\u5668\u4E2D\u6CE8\u518C\uFF0C\u5728\u8FD0\u884C\u65F6\u8FD9\u5C06\u521B\u5EFA\u5176\u7269\u7406/\u89C6\u89C9\u4EE3\u8868\u3002\n                                      \u8FD9\u4E9B\u8C03\u7528\u53EF\u80FD\u5206\u5E03\u5728\u591A\u4E2A\u5E27\u4E0A\uFF0C\u4F46\u56FA\u5B9A\u5728PreRegisterAllComponents\u4E4B\u540E\u3002\n                                      \u5728UnregisterComponent\u8C03\u7528\u5C06\u5176\u4ECE\u573A\u666F\u4E2D\u79FB\u9664\u540E\uFF0C\u5B83\u4E5F\u53EF\u4EE5\u5728\u4E4B\u540E\u88AB\u8C03\u7528\u3002\n- AActor::PostRegisterAllComponents\uFF1A\u4E3A\u7F16\u8F91\u5668\u548C\u6E38\u620F\u8FDB\u7A0B\u4E2D\u7684\u6240\u6709actor\u8C03\u7528\uFF0C\u8FD9\u662F\u5728\u6240\u6709\u60C5\u51B5\u4E2D\u8C03\u7528\u7684\u6700\u540E\u4E00\u4E2A\u51FD\u6570\u3002\n- AActor::PostActorCreated\uFF1A\u5F53\u4E00\u4E2Aactor\u5728\u7F16\u8F91\u5668\u6216\u6E38\u620F\u8FDB\u7A0B\u4E2D\u88AB\u521B\u5EFA\u65F6\uFF0C\u8FD9\u5C06\u5728\u6784\u9020\u4E4B\u524D\u88AB\u8C03\u7528\u3002\n                            \u8FD9\u4E0D\u4F1A\u4E3A\u4ECE\u5173\u5361\u4E2D\u52A0\u8F7D\u7684\u7EC4\u4EF6\u8FDB\u884C\u8C03\u7528\u3002\n- AActor::UserConstructionScript\uFF1A\u4E3A\u5B9E\u73B0\u6784\u9020\u811A\u672C\u7684\u84DD\u56FE\u800C\u8C03\u7528\u3002\n- AActor::OnConstruction\uFF1A\u5728ExecuteConstruction\u7ED3\u675F\u540E\u8C03\u7528\uFF0C\u5176\u5C06\u8C03\u7528\u84DD\u56FE\u6784\u9020\u811A\u672C\u3002\n                          \u8FD9\u5C06\u5728\u6240\u6709\u84DD\u56FE\u521B\u5EFA\u7684\u7EC4\u4EF6\u5B8C\u5168\u521B\u5EFA\u548C\u6CE8\u518C\u540E\u8C03\u7528\u3002\n                          \u8FD9\u53EA\u4F1A\u4E3A\u5DF2\u751F\u6210actor\u5728\u6E38\u620F\u8FDB\u7A0B\u4E2D\u8C03\u7528\uFF0C\u53EF\u4EE5\u5728\u4FEE\u6539\u84DD\u56FE\u65F6\u5728\u7F16\u8F91\u5668\u4E2D\u91CD\u65B0\u8FD0\u884C\u3002\n- AActor::PreInitializeComponents\uFF1A\u5728InitializeComponent\u5728actor\u7684\u7EC4\u4EF6\u4E0A\u88AB\u8C03\u7528\u4E4B\u524D\u8FDB\u884C\u8C03\u7528\u3002\n                                   \u8FD9\u53EA\u5728\u6E38\u620F\u8FDB\u7A0B\u548C\u7279\u5B9A\u7F16\u8F91\u5668\u9884\u89C8\u7A97\u53E3\u4E2D\u8C03\u7528\u3002\n- UActorComponent::Activate\uFF1A\u53EA\u5728\u7EC4\u4EF6\u8BBE\u7F6E\u4E86bAutoActivate\u65F6\u8FDB\u884C\u8C03\u7528\u3002\n                             \u5982\u7EC4\u4EF6\u88AB\u624B\u52A8\u542F\u7528\uFF0C\u5176\u4E5F\u5C06\u88AB\u8C03\u7528\u3002\n- UActorComponent::InitializeComponent\uFF1A\u8FD9\u53EA\u5728\u7EC4\u4EF6\u62E5\u6709bWantsInitializeComponentSet\u65F6\u8FDB\u884C\u8C03\u7528\u3002\n                                        \u8FD9\u53EA\u5728\u4E00\u4E2A\u6E38\u620F\u4F1A\u8BDD\u4E2D\u53D1\u751F\u4E00\u6B21\u3002\n- AActor::PostInitializeComponents\uFF1A\u5728actor\u7684\u7EC4\u4EF6\u521D\u59CB\u5316\u540E\u8C03\u7528\uFF0C\u53EA\u5728\u6E38\u620F\u8FDB\u7A0B\u548C\u90E8\u5206\u7F16\u8F91\u5668\u9884\u89C8\u4E2D\u8C03\u7528\u3002\n- AActor::BeginPlay\uFF1A\u5728\u5173\u5361\u5F00\u59CBtick\u65F6\u8C03\u7528\uFF0C\u53EA\u5728\u5B9E\u9645\u6E38\u620F\u8FDB\u7A0B\u4E2D\u8C03\u7528\u3002\n                     \u8FD9\u901A\u5E38\u5728PostInitializeComponents\u4E4B\u540E\u53D1\u751F\uFF0C\u4F46\u53EF\u786C\u8054\u7F51\u6216\u5B50actor\u800C\u5EF6\u8FDF\u3002\n\n@\u53C2\u89C1https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors\n@\u53C2\u89C1https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors/ActorLifecycle\n@\u53C2\u89C1UActorComponent")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.Actor")]
+public sealed partial class Actor : global::UnifiedScript.Unreal.UnrealObject
+{
+    public Actor(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Rotation", Category = "Transformation", Tooltip = "\u5C06Actor\u7684\u65CB\u8F6C\u7ACB\u5373\u8BBE\u4E3A\u6307\u5B9A\u7684\u65CB\u8F6C\u3002\n\n@param       NewRotation     Actor\u7684\u65B0\u65CB\u8F6C\u3002\n@param       bTeleportPhysics \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n         \u8BBE\u7F6E\u65CB\u8F6C\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u65CB\u8F6C\u3002\n@return      \u8FD4\u56DE\u65CB\u8F6C\u662F\u5426\u8BBE\u7F6E\u6210\u529F\u3002")]
+    public bool SetActorRotation(global::UnifiedScript.Unreal.UnrealRotator newRotation, bool bTeleportPhysics)
+        => Invoke<bool, global::UnifiedScript.Unreal.UnrealRotator, bool>(0x91CB9E715E3273B0UL, "/Script/Engine.Actor:K2_SetActorRotation", newRotation, bTeleportPhysics);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Transform", Category = "Transformation", Tooltip = "\u5C06Actors\u53D8\u6362\u8BBE\u4E3A\u6307\u5B9A\u7684\u53D8\u6362\u3002\n@param NewTransform          \u65B0\u7684\u53D8\u6362\u3002\n@param bSweep                        \u662F\u5426\u626B\u63CF\u5230\u76EE\u6807\u4F4D\u7F6E\uFF0C\u6CBF\u9014\u89E6\u53D1\u91CD\u53E0\uFF0C\u5E76\u5728\u88AB\u67D0\u7269\u963B\u6321\u65F6\u505C\u6B62\u5230\u8FBE\u76EE\u6807\u3002\n                                                     \u53EA\u6709\u6839\u7EC4\u4EF6\u88AB\u626B\u63CF\u5E76\u68C0\u67E5\u963B\u6321\u78B0\u649E\uFF0C\u5B50\u7EC4\u4EF6\u79FB\u52A8\u65F6\u4E0D\u8FDB\u884C\u626B\u63CF\u3002\u5982\u679C\u78B0\u649E\u5173\u95ED\uFF0C\u8FD9\u6CA1\u6709\u6548\u679C\u3002@param bTeleport                     \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                                                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u5982\u679CCCD\u6253\u5F00\u4E14\u672A\u4F20\u9001\uFF0C\u8FD9\u5C06\u5F71\u54CD\u6574\u4E2A\u626B\u63CF\u4F53\u79EF\u4E0A\u7684Object\u3002\n                         \u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n                         \u8BBE\u7F6E\u53D8\u6362\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u53D8\u6362\u3002")]
+    public bool SetActorTransform(global::UnifiedScript.Unreal.UnrealTransform newTransform, bool bSweep, out HitResult sweepHitResult, bool bTeleport)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0xDF26BDB707C29D0AUL,
+            "/Script/Engine.Actor:K2_SetActorTransform",
+            typeof(bool),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealTransform), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, newTransform),
+                new(typeof(bool), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, bSweep),
+                new(typeof(HitResult), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(bool), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, bTeleport),
+            ]);
+        sweepHitResult = (HitResult)__unifiedScriptResult.Outputs[0]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Tick Group", Category = "Actor|Tick", Tooltip = "\u8BBE\u7F6E\u6B64actor\u7684ticking\u7EC4\u3002\n@param NewTickGroup \u8981\u8FDB\u884C\u6307\u5B9A\u7684\u65B0\u503C")]
+    public void SetTickGroup(ETickingGroup newTickGroup)
+        => Invoke<ETickingGroup>(0x6D54E7B208E979BFUL, "/Script/Engine.Actor:SetTickGroup", newTickGroup);
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "ETicking Group", Tooltip = "\u51B3\u5B9Atick\u51FD\u6570\u6240\u5C5E\u7684tick\u7EC4\u3002")]
+[global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/Engine.ETickingGroup", "ETickingGroup")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct ETickingGroup(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
+{
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(0)]
+    public static ETickingGroup TG_PrePhysics { get; } = new(0);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(2)]
+    public static ETickingGroup TG_DuringPhysics { get; } = new(2);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(4)]
+    public static ETickingGroup TG_PostPhysics { get; } = new(4);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(5)]
+    public static ETickingGroup TG_PostUpdateWork { get; } = new(5);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(8)]
+    public static ETickingGroup TG_MAX { get; } = new(8);
+
+    public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/Engine.ETickingGroup", Value);
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Gameplay\u9759\u6001", Tooltip = "\u62E5\u6709\u5B9E\u7528gameplay\u6548\u7528\u51FD\u6570\uFF08\u53EF\u4ECE\u84DD\u56FE\u548CC\u002B\u002B\u8FDB\u884C\u8C03\u7528\uFF09\u7684\u9759\u6001\u7C7B")]
 [global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/Engine.GameplayStatics")]
@@ -396,9 +453,13 @@ public readonly record struct ModifyContextOptions(
 [global::UnifiedScript.Unreal.UnrealValueAttribute]
 public readonly record struct EUnifiedScriptInteropMode(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
 {
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(0)]
     public static EUnifiedScriptInteropMode Idle { get; } = new(0);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(1)]
     public static EUnifiedScriptInteropMode Active { get; } = new(1);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(2)]
     public static EUnifiedScriptInteropMode Suspended { get; } = new(2);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(3)]
     public static EUnifiedScriptInteropMode EUnifiedScriptInteropMode_MAX { get; } = new(3);
 
     public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", Value);

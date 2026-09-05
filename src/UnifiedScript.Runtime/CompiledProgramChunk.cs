@@ -58,6 +58,8 @@ public enum UnifiedScriptRuntimeStateValueKind : byte
     Name = 7,
     Text = 8,
     Vector = 9,
+    Rotator = 10,
+    Transform = 11,
 }
 
 public sealed record UnifiedScriptRuntimeStateValue(
@@ -69,7 +71,20 @@ public sealed record UnifiedScriptRuntimeStateValue(
     string? TextValue = null,
     double VectorX = 0,
     double VectorY = 0,
-    double VectorZ = 0);
+    double VectorZ = 0,
+    double RotatorPitch = 0,
+    double RotatorYaw = 0,
+    double RotatorRoll = 0,
+    double TransformRotationX = 0,
+    double TransformRotationY = 0,
+    double TransformRotationZ = 0,
+    double TransformRotationW = 1,
+    double TransformTranslationX = 0,
+    double TransformTranslationY = 0,
+    double TransformTranslationZ = 0,
+    double TransformScaleX = 1,
+    double TransformScaleY = 1,
+    double TransformScaleZ = 1);
 
 public sealed record UnifiedScriptRuntimeStateDeclaration(
     SemanticId Id,
@@ -307,7 +322,15 @@ public static class UnifiedScriptRuntimeDeclarationBinary
     public static byte[] Encode(UnifiedScriptRuntimeDeclarationDocument document)
     {
         UnifiedScriptRuntimeDeclarationDocument normalized = Normalize(document);
-        var writer = new ChunkPayloadWriter(Magic, minorVersion: 1);
+        ushort minorVersion = normalized.Assets
+            .SelectMany(static asset => asset.States)
+            .Any(static state =>
+                state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.Rotator or
+                    UnifiedScriptRuntimeStateValueKind.Transform ||
+                state.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum)
+            ? (ushort)2
+            : (ushort)1;
+        var writer = new ChunkPayloadWriter(Magic, minorVersion);
         writer.WriteSemanticId(normalized.SourceCompilationId);
         writer.WriteSemanticId(normalized.SemanticConfigurationId);
         writer.WriteCount(normalized.Assets.Count);
@@ -339,7 +362,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     public static UnifiedScriptRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 1);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 2);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -361,6 +384,12 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 ScriptFunctionValueTypeDeclaration? unrealType = reader.MinorVersion >= 1
                     ? ReadUnrealType(ref reader, 0)
                     : null;
+                if (typeKind == ScriptStateTypeKind.Enum && unrealType?.Kind == ScriptFunctionValueTypeKind.Enum &&
+                    reader.MinorVersion < 2)
+                {
+                    throw new InvalidDataException(
+                        $"Typed Unreal enum state '{name}' requires declaration minor version 2.");
+                }
                 UnifiedScriptRuntimeStateValue defaultValue = ReadDefault(ref reader);
                 byte exposureFlags = reader.ReadByte();
                 if ((exposureFlags & ~0x07) != 0)
@@ -460,12 +489,41 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                     VectorX: ReadVectorComponent(state.DefaultValue, "x"),
                     VectorY: ReadVectorComponent(state.DefaultValue, "y"),
                     VectorZ: ReadVectorComponent(state.DefaultValue, "z")),
+            ScriptStateTypeKind.Struct when
+                state.TypeMetadataName == "UnifiedScript.Unreal.UnrealRotator" =>
+                new UnifiedScriptRuntimeStateValue(
+                    UnifiedScriptRuntimeStateValueKind.Rotator,
+                    RotatorPitch: ReadVectorComponent(state.DefaultValue, "pitch"),
+                    RotatorYaw: ReadVectorComponent(state.DefaultValue, "yaw"),
+                    RotatorRoll: ReadVectorComponent(state.DefaultValue, "roll")),
+            ScriptStateTypeKind.Struct when
+                state.TypeMetadataName == "UnifiedScript.Unreal.UnrealTransform" =>
+                ConvertTransformDefault(state.DefaultValue),
             _ => throw new InvalidDataException(
                 $"Script state '{state.Name}' has an unsupported runtime default."),
         };
 
     private static double ReadVectorComponent(JsonElement value, string name) =>
         value.GetProperty(name).GetDouble();
+
+    private static UnifiedScriptRuntimeStateValue ConvertTransformDefault(JsonElement value)
+    {
+        JsonElement rotation = value.GetProperty("rotation");
+        JsonElement translation = value.GetProperty("translation");
+        JsonElement scale = value.GetProperty("scale3D");
+        return new UnifiedScriptRuntimeStateValue(
+            UnifiedScriptRuntimeStateValueKind.Transform,
+            TransformRotationX: rotation.GetProperty("x").GetDouble(),
+            TransformRotationY: rotation.GetProperty("y").GetDouble(),
+            TransformRotationZ: rotation.GetProperty("z").GetDouble(),
+            TransformRotationW: rotation.GetProperty("w").GetDouble(),
+            TransformTranslationX: translation.GetProperty("x").GetDouble(),
+            TransformTranslationY: translation.GetProperty("y").GetDouble(),
+            TransformTranslationZ: translation.GetProperty("z").GetDouble(),
+            TransformScaleX: scale.GetProperty("x").GetDouble(),
+            TransformScaleY: scale.GetProperty("y").GetDouble(),
+            TransformScaleZ: scale.GetProperty("z").GetDouble());
+    }
 
     private static void WriteUnrealType(
         ChunkPayloadWriter writer,
@@ -558,6 +616,23 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 writer.WriteDouble(value.VectorY);
                 writer.WriteDouble(value.VectorZ);
                 break;
+            case UnifiedScriptRuntimeStateValueKind.Rotator:
+                writer.WriteDouble(value.RotatorPitch);
+                writer.WriteDouble(value.RotatorYaw);
+                writer.WriteDouble(value.RotatorRoll);
+                break;
+            case UnifiedScriptRuntimeStateValueKind.Transform:
+                writer.WriteDouble(value.TransformRotationX);
+                writer.WriteDouble(value.TransformRotationY);
+                writer.WriteDouble(value.TransformRotationZ);
+                writer.WriteDouble(value.TransformRotationW);
+                writer.WriteDouble(value.TransformTranslationX);
+                writer.WriteDouble(value.TransformTranslationY);
+                writer.WriteDouble(value.TransformTranslationZ);
+                writer.WriteDouble(value.TransformScaleX);
+                writer.WriteDouble(value.TransformScaleY);
+                writer.WriteDouble(value.TransformScaleZ);
+                break;
             default:
                 throw new InvalidDataException($"Unsupported runtime state value '{value.Kind}'.");
         }
@@ -592,6 +667,23 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 VectorX: reader.ReadDouble(),
                 VectorY: reader.ReadDouble(),
                 VectorZ: reader.ReadDouble()),
+            UnifiedScriptRuntimeStateValueKind.Rotator when reader.MinorVersion >= 2 => new(
+                kind,
+                RotatorPitch: reader.ReadDouble(),
+                RotatorYaw: reader.ReadDouble(),
+                RotatorRoll: reader.ReadDouble()),
+            UnifiedScriptRuntimeStateValueKind.Transform when reader.MinorVersion >= 2 => new(
+                kind,
+                TransformRotationX: reader.ReadDouble(),
+                TransformRotationY: reader.ReadDouble(),
+                TransformRotationZ: reader.ReadDouble(),
+                TransformRotationW: reader.ReadDouble(),
+                TransformTranslationX: reader.ReadDouble(),
+                TransformTranslationY: reader.ReadDouble(),
+                TransformTranslationZ: reader.ReadDouble(),
+                TransformScaleX: reader.ReadDouble(),
+                TransformScaleY: reader.ReadDouble(),
+                TransformScaleZ: reader.ReadDouble()),
             _ => throw new InvalidDataException($"Unsupported runtime state value '{kind}'."),
         };
     }
@@ -662,6 +754,27 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             throw new InvalidDataException(
                 $"Runtime state '{state.Name}' has an incompatible Unreal type identity.");
         }
+        if (state.TypeKind == ScriptStateTypeKind.Enum && state.UnrealType is not null &&
+            (state.UnrealType.Kind != ScriptFunctionValueTypeKind.Enum ||
+             string.IsNullOrWhiteSpace(state.UnrealType.UnrealTypePath) ||
+             string.IsNullOrWhiteSpace(state.UnrealType.UnrealNativeName) ||
+             state.UnrealType.Fields.Count != 0 ||
+             state.DefaultValue.TextValue is null ||
+             !long.TryParse(
+                 state.DefaultValue.TextValue,
+                 System.Globalization.NumberStyles.Integer,
+                 System.Globalization.CultureInfo.InvariantCulture,
+                 out _)))
+        {
+            throw new InvalidDataException(
+                $"Runtime enum state '{state.Name}' has an incompatible Unreal type identity.");
+        }
+        if (state.TypeKind is not (ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct) &&
+            state.UnrealType is not null)
+        {
+            throw new InvalidDataException(
+                $"Runtime state '{state.Name}' has an unexpected Unreal type identity.");
+        }
 
         bool valid = state.TypeKind switch
         {
@@ -687,12 +800,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             ScriptStateTypeKind.Object or ScriptStateTypeKind.Class =>
                 state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Null,
             ScriptStateTypeKind.Struct =>
-                state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" &&
-                state.UnrealType?.UnrealTypePath == "/Script/CoreUObject.Vector" &&
-                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Vector &&
-                double.IsFinite(state.DefaultValue.VectorX) &&
-                double.IsFinite(state.DefaultValue.VectorY) &&
-                double.IsFinite(state.DefaultValue.VectorZ),
+                IsValidStructDefault(state),
             _ => false,
         };
         if (!valid)
@@ -700,6 +808,43 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             throw new InvalidDataException(
                 $"Runtime state '{state.Name}' has an incompatible default value.");
         }
+    }
+
+    private static bool IsValidStructDefault(UnifiedScriptRuntimeStateDeclaration state)
+    {
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector")
+        {
+            return state.UnrealType?.UnrealTypePath == "/Script/CoreUObject.Vector" &&
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Vector &&
+                double.IsFinite(state.DefaultValue.VectorX) &&
+                double.IsFinite(state.DefaultValue.VectorY) &&
+                double.IsFinite(state.DefaultValue.VectorZ);
+        }
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealRotator")
+        {
+            return state.UnrealType?.UnrealTypePath == "/Script/CoreUObject.Rotator" &&
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Rotator &&
+                double.IsFinite(state.DefaultValue.RotatorPitch) &&
+                double.IsFinite(state.DefaultValue.RotatorYaw) &&
+                double.IsFinite(state.DefaultValue.RotatorRoll);
+        }
+        if (state.TypeMetadataName == "UnifiedScript.Unreal.UnrealTransform")
+        {
+            double lengthSquared = state.DefaultValue.TransformRotationX * state.DefaultValue.TransformRotationX +
+                state.DefaultValue.TransformRotationY * state.DefaultValue.TransformRotationY +
+                state.DefaultValue.TransformRotationZ * state.DefaultValue.TransformRotationZ +
+                state.DefaultValue.TransformRotationW * state.DefaultValue.TransformRotationW;
+            return state.UnrealType?.UnrealTypePath == "/Script/CoreUObject.Transform" &&
+                state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Transform &&
+                double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6 &&
+                double.IsFinite(state.DefaultValue.TransformTranslationX) &&
+                double.IsFinite(state.DefaultValue.TransformTranslationY) &&
+                double.IsFinite(state.DefaultValue.TransformTranslationZ) &&
+                double.IsFinite(state.DefaultValue.TransformScaleX) &&
+                double.IsFinite(state.DefaultValue.TransformScaleY) &&
+                double.IsFinite(state.DefaultValue.TransformScaleZ);
+        }
+        return false;
     }
 }
 
@@ -728,6 +873,7 @@ public sealed class CSharpProgramChunkCompiler
         ProgramImageKey imageKey = ProgramImageKey.FromImage(image);
         string[] availableTypes = image.Hir.Types
             .Select(static type => type.QualifiedName)
+            .Concat(image.ScriptAssets.Assets.Select(static asset => asset.QualifiedName))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();

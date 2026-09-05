@@ -380,7 +380,7 @@ and entry point is compatible.
 `UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
 asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
 `unifiedscript.script-asset/v0.1`, maps the reviewed scalar/enum plus `FName`,
-`FText`, `UObject`, `UClass`, and `FVector` state matrix into a fixed-layout
+`FText`, `UObject`, `UClass`, `FVector`, `FRotator` and `FTransform` state matrix into a fixed-layout
 `FInstancedPropertyBag`, and applies C# defaults plus Details metadata and
 Edit/SaveGame/Net flags. The C# declaration remains authoritative; Blueprint
 does not own duplicate field declarations.
@@ -403,17 +403,25 @@ non-deterministic constructor shapes fail before native class mutation. This
 keeps generated CDO defaults, managed state hydration, compatible override
 migration, and packaged reload on one typed declaration contract.
 
-The compiled declaration payload is now v1.1. It preserves v1.0 scalar decoding
-and adds an exact optional Unreal type descriptor plus typed `FName`, `FText`,
-and `FVector` defaults. The generated class projects the new shapes to native
+The compiled declaration payload uses v1.2 for generated Unreal enum wrappers,
+Rotator and Transform state. Older shapes retain v1.1 encoding, and v1.0 scalar
+decoding remains supported. The optional Unreal type descriptor identifies each
+reflected enum or struct exactly. The generated class projects the common shapes to native
 `FNameProperty`, `FTextProperty`, `FObjectProperty`, `FClassProperty`, and
-`FStructProperty` fields; the FVector descriptor must resolve exactly to
-`/Script/CoreUObject.Vector`. Object/class source defaults must be null because
+`FStructProperty` fields; the three core struct descriptors must resolve to
+their exact `/Script/CoreUObject.Vector`, `.Rotator` or `.Transform` identity.
+Generated enum state becomes a K2 enum byte property; its default must be a
+declared UEnum value in byte range. Ordinary CLR enum state retains its legacy
+member-name string representation. Object/class source defaults must be null because
 nonzero managed handles belong to one native registry generation, while normal
 Blueprint CDO edits may still store real reflected object/class references.
 Managed instance startup and compatible reload hydrate/flush the same
 `UnrealName`, `UnrealText`, `UnrealObjectHandle`, `UnrealClassHandle`, and
-`UnrealVector` state without a facade field.
+`UnrealVector`, `UnrealRotator`, `UnrealTransform` and generated enum state
+without a facade field. Transform defaults retain quaternion, translation and
+scale in Declaration IR and the binary payload. The Blueprint adapter translates
+that value into Unreal's specialized Transform default text, shared with CDO
+readback so untouched defaults and explicit overrides compare consistently.
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, obtains the declared value 10 from `DemoScript()`, overrides
