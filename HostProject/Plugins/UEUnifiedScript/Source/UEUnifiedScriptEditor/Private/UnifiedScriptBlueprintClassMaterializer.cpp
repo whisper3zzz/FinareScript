@@ -18,12 +18,18 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/ArchiveReplaceObjectRef.h"
+#include "Serialization/StructuredArchive.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptDeclarationMaterializer.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/EnumProperty.h"
+#include "UObject/GCObject.h"
 #include "UObject/SoftObjectPtr.h"
+#include "UObject/StrongObjectPtr.h"
+#include "UObject/UObjectArray.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 
@@ -42,6 +48,56 @@ const FName ManagedFunctionNameKey(TEXT("UnifiedScript.ManagedName"));
 const FName BlueprintEventKey(TEXT("UnifiedScript.BlueprintEvent"));
 const FName BlueprintEventSuperModeKey(TEXT("UnifiedScript.SuperMode"));
 const FName WorldContextObjectName(TEXT("WorldContextObject"));
+
+bool ReadJsonNumberToken(const TSharedPtr<FJsonValue>& Value, FString& OutToken)
+{
+    return Value.IsValid() && Value->Type == EJson::Number &&
+        Value->TryGetString(OutToken) && !OutToken.IsEmpty();
+}
+
+bool IsJsonIntegerToken(const FString& Token)
+{
+    int32 Start = Token.StartsWith(TEXT("-")) ? 1 : 0;
+    if (Start == Token.Len() || (Token[Start] == TEXT('0') && Token.Len() > Start + 1))
+    {
+        return false;
+    }
+    for (int32 Index = Start; Index < Token.Len(); ++Index)
+    {
+        if (Token[Index] < TEXT('0') || Token[Index] > TEXT('9'))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ParseJsonInt64(const TSharedPtr<FJsonValue>& Value, int64& OutValue)
+{
+    FString Token;
+    if (!ReadJsonNumberToken(Value, Token) || !IsJsonIntegerToken(Token)) return false;
+    const bool bNegative = Token.StartsWith(TEXT("-"));
+    const int32 Start = bNegative ? 1 : 0;
+    const uint64 Limit = bNegative ? static_cast<uint64>(MAX_int64) + 1ull : static_cast<uint64>(MAX_int64);
+    uint64 Magnitude = 0;
+    for (int32 Index = Start; Index < Token.Len(); ++Index)
+    {
+        const uint64 Digit = static_cast<uint64>(Token[Index] - TEXT('0'));
+        if (Magnitude > (Limit - Digit) / 10ull) return false;
+        Magnitude = Magnitude * 10ull + Digit;
+    }
+    if (bNegative && Magnitude == static_cast<uint64>(MAX_int64) + 1ull) OutValue = MIN_int64;
+    else if (bNegative) OutValue = -static_cast<int64>(Magnitude);
+    else OutValue = static_cast<int64>(Magnitude);
+    return true;
+}
+
+bool ParseJsonDouble(const TSharedPtr<FJsonValue>& Value, double& OutValue)
+{
+    FString Token;
+    return ReadJsonNumberToken(Value, Token) && LexTryParseString(OutValue, *Token) &&
+        FMath::IsFinite(OutValue);
+}
 
 struct FStateDeclaration
 {
@@ -1159,42 +1215,43 @@ bool ReadCanonicalDefault(
         return false;
     }
 
-    const double Number = Value->AsNumber();
-    if (!FMath::IsFinite(Number))
+    double Number = 0.0;
+    if (!ParseJsonDouble(Value, Number))
     {
         OutError = FString::Printf(TEXT("State '%s' has a non-finite default."), *StateName);
         return false;
     }
     if (MetadataName == TEXT("System.Byte"))
     {
-        if (Number < 0.0 || Number > MAX_uint8 || FMath::TruncToDouble(Number) != Number)
+        int64 Integer = 0;
+        if (!ParseJsonInt64(Value, Integer) || Integer < 0 || Integer > MAX_uint8)
         {
             OutError = FString::Printf(TEXT("State '%s' default is outside System.Byte."), *StateName);
             return false;
         }
-        OutDefault = LexToString(static_cast<uint8>(Number));
+        OutDefault = LexToString(static_cast<uint8>(Integer));
         return true;
     }
     if (MetadataName == TEXT("System.Int32"))
     {
-        if (Number < MIN_int32 || Number > MAX_int32 || FMath::TruncToDouble(Number) != Number)
+        int64 Integer = 0;
+        if (!ParseJsonInt64(Value, Integer) || Integer < MIN_int32 || Integer > MAX_int32)
         {
             OutError = FString::Printf(TEXT("State '%s' default is outside System.Int32."), *StateName);
             return false;
         }
-        OutDefault = LexToString(static_cast<int32>(Number));
+        OutDefault = LexToString(static_cast<int32>(Integer));
         return true;
     }
     if (MetadataName == TEXT("System.Int64"))
     {
-        if (Number < static_cast<double>(MIN_int64) ||
-            Number > static_cast<double>(MAX_int64) ||
-            FMath::TruncToDouble(Number) != Number)
+        int64 Integer = 0;
+        if (!ParseJsonInt64(Value, Integer))
         {
             OutError = FString::Printf(TEXT("State '%s' default is outside System.Int64."), *StateName);
             return false;
         }
-        OutDefault = LexToString(static_cast<int64>(Number));
+        OutDefault = LexToString(Integer);
         return true;
     }
     if (MetadataName == TEXT("System.Single"))
@@ -1763,7 +1820,8 @@ bool ParseDeclaration(
 {
     TSharedPtr<FJsonObject> Root;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeclarationJson);
-    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    if (!FJsonSerializer::Deserialize(
+            Reader, Root, FJsonSerializer::EFlags::StoreNumbersAsStrings) || !Root.IsValid())
     {
         OutError = FString::Printf(
             TEXT("Script Class declaration JSON is invalid: %s"),
@@ -1787,6 +1845,7 @@ bool ParseDeclaration(
     FString RequestedAssetPath = ScriptAsset.DeclarationAssetPath;
     RequestedAssetPath.TrimStartAndEndInline();
     TSharedPtr<FJsonObject> SelectedAsset;
+    FString SelectedAssetPath;
     for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
     {
         const TSharedPtr<FJsonObject> Candidate = AssetValue.IsValid()
@@ -1803,6 +1862,7 @@ bool ParseDeclaration(
             CandidatePath == RequestedAssetPath)
         {
             SelectedAsset = Candidate;
+            SelectedAssetPath = CandidatePath;
             break;
         }
     }
@@ -1846,6 +1906,9 @@ bool ParseDeclaration(
         OutError = TEXT("BlueprintFunctionLibrary Script Classes cannot declare instance state.");
         return false;
     }
+
+    FInstancedPropertyBag CollectionDefaults;
+    bool bCollectionDefaultsMaterialized = false;
 
     TMap<FGuid, FName> InterfaceFunctionNames;
     if (!ParseGameplayBindings(
@@ -1903,12 +1966,7 @@ bool ParseDeclaration(
                 State,
                 TEXT("unrealType"),
                 StateUnrealType,
-                OutError) ||
-            !ResolvePinType(
-                TypeKind,
-                MetadataName,
-                Declaration.PinType,
-                &StateUnrealType))
+                OutError))
         {
             OutError = FString::Printf(
                 TEXT("State '%s' uses unsupported Blueprint state type '%s' (%s). Reviewed types are bool, byte, int, long, float, double, string, FName, FText, UObject/UClass handles, and FVector."),
@@ -1917,14 +1975,78 @@ bool ParseDeclaration(
                 *MetadataName);
             return false;
         }
-        if (!ReadCanonicalDefault(
-                Name,
-                TypeKind,
-                MetadataName,
-                &StateUnrealType,
-                State->TryGetField(TEXT("defaultValue")),
-                Declaration.DefaultValue,
-                OutError))
+        bool bHasStateValue = false;
+        const bool bResolvedStateType =
+            (StateUnrealType.Kind == EFunctionValueTypeKind::Array ||
+             StateUnrealType.Kind == EFunctionValueTypeKind::Set ||
+             StateUnrealType.Kind == EFunctionValueTypeKind::Map)
+                ? ResolveFunctionPinType(
+                    MetadataName,
+                    StateUnrealType,
+                    false,
+                    Declaration.PinType,
+                    bHasStateValue) && bHasStateValue
+                : ResolvePinType(
+                    TypeKind,
+                    MetadataName,
+                    Declaration.PinType,
+                    &StateUnrealType);
+        if (!bResolvedStateType)
+        {
+            OutError = FString::Printf(
+                TEXT("State '%s' uses unsupported Blueprint state type '%s' (%s). Reviewed types are bool, byte, int, long, float, double, string, FName, FText, UObject/UClass handles, and flat collections."),
+                *Name,
+                *TypeKind,
+                *MetadataName);
+            return false;
+        }
+        const bool bCollectionState =
+            StateUnrealType.Kind == EFunctionValueTypeKind::Array ||
+            StateUnrealType.Kind == EFunctionValueTypeKind::Set ||
+            StateUnrealType.Kind == EFunctionValueTypeKind::Map;
+        if (bCollectionState)
+        {
+            if (!bCollectionDefaultsMaterialized)
+            {
+                FString CollectionAssetPath;
+                if (!FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+                        DeclarationJson,
+                        SelectedAssetPath,
+                        FInstancedPropertyBag(),
+                        CollectionDefaults,
+                        CollectionAssetPath,
+                        OutError))
+                {
+                    return false;
+                }
+                bCollectionDefaultsMaterialized = true;
+            }
+            const FPropertyBagPropertyDesc* CollectionDesc =
+                CollectionDefaults.FindPropertyDescByID(Declaration.Id);
+            if (CollectionDesc == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("State '%s' collection default did not materialize."), *Name);
+                return false;
+            }
+            const TValueOrError<FString, EPropertyBagResult> Serialized =
+                CollectionDefaults.GetValueSerializedString(CollectionDesc->Name);
+            if (!Serialized.IsValid())
+            {
+                OutError = FString::Printf(
+                    TEXT("State '%s' collection default could not be exported."), *Name);
+                return false;
+            }
+            Declaration.DefaultValue = Serialized.GetValue();
+        }
+        else if (!ReadCanonicalDefault(
+                     Name,
+                     TypeKind,
+                     MetadataName,
+                     &StateUnrealType,
+                     State->TryGetField(TEXT("defaultValue")),
+                     Declaration.DefaultValue,
+                     OutError))
         {
             return false;
         }
@@ -2390,6 +2512,16 @@ bool CanonicalCurrentDefault(
         return true;
     }
 
+    if (CastField<FArrayProperty>(Property) != nullptr ||
+        CastField<FSetProperty>(Property) != nullptr ||
+        CastField<FMapProperty>(Property) != nullptr)
+    {
+        const void* Value = Property->ContainerPtrToValuePtr<void>(Cdo);
+        Property->ExportTextItem_Direct(
+            OutValue, Value, Value, const_cast<UObject*>(Cdo), PPF_Delimited);
+        return true;
+    }
+
     if (const FBoolProperty* Typed = CastField<FBoolProperty>(Property))
     {
         OutValue = Typed->GetPropertyValue_InContainer(Cdo) ? TEXT("true") : TEXT("false");
@@ -2534,6 +2666,67 @@ bool CanonicalCurrentDefault(
     return false;
 }
 
+bool IsCollectionProperty(const FProperty* Property)
+{
+    return Property != nullptr &&
+        (CastField<FArrayProperty>(Property) != nullptr ||
+         CastField<FSetProperty>(Property) != nullptr ||
+         CastField<FMapProperty>(Property) != nullptr);
+}
+
+bool ImportSerializedPropertyValue(
+    const FProperty* Property,
+    const FString& Text,
+    void* OutValue)
+{
+    if (Property == nullptr || OutValue == nullptr)
+    {
+        return false;
+    }
+    const TCHAR* End = Property->ImportText_Direct(
+        *Text, OutValue, nullptr, PPF_None, nullptr);
+    if (End == nullptr)
+    {
+        return false;
+    }
+    while (*End != TEXT('\0') && FChar::IsWhitespace(*End))
+    {
+        ++End;
+    }
+    return *End == TEXT('\0');
+}
+
+bool SerializedPropertyValueEquals(
+    const FProperty* Property,
+    const FString& Left,
+    const FString& Right,
+    FString& OutError)
+{
+    if (!IsCollectionProperty(Property))
+    {
+        return Left == Right;
+    }
+    void* LeftValue = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
+    void* RightValue = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
+    Property->InitializeValue(LeftValue);
+    Property->InitializeValue(RightValue);
+    const bool bLeftValid = ImportSerializedPropertyValue(Property, Left, LeftValue);
+    const bool bRightValid = ImportSerializedPropertyValue(Property, Right, RightValue);
+    const bool bEqual = bLeftValid && bRightValid && Property->Identical(LeftValue, RightValue, PPF_None);
+    Property->DestroyValue(LeftValue);
+    Property->DestroyValue(RightValue);
+    FMemory::Free(LeftValue);
+    FMemory::Free(RightValue);
+    if (!bLeftValid || !bRightValid)
+    {
+        OutError = FString::Printf(
+            TEXT("Generated collection property '%s' has an invalid canonical default."),
+            *Property->GetName());
+        return false;
+    }
+    return bEqual;
+}
+
 bool HasMetadataValue(
     const FBPVariableDescription& Variable,
     const FName& Key,
@@ -2673,7 +2866,21 @@ bool BuildPlan(
             return false;
         }
         const FString PreviousDeclarationDefault = Existing.GetMetaData(DeclarationDefaultKey);
-        Planned.bPreserveDefaultOverride = CurrentDefault != PreviousDeclarationDefault;
+        const FProperty* ExistingProperty = Blueprint.GeneratedClass != nullptr
+            ? FindFProperty<FProperty>(Blueprint.GeneratedClass, Existing.VarName)
+            : nullptr;
+        const bool bSameType = Existing.VarType == Declaration.PinType;
+        bool bCurrentMatchesPrevious = CurrentDefault == PreviousDeclarationDefault;
+        if (IsCollectionProperty(ExistingProperty))
+        {
+            bCurrentMatchesPrevious = SerializedPropertyValueEquals(
+                ExistingProperty, CurrentDefault, PreviousDeclarationDefault, OutError);
+            if (!OutError.IsEmpty())
+            {
+                return false;
+            }
+        }
+        Planned.bPreserveDefaultOverride = !bCurrentMatchesPrevious;
         if (Planned.bPreserveDefaultOverride)
         {
             if (Existing.VarType != Declaration.PinType)
@@ -2702,7 +2909,16 @@ bool BuildPlan(
         const bool bCategoryChanged = Existing.Category.ToString() != Declaration.Category;
         const bool bFlagsChanged = Existing.PropertyFlags != Declaration.PropertyFlags ||
             Existing.RepNotifyFunc != Declaration.RepNotifyFunc || Existing.ReplicationCondition != Declaration.ReplicationCondition;
-        const bool bDefaultChanged = CurrentDefault != Planned.AppliedDefault;
+        bool bDefaultChanged = CurrentDefault != Planned.AppliedDefault;
+        if (bSameType && IsCollectionProperty(ExistingProperty))
+        {
+            bDefaultChanged = !SerializedPropertyValueEquals(
+                ExistingProperty, CurrentDefault, Planned.AppliedDefault, OutError);
+            if (!OutError.IsEmpty())
+            {
+                return false;
+            }
+        }
         const bool bMarkerChanged = !HasMetadataValue(Existing, ManagedStateKey, TEXT("true"));
         const bool bStateIdChanged =
             !HasMetadataValue(Existing, StateIdKey, Declaration.SemanticId);
@@ -2710,10 +2926,19 @@ bool BuildPlan(
             Existing,
             TypeMetadataNameKey,
             Declaration.TypeMetadataName);
-        const bool bDeclarationDefaultChanged = !HasMetadataValue(
+        bool bDeclarationDefaultChanged = !HasMetadataValue(
             Existing,
             DeclarationDefaultKey,
             Declaration.DefaultValue);
+        if (bSameType && IsCollectionProperty(ExistingProperty))
+        {
+            bDeclarationDefaultChanged = !SerializedPropertyValueEquals(
+                ExistingProperty, PreviousDeclarationDefault, Declaration.DefaultValue, OutError);
+            if (!OutError.IsEmpty())
+            {
+                return false;
+            }
+        }
         const bool bUpdate = bGuidChanged || bTypeChanged || bFriendlyNameChanged ||
             bCategoryChanged || bFlagsChanged || bDefaultChanged || bMarkerChanged ||
             bStateIdChanged || bMetadataTypeChanged || bDeclarationDefaultChanged;
@@ -3630,6 +3855,410 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
     return true;
 }
 
+/**
+ * Blueprint reinstancing normally delta-serializes collection properties entry
+ * by entry.  That is correct for ordinary Blueprint maps, but a Script Class
+ * state is one stable managed property: changing its default must not turn an
+ * explicitly overridden collection into a hybrid of the old and new defaults.
+ * Keep the complete value for compatible collection states while the generated
+ * class is rebuilt, then restore it through the engine replacement map.
+ */
+struct FCollectionInstanceOverrideSnapshot
+{
+    UObject* OldObject = nullptr;
+    TStrongObjectPtr<UObject> OldObjectRoot;
+    FName OldPropertyName;
+    FName NewPropertyName;
+    FGuid StateId;
+    FInstancedPropertyBag Value;
+};
+
+const FName CollectionSnapshotValueName(TEXT("UnifiedScriptSnapshotValue"));
+
+struct FCollectionReplacementTarget
+{
+    // Keep the raw destination only as an identity key for a later
+    // replacement notification.  It is never dereferenced after the
+    // callback returns; the weak reference is the only safe way to obtain a
+    // live UObject pointer.
+    UObject* Identity = nullptr;
+    TWeakObjectPtr<UObject> Weak;
+};
+
+using FCollectionReplacementMap = TMap<UObject*, FCollectionReplacementTarget>;
+
+UObject* ResolveReplacedObject(
+    UObject* OldObject,
+    const FCollectionReplacementMap& ReplacedObjects,
+    bool& bFoundReplacement)
+{
+    UObject* Result = OldObject;
+    bFoundReplacement = false;
+    TSet<UObject*> Visited;
+    while (Result != nullptr)
+    {
+        if (Visited.Contains(Result))
+        {
+            return nullptr;
+        }
+        Visited.Add(Result);
+        const FCollectionReplacementTarget* Next = ReplacedObjects.Find(Result);
+        if (Next == nullptr)
+        {
+            break;
+        }
+        bFoundReplacement = true;
+        if (UObject* LiveDestination = Next->Weak.Get())
+        {
+            Result = LiveDestination;
+            continue;
+        }
+
+        // A reinstance can publish A->B and then retire B before publishing
+        // B->C.  Continue through B by identity so the later map entry can
+        // still resolve C without ever dereferencing the retired address.
+        if (Next->Identity != nullptr && ReplacedObjects.Contains(Next->Identity))
+        {
+            Result = Next->Identity;
+        }
+        else
+        {
+            Result = nullptr;
+            break;
+        }
+    }
+    return Result;
+}
+
+TMap<UObject*, UObject*> FlattenReplacedObjects(
+    const FCollectionReplacementMap& ReplacedObjects)
+{
+    TMap<UObject*, UObject*> Flattened;
+    for (const TPair<UObject*, FCollectionReplacementTarget>& Pair : ReplacedObjects)
+    {
+        bool bFoundReplacement = false;
+        UObject* FinalObject = ResolveReplacedObject(
+            Pair.Key,
+            ReplacedObjects,
+            bFoundReplacement);
+        if (bFoundReplacement)
+        {
+            // Replacement notifications can contain an intermediate object
+            // which is immediately retired by a later reinstance.  Never
+            // hand that dangling address to FArchiveReplaceObjectRef; an
+            // explicit null is the only safe representation of a destroyed
+            // destination.
+            Flattened.Add(
+                Pair.Key,
+                FinalObject != nullptr && !FinalObject->HasAnyFlags(RF_MirroredGarbage)
+                    ? FinalObject
+                    : nullptr);
+        }
+        else
+        {
+            UObject* DirectObject = Pair.Value.Weak.Get();
+            Flattened.Add(
+                Pair.Key,
+                DirectObject != nullptr && !DirectObject->HasAnyFlags(RF_MirroredGarbage)
+                    ? DirectObject
+                    : nullptr);
+        }
+    }
+    return Flattened;
+}
+
+FProperty* FindStateProperty(
+    UClass* Class,
+    const FGuid& StateId,
+    FName FallbackName)
+{
+    if (Class == nullptr)
+    {
+        return nullptr;
+    }
+    for (TFieldIterator<FProperty> It(Class); It; ++It)
+    {
+        FGuid PropertyStateId;
+        if (It->HasMetaData(StateIdKey) &&
+            ParseSemanticId(It->GetMetaData(StateIdKey), PropertyStateId) &&
+            PropertyStateId == StateId)
+        {
+            return *It;
+        }
+    }
+    return Class->FindPropertyByName(FallbackName);
+}
+
+struct FCollectionSnapshotReferenceGuard final : FGCObject
+{
+    TArray<FCollectionInstanceOverrideSnapshot>& Snapshots;
+
+    explicit FCollectionSnapshotReferenceGuard(
+        TArray<FCollectionInstanceOverrideSnapshot>& InSnapshots)
+        : Snapshots(InSnapshots)
+    {
+    }
+
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        for (FCollectionInstanceOverrideSnapshot& Snapshot : Snapshots)
+        {
+            Snapshot.Value.AddStructReferencedObjects(Collector);
+        }
+    }
+
+    virtual FString GetReferencerName() const override
+    {
+        return TEXT("UnifiedScriptCollectionInstanceOverrideSnapshots");
+    }
+};
+
+bool IsCollectionPin(const FEdGraphPinType& PinType)
+{
+    return PinType.IsArray() || PinType.IsSet() || PinType.IsMap();
+}
+
+bool CaptureCollectionInstanceOverrides(
+    UBlueprint& Blueprint,
+    const FSyncPlan& Plan,
+    TArray<FCollectionInstanceOverrideSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    OutSnapshots.Reset();
+    OutError.Reset();
+    UClass* OldClass = Blueprint.GeneratedClass;
+    if (OldClass == nullptr)
+    {
+        return true;
+    }
+    UObject* OldCdo = OldClass->GetDefaultObject(false);
+    if (OldCdo == nullptr)
+    {
+        return true;
+    }
+
+    TArray<UObject*> Instances;
+    GetObjectsOfClass(OldClass, Instances, false, RF_ClassDefaultObject | RF_MirroredGarbage);
+    for (const FPlannedState& Planned : Plan.States)
+    {
+        const bool bNewCollection = IsCollectionPin(Planned.Declaration.PinType);
+        const FName OldPropertyName = Planned.bExisting
+            ? Planned.ExistingName
+            : Planned.Declaration.Name;
+        FProperty* Property = FindStateProperty(
+            OldClass,
+            Planned.Declaration.Id,
+            OldPropertyName);
+        if (Property == nullptr)
+        {
+            if (Planned.bExisting)
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state '%s' lost its existing property '%s' before instance preservation."),
+                    *Planned.Declaration.Name.ToString(),
+                    *OldPropertyName.ToString());
+                return false;
+            }
+            continue;
+        }
+        const bool bOldCollection = IsCollectionProperty(Property);
+        if (!bNewCollection && !bOldCollection)
+        {
+            continue;
+        }
+        const FBPVariableDescription* ExistingVariable = nullptr;
+        for (const FBPVariableDescription& Variable : Blueprint.NewVariables)
+        {
+            if (Variable.VarName == OldPropertyName ||
+                (Variable.HasMetaData(StateIdKey) &&
+                 Variable.GetMetaData(StateIdKey) == Planned.Declaration.SemanticId))
+            {
+                ExistingVariable = &Variable;
+                break;
+            }
+        }
+        const bool bExistingPinCompatible = ExistingVariable != nullptr &&
+            ExistingVariable->VarType == Planned.Declaration.PinType;
+        for (UObject* Instance : Instances)
+        {
+            if (Instance == nullptr || Instance == OldCdo || Instance->IsTemplate() ||
+                !Property->HasAnyPropertyFlags(CPF_Edit))
+            {
+                continue;
+            }
+            if (Property->Identical_InContainer(Instance, OldCdo, 0, PPF_None))
+            {
+                continue;
+            }
+            if (!bNewCollection || !bExistingPinCompatible)
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state '%s' has an instance override but its existing Blueprint pin type is incompatible with the new declaration."),
+                    *Planned.Declaration.Name.ToString());
+                return false;
+            }
+            FCollectionInstanceOverrideSnapshot& Snapshot = OutSnapshots.AddDefaulted_GetRef();
+            Snapshot.OldObject = Instance;
+            Snapshot.OldObjectRoot = TStrongObjectPtr<UObject>(Instance);
+            Snapshot.OldPropertyName = OldPropertyName;
+            Snapshot.NewPropertyName = Planned.Declaration.Name;
+            Snapshot.StateId = Planned.Declaration.Id;
+            if (Snapshot.Value.AddProperty(CollectionSnapshotValueName, Property) !=
+                EPropertyBagAlterationResult::Success)
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state '%s' could not own its existing property value."),
+                    *Planned.Declaration.Name.ToString());
+                return false;
+            }
+            const FPropertyBagPropertyDesc* SnapshotDesc =
+                Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+            if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state '%s' produced an incomplete override snapshot."),
+                    *Planned.Declaration.Name.ToString());
+                return false;
+            }
+            SnapshotDesc->CachedProperty->CopyCompleteValue(
+                SnapshotDesc->CachedProperty->ContainerPtrToValuePtr<void>(
+                    Snapshot.Value.GetMutableValue().GetMemory()),
+                Property->ContainerPtrToValuePtr<void>(Instance));
+        }
+    }
+    return true;
+}
+
+bool RestoreCollectionInstanceOverrides(
+    TArray<FCollectionInstanceOverrideSnapshot>& Snapshots,
+    const FCollectionReplacementMap& ReplacedObjects,
+    const bool bRollback,
+    FString& OutError)
+{
+    struct FRestoreTarget
+    {
+        FCollectionInstanceOverrideSnapshot* Snapshot = nullptr;
+        UObject* Object = nullptr;
+        FProperty* Property = nullptr;
+        const FProperty* SnapshotProperty = nullptr;
+    };
+
+    TArray<FRestoreTarget> Targets;
+    for (FCollectionInstanceOverrideSnapshot& Snapshot : Snapshots)
+    {
+        if (Snapshot.OldObject == nullptr || !Snapshot.Value.IsValid())
+        {
+            continue;
+        }
+        bool bFoundReplacement = false;
+        UObject* NewObject = ResolveReplacedObject(
+            Snapshot.OldObject,
+            ReplacedObjects,
+            bFoundReplacement);
+        if (NewObject == nullptr && !bFoundReplacement)
+        {
+            NewObject = Snapshot.OldObjectRoot.Get();
+        }
+        if (NewObject == nullptr || NewObject->HasAnyFlags(RF_MirroredGarbage) ||
+            NewObject->GetClass() == nullptr)
+        {
+            // The instance was destroyed during reinstancing and no longer
+            // needs an override restored.
+            continue;
+        }
+        const FPropertyBagPropertyDesc* SnapshotDesc =
+            Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+        if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' has no owned value descriptor."),
+                *Snapshot.NewPropertyName.ToString());
+            return false;
+        }
+        const FName TargetName = bRollback
+            ? Snapshot.OldPropertyName
+            : Snapshot.NewPropertyName;
+        FProperty* NewProperty = FindStateProperty(
+            NewObject->GetClass(),
+            Snapshot.StateId,
+            TargetName);
+        if (NewProperty == nullptr ||
+            !NewProperty->SameType(SnapshotDesc->CachedProperty) ||
+            NewProperty->GetSize() != SnapshotDesc->CachedProperty->GetSize())
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' could not be restored on '%s' after Blueprint reinstancing."),
+                *TargetName.ToString(),
+                *NewObject->GetPathName());
+            return false;
+        }
+        Targets.Add({&Snapshot, NewObject, NewProperty, SnapshotDesc->CachedProperty});
+    }
+
+    const TMap<UObject*, UObject*> FlattenedReplacedObjects =
+        FlattenReplacedObjects(ReplacedObjects);
+    for (const FRestoreTarget& Target : Targets)
+    {
+        if (Target.Object == nullptr ||
+            Target.Object->HasAnyFlags(RF_MirroredGarbage))
+        {
+            // The instance may have been destroyed after the preflight pass;
+            // its override no longer has a destination to restore.
+            continue;
+        }
+        FCollectionInstanceOverrideSnapshot& Snapshot = *Target.Snapshot;
+        void* SnapshotValue = Target.SnapshotProperty->ContainerPtrToValuePtr<void>(
+            Snapshot.Value.GetMutableValue().GetMemory());
+
+        // Object/Class leaves need the same old-to-new mapping that Blueprint
+        // reinstancing used for the containing instance.  Soft references are
+        // handled by the archive as well and remain unloaded.
+        FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+            Target.Object,
+            FlattenedReplacedObjects,
+            EArchiveReplaceObjectFlags::DelayStart);
+        FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
+        Target.SnapshotProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
+
+        void* NewValue = Target.Property->ContainerPtrToValuePtr<void>(Target.Object);
+        Target.Property->CopyCompleteValue(NewValue, SnapshotValue);
+
+        if (const FSetProperty* SetProperty = CastField<FSetProperty>(Target.Property))
+        {
+            FScriptSetHelper SetHelper(
+                SetProperty,
+                SetProperty->ContainerPtrToValuePtr<void>(Target.Object));
+            SetHelper.Rehash();
+        }
+        else if (const FMapProperty* MapProperty = CastField<FMapProperty>(Target.Property))
+        {
+            FScriptMapHelper MapHelper(
+                MapProperty,
+                MapProperty->ContainerPtrToValuePtr<void>(Target.Object));
+            MapHelper.Rehash();
+        }
+    }
+    return true;
+}
+
+void DestroyCollectionInstanceOverrides(
+    TArray<FCollectionInstanceOverrideSnapshot>& Snapshots)
+{
+    for (FCollectionInstanceOverrideSnapshot& Snapshot : Snapshots)
+    {
+        // The property descriptor and storage are owned by the independent
+        // bag, so their destruction remains valid after Blueprint has freed
+        // the old class FFields.
+        Snapshot.Value.Reset();
+        Snapshot.OldObject = nullptr;
+        Snapshot.OldPropertyName = NAME_None;
+        Snapshot.NewPropertyName = NAME_None;
+        Snapshot.StateId.Invalidate();
+        Snapshot.OldObjectRoot.Reset();
+    }
+    Snapshots.Reset();
+}
+
 FString ResolveConfiguredPath(const FString& ConfiguredPath)
 {
     FString Result = ConfiguredPath;
@@ -3825,14 +4454,95 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         return false;
     }
 
+    TArray<FCollectionInstanceOverrideSnapshot> CollectionInstanceOverrides;
+    FString CaptureError;
+    if (!CaptureCollectionInstanceOverrides(
+            Blueprint,
+            Plan,
+            CollectionInstanceOverrides,
+            CaptureError))
+    {
+        OutError = CaptureError;
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        return false;
+    }
+    FCollectionSnapshotReferenceGuard SnapshotReferenceGuard(CollectionInstanceOverrides);
+    FCollectionReplacementMap ReplacedObjects;
+    const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
+        [&ReplacedObjects](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
+        {
+            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
+            {
+                // The delegate is the only point where the replacement value
+                // is guaranteed to be a live UObject.  Convert it to a weak
+                // reference here; all later traversals use Weak.Get() and
+                // never dereference a stale raw destination from the map.
+                FCollectionReplacementTarget Target;
+                Target.Identity = Pair.Value;
+                Target.Weak = TWeakObjectPtr<UObject>(Pair.Value);
+                ReplacedObjects.Add(Pair.Key, MoveTemp(Target));
+            }
+        });
+
     const TArray<FBPVariableDescription> OriginalVariables = Blueprint.NewVariables;
-    if (!ApplyPlan(Blueprint, Plan, OutError))
+    const bool bApplied = ApplyPlan(Blueprint, Plan, OutError);
+    if (!bApplied)
+    {
+        // Keep the replacement listener and snapshots alive while the original
+        // declaration is compiled back.  That rollback can itself reinstance
+        // the class, and the accumulated map is needed to follow every link
+        // before restoring the captured collection values.
+        Blueprint.NewVariables = OriginalVariables;
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
+        FKismetEditorUtilities::CompileBlueprint(&Blueprint);
+        FString RollbackRestoreError;
+        if (!RestoreCollectionInstanceOverrides(
+                CollectionInstanceOverrides,
+                ReplacedObjects,
+                true,
+                RollbackRestoreError) &&
+            !RollbackRestoreError.IsEmpty())
+        {
+            if (!OutError.IsEmpty())
+            {
+                OutError += FString::Printf(TEXT(" Rollback also failed: %s"), *RollbackRestoreError);
+            }
+            else
+            {
+                OutError = RollbackRestoreError;
+            }
+        }
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+        return false;
+    }
+    FString RestoreError;
+    if (!RestoreCollectionInstanceOverrides(
+            CollectionInstanceOverrides,
+            ReplacedObjects,
+            false,
+            RestoreError))
     {
         Blueprint.NewVariables = OriginalVariables;
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
         FKismetEditorUtilities::CompileBlueprint(&Blueprint);
+        FString RollbackRestoreError;
+        const bool bRollbackRestored = RestoreCollectionInstanceOverrides(
+            CollectionInstanceOverrides,
+            ReplacedObjects,
+            true,
+            RollbackRestoreError);
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+        OutError = RestoreError;
+        if (!bRollbackRestored && !RollbackRestoreError.IsEmpty())
+        {
+            OutError += FString::Printf(TEXT(" Rollback also failed: %s"), *RollbackRestoreError);
+        }
         return false;
     }
+    DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+    FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
     if (!SaveBlueprint(Blueprint, OutError))
     {
         return false;

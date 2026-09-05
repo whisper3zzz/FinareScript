@@ -4,6 +4,7 @@
 
 #include "Dom/JsonObject.h"
 #include "EdGraphSchema_K2.h"
+#include "Engine/Engine.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/StaticMeshActor.h"
@@ -1010,6 +1011,433 @@ bool FUnifiedScriptBlueprintClassMaterializerTest::RunTest(const FString& Parame
             Error));
     TestTrue(TEXT("Unsupported-type rejection lists reviewed types"), Error.Contains(TEXT("Reviewed types")));
     TestEqual(TEXT("Rejected plans leave eleven generated plus one user property"), Blueprint->NewVariables.Num(), 12);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptCollectionBlueprintStateMaterializationTest,
+    "UnifiedScript.Unreal.ScriptClass.CollectionStateMaterialization",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptCollectionBlueprintStateMaterializationTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::Tests;
+
+    const FString ArrayType = TEXT(R"JSON({
+      "kind":"array", "unrealTypePath":"", "unrealNativeName":"TArray",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString SetType = TEXT(R"JSON({
+      "kind":"set", "unrealTypePath":"", "unrealNativeName":"TSet",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString NameSetType = TEXT(R"JSON({
+      "kind":"set", "unrealTypePath":"", "unrealNativeName":"TSet",
+      "fields":[], "typeArguments":[{"typeMetadataName":"UnifiedScript.Unreal.UnrealName"}]
+    })JSON");
+    const FString MapType = TEXT(R"JSON({
+      "kind":"map", "unrealTypePath":"", "unrealNativeName":"TMap",
+      "fields":[], "typeArguments":[
+        {"typeMetadataName":"System.Int32"},
+        {"typeMetadataName":"System.String"}
+      ]
+    })JSON");
+    const FString ObjectMapType = TEXT(R"JSON({
+      "kind":"map", "unrealTypePath":"", "unrealNativeName":"TMap",
+      "fields":[], "typeArguments":[
+        {"typeMetadataName":"UnifiedScript.Unreal.UnrealObjectHandle"},
+        {"typeMetadataName":"System.Int32"}
+      ]
+    })JSON");
+
+    const FString NumbersId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
+    const FString NamesId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2");
+    const FString MappingId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3");
+    const FString ObjectRefsId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4");
+    const auto MakeDocument = [&](bool bNumbersSet, bool bReordered, bool bRenameObjectRefs = false)
+    {
+        const FString NumbersMetadata = bNumbersSet
+            ? TEXT("System.Collections.Generic.IReadOnlySet<System.Int32>")
+            : TEXT("System.Collections.Generic.IReadOnlyList<System.Int32>");
+        const FString NumbersType = bNumbersSet ? SetType : ArrayType;
+        const FString NumbersKind = bNumbersSet ? TEXT("set") : TEXT("array");
+        const FString NamesDefault = bReordered ? TEXT("[\"Beta\",\"Alpha\"]") : TEXT("[\"Alpha\",\"Beta\"]");
+        const FString MapDefault = bReordered
+            ? TEXT("[{\"key\":2,\"value\":\"\"},{\"key\":1,\"value\":\"one,two\"}]")
+            : TEXT("[{\"key\":1,\"value\":\"one,two\"},{\"key\":2,\"value\":\"\"}]");
+        const TCHAR* ObjectRefsName = bRenameObjectRefs ? TEXT("ObjectRefsRenamed") : TEXT("ObjectRefs");
+        const FString States = FString::Join(
+            TArray<FString>{
+                State(*NumbersId, TEXT("Numbers"), *NumbersMetadata, *NumbersMetadata,
+                    *NumbersKind, TEXT("[1,2]"), true, false, false, TEXT("Collections"), NumbersType),
+                State(
+                    *NamesId,
+                    TEXT("Names"),
+                    TEXT("IReadOnlySet<UnrealName>"),
+                    TEXT("System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealName>"),
+                    TEXT("set"),
+                    *NamesDefault,
+                    true, false, false, TEXT("Collections"), NameSetType),
+                State(
+                    *MappingId,
+                    TEXT("Mapping"),
+                    TEXT("IReadOnlyDictionary<int, string>"),
+                    TEXT("System.Collections.Generic.IReadOnlyDictionary<System.Int32, System.String>"),
+                    TEXT("map"),
+                    *MapDefault,
+                    true, false, false, TEXT("Collections"), MapType),
+                State(
+                    *ObjectRefsId,
+                    ObjectRefsName,
+                    TEXT("IReadOnlyDictionary<UnrealObjectHandle, int>"),
+                    TEXT("System.Collections.Generic.IReadOnlyDictionary<UnifiedScript.Unreal.UnrealObjectHandle, System.Int32>"),
+                    TEXT("map"),
+                    TEXT("[]"),
+                    true, false, false, TEXT("Collections"), ObjectMapType),
+            },
+            TEXT(","));
+        return Document(
+            States,
+            FString(),
+            TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            TEXT("Tests.CollectionStateActor"),
+            TEXT("Tests/CollectionStateActor"));
+    };
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString AssetName = TEXT("BP_UnifiedScriptCollectionState_") + Suffix;
+    UPackage* Package = CreatePackage(*(TEXT("/Engine/Transient/") + AssetName));
+    UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
+        FKismetEditorUtilities::CreateBlueprint(
+            AActor::StaticClass(),
+            Package,
+            FName(*AssetName),
+            BPTYPE_Normal,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptCollectionStateMaterialization"))));
+    if (!TestNotNull(TEXT("Creates a collection state Blueprint"), Blueprint))
+    {
+        return false;
+    }
+    UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(Package);
+    ScriptAsset->ScriptClassId = Guid(TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    ScriptAsset->ScriptTypeName = TEXT("Tests.CollectionStateActor");
+    ScriptAsset->DeclarationAssetPath = TEXT("Tests/CollectionStateActor");
+    Blueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult Result;
+    FString Error;
+    const auto Synchronize = [&](bool bNumbersSet, bool bReordered, bool bValidateOnly, bool bRenameObjectRefs = false)
+    {
+        Error.Reset();
+        return FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *Blueprint, MakeDocument(bNumbersSet, bReordered, bRenameObjectRefs),
+            bValidateOnly, Result, Error);
+    };
+
+    const bool bInitial = Synchronize(false, false, false);
+    TestTrue(*FString::Printf(TEXT("Initial array/set/map state materializes: %s"), *Error), bInitial);
+    if (Blueprint->GeneratedClass == nullptr)
+    {
+        return false;
+    }
+    const FArrayProperty* NumbersArray = FindFProperty<FArrayProperty>(Blueprint->GeneratedClass, TEXT("Numbers"));
+    const FSetProperty* NamesSet = FindFProperty<FSetProperty>(Blueprint->GeneratedClass, TEXT("Names"));
+    const FMapProperty* Mapping = FindFProperty<FMapProperty>(Blueprint->GeneratedClass, TEXT("Mapping"));
+    TestNotNull(TEXT("IReadOnlyList state becomes an array property"), NumbersArray);
+    TestNotNull(TEXT("IReadOnlySet state becomes a set property"), NamesSet);
+    TestNotNull(TEXT("IReadOnlyDictionary state becomes a map property"), Mapping);
+    if (NumbersArray == nullptr || NamesSet == nullptr || Mapping == nullptr)
+    {
+        return false;
+    }
+    TestEqual(TEXT("Initial array default has two entries"),
+        FScriptArrayHelper(NumbersArray, NumbersArray->ContainerPtrToValuePtr<void>(
+            Blueprint->GeneratedClass->GetDefaultObject())).Num(), 2);
+    TestEqual(TEXT("Initial set default has two entries"),
+        FScriptSetHelper(NamesSet, NamesSet->ContainerPtrToValuePtr<void>(
+            Blueprint->GeneratedClass->GetDefaultObject())).Num(), 2);
+    TestEqual(TEXT("Initial map default has two entries"),
+        FScriptMapHelper(Mapping, Mapping->ContainerPtrToValuePtr<void>(
+            Blueprint->GeneratedClass->GetDefaultObject())).Num(), 2);
+    {
+        const FStrProperty* MapValueProperty = CastField<FStrProperty>(Mapping->ValueProp);
+        FScriptMapHelper MapHelper(
+            Mapping,
+            Mapping->ContainerPtrToValuePtr<void>(Blueprint->GeneratedClass->GetDefaultObject()));
+        TSet<FString> MapValues;
+        for (int32 PairIndex = 0; PairIndex < MapHelper.GetMaxIndex(); ++PairIndex)
+        {
+            if (MapHelper.IsValidIndex(PairIndex) && MapValueProperty != nullptr)
+            {
+                MapValues.Add(MapValueProperty->GetPropertyValue(MapHelper.GetValuePtr(PairIndex)));
+            }
+        }
+        TestTrue(TEXT("Map default preserves punctuation and an empty string"),
+            MapValues.Contains(TEXT("one,two")) && MapValues.Contains(TEXT("")));
+    }
+
+    TestTrue(TEXT("Reordered Set/Map defaults are native-semantic no-override changes"),
+        Synchronize(false, true, false));
+    TestEqual(TEXT("Reordering does not preserve a false override"),
+        Result.PreservedDefaultOverrideCount, 0);
+    TestFalse(TEXT("Reordering does not report a collection property update"), Result.bChanged);
+    TestEqual(TEXT("Reordering updates no collection property metadata"),
+        Result.UpdatedPropertyCount, 0);
+
+    TestTrue(TEXT("An unoverridden collection type change is accepted"),
+        Synchronize(true, true, false));
+    const FSetProperty* NumbersSet = FindFProperty<FSetProperty>(Blueprint->GeneratedClass, TEXT("Numbers"));
+    TestNotNull(TEXT("Collection type change produces the new set property"), NumbersSet);
+    if (NumbersSet == nullptr)
+    {
+        return false;
+    }
+    TestEqual(TEXT("Collection type change applies the new default"),
+        FScriptSetHelper(NumbersSet, NumbersSet->ContainerPtrToValuePtr<void>(
+            Blueprint->GeneratedClass->GetDefaultObject())).Num(), 2);
+
+    UObject* Cdo = Blueprint->GeneratedClass->GetDefaultObject();
+    const TCHAR* NumbersEnd = NumbersSet->ImportText_Direct(
+        TEXT("(1,2,3)"), NumbersSet->ContainerPtrToValuePtr<void>(Cdo), Cdo, PPF_None, nullptr);
+    TestNotNull(TEXT("Can establish a real Set CDO override"), NumbersEnd);
+    if (NumbersEnd == nullptr)
+    {
+        return false;
+    }
+    // A collection-to-scalar declaration change must be rejected before the
+    // Blueprint is recompiled when an existing instance owns a collection
+    // override.  Keep the CDO at its declaration default so BuildPlan does
+    // not mask the instance-preservation preflight with a CDO override error.
+    NumbersEnd = NumbersSet->ImportText_Direct(
+        TEXT("(1,2)"), NumbersSet->ContainerPtrToValuePtr<void>(Cdo), Cdo, PPF_None, nullptr);
+    TestNotNull(TEXT("Restores the Set CDO declaration default before instance check"), NumbersEnd);
+    AActor* CollectionOverrideInstance = NewObject<AActor>(GetTransientPackage(), Blueprint->GeneratedClass);
+    TestNotNull(TEXT("Creates an instance with a collection override"), CollectionOverrideInstance);
+    if (CollectionOverrideInstance == nullptr)
+    {
+        return false;
+    }
+    CollectionOverrideInstance->AddToRoot();
+    TWeakObjectPtr<UObject> CollectionOverrideInstanceWeak(CollectionOverrideInstance);
+    ON_SCOPE_EXIT
+    {
+        if (UObject* LiveInstance = CollectionOverrideInstanceWeak.Get())
+        {
+            LiveInstance->RemoveFromRoot();
+        }
+    };
+    NumbersEnd = NumbersSet->ImportText_Direct(
+        TEXT("(1,2,3)"),
+        NumbersSet->ContainerPtrToValuePtr<void>(CollectionOverrideInstance),
+        CollectionOverrideInstance,
+        PPF_None,
+        nullptr);
+    TestNotNull(TEXT("Sets the live collection override"), NumbersEnd);
+    const FString ScalarNumbersState = State(
+        *NumbersId,
+        TEXT("Numbers"),
+        TEXT("int"),
+        TEXT("System.Int32"),
+        TEXT("integer"),
+        TEXT("7"),
+        true,
+        false,
+        false,
+        TEXT("Collections"));
+    const FString ScalarDocument = Document(
+        FString::Join(
+            TArray<FString>{
+                ScalarNumbersState,
+                State(
+                    *NamesId,
+                    TEXT("Names"),
+                    TEXT("IReadOnlySet<UnrealName>"),
+                    TEXT("System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealName>"),
+                    TEXT("set"),
+                    TEXT("[\"Beta\",\"Alpha\"]"),
+                    true, false, false, TEXT("Collections"), NameSetType),
+                State(
+                    *MappingId,
+                    TEXT("Mapping"),
+                    TEXT("IReadOnlyDictionary<int, string>"),
+                    TEXT("System.Collections.Generic.IReadOnlyDictionary<System.Int32, System.String>"),
+                    TEXT("map"),
+                    TEXT("[{\"key\":2,\"value\":\"\"},{\"key\":1,\"value\":\"one,two\"}]"),
+                    true, false, false, TEXT("Collections"), MapType)},
+            TEXT(",")),
+        FString(),
+        TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        TEXT("Tests.CollectionStateActor"),
+        TEXT("Tests/CollectionStateActor"));
+    TestFalse(TEXT("Collection-to-scalar change with a live collection override is rejected"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *Blueprint, ScalarDocument, false, Result, Error));
+    TestTrue(TEXT("Collection-to-scalar rejection identifies the incompatible instance override"),
+        Error.Contains(TEXT("instance override")));
+    TestNotNull(TEXT("Rejected collection-to-scalar change keeps the old Set property"),
+        FindFProperty<FSetProperty>(Blueprint->GeneratedClass, TEXT("Numbers")));
+
+    // Establish a CDO override as well; this remains the existing CDO-level
+    // type-change regression below.
+    Cdo = Blueprint->GeneratedClass->GetDefaultObject();
+    NumbersSet = FindFProperty<FSetProperty>(Blueprint->GeneratedClass, TEXT("Numbers"));
+    NumbersEnd = NumbersSet != nullptr
+        ? NumbersSet->ImportText_Direct(
+            TEXT("(1,2,3)"), NumbersSet->ContainerPtrToValuePtr<void>(Cdo), Cdo, PPF_None, nullptr)
+        : nullptr;
+    TestFalse(TEXT("A type change with a real collection override is rejected"),
+        Synchronize(false, true, false));
+    TestTrue(TEXT("Collection override type-change rejection is actionable"), Error.Contains(TEXT("overridden")));
+    const FSetProperty* RejectedNumbersSet =
+        FindFProperty<FSetProperty>(Blueprint->GeneratedClass, TEXT("Numbers"));
+    TestNotNull(TEXT("Rejected type change leaves the Set property intact"), RejectedNumbersSet);
+    if (RejectedNumbersSet != nullptr)
+    {
+        const FIntProperty* ElementProperty = CastField<FIntProperty>(RejectedNumbersSet->ElementProp);
+        FScriptSetHelper SetHelper(
+            RejectedNumbersSet,
+            RejectedNumbersSet->ContainerPtrToValuePtr<void>(
+                Blueprint->GeneratedClass->GetDefaultObject()));
+        TSet<int32> Values;
+        for (int32 Index = 0; Index < SetHelper.GetMaxIndex(); ++Index)
+        {
+            if (SetHelper.IsValidIndex(Index) && ElementProperty != nullptr)
+            {
+                Values.Add(ElementProperty->GetPropertyValue(SetHelper.GetElementPtr(Index)));
+            }
+        }
+        TestTrue(TEXT("Rejected type change preserves the overridden Set CDO values"),
+            Values.Contains(1) && Values.Contains(2) && Values.Contains(3));
+    }
+
+    // Exercise archive replacement for an object reference used as a map key.
+    // The referenced value is another live generated-class instance, so a
+    // successful reinstance must replace both the owner and key, then rehash
+    // the restored map before the key can be found.
+    const FMapProperty* ObjectRefs = FindFProperty<FMapProperty>(
+        Blueprint->GeneratedClass, TEXT("ObjectRefs"));
+    TestNotNull(TEXT("Object reference collection property exists"), ObjectRefs);
+    if (ObjectRefs == nullptr)
+    {
+        return false;
+    }
+    FObjectPropertyBase* ObjectKey = CastField<FObjectPropertyBase>(ObjectRefs->KeyProp);
+    const FIntProperty* ObjectValue = CastField<FIntProperty>(ObjectRefs->ValueProp);
+    TestNotNull(TEXT("Object reference collection has an object key"), ObjectKey);
+    TestNotNull(TEXT("Object reference collection has an integer value"), ObjectValue);
+    if (ObjectKey == nullptr || ObjectValue == nullptr)
+    {
+        return false;
+    }
+    UWorld* ObjectWorld = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Creates a world for object-reference reinstancing"), ObjectWorld);
+    if (ObjectWorld == nullptr || GEngine == nullptr)
+    {
+        return false;
+    }
+    ObjectWorld->AddToRoot();
+    FWorldContext& ObjectWorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
+    ObjectWorldContext.SetCurrentWorld(ObjectWorld);
+    ObjectWorld->InitializeActorsForPlay(FURL());
+    ON_SCOPE_EXIT
+    {
+        if (ObjectWorld != nullptr)
+        {
+            ObjectWorld->RemoveFromRoot();
+            GEngine->DestroyWorldContext(ObjectWorld);
+            ObjectWorld->DestroyWorld(false);
+        }
+    };
+    AActor* ObjectCollectionInstance = ObjectWorld->SpawnActor<AActor>(Blueprint->GeneratedClass);
+    AActor* ObjectReferenceTarget = ObjectWorld->SpawnActor<AActor>(Blueprint->GeneratedClass);
+    TestNotNull(TEXT("Creates an object-reference collection owner"), ObjectCollectionInstance);
+    TestNotNull(TEXT("Creates an object-reference collection target"), ObjectReferenceTarget);
+    if (ObjectCollectionInstance == nullptr || ObjectReferenceTarget == nullptr)
+    {
+        return false;
+    }
+    FScriptMapHelper ObjectRefsHelper(
+        ObjectRefs,
+        ObjectRefs->ContainerPtrToValuePtr<void>(ObjectCollectionInstance));
+    ObjectRefsHelper.EmptyValues();
+    const int32 ObjectReferenceIndex = ObjectRefsHelper.AddDefaultValue_Invalid_NeedsRehash();
+    ObjectKey->SetObjectPropertyValue(
+        ObjectRefsHelper.GetKeyPtr(ObjectReferenceIndex), ObjectReferenceTarget);
+    ObjectValue->SetPropertyValue(ObjectRefsHelper.GetValuePtr(ObjectReferenceIndex), 42);
+    ObjectRefsHelper.Rehash();
+
+    TMap<UObject*, TWeakObjectPtr<UObject>> TestReplacedObjects;
+    const FDelegateHandle TestReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
+        [&TestReplacedObjects](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
+        {
+            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
+            {
+                TestReplacedObjects.Add(Pair.Key, TWeakObjectPtr<UObject>(Pair.Value));
+            }
+        });
+    const bool bObjectRename = Synchronize(true, true, false, true);
+    FCoreUObjectDelegates::OnObjectsReplaced.Remove(TestReplacedObjectsHandle);
+    TestTrue(*FString::Printf(
+        TEXT("Object reference collection rename/reinstance succeeds: %s"), *Error), bObjectRename);
+    const FMapProperty* RenamedObjectRefs = FindFProperty<FMapProperty>(
+        Blueprint->GeneratedClass, TEXT("ObjectRefsRenamed"));
+    TestNotNull(TEXT("Object reference collection keeps its renamed property"), RenamedObjectRefs);
+    const auto ResolveTestReplacement = [&TestReplacedObjects](UObject* OldObject) -> UObject*
+    {
+        TSet<UObject*> Visited;
+        UObject* Current = OldObject;
+        while (Current != nullptr && !Visited.Contains(Current))
+        {
+            Visited.Add(Current);
+            const TWeakObjectPtr<UObject>* Next = TestReplacedObjects.Find(Current);
+            if (Next == nullptr)
+            {
+                return Current;
+            }
+            Current = Next->Get();
+        }
+        return nullptr;
+    };
+    UObject* NewOwner = ResolveTestReplacement(ObjectCollectionInstance);
+    UObject* NewTarget = ResolveTestReplacement(ObjectReferenceTarget);
+    TestNotNull(TEXT("Replacement map identifies the exact new object-reference owner"), NewOwner);
+    TestNotNull(TEXT("Replacement map identifies the exact new map-key target"), NewTarget);
+    bool bReplacedCollectionKey = false;
+    bool bOldCollectionKeyRemains = false;
+    if (RenamedObjectRefs != nullptr && NewOwner != nullptr && NewTarget != nullptr)
+    {
+        FObjectPropertyBase* RenamedKey = CastField<FObjectPropertyBase>(RenamedObjectRefs->KeyProp);
+        const FIntProperty* RenamedValue = CastField<FIntProperty>(RenamedObjectRefs->ValueProp);
+        FScriptMapHelper RenamedRefs(
+            RenamedObjectRefs,
+            RenamedObjectRefs->ContainerPtrToValuePtr<void>(NewOwner));
+        if (RenamedKey != nullptr && RenamedValue != nullptr)
+        {
+            uint8* ValueForNewTarget = RenamedRefs.FindValueFromHash(&NewTarget);
+            if (ValueForNewTarget != nullptr &&
+                RenamedValue->GetPropertyValue(ValueForNewTarget) == 42)
+            {
+                bReplacedCollectionKey = true;
+            }
+            for (int32 PairIndex = 0; PairIndex < RenamedRefs.GetMaxIndex(); ++PairIndex)
+            {
+                if (RenamedRefs.IsValidIndex(PairIndex) &&
+                    RenamedKey->GetObjectPropertyValue(RenamedRefs.GetKeyPtr(PairIndex)) == ObjectReferenceTarget)
+                {
+                    bOldCollectionKeyRemains = true;
+                    break;
+                }
+            }
+        }
+    }
+    TestTrue(TEXT("Object reference collection key follows its reinstanced object and retains its value"),
+        bReplacedCollectionKey);
+    TestFalse(TEXT("Object reference collection no longer contains the retired target key"),
+        bOldCollectionKeyRemains);
     return true;
 }
 

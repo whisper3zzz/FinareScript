@@ -171,6 +171,47 @@ cleanup in the same lifecycle scope as other asynchronous gameplay work.
 uses editable mesh and Actor-class references to load assets and create a
 preview Actor through generated native APIs.
 
+Editable collection configuration uses the existing read-only collection
+interfaces. The property remains assignable so gameplay can publish a new
+collection value:
+
+```csharp
+[Expose(InstanceEditable = true, SaveGame = true)]
+public IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
+    new List<UnrealSoftObjectHandle>
+    {
+        new("/Engine/BasicShapes/Cube.Cube"),
+        new("/Engine/BasicShapes/Sphere.Sphere"),
+    };
+
+[Expose(InstanceEditable = true)]
+public IReadOnlySet<UnrealName> EnabledChoices { get; set; } =
+    new HashSet<UnrealName> { new("Cube"), new("Sphere") };
+
+[Expose(InstanceEditable = true)]
+public IReadOnlyDictionary<UnrealName, int> ChoiceIndices { get; set; } =
+    new Dictionary<UnrealName, int>
+    {
+        { new("Cube"), 0 },
+        { new("Sphere"), 1 },
+    };
+```
+
+These become native Array, Set and Map properties. Use explicit empty
+initializers for empty configuration; a null collection is not a native empty
+container. Elements use the reviewed common state types, with native hashing
+required for Set elements and Map keys. Direct nested containers are rejected.
+Soft references inside a collection keep persistent paths and load only when
+gameplay explicitly requests them. Check that the selected name is enabled,
+resolve its index through `ChoiceIndices`, and check the index against
+`Meshes.Count` before loading that path. Snapshot the selected path before
+awaiting the same async loader used by the scalar soft-reference example.
+The [collection-state example](../samples/Unreal/UnifiedScript.Unreal.Demo/CollectionStateGameplayDemoScript.cs)
+combines that selection with generated Actor APIs. `SelectSpherePreview`
+publishes a new array, set and map configuration before loading its selected
+mesh. The prior preview remains alive until the replacement is ready, and the
+script releases its owned preview on shutdown or generation replacement.
+
 Attach the Script Asset to a `UnifiedScriptActor` or to a
 `UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,
 Tick, overlap, EndPlay, level travel, and one Build & Reload. `TargetHandle` is

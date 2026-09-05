@@ -97,7 +97,8 @@ Declaration IR v0.1 accepts booleans, signed/unsigned integers, finite
 floating-point values, decimal, string, enum, `UnrealName`, `UnrealText`,
 `UnrealObjectHandle`, `UnrealClassHandle`, `UnrealSoftObjectHandle`,
 `UnrealSoftClassHandle`, and the reviewed `UnrealVector`,
-`UnrealRotator` and `UnrealTransform` struct state. Every state requires an
+`UnrealRotator` and `UnrealTransform` struct state. Collection state reuses the
+function container descriptors as described below. Every state requires an
 explicit deterministic default. The value
 may come from the property initializer or from a direct, unconditional simple
 assignment in the type's explicit parameterless constructor; an
@@ -115,7 +116,8 @@ native registry generation and are not durable asset references. Ordinary CLR
 enum defaults serialize by member name and reject unnamed values. Generated
 Unreal enum wrappers instead use a decimal string and an exact reflected enum
 descriptor, as described below. Struct state carries its exact Unreal type path,
-native name, and field schema in `unrealType`; other scalar and reference state
+native name, and field schema in `unrealType`; collection state instead carries
+its container descriptor and typed arguments. Other scalar and reference state
 cannot claim that extra identity.
 
 ## Document model
@@ -236,6 +238,55 @@ overrides; Blueprint's `None` import text represents the empty reference.
 Materialization and state synchronization do not eagerly load the referenced
 asset. Compatible explicit overrides retain their semantic identity across
 source-default changes and reload.
+
+### Collection state and binary v1.4
+
+Collection state uses the same `array`, `set` and `map` value-type descriptors
+as function parameters. The public declarations are `IReadOnlyList<T>`,
+`IReadOnlySet<T>` and `IReadOnlyDictionary<TKey, TValue>`; `typeArguments` retain
+the exact element, key and value identities. A native container is a value with
+an explicit empty form, so a null/default interface reference is not an empty
+collection default. Direct nested containers remain outside the Blueprint
+property contract, and set elements/map keys must support native hashing.
+
+Defaults accept parameterless `List<T>`, `HashSet<T>` and
+`Dictionary<TKey, TValue>` construction with fixed collection initializers.
+List collection expressions may contain fixed elements. Arbitrary constructors,
+custom comparers and spread elements are not evaluated as declaration defaults.
+The reviewed leaves are bool, byte, int, long, float, double, string, Name/Text,
+generated Unreal enums, object/class handles, the three common transform value
+types and soft-object/soft-class handles. This does not extend collection state
+to every scalar type accepted by the engine-neutral declaration model.
+
+Array and Set defaults are JSON arrays. A Map default is an array of objects
+with exactly `key` and `value` members, allowing keys other than strings without
+coercing their identity into a JSON object member name. Each entry uses its
+declared leaf's existing default representation, including invariant enum
+strings, reviewed struct objects and persistent soft-reference paths. Set
+elements and Map keys must be unique under the native property's equality
+rules. Array order is significant; Set and Map iteration order does not define
+whether a default or override changed.
+
+Collection overrides retain a whole property value. During compatible default
+updates on the synchronized generated class, an instance collection that differs
+from its previous CDO is preserved as a whole; one that matches the previous CDO
+inherits the new default. Unreal's per-entry Map delta must not silently merge
+new defaults into an overridden configuration. This follows the Property Bag's
+existing override unit, the stable state ID.
+
+Integer leaves remain JSON numbers. Readers retain the number token until
+integer range validation and conversion, so adjacent `long` keys above 2^53
+remain distinct. Fractional and out-of-range tokens are rejected; converting
+through `double` or accepting a quoted number would change the contract.
+
+The binary extension uses major 1, minor 4 for collection state. It appends
+state kinds Array/Set/Map (12/13/14) and default kinds Array/Set/Map (14/15/16),
+preserving existing numeric kinds and earlier payload versions. Collection
+defaults retain their typed children; readers validate the container descriptor
+and every child before publishing native state. An invalid late element must
+not leave an earlier element written to the active bag or instance.
+The reused value-type descriptor kinds keep their existing values: Enum 0,
+Struct 1, Array 2, Set 3 and Map 4. Descriptor presence is encoded separately.
 
 ## Declaration patch v0.2
 

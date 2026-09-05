@@ -327,6 +327,7 @@ struct layout, common values use the following encoding:
 | Transform | Ten binary64 cells: quaternion XYZW, translation XYZ, scale XYZ |
 | Enum | Signed 64-bit value, unsigned 64-bit stable type ID, optional UTF-8 path |
 | SoftObject / SoftClass | UTF-8 asset path with distinct owned-value kinds 27 / 28; empty path is null |
+| Array / Set / Map | Owned kinds 22 / 23 / 24 carry a V3 root cell and its copied arena |
 
 The appended soft kinds apply to reflected property access. Existing generated
 soft-reference calls retain their published path-string encoding and ABI v3
@@ -340,7 +341,14 @@ typed enum arguments retain their runtime enum metadata. Payload sizes and
 integer ranges are checked before dispatching writes. The callback owns neither
 slice and must copy it synchronously. Update managed and native SDK
 parts together for newly supported kinds; old hosts do not gain these codecs
-automatically. Other compound/container shapes remain on ABI v3/v4.
+automatically. Collection property access reuses the V3 value codec while keeping
+the frozen table and value layouts. Root kind and canonical container type ID,
+child cells, arena bounds and payload ownership are validated at this boundary.
+The payload contains the 48-byte V3 root followed by its arena; offsets are
+relative to the arena, and the combined payload is limited to 64 MiB. Set/Map
+keys use native identity rules, including Name case and null-name normalization
+and case-insensitive soft asset paths with case-sensitive subobject paths.
+Generated member calls continue to use their existing ABI v3/v4 path.
 
 This transport support does not expand the generated Script Class property/default
 matrix to every type. The connected example proves long state and enum/Rotator/
@@ -387,7 +395,8 @@ and entry point is compatible.
 asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
 `unifiedscript.script-asset/v0.1`, maps the reviewed scalar/enum plus `FName`,
 `FText`, `UObject`, `UClass`, soft-object/soft-class paths, `FVector`, `FRotator`
-and `FTransform` state matrix into a fixed-layout
+and `FTransform` state matrix, plus reviewed Array/Set/Map configuration, into a
+fixed-layout
 `FInstancedPropertyBag`, and applies C# defaults plus Details metadata and
 Edit/SaveGame/Net flags. The C# declaration remains authoritative; Blueprint
 does not own duplicate field declarations.
@@ -410,11 +419,13 @@ non-deterministic constructor shapes fail before native class mutation. This
 keeps generated CDO defaults, managed state hydration, compatible override
 migration, and packaged reload on one typed declaration contract.
 
-The compiled declaration payload uses v1.3 for soft-reference state and v1.2
+The compiled declaration payload uses v1.4 for collection state,
+v1.3 for soft-reference state and v1.2
 for generated Unreal enum wrappers, Rotator and Transform state. Older shapes
 retain v1.1 encoding, and v1.0 scalar
 decoding remains supported. The optional Unreal type descriptor identifies each
-reflected enum or struct exactly. The generated class projects the common shapes to native
+reflected enum or struct exactly and retains ordered collection type arguments.
+The generated class projects the common shapes to native
 `FNameProperty`, `FTextProperty`, `FObjectProperty`, `FClassProperty`, and
 `FStructProperty` fields; the three core struct descriptors must resolve to
 their exact `/Script/CoreUObject.Vector`, `.Rotator` or `.Transform` identity.
