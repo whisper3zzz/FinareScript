@@ -12,6 +12,7 @@
 #include "UnifiedScriptDeclarationMaterializer.h"
 
 #include "Misc/AutomationTest.h"
+#include "UObject/UnrealType.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptDeclarationMaterializerTest,
@@ -425,6 +426,235 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
     TestEqual(TEXT("Failure keeps active override identities"), FailedOverrideIds.Num(), 1);
     TestEqual(TEXT("Failure keeps the previous migration report"), FailedMigration.PreservedOverrideCount, 1);
     TestTrue(TEXT("Invalid JSON returns a useful error"), !Error.IsEmpty());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptCollectionDeclarationMaterializerTest,
+    "UnifiedScript.Unreal.Declaration.CollectionMaterialization",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptCollectionDeclarationMaterializerTest::RunTest(const FString& Parameters)
+{
+    const FString CollectionJson = UTF8_TO_TCHAR(R"JSON(
+{
+  "schemaVersion": "unifiedscript.script-asset/v0.1",
+  "assets": [{
+    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiedName": "Tests.Collections",
+    "assetPath": "Tests/Collections",
+    "states": [
+      {"id":"us_11111111111111111111111111111111","name":"ByteValue","typeMetadataName":"System.Byte","typeKind":"integer","defaultValue":255,"exposure":{"instanceEditable":true}},
+      {"id":"us_22222222222222222222222222222222","name":"LongMax","typeMetadataName":"System.Int64","typeKind":"integer","defaultValue":9223372036854775807,"exposure":{"instanceEditable":true}},
+      {"id":"us_33333333333333333333333333333333","name":"LongMin","typeMetadataName":"System.Int64","typeKind":"integer","defaultValue":-9223372036854775808,"exposure":{"instanceEditable":true}},
+      {
+        "id":"us_44444444444444444444444444444444","name":"Vectors","typeMetadataName":"System.Collections.Generic.IReadOnlyList<UnifiedScript.Unreal.UnrealVector>","typeKind":"array",
+        "unrealType":{"kind":"array","unrealTypePath":"","unrealNativeName":"TArray","fields":[],"typeArguments":[{"typeMetadataName":"UnifiedScript.Unreal.UnrealVector","unrealType":{"kind":"struct","unrealTypePath":"/Script/CoreUObject.Vector","unrealNativeName":"Vector","fields":[{"index":0,"nativeName":"X","typeMetadataName":"System.Double"},{"index":1,"nativeName":"Y","typeMetadataName":"System.Double"},{"index":2,"nativeName":"Z","typeMetadataName":"System.Double"}]}}]},
+        "defaultValue":[{"x":1,"y":2,"z":3},{"x":4,"y":5,"z":6}],"exposure":{"instanceEditable":true}
+      },
+      {
+        "id":"us_55555555555555555555555555555555","name":"Names","typeMetadataName":"System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealName>","typeKind":"set",
+        "unrealType":{"kind":"set","unrealTypePath":"","unrealNativeName":"TSet","fields":[],"typeArguments":[{"typeMetadataName":"UnifiedScript.Unreal.UnrealName"}]},
+        "defaultValue":["Alpha","Beta"],"exposure":{"instanceEditable":true}
+      },
+      {
+        "id":"us_66666666666666666666666666666666","name":"LargeMap","typeMetadataName":"System.Collections.Generic.IReadOnlyDictionary<System.Int64, System.Int64>","typeKind":"map",
+        "unrealType":{"kind":"map","unrealTypePath":"","unrealNativeName":"TMap","fields":[],"typeArguments":[{"typeMetadataName":"System.Int64"},{"typeMetadataName":"System.Int64"}]},
+        "defaultValue":[{"key":9007199254740992,"value":11},{"key":9007199254740993,"value":22}],"exposure":{"instanceEditable":true}
+      }
+    ]
+  }]
+}
+)JSON");
+
+    FInstancedPropertyBag State;
+    FString AssetPath;
+    FString Error;
+    TestTrue(
+        *FString::Printf(TEXT("Collection declaration materializes: %s"), *Error),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            CollectionJson, TEXT("Tests/Collections"), FInstancedPropertyBag(), State, AssetPath, Error));
+    if (State.GetNumPropertiesInBag() != 6)
+    {
+        return false;
+    }
+    TestEqual(TEXT("Byte default is preserved exactly"), State.GetValueByte(TEXT("ByteValue")).GetValue(), uint8(255));
+    TestEqual(TEXT("Int64 maximum is lossless"), State.GetValueInt64(TEXT("LongMax")).GetValue(), MAX_int64);
+    TestEqual(TEXT("Int64 minimum is lossless"), State.GetValueInt64(TEXT("LongMin")).GetValue(), MIN_int64);
+    const FPropertyBagPropertyDesc* ArrayDesc = State.FindPropertyDescByName(TEXT("Vectors"));
+    const FPropertyBagPropertyDesc* SetDesc = State.FindPropertyDescByName(TEXT("Names"));
+    const FPropertyBagPropertyDesc* MapDesc = State.FindPropertyDescByName(TEXT("LargeMap"));
+    TestTrue(TEXT("Vector state is a PropertyBag array"), ArrayDesc != nullptr &&
+        ArrayDesc->ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Array);
+    TestTrue(TEXT("Name state is a PropertyBag set"), SetDesc != nullptr &&
+        SetDesc->ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Set);
+    TestTrue(TEXT("Large integer state is a PropertyBag map"), MapDesc != nullptr &&
+        MapDesc->ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Map);
+    if (ArrayDesc != nullptr && ArrayDesc->CachedProperty != nullptr)
+    {
+        const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(ArrayDesc->CachedProperty);
+        const FStructProperty* VectorProperty = ArrayProperty != nullptr
+            ? CastField<FStructProperty>(ArrayProperty->Inner)
+            : nullptr;
+        FScriptArrayHelper ArrayHelper(
+            ArrayProperty,
+            ArrayProperty != nullptr
+                ? ArrayProperty->ContainerPtrToValuePtr<void>(State.GetMutableValue().GetMemory())
+                : nullptr);
+        TestEqual(TEXT("Vector array contains both native entries"), ArrayHelper.Num(), 2);
+        if (VectorProperty != nullptr && ArrayHelper.Num() == 2)
+        {
+            const FVector* First = reinterpret_cast<const FVector*>(ArrayHelper.GetRawPtr(0));
+            const FVector* Second = reinterpret_cast<const FVector*>(ArrayHelper.GetRawPtr(1));
+            TestTrue(TEXT("First vector components are materialized"), First != nullptr &&
+                First->Equals(FVector(1.0, 2.0, 3.0), KINDA_SMALL_NUMBER));
+            TestTrue(TEXT("Second vector components are materialized"), Second != nullptr &&
+                Second->Equals(FVector(4.0, 5.0, 6.0), KINDA_SMALL_NUMBER));
+        }
+    }
+    if (MapDesc != nullptr && MapDesc->CachedProperty != nullptr)
+    {
+        const FMapProperty* MapProperty = CastField<FMapProperty>(MapDesc->CachedProperty);
+        const FInt64Property* KeyProperty = MapProperty != nullptr
+            ? CastField<FInt64Property>(MapProperty->KeyProp)
+            : nullptr;
+        const FInt64Property* ValueProperty = MapProperty != nullptr
+            ? CastField<FInt64Property>(MapProperty->ValueProp)
+            : nullptr;
+        FScriptMapHelper MapHelper(
+            MapProperty,
+            MapProperty != nullptr
+                ? MapProperty->ContainerPtrToValuePtr<void>(State.GetMutableValue().GetMemory())
+                : nullptr);
+        TestEqual(TEXT("Large integer map contains both native pairs"), MapHelper.Num(), 2);
+        TSet<int64> SeenKeys;
+        for (int32 PairIndex = 0; PairIndex < MapHelper.GetMaxIndex(); ++PairIndex)
+        {
+            if (!MapHelper.IsValidIndex(PairIndex) || KeyProperty == nullptr || ValueProperty == nullptr)
+            {
+                continue;
+            }
+            const int64 Key = KeyProperty->GetPropertyValue(MapHelper.GetKeyPtr(PairIndex));
+            const int64 Value = ValueProperty->GetPropertyValue(MapHelper.GetValuePtr(PairIndex));
+            SeenKeys.Add(Key);
+            TestTrue(
+                TEXT("Large integer map values retain their exact key/value relationship"),
+                (Key == 9007199254740992LL && Value == 11) ||
+                (Key == 9007199254740993LL && Value == 22));
+        }
+        TestTrue(TEXT("Both adjacent large integer keys are present"),
+            SeenKeys.Contains(9007199254740992LL) && SeenKeys.Contains(9007199254740993LL));
+    }
+    const auto VectorText = State.GetValueSerializedString(TEXT("Vectors"));
+    const auto NamesText = State.GetValueSerializedString(TEXT("Names"));
+    const auto MapText = State.GetValueSerializedString(TEXT("LargeMap"));
+    TestTrue(TEXT("Vector collection has both distinct entries"), VectorText.IsValid() &&
+        VectorText.GetValue().Contains(TEXT("1.000000")) && VectorText.GetValue().Contains(TEXT("4.000000")));
+    TestTrue(TEXT("Set collection has both entries"), NamesText.IsValid() &&
+        NamesText.GetValue().Contains(TEXT("Alpha")) && NamesText.GetValue().Contains(TEXT("Beta")));
+    TestTrue(TEXT("Map keeps adjacent integers above double precision"), MapText.IsValid() &&
+        MapText.GetValue().Contains(TEXT("9007199254740992")) && MapText.GetValue().Contains(TEXT("9007199254740993")));
+
+    const FString DuplicateMapJson = CollectionJson.Replace(
+        TEXT("9007199254740993"), TEXT("9007199254740992"));
+    FInstancedPropertyBag FailedOutput = State;
+    FString FailedAssetPath;
+    FString FailedError;
+    TestFalse(
+        TEXT("Duplicate native map key is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            DuplicateMapJson, TEXT("Tests/Collections"), State, FailedOutput, FailedAssetPath, FailedError));
+    TestEqual(TEXT("Duplicate map failure keeps the previous scalar value"),
+        FailedOutput.GetValueInt64(TEXT("LongMax")).GetValue(), MAX_int64);
+
+    const FString FractionalLongJson = CollectionJson.Replace(
+        TEXT("9223372036854775807"), TEXT("1.5"));
+    FInstancedPropertyBag FractionalOutput = State;
+    FString FractionalAssetPath;
+    FString FractionalError;
+    TestFalse(
+        TEXT("Fractional Int64 default is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            FractionalLongJson, TEXT("Tests/Collections"), State, FractionalOutput, FractionalAssetPath, FractionalError));
+    TestEqual(TEXT("Fractional failure keeps the previous map"),
+        FractionalOutput.GetValueSerializedString(TEXT("LargeMap")).GetValue(),
+        MapText.GetValue());
+
+    const FString NullCollectionJson = CollectionJson.Replace(
+        TEXT("\"defaultValue\":[{\"x\":1,\"y\":2,\"z\":3},{\"x\":4,\"y\":5,\"z\":6}]"),
+        TEXT("\"defaultValue\":null"));
+    FInstancedPropertyBag NullCollectionOutput = State;
+    FString NullCollectionAssetPath;
+    FString NullCollectionError;
+    TestFalse(
+        TEXT("Null collection default is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            NullCollectionJson,
+            TEXT("Tests/Collections"),
+            State,
+            NullCollectionOutput,
+            NullCollectionAssetPath,
+            NullCollectionError));
+    TestTrue(
+        TEXT("Null collection failure keeps the previous vector array"),
+        NullCollectionOutput.GetValueSerializedString(TEXT("Vectors")).IsValid() &&
+        NullCollectionOutput.GetValueSerializedString(TEXT("Vectors")).GetValue() == VectorText.GetValue());
+
+    const FString OverflowJson = CollectionJson.Replace(
+        TEXT("9223372036854775807"), TEXT("9223372036854775808"));
+    FInstancedPropertyBag OverflowOutput = State;
+    FString OverflowAssetPath;
+    FString OverflowError;
+    TestFalse(
+        TEXT("Out of range Int64 default is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            OverflowJson,
+            TEXT("Tests/Collections"),
+            State,
+            OverflowOutput,
+            OverflowAssetPath,
+            OverflowError));
+    TestEqual(
+        TEXT("Overflow failure keeps the previous Int64 maximum"),
+        OverflowOutput.GetValueInt64(TEXT("LongMax")).GetValue(),
+        MAX_int64);
+
+    const FString EmptyUnhashableSetJson = CollectionJson
+        .Replace(
+            TEXT("System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealName>"),
+            TEXT("System.Collections.Generic.IReadOnlySet<UnifiedScript.Unreal.UnrealText>"))
+        .Replace(
+            TEXT("\"typeMetadataName\":\"UnifiedScript.Unreal.UnrealName\""),
+            TEXT("\"typeMetadataName\":\"UnifiedScript.Unreal.UnrealText\""))
+        .Replace(TEXT("\"defaultValue\":[\"Alpha\",\"Beta\"]"), TEXT("\"defaultValue\":[]"));
+    FInstancedPropertyBag EmptyUnhashableSetOutput = State;
+    FString EmptyUnhashableSetAssetPath;
+    FString EmptyUnhashableSetError;
+    TestFalse(
+        TEXT("Empty unhashable Set leaf is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            EmptyUnhashableSetJson,
+            TEXT("Tests/Collections"),
+            State,
+            EmptyUnhashableSetOutput,
+            EmptyUnhashableSetAssetPath,
+            EmptyUnhashableSetError));
+
+    const FString MalformedLeafJson = CollectionJson.Replace(
+        TEXT("{\"index\":0,\"nativeName\":\"X\",\"typeMetadataName\":\"System.Double\"}"),
+        TEXT("{\"index\":0,\"nativeName\":\"X\",\"typeMetadataName\":\"System.Single\"}"));
+    FInstancedPropertyBag MalformedLeafOutput = State;
+    FString MalformedLeafAssetPath;
+    FString MalformedLeafError;
+    TestFalse(
+        TEXT("Malformed Vector leaf descriptor is rejected"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+            MalformedLeafJson,
+            TEXT("Tests/Collections"),
+            State,
+            MalformedLeafOutput,
+            MalformedLeafAssetPath,
+            MalformedLeafError));
     return true;
 }
 

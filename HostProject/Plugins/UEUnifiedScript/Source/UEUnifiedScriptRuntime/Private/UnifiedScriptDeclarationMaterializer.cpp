@@ -20,6 +20,7 @@
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "StructUtils/PropertyBagMapRef.h"
 #include "UnifiedScriptCompiledChunk.h"
 #include "UObject/SoftObjectPath.h"
 
@@ -33,7 +34,89 @@ struct FStateUnrealType
     uint8 Kind = 0;
     FString Path;
     FString NativeName;
+    TArray<FString> FieldNativeNames;
+    TArray<FString> FieldMetadataNames;
+    TArray<FStateUnrealType> FieldTypes;
+    TArray<FString> ArgumentMetadataNames;
+    TArray<FStateUnrealType> TypeArguments;
 };
+
+bool ReadJsonNumberToken(const TSharedPtr<FJsonValue>& Value, FString& OutToken)
+{
+    return Value.IsValid() && Value->Type == EJson::Number &&
+        Value->TryGetString(OutToken) && !OutToken.IsEmpty();
+}
+
+bool IsJsonIntegerToken(const FString& Token)
+{
+    int32 Start = 0;
+    if (Token.StartsWith(TEXT("-")))
+    {
+        Start = 1;
+    }
+    if (Start == Token.Len())
+    {
+        return false;
+    }
+    if (Token[Start] == TEXT('0') && Token.Len() > Start + 1)
+    {
+        return false;
+    }
+    for (int32 Index = Start; Index < Token.Len(); ++Index)
+    {
+        if (Token[Index] < TEXT('0') || Token[Index] > TEXT('9'))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ParseJsonInt64(const TSharedPtr<FJsonValue>& Value, int64& OutValue)
+{
+    FString Token;
+    if (!ReadJsonNumberToken(Value, Token) || !IsJsonIntegerToken(Token))
+    {
+        return false;
+    }
+    const bool bNegative = Token.StartsWith(TEXT("-"));
+    const int32 Start = bNegative ? 1 : 0;
+    uint64 Magnitude = 0;
+    const uint64 Limit = bNegative ? (static_cast<uint64>(MAX_int64) + 1ull) :
+        static_cast<uint64>(MAX_int64);
+    for (int32 Index = Start; Index < Token.Len(); ++Index)
+    {
+        const uint64 Digit = static_cast<uint64>(Token[Index] - TEXT('0'));
+        if (Magnitude > (Limit - Digit) / 10ull)
+        {
+            return false;
+        }
+        Magnitude = Magnitude * 10ull + Digit;
+    }
+    if (bNegative)
+    {
+        if (Magnitude == static_cast<uint64>(MAX_int64) + 1ull)
+        {
+            OutValue = MIN_int64;
+        }
+        else
+        {
+            OutValue = -static_cast<int64>(Magnitude);
+        }
+    }
+    else
+    {
+        OutValue = static_cast<int64>(Magnitude);
+    }
+    return true;
+}
+
+bool ParseJsonDouble(const TSharedPtr<FJsonValue>& Value, double& OutValue)
+{
+    FString Token;
+    return ReadJsonNumberToken(Value, Token) && LexTryParseString(OutValue, *Token) &&
+        FMath::IsFinite(OutValue);
+}
 
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
 {
@@ -89,6 +172,11 @@ bool ResolvePropertyType(
     }
     if (Kind == TEXT("integer"))
     {
+        if (MetadataName == TEXT("System.Byte"))
+        {
+            OutType = EPropertyBagPropertyType::Byte;
+            return true;
+        }
         if (MetadataName == TEXT("System.Int64"))
         {
             OutType = EPropertyBagPropertyType::Int64;
@@ -124,7 +212,7 @@ bool ResolvePropertyType(
     {
         if (UnrealType.bPresent)
         {
-            if (UnrealType.Kind != 0)
+            if (UnrealType.Kind != 0 || !UnrealType.TypeArguments.IsEmpty())
             {
                 return false;
             }
@@ -216,8 +304,13 @@ bool ResolvePropertyType(
 
 bool ReadJsonUnrealType(
     const TSharedPtr<FJsonObject>& State,
-    FStateUnrealType& OutType)
+    FStateUnrealType& OutType,
+    int32 Depth = 0)
 {
+    if (Depth > 16)
+    {
+        return false;
+    }
     OutType = {};
     const TSharedPtr<FJsonObject>* TypeObject = nullptr;
     if (!State->TryGetObjectField(TEXT("unrealType"), TypeObject) || TypeObject == nullptr)
@@ -232,6 +325,56 @@ bool ReadJsonUnrealType(
         !(*TypeObject)->TryGetStringField(TEXT("unrealNativeName"), OutType.NativeName))
     {
         return false;
+    }
+    if (Kind == TEXT("array") || Kind == TEXT("set") || Kind == TEXT("map"))
+    {
+        const FString ExpectedNativeName = Kind == TEXT("array") ? TEXT("TArray") :
+            Kind == TEXT("set") ? TEXT("TSet") : TEXT("TMap");
+        const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* Arguments = nullptr;
+        if (!OutType.Path.IsEmpty() || OutType.NativeName != ExpectedNativeName ||
+            !(*TypeObject)->TryGetArrayField(TEXT("fields"), Fields) ||
+            Fields == nullptr || !Fields->IsEmpty() ||
+            !(*TypeObject)->TryGetArrayField(TEXT("typeArguments"), Arguments) ||
+            Arguments == nullptr || Arguments->Num() != (Kind == TEXT("map") ? 2 : 1))
+        {
+            return false;
+        }
+        OutType.Kind = Kind == TEXT("array") ? 2 : Kind == TEXT("set") ? 3 : 4;
+        for (const TSharedPtr<FJsonValue>& ArgumentValue : *Arguments)
+        {
+            const TSharedPtr<FJsonObject> Argument = ArgumentValue.IsValid()
+                ? ArgumentValue->AsObject() : nullptr;
+            FString MetadataName;
+            if (!Argument.IsValid() ||
+                !Argument->TryGetStringField(TEXT("typeMetadataName"), MetadataName) ||
+                MetadataName.IsEmpty())
+            {
+                return false;
+            }
+            OutType.ArgumentMetadataNames.Add(MetadataName);
+            FStateUnrealType Child;
+            if (Argument->HasField(TEXT("unrealType")))
+            {
+                const TSharedPtr<FJsonObject>* ChildObject = nullptr;
+                if (!Argument->TryGetObjectField(TEXT("unrealType"), ChildObject) ||
+                    ChildObject == nullptr || ChildObject->IsValid() == false)
+                {
+                    return false;
+                }
+                // Recurse through the same strict shape rules used by state
+                // metadata. The helper expects the owner to contain the field.
+                TSharedPtr<FJsonObject> ChildOwner = MakeShared<FJsonObject>();
+                ChildOwner->SetObjectField(TEXT("unrealType"), *ChildObject);
+                if (!ReadJsonUnrealType(ChildOwner, Child, Depth + 1) ||
+                    (Child.bPresent && Child.Kind >= 2))
+                {
+                    return false;
+                }
+            }
+            OutType.TypeArguments.Add(MoveTemp(Child));
+        }
+        return true;
     }
     if (Kind == TEXT("enum"))
     {
@@ -249,16 +392,606 @@ bool ReadJsonUnrealType(
     }
     if (Kind == TEXT("struct"))
     {
+        const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+        if (!(*TypeObject)->TryGetArrayField(TEXT("fields"), Fields) || Fields == nullptr)
+        {
+            return false;
+        }
         OutType.Kind = 1;
+        for (int32 FieldIndex = 0; FieldIndex < Fields->Num(); ++FieldIndex)
+        {
+            const TSharedPtr<FJsonObject> Field = (*Fields)[FieldIndex].IsValid()
+                ? (*Fields)[FieldIndex]->AsObject() : nullptr;
+            double DeclaredIndex = -1.0;
+            FString NativeName;
+            FString MetadataName;
+            if (!Field.IsValid() ||
+                !Field->TryGetNumberField(TEXT("index"), DeclaredIndex) ||
+                DeclaredIndex != static_cast<double>(FieldIndex) ||
+                !Field->TryGetStringField(TEXT("nativeName"), NativeName) || NativeName.IsEmpty() ||
+                !Field->TryGetStringField(TEXT("typeMetadataName"), MetadataName) || MetadataName.IsEmpty())
+            {
+                return false;
+            }
+            OutType.FieldNativeNames.Add(MoveTemp(NativeName));
+            OutType.FieldMetadataNames.Add(MoveTemp(MetadataName));
+            FStateUnrealType FieldType;
+            if (Field->HasField(TEXT("unrealType")))
+            {
+                TSharedPtr<FJsonObject> FieldOwner = MakeShared<FJsonObject>();
+                const TSharedPtr<FJsonObject>* Nested = nullptr;
+                if (!Field->TryGetObjectField(TEXT("unrealType"), Nested) ||
+                    Nested == nullptr || !Nested->IsValid())
+                {
+                    return false;
+                }
+                FieldOwner->SetObjectField(TEXT("unrealType"), *Nested);
+                if (!ReadJsonUnrealType(FieldOwner, FieldType, Depth + 1))
+                {
+                    return false;
+                }
+            }
+            OutType.FieldTypes.Add(MoveTemp(FieldType));
+        }
         return true;
     }
     return false;
+}
+
+FString InferLeafKind(
+    const FString& MetadataName,
+    const FStateUnrealType& UnrealType)
+{
+    if (UnrealType.bPresent && UnrealType.Kind == 0)
+    {
+        return TEXT("enum");
+    }
+    if (UnrealType.bPresent && UnrealType.Kind == 1)
+    {
+        return TEXT("struct");
+    }
+    if (MetadataName == TEXT("System.Boolean")) return TEXT("boolean");
+    if (MetadataName == TEXT("System.Byte") || MetadataName == TEXT("System.Int32") ||
+        MetadataName == TEXT("System.Int64")) return TEXT("integer");
+    if (MetadataName == TEXT("System.Single") || MetadataName == TEXT("System.Double"))
+        return TEXT("floatingPoint");
+    if (MetadataName == TEXT("System.String")) return TEXT("string");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealName")) return TEXT("name");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealText")) return TEXT("text");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle")) return TEXT("object");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle")) return TEXT("class");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle")) return TEXT("softObject");
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle")) return TEXT("softClass");
+    return FString();
+}
+
+bool IsValidCollectionLeafDescriptor(
+    const FString& MetadataName,
+    const FStateUnrealType& UnrealType)
+{
+    if (!UnrealType.bPresent)
+    {
+        return MetadataName == TEXT("System.Boolean") || MetadataName == TEXT("System.Byte") ||
+            MetadataName == TEXT("System.Int32") || MetadataName == TEXT("System.Int64") ||
+            MetadataName == TEXT("System.Single") || MetadataName == TEXT("System.Double") ||
+            MetadataName == TEXT("System.String") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealName") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealText") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealObjectHandle") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealClassHandle") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftObjectHandle") ||
+            MetadataName == TEXT("UnifiedScript.Unreal.UnrealSoftClassHandle");
+    }
+    if (UnrealType.Kind == 0)
+    {
+        return UnrealType.FieldNativeNames.IsEmpty() && UnrealType.FieldMetadataNames.IsEmpty() &&
+            UnrealType.FieldTypes.IsEmpty() && UnrealType.TypeArguments.IsEmpty();
+    }
+    if (UnrealType.Kind != 1 || !UnrealType.TypeArguments.IsEmpty())
+    {
+        return false;
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealVector"))
+    {
+        return UnrealType.Path == TEXT("/Script/CoreUObject.Vector") &&
+            UnrealType.NativeName == TEXT("Vector") &&
+            UnrealType.FieldNativeNames == TArray<FString>{TEXT("X"), TEXT("Y"), TEXT("Z")} &&
+            UnrealType.FieldMetadataNames == TArray<FString>{TEXT("System.Double"), TEXT("System.Double"), TEXT("System.Double")} &&
+            UnrealType.FieldTypes.Num() == 3 &&
+            !UnrealType.FieldTypes[0].bPresent && !UnrealType.FieldTypes[1].bPresent &&
+            !UnrealType.FieldTypes[2].bPresent;
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealRotator"))
+    {
+        return UnrealType.Path == TEXT("/Script/CoreUObject.Rotator") &&
+            UnrealType.NativeName == TEXT("Rotator") && UnrealType.FieldNativeNames.IsEmpty() &&
+            UnrealType.FieldMetadataNames.IsEmpty() && UnrealType.FieldTypes.IsEmpty();
+    }
+    if (MetadataName == TEXT("UnifiedScript.Unreal.UnrealTransform"))
+    {
+        return UnrealType.Path == TEXT("/Script/CoreUObject.Transform") &&
+            UnrealType.NativeName == TEXT("Transform") && UnrealType.FieldNativeNames.IsEmpty() &&
+            UnrealType.FieldMetadataNames.IsEmpty() && UnrealType.FieldTypes.IsEmpty();
+    }
+    return false;
+}
+
+bool ResolveContainerPropertyType(
+    const FString& TypeKind,
+    const FString& MetadataName,
+    const FStateUnrealType& UnrealType,
+    FPropertyBagPropertyDesc& OutDesc)
+{
+    const uint8 ExpectedKind = TypeKind == TEXT("array") ? 2 :
+        TypeKind == TEXT("set") ? 3 : TypeKind == TEXT("map") ? 4 : 0;
+    const int32 Arity = TypeKind == TEXT("map") ? 2 : 1;
+    if (ExpectedKind == 0 || !UnrealType.bPresent || UnrealType.Kind != ExpectedKind ||
+        UnrealType.ArgumentMetadataNames.Num() != Arity || UnrealType.TypeArguments.Num() != Arity)
+    {
+        return false;
+    }
+    const FString Definition = TypeKind == TEXT("array")
+        ? TEXT("System.Collections.Generic.IReadOnlyList")
+        : TypeKind == TEXT("set")
+            ? TEXT("System.Collections.Generic.IReadOnlySet")
+            : TEXT("System.Collections.Generic.IReadOnlyDictionary");
+    if (MetadataName != Definition + TEXT("<") +
+        FString::Join(UnrealType.ArgumentMetadataNames, TEXT(", ")) + TEXT(">"))
+    {
+        return false;
+    }
+
+    EPropertyBagPropertyType ValueType = EPropertyBagPropertyType::None;
+    const UObject* ValueObject = nullptr;
+    const FString ValueKind = InferLeafKind(
+        UnrealType.ArgumentMetadataNames[TypeKind == TEXT("map") ? 1 : 0],
+        UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0]);
+    if (!IsValidCollectionLeafDescriptor(
+            UnrealType.ArgumentMetadataNames[TypeKind == TEXT("map") ? 1 : 0],
+            UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0]) ||
+        ValueKind.IsEmpty() ||
+        !ResolvePropertyType(
+            ValueKind,
+            UnrealType.ArgumentMetadataNames[TypeKind == TEXT("map") ? 1 : 0],
+            UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0],
+            ValueType,
+            ValueObject))
+    {
+        return false;
+    }
+    if (UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].bPresent &&
+        UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].Kind >= 2)
+    {
+        return false;
+    }
+
+    const EPropertyBagContainerType Container = TypeKind == TEXT("array")
+        ? EPropertyBagContainerType::Array
+        : TypeKind == TEXT("set") ? EPropertyBagContainerType::Set : EPropertyBagContainerType::Map;
+    if (Container != EPropertyBagContainerType::Map)
+    {
+        OutDesc = FPropertyBagPropertyDesc(FName(), Container, ValueType, ValueObject);
+        return true;
+    }
+
+    EPropertyBagPropertyType KeyType = EPropertyBagPropertyType::None;
+    const UObject* KeyObject = nullptr;
+    const FString KeyKind = InferLeafKind(
+        UnrealType.ArgumentMetadataNames[0], UnrealType.TypeArguments[0]);
+    if (!IsValidCollectionLeafDescriptor(
+            UnrealType.ArgumentMetadataNames[0], UnrealType.TypeArguments[0]) ||
+        KeyKind.IsEmpty() ||
+        !ResolvePropertyType(
+            KeyKind,
+            UnrealType.ArgumentMetadataNames[0],
+            UnrealType.TypeArguments[0],
+            KeyType,
+            KeyObject) ||
+        UnrealType.TypeArguments[0].bPresent && UnrealType.TypeArguments[0].Kind >= 2)
+    {
+        return false;
+    }
+    OutDesc = FPropertyBagPropertyDesc(
+        FName(),
+        EPropertyBagContainerType::Map,
+        ValueType,
+        ValueObject,
+        CPF_Edit,
+        KeyType,
+        KeyObject);
+    return true;
+}
+
+struct FScopedPropertyValue
+{
+    explicit FScopedPropertyValue(FProperty* InProperty)
+        : Property(InProperty)
+    {
+        if (Property != nullptr)
+        {
+            Value = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
+            Property->InitializeValue(Value);
+        }
+    }
+
+    ~FScopedPropertyValue()
+    {
+        if (Property != nullptr && Value != nullptr)
+        {
+            Property->DestroyValue(Value);
+            FMemory::Free(Value);
+        }
+    }
+
+    FProperty* Property = nullptr;
+    void* Value = nullptr;
+};
+
+bool SetPropertyFromJson(
+    FProperty* Property,
+    EPropertyBagPropertyType ExpectedType,
+    const UObject* TypeObject,
+    const FString& MetadataName,
+    const FStateUnrealType& UnrealType,
+    const TSharedPtr<FJsonValue>& Value,
+    void* Destination,
+    FString& OutError)
+{
+    if (Property == nullptr || Destination == nullptr || !Value.IsValid())
+    {
+        return false;
+    }
+    if (Value->IsNull())
+    {
+        if (ExpectedType == EPropertyBagPropertyType::Object ||
+            ExpectedType == EPropertyBagPropertyType::Class)
+        {
+            CastFieldChecked<FObjectPropertyBase>(Property)->SetObjectPropertyValue(
+                Destination, nullptr);
+            return true;
+        }
+        OutError = TEXT("Collection defaults cannot contain null for this leaf type.");
+        return false;
+    }
+
+    if (ExpectedType == EPropertyBagPropertyType::Bool)
+    {
+        bool Parsed = false;
+        if (Value->TryGetBool(Parsed))
+        {
+            CastFieldChecked<FBoolProperty>(Property)->SetPropertyValue(Destination, Parsed);
+            return true;
+        }
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Byte ||
+        ExpectedType == EPropertyBagPropertyType::Int32 ||
+        ExpectedType == EPropertyBagPropertyType::Int64)
+    {
+        int64 Parsed = 0;
+        const int64 Minimum = ExpectedType == EPropertyBagPropertyType::Byte
+            ? 0 : ExpectedType == EPropertyBagPropertyType::Int32 ? MIN_int32 : MIN_int64;
+        const int64 Maximum = ExpectedType == EPropertyBagPropertyType::Byte
+            ? MAX_uint8 : ExpectedType == EPropertyBagPropertyType::Int32 ? MAX_int32 : MAX_int64;
+        if (ParseJsonInt64(Value, Parsed) && Parsed >= Minimum && Parsed <= Maximum)
+        {
+            if (ExpectedType == EPropertyBagPropertyType::Byte)
+            {
+                CastFieldChecked<FByteProperty>(Property)->SetPropertyValue(
+                    Destination, static_cast<uint8>(Parsed));
+            }
+            else if (ExpectedType == EPropertyBagPropertyType::Int32)
+            {
+                CastFieldChecked<FIntProperty>(Property)->SetPropertyValue(
+                    Destination, static_cast<int32>(Parsed));
+            }
+            else
+            {
+                CastFieldChecked<FInt64Property>(Property)->SetPropertyValue(Destination, Parsed);
+            }
+            return true;
+        }
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Float ||
+        ExpectedType == EPropertyBagPropertyType::Double)
+    {
+        double Parsed = 0.0;
+        if (ParseJsonDouble(Value, Parsed))
+        {
+            if (ExpectedType == EPropertyBagPropertyType::Float)
+            {
+                const float Converted = static_cast<float>(Parsed);
+                if (!FMath::IsFinite(Converted))
+                {
+                    return false;
+                }
+                CastFieldChecked<FFloatProperty>(Property)->SetPropertyValue(Destination, Converted);
+            }
+            else
+            {
+                CastFieldChecked<FDoubleProperty>(Property)->SetPropertyValue(Destination, Parsed);
+            }
+            return true;
+        }
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::String && Value->Type == EJson::String)
+    {
+        CastFieldChecked<FStrProperty>(Property)->SetPropertyValue(Destination, Value->AsString());
+        return true;
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Name && Value->Type == EJson::String)
+    {
+        CastFieldChecked<FNameProperty>(Property)->SetPropertyValue(Destination, FName(*Value->AsString()));
+        return true;
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Text && Value->Type == EJson::String)
+    {
+        CastFieldChecked<FTextProperty>(Property)->SetPropertyValue(
+            Destination, FText::FromString(Value->AsString()));
+        return true;
+    }
+    else if ((ExpectedType == EPropertyBagPropertyType::SoftObject ||
+              ExpectedType == EPropertyBagPropertyType::SoftClass) && Value->Type == EJson::String)
+    {
+        const FString PathText = Value->AsString();
+        if (UnifiedScriptSoftObjectPath::IsValid(PathText))
+        {
+            CastFieldChecked<FSoftObjectProperty>(Property)->SetPropertyValue(
+                Destination, FSoftObjectPtr(FSoftObjectPath(PathText)));
+            return true;
+        }
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Enum && Value->Type == EJson::String)
+    {
+        FString Token = Value->AsString();
+        int64 Parsed = 0;
+        const UEnum* Enum = Cast<UEnum>(TypeObject);
+        if (IsJsonIntegerToken(Token) && LexTryParseString(Parsed, *Token) &&
+            IsLegalPropertyBagEnumValue(Enum, Parsed))
+        {
+            if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
+            {
+                EnumProperty->GetUnderlyingProperty()->SetIntPropertyValue(
+                    Destination, Parsed);
+            }
+            else if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
+            {
+                ByteProperty->SetPropertyValue(Destination, static_cast<uint8>(Parsed));
+            }
+            else
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+    else if (ExpectedType == EPropertyBagPropertyType::Struct && Value->Type == EJson::Object)
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        if (TypeObject == TBaseStructure<FVector>::Get() && Object.IsValid() && Object->Values.Num() == 3)
+        {
+            double X = 0.0, Y = 0.0, Z = 0.0;
+            if (ParseJsonDouble(Object->TryGetField(TEXT("x")), X) &&
+                ParseJsonDouble(Object->TryGetField(TEXT("y")), Y) &&
+                ParseJsonDouble(Object->TryGetField(TEXT("z")), Z))
+            {
+                const FVector Vector(X, Y, Z);
+                CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Vector);
+                return true;
+            }
+        }
+        else if (TypeObject == TBaseStructure<FRotator>::Get() && Object.IsValid() && Object->Values.Num() == 3)
+        {
+            double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+            if (ParseJsonDouble(Object->TryGetField(TEXT("pitch")), Pitch) &&
+                ParseJsonDouble(Object->TryGetField(TEXT("yaw")), Yaw) &&
+                ParseJsonDouble(Object->TryGetField(TEXT("roll")), Roll))
+            {
+                const FRotator Rotator(Pitch, Yaw, Roll);
+                CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Rotator);
+                return true;
+            }
+        }
+        else if (TypeObject == TBaseStructure<FTransform>::Get() && Object.IsValid() && Object->Values.Num() == 3)
+        {
+            const TSharedPtr<FJsonObject>* Rotation = nullptr;
+            const TSharedPtr<FJsonObject>* Translation = nullptr;
+            const TSharedPtr<FJsonObject>* Scale = nullptr;
+            if (Object->TryGetObjectField(TEXT("rotation"), Rotation) &&
+                Object->TryGetObjectField(TEXT("translation"), Translation) &&
+                Object->TryGetObjectField(TEXT("scale3D"), Scale) &&
+                Rotation != nullptr && Translation != nullptr && Scale != nullptr)
+            {
+                double X = 0.0, Y = 0.0, Z = 0.0, W = 0.0;
+                double TX = 0.0, TY = 0.0, TZ = 0.0;
+                double SX = 0.0, SY = 0.0, SZ = 0.0;
+                if ((*Rotation)->Values.Num() == 4 && (*Translation)->Values.Num() == 3 && (*Scale)->Values.Num() == 3 &&
+                    ParseJsonDouble((*Rotation)->TryGetField(TEXT("x")), X) &&
+                    ParseJsonDouble((*Rotation)->TryGetField(TEXT("y")), Y) &&
+                    ParseJsonDouble((*Rotation)->TryGetField(TEXT("z")), Z) &&
+                    ParseJsonDouble((*Rotation)->TryGetField(TEXT("w")), W) &&
+                    ParseJsonDouble((*Translation)->TryGetField(TEXT("x")), TX) &&
+                    ParseJsonDouble((*Translation)->TryGetField(TEXT("y")), TY) &&
+                    ParseJsonDouble((*Translation)->TryGetField(TEXT("z")), TZ) &&
+                    ParseJsonDouble((*Scale)->TryGetField(TEXT("x")), SX) &&
+                    ParseJsonDouble((*Scale)->TryGetField(TEXT("y")), SY) &&
+                    ParseJsonDouble((*Scale)->TryGetField(TEXT("z")), SZ) &&
+                    FMath::IsNearlyEqual(X * X + Y * Y + Z * Z + W * W, 1.0, 1e-6))
+                {
+                    const FTransform Transform(FQuat(X, Y, Z, W), FVector(TX, TY, TZ), FVector(SX, SY, SZ));
+                    CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Transform);
+                    return true;
+                }
+            }
+        }
+    }
+
+    OutError = FString::Printf(TEXT("Collection leaf '%s' has an invalid default."), *MetadataName);
+    return false;
+}
+
+bool AddCollectionLeaf(
+    FScriptArrayHelper& Helper,
+    FProperty* Property,
+    EPropertyBagPropertyType Type,
+    const UObject* TypeObject,
+    const FString& MetadataName,
+    const FStateUnrealType& UnrealType,
+    const TSharedPtr<FJsonValue>& Value,
+    FString& OutError)
+{
+    const int32 Index = Helper.AddValue();
+    if (!SetPropertyFromJson(Property, Type, TypeObject, MetadataName, UnrealType, Value,
+            Helper.GetRawPtr(Index), OutError))
+    {
+        Helper.RemoveValues(Index);
+        return false;
+    }
+    return true;
+}
+
+bool ValidateCollectionHashability(
+    const FPropertyBagPropertyDesc& Desc,
+    FString& OutError)
+{
+    if (Desc.ContainerTypes.IsEmpty())
+    {
+        return true;
+    }
+    const EPropertyBagContainerType Container = Desc.ContainerTypes.GetFirstContainerType();
+    if (Container == EPropertyBagContainerType::Array)
+    {
+        return true;
+    }
+    if (Container == EPropertyBagContainerType::Set)
+    {
+        const FSetProperty* Set = CastField<FSetProperty>(Desc.CachedProperty);
+        if (Set == nullptr || Set->ElementProp == nullptr ||
+            !Set->ElementProp->HasAllPropertyFlags(CPF_HasGetValueTypeHash))
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state '%s' uses an element type that Unreal cannot hash."),
+                *Desc.Name.ToString());
+            return false;
+        }
+        return true;
+    }
+    if (Container == EPropertyBagContainerType::Map)
+    {
+        const FMapProperty* Map = CastField<FMapProperty>(Desc.CachedProperty);
+        if (Map == nullptr || Map->KeyProp == nullptr ||
+            !Map->KeyProp->HasAllPropertyFlags(CPF_HasGetValueTypeHash))
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state '%s' uses a map key type that Unreal cannot hash."),
+                *Desc.Name.ToString());
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SetCollectionJsonDefault(
+    FInstancedPropertyBag& Bag,
+    const FPropertyBagPropertyDesc& Desc,
+    const FStateUnrealType& UnrealType,
+    const TSharedPtr<FJsonValue>& DefaultValue,
+    FString& OutError)
+{
+    const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+    if (!DefaultValue.IsValid() || !DefaultValue->TryGetArray(Items) || Items == nullptr ||
+        UnrealType.TypeArguments.Num() != (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Map ? 2 : 1))
+    {
+        OutError = FString::Printf(TEXT("Collection state '%s' requires an array default."), *Desc.Name.ToString());
+        return false;
+    }
+    const int32 ValueArgumentIndex = Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Map ? 1 : 0;
+    const FString& ValueMetadata = UnrealType.ArgumentMetadataNames[ValueArgumentIndex];
+    const FStateUnrealType& ValueUnrealType = UnrealType.TypeArguments[ValueArgumentIndex];
+    if (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Array)
+    {
+        const FArrayProperty* Array = CastField<FArrayProperty>(Desc.CachedProperty);
+        FScriptArrayHelper Helper(
+            Array,
+            Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+        for (const TSharedPtr<FJsonValue>& Item : *Items)
+        {
+            if (!AddCollectionLeaf(Helper, Array->Inner, Desc.ValueType, Desc.ValueTypeObject,
+                    ValueMetadata, ValueUnrealType, Item, OutError)) return false;
+        }
+        return true;
+    }
+    if (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Set)
+    {
+        const FSetProperty* Set = CastField<FSetProperty>(Desc.CachedProperty);
+        FScriptSetHelper Helper(
+            Set,
+            Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+        for (const TSharedPtr<FJsonValue>& Item : *Items)
+        {
+            FScopedPropertyValue Candidate(Set->ElementProp);
+            if (!SetPropertyFromJson(Set->ElementProp, Desc.ValueType, Desc.ValueTypeObject,
+                    ValueMetadata, ValueUnrealType, Item, Candidate.Value, OutError)) return false;
+            if (Helper.FindElementIndex(Candidate.Value) != INDEX_NONE)
+            {
+                OutError = FString::Printf(TEXT("Collection state '%s' contains a duplicate set value."), *Desc.Name.ToString());
+                return false;
+            }
+            const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+            Set->ElementProp->CopyCompleteValue(Helper.GetElementPtr(Index), Candidate.Value);
+        }
+        Helper.Rehash();
+        return true;
+    }
+    const FMapProperty* Map = CastField<FMapProperty>(Desc.CachedProperty);
+    FScriptMapHelper Helper(
+        Map,
+        Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+    const FString& KeyMetadata = UnrealType.ArgumentMetadataNames[0];
+    const FStateUnrealType& KeyUnrealType = UnrealType.TypeArguments[0];
+    for (const TSharedPtr<FJsonValue>& Item : *Items)
+    {
+        const TSharedPtr<FJsonObject> Object = Item.IsValid() ? Item->AsObject() : nullptr;
+        const TSharedPtr<FJsonValue> Key = Object.IsValid() ? Object->TryGetField(TEXT("key")) : nullptr;
+        const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(TEXT("value")) : nullptr;
+        if (!Object.IsValid() || Object->Values.Num() != 2 || !Key.IsValid() || !Value.IsValid())
+        {
+            OutError = FString::Printf(TEXT("Collection state '%s' contains an invalid map entry."), *Desc.Name.ToString());
+            return false;
+        }
+        FScopedPropertyValue KeyValue(Map->KeyProp);
+        FScopedPropertyValue MappedValue(Map->ValueProp);
+        if (!SetPropertyFromJson(Map->KeyProp, Desc.KeyType, Desc.KeyTypeObject,
+                KeyMetadata, KeyUnrealType, Key, KeyValue.Value, OutError) ||
+            !SetPropertyFromJson(Map->ValueProp, Desc.ValueType, Desc.ValueTypeObject,
+                ValueMetadata, ValueUnrealType, Value, MappedValue.Value, OutError)) return false;
+        bool bDuplicate = false;
+        for (int32 PairIndex = 0; PairIndex < Helper.GetMaxIndex(); ++PairIndex)
+        {
+            if (Helper.IsValidIndex(PairIndex) && Map->KeyProp->Identical(
+                    Helper.GetKeyPtr(PairIndex), KeyValue.Value))
+            {
+                bDuplicate = true;
+                break;
+            }
+        }
+        if (bDuplicate)
+        {
+            OutError = FString::Printf(TEXT("Collection state '%s' contains a duplicate map key."), *Desc.Name.ToString());
+            return false;
+        }
+        const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        Map->KeyProp->CopyCompleteValue(Helper.GetKeyPtr(Index), KeyValue.Value);
+        Map->ValueProp->CopyCompleteValue(Helper.GetValuePtr(Index), MappedValue.Value);
+    }
+    Helper.Rehash();
+    return true;
 }
 
 bool SetDefaultValue(
     FInstancedPropertyBag& Bag,
     const FPropertyBagPropertyDesc& Desc,
     const TSharedPtr<FJsonValue>& DefaultValue,
+    const FStateUnrealType* UnrealType,
     FString& OutError)
 {
     if (!DefaultValue.IsValid())
@@ -267,6 +1000,12 @@ bool SetDefaultValue(
             TEXT("State '%s' is missing its defaultValue."),
             *Desc.Name.ToString());
         return false;
+    }
+    if (!Desc.ContainerTypes.IsEmpty())
+    {
+        return UnrealType != nullptr &&
+            !DefaultValue->IsNull() &&
+            SetCollectionJsonDefault(Bag, Desc, *UnrealType, DefaultValue, OutError);
     }
     if (DefaultValue->IsNull())
     {
@@ -284,11 +1023,21 @@ bool SetDefaultValue(
             Result = Bag.SetValueBool(Desc.Name, DefaultValue->AsBool());
         }
         break;
+    case EPropertyBagPropertyType::Byte:
+        if (DefaultValue->Type == EJson::Number)
+        {
+            int64 Number = 0;
+            if (ParseJsonInt64(DefaultValue, Number) && Number >= 0 && Number <= MAX_uint8)
+            {
+                Result = Bag.SetValueByte(Desc.Name, static_cast<uint8>(Number));
+            }
+        }
+        break;
     case EPropertyBagPropertyType::Int32:
         if (DefaultValue->Type == EJson::Number)
         {
-            const double Number = DefaultValue->AsNumber();
-            if (Number >= MIN_int32 && Number <= MAX_int32 && FMath::TruncToDouble(Number) == Number)
+            int64 Number = 0;
+            if (ParseJsonInt64(DefaultValue, Number) && Number >= MIN_int32 && Number <= MAX_int32)
             {
                 Result = Bag.SetValueInt32(Desc.Name, static_cast<int32>(Number));
             }
@@ -297,25 +1046,31 @@ bool SetDefaultValue(
     case EPropertyBagPropertyType::Int64:
         if (DefaultValue->Type == EJson::Number)
         {
-            const double Number = DefaultValue->AsNumber();
-            if (Number >= static_cast<double>(MIN_int64) &&
-                Number <= static_cast<double>(MAX_int64) &&
-                FMath::TruncToDouble(Number) == Number)
+            int64 Number = 0;
+            if (ParseJsonInt64(DefaultValue, Number))
             {
-                Result = Bag.SetValueInt64(Desc.Name, static_cast<int64>(Number));
+                Result = Bag.SetValueInt64(Desc.Name, Number);
             }
         }
         break;
     case EPropertyBagPropertyType::Float:
         if (DefaultValue->Type == EJson::Number)
         {
-            Result = Bag.SetValueFloat(Desc.Name, static_cast<float>(DefaultValue->AsNumber()));
+            double Number = 0.0;
+            if (ParseJsonDouble(DefaultValue, Number) && FMath::IsFinite(static_cast<float>(Number)))
+            {
+                Result = Bag.SetValueFloat(Desc.Name, static_cast<float>(Number));
+            }
         }
         break;
     case EPropertyBagPropertyType::Double:
         if (DefaultValue->Type == EJson::Number)
         {
-            Result = Bag.SetValueDouble(Desc.Name, DefaultValue->AsNumber());
+            double Number = 0.0;
+            if (ParseJsonDouble(DefaultValue, Number))
+            {
+                Result = Bag.SetValueDouble(Desc.Name, Number);
+            }
         }
         break;
     case EPropertyBagPropertyType::String:
@@ -526,6 +1281,9 @@ enum class EBinaryDefaultKind : uint8
     Transform = 11,
     SoftObject = 12,
     SoftClass = 13,
+    Array = 14,
+    Set = 15,
+    Map = 16,
 };
 
 struct FBinaryDefault
@@ -539,6 +1297,7 @@ struct FBinaryDefault
     FVector Vector = FVector::ZeroVector;
     FRotator Rotator = FRotator::ZeroRotator;
     FTransform Transform = FTransform::Identity;
+    TArray<FBinaryDefault> Children;
 };
 
 class FBinaryDeclarationReader
@@ -562,7 +1321,7 @@ public:
         uint16 Minor = 0;
         uint32 Reserved = 0;
         if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-            Major != 1 || Minor > 3 || Reserved != 0)
+            Major != 1 || Minor > 4 || Reserved != 0)
         {
             OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
             return false;
@@ -659,13 +1418,19 @@ public:
         return ReadUInt32(OutCount) && OutCount <= 1'000'000;
     }
 
-    bool ReadDefault(FBinaryDefault& OutDefault)
+    bool ReadDefault(FBinaryDefault& OutDefault, int32 Depth = 0)
     {
+        if (Depth > 16)
+        {
+            return false;
+        }
         uint8 Kind = 0;
-        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::SoftClass) ||
+        if (!ReadByte(Kind) || Kind > static_cast<uint8>(EBinaryDefaultKind::Map) ||
             Kind >= static_cast<uint8>(EBinaryDefaultKind::Rotator) &&
                 Kind < static_cast<uint8>(EBinaryDefaultKind::SoftObject) && MinorVersion < 2 ||
-            Kind >= static_cast<uint8>(EBinaryDefaultKind::SoftObject) && MinorVersion < 3)
+            Kind >= static_cast<uint8>(EBinaryDefaultKind::SoftObject) &&
+                Kind < static_cast<uint8>(EBinaryDefaultKind::Array) && MinorVersion < 3 ||
+            Kind >= static_cast<uint8>(EBinaryDefaultKind::Array) && MinorVersion < 4)
         {
             return false;
         }
@@ -713,6 +1478,25 @@ public:
         case EBinaryDefaultKind::SoftObject:
         case EBinaryDefaultKind::SoftClass:
             return ReadString(OutDefault.Text);
+        case EBinaryDefaultKind::Array:
+        case EBinaryDefaultKind::Set:
+        case EBinaryDefaultKind::Map:
+        {
+            uint32 Count = 0;
+            if (!ReadCount(Count) || Count > 1'000'000)
+            {
+                return false;
+            }
+            OutDefault.Children.SetNum(static_cast<int32>(Count));
+            for (FBinaryDefault& Child : OutDefault.Children)
+            {
+                if (!ReadDefault(Child, Depth + 1))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
         case EBinaryDefaultKind::Vector:
         {
             double Components[3] = {};
@@ -804,10 +1588,14 @@ public:
 
         OutType.bPresent = true;
         uint32 FieldCount = 0;
-        if (!ReadByte(OutType.Kind) || OutType.Kind > 1 ||
-            !ReadString(OutType.Path) || OutType.Path.IsEmpty() ||
+        if (!ReadByte(OutType.Kind) || OutType.Kind > 4 ||
+            !ReadString(OutType.Path) ||
             !ReadString(OutType.NativeName) || OutType.NativeName.IsEmpty() ||
             !ReadCount(FieldCount))
+        {
+            return false;
+        }
+        if (OutType.Kind < 2 && OutType.Path.IsEmpty())
         {
             return false;
         }
@@ -824,8 +1612,37 @@ public:
             {
                 return false;
             }
+            OutType.FieldNativeNames.Add(MoveTemp(NativeName));
+            OutType.FieldMetadataNames.Add(MoveTemp(MetadataName));
+            OutType.FieldTypes.Add(MoveTemp(NestedType));
         }
-        return OutType.Kind == 1 || FieldCount == 0;
+        if (OutType.Kind == 2 || OutType.Kind == 3 || OutType.Kind == 4)
+        {
+            const int32 ExpectedCount = OutType.Kind == 4 ? 2 : 1;
+            uint32 ArgumentCount = 0;
+            if (!ReadCount(ArgumentCount) || ArgumentCount != ExpectedCount)
+            {
+                return false;
+            }
+            for (uint32 ArgumentIndex = 0; ArgumentIndex < ArgumentCount; ++ArgumentIndex)
+            {
+                FString MetadataName;
+                FStateUnrealType ArgumentType;
+                if (!ReadString(MetadataName) || MetadataName.IsEmpty() ||
+                    !ReadUnrealType(ArgumentType, Depth + 1))
+                {
+                    return false;
+                }
+                if (ArgumentType.bPresent && ArgumentType.Kind >= 2)
+                {
+                    return false;
+                }
+                OutType.ArgumentMetadataNames.Add(MoveTemp(MetadataName));
+                OutType.TypeArguments.Add(MoveTemp(ArgumentType));
+            }
+            return FieldCount == 0;
+        }
+        return OutType.Kind == 0 || OutType.Kind == 1;
     }
 
     bool IsAtEnd() const { return Offset == Data.Num(); }
@@ -880,12 +1697,266 @@ bool ResolveBinaryPropertyType(
     }
 }
 
+bool SetPropertyFromBinary(
+    FProperty* Property,
+    EPropertyBagPropertyType ExpectedType,
+    const UObject* TypeObject,
+    const FString& MetadataName,
+    const FBinaryDefault& Default,
+    void* Destination,
+    FString& OutError)
+{
+    if (Property == nullptr || Destination == nullptr)
+    {
+        return false;
+    }
+    switch (ExpectedType)
+    {
+    case EPropertyBagPropertyType::Bool:
+        if (Default.Kind == EBinaryDefaultKind::Boolean)
+        {
+            CastFieldChecked<FBoolProperty>(Property)->SetPropertyValue(Destination, Default.bBoolean);
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Byte:
+        if (Default.Kind == EBinaryDefaultKind::UnsignedInteger && Default.UnsignedInteger <= MAX_uint8)
+        {
+            CastFieldChecked<FByteProperty>(Property)->SetPropertyValue(Destination, static_cast<uint8>(Default.UnsignedInteger));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Int32:
+        if (Default.Kind == EBinaryDefaultKind::SignedInteger && Default.SignedInteger >= MIN_int32 && Default.SignedInteger <= MAX_int32)
+        {
+            CastFieldChecked<FIntProperty>(Property)->SetPropertyValue(Destination, static_cast<int32>(Default.SignedInteger));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Int64:
+        if (Default.Kind == EBinaryDefaultKind::SignedInteger)
+        {
+            CastFieldChecked<FInt64Property>(Property)->SetPropertyValue(Destination, Default.SignedInteger);
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Float:
+        if (Default.Kind == EBinaryDefaultKind::FloatingPoint && FMath::IsFinite(static_cast<float>(Default.FloatingPoint)))
+        {
+            CastFieldChecked<FFloatProperty>(Property)->SetPropertyValue(Destination, static_cast<float>(Default.FloatingPoint));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Double:
+        if (Default.Kind == EBinaryDefaultKind::FloatingPoint)
+        {
+            CastFieldChecked<FDoubleProperty>(Property)->SetPropertyValue(Destination, Default.FloatingPoint);
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::String:
+        if (Default.Kind == EBinaryDefaultKind::String)
+        {
+            CastFieldChecked<FStrProperty>(Property)->SetPropertyValue(Destination, Default.Text);
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Name:
+        if (Default.Kind == EBinaryDefaultKind::Name)
+        {
+            CastFieldChecked<FNameProperty>(Property)->SetPropertyValue(Destination, FName(*Default.Text));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Text:
+        if (Default.Kind == EBinaryDefaultKind::Text)
+        {
+            CastFieldChecked<FTextProperty>(Property)->SetPropertyValue(Destination, FText::FromString(Default.Text));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::SoftObject:
+    case EPropertyBagPropertyType::SoftClass:
+        if (Default.Kind == (ExpectedType == EPropertyBagPropertyType::SoftObject
+                ? EBinaryDefaultKind::SoftObject : EBinaryDefaultKind::SoftClass) &&
+            UnifiedScriptSoftObjectPath::IsValid(Default.Text))
+        {
+            CastFieldChecked<FSoftObjectProperty>(Property)->SetPropertyValue(
+                Destination, FSoftObjectPtr(FSoftObjectPath(Default.Text)));
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Enum:
+    {
+        int64 Parsed = 0;
+        const UEnum* Enum = Cast<UEnum>(TypeObject);
+        if (Default.Kind == EBinaryDefaultKind::Enum && IsJsonIntegerToken(Default.Text) &&
+            LexTryParseString(Parsed, *Default.Text) && IsLegalPropertyBagEnumValue(Enum, Parsed))
+        {
+            if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
+            {
+                EnumProperty->GetUnderlyingProperty()->SetIntPropertyValue(Destination, Parsed);
+            }
+            else if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
+            {
+                ByteProperty->SetPropertyValue(Destination, static_cast<uint8>(Parsed));
+            }
+            else
+            {
+                break;
+            }
+            return true;
+        }
+        break;
+    }
+    case EPropertyBagPropertyType::Struct:
+        if (Default.Kind == EBinaryDefaultKind::Vector && TypeObject == TBaseStructure<FVector>::Get())
+        {
+            CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Default.Vector);
+            return true;
+        }
+        if (Default.Kind == EBinaryDefaultKind::Rotator && TypeObject == TBaseStructure<FRotator>::Get())
+        {
+            CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Default.Rotator);
+            return true;
+        }
+        if (Default.Kind == EBinaryDefaultKind::Transform && TypeObject == TBaseStructure<FTransform>::Get())
+        {
+            CastFieldChecked<FStructProperty>(Property)->CopyCompleteValue(Destination, &Default.Transform);
+            return true;
+        }
+        break;
+    case EPropertyBagPropertyType::Object:
+    case EPropertyBagPropertyType::Class:
+        if (Default.Kind == EBinaryDefaultKind::Null)
+        {
+            CastFieldChecked<FObjectPropertyBase>(Property)->SetObjectPropertyValue(Destination, nullptr);
+            return true;
+        }
+        break;
+    default:
+        break;
+    }
+    OutError = FString::Printf(TEXT("Collection leaf '%s' has an invalid binary default."), *MetadataName);
+    return false;
+}
+
+bool SetCollectionBinaryDefault(
+    FInstancedPropertyBag& Bag,
+    const FPropertyBagPropertyDesc& Desc,
+    const FStateUnrealType& UnrealType,
+    const FBinaryDefault& Default,
+    FString& OutError)
+{
+    if (Default.Children.Num() > 1'000'000 ||
+        UnrealType.TypeArguments.Num() != (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Map ? 2 : 1))
+    {
+        return false;
+    }
+    const int32 ValueArgumentIndex = Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Map ? 1 : 0;
+    if (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Array)
+    {
+        const FArrayProperty* Array = CastField<FArrayProperty>(Desc.CachedProperty);
+        FScriptArrayHelper Helper(
+            Array,
+            Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+        for (const FBinaryDefault& Child : Default.Children)
+        {
+            const int32 Index = Helper.AddValue();
+            if (!SetPropertyFromBinary(Array->Inner, Desc.ValueType, Desc.ValueTypeObject,
+                    UnrealType.ArgumentMetadataNames[ValueArgumentIndex], Child,
+                    Helper.GetRawPtr(Index), OutError))
+            {
+                Helper.RemoveValues(Index);
+                return false;
+            }
+        }
+        return true;
+    }
+    if (Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Set)
+    {
+        const FSetProperty* Set = CastField<FSetProperty>(Desc.CachedProperty);
+        FScriptSetHelper Helper(
+            Set,
+            Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+        for (const FBinaryDefault& Child : Default.Children)
+        {
+            FScopedPropertyValue Candidate(Set->ElementProp);
+            if (!SetPropertyFromBinary(Set->ElementProp, Desc.ValueType, Desc.ValueTypeObject,
+                    UnrealType.ArgumentMetadataNames[0], Child, Candidate.Value, OutError)) return false;
+            if (Helper.FindElementIndex(Candidate.Value) != INDEX_NONE)
+            {
+                OutError = FString::Printf(TEXT("Collection state '%s' contains a duplicate set value."), *Desc.Name.ToString());
+                return false;
+            }
+            const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+            Set->ElementProp->CopyCompleteValue(Helper.GetElementPtr(Index), Candidate.Value);
+        }
+        Helper.Rehash();
+        return true;
+    }
+    if (Default.Children.Num() % 2 != 0)
+    {
+        return false;
+    }
+    const FMapProperty* Map = CastField<FMapProperty>(Desc.CachedProperty);
+    FScriptMapHelper Helper(
+        Map,
+        Desc.CachedProperty->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()));
+    for (int32 Index = 0; Index < Default.Children.Num(); Index += 2)
+    {
+        FScopedPropertyValue KeyValue(Map->KeyProp);
+        FScopedPropertyValue MappedValue(Map->ValueProp);
+        if (!SetPropertyFromBinary(Map->KeyProp, Desc.KeyType, Desc.KeyTypeObject,
+                UnrealType.ArgumentMetadataNames[0], Default.Children[Index], KeyValue.Value, OutError) ||
+            !SetPropertyFromBinary(Map->ValueProp, Desc.ValueType, Desc.ValueTypeObject,
+                UnrealType.ArgumentMetadataNames[1], Default.Children[Index + 1], MappedValue.Value, OutError)) return false;
+        bool bDuplicate = false;
+        for (int32 PairIndex = 0; PairIndex < Helper.GetMaxIndex(); ++PairIndex)
+        {
+            if (Helper.IsValidIndex(PairIndex) && Map->KeyProp->Identical(
+                    Helper.GetKeyPtr(PairIndex), KeyValue.Value))
+            {
+                bDuplicate = true;
+                break;
+            }
+        }
+        if (bDuplicate)
+        {
+            OutError = FString::Printf(TEXT("Collection state '%s' contains a duplicate map key."), *Desc.Name.ToString());
+            return false;
+        }
+        const int32 PairIndex = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        Map->KeyProp->CopyCompleteValue(Helper.GetKeyPtr(PairIndex), KeyValue.Value);
+        Map->ValueProp->CopyCompleteValue(Helper.GetValuePtr(PairIndex), MappedValue.Value);
+    }
+    Helper.Rehash();
+    return true;
+}
+
 bool SetBinaryDefaultValue(
     FInstancedPropertyBag& Bag,
     const FPropertyBagPropertyDesc& Desc,
     const FBinaryDefault& Default,
+    const FStateUnrealType* UnrealType,
     FString& OutError)
 {
+    if (!Desc.ContainerTypes.IsEmpty())
+    {
+        const EBinaryDefaultKind ExpectedKind =
+            Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Array
+                ? EBinaryDefaultKind::Array
+                : Desc.ContainerTypes.GetFirstContainerType() == EPropertyBagContainerType::Set
+                    ? EBinaryDefaultKind::Set : EBinaryDefaultKind::Map;
+        if (UnrealType == nullptr || Default.Kind != ExpectedKind)
+        {
+            OutError = FString::Printf(
+                TEXT("State '%s' has a binary default incompatible with its collection type."),
+                *Desc.Name.ToString());
+            return false;
+        }
+        return SetCollectionBinaryDefault(Bag, Desc, *UnrealType, Default, OutError);
+    }
     if (Default.Kind == EBinaryDefaultKind::Null)
     {
         return Desc.ValueType == EPropertyBagPropertyType::String ||
@@ -900,6 +1971,12 @@ bool SetBinaryDefaultValue(
         if (Default.Kind == EBinaryDefaultKind::Boolean)
         {
             Result = Bag.SetValueBool(Desc.Name, Default.bBoolean);
+        }
+        break;
+    case EPropertyBagPropertyType::Byte:
+        if (Default.Kind == EBinaryDefaultKind::UnsignedInteger && Default.UnsignedInteger <= MAX_uint8)
+        {
+            Result = Bag.SetValueByte(Desc.Name, static_cast<uint8>(Default.UnsignedInteger));
         }
         break;
     case EPropertyBagPropertyType::Int32:
@@ -1124,6 +2201,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
     TSet<FString> SeenAssetPaths;
     TArray<FPropertyBagPropertyDesc> Descs;
     TArray<FBinaryDefault> Defaults;
+    TArray<FStateUnrealType> UnrealTypes;
     FGuid SelectedAssetId;
     FString SelectedQualifiedName;
     FString SelectedAssetPath;
@@ -1163,6 +2241,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             SelectedAssetPath = AssetPath;
             Descs.Reserve(static_cast<int32>(StateCount));
             Defaults.Reserve(static_cast<int32>(StateCount));
+            UnrealTypes.Reserve(static_cast<int32>(StateCount));
         }
 
         TSet<FGuid> SeenStateIds;
@@ -1211,6 +2290,14 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
                     *AssetPath);
                 return false;
             }
+            if ((TypeKind == 12 || TypeKind == 13 || TypeKind == 14) &&
+                Reader.GetMinorVersion() < 4)
+            {
+                OutError = FString::Printf(
+                    TEXT("Compiled declaration asset '%s' uses a collection state without the required payload version."),
+                    *AssetPath);
+                return false;
+            }
 
             if (!bUseAsset)
             {
@@ -1218,16 +2305,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             }
 
             const FName PropertyName(Name);
-            EPropertyBagPropertyType PropertyType = EPropertyBagPropertyType::None;
-            const UObject* PropertyTypeObject = nullptr;
             if (PropertyName.IsNone() || SeenStateIds.Contains(StateId) ||
-                SeenStateNames.Contains(PropertyName) ||
-                !ResolveBinaryPropertyType(
-                    TypeKind,
-                    MetadataName,
-                    UnrealType,
-                    PropertyType,
-                    PropertyTypeObject))
+                SeenStateNames.Contains(PropertyName))
             {
                 OutError = FString::Printf(
                     TEXT("Compiled declaration contains invalid or duplicate state '%s'."),
@@ -1248,22 +2327,59 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             {
                 Flags |= CPF_Net;
             }
-            FPropertyBagPropertyDesc& Desc = Descs.Emplace_GetRef(
-                PropertyName,
-                EPropertyBagContainerType::None,
-                PropertyType,
-                PropertyTypeObject,
-                Flags);
-            Desc.ID = StateId;
+            FPropertyBagPropertyDesc Desc;
+            const bool bContainer = TypeKind == 12 || TypeKind == 13 || TypeKind == 14;
+            if (bContainer)
+            {
+                const FString ContainerKind = TypeKind == 12 ? TEXT("array") :
+                    TypeKind == 13 ? TEXT("set") : TEXT("map");
+                if (!ResolveContainerPropertyType(
+                        ContainerKind, MetadataName, UnrealType, Desc))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Compiled declaration contains invalid collection type '%s'."),
+                        *Name);
+                    return false;
+                }
+                Desc.Name = PropertyName;
+                Desc.PropertyFlags = Flags;
+            }
+            else
+            {
+                EPropertyBagPropertyType PropertyType = EPropertyBagPropertyType::None;
+                const UObject* PropertyTypeObject = nullptr;
+                if (!ResolveBinaryPropertyType(
+                        TypeKind,
+                        MetadataName,
+                        UnrealType,
+                        PropertyType,
+                        PropertyTypeObject))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Compiled declaration contains invalid or duplicate state '%s'."),
+                        *Name);
+                    return false;
+                }
+                Desc = FPropertyBagPropertyDesc(
+                    PropertyName,
+                    EPropertyBagContainerType::None,
+                    PropertyType,
+                    PropertyTypeObject,
+                    Flags);
+            }
+            Descs.Add(MoveTemp(Desc));
+            FPropertyBagPropertyDesc& AddedDesc = Descs.Last();
+            AddedDesc.ID = StateId;
 #if WITH_EDITOR
-            Desc.SetMetaData(TEXT("DisplayName"), Name);
-            Desc.SetMetaData(TEXT("UnifiedScriptSemanticId"), StateIdText);
+            AddedDesc.SetMetaData(TEXT("DisplayName"), Name);
+            AddedDesc.SetMetaData(TEXT("UnifiedScriptSemanticId"), StateIdText);
             if (bHasCategory && !Category.IsEmpty())
             {
-                Desc.SetMetaData(TEXT("Category"), Category);
+                AddedDesc.SetMetaData(TEXT("Category"), Category);
             }
 #endif
             Defaults.Add(MoveTemp(Default));
+            UnrealTypes.Add(MoveTemp(UnrealType));
             SeenStateIds.Add(StateId);
             SeenStateNames.Add(PropertyName);
         }
@@ -1291,9 +2407,35 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
         OutError = TEXT("Unreal could not create the compiled Script State layout.");
         return false;
     }
+    for (const FPropertyBagPropertyDesc& InputDesc : Descs)
+    {
+        const FPropertyBagPropertyDesc* MaterializedDesc =
+            DefaultsBag.FindPropertyDescByID(InputDesc.ID);
+        if (MaterializedDesc == nullptr ||
+            !ValidateCollectionHashability(*MaterializedDesc, OutError))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Unreal could not resolve a compiled Script State descriptor.");
+            }
+            return false;
+        }
+    }
     for (int32 Index = 0; Index < Descs.Num(); ++Index)
     {
-        if (!SetBinaryDefaultValue(DefaultsBag, Descs[Index], Defaults[Index], OutError))
+        const FPropertyBagPropertyDesc* MaterializedDesc =
+            DefaultsBag.FindPropertyDescByID(Descs[Index].ID);
+        if (MaterializedDesc == nullptr)
+        {
+            OutError = TEXT("Unreal could not resolve a compiled Script State descriptor.");
+            return false;
+        }
+        if (!SetBinaryDefaultValue(
+                DefaultsBag,
+                *MaterializedDesc,
+                Defaults[Index],
+                &UnrealTypes[Index],
+                OutError))
         {
             return false;
         }
@@ -1393,7 +2535,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
 
     TSharedPtr<FJsonObject> Root;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeclarationJson);
-    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    if (!FJsonSerializer::Deserialize(
+            Reader, Root, FJsonSerializer::EFlags::StoreNumbersAsStrings) || !Root.IsValid())
     {
         OutError = FString::Printf(
             TEXT("Script Asset declaration JSON is invalid: %s"),
@@ -1450,10 +2593,12 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
 
     TArray<FPropertyBagPropertyDesc> Descs;
     TArray<TSharedPtr<FJsonValue>> Defaults;
+    TArray<FStateUnrealType> UnrealTypes;
     TSet<FGuid> SeenIds;
     TSet<FName> SeenNames;
     Descs.Reserve(States->Num());
     Defaults.Reserve(States->Num());
+    UnrealTypes.Reserve(States->Num());
     for (const TSharedPtr<FJsonValue>& StateValue : *States)
     {
         const TSharedPtr<FJsonObject> State = StateValue.IsValid()
@@ -1496,12 +2641,13 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             return false;
         }
         if (!ReadJsonUnrealType(State, UnrealType) ||
-            !ResolvePropertyType(
-                TypeKind,
-                MetadataName,
-                UnrealType,
-                PropertyType,
-                PropertyTypeObject))
+            (TypeKind == TEXT("array") || TypeKind == TEXT("set") || TypeKind == TEXT("map")
+                ? false : !ResolvePropertyType(
+                    TypeKind,
+                    MetadataName,
+                    UnrealType,
+                    PropertyType,
+                    PropertyTypeObject)))
         {
             OutError = FString::Printf(
                 TEXT("State '%s' uses unsupported declaration type '%s' (%s)."),
@@ -1538,22 +2684,40 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             Flags |= CPF_Net;
         }
 
-        FPropertyBagPropertyDesc& Desc = Descs.Emplace_GetRef(
-            PropertyName,
-            EPropertyBagContainerType::None,
-            PropertyType,
-            PropertyTypeObject,
-            Flags);
-        Desc.ID = Id;
+        FPropertyBagPropertyDesc Desc;
+        if (TypeKind == TEXT("array") || TypeKind == TEXT("set") || TypeKind == TEXT("map"))
+        {
+            if (!ResolveContainerPropertyType(TypeKind, MetadataName, UnrealType, Desc))
+            {
+                OutError = FString::Printf(
+                    TEXT("State '%s' uses unsupported or nested collection metadata."), *Name);
+                return false;
+            }
+            Desc.Name = PropertyName;
+            Desc.PropertyFlags = static_cast<uint64>(Flags);
+        }
+        else
+        {
+            Desc = FPropertyBagPropertyDesc(
+                PropertyName,
+                EPropertyBagContainerType::None,
+                PropertyType,
+                PropertyTypeObject,
+                Flags);
+        }
+        Descs.Add(MoveTemp(Desc));
+        FPropertyBagPropertyDesc& AddedDesc = Descs.Last();
+        AddedDesc.ID = Id;
 #if WITH_EDITOR
-        Desc.SetMetaData(TEXT("DisplayName"), Name);
-        Desc.SetMetaData(TEXT("UnifiedScriptSemanticId"), SemanticId);
+        AddedDesc.SetMetaData(TEXT("DisplayName"), Name);
+        AddedDesc.SetMetaData(TEXT("UnifiedScriptSemanticId"), SemanticId);
         if (!Category.IsEmpty())
         {
-            Desc.SetMetaData(TEXT("Category"), Category);
+            AddedDesc.SetMetaData(TEXT("Category"), Category);
         }
 #endif
         Defaults.Add(State->TryGetField(TEXT("defaultValue")));
+        UnrealTypes.Add(MoveTemp(UnrealType));
         SeenIds.Add(Id);
         SeenNames.Add(PropertyName);
     }
@@ -1565,9 +2729,35 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
         OutError = TEXT("Unreal could not create the declared Script State layout.");
         return false;
     }
+    for (const FPropertyBagPropertyDesc& InputDesc : Descs)
+    {
+        const FPropertyBagPropertyDesc* MaterializedDesc =
+            DefaultsBag.FindPropertyDescByID(InputDesc.ID);
+        if (MaterializedDesc == nullptr ||
+            !ValidateCollectionHashability(*MaterializedDesc, OutError))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Unreal could not resolve a declared Script State descriptor.");
+            }
+            return false;
+        }
+    }
     for (int32 Index = 0; Index < Descs.Num(); ++Index)
     {
-        if (!SetDefaultValue(DefaultsBag, Descs[Index], Defaults[Index], OutError))
+        const FPropertyBagPropertyDesc* MaterializedDesc =
+            DefaultsBag.FindPropertyDescByID(Descs[Index].ID);
+        if (MaterializedDesc == nullptr)
+        {
+            OutError = TEXT("Unreal could not resolve a declared Script State descriptor.");
+            return false;
+        }
+        if (!SetDefaultValue(
+                DefaultsBag,
+                *MaterializedDesc,
+                Defaults[Index],
+                &UnrealTypes[Index],
+                OutError))
         {
             return false;
         }

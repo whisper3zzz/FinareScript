@@ -1896,9 +1896,30 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             UnrealInvocationValueKind.Rotator => ReadRotatorPayload(stringData, stringLength),
             UnrealInvocationValueKind.Transform => ReadTransformPayload(stringData, stringLength),
             UnrealInvocationValueKind.Enum => ReadEnumPayload(stringData, stringLength),
+            UnrealInvocationValueKind.Array or
+                UnrealInvocationValueKind.Set or
+                UnrealInvocationValueKind.Map => ReadContainerPayload(
+                    (UnrealInvocationValueKind)kind,
+                    stringData,
+                    stringLength),
             _ => throw new InvalidOperationException(
                 $"The native Unreal transport returned unknown value kind {kind}."),
         };
+
+    private static UnrealInvocationValue ReadContainerPayload(
+        UnrealInvocationValueKind kind,
+        nint data,
+        int length)
+    {
+        int rootSize = Marshal.SizeOf<UnrealNativeValueV3>();
+        if (length < rootSize || length > UnrealByteBuffer.MaximumCallBytes)
+        {
+            throw new InvalidOperationException("The native Unreal transport returned an invalid collection payload.");
+        }
+        return UnrealInvocationValue.FromContainerPayload(
+            kind,
+            ReadPayload(data, length, length));
+    }
 
     private static UnrealInvocationValue ReadEnumPayload(nint data, int length)
     {
@@ -2272,6 +2293,15 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 nativeValue.StringData = _payload.Pointer;
                 nativeValue.StringLength = _payload.Length;
             }
+            else if (value.Kind is UnrealInvocationValueKind.Array or
+                UnrealInvocationValueKind.Set or UnrealInvocationValueKind.Map)
+            {
+                if (value.ContainerPayload is not ReadOnlyMemory<byte> containerPayload)
+                    throw new ArgumentException("A collection value requires an owned V3 payload.");
+                _payload = new NativeByteBuffer(containerPayload.Span);
+                nativeValue.StringData = _payload.Pointer;
+                nativeValue.StringLength = _payload.Length;
+            }
             Value = nativeValue;
         }
 
@@ -2293,14 +2323,13 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
 
     private sealed class NativeByteBuffer : IDisposable
     {
-        public NativeByteBuffer(byte[] value)
+        public NativeByteBuffer(ReadOnlySpan<byte> value)
         {
-            ArgumentNullException.ThrowIfNull(value);
             Length = value.Length;
             Pointer = Marshal.AllocHGlobal(Math.Max(1, Length));
             if (Length > 0)
             {
-                Marshal.Copy(value, 0, Pointer, Length);
+                Marshal.Copy(value.ToArray(), 0, Pointer, Length);
             }
         }
 

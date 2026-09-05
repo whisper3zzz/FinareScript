@@ -476,6 +476,14 @@ bool TryDecodeUtf8(const uint8* Data, int32 Length, FString& OutValue)
     return true;
 }
 
+bool EncodeContainerPayloadV3(
+    const FUnifiedScriptValue& Value,
+    TArray<uint8>& OutPayload);
+
+bool DecodeContainerPayloadV3(
+    const FUnifiedScriptNativeValueV1& NativeValue,
+    FUnifiedScriptValue& OutValue);
+
 void Complete(
     FUnifiedScriptNativeResultCallbackV1 Callback,
     void* UserData,
@@ -487,58 +495,79 @@ void Complete(
         return;
     }
 
+    FUnifiedScriptInvocationResult EffectiveResult = Result;
+    FUnifiedScriptValue EmptyValue;
+    const FUnifiedScriptValue* ReportedValue = &Value;
+    TArray<uint8> ContainerPayload;
+    if (EffectiveResult.IsSuccess() &&
+        (Value.Kind == EUnifiedScriptValueKind::Array ||
+         Value.Kind == EUnifiedScriptValueKind::Set ||
+         Value.Kind == EUnifiedScriptValueKind::Map) &&
+        !EncodeContainerPayloadV3(Value, ContainerPayload))
+    {
+        EffectiveResult.Error = EUnifiedScriptInvocationError::UnsupportedValueType;
+        EffectiveResult.Message = TEXT("The reflected collection result cannot be encoded in the bounded V3 payload.");
+        EmptyValue = {};
+        ReportedValue = &EmptyValue;
+    }
+    if (!EffectiveResult.IsSuccess())
+    {
+        EmptyValue = {};
+        ReportedValue = &EmptyValue;
+    }
+
     FString StringValue;
-    switch (Value.Kind)
+    switch (ReportedValue->Kind)
     {
     case EUnifiedScriptValueKind::String:
     case EUnifiedScriptValueKind::SoftObject:
     case EUnifiedScriptValueKind::SoftClass:
-        StringValue = Value.StringValue;
+        StringValue = ReportedValue->StringValue;
         break;
     case EUnifiedScriptValueKind::Name:
-        StringValue = Value.NameValue.ToString();
+        StringValue = ReportedValue->NameValue.ToString();
         break;
     case EUnifiedScriptValueKind::Text:
-        StringValue = Value.TextValue.ToString();
+        StringValue = ReportedValue->TextValue.ToString();
         break;
     default:
         break;
     }
     const FTCHARToUTF8 StringUtf8(*StringValue);
-    const FTCHARToUTF8 MessageUtf8(*Result.Message);
-    const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String ||
-        Value.Kind == EUnifiedScriptValueKind::SoftObject ||
-        Value.Kind == EUnifiedScriptValueKind::SoftClass ||
-        Value.Kind == EUnifiedScriptValueKind::Name ||
-        Value.Kind == EUnifiedScriptValueKind::Text;
+    const FTCHARToUTF8 MessageUtf8(*EffectiveResult.Message);
+    const bool bHasString = ReportedValue->Kind == EUnifiedScriptValueKind::String ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::SoftObject ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::SoftClass ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::Name ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::Text;
     uint8 BinaryPayload[sizeof(double) * 10] = {};
     TArray<uint8> EnumPayload;
-    int32 EncodedInt32 = Value.Int32Value;
-    switch (Value.Kind)
+    int32 EncodedInt32 = ReportedValue->Int32Value;
+    switch (ReportedValue->Kind)
     {
-    case EUnifiedScriptValueKind::Int8: EncodedInt32 = Value.Int8Value; break;
-    case EUnifiedScriptValueKind::UInt8: EncodedInt32 = Value.UInt8Value; break;
-    case EUnifiedScriptValueKind::Int16: EncodedInt32 = Value.Int16Value; break;
-    case EUnifiedScriptValueKind::UInt16: EncodedInt32 = Value.UInt16Value; break;
-    case EUnifiedScriptValueKind::UInt32: EncodedInt32 = std::bit_cast<int32>(Value.UInt32Value); break;
-    case EUnifiedScriptValueKind::Float32: EncodedInt32 = std::bit_cast<int32>(Value.Float32Value); break;
+    case EUnifiedScriptValueKind::Int8: EncodedInt32 = ReportedValue->Int8Value; break;
+    case EUnifiedScriptValueKind::UInt8: EncodedInt32 = ReportedValue->UInt8Value; break;
+    case EUnifiedScriptValueKind::Int16: EncodedInt32 = ReportedValue->Int16Value; break;
+    case EUnifiedScriptValueKind::UInt16: EncodedInt32 = ReportedValue->UInt16Value; break;
+    case EUnifiedScriptValueKind::UInt32: EncodedInt32 = std::bit_cast<int32>(ReportedValue->UInt32Value); break;
+    case EUnifiedScriptValueKind::Float32: EncodedInt32 = std::bit_cast<int32>(ReportedValue->Float32Value); break;
     default: break;
     }
     const uint8* ValueData = bHasString
         ? reinterpret_cast<const uint8*>(StringUtf8.Get())
         : nullptr;
     int32 ValueLength = bHasString ? StringUtf8.Length() : 0;
-    if (Value.Kind == EUnifiedScriptValueKind::Int64 || Value.Kind == EUnifiedScriptValueKind::UInt64)
+    if (ReportedValue->Kind == EUnifiedScriptValueKind::Int64 || ReportedValue->Kind == EUnifiedScriptValueKind::UInt64)
     {
-        WriteUInt64LittleEndian(BinaryPayload, Value.Kind == EUnifiedScriptValueKind::Int64
-            ? std::bit_cast<uint64>(Value.Int64Value) : Value.UInt64Value);
+        WriteUInt64LittleEndian(BinaryPayload, ReportedValue->Kind == EUnifiedScriptValueKind::Int64
+            ? std::bit_cast<uint64>(ReportedValue->Int64Value) : ReportedValue->UInt64Value);
         ValueData = BinaryPayload;
         ValueLength = sizeof(uint64);
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Enum)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Enum)
     {
-        const FTCHARToUTF8 Path(Value.TypePath.IsNone() ? TEXT("") : *Value.TypePath.ToString());
-        if (Value.TypeIdValue == 0 || Path.Length() > 4096)
+        const FTCHARToUTF8 Path(ReportedValue->TypePath.IsNone() ? TEXT("") : *ReportedValue->TypePath.ToString());
+        if (ReportedValue->TypeIdValue == 0 || Path.Length() > 4096)
         {
             FUnifiedScriptInvocationResult Failure;
             Failure.Error = EUnifiedScriptInvocationError::ValueTypeMismatch;
@@ -547,68 +576,75 @@ void Complete(
             return;
         }
         EnumPayload.SetNumUninitialized(16 + Path.Length());
-        WriteUInt64LittleEndian(EnumPayload.GetData(), std::bit_cast<uint64>(Value.Int64Value));
-        WriteUInt64LittleEndian(EnumPayload.GetData() + 8, Value.TypeIdValue);
+        WriteUInt64LittleEndian(EnumPayload.GetData(), std::bit_cast<uint64>(ReportedValue->Int64Value));
+        WriteUInt64LittleEndian(EnumPayload.GetData() + 8, ReportedValue->TypeIdValue);
         if (Path.Length() > 0) FMemory::Memcpy(EnumPayload.GetData() + 16, Path.Get(), Path.Length());
         ValueData = EnumPayload.GetData();
         ValueLength = EnumPayload.Num();
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Float64)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Float64)
     {
-        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(Value.Float64Value));
+        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(ReportedValue->Float64Value));
         ValueData = BinaryPayload;
         ValueLength = sizeof(double);
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Object ||
-        Value.Kind == EUnifiedScriptValueKind::Class)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Object ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::Class)
     {
-        WriteUInt64LittleEndian(BinaryPayload, Value.ObjectHandleValue.Value);
+        WriteUInt64LittleEndian(BinaryPayload, ReportedValue->ObjectHandleValue.Value);
         ValueData = BinaryPayload;
         ValueLength = ObjectHandlePayloadSize;
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Vector)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Vector)
     {
         WriteUInt64LittleEndian(
             BinaryPayload,
-            std::bit_cast<uint64>(Value.VectorValue.X));
+            std::bit_cast<uint64>(ReportedValue->VectorValue.X));
         WriteUInt64LittleEndian(
             BinaryPayload + sizeof(uint64),
-            std::bit_cast<uint64>(Value.VectorValue.Y));
+            std::bit_cast<uint64>(ReportedValue->VectorValue.Y));
         WriteUInt64LittleEndian(
             BinaryPayload + sizeof(uint64) * 2,
-            std::bit_cast<uint64>(Value.VectorValue.Z));
+            std::bit_cast<uint64>(ReportedValue->VectorValue.Z));
         ValueData = BinaryPayload;
         ValueLength = VectorPayloadSize;
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Rotator)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Rotator)
     {
-        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(Value.RotatorValue.Pitch));
-        WriteUInt64LittleEndian(BinaryPayload + 8, std::bit_cast<uint64>(Value.RotatorValue.Yaw));
-        WriteUInt64LittleEndian(BinaryPayload + 16, std::bit_cast<uint64>(Value.RotatorValue.Roll));
+        WriteUInt64LittleEndian(BinaryPayload, std::bit_cast<uint64>(ReportedValue->RotatorValue.Pitch));
+        WriteUInt64LittleEndian(BinaryPayload + 8, std::bit_cast<uint64>(ReportedValue->RotatorValue.Yaw));
+        WriteUInt64LittleEndian(BinaryPayload + 16, std::bit_cast<uint64>(ReportedValue->RotatorValue.Roll));
         ValueData = BinaryPayload;
         ValueLength = 24;
     }
-    else if (Value.Kind == EUnifiedScriptValueKind::Transform)
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Transform)
     {
-        const FQuat Q = Value.TransformValue.GetRotation();
-        const FVector T = Value.TransformValue.GetTranslation();
-        const FVector S = Value.TransformValue.GetScale3D();
+        const FQuat Q = ReportedValue->TransformValue.GetRotation();
+        const FVector T = ReportedValue->TransformValue.GetTranslation();
+        const FVector S = ReportedValue->TransformValue.GetScale3D();
         const double Cells[] = {Q.X, Q.Y, Q.Z, Q.W, T.X, T.Y, T.Z, S.X, S.Y, S.Z};
         for (int32 Index = 0; Index < 10; ++Index)
             WriteUInt64LittleEndian(BinaryPayload + Index * 8, std::bit_cast<uint64>(Cells[Index]));
         ValueData = BinaryPayload;
         ValueLength = 80;
     }
+    else if (ReportedValue->Kind == EUnifiedScriptValueKind::Array ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::Set ||
+        ReportedValue->Kind == EUnifiedScriptValueKind::Map)
+    {
+        ValueData = ContainerPayload.GetData();
+        ValueLength = ContainerPayload.Num();
+    }
     Callback(
         UserData,
-        Result.IsSuccess() ? 1 : 0,
-        static_cast<uint8>(Value.Kind),
-        Value.BooleanValue ? 1 : 0,
+        EffectiveResult.IsSuccess() ? 1 : 0,
+        static_cast<uint8>(ReportedValue->Kind),
+        ReportedValue->BooleanValue ? 1 : 0,
         EncodedInt32,
         ValueData,
         ValueLength,
-        static_cast<uint8>(Result.Error),
-        static_cast<uint8>(Result.HandleError),
+        static_cast<uint8>(EffectiveResult.Error),
+        static_cast<uint8>(EffectiveResult.HandleError),
         reinterpret_cast<const uint8*>(MessageUtf8.Get()),
         MessageUtf8.Length());
 }
@@ -859,6 +895,14 @@ bool DecodeValue(
             FVector(At(4), At(5), At(6)), FVector(At(7), At(8), At(9))));
         return true;
     }
+    case EUnifiedScriptValueKind::Array:
+    case EUnifiedScriptValueKind::Set:
+    case EUnifiedScriptValueKind::Map:
+        if (DecodeContainerPayloadV3(NativeValue, OutValue))
+        {
+            return true;
+        }
+        return Invalid(TEXT("The UnifiedScript reflected collection payload is invalid."));
     default:
         CompleteFailure(
             Callback,
@@ -1965,6 +2009,154 @@ bool EncodeValueV3(
     }
     default:
         return false;
+    }
+    return true;
+}
+
+bool IsFlatOwnedCollectionValue(const FUnifiedScriptValue& Value)
+{
+    // Property state collections are deliberately flat in this tranche. A
+    // nested container/struct must not accidentally become a generic V3 DAG
+    // accepted by the legacy property-path lane.
+    return Value.Kind != EUnifiedScriptValueKind::Struct &&
+        Value.Kind != EUnifiedScriptValueKind::Array &&
+        Value.Kind != EUnifiedScriptValueKind::Set &&
+        Value.Kind != EUnifiedScriptValueKind::Map;
+}
+
+bool EncodeContainerPayloadV3(
+    const FUnifiedScriptValue& Value,
+    TArray<uint8>& OutPayload)
+{
+    if ((Value.Kind != EUnifiedScriptValueKind::Array &&
+         Value.Kind != EUnifiedScriptValueKind::Set &&
+         Value.Kind != EUnifiedScriptValueKind::Map) ||
+        Value.TypeIdValue == 0 ||
+        (Value.Kind == EUnifiedScriptValueKind::Map &&
+            Value.ContainerValues.Num() % 2 != 0))
+    {
+        return false;
+    }
+    for (const FUnifiedScriptValue& Child : Value.ContainerValues)
+    {
+        if (!IsFlatOwnedCollectionValue(Child))
+        {
+            return false;
+        }
+    }
+
+    constexpr uint32 RootSize = sizeof(FUnifiedScriptNativeValueV3);
+    if (FUnifiedScriptByteBuffer::MaximumCallBytes < RootSize)
+    {
+        return false;
+    }
+    const uint32 MaximumArena =
+        FUnifiedScriptByteBuffer::MaximumCallBytes - RootSize;
+    uint32 RequiredBytes = 0;
+    if (!MeasureValueV3(Value, RequiredBytes) || RequiredBytes > MaximumArena)
+    {
+        return false;
+    }
+    TArray<uint8> Arena;
+    Arena.SetNumZeroed(static_cast<int32>(RequiredBytes));
+    FUnifiedScriptNativeCallFrameV3 Frame;
+    Frame.ByteBuffer = Arena.GetData();
+    Frame.ByteCapacity = RequiredBytes;
+    FUnifiedScriptNativeValueV3 Root;
+    uint32 ByteCursor = 0;
+    if (!EncodeValueV3(Value, Frame, Root, ByteCursor) ||
+        ByteCursor != RequiredBytes)
+    {
+        return false;
+    }
+
+    OutPayload.SetNumUninitialized(static_cast<int32>(RootSize + ByteCursor));
+    FMemory::Memcpy(OutPayload.GetData(), &Root, RootSize);
+    if (ByteCursor > 0)
+    {
+        FMemory::Memcpy(OutPayload.GetData() + RootSize, Arena.GetData(), ByteCursor);
+    }
+    return true;
+}
+
+bool DecodeContainerPayloadV3(
+    const FUnifiedScriptNativeValueV1& NativeValue,
+    FUnifiedScriptValue& OutValue)
+{
+    constexpr uint32 RootSize = sizeof(FUnifiedScriptNativeValueV3);
+    if (NativeValue.StringData == nullptr ||
+        NativeValue.StringLength < static_cast<int32>(RootSize) ||
+        NativeValue.StringLength > static_cast<int32>(FUnifiedScriptByteBuffer::MaximumCallBytes))
+    {
+        return false;
+    }
+    FUnifiedScriptNativeValueV3 Root;
+    FMemory::Memcpy(&Root, NativeValue.StringData, RootSize);
+    const EUnifiedScriptValueKind ExpectedKind =
+        static_cast<EUnifiedScriptValueKind>(NativeValue.Kind);
+    const EUnifiedScriptNativeValueKindV3 ExpectedNativeKind =
+        ExpectedKind == EUnifiedScriptValueKind::Array
+            ? EUnifiedScriptNativeValueKindV3::Array
+            : ExpectedKind == EUnifiedScriptValueKind::Set
+                ? EUnifiedScriptNativeValueKindV3::Set
+                : EUnifiedScriptNativeValueKindV3::Map;
+    if (Root.Kind != ExpectedNativeKind)
+    {
+        return false;
+    }
+    const uint64 CellsPerEntry = ExpectedKind == EUnifiedScriptValueKind::Map ? 2ull : 1ull;
+    if (Root.Reserved16 != 0 || Root.Auxiliary != 0 ||
+        Root.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+        Root.TypeId == 0 || Root.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||
+        Root.Payload2 > MAX_int32 ||
+        Root.Payload2 > MAX_uint64 / CellsPerEntry)
+    {
+        return false;
+    }
+    const uint64 CellCount = Root.Payload2 * CellsPerEntry;
+    if (CellCount > MAX_uint32 / sizeof(FUnifiedScriptNativeValueV3) ||
+        Root.Payload1 != CellCount * sizeof(FUnifiedScriptNativeValueV3))
+    {
+        return false;
+    }
+    const uint32 ArenaBytes =
+        static_cast<uint32>(NativeValue.StringLength - RootSize);
+    if (Root.Payload0 > ArenaBytes || Root.Payload1 > ArenaBytes - Root.Payload0)
+    {
+        return false;
+    }
+    const uint8* DescriptorData =
+        NativeValue.StringData + RootSize + Root.Payload0;
+    for (uint64 Index = 0; Index < CellCount; ++Index)
+    {
+        FUnifiedScriptNativeValueV3 Cell;
+        FMemory::Memcpy(
+            &Cell,
+            DescriptorData + Index * sizeof(FUnifiedScriptNativeValueV3),
+            sizeof(Cell));
+        if (Cell.Kind == EUnifiedScriptNativeValueKindV3::Struct ||
+            Cell.Kind == EUnifiedScriptNativeValueKindV3::Array ||
+            Cell.Kind == EUnifiedScriptNativeValueKindV3::Set ||
+            Cell.Kind == EUnifiedScriptNativeValueKindV3::Map)
+        {
+            return false;
+        }
+    }
+    FUnifiedScriptNativeCallFrameV3 Frame;
+    Frame.ByteBuffer = const_cast<uint8*>(NativeValue.StringData + RootSize);
+    Frame.ByteCapacity = ArenaBytes;
+    Frame.ByteCount = ArenaBytes;
+    if (!DecodeValueV3(Root, Frame, ArenaBytes, OutValue) ||
+        OutValue.Kind != ExpectedKind)
+    {
+        return false;
+    }
+    for (const FUnifiedScriptValue& Child : OutValue.ContainerValues)
+    {
+        if (!IsFlatOwnedCollectionValue(Child))
+        {
+            return false;
+        }
     }
     return true;
 }

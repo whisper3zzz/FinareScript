@@ -7,6 +7,222 @@ namespace UnifiedScript.Tests;
 
 public sealed partial class InProcessUnrealNativeInvocationTransportTests
 {
+    [Fact]
+    public void PropertyPathPreflightsNullMapValuesBeforeArenaGrowthOrNativeWrite()
+    {
+        int writeCallbacks = 0;
+        IReadOnlyDictionary<UnrealName, string> map = new Dictionary<UnrealName, string>
+        {
+            [new UnrealName("MissingValue")] = null!,
+        };
+
+        WithCommonValueLoopback(
+            transport =>
+            {
+                var bridge = new NativeUnrealInvocationBridge(transport);
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                Assert.Throws<UnrealInvocationException>(() => bridge.WriteProperty(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property",
+                    map));
+                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.InRange(allocated, 0, 2 * 1024 * 1024);
+            },
+            onWrite: () => writeCallbacks++);
+
+        Assert.Equal(0, writeCallbacks);
+    }
+
+    [Fact]
+    public void LegacyPropertyPathCarriesPackedV3CollectionPayloadsThroughBridge()
+    {
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            PackCollection<IReadOnlyList<int>>([1, 2, 3]),
+            transport =>
+            {
+                var bridge = new NativeUnrealInvocationBridge(transport);
+                UnrealObjectHandle target = UnrealObjectHandle.Create(4, 9);
+                Assert.Equal(
+                    [1, 2, 3],
+                    bridge.ReadProperty<IReadOnlyList<int>>(target, "property"));
+
+                IReadOnlyList<int> replacement = [7, 11];
+                bridge.WriteProperty(target, "property", replacement);
+                Assert.Equal(replacement, bridge.ReadProperty<IReadOnlyList<int>>(target, "property"));
+            });
+
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Set,
+            PackCollection<IReadOnlySet<UnrealVector>>(new HashSet<UnrealVector>
+            {
+                new(1, 2, 3),
+                new(1, 2, 4),
+            }),
+            transport =>
+            {
+                var bridge = new NativeUnrealInvocationBridge(transport);
+                IReadOnlySet<UnrealVector> decoded = bridge.ReadProperty<IReadOnlySet<UnrealVector>>(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property");
+                Assert.Equal(2, decoded.Count);
+                Assert.Contains(new UnrealVector(1, 2, 4), decoded);
+            });
+
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Map,
+            PackCollection<IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle>>(
+                new Dictionary<UnrealName, UnrealSoftObjectHandle>
+                {
+                    [new UnrealName("Mesh")] = new("/Game/Props/Cube.Cube"),
+                }),
+            transport =>
+            {
+                var bridge = new NativeUnrealInvocationBridge(transport);
+                IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle> decoded =
+                    bridge.ReadProperty<IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle>>(
+                        UnrealObjectHandle.Create(4, 9),
+                        "property");
+                Assert.Equal("/Game/Props/Cube.Cube", decoded.Single().Value.AssetPath);
+            });
+    }
+
+    [Fact]
+    public void PackedCollectionPropertyPathRejectsWrongRootAndMalformedArena()
+    {
+        byte[] wrongKind = PackCollection<IReadOnlyList<int>>([1, 2]);
+        UnrealNativeValueV3 root = MemoryMarshal.Read<UnrealNativeValueV3>(wrongKind);
+        root.Kind = UnrealNativeValueKindV3.Set;
+        MemoryMarshal.Write(wrongKind.AsSpan(), in root);
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            wrongKind,
+            transport => Assert.Throws<UnrealInvocationException>(() =>
+                new NativeUnrealInvocationBridge(transport).ReadProperty<IReadOnlyList<int>>(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property")));
+
+        byte[] wrongType = PackCollection<IReadOnlyList<int>>([1, 2]);
+        root = MemoryMarshal.Read<UnrealNativeValueV3>(wrongType);
+        root.TypeId = UnrealTypeIdV3.FromPath("TArray<float>");
+        MemoryMarshal.Write(wrongType.AsSpan(), in root);
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            wrongType,
+            transport => Assert.Throws<UnrealInvocationException>(() =>
+                new NativeUnrealInvocationBridge(transport).ReadProperty<IReadOnlyList<int>>(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property")));
+
+        byte[] truncated = PackCollection<IReadOnlyList<int>>([1, 2]);
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            truncated[..^1],
+            transport => Assert.Throws<UnrealInvocationException>(() =>
+                new NativeUnrealInvocationBridge(transport).ReadProperty<IReadOnlyList<int>>(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property")));
+
+        byte[] badOffset = PackCollection<IReadOnlyList<int>>([1, 2]);
+        root = MemoryMarshal.Read<UnrealNativeValueV3>(badOffset);
+        root.Payload0 = (ulong)badOffset.Length;
+        MemoryMarshal.Write(badOffset.AsSpan(), in root);
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            badOffset,
+            transport => Assert.Throws<UnrealInvocationException>(() =>
+                new NativeUnrealInvocationBridge(transport).ReadProperty<IReadOnlyList<int>>(
+                    UnrealObjectHandle.Create(4, 9),
+                    "property")));
+
+        byte[] lateLeaf = PackCollection<IReadOnlyList<int>>([1, 2]);
+        root = MemoryMarshal.Read<UnrealNativeValueV3>(lateLeaf);
+        int secondCellOffset = checked(
+            Marshal.SizeOf<UnrealNativeValueV3>() +
+            (int)root.Payload0 +
+            UnrealNativeAbiV3.ValueSize);
+        UnrealNativeValueV3 invalidCell = MemoryMarshal.Read<UnrealNativeValueV3>(
+            lateLeaf.AsSpan(secondCellOffset));
+        invalidCell.Kind = UnrealNativeValueKindV3.Boolean;
+        MemoryMarshal.Write(lateLeaf.AsSpan(secondCellOffset), in invalidCell);
+        WithPackedCollectionLoopback(
+            UnrealInvocationValueKind.Array,
+            lateLeaf,
+            transport => Assert.Throws<UnrealInvocationException>(() =>
+                new NativeUnrealInvocationBridge(transport).ReadProperty<IReadOnlyList<int>>(
+                    UnrealObjectHandle.Create(4, 9),
+                "property")));
+    }
+
+    [Fact]
+    public void PackedCollectionPayloadTakesAnOwnedSnapshotAtCallbackBoundary()
+    {
+        byte[] source = PackCollection<IReadOnlyList<int>>([13, 17]);
+        var bridge = new NativeUnrealInvocationBridge(new OwnedCollectionPayloadTransport(source));
+
+        Assert.Equal(
+            [13, 17],
+            bridge.ReadProperty<IReadOnlyList<int>>(
+                UnrealObjectHandle.Create(4, 9),
+                "property"));
+    }
+
+    private static byte[] PackCollection<T>(T value)
+    {
+        byte[] arena = new byte[4096];
+        int byteCount = 0;
+        Assert.True(UnrealNativeValueCodecV3.TryEncode(
+            value,
+            arena,
+            ref byteCount,
+            out UnrealNativeValueV3 root,
+            out _));
+        int rootSize = Marshal.SizeOf<UnrealNativeValueV3>();
+        byte[] payload = new byte[checked(rootSize + byteCount)];
+        MemoryMarshal.Write(payload.AsSpan(), in root);
+        arena.AsSpan(0, byteCount).CopyTo(payload.AsSpan(rootSize));
+        return payload;
+    }
+
+    private void WithPackedCollectionLoopback(
+        UnrealInvocationValueKind kind,
+        byte[] payload,
+        Action<InProcessUnrealNativeInvocationTransport> test)
+    {
+        WithCommonValueLoopback(test, kind, initialBytes: payload);
+    }
+
+    private sealed class OwnedCollectionPayloadTransport(byte[] payload)
+        : IUnrealNativeInvocationTransport
+    {
+        public UnrealInvocationResponse ReadProperty(
+            UnrealObjectHandle target,
+            string propertyPath)
+        {
+            UnrealInvocationValue value = UnrealInvocationValue.FromContainerPayload(
+                UnrealInvocationValueKind.Array,
+                payload);
+            UnrealNativeValueV3 root = MemoryMarshal.Read<UnrealNativeValueV3>(payload);
+            root.TypeId = UnrealTypeIdV3.FromPath("TArray<float>");
+            MemoryMarshal.Write(payload.AsSpan(), in root);
+            return UnrealInvocationResponse.Succeeded(value);
+        }
+
+        public UnrealInvocationResponse WriteProperty(
+            UnrealObjectHandle target,
+            string propertyPath,
+            UnrealInvocationValue value) =>
+            UnrealInvocationResponse.Succeeded(UnrealInvocationValue.Void);
+
+        public UnrealInvocationResponse Invoke(
+            UnrealObjectHandle target,
+            string functionPath,
+            IReadOnlyList<UnrealInvocationValue> arguments) =>
+            UnrealInvocationResponse.Failed(
+                UnrealInvocationError.FunctionNotFound,
+                "Not used by this test.");
+    }
+
     public static IEnumerable<object[]> LegacyCommonValues()
     {
         yield return [UnrealInvocationValue.FromInt8(sbyte.MinValue)];
@@ -87,7 +303,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
     }
 
     private void WithCommonValueLoopback(Action<InProcessUnrealNativeInvocationTransport> test,
-        UnrealInvocationValueKind initialKind = UnrealInvocationValueKind.Void, int initialCell = 0, byte[]? initialBytes = null)
+        UnrealInvocationValueKind initialKind = UnrealInvocationValueKind.Void, int initialCell = 0, byte[]? initialBytes = null,
+        Action? onWrite = null)
     {
         byte kind = (byte)initialKind;
         int cell = initialCell;
@@ -105,6 +322,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
         UnrealNativeReadPropertyV1 read = (context, target, path, length, callback, userData) => Reply(callback, userData);
         UnrealNativeWritePropertyV1 write = (context, target, path, length, value, callback, userData) =>
         {
+            onWrite?.Invoke();
             Store(value);
             InvokeCallback(callback, userData, true);
         };

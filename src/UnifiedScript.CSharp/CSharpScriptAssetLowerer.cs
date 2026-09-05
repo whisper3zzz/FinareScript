@@ -198,6 +198,15 @@ internal sealed class CSharpScriptAssetLowerer
                 UnifiedDiagnosticSeverity.Error, exception.Message, hir.Span));
             return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
         }
+        catch (JsonException exception)
+        {
+            diagnostics.Add(new UnifiedDiagnostic(
+                DeclarationDiagnosticCodes.StateDefaultRequired,
+                UnifiedDiagnosticSeverity.Error,
+                exception.Message,
+                hir.Span));
+            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
+        }
     }
 
     private static bool TryReadNamedString(
@@ -832,6 +841,36 @@ internal sealed class CSharpScriptAssetLowerer
                     LowerFunctionValueType(compilation, argument, depth + 1))).ToArray());
         }
 
+        string knownValueMetadata = type.ToDisplayString(TypeMetadataFormat);
+        if (knownValueMetadata is "UnifiedScript.Unreal.UnrealVector" or
+            "UnifiedScript.Unreal.UnrealRotator" or
+            "UnifiedScript.Unreal.UnrealTransform")
+        {
+            string path = knownValueMetadata switch
+            {
+                "UnifiedScript.Unreal.UnrealVector" => "/Script/CoreUObject.Vector",
+                "UnifiedScript.Unreal.UnrealRotator" => "/Script/CoreUObject.Rotator",
+                _ => "/Script/CoreUObject.Transform",
+            };
+            string nativeName = knownValueMetadata switch
+            {
+                "UnifiedScript.Unreal.UnrealVector" => "Vector",
+                "UnifiedScript.Unreal.UnrealRotator" => "Rotator",
+                _ => "Transform",
+            };
+            return new ScriptFunctionValueTypeDeclaration(
+                ScriptFunctionValueTypeKind.Struct,
+                path,
+                nativeName,
+                knownValueMetadata == "UnifiedScript.Unreal.UnrealVector"
+                    ? [
+                        new ScriptFunctionStructFieldDeclaration(0, "X", "System.Double"),
+                        new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
+                        new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
+                    ]
+                    : []);
+        }
+
         AttributeData? enumAttribute = FindAttribute(type, UnrealEnumAttributeName);
         if (TryReadUnrealTypeIdentity(
                 enumAttribute,
@@ -922,6 +961,59 @@ internal sealed class CSharpScriptAssetLowerer
     {
         string metadataName = type.ToDisplayString(TypeMetadataFormat);
         unrealType = null;
+        ScriptFunctionValueTypeDeclaration? classifiedValueType =
+            LowerFunctionValueType(compilation, type);
+        if (classifiedValueType?.Kind is ScriptFunctionValueTypeKind.Array or
+            ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
+        {
+            ITypeSymbol[] collectionArguments = type is INamedTypeSymbol namedType
+                ? namedType.TypeArguments.ToArray()
+                : [];
+            IReadOnlyList<ScriptFunctionTypeArgumentDeclaration>? declaredArguments =
+                classifiedValueType.TypeArguments;
+            bool validLeaf = declaredArguments is not null &&
+                declaredArguments.Count == collectionArguments.Length;
+            ScriptFunctionTypeArgumentDeclaration[] normalizedArguments =
+                declaredArguments?.ToArray() ?? [];
+            if (validLeaf)
+            {
+                for (int index = 0; index < collectionArguments.Length; index++)
+                {
+                    if (normalizedArguments[index].UnrealType?.Kind is
+                        ScriptFunctionValueTypeKind.Array or ScriptFunctionValueTypeKind.Set or
+                        ScriptFunctionValueTypeKind.Map ||
+                        !TryClassifyType(
+                            compilation,
+                            collectionArguments[index],
+                            out ScriptStateTypeKind leafKind,
+                            out ScriptFunctionValueTypeDeclaration? leafType) ||
+                        leafKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or
+                            ScriptStateTypeKind.Map ||
+                        leafKind == ScriptStateTypeKind.Enum && leafType is null)
+                    {
+                        validLeaf = false;
+                        break;
+                    }
+                    normalizedArguments[index] = normalizedArguments[index] with
+                    {
+                        UnrealType = leafType,
+                    };
+                }
+            }
+            if (!validLeaf)
+            {
+                kind = default;
+                return false;
+            }
+            kind = classifiedValueType.Kind switch
+            {
+                ScriptFunctionValueTypeKind.Array => ScriptStateTypeKind.Array,
+                ScriptFunctionValueTypeKind.Set => ScriptStateTypeKind.Set,
+                _ => ScriptStateTypeKind.Map,
+            };
+            unrealType = classifiedValueType with { TypeArguments = normalizedArguments };
+            return true;
+        }
         bool isGeneratedUnrealEnum = type is INamedTypeSymbol generatedEnum &&
             TryReadUnrealTypeIdentity(
                 FindAttribute(generatedEnum, UnrealEnumAttributeName),
@@ -1153,6 +1245,13 @@ internal sealed class CSharpScriptAssetLowerer
         out JsonElement value)
     {
         string metadataName = type.ToDisplayString(TypeMetadataFormat);
+        if (type is INamedTypeSymbol collectionType &&
+            collectionType.IsGenericType &&
+            collectionType.OriginalDefinition.MetadataName is "IReadOnlyList`1" or
+                "IReadOnlySet`1" or "IReadOnlyDictionary`2")
+        {
+            return TryCreateCollectionDefault(collectionType, expression, semanticModel, out value);
+        }
         if (type is INamedTypeSymbol typedEnum &&
             TryReadUnrealTypeIdentity(
                 FindAttribute(typedEnum, UnrealEnumAttributeName),
@@ -1432,6 +1531,120 @@ internal sealed class CSharpScriptAssetLowerer
 
         value = JsonSerializer.SerializeToElement(constant, constant?.GetType() ?? typeof(object));
         return true;
+    }
+
+    private static bool TryCreateCollectionDefault(
+        INamedTypeSymbol collectionType,
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        out JsonElement value)
+    {
+        value = default;
+        IReadOnlyList<ExpressionSyntax>? collectionItems = null;
+        InitializerExpressionSyntax? initializer = expression switch
+        {
+            ObjectCreationExpressionSyntax creation => creation.Initializer,
+            ImplicitObjectCreationExpressionSyntax creation => creation.Initializer,
+            _ => null,
+        };
+        if (initializer is null && expression is CollectionExpressionSyntax collection &&
+            collection.Elements.All(static element => element is ExpressionElementSyntax))
+        {
+            // Keep the original expressions attached to the source tree. A
+            // synthesized InitializerExpression has no SyntaxTree, so asking
+            // the source SemanticModel for constant/type information on its
+            // children throws before the declaration can produce a diagnostic.
+            collectionItems = collection.Elements
+                .Cast<ExpressionElementSyntax>()
+                .Select(static element => element.Expression)
+                .ToArray();
+        }
+        if (initializer is null && collectionItems is null)
+        {
+            BaseArgumentListSyntax? arguments = expression switch
+            {
+                ObjectCreationExpressionSyntax creation => creation.ArgumentList,
+                ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList,
+                _ => null,
+            };
+            if (arguments?.Arguments.Count == 0 &&
+                IsReviewedCollectionConstructor(semanticModel, expression, collectionType))
+            {
+                value = JsonSerializer.SerializeToElement(Array.Empty<object>());
+                return true;
+            }
+            return false;
+        }
+
+        var items = new List<JsonElement>();
+        var types = collectionType.TypeArguments;
+        if (expression is ObjectCreationExpressionSyntax creationWithInitializer &&
+            !IsReviewedCollectionConstructor(semanticModel, creationWithInitializer, collectionType) ||
+            expression is ImplicitObjectCreationExpressionSyntax implicitWithInitializer &&
+            !IsReviewedCollectionConstructor(semanticModel, implicitWithInitializer, collectionType))
+        {
+            return false;
+        }
+        IEnumerable<ExpressionSyntax> sourceItems = collectionItems ?? initializer!.Expressions;
+        foreach (ExpressionSyntax item in sourceItems)
+        {
+            if (collectionType.OriginalDefinition.MetadataName == "IReadOnlyDictionary`2")
+            {
+                if (item is not InitializerExpressionSyntax pair || pair.Expressions.Count != 2 ||
+                    !TryCreateDefaultValue(types[0], pair.Expressions[0], semanticModel, out JsonElement key) ||
+                    !TryCreateDefaultValue(types[1], pair.Expressions[1], semanticModel, out JsonElement mapped))
+                {
+                    return false;
+                }
+                items.Add(JsonSerializer.SerializeToElement(new { key, value = mapped }));
+            }
+            else if (!TryCreateDefaultValue(types[0], item, semanticModel, out JsonElement element))
+            {
+                return false;
+            }
+            else
+            {
+                items.Add(element);
+            }
+        }
+        value = JsonSerializer.SerializeToElement(items);
+        return true;
+    }
+
+    private static bool IsReviewedCollectionConstructor(
+        SemanticModel semanticModel,
+        ExpressionSyntax expression,
+        INamedTypeSymbol collectionType)
+    {
+        if (expression is CollectionExpressionSyntax)
+            return true;
+        BaseArgumentListSyntax? arguments = expression switch
+        {
+            ObjectCreationExpressionSyntax creation => creation.ArgumentList,
+            ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList,
+            _ => null,
+        };
+        if (arguments is not null && arguments.Arguments.Count != 0)
+            return false;
+        INamedTypeSymbol? constructedType = semanticModel.GetTypeInfo(expression).Type as INamedTypeSymbol;
+        if (constructedType is null)
+            return false;
+        string expectedMetadataName = collectionType.OriginalDefinition.MetadataName switch
+        {
+            "IReadOnlyList`1" => "System.Collections.Generic.List`1",
+            "IReadOnlySet`1" => "System.Collections.Generic.HashSet`1",
+            "IReadOnlyDictionary`2" => "System.Collections.Generic.Dictionary`2",
+            _ => string.Empty,
+        };
+        INamedTypeSymbol? expectedDefinition = string.IsNullOrEmpty(expectedMetadataName)
+            ? null
+            : semanticModel.Compilation.GetTypeByMetadataName(expectedMetadataName);
+        return expectedDefinition is not null &&
+            SymbolEqualityComparer.Default.Equals(constructedType.OriginalDefinition, expectedDefinition) &&
+            constructedType.TypeArguments.Length == collectionType.TypeArguments.Length &&
+            SymbolEqualityComparer.Default.Equals(constructedType.TypeArguments[0], collectionType.TypeArguments[0]) &&
+            (collectionType.TypeArguments.Length == 1 ||
+                SymbolEqualityComparer.Default.Equals(constructedType.TypeArguments[1], collectionType.TypeArguments[1]));
     }
 
     private static bool TryReadUnrealEnumConstant(

@@ -5,6 +5,7 @@
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptPropertyValueCodec.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -164,27 +165,6 @@ double BitsDouble(uint64 Bits)
     return Value;
 }
 
-uint64 TypeIdFromPath(const FString& Path)
-{
-    constexpr uint64 OffsetBasis = 14695981039346656037ull;
-    constexpr uint64 Prime = 1099511628211ull;
-    if (Path.IsEmpty())
-    {
-        return 0;
-    }
-    uint64 Hash = OffsetBasis;
-    for (const TCHAR Character : Path)
-    {
-        if (Character > 0x7f)
-        {
-            return 0;
-        }
-        Hash ^= static_cast<uint8>(Character);
-        Hash *= Prime;
-    }
-    return Hash;
-}
-
 bool PathStartsWith(TConstArrayView<FName> Path, TConstArrayView<FName> Prefix)
 {
     if (Path.Num() < Prefix.Num())
@@ -215,41 +195,6 @@ void CollectDirectStructFields(
             OutNames.Add(Field.Segments.Last());
         }
     }
-}
-
-FString ContainerValueNativeName(const FProperty& Property)
-{
-    if (const FEnumProperty* Typed = CastField<FEnumProperty>(&Property)) return Typed->GetEnum()->GetName();
-    if (const FByteProperty* Typed = CastField<FByteProperty>(&Property); Typed && Typed->Enum)
-        return Typed->Enum->GetName();
-    if (CastField<FBoolProperty>(&Property)) return TEXT("bool");
-    if (CastField<FByteProperty>(&Property)) return TEXT("uint8");
-    if (CastField<FIntProperty>(&Property)) return TEXT("int32");
-    if (CastField<FInt64Property>(&Property)) return TEXT("int64");
-    if (CastField<FFloatProperty>(&Property)) return TEXT("float");
-    if (CastField<FDoubleProperty>(&Property)) return TEXT("double");
-    if (CastField<FStrProperty>(&Property)) return TEXT("FString");
-    if (CastField<FNameProperty>(&Property)) return TEXT("FName");
-    if (CastField<FTextProperty>(&Property)) return TEXT("FText");
-    if (CastField<FSoftClassProperty>(&Property)) return TEXT("FSoftClassPath");
-    if (CastField<FSoftObjectProperty>(&Property)) return TEXT("FSoftObjectPath");
-    if (CastField<FClassProperty>(&Property)) return TEXT("UClass*");
-    if (CastField<FObjectPropertyBase>(&Property)) return TEXT("UObject*");
-    if (const FStructProperty* Typed = CastField<FStructProperty>(&Property))
-    {
-        if (Typed->Struct == TBaseStructure<FVector>::Get()) return TEXT("FVector");
-        if (Typed->Struct == TBaseStructure<FRotator>::Get()) return TEXT("FRotator");
-        if (Typed->Struct == TBaseStructure<FTransform>::Get()) return TEXT("FTransform");
-        return Typed->Struct->GetStructCPPName();
-    }
-    if (const FArrayProperty* Typed = CastField<FArrayProperty>(&Property))
-        return TEXT("TArray<") + ContainerValueNativeName(*Typed->Inner) + TEXT(">");
-    if (const FSetProperty* Typed = CastField<FSetProperty>(&Property))
-        return TEXT("TSet<") + ContainerValueNativeName(*Typed->ElementProp) + TEXT(">");
-    if (const FMapProperty* Typed = CastField<FMapProperty>(&Property))
-        return TEXT("TMap<") + ContainerValueNativeName(*Typed->KeyProp) + TEXT(",") +
-            ContainerValueNativeName(*Typed->ValueProp) + TEXT(">");
-    return FString();
 }
 
 bool PackValueV2(
@@ -319,7 +264,8 @@ bool PackValueV2(
         OutValue.Kind = ArrayProperty ? EUnifiedScriptNativeValueKindV3::Array :
             SetProperty ? EUnifiedScriptNativeValueKindV3::Set : EUnifiedScriptNativeValueKindV3::Map;
         OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
-        OutValue.TypeId = TypeIdFromPath(ContainerValueNativeName(Property));
+        OutValue.TypeId = UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(
+            UE::UnifiedScript::PropertyValueCodec::ContainerValueNativeName(Property));
         OutValue.Payload0 = Offset;
         OutValue.Payload1 = DescriptorBytes;
         OutValue.Payload2 = Count;
@@ -371,7 +317,7 @@ bool PackValueV2(
             return false;
         }
         OutValue.Kind = EUnifiedScriptNativeValueKindV3::Enum;
-        OutValue.TypeId = TypeIdFromPath(TypePath);
+        OutValue.TypeId = UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(TypePath);
         OutValue.Payload0 = static_cast<uint64>(EnumValue);
         return OutValue.TypeId != 0;
     }
@@ -625,7 +571,7 @@ bool PackValueV2(
         }
         OutValue.Kind = EUnifiedScriptNativeValueKindV3::Struct;
         OutValue.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
-        OutValue.TypeId = TypeIdFromPath(TypePath);
+        OutValue.TypeId = UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(TypePath);
         OutValue.Payload0 = DescriptorOffset;
         OutValue.Payload1 = DescriptorBytes;
         OutValue.Payload2 = FieldNames.Num();
@@ -664,7 +610,8 @@ bool UnpackReturnValueV2(
             SetProperty ? EUnifiedScriptNativeValueKindV3::Set : EUnifiedScriptNativeValueKindV3::Map;
         const uint64 CellsPerEntry = MapProperty ? 2 : 1;
         if (Value.Kind != Kind || Value.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
-            Value.TypeId != TypeIdFromPath(ContainerValueNativeName(Property)) ||
+            Value.TypeId != UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(
+                UE::UnifiedScript::PropertyValueCodec::ContainerValueNativeName(Property)) ||
             Value.Payload2 > MaximumManagedFunctionArenaBytes / (CellsPerEntry * sizeof(FUnifiedScriptNativeValueV3)) ||
             Value.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||
             Value.Payload1 != Value.Payload2 * CellsPerEntry * sizeof(FUnifiedScriptNativeValueV3) ||
@@ -755,7 +702,7 @@ bool UnpackReturnValueV2(
         const FString TypePath = Enum->GetPathName();
         if (Value.Kind != EUnifiedScriptNativeValueKindV3::Enum ||
             Value.Flags != EUnifiedScriptNativeValueFlagsV3::None ||
-            Value.TypeId != TypeIdFromPath(TypePath) ||
+            Value.TypeId != UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(TypePath) ||
             (StructPrefix.IsEmpty() && TypeBinding != nullptr &&
              !TypeBinding->UnrealTypePath.IsEmpty() &&
              TypeBinding->UnrealTypePath != TypePath))
@@ -933,7 +880,7 @@ bool UnpackReturnValueV2(
             static_cast<uint64>(FieldNames.Num()) * sizeof(FUnifiedScriptNativeValueV3);
         if (Value.Kind != EUnifiedScriptNativeValueKindV3::Struct ||
             Value.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
-            Value.TypeId != TypeIdFromPath(TypePath) ||
+            Value.TypeId != UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(TypePath) ||
             Value.Payload1 != DescriptorBytes ||
             Value.Payload2 != static_cast<uint64>(FieldNames.Num()) ||
             Value.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||

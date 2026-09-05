@@ -4,6 +4,7 @@
 #include "Containers/StringConv.h"
 #include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptPropertyValueCodec.h"
 #include "UnifiedScriptBlueprint.h"
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
@@ -16,6 +17,7 @@
 #include "UObject/TextProperty.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
+#include "UObject/Script.h"
 
 namespace UE::UnifiedScript::Invocation::Private
 {
@@ -146,109 +148,205 @@ bool ReadValue(
     const FProperty* Property,
     const void* Container,
     FUnifiedScriptValue& OutValue,
-    FUnifiedScriptInvocationResult& OutResult)
+    FUnifiedScriptInvocationResult& OutResult,
+    bool bDirectValue = false)
 {
+    const void* Value = bDirectValue
+        ? Container
+        : Property->ContainerPtrToValuePtr<void>(Container);
+    const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(Property);
+    const FSetProperty* SetProperty = CastField<FSetProperty>(Property);
+    const FMapProperty* MapProperty = CastField<FMapProperty>(Property);
+    if (ArrayProperty || SetProperty || MapProperty)
+    {
+        const FString NativeName =
+            UE::UnifiedScript::PropertyValueCodec::ContainerValueNativeName(*Property);
+        const uint64 TypeId =
+            UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(NativeName);
+        if (TypeId == 0)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::UnsupportedValueType,
+                FString::Printf(
+                    TEXT("Property '%s' has an unsupported reflected collection shape."),
+                    *Property->GetName()));
+            return false;
+        }
+
+        TArray<FUnifiedScriptValue> Values;
+        const auto ReadChild = [&](const FProperty& ChildProperty, const void* ChildValue)
+        {
+            FUnifiedScriptValue Child;
+            if (!ReadValue(Registry, &ChildProperty, ChildValue, Child, OutResult, true))
+            {
+                return false;
+            }
+            // V3's string cell is the published representation for soft
+            // references inside an already-validated flat collection. Keep
+            // scalar property reads on the strict typed soft kinds.
+            if (CastField<FSoftClassProperty>(&ChildProperty) != nullptr &&
+                Child.Kind == EUnifiedScriptValueKind::SoftClass)
+            {
+                Child.Kind = EUnifiedScriptValueKind::String;
+            }
+            else if (CastField<FSoftObjectProperty>(&ChildProperty) != nullptr &&
+                Child.Kind == EUnifiedScriptValueKind::SoftObject)
+            {
+                Child.Kind = EUnifiedScriptValueKind::String;
+            }
+            Values.Add(MoveTemp(Child));
+            return true;
+        };
+
+        if (ArrayProperty)
+        {
+            FScriptArrayHelper Array(ArrayProperty, const_cast<void*>(Value));
+            Values.Reserve(Array.Num());
+            for (int32 Index = 0; Index < Array.Num(); ++Index)
+            {
+                if (!ReadChild(*ArrayProperty->Inner, Array.GetRawPtr(Index)))
+                {
+                    return false;
+                }
+            }
+            OutValue = FUnifiedScriptValue::FromArray(MoveTemp(Values), TypeId);
+            return true;
+        }
+        if (SetProperty)
+        {
+            FScriptSetHelper Set(SetProperty, const_cast<void*>(Value));
+            Values.Reserve(Set.Num());
+            for (int32 Index = 0; Index < Set.GetMaxIndex(); ++Index)
+            {
+                if (Set.IsValidIndex(Index) &&
+                    !ReadChild(*SetProperty->ElementProp, Set.GetElementPtr(Index)))
+                {
+                    return false;
+                }
+            }
+            OutValue = FUnifiedScriptValue::FromSet(MoveTemp(Values), TypeId);
+            return true;
+        }
+
+        FScriptMapHelper Map(MapProperty, const_cast<void*>(Value));
+        Values.Reserve(Map.Num() * 2);
+        for (int32 Index = 0; Index < Map.GetMaxIndex(); ++Index)
+        {
+            if (!Map.IsValidIndex(Index))
+            {
+                continue;
+            }
+            if (!ReadChild(*MapProperty->KeyProp, Map.GetKeyPtr(Index)) ||
+                !ReadChild(*MapProperty->ValueProp, Map.GetValuePtr(Index)))
+            {
+                return false;
+            }
+        }
+        OutValue = FUnifiedScriptValue::FromMap(MoveTemp(Values), TypeId);
+        return true;
+    }
     if (const FBoolProperty* BoolProperty = CastField<FBoolProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromBoolean(
-            BoolProperty->GetPropertyValue_InContainer(Container));
+            BoolProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FIntProperty* IntProperty = CastField<FIntProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromInt32(
-            IntProperty->GetPropertyValue_InContainer(Container));
+            IntProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FInt8Property* TypedProperty = CastField<FInt8Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromInt8(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FByteProperty* TypedProperty = CastField<FByteProperty>(Property))
     {
-        const uint8 Value = TypedProperty->GetPropertyValue_InContainer(Container);
+        const uint8 NativeValue = TypedProperty->GetPropertyValue(Value);
         OutValue = TypedProperty->Enum != nullptr
-            ? FUnifiedScriptValue::FromEnum(Value, FName(*TypedProperty->Enum->GetPathName()))
-            : FUnifiedScriptValue::FromUInt8(Value);
+            ? FUnifiedScriptValue::FromEnum(NativeValue, FName(*TypedProperty->Enum->GetPathName()))
+            : FUnifiedScriptValue::FromUInt8(NativeValue);
         return true;
     }
     if (const FInt16Property* TypedProperty = CastField<FInt16Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromInt16(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FUInt16Property* TypedProperty = CastField<FUInt16Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromUInt16(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FUInt32Property* TypedProperty = CastField<FUInt32Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromUInt32(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FInt64Property* TypedProperty = CastField<FInt64Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromInt64(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FUInt64Property* TypedProperty = CastField<FUInt64Property>(Property))
     {
         OutValue = FUnifiedScriptValue::FromUInt64(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FFloatProperty* TypedProperty = CastField<FFloatProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromFloat32(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FDoubleProperty* TypedProperty = CastField<FDoubleProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromFloat64(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FStrProperty* StringProperty = CastField<FStrProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromString(
-            StringProperty->GetPropertyValue_InContainer(Container));
+            StringProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FNameProperty* TypedProperty = CastField<FNameProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromName(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FTextProperty* TypedProperty = CastField<FTextProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromText(
-            TypedProperty->GetPropertyValue_InContainer(Container));
+            TypedProperty->GetPropertyValue(Value));
         return true;
     }
     if (const FSoftClassProperty* TypedProperty = CastField<FSoftClassProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromSoftClassPath(
-            TypedProperty->GetPropertyValue_InContainer(Container).ToSoftObjectPath().ToString());
+            TypedProperty->GetPropertyValue(Value).ToSoftObjectPath().ToString());
         return true;
     }
     if (const FSoftObjectProperty* TypedProperty = CastField<FSoftObjectProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromSoftObjectPath(
-            TypedProperty->GetPropertyValue_InContainer(Container).ToSoftObjectPath().ToString());
+            TypedProperty->GetPropertyValue(Value).ToSoftObjectPath().ToString());
         return true;
     }
     if (const FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
     {
-        const void* ValueAddress = TypedProperty->ContainerPtrToValuePtr<void>(Container);
+        const void* ValueAddress = Value;
         OutValue = FUnifiedScriptValue::FromEnum(
             TypedProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValueAddress),
             FName(*TypedProperty->GetEnum()->GetPathName()));
@@ -259,25 +357,25 @@ bool ReadValue(
         if (TypedProperty->Struct == TBaseStructure<FVector>::Get())
         {
             OutValue = FUnifiedScriptValue::FromVector(
-                *TypedProperty->ContainerPtrToValuePtr<FVector>(Container));
+                *static_cast<const FVector*>(Value));
             return true;
         }
         if (TypedProperty->Struct == TBaseStructure<FRotator>::Get())
         {
             OutValue = FUnifiedScriptValue::FromRotator(
-                *TypedProperty->ContainerPtrToValuePtr<FRotator>(Container));
+                *static_cast<const FRotator*>(Value));
             return true;
         }
         if (TypedProperty->Struct == TBaseStructure<FTransform>::Get())
         {
             OutValue = FUnifiedScriptValue::FromTransform(
-                *TypedProperty->ContainerPtrToValuePtr<FTransform>(Container));
+                *static_cast<const FTransform*>(Value));
             return true;
         }
     }
     if (const FClassProperty* TypedProperty = CastField<FClassProperty>(Property))
     {
-        UClass* Object = Cast<UClass>(TypedProperty->GetObjectPropertyValue_InContainer(Container));
+        UClass* Object = Cast<UClass>(TypedProperty->GetObjectPropertyValue(Value));
         if (Object == nullptr)
         {
             OutValue = FUnifiedScriptValue::FromObjectHandle({}, true);
@@ -298,7 +396,7 @@ bool ReadValue(
     if (const FInterfaceProperty* TypedProperty = CastField<FInterfaceProperty>(Property))
     {
         const FScriptInterface* InterfaceValue =
-            TypedProperty->ContainerPtrToValuePtr<FScriptInterface>(Container);
+            static_cast<const FScriptInterface*>(Value);
         UObject* Object = InterfaceValue == nullptr ? nullptr : InterfaceValue->GetObject();
         if (Object == nullptr)
         {
@@ -319,7 +417,7 @@ bool ReadValue(
     }
     if (const FObjectPropertyBase* TypedProperty = CastField<FObjectPropertyBase>(Property))
     {
-        UObject* Object = TypedProperty->GetObjectPropertyValue_InContainer(Container);
+        UObject* Object = TypedProperty->GetObjectPropertyValue(Value);
         if (Object == nullptr)
         {
             OutValue = FUnifiedScriptValue::FromObjectHandle({});
@@ -353,8 +451,184 @@ bool WriteValue(
     FProperty* Property,
     void* Container,
     const FUnifiedScriptValue& Value,
-    FUnifiedScriptInvocationResult& OutResult)
+    FUnifiedScriptInvocationResult& OutResult,
+    bool bDirectValue = false)
 {
+    void* ValueAddress = bDirectValue
+        ? Container
+        : Property->ContainerPtrToValuePtr<void>(Container);
+    const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(Property);
+    const FSetProperty* SetProperty = CastField<FSetProperty>(Property);
+    const FMapProperty* MapProperty = CastField<FMapProperty>(Property);
+    if (ArrayProperty || SetProperty || MapProperty)
+    {
+        const FString NativeName =
+            UE::UnifiedScript::PropertyValueCodec::ContainerValueNativeName(*Property);
+        const uint64 TypeId =
+            UE::UnifiedScript::PropertyValueCodec::TypeIdFromPath(NativeName);
+        if (TypeId == 0)
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::UnsupportedValueType,
+                FString::Printf(TEXT("Property '%s' has an unsupported reflected collection shape."),
+                    *Property->GetName()));
+            return false;
+        }
+
+        TConstArrayView<FUnifiedScriptValue> Cells;
+        const bool bShapeMatches = ArrayProperty
+            ? Value.TryGetArray(TypeId, Cells)
+            : SetProperty
+                ? Value.TryGetSet(TypeId, Cells)
+                : Value.TryGetMap(TypeId, Cells);
+        const int32 CellsPerEntry = MapProperty ? 2 : 1;
+        if (!bShapeMatches || Cells.Num() % CellsPerEntry != 0)
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(TEXT("Property '%s' received an incompatible collection value."),
+                    *Property->GetName()));
+            return false;
+        }
+        auto IsNestedContainer = [](const FProperty& Child)
+        {
+            return CastField<FArrayProperty>(&Child) != nullptr ||
+                CastField<FSetProperty>(&Child) != nullptr ||
+                CastField<FMapProperty>(&Child) != nullptr;
+        };
+        if ((ArrayProperty && IsNestedContainer(*ArrayProperty->Inner)) ||
+            (SetProperty && IsNestedContainer(*SetProperty->ElementProp)) ||
+            (MapProperty &&
+                (IsNestedContainer(*MapProperty->KeyProp) ||
+                 IsNestedContainer(*MapProperty->ValueProp))))
+        {
+            Fail(OutResult, EUnifiedScriptInvocationError::UnsupportedValueType,
+                FString::Printf(TEXT("Property '%s' uses a nested collection, which is unsupported."),
+                    *Property->GetName()));
+            return false;
+        }
+
+        const auto AllocateValue = [](const FProperty& Child) -> void*
+        {
+            void* Storage = FMemory::Malloc(Child.GetSize(), Child.GetMinAlignment());
+            Child.InitializeValue(Storage);
+            return Storage;
+        };
+        const auto FreeValue = [](const FProperty& Child, void* Storage)
+        {
+            Child.DestroyValue(Storage);
+            FMemory::Free(Storage);
+        };
+        auto CopyCell = [&](FProperty& Child, void* Destination, const FUnifiedScriptValue& Cell)
+        {
+            FUnifiedScriptValue TypedCell = Cell;
+            if (CastField<FSoftClassProperty>(&Child) != nullptr &&
+                TypedCell.Kind == EUnifiedScriptValueKind::String)
+            {
+                TypedCell.Kind = EUnifiedScriptValueKind::SoftClass;
+            }
+            else if (CastField<FSoftObjectProperty>(&Child) != nullptr &&
+                TypedCell.Kind == EUnifiedScriptValueKind::String)
+            {
+                TypedCell.Kind = EUnifiedScriptValueKind::SoftObject;
+            }
+            return WriteValue(Registry, &Child, Destination, TypedCell, OutResult, true);
+        };
+
+        void* Temporary = AllocateValue(*Property);
+        ON_SCOPE_EXIT
+        {
+            FreeValue(*Property, Temporary);
+        };
+        const auto Commit = [&]
+        {
+            Property->CopyCompleteValue(ValueAddress, Temporary);
+        };
+
+        if (ArrayProperty)
+        {
+            FScriptArrayHelper Array(ArrayProperty, Temporary);
+            Array.EmptyAndAddValues(Cells.Num());
+            for (int32 Index = 0; Index < Cells.Num(); ++Index)
+            {
+                if (!CopyCell(*ArrayProperty->Inner, Array.GetRawPtr(Index), Cells[Index]))
+                {
+                    return false;
+                }
+            }
+            Commit();
+            return true;
+        }
+        if (SetProperty)
+        {
+            FScriptSetHelper Set(SetProperty, Temporary);
+            Set.EmptyElements(Cells.Num());
+            for (const FUnifiedScriptValue& Cell : Cells)
+            {
+                void* Candidate = AllocateValue(*SetProperty->ElementProp);
+                ON_SCOPE_EXIT
+                {
+                    FreeValue(*SetProperty->ElementProp, Candidate);
+                };
+                if (!CopyCell(*SetProperty->ElementProp, Candidate, Cell))
+                {
+                    return false;
+                }
+                for (int32 Index = 0; Index < Set.GetMaxIndex(); ++Index)
+                {
+                    if (Set.IsValidIndex(Index) &&
+                        SetProperty->ElementProp->Identical(
+                            Set.GetElementPtr(Index), Candidate))
+                    {
+                        Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                            FString::Printf(TEXT("Property '%s' contains a duplicate set element."),
+                                *Property->GetName()));
+                        return false;
+                    }
+                }
+                const int32 Added = Set.AddDefaultValue_Invalid_NeedsRehash();
+                SetProperty->ElementProp->CopyCompleteValue(
+                    Set.GetElementPtr(Added), Candidate);
+            }
+            Set.Rehash();
+            Commit();
+            return true;
+        }
+
+        FScriptMapHelper Map(MapProperty, Temporary);
+        Map.EmptyValues(Cells.Num() / 2);
+        for (int32 Index = 0; Index < Cells.Num(); Index += 2)
+        {
+            void* CandidateKey = AllocateValue(*MapProperty->KeyProp);
+            void* CandidateValue = AllocateValue(*MapProperty->ValueProp);
+            ON_SCOPE_EXIT
+            {
+                FreeValue(*MapProperty->KeyProp, CandidateKey);
+                FreeValue(*MapProperty->ValueProp, CandidateValue);
+            };
+            if (!CopyCell(*MapProperty->KeyProp, CandidateKey, Cells[Index]) ||
+                !CopyCell(*MapProperty->ValueProp, CandidateValue, Cells[Index + 1]))
+            {
+                return false;
+            }
+            for (int32 Existing = 0; Existing < Map.GetMaxIndex(); ++Existing)
+            {
+                if (Map.IsValidIndex(Existing) &&
+                    MapProperty->KeyProp->Identical(
+                        Map.GetKeyPtr(Existing), CandidateKey))
+                {
+                    Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                        FString::Printf(TEXT("Property '%s' contains a duplicate map key."),
+                            *Property->GetName()));
+                    return false;
+                }
+            }
+            const int32 Added = Map.AddDefaultValue_Invalid_NeedsRehash();
+            MapProperty->KeyProp->CopyCompleteValue(Map.GetKeyPtr(Added), CandidateKey);
+            MapProperty->ValueProp->CopyCompleteValue(Map.GetValuePtr(Added), CandidateValue);
+        }
+        Map.Rehash();
+        Commit();
+        return true;
+    }
     if (auto* DelegateProperty = CastField<FDelegateProperty>(Property))
     {
         FScriptDelegate Delegate;
@@ -366,7 +640,7 @@ bool WriteValue(
             Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch, TEXT("Callback signature changed since binding."));
             return false;
         }
-        *DelegateProperty->ContainerPtrToValuePtr<FScriptDelegate>(Container) = Delegate;
+        *static_cast<FScriptDelegate*>(ValueAddress) = Delegate;
         return true;
     }
     if (FBoolProperty* BoolProperty = CastField<FBoolProperty>(Property))
@@ -380,7 +654,7 @@ bool WriteValue(
                 FString::Printf(TEXT("Property '%s' requires a boolean value."), *Property->GetName()));
             return false;
         }
-        BoolProperty->SetPropertyValue_InContainer(Container, NativeValue);
+        BoolProperty->SetPropertyValue(ValueAddress, NativeValue);
         return true;
     }
     if (FIntProperty* IntProperty = CastField<FIntProperty>(Property))
@@ -394,7 +668,7 @@ bool WriteValue(
                 FString::Printf(TEXT("Property '%s' requires an int32 value."), *Property->GetName()));
             return false;
         }
-        IntProperty->SetPropertyValue_InContainer(Container, NativeValue);
+        IntProperty->SetPropertyValue(ValueAddress, NativeValue);
         return true;
     }
     if (FInt8Property* TypedProperty = CastField<FInt8Property>(Property))
@@ -402,7 +676,7 @@ bool WriteValue(
         int8 NativeValue = 0;
         if (Value.TryGetInt8(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -424,7 +698,7 @@ bool WriteValue(
             : Value.TryGetUInt8(NativeValue);
         if (bValid)
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -433,7 +707,7 @@ bool WriteValue(
         int16 NativeValue = 0;
         if (Value.TryGetInt16(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -442,7 +716,7 @@ bool WriteValue(
         uint16 NativeValue = 0;
         if (Value.TryGetUInt16(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -451,7 +725,7 @@ bool WriteValue(
         uint32 NativeValue = 0;
         if (Value.TryGetUInt32(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -460,7 +734,7 @@ bool WriteValue(
         int64 NativeValue = 0;
         if (Value.TryGetInt64(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -469,7 +743,7 @@ bool WriteValue(
         uint64 NativeValue = 0;
         if (Value.TryGetUInt64(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -478,7 +752,7 @@ bool WriteValue(
         float NativeValue = 0.0f;
         if (Value.TryGetFloat32(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -487,7 +761,7 @@ bool WriteValue(
         double NativeValue = 0.0;
         if (Value.TryGetFloat64(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -502,7 +776,7 @@ bool WriteValue(
                 FString::Printf(TEXT("Property '%s' requires a string value."), *Property->GetName()));
             return false;
         }
-        StringProperty->SetPropertyValue_InContainer(Container, NativeValue);
+        StringProperty->SetPropertyValue(ValueAddress, NativeValue);
         return true;
     }
     if (FNameProperty* TypedProperty = CastField<FNameProperty>(Property))
@@ -510,7 +784,7 @@ bool WriteValue(
         FName NativeValue;
         if (Value.TryGetName(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -519,7 +793,7 @@ bool WriteValue(
         FText NativeValue;
         if (Value.TryGetText(NativeValue))
         {
-            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            TypedProperty->SetPropertyValue(ValueAddress, NativeValue);
             return true;
         }
     }
@@ -545,7 +819,7 @@ bool WriteValue(
                 FString::Printf(TEXT("Property '%s' received an incompatible soft class path."), *Property->GetName()));
             return false;
         }
-        TypedProperty->SetPropertyValue_InContainer(Container, FSoftObjectPtr(Path));
+        TypedProperty->SetPropertyValue(ValueAddress, FSoftObjectPtr(Path));
         return true;
     }
     if (FSoftObjectProperty* TypedProperty = CastField<FSoftObjectProperty>(Property))
@@ -570,7 +844,7 @@ bool WriteValue(
                 FString::Printf(TEXT("Property '%s' received an incompatible soft object path."), *Property->GetName()));
             return false;
         }
-        TypedProperty->SetPropertyValue_InContainer(Container, FSoftObjectPtr(Path));
+        TypedProperty->SetPropertyValue(ValueAddress, FSoftObjectPtr(Path));
         return true;
     }
     if (FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
@@ -578,7 +852,6 @@ bool WriteValue(
         int64 NativeValue = 0;
         if (Value.TryGetEnum(NativeValue, FName(*TypedProperty->GetEnum()->GetPathName())))
         {
-            void* ValueAddress = TypedProperty->ContainerPtrToValuePtr<void>(Container);
             TypedProperty->GetUnderlyingProperty()->SetIntPropertyValue(ValueAddress, NativeValue);
             return true;
         }
@@ -590,7 +863,7 @@ bool WriteValue(
             FVector NativeValue;
             if (Value.TryGetVector(NativeValue))
             {
-                *TypedProperty->ContainerPtrToValuePtr<FVector>(Container) = NativeValue;
+                *static_cast<FVector*>(ValueAddress) = NativeValue;
                 return true;
             }
         }
@@ -599,7 +872,7 @@ bool WriteValue(
             FRotator NativeValue;
             if (Value.TryGetRotator(NativeValue))
             {
-                *TypedProperty->ContainerPtrToValuePtr<FRotator>(Container) = NativeValue;
+                *static_cast<FRotator*>(ValueAddress) = NativeValue;
                 return true;
             }
         }
@@ -608,7 +881,7 @@ bool WriteValue(
             FTransform NativeValue;
             if (Value.TryGetTransform(NativeValue))
             {
-                *TypedProperty->ContainerPtrToValuePtr<FTransform>(Container) = NativeValue;
+                *static_cast<FTransform*>(ValueAddress) = NativeValue;
                 return true;
             }
         }
@@ -654,7 +927,7 @@ bool WriteValue(
         }
 
         FScriptInterface* Destination =
-            TypedProperty->ContainerPtrToValuePtr<FScriptInterface>(Container);
+            static_cast<FScriptInterface*>(ValueAddress);
         if (Handle.IsNull())
         {
             *Destination = FScriptInterface();
@@ -702,7 +975,7 @@ bool WriteValue(
             }
             if (Object != nullptr || Handle.IsNull())
             {
-                TypedProperty->SetObjectPropertyValue_InContainer(Container, Object);
+                TypedProperty->SetObjectPropertyValue(ValueAddress, Object);
                 return true;
             }
         }

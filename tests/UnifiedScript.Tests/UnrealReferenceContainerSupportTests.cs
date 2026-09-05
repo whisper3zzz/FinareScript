@@ -1,9 +1,82 @@
+using UnifiedScript.CSharp;
+using UnifiedScript.Core;
 using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
 public sealed class UnrealReferenceContainerSupportTests
 {
+    [Fact]
+    public void CollectionExpressionDefaultsLowerThroughTheSemanticPipeline()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game.CollectionExpressionDefaults")]
+            public sealed class CollectionExpressionDefaults
+            {
+                public IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
+                    [new UnrealSoftObjectHandle("/Game/Props/Cube.Cube")];
+                public IReadOnlyList<UnrealName> Choices { get; set; } =
+                    [new UnrealName("Cube"), new UnrealName("Sphere")];
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "CollectionExpressionDefaults",
+                [new CSharpSourceDocument("Game/CollectionExpressionDefaults.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states =
+            Assert.Single(result.ScriptAssets!.Assets).States.ToDictionary(
+                static state => state.Name,
+                StringComparer.Ordinal);
+        Assert.Equal(
+            "/Game/Props/Cube.Cube",
+            states["Meshes"].DefaultValue[0].GetString());
+        Assert.Equal("Cube", states["Choices"].DefaultValue[0].GetString());
+        Assert.Equal("Sphere", states["Choices"].DefaultValue[1].GetString());
+        Assert.Equal(
+            "UnifiedScript.Unreal.UnrealSoftObjectHandle",
+            states["Meshes"].UnrealType?.TypeArguments?[0].TypeMetadataName);
+    }
+
+    [Fact]
+    public void CodecRejectsNativeIdentityDuplicatesBeforePublishingAContainer()
+    {
+        IReadOnlySet<UnrealName> names = new HashSet<UnrealName>
+        {
+            new UnrealName("Alpha"),
+            new UnrealName("alpha"),
+        };
+        Span<byte> setArena = stackalloc byte[1024];
+        int setBytes = 0;
+        Assert.False(UnrealNativeValueCodecV3.TryEncode(
+            names,
+            setArena,
+            ref setBytes,
+            out UnrealNativeValueV3 _,
+            out _));
+
+        IReadOnlyDictionary<UnrealName, int> map = new Dictionary<UnrealName, int>
+        {
+            [new UnrealName("None")] = 1,
+            [new UnrealName(string.Empty)] = 2,
+        };
+        Span<byte> mapArena = stackalloc byte[1024];
+        int mapBytes = 0;
+        Assert.False(UnrealNativeValueCodecV3.TryEncode(
+            map,
+            mapArena,
+            ref mapBytes,
+            out UnrealNativeValueV3 _,
+            out _));
+    }
+
     [Fact]
     public void CodecUsesCanonicalWireNamesForReferenceContainersAndRejectsWrongOuterId()
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -177,6 +178,10 @@ public static class ScriptAssetJson
                     $"Soft reference state '{state.Name}' requires its exact managed handle type and no Unreal type identity.");
             }
         }
+        else if (state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map)
+        {
+            ValidateStateContainerType(state);
+        }
         else if (state.UnrealType is not null)
         {
             throw new JsonException(
@@ -211,6 +216,8 @@ public static class ScriptAssetJson
                 state.DefaultValue.ValueKind == JsonValueKind.String &&
                 UnrealObjectPathValidator.IsValid(state.DefaultValue.GetString()),
             ScriptStateTypeKind.Struct => IsValidStructDefault(state),
+            ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map =>
+                IsValidCollectionDefault(state),
             _ => false,
         };
         if (!validDefault)
@@ -219,6 +226,286 @@ public static class ScriptAssetJson
                 $"Script state '{state.Name}' has a default incompatible with '{state.TypeKind}'.");
         }
     }
+
+    private static void ValidateStateContainerType(ScriptStateDeclaration state)
+    {
+        ScriptFunctionValueTypeKind expectedKind = state.TypeKind switch
+        {
+            ScriptStateTypeKind.Array => ScriptFunctionValueTypeKind.Array,
+            ScriptStateTypeKind.Set => ScriptFunctionValueTypeKind.Set,
+            _ => ScriptFunctionValueTypeKind.Map,
+        };
+        ScriptFunctionValueTypeDeclaration? type = state.UnrealType;
+        int arity = expectedKind == ScriptFunctionValueTypeKind.Map ? 2 : 1;
+        string definition = expectedKind switch
+        {
+            ScriptFunctionValueTypeKind.Array => "System.Collections.Generic.IReadOnlyList",
+            ScriptFunctionValueTypeKind.Set => "System.Collections.Generic.IReadOnlySet",
+            _ => "System.Collections.Generic.IReadOnlyDictionary",
+        };
+        string expectedMetadata = $"{definition}<{string.Join(", ", type?.TypeArguments?.Select(static a => a.TypeMetadataName) ?? [])}>";
+        if (type?.Kind != expectedKind || type.UnrealTypePath != string.Empty ||
+            type.UnrealNativeName != (expectedKind == ScriptFunctionValueTypeKind.Array ? "TArray" :
+                expectedKind == ScriptFunctionValueTypeKind.Set ? "TSet" : "TMap") ||
+            type.Fields.Count != 0 || type.TypeArguments is null || type.TypeArguments.Count != arity ||
+            state.TypeMetadataName != expectedMetadata ||
+            type.TypeArguments.Any(static argument => argument.UnrealType?.Kind is
+                ScriptFunctionValueTypeKind.Array or ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map))
+        {
+            throw new JsonException($"Collection state '{state.Name}' has invalid flat container type metadata.");
+        }
+
+        foreach (ScriptFunctionTypeArgumentDeclaration argument in type.TypeArguments)
+        {
+            if (!IsSupportedCollectionLeaf(argument))
+            {
+                throw new JsonException(
+                    $"Collection state '{state.Name}' has an unsupported or non-hashable leaf type '{argument.TypeMetadataName}'.");
+            }
+        }
+    }
+
+    public static bool IsSupportedCollectionLeaf(ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        string metadata = argument.TypeMetadataName;
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Array or
+            ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
+        {
+            return false;
+        }
+        if (metadata is "System.Boolean" or "System.Byte" or "System.Int32" or
+            "System.Int64" or "System.Single" or "System.Double" or
+            "System.String" or "UnifiedScript.Unreal.UnrealName" or
+            "UnifiedScript.Unreal.UnrealText" or "UnifiedScript.Unreal.UnrealObjectHandle" or
+            "UnifiedScript.Unreal.UnrealClassHandle" or "UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+            "UnifiedScript.Unreal.UnrealSoftClassHandle")
+        {
+            return argument.UnrealType is null;
+        }
+        if (metadata is "UnifiedScript.Unreal.UnrealVector" or
+            "UnifiedScript.Unreal.UnrealRotator" or "UnifiedScript.Unreal.UnrealTransform")
+        {
+            string expectedPath = metadata switch
+            {
+                "UnifiedScript.Unreal.UnrealVector" => "/Script/CoreUObject.Vector",
+                "UnifiedScript.Unreal.UnrealRotator" => "/Script/CoreUObject.Rotator",
+                _ => "/Script/CoreUObject.Transform",
+            };
+            string expectedNativeName = metadata switch
+            {
+                "UnifiedScript.Unreal.UnrealVector" => "Vector",
+                "UnifiedScript.Unreal.UnrealRotator" => "Rotator",
+                _ => "Transform",
+            };
+            return argument.UnrealType is
+                {
+                    Kind: ScriptFunctionValueTypeKind.Struct,
+                    UnrealTypePath: var path,
+                    UnrealNativeName: var nativeName,
+                    Fields: { Count: var fieldCount } fields,
+                    TypeArguments: null,
+                } && path == expectedPath && nativeName == expectedNativeName &&
+                (metadata == "UnifiedScript.Unreal.UnrealVector"
+                    ? fieldCount == 3 &&
+                        fields.Select(static field => field.NativeName).SequenceEqual(["X", "Y", "Z"]) &&
+                        fields.All(static field => field.TypeMetadataName == "System.Double" && field.UnrealType is null)
+                    : fields.Count == 0);
+        }
+        return argument.UnrealType is
+            {
+                Kind: ScriptFunctionValueTypeKind.Enum,
+                UnrealTypePath: var enumPath,
+                UnrealNativeName: var enumNativeName,
+                Fields: { Count: 0 },
+                TypeArguments: null,
+            } && enumPath.StartsWith("/Script/", StringComparison.Ordinal) &&
+            enumNativeName.Length != 0;
+    }
+
+    private static bool IsValidCollectionDefault(ScriptStateDeclaration state)
+    {
+        if (state.DefaultValue.ValueKind != JsonValueKind.Array || state.UnrealType?.TypeArguments is null)
+        {
+            return false;
+        }
+        ScriptFunctionValueTypeKind kind = state.UnrealType.Kind;
+        ScriptFunctionTypeArgumentDeclaration[] arguments = state.UnrealType.TypeArguments.ToArray();
+        if (kind == ScriptFunctionValueTypeKind.Map)
+        {
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonElement entry in state.DefaultValue.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object ||
+                    entry.EnumerateObject().Count() != 2 ||
+                    !entry.TryGetProperty("key", out JsonElement key) ||
+                    !entry.TryGetProperty("value", out JsonElement value) ||
+                    !IsValidCollectionLeafDefault(key, arguments[0]) ||
+                    !IsValidCollectionLeafDefault(value, arguments[1]) ||
+                    !keys.Add(CollectionIdentity(key, arguments[0])))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        var values = kind == ScriptFunctionValueTypeKind.Set
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : null;
+        foreach (JsonElement item in state.DefaultValue.EnumerateArray())
+        {
+            if (!IsValidCollectionLeafDefault(item, arguments[0]) ||
+                values is not null && !values.Add(CollectionIdentity(item, arguments[0])))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static bool IsValidCollectionLeafDefault(
+        JsonElement value,
+        ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        if (!IsSupportedCollectionLeaf(argument))
+        {
+            return false;
+        }
+        string metadata = argument.TypeMetadataName;
+        if (metadata == "System.Boolean") return value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        if (metadata == "System.Byte")
+            return value.ValueKind == JsonValueKind.Number &&
+                value.TryGetUInt64(out ulong byteValue) && byteValue <= byte.MaxValue;
+        if (metadata == "System.Int32")
+            return value.ValueKind == JsonValueKind.Number &&
+                value.TryGetInt64(out long intValue) && intValue is >= int.MinValue and <= int.MaxValue;
+        if (metadata == "System.Int64")
+            return value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out _);
+        if (metadata == "System.Single")
+            return value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out float single) && float.IsFinite(single);
+        if (metadata == "System.Double")
+            return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out double number) && double.IsFinite(number);
+        if (metadata == "System.String" || metadata is "UnifiedScript.Unreal.UnrealName" or
+            "UnifiedScript.Unreal.UnrealText") return value.ValueKind == JsonValueKind.String;
+        if (metadata is "UnifiedScript.Unreal.UnrealObjectHandle" or "UnifiedScript.Unreal.UnrealClassHandle")
+            return value.ValueKind == JsonValueKind.Null;
+        if (metadata is "UnifiedScript.Unreal.UnrealSoftObjectHandle" or "UnifiedScript.Unreal.UnrealSoftClassHandle")
+            return value.ValueKind == JsonValueKind.String && UnrealObjectPathValidator.IsValid(value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealVector")
+            return argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Struct &&
+                argument.UnrealType.UnrealTypePath == "/Script/CoreUObject.Vector" &&
+                IsFiniteVectorDefault(value, "x", "y", "z");
+        if (metadata == "UnifiedScript.Unreal.UnrealRotator")
+            return argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Struct &&
+                argument.UnrealType.UnrealTypePath == "/Script/CoreUObject.Rotator" &&
+                IsFiniteVectorDefault(value, "pitch", "yaw", "roll");
+        if (metadata == "UnifiedScript.Unreal.UnrealTransform")
+            return argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Struct &&
+                argument.UnrealType.UnrealTypePath == "/Script/CoreUObject.Transform" &&
+                IsValidTransformDefault(value);
+        if (argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum)
+            return value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(),
+                System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _);
+        return false;
+    }
+
+    private static bool IsFiniteVectorDefault(JsonElement value, string first, string second, string third) =>
+        value.ValueKind == JsonValueKind.Object && value.EnumerateObject().Count() == 3 &&
+        TryGetFiniteNumber(value, first, out _) && TryGetFiniteNumber(value, second, out _) &&
+        TryGetFiniteNumber(value, third, out _);
+
+    private static bool IsValidTransformDefault(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object || value.EnumerateObject().Count() != 3 ||
+            !TryGetFiniteVector(value, "translation") || !TryGetFiniteVector(value, "scale3D") ||
+            !value.TryGetProperty("rotation", out JsonElement rotation) ||
+            rotation.ValueKind != JsonValueKind.Object || rotation.EnumerateObject().Count() != 4 ||
+            !TryGetFiniteNumber(rotation, "x", out double x) || !TryGetFiniteNumber(rotation, "y", out double y) ||
+            !TryGetFiniteNumber(rotation, "z", out double z) || !TryGetFiniteNumber(rotation, "w", out double w))
+            return false;
+        double lengthSquared = x * x + y * y + z * z + w * w;
+        return double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6;
+    }
+
+    public static string CollectionIdentity(
+        JsonElement value,
+        ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        string metadata = argument.TypeMetadataName;
+        if (metadata == "System.Boolean")
+            return value.GetBoolean() ? "bool:1" : "bool:0";
+        if (metadata == "System.Byte")
+            return $"byte:{value.GetUInt64()}";
+        if (metadata == "System.Int32")
+            return $"int:{value.GetInt64()}";
+        if (metadata == "System.Int64")
+            return $"long:{value.GetInt64()}";
+        if (metadata == "System.Single")
+        {
+            float single = value.GetSingle();
+            return $"single:{CanonicalFloat(single)}";
+        }
+        if (metadata == "System.Double")
+            return $"double:{CanonicalDouble(value.GetDouble())}";
+        if (metadata == "System.String")
+            return "string:" + (value.GetString() ?? string.Empty);
+        if (metadata == "UnifiedScript.Unreal.UnrealName")
+            return "name:" + CanonicalName(value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealText")
+            return "text:" + (value.GetString() ?? string.Empty);
+        if (metadata is "UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+            "UnifiedScript.Unreal.UnrealSoftClassHandle")
+            return "soft:" + CanonicalSoftPath(value.GetString());
+        if (metadata is "UnifiedScript.Unreal.UnrealObjectHandle" or
+            "UnifiedScript.Unreal.UnrealClassHandle")
+            return "null";
+        if (metadata == "UnifiedScript.Unreal.UnrealVector")
+            return "vector:" + CanonicalVector(value, "x", "y", "z");
+        if (metadata == "UnifiedScript.Unreal.UnrealRotator")
+            return "rotator:" + CanonicalVector(value, "pitch", "yaw", "roll");
+        if (metadata == "UnifiedScript.Unreal.UnrealTransform")
+        {
+            JsonElement rotation = value.GetProperty("rotation");
+            JsonElement translation = value.GetProperty("translation");
+            JsonElement scale = value.GetProperty("scale3D");
+            return "transform:" + CanonicalVector(rotation, "x", "y", "z", "w") + ";" +
+                CanonicalVector(translation, "x", "y", "z") + ";" +
+                CanonicalVector(scale, "x", "y", "z");
+        }
+        if (argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum)
+            return "enum:" + long.Parse(value.GetString()!, CultureInfo.InvariantCulture);
+        throw new JsonException($"Unsupported collection identity leaf '{metadata}'.");
+    }
+
+    private static string CanonicalName(string? value) =>
+        string.IsNullOrEmpty(value) || string.Equals(value, "None", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value.ToUpperInvariant();
+
+    private static string CanonicalSoftPath(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || string.Equals(value, "None", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+        int colon = value.IndexOf(':');
+        string prefix = colon < 0 ? value : value[..colon];
+        string subobject = colon < 0 ? string.Empty : value[(colon + 1)..];
+        return prefix.ToUpperInvariant() + "\u001f" + subobject;
+    }
+
+    private static string CanonicalVector(
+        JsonElement value,
+        params string[] components) =>
+        string.Join(",", components.Select(component => CanonicalDouble(value.GetProperty(component).GetDouble())));
+
+    private static string CanonicalFloat(float value) =>
+        value == 0
+            ? "0"
+            : BitConverter.SingleToInt32Bits(value).ToString("X8", CultureInfo.InvariantCulture);
+
+    private static string CanonicalDouble(double value) =>
+        value == 0
+            ? "0"
+            : BitConverter.DoubleToInt64Bits(value).ToString("X16", CultureInfo.InvariantCulture);
 
     private static bool IsValidStructDefault(ScriptStateDeclaration state)
     {

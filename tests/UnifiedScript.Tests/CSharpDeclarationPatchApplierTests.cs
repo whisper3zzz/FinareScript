@@ -306,6 +306,117 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyCollectionDefaultsUsesTypedLeafEmittersAndRoundTrips()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealEnum("/Script/FixtureRuntime.ECollectionMode", "ECollectionMode")]
+            [UnrealValue]
+            public readonly record struct CollectionMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static CollectionMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Game.CollectionPatch")]
+            public sealed class CollectionPatch
+            {
+                public int Existing { get; set; } = 1;
+            }
+            """;
+        CSharpCompilationRequest request = new(
+            "CollectionPatch",
+            [new CSharpSourceDocument("Game/CollectionPatch.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        JsonElement points = JsonDocument.Parse("[{\"x\":1,\"y\":2,\"z\":3}]").RootElement.Clone();
+        JsonElement modes = JsonDocument.Parse("[\"7\"]").RootElement.Clone();
+        JsonElement assets = JsonDocument.Parse(
+            "[{\"key\":\"Mesh\",\"value\":\"/Game/Props/Cube.Cube\"}]").RootElement.Clone();
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new AddScriptStatePatchOperation(asset.Id, new ScriptStatePatchSpec(
+                "Points",
+                "IReadOnlyList<UnrealVector>",
+                ScriptStateTypeKind.Array,
+                points,
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, new ScriptStatePatchSpec(
+                "Modes",
+                "IReadOnlyList<CollectionMode>",
+                ScriptStateTypeKind.Array,
+                modes,
+                ScriptExposure.None)),
+            new AddScriptStatePatchOperation(asset.Id, new ScriptStatePatchSpec(
+                "Assets",
+                "IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle>",
+                ScriptStateTypeKind.Map,
+                assets,
+                ScriptExposure.None)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("new UnrealVector(1d, 2d, 3d)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("new CollectionMode(7L)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("new UnrealName(\"Mesh\")", patchedSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "new UnrealSoftObjectHandle(\"/Game/Props/Cube.Cube\")",
+            patchedSource,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult roundTripped = Analyze(result.PatchedRequest!);
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states =
+            Assert.Single(roundTripped.ScriptAssets!.Assets).States.ToDictionary(
+                static state => state.Name,
+                StringComparer.Ordinal);
+        Assert.Equal(3, states["Points"].DefaultValue[0].GetProperty("z").GetDouble());
+        Assert.Equal("7", states["Modes"].DefaultValue[0].GetString());
+        Assert.Equal("/Game/Props/Cube.Cube",
+            states["Assets"].DefaultValue[0].GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public void ApplyCollectionUpdateResolvesUsingAliasAndPreservesStateIdentity()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+            using PointsAlias = System.Collections.Generic.IReadOnlyList<UnifiedScript.Unreal.UnrealVector>;
+
+            [ScriptAsset("Game.CollectionAlias")]
+            public sealed class CollectionAlias
+            {
+                public PointsAlias Points { get; set; } =
+                    new List<UnrealVector> { new(1, 2, 3) };
+            }
+            """;
+        CSharpCompilationRequest request = new(
+            "CollectionAlias",
+            [new CSharpSourceDocument("Game/CollectionAlias.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        ScriptStateDeclaration state = Assert.Single(asset.States);
+        JsonElement replacement = JsonDocument.Parse("[{\"x\":4,\"y\":5,\"z\":6}]").RootElement.Clone();
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(original, new UpdateScriptStatePatchOperation(
+                state.Id,
+                Expected(state),
+                Spec("Points", "PointsAlias", ScriptStateTypeKind.Array, replacement, state.Exposure))));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(state.Id, State(result.Analysis!, "Points").Id);
+        Assert.Equal(6, State(result.Analysis!, "Points").DefaultValue[0].GetProperty("z").GetInt32());
+    }
+
+    [Fact]
     public void ApplyRejectsStaleSourceConfigurationAndStatePreconditions()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);

@@ -316,6 +316,67 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void DeclarationBinary_UsesTypedChildDefaultsForCollectionsAndRejectsOlderReaders()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Tests/CollectionState")]
+            public sealed class CollectionState
+            {
+                public IReadOnlyList<UnrealVector> Points { get; set; } =
+                    new List<UnrealVector> { new(1, 2, 3) };
+                public IReadOnlySet<bool> Flags { get; set; } =
+                    new HashSet<bool> { true, false };
+                public IReadOnlySet<UnrealVector> VectorSet { get; set; } =
+                    new HashSet<UnrealVector> { new(1, 2, 3), new(1, 2, 4) };
+                public IReadOnlySet<UnrealName> Names { get; set; } =
+                    new HashSet<UnrealName> { new("Alpha") };
+                public IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle> Assets { get; set; } =
+                    new Dictionary<UnrealName, UnrealSoftObjectHandle>
+                    {
+                        { new UnrealName("Mesh"), new UnrealSoftObjectHandle("/Game/Props/Cube.Cube") },
+                    };
+            }
+            """;
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(source, [typeof(UnrealObjectScript).Assembly.Location]));
+        byte[] payload = result.Chunk.GetRequiredSection(
+            UnifiedScriptChunkSectionKind.DeclarationData).Data.ToArray();
+        Assert.Equal((byte)4, payload[10]);
+
+        UnifiedScriptRuntimeDeclarationDocument decoded =
+            UnifiedScriptRuntimeDeclarationBinary.Decode(payload);
+        IReadOnlyDictionary<string, UnifiedScriptRuntimeStateDeclaration> states =
+            Assert.Single(decoded.Assets).States.ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        UnifiedScriptRuntimeStateValue points = states["Points"].DefaultValue;
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Array, points.Kind);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Vector, Assert.Single(points.ContainerValues!).Kind);
+        Assert.Equal(3, Assert.Single(points.ContainerValues!).VectorZ);
+        UnifiedScriptRuntimeStateValue flags = states["Flags"].DefaultValue;
+        Assert.Equal(2, flags.ContainerValues!.Count);
+        Assert.Contains(flags.ContainerValues, static value => value.BooleanValue);
+        Assert.Contains(flags.ContainerValues, static value => !value.BooleanValue);
+        UnifiedScriptRuntimeStateValue vectorSet = states["VectorSet"].DefaultValue;
+        Assert.Equal(2, vectorSet.ContainerValues!.Count);
+        Assert.NotEqual(
+            vectorSet.ContainerValues[0].VectorZ,
+            vectorSet.ContainerValues[1].VectorZ);
+        UnifiedScriptRuntimeStateValue assets = states["Assets"].DefaultValue;
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Map, assets.Kind);
+        Assert.Equal(2, assets.ContainerValues!.Count);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.Name, assets.ContainerValues[0].Kind);
+        Assert.Equal(UnifiedScriptRuntimeStateValueKind.SoftObject, assets.ContainerValues[1].Kind);
+
+        payload[10] = 3;
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            UnifiedScriptRuntimeDeclarationBinary.Decode(payload));
+        Assert.Contains("requires declaration minor version 4", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BindingAndDependencyPayloads_AreSortedAndStrictlyRoundTrip()
     {
         var bindings = new UnifiedScriptRuntimeBindingManifest(

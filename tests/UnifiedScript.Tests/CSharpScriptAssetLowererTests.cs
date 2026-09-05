@@ -1133,6 +1133,179 @@ public sealed class CSharpScriptAssetLowererTests
         }
     }
 
+    [Fact]
+    public void CollectionStateDefaultsPreserveLeafMetadataAndTypedJson()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealEnum("/Script/FixtureRuntime.ECollectionMode", "ECollectionMode")]
+            [UnrealValue]
+            public readonly record struct CollectionMode(long Value) : IUnrealEnumValue
+            {
+                [UnrealEnumConstant(7)]
+                public static CollectionMode Active { get; } = new(7);
+            }
+
+            [ScriptAsset("Game.CollectionState")]
+            public sealed class CollectionState
+            {
+                public IReadOnlyList<UnrealVector> Points { get; set; } =
+                    new List<UnrealVector> { new(1, 2, 3) };
+                public IReadOnlySet<UnrealName> Enabled { get; set; } =
+                    new HashSet<UnrealName> { new("Alpha"), new("Beta") };
+                public IReadOnlyDictionary<UnrealName, UnrealSoftObjectHandle> Assets { get; set; } =
+                    new Dictionary<UnrealName, UnrealSoftObjectHandle>
+                    {
+                        { new UnrealName("Mesh"), new UnrealSoftObjectHandle("/Game/Props/Cube.Cube") },
+                    };
+                public IReadOnlyList<CollectionMode> Modes { get; set; } =
+                    new List<CollectionMode> { CollectionMode.Active };
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "CollectionState",
+                [new CSharpSourceDocument("Game/CollectionState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = Assert.Single(
+                result.ScriptAssets!.Assets).States
+            .ToDictionary(static state => state.Name, StringComparer.Ordinal);
+
+        ScriptStateDeclaration points = states["Points"];
+        Assert.Equal(ScriptStateTypeKind.Array, points.TypeKind);
+        Assert.Equal(ScriptFunctionValueTypeKind.Array, points.UnrealType?.Kind);
+        Assert.Equal("UnifiedScript.Unreal.UnrealVector", points.UnrealType?.TypeArguments![0].TypeMetadataName);
+        Assert.Equal(1, points.DefaultValue.GetArrayLength());
+        Assert.Equal(3, points.DefaultValue[0].GetProperty("z").GetDouble());
+
+        ScriptStateDeclaration enabled = states["Enabled"];
+        Assert.Equal(ScriptStateTypeKind.Set, enabled.TypeKind);
+        Assert.Equal(2, enabled.DefaultValue.GetArrayLength());
+        Assert.Equal("Alpha", enabled.DefaultValue[0].GetString());
+
+        ScriptStateDeclaration assets = states["Assets"];
+        Assert.Equal(ScriptStateTypeKind.Map, assets.TypeKind);
+        Assert.Equal("UnifiedScript.Unreal.UnrealSoftObjectHandle",
+            assets.UnrealType?.TypeArguments![1].TypeMetadataName);
+        Assert.Equal("/Game/Props/Cube.Cube",
+            assets.DefaultValue[0].GetProperty("value").GetString());
+
+        ScriptStateDeclaration modes = states["Modes"];
+        Assert.Equal(ScriptFunctionValueTypeKind.Enum, modes.UnrealType?.TypeArguments![0].UnrealType?.Kind);
+        Assert.Equal("7", modes.DefaultValue[0].GetString());
+    }
+
+    [Fact]
+    public void CollectionStateRejectsNestedAndUnreviewedLeafShapes()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealStruct("/Script/FixtureRuntime.FixturePayload", "FFixturePayload")]
+            [UnrealValue]
+            public readonly record struct FixturePayload(
+                [property: UnrealStructField(0, "Count")] int Count);
+
+            [ScriptAsset("Game.InvalidCollectionState")]
+            public sealed class InvalidCollectionState
+            {
+                public IReadOnlyList<IReadOnlyList<int>> Nested { get; set; } =
+                    new List<IReadOnlyList<int>>();
+                public IReadOnlySet<FixturePayload> Structs { get; set; } =
+                    new HashSet<FixturePayload>();
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InvalidCollectionState",
+                [new CSharpSourceDocument("Game/InvalidCollectionState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedStateType ||
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired);
+    }
+
+    [Fact]
+    public void CollectionStateInvalidDefaultsBecomeDiagnosticsWithoutThrowing()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            sealed class NameComparer : IEqualityComparer<UnrealName>
+            {
+                public bool Equals(UnrealName left, UnrealName right) => left.Value == right.Value;
+                public int GetHashCode(UnrealName value) => value.Value.GetHashCode();
+            }
+
+            [ScriptAsset("Game.InvalidCollectionDefaults")]
+            public sealed class InvalidCollectionDefaults
+            {
+                public IReadOnlySet<UnrealName> DuplicateNames { get; set; } =
+                    new HashSet<UnrealName> { new("Alpha"), new("alpha") };
+                public IReadOnlySet<UnrealName> CustomComparer { get; set; } =
+                    new HashSet<UnrealName>(new NameComparer());
+                public IReadOnlyList<short> UnsupportedInteger { get; set; } =
+                    new List<short> { 1 };
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InvalidCollectionDefaults",
+                [new CSharpSourceDocument("Game/InvalidCollectionDefaults.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code is DeclarationDiagnosticCodes.StateDefaultRequired or
+                DeclarationDiagnosticCodes.UnsupportedStateType);
+    }
+
+    [Fact]
+    public void CollectionDefaultsRejectSameNamedNonGenericImplementations()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace FakeCollections
+            {
+                public sealed class List<T> : System.Collections.Generic.List<T> { }
+            }
+
+            [ScriptAsset("Game.FakeCollectionDefaults")]
+            public sealed class FakeCollectionDefaults
+            {
+                public IReadOnlyList<int> Values { get; set; } =
+                    new FakeCollections.List<int> { 1, 2 };
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "FakeCollectionDefaults",
+                [new CSharpSourceDocument("Game/FakeCollectionDefaults.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired);
+    }
+
     [Theory]
     [InlineData("IReadOnlyList<int>", ScriptFunctionValueTypeKind.Array, "TArray", 1)]
     [InlineData("IReadOnlySet<UnrealName>", ScriptFunctionValueTypeKind.Set, "TSet", 1)]

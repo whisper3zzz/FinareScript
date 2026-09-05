@@ -426,6 +426,59 @@ internal static class UnrealNativeValueCodecV3
             out requiredCapability);
     }
 
+    internal static bool TryValidateContainerInput(object? value, Type type)
+    {
+        if (value is null ||
+            !TryGetContainerShape(
+                type,
+                out UnrealNativeValueKindV3 kind,
+                out _,
+                out _,
+                out _,
+                out _) ||
+            value is not IEnumerable enumerable ||
+            !TryGetCount(value, out int count) ||
+            count < 0)
+        {
+            return false;
+        }
+
+        HashSet<object?>? nativeIdentities = kind switch
+        {
+            UnrealNativeValueKindV3.Set or UnrealNativeValueKindV3.Map =>
+                new HashSet<object?>(NativeIdentityComparer.Instance),
+            _ => null,
+        };
+        int observed = 0;
+        foreach (object? item in enumerable)
+        {
+            if (observed++ >= count)
+            {
+                return false;
+            }
+            if (kind == UnrealNativeValueKindV3.Map)
+            {
+                if (item is null)
+                {
+                    return false;
+                }
+                Type pairType = item.GetType();
+                object? key = pairType.GetProperty("Key")?.GetValue(item);
+                object? mappedValue = pairType.GetProperty("Value")?.GetValue(item);
+                if (key is null || mappedValue is null ||
+                    nativeIdentities is not null && !nativeIdentities.Add(key))
+                {
+                    return false;
+                }
+            }
+            else if (item is null || nativeIdentities is not null && !nativeIdentities.Add(item))
+            {
+                return false;
+            }
+        }
+        return observed == count;
+    }
+
     public static bool TryCreateResultDescriptor<T>(
         out UnrealNativeValueV3 descriptor,
         out UnrealNativeCapabilitiesV3 requiredCapability) =>
@@ -1069,6 +1122,12 @@ internal static class UnrealNativeValueCodecV3
         int descriptorOffset = byteCount;
         byteCount += descriptorBytes;
         int cellIndex = 0;
+        HashSet<object?>? nativeIdentities = kind switch
+        {
+            UnrealNativeValueKindV3.Set => new HashSet<object?>(NativeIdentityComparer.Instance),
+            UnrealNativeValueKindV3.Map => new HashSet<object?>(NativeIdentityComparer.Instance),
+            _ => null,
+        };
         foreach (object? item in enumerable)
         {
             if (kind == UnrealNativeValueKindV3.Map)
@@ -1080,6 +1139,10 @@ internal static class UnrealNativeValueCodecV3
                 Type pairType = item.GetType();
                 object? key = pairType.GetProperty("Key")?.GetValue(item);
                 object? mappedValue = pairType.GetProperty("Value")?.GetValue(item);
+                if (key is null || nativeIdentities is not null && !nativeIdentities.Add(key))
+                {
+                    return false;
+                }
                 if (!TryEncodeDynamic(
                         key,
                         keyType,
@@ -1103,6 +1166,10 @@ internal static class UnrealNativeValueCodecV3
             }
             else
             {
+                if (item is null || nativeIdentities is not null && !nativeIdentities.Add(item))
+                {
+                    return false;
+                }
                 if (elementType is null || !TryEncodeDynamic(
                         item,
                         elementType,
@@ -1556,7 +1623,7 @@ internal static class UnrealNativeValueCodecV3
         if (expectedKind == UnrealNativeValueKindV3.Set)
         {
             Type setType = typeof(HashSet<>).MakeGenericType(elementType!);
-            object set = Activator.CreateInstance(setType)!;
+            object set = CreateNativeCollection(setType, elementType!);
             System.Reflection.MethodInfo add = setType.GetMethod("Add", [elementType!])!;
             for (int index = 0; index < entries; index++)
             {
@@ -1566,14 +1633,17 @@ internal static class UnrealNativeValueCodecV3
                 {
                     return false;
                 }
-                _ = add.Invoke(set, [item]);
+                if (add.Invoke(set, [item]) is not true)
+                {
+                    return false;
+                }
             }
             decoded = set;
             return true;
         }
 
         Type dictionaryType = typeof(Dictionary<,>).MakeGenericType(keyType!, valueType!);
-        var dictionary = (IDictionary)Activator.CreateInstance(dictionaryType, entries)!;
+        var dictionary = (IDictionary)CreateNativeCollection(dictionaryType, keyType!);
         for (int index = 0; index < entries; index++)
         {
             UnrealNativeValueV3 keyCell = ReadCell(arena, descriptorOffset, index * 2);
@@ -1583,6 +1653,10 @@ internal static class UnrealNativeValueCodecV3
                 !TryDecodeNested(
                     valueType!, valueCell, arena, byteCount, depth + 1, out object? mappedValue) ||
                 key is null)
+            {
+                return false;
+            }
+            if (dictionary.Contains(key))
             {
                 return false;
             }
@@ -1619,6 +1693,114 @@ internal static class UnrealNativeValueCodecV3
         int offset = checked(descriptorOffset + cellIndex * UnrealNativeAbiV3.ValueSize);
         return MemoryMarshal.Read<UnrealNativeValueV3>(
             arena.Slice(offset, UnrealNativeAbiV3.ValueSize));
+    }
+
+    private static object CreateNativeCollection(Type collectionType, Type identityType)
+    {
+        object? comparer = NativeIdentityComparer.Create(identityType);
+        return comparer is null
+            ? Activator.CreateInstance(collectionType)!
+            : Activator.CreateInstance(collectionType, comparer)!;
+    }
+
+    private sealed class NativeIdentityComparer : IEqualityComparer<object?>
+    {
+        public static NativeIdentityComparer Instance { get; } = new();
+
+        public static object? Create(Type type) =>
+            type == typeof(UnrealName) ? new UnrealNameComparer() :
+            type == typeof(UnrealSoftObjectHandle) ? new UnrealSoftObjectComparer() :
+            type == typeof(UnrealSoftClassHandle) ? new UnrealSoftClassComparer() :
+            null;
+
+        public new bool Equals(object? left, object? right)
+        {
+            if (left is UnrealName leftName && right is UnrealName rightName)
+                return UnrealNameComparer.Instance.Equals(leftName, rightName);
+            if (left is UnrealSoftObjectHandle leftObject && right is UnrealSoftObjectHandle rightObject)
+                return UnrealSoftObjectComparer.Instance.Equals(leftObject, rightObject);
+            if (left is UnrealSoftClassHandle leftClass && right is UnrealSoftClassHandle rightClass)
+                return UnrealSoftClassComparer.Instance.Equals(leftClass, rightClass);
+            return object.Equals(left, right);
+        }
+
+        public int GetHashCode(object? value) => value switch
+        {
+            UnrealName name => UnrealNameComparer.Instance.GetHashCode(name),
+            UnrealSoftObjectHandle softObject => UnrealSoftObjectComparer.Instance.GetHashCode(softObject),
+            UnrealSoftClassHandle softClass => UnrealSoftClassComparer.Instance.GetHashCode(softClass),
+            null => 0,
+            _ => value.GetHashCode(),
+        };
+    }
+
+    private sealed class UnrealNameComparer : IEqualityComparer<UnrealName>
+    {
+        public static UnrealNameComparer Instance { get; } = new();
+
+        public bool Equals(UnrealName left, UnrealName right) =>
+            string.Equals(Normalize(left.Value), Normalize(right.Value), StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode(UnrealName value) =>
+            StringComparer.OrdinalIgnoreCase.GetHashCode(Normalize(value.Value));
+
+        private static string Normalize(string value) =>
+            value.Length == 0 || string.Equals(value, "None", StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : value;
+    }
+
+    private sealed class UnrealSoftObjectComparer : IEqualityComparer<UnrealSoftObjectHandle>
+    {
+        public static UnrealSoftObjectComparer Instance { get; } = new();
+
+        public bool Equals(UnrealSoftObjectHandle left, UnrealSoftObjectHandle right) =>
+            SoftPathEquals(left.AssetPath, right.AssetPath);
+
+        public int GetHashCode(UnrealSoftObjectHandle value) => SoftPathHashCode(value.AssetPath);
+    }
+
+    private sealed class UnrealSoftClassComparer : IEqualityComparer<UnrealSoftClassHandle>
+    {
+        public static UnrealSoftClassComparer Instance { get; } = new();
+
+        public bool Equals(UnrealSoftClassHandle left, UnrealSoftClassHandle right) =>
+            SoftPathEquals(left.AssetPath, right.AssetPath);
+
+        public int GetHashCode(UnrealSoftClassHandle value) => SoftPathHashCode(value.AssetPath);
+    }
+
+    private static bool SoftPathEquals(string? left, string? right)
+    {
+        SplitSoftPath(left, out string leftPrefix, out string leftSubobject);
+        SplitSoftPath(right, out string rightPrefix, out string rightSubobject);
+        return string.Equals(leftPrefix, rightPrefix, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(leftSubobject, rightSubobject, StringComparison.Ordinal);
+    }
+
+    private static int SoftPathHashCode(string? value)
+    {
+        SplitSoftPath(value, out string prefix, out string subobject);
+        return HashCode.Combine(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(prefix),
+            StringComparer.Ordinal.GetHashCode(subobject));
+    }
+
+    private static void SplitSoftPath(string? value, out string prefix, out string subobject)
+    {
+        string normalized = string.IsNullOrEmpty(value) ||
+            string.Equals(value, "None", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value!;
+        int separator = normalized.IndexOf(':');
+        if (separator < 0)
+        {
+            prefix = normalized;
+            subobject = string.Empty;
+            return;
+        }
+        prefix = normalized[..separator];
+        subobject = normalized[(separator + 1)..];
     }
 
     private static bool TryDecodeUtf8(

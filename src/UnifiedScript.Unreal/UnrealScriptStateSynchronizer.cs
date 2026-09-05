@@ -218,6 +218,21 @@ internal static class UnrealScriptStateSynchronizer
             {
                 return StateBinding<UnrealTransform>.CreateTyped(property, memberPath);
             }
+            bool isCollection = type.IsGenericType &&
+                (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>) ||
+                 type.GetGenericTypeDefinition() == typeof(IReadOnlySet<>) ||
+                 type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
+            if (isCollection)
+            {
+                Type bindingType = typeof(ReferenceStateBinding<>).MakeGenericType(type);
+                MethodInfo? factory = bindingType.GetMethod(
+                    "CreateTyped",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (factory?.Invoke(null, [property, memberPath]) is StateBinding binding)
+                {
+                    return binding;
+                }
+            }
             if (type.IsValueType &&
                 type.GetCustomAttribute<UnrealEnumAttribute>(inherit: false) is not null &&
                 typeof(IUnrealEnumValue).IsAssignableFrom(type))
@@ -287,6 +302,31 @@ internal static class UnrealScriptStateSynchronizer
                 memberPath,
                 CompileGetter<string>(property),
                 CompileSetter<string>(property));
+    }
+
+    private sealed class ReferenceStateBinding<T>(
+        string memberPath,
+        Func<UnrealObjectScript, T> getter,
+        Action<UnrealObjectScript, T> setter)
+        : StateBinding(memberPath)
+    {
+        public override void Hydrate(
+            UnrealObjectScript script,
+            IUnrealInvocationBridge bridge,
+            UnrealObjectHandle handle) =>
+            setter(script, bridge.ReadProperty<T>(handle, MemberPath));
+
+        public override void Flush(
+            UnrealObjectScript script,
+            IUnrealInvocationBridge bridge,
+            UnrealObjectHandle handle) =>
+            bridge.WriteProperty(handle, MemberPath, getter(script));
+
+        public static ReferenceStateBinding<T> CreateTyped(PropertyInfo property, string memberPath) =>
+            new(
+                memberPath,
+                CompileGetter<T>(property),
+                CompileSetter<T>(property));
     }
 
     private static Func<UnrealObjectScript, T> CompileGetter<T>(PropertyInfo property)

@@ -29,6 +29,9 @@ public enum UnrealInvocationValueKind : byte
     Vector = 18,
     Rotator = 19,
     Transform = 20,
+    Array = 22,
+    Set = 23,
+    Map = 24,
     SoftObject = 27,
     SoftClass = 28,
 }
@@ -77,7 +80,8 @@ public readonly record struct UnrealInvocationValue
         UnrealVector vectorValue = default,
         UnrealRotator rotatorValue = default,
         UnrealTransform transformValue = default,
-        ulong enumTypeId = 0)
+        ulong enumTypeId = 0,
+        ReadOnlyMemory<byte>? containerPayload = null)
     {
         Kind = kind;
         BooleanValue = booleanValue;
@@ -91,6 +95,7 @@ public readonly record struct UnrealInvocationValue
         RotatorValue = rotatorValue;
         TransformValue = transformValue;
         EnumTypeId = enumTypeId;
+        ContainerPayload = containerPayload;
     }
 
     public UnrealInvocationValueKind Kind { get; }
@@ -115,6 +120,8 @@ public readonly record struct UnrealInvocationValue
 
     public UnrealTransform TransformValue { get; }
     public ulong EnumTypeId { get; }
+
+    internal ReadOnlyMemory<byte>? ContainerPayload { get; }
 
     public static UnrealInvocationValue Void => default;
 
@@ -196,6 +203,15 @@ public readonly record struct UnrealInvocationValue
 
     public static UnrealInvocationValue FromTransform(UnrealTransform value) =>
         new(UnrealInvocationValueKind.Transform, transformValue: value);
+
+    internal static UnrealInvocationValue FromContainerPayload(
+        UnrealInvocationValueKind kind,
+        byte[] payload) =>
+        kind is UnrealInvocationValueKind.Array or UnrealInvocationValueKind.Set or UnrealInvocationValueKind.Map
+            ? new(
+                kind,
+                containerPayload: (payload ?? throw new ArgumentNullException(nameof(payload))).ToArray())
+            : throw new ArgumentOutOfRangeException(nameof(kind));
 }
 
 public readonly record struct UnrealInvocationResponse
@@ -1870,8 +1886,21 @@ public sealed class NativeUnrealInvocationBridge
     private static UnrealInvocationValue ConvertToNative<T>(
         T value,
         string memberPath,
-        bool useSoftKinds = false) =>
-        value switch
+        bool useSoftKinds = false)
+    {
+        if (IsContainerType(typeof(T)))
+        {
+            if (TryEncodeContainerPayload(
+                    value,
+                    typeof(T),
+                    memberPath,
+                    out UnrealInvocationValue container))
+            {
+                return container;
+            }
+            throw UnsupportedValue(memberPath, typeof(T));
+        }
+        return value switch
         {
             bool booleanValue => UnrealInvocationValue.FromBoolean(booleanValue),
             sbyte int8Value => UnrealInvocationValue.FromInt8(int8Value),
@@ -1907,12 +1936,18 @@ public sealed class NativeUnrealInvocationBridge
             UnrealTransform transformValue => UnrealInvocationValue.FromTransform(transformValue),
             _ => throw UnsupportedValue(memberPath, typeof(T)),
         };
+    }
 
     private static T ConvertFromNative<T>(
         UnrealInvocationValue value,
         string memberPath,
         bool useSoftKinds = false)
     {
+        if (value.Kind is UnrealInvocationValueKind.Array or UnrealInvocationValueKind.Set or UnrealInvocationValueKind.Map &&
+            TryDecodeContainerPayload(value, typeof(T), out object? decodedContainer))
+        {
+            return (T)decodedContainer!;
+        }
         if (value.Kind == UnrealInvocationValueKind.Enum &&
             TryGetEnumPath(typeof(T), out string expectedEnumPath) &&
             value.EnumTypeId == UnrealMemberId.FromPath(expectedEnumPath) &&
@@ -1988,6 +2023,94 @@ public sealed class NativeUnrealInvocationBridge
                 $"Native member '{memberPath}' returned {value.Kind}, not {typeof(T).FullName}.");
         }
         return (T)converted;
+    }
+
+    private static bool IsContainerType(Type type) =>
+        type.IsGenericType && type.GetGenericTypeDefinition() is
+            { } definition && (definition == typeof(IReadOnlyList<>) ||
+                definition == typeof(IReadOnlySet<>) ||
+                definition == typeof(IReadOnlyDictionary<,>));
+
+    private static bool TryEncodeContainerPayload<T>(
+        T value,
+        Type declaredType,
+        string memberPath,
+        out UnrealInvocationValue converted)
+    {
+        converted = default;
+        int rootSize = Marshal.SizeOf<UnrealNativeValueV3>();
+        int maximumArena = UnrealByteBuffer.MaximumCallBytes - rootSize;
+        if (maximumArena <= 0)
+            return false;
+        if (!UnrealNativeValueCodecV3.TryValidateContainerInput(value, declaredType))
+            return false;
+        int capacity = Math.Min(CallFrameArenaByteCapacity, maximumArena);
+        while (capacity > 0)
+        {
+            byte[] arena = new byte[capacity];
+            int byteCount = 0;
+            if (UnrealNativeValueCodecV3.TryEncodeObject(
+                    value,
+                    declaredType,
+                    arena,
+                    ref byteCount,
+                    out UnrealNativeValueV3 encoded,
+                    out _)
+                && encoded.Kind is UnrealNativeValueKindV3.Array or
+                    UnrealNativeValueKindV3.Set or UnrealNativeValueKindV3.Map)
+            {
+                if (byteCount < 0 || byteCount > maximumArena)
+                    return false;
+                byte[] payload = new byte[checked(rootSize + byteCount)];
+                MemoryMarshal.Write(payload.AsSpan(), in encoded);
+                arena.AsSpan(0, byteCount).CopyTo(payload.AsSpan(rootSize));
+                UnrealInvocationValueKind kind = encoded.Kind switch
+                {
+                    UnrealNativeValueKindV3.Array => UnrealInvocationValueKind.Array,
+                    UnrealNativeValueKindV3.Set => UnrealInvocationValueKind.Set,
+                    _ => UnrealInvocationValueKind.Map,
+                };
+                converted = UnrealInvocationValue.FromContainerPayload(kind, payload);
+                return true;
+            }
+            if (capacity == maximumArena)
+                break;
+            int nextCapacity = Math.Min(maximumArena, checked(capacity * 2));
+            if (nextCapacity == capacity)
+                break;
+            capacity = nextCapacity;
+        }
+        return false;
+    }
+
+    private static bool TryDecodeContainerPayload(
+        UnrealInvocationValue value,
+        Type declaredType,
+        out object? converted)
+    {
+        converted = null;
+        if (!IsContainerType(declaredType) || value.ContainerPayload is null)
+            return false;
+        int rootSize = Marshal.SizeOf<UnrealNativeValueV3>();
+        ReadOnlyMemory<byte> payload = value.ContainerPayload.Value;
+        if (payload.Length < rootSize || payload.Length > UnrealByteBuffer.MaximumCallBytes)
+            return false;
+        UnrealNativeValueV3 root = MemoryMarshal.Read<UnrealNativeValueV3>(payload.Span);
+        UnrealNativeValueKindV3 expectedKind = value.Kind switch
+        {
+            UnrealInvocationValueKind.Array => UnrealNativeValueKindV3.Array,
+            UnrealInvocationValueKind.Set => UnrealNativeValueKindV3.Set,
+            UnrealInvocationValueKind.Map => UnrealNativeValueKindV3.Map,
+            _ => UnrealNativeValueKindV3.Void,
+        };
+        if (root.Kind != expectedKind || root.Flags != UnrealNativeValueFlagsV3.ArenaBacked)
+            return false;
+        return UnrealNativeValueCodecV3.TryDecodeObject(
+            declaredType,
+            in root,
+            payload.Span[rootSize..],
+            payload.Length - rootSize,
+            out converted);
     }
 
     private static bool TryGetEnumPath(Type type, out string path)

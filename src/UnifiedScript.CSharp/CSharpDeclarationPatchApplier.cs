@@ -590,7 +590,10 @@ public sealed class CSharpDeclarationPatchApplier
                 context.Root,
                 StateAnnotationKind,
                 update.State.Id);
-            PropertyDeclarationSyntax replacement = RewriteProperty(property, update.Replacement)
+            PropertyDeclarationSyntax replacement = RewriteProperty(
+                    property,
+                    update.Replacement,
+                    context.SemanticModel)
                 .WithAdditionalAnnotations(StateAnnotation(update.State.Id));
             context.Root = context.Root.ReplaceNode(property, replacement);
         }
@@ -684,7 +687,9 @@ public sealed class CSharpDeclarationPatchApplier
             SyntaxList<MemberDeclarationSyntax> members = type.Members;
             foreach (AddPlan add in assetAdds)
             {
-                members = members.Insert(insertionIndex++, CreateProperty(add.State, type));
+                members = members.Insert(
+                    insertionIndex++,
+                    CreateProperty(add.State, type, context.SemanticModel));
             }
 
             TypeDeclarationSyntax replacement = type.WithMembers(members)
@@ -1049,7 +1054,8 @@ public sealed class CSharpDeclarationPatchApplier
 
     private static PropertyDeclarationSyntax RewriteProperty(
         PropertyDeclarationSyntax property,
-        ScriptStatePatchSpec spec)
+        ScriptStatePatchSpec spec,
+        SemanticModel semanticModel)
     {
         SyntaxTriviaList leading = property.GetLeadingTrivia();
         SyntaxTriviaList trailing = property.GetTrailingTrivia();
@@ -1068,7 +1074,10 @@ public sealed class CSharpDeclarationPatchApplier
                 spec.Name,
                 property.Identifier.TrailingTrivia))
             .WithInitializer(SyntaxFactory.EqualsValueClause(
-                SyntaxFactory.ParseExpression(RenderDefault(spec))))
+                SyntaxFactory.ParseExpression(RenderDefault(
+                    spec,
+                    semanticModel,
+                    property.SpanStart))))
             .WithSemicolonToken(property.SemicolonToken.IsKind(SyntaxKind.None)
                 ? SyntaxFactory.Token(SyntaxKind.SemicolonToken)
                 : property.SemicolonToken);
@@ -1083,9 +1092,13 @@ public sealed class CSharpDeclarationPatchApplier
 
     private static PropertyDeclarationSyntax CreateProperty(
         ScriptStatePatchSpec spec,
-        TypeDeclarationSyntax containingType)
+        TypeDeclarationSyntax containingType,
+        SemanticModel semanticModel)
     {
-        string source = RenderProperty(spec);
+        string source = RenderProperty(
+            spec,
+            semanticModel,
+            containingType.SpanStart);
         PropertyDeclarationSyntax property = SyntaxFactory.ParseMemberDeclaration(source)
             as PropertyDeclarationSyntax ??
             throw new InvalidOperationException("A validated state specification did not parse as a property.");
@@ -1122,13 +1135,20 @@ public sealed class CSharpDeclarationPatchApplier
             throw new InvalidOperationException("A normalized script-state property did not parse.");
     }
 
-    private static string RenderProperty(ScriptStatePatchSpec spec)
+    private static string RenderProperty(
+        ScriptStatePatchSpec spec,
+        SemanticModel semanticModel,
+        int position)
     {
         string exposure = RenderExposureAttribute(spec.Exposure);
-        return $"{exposure}public {spec.TypeName} {spec.Name} {{ get; set; }} = {RenderDefault(spec)};";
+        return $"{exposure}public {spec.TypeName} {spec.Name} {{ get; set; }} = " +
+            $"{RenderDefault(spec, semanticModel, position)};";
     }
 
-    private static string RenderDefault(ScriptStatePatchSpec spec)
+    private static string RenderDefault(
+        ScriptStatePatchSpec spec,
+        SemanticModel? semanticModel = null,
+        int position = 0)
     {
         if (spec.TypeKind == ScriptStateTypeKind.String)
         {
@@ -1171,6 +1191,54 @@ public sealed class CSharpDeclarationPatchApplier
                 ? "default"
                 : $"new {spec.TypeName}(" +
                     Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(path, quote: true) + ")";
+        }
+
+        if (spec.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map)
+        {
+            TypeSyntax collectionSyntax = SyntaxFactory.ParseTypeName(spec.TypeName);
+            ITypeSymbol? collectionSymbol = semanticModel?.GetSpeculativeTypeInfo(
+                position,
+                collectionSyntax,
+                SpeculativeBindingOption.BindAsTypeOrNamespace).Type;
+            string[] typeArguments;
+            ITypeSymbol[] elementSymbols;
+            if (collectionSymbol is INamedTypeSymbol namedCollection)
+            {
+                string[] explicitArguments = GetCollectionTypeArguments(collectionSyntax);
+                typeArguments = explicitArguments.Length == namedCollection.TypeArguments.Length
+                    ? explicitArguments
+                    : namedCollection.TypeArguments
+                        .Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                            .Replace("global::", string.Empty, StringComparison.Ordinal))
+                        .ToArray();
+                elementSymbols = namedCollection.TypeArguments.ToArray();
+            }
+            else
+            {
+                typeArguments = GetCollectionTypeArguments(collectionSyntax);
+                elementSymbols = [];
+            }
+            if (spec.TypeKind == ScriptStateTypeKind.Map)
+            {
+                if (typeArguments.Length != 2)
+                    throw new InvalidOperationException("A map state requires key and value types.");
+                string entries = string.Join(", ", spec.DefaultValue.EnumerateArray().Select(entry =>
+                    $"{{ {RenderCollectionLeafDefault(entry.GetProperty("key"), typeArguments[0],
+                        elementSymbols.Length > 0 ? elementSymbols[0] : null)}, " +
+                    $"{RenderCollectionLeafDefault(entry.GetProperty("value"), typeArguments[1],
+                        elementSymbols.Length > 1 ? elementSymbols[1] : null)} }}"));
+                return $"new global::System.Collections.Generic.Dictionary<{typeArguments[0]}, {typeArguments[1]}> {{ {entries} }}";
+            }
+            string elementType = typeArguments.Length == 1 ? typeArguments[0] : throw new InvalidOperationException("A collection state requires one element type.");
+            string values = string.Join(", ", spec.DefaultValue.EnumerateArray()
+                .Select(item => RenderCollectionLeafDefault(
+                    item,
+                    elementType,
+                    elementSymbols.Length == 1 ? elementSymbols[0] : null)));
+            string implementation = spec.TypeKind == ScriptStateTypeKind.Set
+                ? "global::System.Collections.Generic.HashSet"
+                : "global::System.Collections.Generic.List";
+            return $"new {implementation}<{elementType}> {{ {values} }}";
         }
 
         if (spec.TypeKind == ScriptStateTypeKind.Struct)
@@ -1216,6 +1284,132 @@ public sealed class CSharpDeclarationPatchApplier
             "ulong" or "System.UInt64" => value + "UL",
             _ => value,
         };
+    }
+
+    private static string[] GetCollectionTypeArguments(TypeSyntax syntax)
+    {
+        GenericNameSyntax? generic = syntax.DescendantNodesAndSelf()
+            .OfType<GenericNameSyntax>()
+            .FirstOrDefault();
+        if (generic is null)
+        {
+            return [];
+        }
+        return generic.TypeArgumentList.Arguments
+            .Select(static argument => argument.ToString())
+            .ToArray();
+    }
+
+    private static string RenderCollectionLeafDefault(
+        JsonElement value,
+        string typeName,
+        ITypeSymbol? resolvedType)
+    {
+        string normalizedType = (resolvedType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? typeName)
+            .Replace("global::", string.Empty, StringComparison.Ordinal)
+            .Trim();
+        if (normalizedType is "string" or "System.String")
+        {
+            return value.ValueKind == JsonValueKind.String
+                ? Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(value.GetString()!, quote: true)
+                : throw new InvalidOperationException("A string collection default must be a JSON string.");
+        }
+        if (normalizedType is "bool" or "System.Boolean")
+        {
+            return value.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? value.GetRawText()
+                : throw new InvalidOperationException("A boolean collection default is invalid.");
+        }
+        if (normalizedType is "byte" or "System.Byte" or "int" or "System.Int32" or
+            "long" or "System.Int64" or "float" or "System.Single" or
+            "double" or "System.Double")
+        {
+            if (value.ValueKind != JsonValueKind.Number)
+                throw new InvalidOperationException("A numeric collection default is invalid.");
+            string suffix = normalizedType switch
+            {
+                "long" or "System.Int64" => "L",
+                "float" or "System.Single" => "f",
+                "double" or "System.Double" => "d",
+                _ => string.Empty,
+            };
+            return value.GetRawText() + suffix;
+        }
+        if (normalizedType is "UnifiedScript.Unreal.UnrealName" or
+            "UnifiedScript.Unreal.UnrealText")
+        {
+            if (value.ValueKind != JsonValueKind.String)
+                throw new InvalidOperationException("A name/text collection default must be a JSON string.");
+            string escaped = Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(
+                value.GetString()!, quote: true);
+            return $"new {typeName}({escaped})";
+        }
+        if (normalizedType is "UnifiedScript.Unreal.UnrealSoftObjectHandle" or
+            "UnifiedScript.Unreal.UnrealSoftClassHandle")
+        {
+            if (value.ValueKind != JsonValueKind.String)
+                throw new InvalidOperationException("A soft reference collection default must be a JSON string.");
+            string path = value.GetString()!;
+            return path.Length == 0
+                ? "default"
+                : $"new {typeName}(" +
+                    Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(path, quote: true) + ")";
+        }
+        if (normalizedType is "UnifiedScript.Unreal.UnrealObjectHandle" or
+            "UnifiedScript.Unreal.UnrealClassHandle")
+        {
+            return value.ValueKind == JsonValueKind.Null
+                ? "default"
+                : throw new InvalidOperationException("An object collection default must be null.");
+        }
+        if (normalizedType == "UnifiedScript.Unreal.UnrealVector" &&
+            value.ValueKind == JsonValueKind.Object)
+        {
+            return $"new {typeName}({RenderDouble(value, "x")}, {RenderDouble(value, "y")}, {RenderDouble(value, "z")})";
+        }
+        if (normalizedType == "UnifiedScript.Unreal.UnrealRotator" &&
+            value.ValueKind == JsonValueKind.Object)
+        {
+            return $"new {typeName}({RenderDouble(value, "pitch")}, {RenderDouble(value, "yaw")}, {RenderDouble(value, "roll")})";
+        }
+        if (normalizedType == "UnifiedScript.Unreal.UnrealTransform" &&
+            value.ValueKind == JsonValueKind.Object)
+        {
+            JsonElement rotation = value.GetProperty("rotation");
+            JsonElement translation = value.GetProperty("translation");
+            JsonElement scale = value.GetProperty("scale3D");
+            string quaternion =
+                $"new global::UnifiedScript.Unreal.UnrealQuaternion({RenderDouble(rotation, "x")}, " +
+                $"{RenderDouble(rotation, "y")}, {RenderDouble(rotation, "z")}, {RenderDouble(rotation, "w")})";
+            string vector(JsonElement vectorValue) =>
+                $"new global::UnifiedScript.Unreal.UnrealVector({RenderDouble(vectorValue, "x")}, " +
+                $"{RenderDouble(vectorValue, "y")}, {RenderDouble(vectorValue, "z")})";
+            return $"new {typeName}({quaternion}, {vector(translation)}, {vector(scale)})";
+        }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            string enumValue = value.GetString()!;
+            if (long.TryParse(enumValue,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out long numericValue))
+            {
+                return $"new {typeName}({numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}L)";
+            }
+            if (Microsoft.CodeAnalysis.CSharp.SyntaxFacts.IsValidIdentifier(enumValue))
+                return $"{typeName}.{enumValue}";
+        }
+        throw new InvalidOperationException(
+            $"Collection default for '{typeName}' is not a supported scalar literal.");
+    }
+
+    private static string RenderDouble(JsonElement value, string propertyName)
+    {
+        JsonElement component = value.GetProperty(propertyName);
+        if (component.ValueKind != JsonValueKind.Number || !component.TryGetDouble(out double number) ||
+            !double.IsFinite(number))
+            throw new InvalidOperationException($"Collection struct component '{propertyName}' is invalid.");
+        return number.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "d";
     }
 
     private static SyntaxList<AttributeListSyntax> RemoveExposureAttributes(
@@ -1559,8 +1753,26 @@ public sealed class CSharpDeclarationPatchApplier
         return string.Equals(state.TypeMetadataName, metadataName, StringComparison.Ordinal) ||
             string.Equals(state.TypeDisplayName, sourceName, StringComparison.Ordinal) ||
             (!sourceName.Contains('.', StringComparison.Ordinal) &&
-                state.TypeMetadataName.EndsWith('.' + sourceName, StringComparison.Ordinal));
+                state.TypeMetadataName.EndsWith('.' + sourceName, StringComparison.Ordinal)) ||
+            IsAliasedCollectionType(state, sourceName);
     }
+
+    private static bool IsAliasedCollectionType(
+        ScriptStateDeclaration state,
+        string sourceName) =>
+        !sourceName.Contains('.', StringComparison.Ordinal) &&
+        sourceName.IndexOf('<') < 0 &&
+        state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map &&
+        state.UnrealType?.Kind switch
+        {
+            ScriptFunctionValueTypeKind.Array => state.TypeMetadataName.StartsWith(
+                "System.Collections.Generic.IReadOnlyList<", StringComparison.Ordinal),
+            ScriptFunctionValueTypeKind.Set => state.TypeMetadataName.StartsWith(
+                "System.Collections.Generic.IReadOnlySet<", StringComparison.Ordinal),
+            ScriptFunctionValueTypeKind.Map => state.TypeMetadataName.StartsWith(
+                "System.Collections.Generic.IReadOnlyDictionary<", StringComparison.Ordinal),
+            _ => false,
+        };
 
     private static bool MatchesSourceType(string metadataTypeName, string sourceTypeName)
     {

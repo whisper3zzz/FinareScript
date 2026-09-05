@@ -149,6 +149,59 @@ public sealed class ScriptAssetJsonTests
         Assert.True(UnrealObjectPathValidator.IsValid("/Game/Foo(Bar)/Cube.Cube"));
     }
 
+    [Fact]
+    public void CollectionIdentityUsesTypedNativeCompatibleCanonicalValues()
+    {
+        ScriptFunctionTypeArgumentDeclaration text = new("System.String");
+        ScriptFunctionTypeArgumentDeclaration number = new("System.Double");
+        ScriptFunctionTypeArgumentDeclaration name = new("UnifiedScript.Unreal.UnrealName");
+        ScriptFunctionTypeArgumentDeclaration soft = new("UnifiedScript.Unreal.UnrealSoftObjectHandle");
+        ScriptFunctionTypeArgumentDeclaration vector = new(
+            "UnifiedScript.Unreal.UnrealVector",
+            new ScriptFunctionValueTypeDeclaration(
+                ScriptFunctionValueTypeKind.Struct,
+                "/Script/CoreUObject.Vector",
+                "Vector",
+                [
+                    new ScriptFunctionStructFieldDeclaration(0, "X", "System.Double"),
+                    new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
+                    new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
+                ]));
+
+        static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+        Assert.Equal(
+            ScriptAssetJson.CollectionIdentity(Parse("\"a\""), text),
+            ScriptAssetJson.CollectionIdentity(Parse("\"\\u0061\""), text));
+        Assert.Equal(
+            ScriptAssetJson.CollectionIdentity(Parse("1"), number),
+            ScriptAssetJson.CollectionIdentity(Parse("1.0"), number));
+        Assert.Equal(
+            ScriptAssetJson.CollectionIdentity(Parse("\"\""), name),
+            ScriptAssetJson.CollectionIdentity(Parse("\"None\""), name));
+        Assert.Equal(
+            ScriptAssetJson.CollectionIdentity(Parse("\"/game/a.a:Sub\""), soft),
+            ScriptAssetJson.CollectionIdentity(Parse("\"/Game/A.A:Sub\""), soft));
+        Assert.NotEqual(
+            ScriptAssetJson.CollectionIdentity(Parse("\"/Game/A.A:Sub\""), soft),
+            ScriptAssetJson.CollectionIdentity(Parse("\"/Game/A.A:sub\""), soft));
+        Assert.NotEqual(
+            ScriptAssetJson.CollectionIdentity(Parse("{\"x\":1,\"y\":2,\"z\":3}"), vector),
+            ScriptAssetJson.CollectionIdentity(Parse("{\"x\":1,\"y\":2,\"z\":4}"), vector));
+        ScriptFunctionTypeArgumentDeclaration malformedVector = vector with
+        {
+            UnrealType = vector.UnrealType! with
+            {
+                Fields = [
+                    new ScriptFunctionStructFieldDeclaration(0, "X", "System.Int32"),
+                    new ScriptFunctionStructFieldDeclaration(1, "Y", "System.Double"),
+                    new ScriptFunctionStructFieldDeclaration(2, "Z", "System.Double"),
+                ],
+            },
+        };
+        Assert.False(ScriptAssetJson.IsSupportedCollectionLeaf(malformedVector));
+    }
+
     private static ScriptStateDeclaration State(string name, int defaultValue) => new(
         SemanticId.FromKey($"state:{name}"),
         name,

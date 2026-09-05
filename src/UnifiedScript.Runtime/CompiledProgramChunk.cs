@@ -62,6 +62,9 @@ public enum UnifiedScriptRuntimeStateValueKind : byte
     Transform = 11,
     SoftObject = 12,
     SoftClass = 13,
+    Array = 14,
+    Set = 15,
+    Map = 16,
 }
 
 public sealed record UnifiedScriptRuntimeStateValue(
@@ -86,7 +89,8 @@ public sealed record UnifiedScriptRuntimeStateValue(
     double TransformTranslationZ = 0,
     double TransformScaleX = 1,
     double TransformScaleY = 1,
-    double TransformScaleZ = 1);
+    double TransformScaleZ = 1,
+    IReadOnlyList<UnifiedScriptRuntimeStateValue>? ContainerValues = null);
 
 public sealed record UnifiedScriptRuntimeStateDeclaration(
     SemanticId Id,
@@ -320,6 +324,7 @@ public static class UnifiedScriptRuntimeDependencyManifestBinary
 public static class UnifiedScriptRuntimeDeclarationBinary
 {
     private static ReadOnlySpan<byte> Magic => "USRDEC\0\0"u8;
+    private const int MaximumDefaultDepth = 16;
 
     public static byte[] Encode(UnifiedScriptRuntimeDeclarationDocument document)
     {
@@ -328,6 +333,11 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             .SelectMany(static asset => asset.States)
             .ToArray();
         ushort minorVersion = allStates.Any(static state =>
+                state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map ||
+                state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.Array or
+                    UnifiedScriptRuntimeStateValueKind.Set or UnifiedScriptRuntimeStateValueKind.Map)
+            ? (ushort)4
+            : allStates.Any(static state =>
                 state.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass ||
                 state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.SoftObject or
                     UnifiedScriptRuntimeStateValueKind.SoftClass)
@@ -370,7 +380,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     public static UnifiedScriptRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 3);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 4);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -403,6 +413,12 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 {
                     throw new InvalidDataException(
                         $"Soft reference state '{name}' requires declaration minor version 3.");
+                }
+                if (typeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map &&
+                    reader.MinorVersion < 4)
+                {
+                    throw new InvalidDataException(
+                        $"Collection state '{name}' requires declaration minor version 4.");
                 }
                 UnifiedScriptRuntimeStateValue defaultValue = ReadDefault(ref reader);
                 byte exposureFlags = reader.ReadByte();
@@ -502,6 +518,15 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             ScriptStateTypeKind.SoftClass => new UnifiedScriptRuntimeStateValue(
                 UnifiedScriptRuntimeStateValueKind.SoftClass,
                 TextValue: state.DefaultValue.GetString()),
+            ScriptStateTypeKind.Array => ConvertCollectionDefault(
+                state,
+                UnifiedScriptRuntimeStateValueKind.Array),
+            ScriptStateTypeKind.Set => ConvertCollectionDefault(
+                state,
+                UnifiedScriptRuntimeStateValueKind.Set),
+            ScriptStateTypeKind.Map => ConvertCollectionDefault(
+                state,
+                UnifiedScriptRuntimeStateValueKind.Map),
             ScriptStateTypeKind.Struct when
                 state.TypeMetadataName == "UnifiedScript.Unreal.UnrealVector" =>
                 new UnifiedScriptRuntimeStateValue(
@@ -545,6 +570,73 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             TransformScaleZ: scale.GetProperty("z").GetDouble());
     }
 
+    private static UnifiedScriptRuntimeStateValue ConvertCollectionDefault(
+        ScriptStateDeclaration state,
+        UnifiedScriptRuntimeStateValueKind kind)
+    {
+        ScriptFunctionTypeArgumentDeclaration[] arguments =
+            state.UnrealType?.TypeArguments?.ToArray() ?? throw new InvalidDataException(
+                $"Collection state '{state.Name}' has no element type metadata.");
+        var values = new List<UnifiedScriptRuntimeStateValue>();
+        foreach (JsonElement item in state.DefaultValue.EnumerateArray())
+        {
+            if (kind == UnifiedScriptRuntimeStateValueKind.Map)
+            {
+                values.Add(ConvertCollectionLeaf(item.GetProperty("key"), arguments[0]));
+                values.Add(ConvertCollectionLeaf(item.GetProperty("value"), arguments[1]));
+            }
+            else
+            {
+                values.Add(ConvertCollectionLeaf(item, arguments[0]));
+            }
+        }
+        return new UnifiedScriptRuntimeStateValue(kind, ContainerValues: values);
+    }
+
+    private static UnifiedScriptRuntimeStateValue ConvertCollectionLeaf(
+        JsonElement value,
+        ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        string metadata = argument.TypeMetadataName;
+        if (metadata == "System.Boolean")
+            return new(UnifiedScriptRuntimeStateValueKind.Boolean, BooleanValue: value.GetBoolean());
+        if (metadata is "System.Byte" or "System.UInt16" or "System.UInt32" or "System.UInt64")
+            return value.TryGetUInt64(out ulong unsigned)
+                ? new(UnifiedScriptRuntimeStateValueKind.UnsignedInteger, UnsignedIntegerValue: unsigned)
+                : throw new InvalidDataException("An unsigned collection default is out of range.");
+        if (metadata is "System.SByte" or "System.Int16" or "System.Int32" or "System.Int64")
+            return value.TryGetInt64(out long signed)
+                ? new(UnifiedScriptRuntimeStateValueKind.SignedInteger, SignedIntegerValue: signed)
+                : throw new InvalidDataException("A signed collection default is out of range.");
+        if (metadata is "System.Single" or "System.Double")
+            return new(UnifiedScriptRuntimeStateValueKind.FloatingPoint, FloatingPointValue: value.GetDouble());
+        if (metadata == "System.String")
+            return new(UnifiedScriptRuntimeStateValueKind.String, TextValue: value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealName")
+            return new(UnifiedScriptRuntimeStateValueKind.Name, TextValue: value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealText")
+            return new(UnifiedScriptRuntimeStateValueKind.Text, TextValue: value.GetString());
+        if (metadata is "UnifiedScript.Unreal.UnrealObjectHandle" or "UnifiedScript.Unreal.UnrealClassHandle")
+            return new(UnifiedScriptRuntimeStateValueKind.Null);
+        if (metadata == "UnifiedScript.Unreal.UnrealSoftObjectHandle")
+            return new(UnifiedScriptRuntimeStateValueKind.SoftObject, TextValue: value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealSoftClassHandle")
+            return new(UnifiedScriptRuntimeStateValueKind.SoftClass, TextValue: value.GetString());
+        if (argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum)
+            return new(UnifiedScriptRuntimeStateValueKind.Enum, TextValue: value.GetString());
+        if (metadata == "UnifiedScript.Unreal.UnrealVector")
+            return new(UnifiedScriptRuntimeStateValueKind.Vector,
+                VectorX: value.GetProperty("x").GetDouble(), VectorY: value.GetProperty("y").GetDouble(),
+                VectorZ: value.GetProperty("z").GetDouble());
+        if (metadata == "UnifiedScript.Unreal.UnrealRotator")
+            return new(UnifiedScriptRuntimeStateValueKind.Rotator,
+                RotatorPitch: value.GetProperty("pitch").GetDouble(), RotatorYaw: value.GetProperty("yaw").GetDouble(),
+                RotatorRoll: value.GetProperty("roll").GetDouble());
+        if (metadata == "UnifiedScript.Unreal.UnrealTransform")
+            return ConvertTransformDefault(value);
+        throw new InvalidDataException($"Unsupported collection leaf '{metadata}'.");
+    }
+
     private static void WriteUnrealType(
         ChunkPayloadWriter writer,
         ScriptFunctionValueTypeDeclaration? type,
@@ -569,6 +661,16 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             writer.WriteString(field.NativeName);
             writer.WriteString(field.TypeMetadataName);
             WriteUnrealType(writer, field.UnrealType, depth + 1);
+        }
+        if (type.Kind is ScriptFunctionValueTypeKind.Array or
+            ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
+        {
+            writer.WriteCount(type.TypeArguments?.Count ?? 0);
+            foreach (ScriptFunctionTypeArgumentDeclaration argument in type.TypeArguments ?? [])
+            {
+                writer.WriteString(argument.TypeMetadataName);
+                WriteUnrealType(writer, argument.UnrealType, depth + 1);
+            }
         }
     }
 
@@ -600,13 +702,32 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 metadataName,
                 ReadUnrealType(ref reader, depth + 1));
         }
-        return new ScriptFunctionValueTypeDeclaration(kind, path, nativeName, fields);
+        IReadOnlyList<ScriptFunctionTypeArgumentDeclaration>? typeArguments = null;
+        if (kind is ScriptFunctionValueTypeKind.Array or
+            ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
+        {
+            int argumentCount = reader.ReadCount();
+            var arguments = new ScriptFunctionTypeArgumentDeclaration[argumentCount];
+            for (int index = 0; index < argumentCount; index++)
+            {
+                arguments[index] = new ScriptFunctionTypeArgumentDeclaration(
+                    reader.ReadString(),
+                    ReadUnrealType(ref reader, depth + 1));
+            }
+            typeArguments = arguments;
+        }
+        return new ScriptFunctionValueTypeDeclaration(kind, path, nativeName, fields, typeArguments);
     }
 
     private static void WriteDefault(
         ChunkPayloadWriter writer,
-        UnifiedScriptRuntimeStateValue value)
+        UnifiedScriptRuntimeStateValue value,
+        int depth = 0)
     {
+        if (depth > MaximumDefaultDepth)
+        {
+            throw new InvalidDataException("A runtime collection default exceeds the nesting limit.");
+        }
         writer.WriteByte((byte)value.Kind);
         switch (value.Kind)
         {
@@ -632,6 +753,15 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             case UnifiedScriptRuntimeStateValueKind.SoftClass:
                 writer.WriteString(value.TextValue ?? throw new InvalidDataException(
                     "A runtime textual default requires text."));
+                break;
+            case UnifiedScriptRuntimeStateValueKind.Array:
+            case UnifiedScriptRuntimeStateValueKind.Set:
+            case UnifiedScriptRuntimeStateValueKind.Map:
+                if (value.ContainerValues is null)
+                    throw new InvalidDataException("A runtime collection default requires child values.");
+                writer.WriteCount(value.ContainerValues.Count);
+                foreach (UnifiedScriptRuntimeStateValue child in value.ContainerValues)
+                    WriteDefault(writer, child, depth + 1);
                 break;
             case UnifiedScriptRuntimeStateValueKind.Vector:
                 writer.WriteDouble(value.VectorX);
@@ -660,8 +790,14 @@ public static class UnifiedScriptRuntimeDeclarationBinary
         }
     }
 
-    private static UnifiedScriptRuntimeStateValue ReadDefault(ref ChunkPayloadReader reader)
+    private static UnifiedScriptRuntimeStateValue ReadDefault(
+        ref ChunkPayloadReader reader,
+        int depth = 0)
     {
+        if (depth > MaximumDefaultDepth)
+        {
+            throw new InvalidDataException("A runtime collection default exceeds the nesting limit.");
+        }
         var kind = (UnifiedScriptRuntimeStateValueKind)reader.ReadByte();
         return kind switch
         {
@@ -710,8 +846,24 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 UnifiedScriptRuntimeStateValueKind.SoftClass when reader.MinorVersion >= 3 => new(
                     kind,
                     TextValue: reader.ReadString()),
+            UnifiedScriptRuntimeStateValueKind.Array or
+                UnifiedScriptRuntimeStateValueKind.Set or
+                UnifiedScriptRuntimeStateValueKind.Map when reader.MinorVersion >= 4 =>
+                ReadCollectionDefault(ref reader, kind, depth),
             _ => throw new InvalidDataException($"Unsupported runtime state value '{kind}'."),
         };
+    }
+
+    private static UnifiedScriptRuntimeStateValue ReadCollectionDefault(
+        ref ChunkPayloadReader reader,
+        UnifiedScriptRuntimeStateValueKind kind,
+        int depth)
+    {
+        int count = reader.ReadCount();
+        var values = new UnifiedScriptRuntimeStateValue[count];
+        for (int index = 0; index < count; index++)
+            values[index] = ReadDefault(ref reader, depth + 1);
+        return new UnifiedScriptRuntimeStateValue(kind, ContainerValues: values);
     }
 
     private static UnifiedScriptRuntimeDeclarationDocument Normalize(
@@ -780,6 +932,10 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             throw new InvalidDataException(
                 $"Runtime state '{state.Name}' has an incompatible Unreal type identity.");
         }
+        if (state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map)
+        {
+            ValidateCollectionDefault(state);
+        }
         if (state.TypeKind == ScriptStateTypeKind.Enum && state.UnrealType is not null &&
             (state.UnrealType.Kind != ScriptFunctionValueTypeKind.Enum ||
              string.IsNullOrWhiteSpace(state.UnrealType.UnrealTypePath) ||
@@ -812,7 +968,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                     $"Runtime soft reference state '{state.Name}' has an incompatible identity or path.");
             }
         }
-        if (state.TypeKind is not (ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct) &&
+        if (state.TypeKind is not (ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct or
+            ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map) &&
             state.UnrealType is not null)
         {
             throw new InvalidDataException(
@@ -848,6 +1005,9 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             ScriptStateTypeKind.SoftClass =>
                 state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.SoftClass &&
                 UnrealObjectPathValidator.IsValid(state.DefaultValue.TextValue),
+            ScriptStateTypeKind.Array => state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Array,
+            ScriptStateTypeKind.Set => state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Set,
+            ScriptStateTypeKind.Map => state.DefaultValue.Kind == UnifiedScriptRuntimeStateValueKind.Map,
             ScriptStateTypeKind.Struct =>
                 IsValidStructDefault(state),
             _ => false,
@@ -857,6 +1017,195 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             throw new InvalidDataException(
                 $"Runtime state '{state.Name}' has an incompatible default value.");
         }
+    }
+
+    private static void ValidateCollectionDefault(UnifiedScriptRuntimeStateDeclaration state)
+    {
+        ScriptFunctionValueTypeKind expected = state.TypeKind switch
+        {
+            ScriptStateTypeKind.Array => ScriptFunctionValueTypeKind.Array,
+            ScriptStateTypeKind.Set => ScriptFunctionValueTypeKind.Set,
+            _ => ScriptFunctionValueTypeKind.Map,
+        };
+        ScriptFunctionValueTypeDeclaration? type = state.UnrealType;
+        int arity = expected == ScriptFunctionValueTypeKind.Map ? 2 : 1;
+        string definition = expected switch
+        {
+            ScriptFunctionValueTypeKind.Array => "System.Collections.Generic.IReadOnlyList",
+            ScriptFunctionValueTypeKind.Set => "System.Collections.Generic.IReadOnlySet",
+            _ => "System.Collections.Generic.IReadOnlyDictionary",
+        };
+        string expectedMetadata = type?.TypeArguments is null
+            ? string.Empty
+            : $"{definition}<{string.Join(", ", type.TypeArguments.Select(static a => a.TypeMetadataName))}>";
+        if (type?.Kind != expected || type.UnrealTypePath != string.Empty ||
+            type.Fields.Count != 0 || type.TypeArguments is null || type.TypeArguments.Count != arity ||
+            type.UnrealNativeName != (expected == ScriptFunctionValueTypeKind.Array ? "TArray" :
+                expected == ScriptFunctionValueTypeKind.Set ? "TSet" : "TMap") ||
+            state.TypeMetadataName != expectedMetadata ||
+            type.TypeArguments.Any(static argument => !ScriptAssetJson.IsSupportedCollectionLeaf(argument)) ||
+            type.TypeArguments.Any(static argument => argument.UnrealType?.Kind is
+                ScriptFunctionValueTypeKind.Array or ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map) ||
+            state.DefaultValue.ContainerValues is null)
+        {
+            throw new InvalidDataException($"Runtime collection state '{state.Name}' has invalid type identity.");
+        }
+        try
+        {
+            IReadOnlyList<UnifiedScriptRuntimeStateValue> values = state.DefaultValue.ContainerValues;
+            if (expected == ScriptFunctionValueTypeKind.Map && values.Count % 2 != 0)
+                throw new InvalidDataException();
+            var identities = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < values.Count; index++)
+            {
+                int argumentIndex = expected == ScriptFunctionValueTypeKind.Map ? index % 2 : 0;
+                ScriptFunctionTypeArgumentDeclaration argument = type.TypeArguments[argumentIndex];
+                UnifiedScriptRuntimeStateValue child = values[index];
+                ValidateCollectionLeaf(child, argument);
+                if (expected == ScriptFunctionValueTypeKind.Set &&
+                    !identities.Add(CollectionIdentity(child, argument)) ||
+                    expected == ScriptFunctionValueTypeKind.Map && index % 2 == 0 &&
+                    !identities.Add(CollectionIdentity(child, argument)))
+                    throw new InvalidDataException();
+            }
+        }
+        catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidDataException)
+        {
+            throw new InvalidDataException($"Runtime collection state '{state.Name}' has an invalid default payload.", exception);
+        }
+    }
+
+    private static void ValidateCollectionLeaf(
+        UnifiedScriptRuntimeStateValue value,
+        ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        string metadata = argument.TypeMetadataName;
+        if (!ScriptAssetJson.IsSupportedCollectionLeaf(argument))
+            throw new InvalidDataException($"Collection leaf '{metadata}' is unsupported.");
+        bool valid = metadata == "System.Boolean"
+            ? value.Kind == UnifiedScriptRuntimeStateValueKind.Boolean
+            : metadata == "System.Byte"
+                ? value.Kind == UnifiedScriptRuntimeStateValueKind.UnsignedInteger &&
+                    value.UnsignedIntegerValue <= byte.MaxValue
+                : metadata == "System.Int32"
+                    ? value.Kind == UnifiedScriptRuntimeStateValueKind.SignedInteger &&
+                        value.SignedIntegerValue is >= int.MinValue and <= int.MaxValue
+                    : metadata == "System.Int64"
+                        ? value.Kind == UnifiedScriptRuntimeStateValueKind.SignedInteger
+                        : metadata is "System.Single" or "System.Double"
+                            ? value.Kind == UnifiedScriptRuntimeStateValueKind.FloatingPoint &&
+                                (metadata != "System.Single" || float.IsFinite((float)value.FloatingPointValue)) &&
+                                double.IsFinite(value.FloatingPointValue)
+                            : metadata == "System.String"
+                                ? value.Kind == UnifiedScriptRuntimeStateValueKind.String && value.TextValue is not null
+                                : metadata == "UnifiedScript.Unreal.UnrealName"
+                                    ? value.Kind == UnifiedScriptRuntimeStateValueKind.Name && value.TextValue is not null
+                                    : metadata == "UnifiedScript.Unreal.UnrealText"
+                                        ? value.Kind == UnifiedScriptRuntimeStateValueKind.Text && value.TextValue is not null
+                                        : metadata is "UnifiedScript.Unreal.UnrealObjectHandle" or "UnifiedScript.Unreal.UnrealClassHandle"
+                                            ? value.Kind == UnifiedScriptRuntimeStateValueKind.Null
+                                            : metadata == "UnifiedScript.Unreal.UnrealSoftObjectHandle"
+                                                ? value.Kind == UnifiedScriptRuntimeStateValueKind.SoftObject && UnrealObjectPathValidator.IsValid(value.TextValue)
+                                                : metadata == "UnifiedScript.Unreal.UnrealSoftClassHandle"
+                                                    ? value.Kind == UnifiedScriptRuntimeStateValueKind.SoftClass && UnrealObjectPathValidator.IsValid(value.TextValue)
+                                                    : argument.UnrealType?.Kind == ScriptFunctionValueTypeKind.Enum
+                                                        ? value.Kind == UnifiedScriptRuntimeStateValueKind.Enum &&
+                                                            long.TryParse(value.TextValue,
+                                                                System.Globalization.NumberStyles.Integer,
+                                                                System.Globalization.CultureInfo.InvariantCulture,
+                                                                out _)
+                                                        : metadata == "UnifiedScript.Unreal.UnrealVector"
+                                                            ? value.Kind == UnifiedScriptRuntimeStateValueKind.Vector &&
+                                                                double.IsFinite(value.VectorX) &&
+                                                                double.IsFinite(value.VectorY) &&
+                                                                double.IsFinite(value.VectorZ)
+                                                            : metadata == "UnifiedScript.Unreal.UnrealRotator"
+                                                                ? value.Kind == UnifiedScriptRuntimeStateValueKind.Rotator &&
+                                                                    double.IsFinite(value.RotatorPitch) &&
+                                                                    double.IsFinite(value.RotatorYaw) &&
+                                                                    double.IsFinite(value.RotatorRoll)
+                                                                : metadata == "UnifiedScript.Unreal.UnrealTransform"
+                                                                    ? IsValidCollectionTransform(value)
+                                                                    : false;
+        if (!valid)
+            throw new InvalidDataException($"Collection leaf '{metadata}' has an incompatible default kind.");
+    }
+
+    private static bool IsValidCollectionTransform(UnifiedScriptRuntimeStateValue value)
+    {
+        double lengthSquared = value.TransformRotationX * value.TransformRotationX +
+            value.TransformRotationY * value.TransformRotationY +
+            value.TransformRotationZ * value.TransformRotationZ +
+            value.TransformRotationW * value.TransformRotationW;
+        return value.Kind == UnifiedScriptRuntimeStateValueKind.Transform &&
+            double.IsFinite(lengthSquared) && Math.Abs(lengthSquared - 1.0) <= 1e-6 &&
+            double.IsFinite(value.TransformTranslationX) &&
+            double.IsFinite(value.TransformTranslationY) &&
+            double.IsFinite(value.TransformTranslationZ) &&
+            double.IsFinite(value.TransformScaleX) &&
+            double.IsFinite(value.TransformScaleY) &&
+            double.IsFinite(value.TransformScaleZ);
+    }
+
+    private static string CollectionIdentity(
+        UnifiedScriptRuntimeStateValue value,
+        ScriptFunctionTypeArgumentDeclaration argument) =>
+        ScriptAssetJson.CollectionIdentity(ToIdentityJson(value, argument), argument);
+
+    private static JsonElement ToIdentityJson(
+        UnifiedScriptRuntimeStateValue value,
+        ScriptFunctionTypeArgumentDeclaration argument)
+    {
+        string metadata = argument.TypeMetadataName;
+        if (metadata == "System.Boolean")
+            return JsonSerializer.SerializeToElement(value.BooleanValue);
+        if (metadata == "System.Byte")
+            return JsonSerializer.SerializeToElement(value.UnsignedIntegerValue);
+        if (metadata is "System.Int32" or "System.Int64")
+            return JsonSerializer.SerializeToElement(value.SignedIntegerValue);
+        if (metadata is "System.Single" or "System.Double")
+            return JsonSerializer.SerializeToElement(value.FloatingPointValue);
+        if (metadata == "UnifiedScript.Unreal.UnrealVector")
+            return JsonSerializer.SerializeToElement(new
+            {
+                x = value.VectorX,
+                y = value.VectorY,
+                z = value.VectorZ,
+            });
+        if (metadata == "UnifiedScript.Unreal.UnrealRotator")
+            return JsonSerializer.SerializeToElement(new
+            {
+                pitch = value.RotatorPitch,
+                yaw = value.RotatorYaw,
+                roll = value.RotatorRoll,
+            });
+        if (metadata == "UnifiedScript.Unreal.UnrealTransform")
+            return JsonSerializer.SerializeToElement(new
+            {
+                rotation = new
+                {
+                    x = value.TransformRotationX,
+                    y = value.TransformRotationY,
+                    z = value.TransformRotationZ,
+                    w = value.TransformRotationW,
+                },
+                translation = new
+                {
+                    x = value.TransformTranslationX,
+                    y = value.TransformTranslationY,
+                    z = value.TransformTranslationZ,
+                },
+                scale3D = new
+                {
+                    x = value.TransformScaleX,
+                    y = value.TransformScaleY,
+                    z = value.TransformScaleZ,
+                },
+            });
+        if (metadata is "UnifiedScript.Unreal.UnrealObjectHandle" or
+            "UnifiedScript.Unreal.UnrealClassHandle")
+            return JsonSerializer.SerializeToElement<object?>(null);
+        return JsonSerializer.SerializeToElement(value.TextValue ?? string.Empty);
     }
 
     private static bool IsValidStructDefault(UnifiedScriptRuntimeStateDeclaration state)

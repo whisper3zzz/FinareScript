@@ -408,6 +408,17 @@ public static class DeclarationPatchJson
                 value.ValueKind == JsonValueKind.String &&
                 UnrealObjectPathValidator.IsValid(value.GetString()),
             ScriptStateTypeKind.Struct => IsFiniteCommonValue(value),
+            ScriptStateTypeKind.Array or ScriptStateTypeKind.Set =>
+                value.ValueKind == JsonValueKind.Array &&
+                (typeKind != ScriptStateTypeKind.Set ||
+                    value.EnumerateArray().Select(static item => item.GetRawText()).Distinct(StringComparer.Ordinal).Count() ==
+                    value.GetArrayLength()),
+            ScriptStateTypeKind.Map => value.ValueKind == JsonValueKind.Array &&
+                value.EnumerateArray().All(static item => item.ValueKind == JsonValueKind.Object &&
+                    item.EnumerateObject().Count() == 2 && item.TryGetProperty("key", out _) &&
+                    item.TryGetProperty("value", out _)) &&
+                value.EnumerateArray().Select(static item => item.GetProperty("key").GetRawText())
+                    .Distinct(StringComparer.Ordinal).Count() == value.GetArrayLength(),
             _ => false,
         };
         if (!valid)
