@@ -346,16 +346,21 @@ internal sealed class UnrealManagedFunctionDispatcherV2
     private readonly string _typeName;
     private readonly bool _staticOnly;
     private readonly IReadOnlyDictionary<string, FunctionContract> _functions;
+    private readonly IReadOnlyDictionary<string, UnrealManagedFunctionSignature> _signatures;
 
     private UnrealManagedFunctionDispatcherV2(
         Type scriptType,
         bool staticOnly,
-        IReadOnlyDictionary<string, FunctionContract> functions)
+        IReadOnlyDictionary<string, FunctionContract> functions,
+        IReadOnlyDictionary<string, UnrealManagedFunctionSignature> signatures)
     {
         _typeName = scriptType.FullName ?? scriptType.Name;
         _staticOnly = staticOnly;
         _functions = functions;
+        _signatures = signatures;
     }
+
+    internal IReadOnlyDictionary<string, UnrealManagedFunctionSignature> Signatures => _signatures;
 
     public static UnrealManagedFunctionDispatcherV2 Create(
         Type scriptType,
@@ -363,6 +368,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
     {
         ArgumentNullException.ThrowIfNull(scriptType);
         var functions = new Dictionary<string, FunctionContract>(StringComparer.Ordinal);
+        var signatures = new Dictionary<string, UnrealManagedFunctionSignature>(StringComparer.Ordinal);
         BindingFlags flags = BindingFlags.Public | BindingFlags.FlattenHierarchy |
             (staticOnly ? BindingFlags.Static : BindingFlags.Instance);
         foreach (MethodInfo method in scriptType.GetMethods(flags))
@@ -373,8 +379,11 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             {
                 continue;
             }
-            if (!FunctionContract.TryCreate(method, out FunctionContract? contract) ||
-                contract is null)
+            if (!FunctionContract.TryCreate(
+                    method,
+                    out FunctionContract? contract,
+                    out UnrealManagedFunctionSignature? signature) ||
+                contract is null || signature is null)
             {
                 continue;
             }
@@ -384,8 +393,9 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                     $"Blueprint-callable managed methods cannot overload '{scriptType.FullName}.{method.Name}'. " +
                     "Use distinct method names so one stable Unreal UFunction owns each call contract.");
             }
+            signatures.Add(method.Name, signature);
         }
-        return new UnrealManagedFunctionDispatcherV2(scriptType, staticOnly, functions);
+        return new UnrealManagedFunctionDispatcherV2(scriptType, staticOnly, functions, signatures);
     }
 
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
@@ -432,14 +442,20 @@ internal sealed class UnrealManagedFunctionDispatcherV2
 
     private delegate void InvokeFunction(object? target, nint frame);
 
+    internal sealed record UnrealManagedFunctionSignature(string Canonical);
+
     private sealed record FunctionContract(
         int ArgumentCount,
         int ResultCount,
         InvokeFunction Invoke)
     {
-        public static bool TryCreate(MethodInfo method, out FunctionContract? contract)
+        public static bool TryCreate(
+            MethodInfo method,
+            out FunctionContract? contract,
+            out UnrealManagedFunctionSignature? signature)
         {
             contract = null;
+            signature = null;
             ParameterInfo[] parameters = method.GetParameters();
             if (method.ContainsGenericParameters ||
                 parameters.Length > MaximumArgumentCount ||
@@ -534,12 +550,63 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 frame,
                 Expression.Constant(resultIndex)));
             Expression body = Expression.Block(variables, bodyExpressions);
+            if (!TryCreateSignature(method, out signature))
+            {
+                return false;
+            }
             contract = new FunctionContract(
                 parameters.Length,
                 resultIndex,
                 Expression.Lambda<InvokeFunction>(body, target, frame).Compile());
             return true;
         }
+
+        private static bool TryCreateSignature(
+            MethodInfo method,
+            out UnrealManagedFunctionSignature? signature)
+        {
+            signature = null;
+            if (!TryCreateTypeIdentity(method.ReturnType, out string returnIdentity))
+            {
+                return false;
+            }
+
+            var builder = new System.Text.StringBuilder();
+            AppendPart(builder, method.Name);
+            AppendPart(builder, returnIdentity);
+            foreach (ParameterInfo parameter in method.GetParameters())
+            {
+                Type parameterType = parameter.ParameterType;
+                Type valueType = parameterType.IsByRef
+                    ? parameterType.GetElementType() ?? typeof(void)
+                    : parameterType;
+                if (!TryCreateTypeIdentity(valueType, out string parameterIdentity))
+                {
+                    return false;
+                }
+                string direction = parameterType.IsByRef
+                    ? parameter.IsOut ? "out" : "ref"
+                    : "in";
+                AppendPart(builder, parameter.Name ?? string.Empty);
+                AppendPart(builder, direction);
+                AppendPart(builder, parameterIdentity);
+            }
+            signature = new UnrealManagedFunctionSignature(builder.ToString());
+            return true;
+        }
+
+        private static bool TryCreateTypeIdentity(Type type, out string identity)
+        {
+            if (type == typeof(void))
+            {
+                identity = "void";
+                return true;
+            }
+            return UnrealNativeValueCodecV3.TryCreateContractIdentity(type, out identity);
+        }
+
+        private static void AppendPart(System.Text.StringBuilder builder, string value) =>
+            builder.Append(value.Length).Append(':').Append(value).Append(';');
     }
 
     private static bool IsSupported(Type type) =>

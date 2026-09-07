@@ -150,7 +150,11 @@ public static class UnrealWorldManagedEntryPoint
     /// lifecycle soak tests use it to turn unload intent into observable proof.
     /// </summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int CollectRetiredLoadContexts()
+    public static int CollectRetiredLoadContexts() => CollectRetiredLoadContextsCore();
+
+    internal static int CollectRetiredLoadContextsForTests() => CollectRetiredLoadContextsCore();
+
+    private static int CollectRetiredLoadContextsCore()
     {
         for (int pass = 0; pass < 3; ++pass)
         {
@@ -1208,6 +1212,66 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        internal int PrepareStaticLibraryReload(string assemblyPath, string typeName)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                string key = GetStaticLibraryKey(assemblyPath, typeName);
+                return _staticLibraries.TryGetValue(key, out ManagedStaticLibrary? library)
+                    ? library.PrepareReload()
+                    : 0;
+            }
+        }
+
+        internal int CommitStaticLibraryReload(
+            string assemblyPath,
+            string typeName,
+            int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                string key = GetStaticLibraryKey(assemblyPath, typeName);
+                return RequireStaticLibrary(key).CommitPreparedReload(candidateGeneration);
+            }
+        }
+
+        internal void AbortStaticLibraryReload(
+            string assemblyPath,
+            string typeName,
+            int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                string key = GetStaticLibraryKey(assemblyPath, typeName);
+                RequireStaticLibrary(key).AbortPreparedReload(candidateGeneration);
+            }
+        }
+
+        internal void FinalizeStaticLibraryReload(
+            string assemblyPath,
+            string typeName,
+            int candidateGeneration)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                string key = GetStaticLibraryKey(assemblyPath, typeName);
+                RequireStaticLibrary(key).FinalizePreparedReload(candidateGeneration);
+            }
+        }
+
+        private static string GetStaticLibraryKey(string assemblyPath, string typeName) =>
+            Path.GetFullPath(assemblyPath) + "\0" + typeName;
+
+        private ManagedStaticLibrary RequireStaticLibrary(string key) =>
+            _staticLibraries.TryGetValue(key, out ManagedStaticLibrary? library)
+                ? library
+                : throw new InvalidOperationException(
+                    "The managed static library cache slot is not loaded for this World.");
+
         public int ReloadScript(
             ulong instanceId,
             string assemblyPath,
@@ -2180,18 +2244,27 @@ public static class UnrealWorldManagedEntryPoint
                 : CoreClrGenerationPrewarmOptions.Default;
     }
 
-    private sealed class ManagedStaticLibrary : IDisposable
+    internal sealed class ManagedStaticLibrary : IDisposable
     {
-        private readonly ScriptAssemblyLoadContext _loadContext;
-        private readonly UnrealManagedFunctionDispatcherV2 _functions;
+        private readonly ulong _worldId;
+        private readonly string _assemblyPath;
+        private readonly string _typeName;
+        private StaticLibraryGeneration? _current;
+        private PreparedStaticLibraryReload? _preparedReload;
+        private int _nextGeneration;
         private bool _disposed;
 
         private ManagedStaticLibrary(
-            ScriptAssemblyLoadContext loadContext,
-            UnrealManagedFunctionDispatcherV2 functions)
+            ulong worldId,
+            string assemblyPath,
+            string typeName,
+            StaticLibraryGeneration current)
         {
-            _loadContext = loadContext;
-            _functions = functions;
+            _worldId = worldId;
+            _assemblyPath = assemblyPath;
+            _typeName = typeName;
+            _current = current;
+            _nextGeneration = checked(current.Generation + 1);
         }
 
         public static ManagedStaticLibrary Create(
@@ -2199,39 +2272,118 @@ public static class UnrealWorldManagedEntryPoint
             string assemblyPath,
             string typeName)
         {
-            var loadContext = new ScriptAssemblyLoadContext(
+            string fullAssemblyPath = Path.GetFullPath(assemblyPath);
+            StaticLibraryGeneration current = LoadGeneration(
                 worldId,
-                instanceId: 0,
-                generation: 1,
-                assemblyPath);
-            try
-            {
-                Assembly assembly = loadContext.LoadMainAssembly();
-                Type type = assembly.GetType(typeName, throwOnError: true)!;
-                UnrealScriptClassAttribute? scriptClass =
-                    type.GetCustomAttribute<UnrealScriptClassAttribute>(inherit: false);
-                if (!type.IsAbstract || !type.IsSealed ||
-                    scriptClass?.Kind != UnrealScriptClassKind.BlueprintFunctionLibrary)
-                {
-                    throw new InvalidOperationException(
-                        $"Managed static library '{typeName}' must be a static class marked " +
-                        $"[{nameof(UnrealScriptClassAttribute)}({nameof(UnrealScriptClassKind.BlueprintFunctionLibrary)})].");
-                }
-                return new ManagedStaticLibrary(
-                    loadContext,
-                    UnrealManagedFunctionDispatcherV2.Create(type, staticOnly: true));
-            }
-            catch
-            {
-                RetireLoadContext(loadContext);
-                throw;
-            }
+                fullAssemblyPath,
+                typeName,
+                generation: 1);
+            return new ManagedStaticLibrary(
+                worldId,
+                fullAssemblyPath,
+                typeName,
+                current);
         }
 
         public void Invoke(string functionName, nint frameAddress)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _functions.Invoke(target: null, functionName, frameAddress);
+            (_current ?? throw new ObjectDisposedException(nameof(ManagedStaticLibrary)))
+                .Functions.Invoke(target: null, functionName, frameAddress);
+        }
+
+        internal int PrepareReload()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_preparedReload is not null)
+            {
+                throw new InvalidOperationException(
+                    "A managed static library reload candidate is already prepared.");
+            }
+
+            int candidateGeneration = _nextGeneration;
+            _nextGeneration = checked(_nextGeneration + 1);
+            StaticLibraryGeneration candidate = LoadGeneration(
+                _worldId,
+                _assemblyPath,
+                _typeName,
+                candidateGeneration);
+            try
+            {
+                ValidateCompatible(
+                    _current ?? throw new ObjectDisposedException(nameof(ManagedStaticLibrary)),
+                    candidate);
+                _preparedReload = new PreparedStaticLibraryReload(candidate);
+                return candidateGeneration;
+            }
+            catch
+            {
+                candidate.Dispose();
+                throw;
+            }
+        }
+
+        internal int CommitPreparedReload(int candidateGeneration)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            PreparedStaticLibraryReload prepared = RequirePreparedReload(candidateGeneration);
+            if (prepared.IsCommitted)
+            {
+                return prepared.Candidate.Generation;
+            }
+
+            prepared.Previous = _current ??
+                throw new ObjectDisposedException(nameof(ManagedStaticLibrary));
+            _current = prepared.Candidate;
+            prepared.IsCommitted = true;
+            return prepared.Candidate.Generation;
+        }
+
+        internal void AbortPreparedReload(int candidateGeneration)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            PreparedStaticLibraryReload prepared = RequirePreparedReload(candidateGeneration);
+            if (prepared.IsCommitted)
+            {
+                _current = prepared.Previous ??
+                    throw new InvalidOperationException(
+                        "A committed static library reload has no retained previous generation.");
+            }
+
+            _preparedReload = null;
+            prepared.Candidate.Dispose();
+        }
+
+        internal void FinalizePreparedReload(int candidateGeneration)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            PreparedStaticLibraryReload prepared = RequirePreparedReload(candidateGeneration);
+            if (!prepared.IsCommitted)
+            {
+                throw new InvalidOperationException(
+                    "A managed static library reload candidate must be committed before finalization.");
+            }
+
+            _preparedReload = null;
+            prepared.Previous?.Dispose();
+        }
+
+        internal IReadOnlyList<WeakReference> GetLoadContextReferencesForTests()
+        {
+            var references = new List<WeakReference>();
+            if (_current is not null)
+            {
+                references.Add(new WeakReference(_current.LoadContext));
+            }
+            if (_preparedReload is not null)
+            {
+                references.Add(new WeakReference(_preparedReload.Candidate.LoadContext));
+                if (_preparedReload.Previous is not null)
+                {
+                    references.Add(new WeakReference(_preparedReload.Previous.LoadContext));
+                }
+            }
+            return references;
         }
 
         public void Dispose()
@@ -2241,7 +2393,159 @@ public static class UnrealWorldManagedEntryPoint
                 return;
             }
             _disposed = true;
-            RetireLoadContext(_loadContext);
+            PreparedStaticLibraryReload? prepared = _preparedReload;
+            _preparedReload = null;
+            StaticLibraryGeneration? current = _current;
+            _current = null;
+            List<Exception>? failures = null;
+            try
+            {
+                prepared?.Candidate.Dispose();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                prepared?.Previous?.Dispose();
+                if (prepared is not null)
+                {
+                    prepared.Previous = null;
+                }
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                current?.Dispose();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            if (failures is not null)
+            {
+                throw new AggregateException(
+                    "One or more static library generations failed during World teardown.",
+                    failures);
+            }
+        }
+
+        private PreparedStaticLibraryReload RequirePreparedReload(int candidateGeneration)
+        {
+            PreparedStaticLibraryReload prepared = _preparedReload ??
+                throw new InvalidOperationException(
+                    "No managed static library reload candidate is prepared.");
+            if (candidateGeneration <= 0 ||
+                prepared.Candidate.Generation != candidateGeneration)
+            {
+                throw new InvalidOperationException(
+                    $"Prepared static library reload token '{candidateGeneration}' does not match " +
+                    $"candidate generation '{prepared.Candidate.Generation}'.");
+            }
+            return prepared;
+        }
+
+        private static StaticLibraryGeneration LoadGeneration(
+            ulong worldId,
+            string assemblyPath,
+            string typeName,
+            int generation)
+        {
+            var loadContext = new ScriptAssemblyLoadContext(
+                worldId,
+                instanceId: 0,
+                generation,
+                assemblyPath);
+            try
+            {
+                Assembly assembly = loadContext.LoadMainAssembly();
+                loadContext.ValidateEntryType(assembly, typeName);
+                Type type = assembly.GetType(typeName, throwOnError: true)!;
+                ValidateStaticLibraryType(type, typeName);
+                UnrealManagedFunctionDispatcherV2 functions =
+                    UnrealManagedFunctionDispatcherV2.Create(type, staticOnly: true);
+                return new StaticLibraryGeneration(generation, loadContext, functions);
+            }
+            catch
+            {
+                RetireLoadContext(loadContext);
+                throw;
+            }
+        }
+
+        private static void ValidateStaticLibraryType(Type type, string typeName)
+        {
+            UnrealScriptClassAttribute? scriptClass =
+                type.GetCustomAttribute<UnrealScriptClassAttribute>(inherit: false);
+            if (!type.IsAbstract || !type.IsSealed ||
+                scriptClass?.Kind != UnrealScriptClassKind.BlueprintFunctionLibrary)
+            {
+                throw new InvalidOperationException(
+                    $"Managed static library '{typeName}' must be a static class marked " +
+                    $"[{nameof(UnrealScriptClassAttribute)}({nameof(UnrealScriptClassKind.BlueprintFunctionLibrary)})].");
+            }
+        }
+
+        private static void ValidateCompatible(
+            StaticLibraryGeneration previous,
+            StaticLibraryGeneration candidate)
+        {
+            foreach ((string functionName, UnrealManagedFunctionDispatcherV2.UnrealManagedFunctionSignature signature) in
+                     previous.Functions.Signatures)
+            {
+                if (!candidate.Functions.Signatures.TryGetValue(
+                        functionName,
+                        out UnrealManagedFunctionDispatcherV2.UnrealManagedFunctionSignature? candidateSignature))
+                {
+                    throw new InvalidOperationException(
+                        $"Static library reload removes callable function '{functionName}'.");
+                }
+                if (!string.Equals(
+                        signature.Canonical,
+                        candidateSignature.Canonical,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Static library reload changes callable function '{functionName}' signature.");
+                }
+            }
+        }
+
+        private sealed class PreparedStaticLibraryReload(StaticLibraryGeneration candidate)
+        {
+            public StaticLibraryGeneration Candidate { get; } = candidate;
+
+            public StaticLibraryGeneration? Previous { get; set; }
+
+            public bool IsCommitted { get; set; }
+        }
+
+        private sealed class StaticLibraryGeneration(
+            int generation,
+            ScriptAssemblyLoadContext loadContext,
+            UnrealManagedFunctionDispatcherV2 functions) : IDisposable
+        {
+            private bool _disposed;
+
+            public int Generation { get; } = generation;
+
+            public ScriptAssemblyLoadContext LoadContext { get; } = loadContext;
+
+            public UnrealManagedFunctionDispatcherV2 Functions { get; } = functions;
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+                _disposed = true;
+                RetireLoadContext(LoadContext);
+            }
         }
     }
 

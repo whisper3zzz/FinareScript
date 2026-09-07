@@ -126,6 +126,150 @@ internal static class UnrealNativeValueCodecV3
 {
     internal const int TransformByteSize = 10 * sizeof(double);
 
+    /// <summary>
+    /// Builds the owned, reflection-free-at-call-time identity used when a
+    /// managed function generation is compared with its replacement.  The
+    /// returned value contains only immutable strings and descriptor scalars;
+    /// no Type or MemberInfo is retained by a reload slot.
+    /// </summary>
+    internal static bool TryCreateContractIdentity(Type type, out string identity)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return TryCreateContractIdentity(type, new HashSet<Type>(), depth: 0, out identity);
+    }
+
+    private static bool TryCreateContractIdentity(
+        Type type,
+        HashSet<Type> visiting,
+        int depth,
+        out string identity)
+    {
+        identity = string.Empty;
+        if (depth > 16 || !visiting.Add(type) ||
+            !TryCreateResultDescriptor(type, out UnrealNativeValueV3 descriptor, out _))
+        {
+            visiting.Remove(type);
+            return false;
+        }
+
+        try
+        {
+            var builder = new StringBuilder();
+            AppendContractPart(builder, ((byte)descriptor.Kind).ToString());
+            AppendContractPart(builder, ((byte)descriptor.Flags).ToString());
+            AppendContractPart(builder, descriptor.TypeId.ToString("X16"));
+            AppendContractPart(builder, descriptor.Payload1.ToString("X16"));
+            AppendContractPart(builder, descriptor.Payload2.ToString("X16"));
+            AppendContractPart(builder, descriptor.Payload3.ToString("X16"));
+
+            if (TryGetEnumShape(type, out UnrealEnumShape enumShape))
+            {
+                AppendContractPart(builder, "enum");
+                AppendContractPart(builder, enumShape.Attribute.Path);
+                AppendContractPart(builder, enumShape.Attribute.NativeName);
+            }
+            else if (TryGetStructShape(type, out UnrealStructShape structShape))
+            {
+                AppendContractPart(builder, "struct");
+                AppendContractPart(builder, structShape.Attribute.Path);
+                AppendContractPart(builder, structShape.Attribute.NativeName);
+                var fields = structShape.Fields
+                    .Select(static field => (
+                        Property: field,
+                        Attribute: field.GetCustomAttribute<UnrealStructFieldAttribute>()!))
+                    .OrderBy(static field => field.Attribute.Index)
+                    .ToArray();
+                foreach ((PropertyInfo field, UnrealStructFieldAttribute attribute) in fields)
+                {
+                    AppendContractPart(builder, attribute.Index.ToString());
+                    AppendContractPart(
+                        builder,
+                        string.IsNullOrEmpty(attribute.NativeName)
+                            ? field.Name
+                            : attribute.NativeName);
+                    AppendContractPart(builder, field.Name);
+                    if (!TryCreateContractIdentity(
+                            field.PropertyType,
+                            visiting,
+                            depth + 1,
+                            out string fieldIdentity))
+                    {
+                        return false;
+                    }
+                    AppendContractPart(builder, fieldIdentity);
+                }
+            }
+            else if (TryGetContainerShape(
+                         type,
+                         out UnrealNativeValueKindV3 kind,
+                         out Type? elementType,
+                         out Type? keyType,
+                         out Type? valueType,
+                         out string nativeName))
+            {
+                AppendContractPart(builder, "container");
+                AppendContractPart(builder, ((byte)kind).ToString());
+                AppendContractPart(builder, nativeName);
+                if (kind == UnrealNativeValueKindV3.Map)
+                {
+                    if (keyType is null || valueType is null ||
+                        !TryCreateContractIdentity(
+                            keyType,
+                            visiting,
+                            depth + 1,
+                            out string keyIdentity) ||
+                        !TryCreateContractIdentity(
+                            valueType,
+                            visiting,
+                            depth + 1,
+                            out string valueIdentity))
+                    {
+                        return false;
+                    }
+                    AppendContractPart(builder, keyIdentity);
+                    AppendContractPart(builder, valueIdentity);
+                }
+                else
+                {
+                    if (elementType is null ||
+                        !TryCreateContractIdentity(
+                            elementType,
+                            visiting,
+                            depth + 1,
+                            out string elementIdentity))
+                    {
+                        return false;
+                    }
+                    AppendContractPart(builder, elementIdentity);
+                }
+            }
+            else if (type == typeof(UnrealByteBuffer))
+            {
+                AppendContractPart(builder, nameof(UnrealByteBuffer));
+            }
+            else if (TryGetNativeName(type, out string primitiveNativeName))
+            {
+                AppendContractPart(builder, primitiveNativeName);
+            }
+            else
+            {
+                AppendContractPart(builder, type.FullName ?? type.Name);
+            }
+
+            identity = builder.ToString();
+            return true;
+        }
+        finally
+        {
+            visiting.Remove(type);
+        }
+    }
+
+    private static void AppendContractPart(StringBuilder builder, string value)
+    {
+        builder.Append(value.Length).Append(':').Append(value).Append(';');
+    }
+
     private static bool TryEncodeBuffer(UnrealByteBuffer buffer, Span<byte> arena,
         ref int byteCount, out UnrealNativeValueV3 value)
     {
