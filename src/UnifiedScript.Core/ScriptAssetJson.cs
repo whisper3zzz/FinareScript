@@ -29,11 +29,13 @@ public static class ScriptAssetJson
     public static ScriptAssetDocument NormalizeAndValidate(ScriptAssetDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (document.SchemaVersion != ScriptAssetDocument.CurrentSchemaVersion)
+        if (document.SchemaVersion is not ScriptAssetDocument.CurrentSchemaVersion and
+            not ScriptAssetDocument.OverrideSchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported script-asset schema '{document.SchemaVersion}'. " +
-                $"Expected '{ScriptAssetDocument.CurrentSchemaVersion}'.");
+                $"Expected '{ScriptAssetDocument.CurrentSchemaVersion}' or " +
+                $"'{ScriptAssetDocument.OverrideSchemaVersion}'.");
         }
 
         if (document.SourceCompilationId.IsEmpty ||
@@ -41,6 +43,15 @@ public static class ScriptAssetJson
             document.Assets is null)
         {
             throw new JsonException("A script-asset document has invalid required fields.");
+        }
+
+        bool hasBlueprintOverride = document.Assets.Any(static asset =>
+            asset?.Functions?.Any(static function => function?.BlueprintEvent?.Override is not null) == true);
+        if (document.SchemaVersion == ScriptAssetDocument.CurrentSchemaVersion && hasBlueprintOverride)
+        {
+            throw new JsonException(
+                $"Script-asset schema '{ScriptAssetDocument.CurrentSchemaVersion}' cannot carry Blueprint override metadata; " +
+                $"use '{ScriptAssetDocument.OverrideSchemaVersion}'.");
         }
 
         var assetIds = new HashSet<SemanticId>();
@@ -92,9 +103,10 @@ public static class ScriptAssetJson
         }
 
         var functionIds = new HashSet<SemanticId>();
+        var blueprintOverrideRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (ScriptFunctionDeclaration? function in asset.Functions)
         {
-            ValidateFunction(asset, function, functionIds);
+            ValidateFunction(asset, function, functionIds, blueprintOverrideRoutes);
         }
 
         var notifiedStates = new HashSet<string>(StringComparer.Ordinal);
@@ -575,7 +587,8 @@ public static class ScriptAssetJson
     private static void ValidateFunction(
         ScriptAssetDeclaration asset,
         ScriptFunctionDeclaration? function,
-        ISet<SemanticId> functionIds)
+        ISet<SemanticId> functionIds,
+        ISet<string> blueprintOverrideRoutes)
     {
         if (function is null || function.Id.IsEmpty ||
             string.IsNullOrWhiteSpace(function.Name) ||
@@ -613,7 +626,25 @@ public static class ScriptAssetJson
             {
                 throw new JsonException(
                     $"Blueprint event '{function.QualifiedName}' must be a public instance method " +
-                    "with a valid Super policy and cannot own another gameplay binding.");
+                        "with a valid Super policy and cannot own another gameplay binding.");
+            }
+
+            if (function.BlueprintEvent.Override is { } blueprintOverride)
+            {
+                if (!IsValidBlueprintOverrideClassPath(blueprintOverride.DeclaringTypePath) ||
+                    !IsValidBlueprintOverrideFunctionName(blueprintOverride.FunctionName))
+                {
+                    throw new JsonException(
+                        $"Blueprint override '{function.QualifiedName}' has an invalid declaring class path or function name.");
+                }
+
+                string route = $"{blueprintOverride.DeclaringTypePath}\u001f{blueprintOverride.FunctionName}";
+                if (!blueprintOverrideRoutes.Add(route))
+                {
+                    throw new JsonException(
+                        $"Script asset '{asset.AssetPath}' declares duplicate Blueprint override route " +
+                        $"'{blueprintOverride.DeclaringTypePath}:{blueprintOverride.FunctionName}' (case-insensitive).");
+                }
             }
         }
 
@@ -913,6 +944,46 @@ public static class ScriptAssetJson
     private static bool IsUnrealObjectPath(string? path) =>
         !string.IsNullOrWhiteSpace(path) && path.StartsWith("/", StringComparison.Ordinal) &&
         !path.Contains(' ') && !path.EndsWith("/", StringComparison.Ordinal);
+
+    public static bool IsValidBlueprintOverrideClassPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal) ||
+            path.Contains('\\') || path.Contains(':') || path.Any(char.IsWhiteSpace) ||
+            path.Any(static character => character is '<' or '>' or '|' or '*' or '?' or '#') ||
+            path.Contains("//", StringComparison.Ordinal) || path.EndsWith("/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (path.StartsWith("/Script/", StringComparison.Ordinal))
+        {
+            string nativePath = path["/Script/".Length..];
+            int separator = nativePath.IndexOf('.');
+            return separator > 0 && separator == nativePath.LastIndexOf('.') &&
+                separator + 1 < nativePath.Length &&
+                !nativePath[..separator].Contains('/') &&
+                IsIdentifier(nativePath[..separator]) &&
+                IsIdentifier(nativePath[(separator + 1)..]);
+        }
+
+        string[] segments = path[1..].Split('/');
+        if (segments.Length < 2 || segments[..^1].Any(static segment =>
+                string.IsNullOrEmpty(segment) || segment is "." or ".." || segment.Contains('.')))
+        {
+            return false;
+        }
+
+        string objectName = segments[^1];
+        int separatorIndex = objectName.IndexOf('.');
+        return separatorIndex > 0 && separatorIndex == objectName.LastIndexOf('.') &&
+            separatorIndex + 1 < objectName.Length &&
+            objectName[(separatorIndex + 1)..].EndsWith("_C", StringComparison.Ordinal) &&
+            IsIdentifier(objectName[..separatorIndex]) &&
+            IsIdentifier(objectName[(separatorIndex + 1)..]);
+    }
+
+    public static bool IsValidBlueprintOverrideFunctionName(string? name) =>
+        IsIdentifier(name);
 
     private static bool IsScriptTypePath(string? path) =>
         IsUnrealObjectPath(path) && path!.StartsWith("/Script/", StringComparison.Ordinal) &&

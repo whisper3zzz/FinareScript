@@ -104,6 +104,7 @@ internal sealed class UnrealManagedFunctionDispatcher
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
         method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null ||
+        method.GetCustomAttribute<UnrealBlueprintOverrideAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealRpcAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealRepNotifyAttribute>(inherit: false) is not null ||
         method.GetCustomAttributes<UnrealInputActionAttribute>(inherit: false).Any() ||
@@ -401,6 +402,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
         method.GetCustomAttribute<global::UnifiedScript.VisualAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealBlueprintEventAttribute>(inherit: false) is not null ||
+        method.GetCustomAttribute<UnrealBlueprintOverrideAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealRpcAttribute>(inherit: false) is not null ||
         method.GetCustomAttribute<UnrealRepNotifyAttribute>(inherit: false) is not null ||
         method.GetCustomAttributes<UnrealInputActionAttribute>(inherit: false).Any() ||

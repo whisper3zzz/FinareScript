@@ -24,6 +24,7 @@ public static class VisualProfileDiagnosticCodes
     public const string LoopControlTargetRequired = "UVS1020";
     public const string BreakTargetRequired = "UVS1021";
     public const string PatternNotSupported = "UVS1022";
+    public const string InvalidBlueprintOverride = "UVS1023";
     public const string StatementNotSupported = "UVS1100";
     public const string ExpressionNotSupported = "UVS1101";
 }

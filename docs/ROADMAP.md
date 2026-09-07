@@ -32,6 +32,8 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   BlueprintImplementableEvent paths with an exact owner, explicit parent-call
   semantics and predictable reload. The materializer currently rejects inherited
   function collisions; do not silently turn those collisions into overrides.
+  The active cross-module design and handoff are in
+  `docs/plans/2026-09-07-blueprint-event-extension.md`.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary
   exchange families pass ordinary Blueprint caller bytecode, downstream output
   use, package reload and Win64 Development cooked execution. Static-library

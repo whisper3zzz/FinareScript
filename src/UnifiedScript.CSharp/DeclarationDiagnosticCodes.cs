@@ -13,4 +13,5 @@ public static class DeclarationDiagnosticCodes
     public const string InvalidGameplayBinding = "UAD1009";
     public const string UnsupportedFunctionSignature = "UAD1010";
     public const string InvalidNetworkingContract = "UAD1011";
+    public const string InvalidBlueprintOverride = "UAD1012";
 }

@@ -27,6 +27,8 @@ internal sealed class CSharpScriptAssetLowerer
         "UnifiedScript.Unreal.UnrealScriptClassAttribute";
     private const string UnrealBlueprintEventAttributeName =
         "UnifiedScript.Unreal.UnrealBlueprintEventAttribute";
+    private const string UnrealBlueprintOverrideAttributeName =
+        "UnifiedScript.Unreal.UnrealBlueprintOverrideAttribute";
     private const string UnrealRpcAttributeName = "UnifiedScript.Unreal.UnrealRpcAttribute";
     private const string UnrealRepNotifyAttributeName = "UnifiedScript.Unreal.UnrealRepNotifyAttribute";
     private const string UnrealInputActionAttributeName =
@@ -370,6 +372,7 @@ internal sealed class CSharpScriptAssetLowerer
         }
 
         var functions = new List<ScriptFunctionDeclaration>(declarations.Count);
+        var blueprintOverrideRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (HirMethodDeclaration method in declarations)
         {
             MethodDescriptor descriptor = methods[method.Id];
@@ -460,16 +463,84 @@ internal sealed class CSharpScriptAssetLowerer
                 LowerDelegateBindings(method, methodSymbol, diagnostics);
             IReadOnlyList<ScriptInterfaceFunctionDeclaration> interfaceFunctions =
                 LowerInterfaceFunctions(method, methodSymbol, diagnostics);
-            bool blueprintEvent = methodSymbol is not null
-                ? FindAttribute(methodSymbol, UnrealBlueprintEventAttributeName) is not null
-                : method.Attributes?.Any(static attribute =>
+            AttributeData? blueprintEventAttribute = methodSymbol is null
+                ? null
+                : FindAttribute(methodSymbol, UnrealBlueprintEventAttributeName);
+            bool blueprintEvent = blueprintEventAttribute is not null ||
+                method.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealBlueprintEvent") == true;
+            AttributeData? blueprintOverrideAttribute = methodSymbol is null
+                ? null
+                : FindAttribute(methodSymbol, UnrealBlueprintOverrideAttributeName);
             AttributeData? rpcAttribute = methodSymbol is null ? null : FindAttribute(methodSymbol, UnrealRpcAttributeName);
             AttributeData? notifyAttribute = methodSymbol is null ? null : FindAttribute(methodSymbol, UnrealRepNotifyAttributeName);
             ScriptRpcDeclaration? rpc = rpcAttribute is null ? null : new(
                 (ScriptRpcTarget)(int)(rpcAttribute.ConstructorArguments[0].Value ?? 0),
                 rpcAttribute.NamedArguments.Any(a => a.Key == "Reliable" && a.Value.Value is true));
             string? repNotifyProperty = notifyAttribute?.ConstructorArguments[0].Value as string;
+            ScriptFunctionOverrideDeclaration? blueprintOverride = null;
+            ScriptBlueprintEventSuperMode blueprintEventSuperMode =
+                ScriptBlueprintEventSuperMode.Explicit;
+            if (blueprintOverrideAttribute is not null)
+            {
+                string declaringClassPath = blueprintOverrideAttribute.ConstructorArguments
+                    .ElementAtOrDefault(0).Value as string ?? string.Empty;
+                string functionName = blueprintOverrideAttribute.ConstructorArguments
+                    .ElementAtOrDefault(1).Value as string ?? string.Empty;
+                int superModeValue = ReadNamedEnumValue(
+                    blueprintOverrideAttribute,
+                    "SuperMode",
+                    1);
+                if (superModeValue == 1)
+                {
+                    blueprintEventSuperMode = ScriptBlueprintEventSuperMode.Explicit;
+                }
+                if (!method.IsPublic || method.IsStatic ||
+                    !ScriptAssetJson.IsValidBlueprintOverrideClassPath(declaringClassPath) ||
+                    !ScriptAssetJson.IsValidBlueprintOverrideFunctionName(functionName) ||
+                    superModeValue != 1)
+                {
+                    diagnostics.Add(new UnifiedDiagnostic(
+                        DeclarationDiagnosticCodes.InvalidBlueprintOverride,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Blueprint override '{type.QualifiedName}.{method.Name}' requires a public instance method, an exact declaring class path, a valid Unreal function identifier, and only SuperMode=Explicit.",
+                        method.Span,
+                        method.Id));
+                }
+                else if (blueprintEvent || inputActions.Count != 0 || delegateBindings.Count != 0 ||
+                    interfaceFunctions.Count != 0 || rpcAttribute is not null || notifyAttribute is not null)
+                {
+                    diagnostics.Add(new UnifiedDiagnostic(
+                        DeclarationDiagnosticCodes.InvalidBlueprintOverride,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Blueprint override '{type.QualifiedName}.{method.Name}' cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
+                        method.Span,
+                        method.Id));
+                }
+                else
+                {
+                    string route = $"{declaringClassPath}\u001f{functionName}";
+                    if (!blueprintOverrideRoutes.Add(route))
+                    {
+                        diagnostics.Add(new UnifiedDiagnostic(
+                            DeclarationDiagnosticCodes.InvalidBlueprintOverride,
+                            UnifiedDiagnosticSeverity.Error,
+                            $"Script asset '{type.QualifiedName}' declares duplicate Blueprint override route '{declaringClassPath}:{functionName}' (case-insensitive) on method '{type.QualifiedName}.{method.Name}'.",
+                            method.Span,
+                            method.Id));
+                    }
+                    else
+                    {
+                        blueprintOverride = new ScriptFunctionOverrideDeclaration(
+                            declaringClassPath,
+                            functionName);
+                    }
+                }
+            }
+            if (blueprintOverrideAttribute is not null)
+            {
+                blueprintEvent = true;
+            }
             if (notifyAttribute is not null && string.IsNullOrWhiteSpace(repNotifyProperty))
                 diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
                     UnifiedDiagnosticSeverity.Error, "RepNotify requires an exact replicated property name.", method.Span, method.Id));
@@ -505,7 +576,8 @@ internal sealed class CSharpScriptAssetLowerer
                         types[descriptor.ReturnTypeId].MetadataName)),
                 blueprintEvent
                     ? new ScriptBlueprintEventDeclaration(
-                        ScriptBlueprintEventSuperMode.Explicit)
+                        blueprintEventSuperMode,
+                        blueprintOverride)
                     : null,
                 inputActions,
                 delegateBindings,

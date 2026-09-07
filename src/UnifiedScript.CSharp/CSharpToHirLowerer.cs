@@ -116,6 +116,7 @@ public sealed class CSharpToHirLowerer
                 name = separator >= 0 ? name[(separator + 1)..] : name;
                 return name is "UnrealEvent" or "UnrealEventAttribute" or
                     "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute" or
+                    "UnrealBlueprintOverride" or "UnrealBlueprintOverrideAttribute" or
                     "UnrealInputAction" or "UnrealInputActionAttribute" or
                     "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute" or
                     "UnrealRpc" or "UnrealRpcAttribute" or "UnrealRepNotify" or "UnrealRepNotifyAttribute";

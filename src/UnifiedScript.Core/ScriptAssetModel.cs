@@ -91,8 +91,14 @@ public enum ScriptBlueprintEventSuperMode
     Explicit,
 }
 
+public sealed record ScriptFunctionOverrideDeclaration(
+    string DeclaringTypePath,
+    string FunctionName);
+
 public sealed record ScriptBlueprintEventDeclaration(
-    ScriptBlueprintEventSuperMode SuperMode);
+    ScriptBlueprintEventSuperMode SuperMode,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ScriptFunctionOverrideDeclaration? Override = null);
 
 public enum ScriptRpcTarget { Server = 1, Client = 2, Multicast = 3 }
 
@@ -189,9 +195,18 @@ public sealed record ScriptAssetDocument(
 {
     public const string CurrentSchemaVersion = "unifiedscript.script-asset/v0.1";
 
+    public const string OverrideSchemaVersion = "unifiedscript.script-asset/v0.2";
+
     public static ScriptAssetDocument Create(
         SemanticId sourceCompilationId,
         SemanticId semanticConfigurationId,
-        IReadOnlyList<ScriptAssetDeclaration> assets) =>
-        new(CurrentSchemaVersion, sourceCompilationId, semanticConfigurationId, assets);
+        IReadOnlyList<ScriptAssetDeclaration> assets)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+        string schemaVersion = assets.Any(static asset =>
+            asset?.Functions?.Any(static function => function?.BlueprintEvent?.Override is not null) == true)
+            ? OverrideSchemaVersion
+            : CurrentSchemaVersion;
+        return new(schemaVersion, sourceCompilationId, semanticConfigurationId, assets);
+    }
 }

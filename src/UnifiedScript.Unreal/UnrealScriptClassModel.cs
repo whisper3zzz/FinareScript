@@ -41,6 +41,24 @@ public sealed class UnrealBlueprintEventAttribute : Attribute
         UnrealBlueprintEventSuperMode.Explicit;
 }
 
+/// <summary>
+/// Implements one existing parent Blueprint event through an explicit managed
+/// method. The generated Blueprint may call the parent implementation only
+/// through its explicit Call Parent Function route.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealBlueprintOverrideAttribute(
+    string declaringClassPath,
+    string functionName) : Attribute
+{
+    public string DeclaringClassPath { get; } = declaringClassPath;
+
+    public string FunctionName { get; } = functionName;
+
+    public UnrealBlueprintEventSuperMode SuperMode { get; init; } =
+        UnrealBlueprintEventSuperMode.Explicit;
+}
+
 /// <summary>Controls how a Blueprint override reaches its managed default implementation.</summary>
 public enum UnrealBlueprintEventSuperMode
 {

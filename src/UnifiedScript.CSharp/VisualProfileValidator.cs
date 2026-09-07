@@ -46,6 +46,7 @@ public sealed class VisualProfileValidator
         }
 
         ValidateMethodDeclaration(method, filePath, diagnostics);
+        ValidateBlueprintOverrideDeclaration(method, filePath, diagnostics);
         new VisualMethodWalker(filePath, diagnostics).Visit(method);
         return diagnostics;
     }
@@ -67,9 +68,75 @@ public sealed class VisualProfileValidator
 
         return shortName is "Visual" or "VisualAttribute" or
             "UnrealBlueprintEvent" or "UnrealBlueprintEventAttribute" or
+            "UnrealBlueprintOverride" or "UnrealBlueprintOverrideAttribute" or
             "UnrealInputAction" or "UnrealInputActionAttribute" or
             "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute" or
             "UnrealRpc" or "UnrealRpcAttribute" or "UnrealRepNotify" or "UnrealRepNotifyAttribute";
+    }
+
+    private static void ValidateBlueprintOverrideDeclaration(
+        MethodDeclarationSyntax method,
+        string filePath,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        AttributeSyntax[] overrides = GetBlueprintOverrideAttributes(method).ToArray();
+        if (overrides.Length == 0)
+        {
+            return;
+        }
+
+        if (!method.Modifiers.Any(SyntaxKind.PublicKeyword) ||
+            method.Modifiers.Any(SyntaxKind.StaticKeyword))
+        {
+            Add(
+                diagnostics,
+                VisualProfileDiagnosticCodes.InvalidBlueprintOverride,
+                "A Blueprint override must be a public instance method.",
+                method,
+                filePath);
+        }
+
+        string[] conflictingAttributes =
+        [
+            "UnrealBlueprintEvent",
+            "UnrealBlueprintEventAttribute",
+            "UnrealInputAction",
+            "UnrealInputActionAttribute",
+            "UnrealEvent",
+            "UnrealEventAttribute",
+            "UnrealInterfaceFunction",
+            "UnrealInterfaceFunctionAttribute",
+            "UnrealRpc",
+            "UnrealRpcAttribute",
+            "UnrealRepNotify",
+            "UnrealRepNotifyAttribute",
+        ];
+        if (method.AttributeLists
+                .SelectMany(static list => list.Attributes)
+                .Select(static attribute => attribute.Name.ToString().Split('.').Last())
+                .Any(name => conflictingAttributes.Contains(name, StringComparer.Ordinal)))
+        {
+            Add(
+                diagnostics,
+                VisualProfileDiagnosticCodes.InvalidBlueprintOverride,
+                "A Blueprint override cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
+                method,
+                filePath);
+        }
+    }
+
+    private static IEnumerable<AttributeSyntax> GetBlueprintOverrideAttributes(
+        MethodDeclarationSyntax method) => method.AttributeLists
+        .SelectMany(static list => list.Attributes)
+        .Where(static attribute => IsAttributeNamed(
+            attribute,
+            "UnrealBlueprintOverride",
+            "UnrealBlueprintOverrideAttribute"));
+
+    private static bool IsAttributeNamed(AttributeSyntax attribute, params string[] names)
+    {
+        string name = attribute.Name.ToString().Split('.').Last();
+        return names.Contains(name, StringComparer.Ordinal);
     }
 
     private static void ValidateMethodDeclaration(
