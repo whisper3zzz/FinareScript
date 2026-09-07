@@ -55,7 +55,9 @@ parent chain and must not silently reparent an asset.
   resolved parent UFunction instead. An intervening ordinary Blueprint parent
   must retain its implementation. General managed-to-managed parent bodies
   cannot be implemented by recursively dispatching the same method name on the
-  current instance; keep that C-3 concern explicit.
+  current instance; keep that C-3 concern explicit. Reject a parent route whose
+  remaining ancestor chain contains another managed owner of the same event,
+  even if an ordinary Blueprint lies between them and might Call Parent again.
 - Reuse the existing ABI v3 multi-result codecs for parent calls. Keep the
   48-byte value and 72-byte frame layouts unchanged. A capability-gated parent
   operation can use a defined frame flag through the existing Invoke entry;
@@ -81,6 +83,12 @@ parent chain and must not silently reparent an asset.
   input/ref values. Reflection-derived return types/directions feed the existing
   multi-result representation; no process-global strong reflection cache is
   needed. Input-only helpers reject a method that requires output handling.
+  A helper must flush its managed state before entering an ordinary Blueprint
+  parent and hydrate after the call, including a failure after parent execution.
+  Otherwise the parent observes stale properties, or the enclosing managed
+  dispatch flush overwrites the parent's changes. Preserve the original call
+  failure if post-call hydration also fails. Validate the helper's local
+  contract before flushing state.
 - Parent calls must share the correlated-result lifetime so a larger output
   buffer retry never executes the parent twice. The pending identity includes
   the parent operation, host handle, member identity and request contents.
@@ -128,22 +136,43 @@ managed instance. Do not mark an uncommitted candidate as active to enable
 such a call. The normal inherited-event body runs after activation and can
 invoke its parent synchronously.
 
-Instance reload currently loads the candidate and then stops the old generation;
-the static-library signature barrier is not shared by this path. Add an
-override-contract barrier before stopping either generation: method identity,
-native declaring identity, function name, Super policy and argument/return
-contracts must remain compatible. A body-only edit may swap; removal, retargeting
-or a type/direction change must preserve the old generation and request class
-resynchronization. Validate the complete override route set so a newly introduced
-override cannot silently run against an older Blueprint binding either.
+Instance reload now validates the complete override route set after loading the
+candidate and before stopping the old generation. Method identity, raw native
+declaring path/function spelling, Super policy and the existing V2 argument/
+return signature must remain compatible. A body-only edit may swap; removal,
+addition, retargeting or a type/direction change rejects and retires the
+candidate while preserving the old instance. The transaction records an
+`overrideContractValidation` phase and an unchanged rollback on rejection.
+Malformed, hidden or unsupported override methods fail during dispatcher
+creation rather than disappearing from the route set. Signature validation
+does not compile a second dispatch delegate. This managed barrier is implemented;
+it does not yet compare the DLL with a saved native Blueprint contract.
 
 Cold activation also needs a loaded-type versus persisted Blueprint contract
 check before lifecycle user code. Comparing only the old and new DLLs during
 reload cannot detect an already stale saved Blueprint. The expected contract
 must come from the materialized class, not a mutable source file or a freshly
 loaded Declaration. Define its boundary before claiming runtime closure; do not
-encode this metadata in event names or diagnostic fields. A change to a live
-asset's native route must not silently redirect the still-active old generation.
+encode this metadata in event names or diagnostic fields. Build the expected
+contract from the Script Asset's exact generated class, its persistent bindings
+and reflected UFunction properties. These already preserve the native route,
+source-to-native order and struct field paths; do not duplicate source metadata
+in another generated payload. Share the existing native/managed canonical type
+name helpers and codecs. Include enum/struct paths and ordered struct fields,
+and distinguish Soft Reference kinds from strings even though their scalar
+call-frame representation overlaps. An empty override set is an explicit
+contract and must reject an unexpected new override in the DLL.
+
+Use an optional named managed creation export carrying this bounded contract;
+leave the existing transport table and legacy creation signature intact.
+Validate before activation and retain the immutable expected contract for
+candidate validation. A legacy creation request cannot silently activate a type
+that needs inherited-event binding. The native materializer must reject changes
+to the override contract while that class has active managed instances, before
+asset mutation, with a stop/resynchronize/restart diagnostic. Unchanged contracts
+and ordinary Blueprint child bodies remain allowed. This avoids redirecting a
+live old generation during class Sync; general live class-shape migration is
+outside this checkpoint.
 
 ## Implementation sequence and evidence
 
@@ -176,6 +205,16 @@ deployment. Evidence is under `artifacts/m13-3c-2-native-materialization/`;
 `blueprint-managed-function-dispatch-regression-release-staging.log` record these
 checks. Parent-call transport and end-to-end inherited-event execution remain
 open; materialization and binding do not prove that runtime behavior.
+
+The managed reload barrier passed 12 focused SDK 10 Release tests. They emit
+replacement DLLs to the same path with the same CLR type and exercise actual
+event dispatch, commit/finalize, abort and rejection followed by a compatible
+replacement. Rejection preserves the old generation and lifecycle history;
+event route additions/removals, retargeting, raw path/name casing and method/
+return/parameter changes are covered. Existing managed transaction/dispatcher
+tests passed 9, static-library reload tests 4 and source override-contract
+tests 12. Logs are under `artifacts/m13-3c-2-override-reload/`. These are managed
+tests; UE runtime, parent invocation and cooked extension proof remain open.
 
 Native integration must cover both Blueprint/state Declaration readers,
 materializer planning/rollback/idempotency, persistent generated-class binding,

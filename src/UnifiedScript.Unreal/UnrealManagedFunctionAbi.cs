@@ -353,21 +353,27 @@ internal sealed class UnrealManagedFunctionDispatcherV2
         Type scriptType,
         bool staticOnly,
         IReadOnlyDictionary<string, FunctionContract> functions,
-        IReadOnlyDictionary<string, UnrealManagedFunctionSignature> signatures)
+        IReadOnlyDictionary<string, UnrealManagedFunctionSignature> signatures,
+        IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> blueprintOverrides)
     {
         _typeName = scriptType.FullName ?? scriptType.Name;
         _staticOnly = staticOnly;
         _functions = functions;
         _signatures = signatures;
+        BlueprintOverrides = blueprintOverrides;
     }
 
     internal IReadOnlyDictionary<string, UnrealManagedFunctionSignature> Signatures => _signatures;
+
+    internal IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> BlueprintOverrides { get; }
 
     public static UnrealManagedFunctionDispatcherV2 Create(
         Type scriptType,
         bool staticOnly)
     {
         ArgumentNullException.ThrowIfNull(scriptType);
+        IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> blueprintOverrides =
+            UnrealBlueprintOverrideContract.Create(scriptType);
         var functions = new Dictionary<string, FunctionContract>(StringComparer.Ordinal);
         var signatures = new Dictionary<string, UnrealManagedFunctionSignature>(StringComparer.Ordinal);
         BindingFlags flags = BindingFlags.Public | BindingFlags.FlattenHierarchy |
@@ -386,6 +392,13 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                     out UnrealManagedFunctionSignature? signature) ||
                 contract is null || signature is null)
             {
+                if (method.GetCustomAttribute<UnrealBlueprintOverrideAttribute>(inherit: false) is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"Blueprint override method '{method.DeclaringType?.FullName}.{method.Name}' " +
+                        "does not satisfy the V2 managed function contract; its return or " +
+                        "parameter shape is unsupported or cannot be bound.");
+                }
                 continue;
             }
             if (!functions.TryAdd(method.Name, contract))
@@ -396,7 +409,19 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             }
             signatures.Add(method.Name, signature);
         }
-        return new UnrealManagedFunctionDispatcherV2(scriptType, staticOnly, functions, signatures);
+        return new UnrealManagedFunctionDispatcherV2(
+            scriptType,
+            staticOnly,
+            functions,
+            signatures,
+            blueprintOverrides);
+    }
+
+    internal static bool TryCreateReviewedSignature(
+        MethodInfo method,
+        out UnrealManagedFunctionSignature? signature)
+    {
+        return FunctionContract.TryCreateSignatureOnly(method, out signature);
     }
 
     private static bool IsReviewedBlueprintCallable(MethodInfo method) =>
@@ -459,9 +484,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             contract = null;
             signature = null;
             ParameterInfo[] parameters = method.GetParameters();
-            if (method.ContainsGenericParameters ||
-                parameters.Length > MaximumArgumentCount ||
-                (method.ReturnType != typeof(void) && !IsSupported(method.ReturnType)))
+            if (!TryValidateShape(method, parameters))
             {
                 return false;
             }
@@ -560,6 +583,43 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 parameters.Length,
                 resultIndex,
                 Expression.Lambda<InvokeFunction>(body, target, frame).Compile());
+            return true;
+        }
+
+        internal static bool TryCreateSignatureOnly(
+            MethodInfo method,
+            out UnrealManagedFunctionSignature? signature)
+        {
+            signature = null;
+            ParameterInfo[] parameters = method.GetParameters();
+            if (!TryValidateShape(method, parameters) || !TryCreateSignature(method, out signature))
+            {
+                signature = null;
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryValidateShape(MethodInfo method, ParameterInfo[] parameters)
+        {
+            if (method.ContainsGenericParameters ||
+                parameters.Length > MaximumArgumentCount ||
+                (method.ReturnType != typeof(void) && !IsSupported(method.ReturnType)))
+            {
+                return false;
+            }
+            foreach (ParameterInfo parameter in parameters)
+            {
+                Type parameterType = parameter.ParameterType;
+                Type valueType = parameterType.IsByRef
+                    ? parameterType.GetElementType() ?? typeof(void)
+                    : parameterType;
+                if (valueType == typeof(void) || !IsSupported(valueType) ||
+                    parameterType.IsByRef && parameter.IsIn && !parameter.IsOut)
+                {
+                    return false;
+                }
+            }
             return true;
         }
 

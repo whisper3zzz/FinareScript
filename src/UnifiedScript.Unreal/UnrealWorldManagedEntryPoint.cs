@@ -1790,22 +1790,49 @@ public static class UnrealWorldManagedEntryPoint
             var phases = new List<UnrealManagedReloadPhase>();
             ScriptGeneration? next = null;
             long phaseStart = Stopwatch.GetTimestamp();
+            bool generationLoaded = false;
             try
             {
                 next = LoadGeneration(candidateGeneration, nextAssemblyPath, typeName);
+                generationLoaded = true;
                 phases.Add(CompletePhase(
                     "generationLoad",
                     phaseStart,
                     "succeeded",
                     "Loaded the candidate assembly into a collectible script context."));
+                phaseStart = Stopwatch.GetTimestamp();
+                ValidateBlueprintOverrideCompatibility(previous, next);
+                phases.Add(CompletePhase(
+                    "overrideContractValidation",
+                    phaseStart,
+                    "succeeded",
+                    "The complete Blueprint override route set and V2 ABI signatures match the active generation."));
             }
             catch (Exception exception)
             {
+                string failedPhase = generationLoaded
+                    ? "overrideContractValidation"
+                    : "generationLoad";
                 phases.Add(CompletePhase(
-                    "generationLoad",
+                    failedPhase,
                     phaseStart,
                     "failed",
                     exception.Message));
+                if (next is not null)
+                {
+                    try
+                    {
+                        next.Dispose();
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        phases.Add(new UnrealManagedReloadPhase(
+                            "candidateRetirement",
+                            "failed",
+                            0,
+                            cleanupException.Message));
+                    }
+                }
                 phases.Add(new UnrealManagedReloadPhase(
                     "rollback",
                     "unchanged",
@@ -2369,6 +2396,7 @@ public static class UnrealWorldManagedEntryPoint
                     generationBridge,
                     functions,
                     functionsV2,
+                    functionsV2.BlueprintOverrides,
                     prewarm);
             }
             catch
@@ -2380,6 +2408,89 @@ public static class UnrealWorldManagedEntryPoint
 
         private static double StopwatchTicksToMilliseconds(long ticks) =>
             Math.Max(0, ticks) * 1000d / Stopwatch.Frequency;
+
+        private static void ValidateBlueprintOverrideCompatibility(
+            ScriptGeneration previous,
+            ScriptGeneration candidate)
+        {
+            const string recovery =
+                "Stop the affected instance, synchronize the Script Class, and restart it to apply an override contract change.";
+            IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> previousRoutes =
+                previous.BlueprintOverrides;
+            IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> candidateRoutes =
+                candidate.BlueprintOverrides;
+            foreach ((string routeKey, UnrealBlueprintOverrideRoute previousRoute) in previousRoutes)
+            {
+                if (!candidateRoutes.TryGetValue(routeKey, out UnrealBlueprintOverrideRoute? candidateRoute))
+                {
+                    throw new InvalidOperationException(
+                        $"Blueprint override route '{previousRoute.DisplayName}' was removed " +
+                        $"by managed method '{previousRoute.ManagedMethodIdentity}'. " +
+                        $"The active generation remains running. {recovery}");
+                }
+
+                var differences = new List<string>();
+                if (!string.Equals(
+                        previousRoute.ManagedMethodIdentity,
+                        candidateRoute.ManagedMethodIdentity,
+                        StringComparison.Ordinal))
+                {
+                    differences.Add(
+                        $"managed method changed from '{previousRoute.ManagedMethodIdentity}' " +
+                        $"to '{candidateRoute.ManagedMethodIdentity}'");
+                }
+                if (!string.Equals(
+                        previousRoute.DeclaringClassPath,
+                        candidateRoute.DeclaringClassPath,
+                        StringComparison.Ordinal))
+                {
+                    differences.Add(
+                        $"declaring class changed from '{previousRoute.DeclaringClassPath}' " +
+                        $"to '{candidateRoute.DeclaringClassPath}'");
+                }
+                if (!string.Equals(
+                        previousRoute.FunctionName,
+                        candidateRoute.FunctionName,
+                        StringComparison.Ordinal))
+                {
+                    differences.Add(
+                        $"function name changed from '{previousRoute.FunctionName}' " +
+                        $"to '{candidateRoute.FunctionName}'");
+                }
+                if (previousRoute.SuperMode != candidateRoute.SuperMode)
+                {
+                    differences.Add(
+                        $"SuperMode changed from '{previousRoute.SuperMode}' " +
+                        $"to '{candidateRoute.SuperMode}'");
+                }
+                if (!string.Equals(
+                        previousRoute.AbiSignature,
+                        candidateRoute.AbiSignature,
+                        StringComparison.Ordinal))
+                {
+                    differences.Add("the V2 ABI signature changed");
+                }
+                if (differences.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Blueprint override contract changed for route '{previousRoute.DisplayName}' " +
+                        $"(managed method '{previousRoute.ManagedMethodIdentity}'): " +
+                        string.Join("; ", differences) +
+                        $". The active generation remains running. {recovery}");
+                }
+            }
+
+            foreach ((string routeKey, UnrealBlueprintOverrideRoute candidateRoute) in candidateRoutes)
+            {
+                if (!previousRoutes.ContainsKey(routeKey))
+                {
+                    throw new InvalidOperationException(
+                        $"Blueprint override route '{candidateRoute.DisplayName}' was added " +
+                        $"by managed method '{candidateRoute.ManagedMethodIdentity}'. " +
+                        $"The active generation remains running. {recovery}");
+                }
+            }
+        }
 
         private static CoreClrGenerationPrewarmOptions ResolvePrewarmOptions() =>
             string.Equals(
@@ -2703,6 +2814,7 @@ public static class UnrealWorldManagedEntryPoint
         UnrealGenerationInvocationBridge Bridge,
         UnrealManagedFunctionDispatcher Functions,
         UnrealManagedFunctionDispatcherV2 FunctionsV2,
+        IReadOnlyDictionary<string, UnrealBlueprintOverrideRoute> BlueprintOverrides,
         CoreClrGenerationPrewarmOperation Prewarm) : IDisposable
     {
         private bool _disposed;

@@ -31,9 +31,11 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   `[UnrealBlueprintOverride]` declarations now materialize inherited
   BlueprintNativeEvent and BlueprintImplementableEvent signatures, preserving
   the native owner and source identity through compile and asset reload.
-  Undeclared collisions still fail. Parent-call transport, runtime execution,
-  lifecycle ordering and reload compatibility remain open; this is a native
-  materialization checkpoint, not completed extension behavior.
+  Undeclared collisions still fail. A managed reload barrier preserves the old
+  instance when an override route or ABI changes; same-path DLL body replacement
+  passes focused execution tests. Parent-call transport, saved-Blueprint/DLL
+  agreement, UE lifecycle ordering and runtime/cooked extension proof remain
+  open. These checkpoints do not complete extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary
