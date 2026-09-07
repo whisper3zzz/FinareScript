@@ -16,6 +16,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "PackageTools.h"
@@ -354,6 +355,10 @@ bool FUnifiedScriptStaticLibraryReloadTest::RunTest(const FString& Parameters)
     const int32 InitialManagedWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
     const FString PackageName = TEXT("/Game/UnifiedScriptTests/StaticLibraryReload_") +
         FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString PackageFilename = FPaths::ConvertRelativePathToFull(
+        FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension()));
     UPackage* Package = CreatePackage(*PackageName);
     ON_SCOPE_EXIT
     {
@@ -362,6 +367,13 @@ bool FUnifiedScriptStaticLibraryReloadTest::RunTest(const FString& Parameters)
             Package->SetDirtyFlag(false);
             TArray<UPackage*> Packages{Package};
             UPackageTools::UnloadPackages(Packages);
+        }
+        if (IFileManager::Get().FileExists(*PackageFilename) &&
+            !IFileManager::Get().Delete(*PackageFilename, false, true, true))
+        {
+            AddError(FString::Printf(
+                TEXT("Static reload fixture package cleanup failed: %s"),
+                *PackageFilename));
         }
     };
 

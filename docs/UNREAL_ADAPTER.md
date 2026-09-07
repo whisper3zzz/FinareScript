@@ -908,8 +908,26 @@ uses separately compiled v1/v2/incompatible DLLs and ordinary Blueprint callers
 in two existing Worlds. It covers changed results, commit/abort restoration,
 rejected candidates, cold-World exclusion, daily-action target deduplication
 and World-host cleanup. Evidence is under
-`artifacts/m13-3c-1c-b-static-library-reload`. Cooked function execution remains
-the outstanding acceptance path for this slice.
+`artifacts/m13-3c-1c-b-static-library-reload`.
+
+The same five exchange families also pass ordinary Blueprint caller bytecode
+in a Win64 Development cooked HostProject. The packaged verifier checks exact
+property shapes, unchanged input, ref replacement, out/return/downstream values,
+World cleanup, and chunk/hostfxr paths inside the executing archive. This proves
+soft-reference value transport; the fixture paths do not request asset loading.
+Evidence is under `artifacts/m13-3c-1c-b-function-closure`.
+
+After building the Host Editor and emitting the Demo chunk with the UE-bundled
+.NET 10 SDK in Release, run the focused fixture/Cook driver from the repo root:
+
+```powershell
+pwsh -File tools/run-unreal-function-closure.ps1 -EngineRoot D:/UE_5.8 -CookAndRun
+```
+
+Omit `-CookAndRun` to retain the passing fixture for inspection, then use
+`-UseExistingFixture -CookAndRun` to package that exact fixture. The driver
+validates its receipt, checks UAT and packaged execution, and removes its own
+temporary Content package after the Cook/run attempt.
 
 ## Commands
 

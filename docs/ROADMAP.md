@@ -25,25 +25,22 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.3 resumed after the M13.5 common capability breadth checkpoint**.
-- Current tranche: **M13.3C-1c-b — container and Soft Reference function closure**.
-  The checked-in `DemoLibrary` exchange methods now pass actual Blueprint VM
-  callers for all five families, including downstream output use, caller output
-  forwarding and package reload. Source diagnostics reject nested containers
-  and known unhashable Set/Map leaves. Static-library code reload now passes
-  actual Blueprint callers in existing Worlds. Next verify the cooked execution
-  path; native `ProcessEvent` regression checks
-  remain distinct from Blueprint caller bytecode evidence.
-  Reuse the local HostProject packaging facilities without modifying protected
-  files or an external project.
-  The managed static-library cache now has prepared/current/retained code
-  generations, compatible-signature validation and rollback (`37986b6`). Native
-  control entry points and daily/selected-asset Build & Reload integration are
-  implemented and validated. The new CMD test observes v1/v2 body replacement
-  in two existing Worlds, commit/abort restoration, incompatible-candidate
-  rejection, cold-World exclusion and daily-action target deduplication. Editor
-  compilation and existing dispatch/component reload regressions pass. Cooked
-  function execution remains open. See
-  `docs/plans/2026-09-07-static-library-reload.md` for the active handoff.
+- Current tranche: **M13.3C-2 — explicit extension behavior**.
+  Existing `[UnrealBlueprintEvent]` support lets a child Blueprint override a
+  managed default with explicit Call Parent Function. The next contract must
+  let managed behavior extend existing BlueprintNativeEvent and
+  BlueprintImplementableEvent paths with an exact owner, explicit parent-call
+  semantics and predictable reload. The materializer currently rejects inherited
+  function collisions; do not silently turn those collisions into overrides.
+- Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary
+  exchange families pass ordinary Blueprint caller bytecode, downstream output
+  use, package reload and Win64 Development cooked execution. Static-library
+  reload passes changed DLL bodies in two existing Worlds, rollback, rejected
+  candidates and the daily/selected-asset authoring routes (`37986b6`, `72c852a`).
+  The packaged verifier checks the input/ref/out/return values and World cleanup,
+  and uses the chunk and hostfxr from the executing archive. Evidence lives in
+  `artifacts/m13-3c-1c-b-function-closure`; the completed implementation notes are
+  in `docs/plans/2026-09-07-static-library-reload.md`.
 - Latest delivered M13.5 checkpoint: **collection state and defaults**,
   with core serialization/runtime commit `e30045f`, following soft-reference
   state/defaults (`9249194`), common value state/defaults (`2397d75`),
@@ -51,9 +48,8 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   ordinary native object text values (`4f68d09`),
   typed reference containers (`7c250c5`), reflected interface references
   (`bffb2d8`) and callbacks (`2827216`).
-- Last completed M13.3 slice: **M13.3C-1c-a**, local commit `6c03d51`.
-- Container/Soft Reference implementation checkpoint: `46f912d`; the full
-  M13.3C-1c-b acceptance scope remains open.
+- Last completed M13.3 slice: **M13.3C-1c-b**, following the common-value
+  function checkpoint `6c03d51` and container implementation `46f912d`.
 - Current delivery strategy: **M13.5 comparison and capability breadth first ->
   M13.3 deeper Script Class integration -> M13.4 external validation ->
   M13.6 delivery expansion**.
@@ -195,16 +191,18 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   polish into a prerequisite for the next capability batch. Full M13.3 still waits
   for the M13.5 breadth target.
 
-Existing in-flight work, **M13.3C-1c-b**, is implemented through declaration lowering, typed container
+Completed **M13.3C-1c-b** is implemented through declaration lowering, typed container
 arguments, Blueprint pins and native/managed ABI v3 calls. The five Demo exchange
 functions (Array, Set, Map, Soft Object, Soft Class) exercise input, return and
 ref/out through ordinary Blueprint caller bytecode after package save/reload,
 including downstream output consumption. Nested containers and known unhashable
 Set/Map leaves have source diagnostics. Static library code reload through the
 daily and selected-asset authoring routes passes same-World Blueprint callers
-in `72c852a`. Full slice closure still needs packaged execution.
-The current VM checkpoint is `54eb18a`, with evidence in
-`artifacts/m13-3c-1c-b-blueprint-vm`; this slice remains the active tranche.
+in `72c852a`. Win64 Development BuildCookRun and the archived executable also
+pass the five ordinary Blueprint callers with a packaged managed runtime.
+The VM checkpoint is `54eb18a`, with evidence in
+`artifacts/m13-3c-1c-b-blueprint-vm`; cooked evidence is in
+`artifacts/m13-3c-1c-b-function-closure`. Continue with C-2 extension behavior.
 
 ## Current capabilities
 
@@ -227,7 +225,7 @@ scope, not universal support for every Unreal type, project, or platform.
 | Composed UI/async gameplay — M13.5 | Generated UMG wrappers/nodes, async loading/spawn/cancel and lifecycle cleanup; persistent scene and cooked runtime checkpoint; project-backed C#/Graph publication, external IDE refresh and native body build/live reload with automatic Slate synchronization | Installed-consumer authoring and live class-shape/default deployment remain open; no physical toolbar/mouse or visual appearance acceptance, and no general UMG/latent parity claim |
 | Basic networking — M13.5 | Generated Actor and dynamic ActorComponent replication, all five exposed conditions, int/string RepNotify, mixed RPC including typed enum/Rotator/Transform and wide integers, ownership checks and reload on real server/two-client CMD sessions | Full payload/condition combinations, broader Script Class state/default shapes, push-model verification, travel and cooked networking remain open; this is not packaged WindowsServer support |
 | Script Class model — M13.3A/B | UObject, Actor, ActorComponent and FunctionLibrary proxies; reviewed properties/defaults, lifecycle, events, input, delegates and interfaces | General extension behavior, inheritance/default/subobject identity, and component composition remain incomplete |
-| Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; all five container/Soft Reference exchanges pass package reload and actual Blueprint caller bytecode, including downstream outputs; source diagnostics reject nested and known unhashable shapes; same-World static library reload passes through the authoring route | Cooked execution remains open before closing C-1c-b |
+| Managed functions called by Blueprint — M13.3C-1c | Reviewed common values and `ref`/`out`; all five container/Soft Reference exchanges pass package reload, actual Blueprint caller bytecode and Win64 Development cooked execution; same-World static library reload passes through the authoring route | Nested containers and known unhashable shapes are rejected with source diagnostics; C-2 inherited event extension remains separate |
 | Runtime and Demo — M9–M12 | Compiled chunks, reload, debugging/profiling, packaged BlockBreaker, World scheduling and batch/shared-data routes | The advertised package target is UE 5.8.1 / Win64; cooked networking and broader engine/platform support are not established |
 | Performance — M10 | Matched workload infrastructure and measured wins on batch/shared-data routes | Scalar, resource/spawn and reload weaknesses remain; there is no general "faster than Puerts" conclusion |
 
@@ -314,7 +312,7 @@ not an exhaustive signature audit or a claim of parity.
 | Capability family | Current UnifiedScript gap or next comparison | Owner |
 | --- | --- | --- |
 | Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
-| Containers and Soft References | Generated native calls exchange Actor arrays, class sets, named Soft Object maps and Soft Class arrays. Flat collection and Soft Reference class state retain editable configuration through reload and explicit async loading/spawn. Generated Blueprint functions pass real VM exchange, source-negative checks and same-World static library reload; cooked function execution remains the active follow-up | M13.3C-1c-b; M13.5 breadth checkpoint delivered |
+| Containers and Soft References | Generated native calls exchange Actor arrays, class sets, named Soft Object maps and Soft Class arrays. Flat collection and Soft Reference class state retain editable configuration through reload and explicit async loading/spawn. Generated Blueprint functions pass real VM exchange, source-negative checks, same-World static library reload and Win64 Development cooked execution | M13.3C-1c-b and M13.5 breadth checkpoint delivered |
 | Script classes and extension | Typed Unreal enum, Rotator, Transform, Soft Reference and flat collection defaults/state use the existing class foundation and have real Actor reload evidence. Complete deeper extension, inheritance, default subobjects and composition in M13.3 | M13.3C-2 through C-4 |
 | Non-reflected C++ | UObject members and ordinary C++ constructors/fields/methods/owned-borrowed returns plus pointer/reference inputs have generated C#/C++/node descriptions and runtime examples. Exact `FString`/`std::string` fields, constructor/method inputs and returned snapshots now use an optional bounded text transport, including mixed object arguments and generation/World cleanup. Containers/richer structs, ref/out, retention/transfer, inheritance, callbacks and converters remain separate follow-ups | M13.5 |
 | Delegates, interfaces and async gameplay | Generated UMG events and async load/spawn compose in the saved/cooked Demo and daily authoring loop. Reflected callable delegate parameters support synchronous results/ref/out, native retention and worker-originated generated UE reentry. Native interface methods and generated World/GameInstance/LocalPlayer lookup now support Enhanced Input mapping with reload/cleanup. Installed-consumer authoring, broader latent/service use cases and richer callback forms remain follow-ups | M13.5 |
@@ -451,13 +449,14 @@ an external project requires the user's authorization.
   and move into implementation once the priority is clear; an exhaustive audit
   is not a prerequisite for starting the first batch.
 - [ ] Close common reflected API, value, container and Soft Reference gaps in
-  both call directions and normal state usage. Reuse the unfinished M13.3C-1c-b
-  work where relevant rather than restarting it or treating it as all of parity.
+  both call directions and normal state usage. Reuse the completed M13.3C-1c-b
+  function contracts without treating them as all of parity.
   Generated enum, Rotator and Transform state/defaults now pass native
   materialization and Actor runtime checks. Soft Reference defaults/state now
   retain persistent paths and compose with async loading/spawn. Flat collection
   state/defaults now drive the same gameplay route with whole-value overrides;
-  the broader property matrix and Blueprint function closure remain open.
+  the broader property matrix remains open. Blueprint function closure now
+  includes same-World reload and Win64 Development cooked execution.
 - [ ] Extend the versioned generation model to common non-reflected C++
   constructors, methods, fields, overloads and inheritance, including callbacks,
   conversion and explicit ownership. Generate C# declarations and visual nodes
@@ -521,13 +520,14 @@ full M13.3 completion nor external-project proof is required to complete M13.5.
 ### M13.3 — Make Script Classes ordinary Unreal gameplay types
 
 The collection-state checkpoint meets the selected M13.5 capability breadth
-target. This scope is active again, beginning with the remaining function slice.
+target. The remaining function slice is complete; explicit extension behavior
+is now active.
 
 The reviewed four-kind class foundation, common property/default shapes,
 lifecycle/input/event/delegate/interface routes, and common-value plus
 `ref`/`out` Blueprint functions are already implemented. Continue from them.
 
-- [ ] **M13.3C-1c-b — container and Soft Reference functions:** carry reviewed
+- [x] **M13.3C-1c-b — container and Soft Reference functions:** carry reviewed
   array/set/map and Soft Object/Class Reference shapes through lowering,
   Declaration IR, generated pins, native/managed codecs and dispatch. Cover
   input, return and supported `ref`/`out` directions. Unsupported combinations

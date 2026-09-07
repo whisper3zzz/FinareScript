@@ -27,9 +27,11 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/Parse.h"
 #include "Misc/ScopeExit.h"
 #include "PackageTools.h"
 #include "Serialization/JsonReader.h"
@@ -56,6 +58,19 @@ namespace UE::UnifiedScript::BlueprintClass::Tests
 FString SemanticId(const TCHAR* Digits)
 {
     return FString::Printf(TEXT("us_%s"), Digits);
+}
+
+bool ReadFixtureOutputArgument(FString& OutPath)
+{
+    if (!FParse::Value(
+            FCommandLine::Get(),
+            TEXT("UnifiedScriptFunctionFixtureOutput="),
+            OutPath))
+    {
+        return false;
+    }
+    OutPath.TrimQuotesInline();
+    return !OutPath.IsEmpty();
 }
 
 FGuid Guid(const TCHAR* Digits)
@@ -2006,11 +2021,21 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     using namespace UE::UnifiedScript::BlueprintClass::Tests;
 
     const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    const FString AssetName = TEXT("BP_UnifiedScriptStaticDispatch_") + Suffix;
-    const FString PackageName = TEXT("/Game/UnifiedScriptTests/") + AssetName;
-    const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+    FString FixtureOutputRoot;
+    const bool bFixtureOutputRequested = ReadFixtureOutputArgument(FixtureOutputRoot);
+    const FString FixtureDirectoryName = TEXT("UnifiedScriptFunctionFixture_") + Suffix;
+    const FString AssetName = bFixtureOutputRequested
+        ? TEXT("BP_UnifiedScriptFunctionFixture_") + Suffix
+        : TEXT("BP_UnifiedScriptStaticDispatch_") + Suffix;
+    const FString PackageName = bFixtureOutputRequested
+        ? TEXT("/Game/") + FixtureDirectoryName + TEXT("/FunctionFixture")
+        : TEXT("/Game/UnifiedScriptTests/") + AssetName;
+    FString PackageFilename = FPackageName::LongPackageNameToFilename(
         PackageName,
         FPackageName::GetAssetPackageExtension());
+    PackageFilename = FPaths::ConvertRelativePathToFull(PackageFilename);
+    FPaths::NormalizeFilename(PackageFilename);
+    bool bKeepFixture = false;
     ON_SCOPE_EXIT
     {
         if (UPackage* ExistingPackage = FindPackage(nullptr, *PackageName))
@@ -2019,7 +2044,10 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
             TArray<UPackage*> PackagesToUnload{ExistingPackage};
             UPackageTools::UnloadPackages(PackagesToUnload);
         }
-        IFileManager::Get().Delete(*PackageFilename, false, true, true);
+        if (!bKeepFixture)
+        {
+            IFileManager::Get().Delete(*PackageFilename, false, true, true);
+        }
     };
     UPackage* Package = CreatePackage(*PackageName);
     UUnifiedScriptBlueprint* Blueprint = Cast<UUnifiedScriptBlueprint>(
@@ -2295,6 +2323,7 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
 
         UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(CallerGraph);
         CallNode->FunctionReference.SetExternalMember(ExchangeName, MaterializedClass);
+        CallNode->CreateNewGuid();
         CallerGraph->AddNode(CallNode, true, false);
         CallNode->AllocateDefaultPins();
         if (!TestTrue(
@@ -2355,6 +2384,7 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         UK2Node_VariableSet* ObserveOutput = NewObject<UK2Node_VariableSet>(CallerGraph);
         ObserveOutput->VariableReference.SetSelfMember(
             BlueprintObservedOutputNames.FindChecked(FName(Shape.Id)));
+        ObserveOutput->CreateNewGuid();
         CallerGraph->AddNode(ObserveOutput, true, false);
         ObserveOutput->AllocateDefaultPins();
         UEdGraphPin* ObserveValue = ObserveOutput->FindPin(
@@ -3123,7 +3153,55 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
             FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
             InitialManagedWorldCount);
     }
-    return bRuntimeReady && bRecreatedRuntimeReady && !HasAnyErrors();
+
+    bool bFixtureReceiptWritten = !bFixtureOutputRequested;
+    if (bFixtureOutputRequested && bRuntimeReady && bRecreatedRuntimeReady &&
+        !HasAnyErrors() &&
+        Package != nullptr && Blueprint != nullptr && CallerBlueprint != nullptr &&
+        Blueprint->GeneratedClass != nullptr && CallerBlueprint->GeneratedClass != nullptr)
+    {
+        IFileManager::Get().MakeDirectory(*FixtureOutputRoot, true);
+        const TSharedRef<FJsonObject> Receipt = MakeShared<FJsonObject>();
+        Receipt->SetStringField(
+            TEXT("schemaVersion"),
+            TEXT("unifiedscript.function-closure-fixture/v0.1"));
+        Receipt->SetStringField(TEXT("packageName"), PackageName);
+        Receipt->SetStringField(TEXT("packageFilename"), PackageFilename);
+        Receipt->SetStringField(
+            TEXT("libraryClassPath"),
+            Blueprint->GeneratedClass->GetPathName());
+        Receipt->SetStringField(
+            TEXT("callerClassPath"),
+            CallerBlueprint->GeneratedClass->GetPathName());
+        Receipt->SetStringField(TEXT("libraryAssetPath"), Blueprint->GetPathName());
+        Receipt->SetStringField(TEXT("callerAssetPath"), CallerBlueprint->GetPathName());
+        TArray<TSharedPtr<FJsonValue>> CallerFunctions;
+        TArray<TSharedPtr<FJsonValue>> ObservedProperties;
+        TArray<TSharedPtr<FJsonValue>> LibraryFunctions;
+        for (const FExchangeShape& Shape : ExchangeShapes)
+        {
+            CallerFunctions.Add(MakeShared<FJsonValueString>(
+                FString::Printf(TEXT("Call_%s"), Shape.Name)));
+            ObservedProperties.Add(MakeShared<FJsonValueString>(
+                FString::Printf(TEXT("Observed_%s"), Shape.Name)));
+            LibraryFunctions.Add(MakeShared<FJsonValueString>(
+                FString::Printf(TEXT("USF_%s"), Shape.Id)));
+        }
+        Receipt->SetArrayField(TEXT("callerFunctionNames"), MoveTemp(CallerFunctions));
+        Receipt->SetArrayField(TEXT("observedPropertyNames"), MoveTemp(ObservedProperties));
+        Receipt->SetArrayField(TEXT("libraryFunctionNames"), MoveTemp(LibraryFunctions));
+        FString ReceiptJson;
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ReceiptJson);
+        bFixtureReceiptWritten = FJsonSerializer::Serialize(Receipt, Writer) &&
+            FFileHelper::SaveStringToFile(
+                ReceiptJson,
+                *FPaths::Combine(FixtureOutputRoot, TEXT("function-closure-receipt.json")),
+                FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+        TestTrue(TEXT("Function closure fixture receipt writes successfully"), bFixtureReceiptWritten);
+    }
+    bKeepFixture = bFixtureOutputRequested && bFixtureReceiptWritten &&
+        bRuntimeReady && bRecreatedRuntimeReady && !HasAnyErrors();
+    return bRuntimeReady && bRecreatedRuntimeReady && bFixtureReceiptWritten && !HasAnyErrors();
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

@@ -14,5 +14,6 @@ public class UEUnifiedScriptHost : ModuleRules
             "UMG",
             "UEUnifiedScriptRuntime"
         });
+        PrivateDependencyModuleNames.Add("Json");
     }
 }
