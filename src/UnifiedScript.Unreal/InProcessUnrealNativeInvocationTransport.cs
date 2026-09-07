@@ -1367,6 +1367,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             UnrealNativeOperationV3.ReadProperty => _readPropertyByIdV3,
             UnrealNativeOperationV3.WriteProperty => _writePropertyByIdV3,
             UnrealNativeOperationV3.Invoke => _invokeByIdV3,
+            UnrealNativeOperationV3.InvokeParent => _invokeByIdV3,
             _ => nint.Zero,
         };
         if (executePointer == nint.Zero)
@@ -1391,6 +1392,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     Results = (nint)resultPointer,
                     ResultCapacity = checked((uint)results.Length),
                     ResultCount = checked((uint)results.Length),
+                    Flags = operation == UnrealNativeOperationV3.InvokeParent
+                        ? (uint)UnrealNativeCallFrameFlagsV3.BlueprintParent
+                        : 0,
                     ByteBuffer = (nint)bytePointer,
                     ByteCapacity = checked((uint)byteBuffer.Length),
                     ByteCount = checked((uint)inputByteCount),

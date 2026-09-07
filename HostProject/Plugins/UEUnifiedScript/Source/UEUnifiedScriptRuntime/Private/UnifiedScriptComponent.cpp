@@ -2672,6 +2672,54 @@ UObject* UUnifiedScriptComponent::GetScriptTarget()
     return this;
 }
 
+const UUnifiedScriptBlueprintGeneratedClass*
+UUnifiedScriptComponent::GetActiveManagedGeneratedClass() const
+{
+    if (!bScriptRunning || ActiveScriptAsset == nullptr ||
+        !ActiveScriptAsset->GeneratedClassPath.IsValid())
+    {
+        return nullptr;
+    }
+    UClass* ExpectedClass =
+        ActiveScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
+    if (ExpectedClass == nullptr)
+    {
+        return nullptr;
+    }
+    UObject* Receiver = GetParentInvocationReceiver();
+    for (UClass* Candidate = Receiver != nullptr ? Receiver->GetClass() : nullptr;
+         Candidate != nullptr;
+         Candidate = Candidate->GetSuperClass())
+    {
+        if (Candidate == ExpectedClass)
+        {
+            return Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+        }
+    }
+    return nullptr;
+}
+
+UObject* UUnifiedScriptComponent::GetParentInvocationReceiver() const
+{
+    if (!bScriptRunning)
+    {
+        return nullptr;
+    }
+    if (ActiveScriptAsset != nullptr &&
+        ActiveScriptAsset->ScriptClassKind == EUnifiedScriptClassKind::ActorComponent)
+    {
+        return const_cast<UUnifiedScriptComponent*>(this);
+    }
+    return const_cast<UUnifiedScriptComponent*>(this)->GetScriptTarget();
+}
+
+bool UUnifiedScriptComponent::OwnsActiveManagedOverride(
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass) const
+{
+    return GeneratedClass != nullptr &&
+        GetActiveManagedGeneratedClass() == GeneratedClass;
+}
+
 bool UUnifiedScriptComponent::BindManagedInputActions(FString& OutError)
 {
     check(IsInGameThread());

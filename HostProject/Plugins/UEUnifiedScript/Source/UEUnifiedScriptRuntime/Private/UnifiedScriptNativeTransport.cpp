@@ -1315,6 +1315,7 @@ uint64 HashRequestV3(
     uint32 EntryByteCount)
 {
     uint64 Hash = 14695981039346656037ull;
+    HashBytesV3(Hash, &Frame.Flags, sizeof(Frame.Flags));
     HashBytesV3(Hash, &Frame.ArgumentCount, sizeof(Frame.ArgumentCount));
     HashBytesV3(Hash, &Frame.ResultCount, sizeof(Frame.ResultCount));
     if (Frame.ArgumentCount > 0)
@@ -1385,7 +1386,9 @@ bool ValidateFrameV3(
     FUnifiedScriptNativeCallFrameV3* Frame,
     uint32 ExpectedArgumentCount,
     uint32 ExpectedResultCount,
-    uint32& OutEntryByteCount)
+    uint32& OutEntryByteCount,
+    EUnifiedScriptNativeCallFrameFlagsV3 ExpectedFlags =
+        EUnifiedScriptNativeCallFrameFlagsV3::None)
 {
     if (Frame == nullptr)
     {
@@ -1393,7 +1396,7 @@ bool ValidateFrameV3(
     }
     OutEntryByteCount = Frame->ByteCount;
     const bool bValid =
-        Frame->Flags == 0 &&
+        Frame->Flags == static_cast<uint32>(ExpectedFlags) &&
         Frame->Reserved8 == 0 &&
         Frame->Reserved32 == 0 &&
         Frame->Status == EUnifiedScriptNativeCallStatusV3::Uninitialized &&
@@ -2322,10 +2325,36 @@ void InvokeByIdV3Core(
         InvalidFrameV3(Frame, EntryByteCount);
         return;
     }
+    const uint32 ParentFlag =
+        static_cast<uint32>(EUnifiedScriptNativeCallFrameFlagsV3::BlueprintParent);
+    const bool bParentCall = Frame->Flags == ParentFlag;
+    if (Frame->Flags != 0 && Frame->Flags != ParentFlag)
+    {
+        InvalidFrameV3(Frame, EntryByteCount);
+        return;
+    }
+    if (bParentCall && CorrelationId == 0)
+    {
+        FUnifiedScriptInvocationResult Result;
+        Result.Error = EUnifiedScriptInvocationError::FunctionNotCallable;
+        Result.Message = TEXT("Blueprint parent calls require a correlated ABI v3 invocation.");
+        InvocationFailureV3(*Frame, EntryByteCount, Result);
+        return;
+    }
     uint32 ExpectedResultCount = 0;
-    if (!FUnifiedScriptGeneratedThunkRegistry::DescribeInvokeResultCount(
-            MemberId, ExpectedResultCount) ||
-        ExpectedResultCount > 64)
+    if (bParentCall)
+    {
+        ExpectedResultCount = Frame->ResultCount;
+    }
+    else if (!FUnifiedScriptGeneratedThunkRegistry::DescribeInvokeResultCount(
+                 MemberId, ExpectedResultCount))
+    {
+        FUnifiedScriptInvocationResult Result;
+        Result.Error = EUnifiedScriptInvocationError::InvalidMemberPath;
+        InvocationFailureV3(*Frame, EntryByteCount, Result);
+        return;
+    }
+    if (ExpectedResultCount > 64)
     {
         FUnifiedScriptInvocationResult Result;
         Result.Error = EUnifiedScriptInvocationError::InvalidMemberPath;
@@ -2336,7 +2365,10 @@ void InvokeByIdV3Core(
             Frame,
             Frame->ArgumentCount,
             ExpectedResultCount,
-            EntryByteCount))
+            EntryByteCount,
+            bParentCall
+                ? EUnifiedScriptNativeCallFrameFlagsV3::BlueprintParent
+                : EUnifiedScriptNativeCallFrameFlagsV3::None))
     {
         return;
     }
@@ -2359,7 +2391,9 @@ void InvokeByIdV3Core(
         }
         BinaryInputBytes += Argument.Payload1;
     }
-    for (uint32 ResultIndex = 0; ResultIndex < ExpectedResultCount; ++ResultIndex)
+    for (uint32 ResultIndex = 0;
+         ResultIndex < ExpectedResultCount && !bParentCall;
+         ++ResultIndex)
     {
         EUnifiedScriptValueKind ExpectedKind;
         uint64 ExpectedTypeId = 0;
@@ -2414,7 +2448,7 @@ void InvokeByIdV3Core(
     }
     TArray<FUnifiedScriptValue, TInlineAllocator<8>> Arguments;
     Arguments.Reserve(Frame->ArgumentCount);
-    for (uint32 Index = 0; Index < Frame->ArgumentCount; ++Index)
+    for (uint32 Index = 0; Index < Frame->ArgumentCount && !bParentCall; ++Index)
     {
         FUnifiedScriptValue Value;
         if (!DecodeValueV3(Frame->Arguments[Index], *Frame, EntryByteCount, Value))
@@ -2424,7 +2458,7 @@ void InvokeByIdV3Core(
         }
         Arguments.Add(MoveTemp(Value));
     }
-    const uint64 RequestHash = bRequiresRequestHash
+    const uint64 RequestHash = bParentCall || bRequiresRequestHash
         ? HashRequestV3(*Frame, EntryByteCount)
         : 0;
     const bool bExecuted = Context != nullptr &&
@@ -2435,13 +2469,106 @@ void InvokeByIdV3Core(
                 FUnifiedScriptValue ReturnValue;
                 TArray<FUnifiedScriptValue> OutputValues;
                 FUnifiedScriptInvocationResult Result;
-                const bool bUsePending = Pending.bValid && Pending.Operation == 2 &&
+                const uint8 ExpectedOperation = bParentCall ? 3 : 2;
+                const bool bUsePending = Pending.bValid &&
+                    Pending.Operation == ExpectedOperation &&
                     Pending.Target == Target && Pending.MemberId == MemberId &&
                     Pending.RequestHash == RequestHash;
                 if (CorrelationId != 0 && Pending.bValid && !bUsePending)
                 {
                     InvalidFrameV3(Frame, EntryByteCount);
                     return; // An identity cannot be reused for a different pending request.
+                }
+                if (bParentCall)
+                {
+                    auto PublishParentResult = [&](
+                        const TArray<uint8>& ResultCells,
+                        const TArray<uint8>& Arena)
+                    {
+                        const uint32 CellBytes = ExpectedResultCount *
+                            sizeof(FUnifiedScriptNativeValueV3);
+                        if (ResultCells.Num() != static_cast<int32>(CellBytes) ||
+                            Arena.Num() < static_cast<int32>(EntryByteCount) ||
+                            Arena.Num() > static_cast<int32>(FUnifiedScriptByteBuffer::MaximumCallBytes))
+                        {
+                            Pending.Reset();
+                            UnsupportedValueV3(*Frame, EntryByteCount);
+                            return;
+                        }
+                        if (CellBytes > 0)
+                        {
+                            FMemory::Memcpy(
+                                Frame->Results,
+                                ResultCells.GetData(),
+                                CellBytes);
+                        }
+                        const uint32 PublishedByteCount = Arena.Num();
+                        if (PublishedByteCount > 0)
+                        {
+                            FMemory::Memcpy(
+                                Frame->ByteBuffer,
+                                Arena.GetData(),
+                                PublishedByteCount);
+                        }
+                        Pending.Reset();
+                        ResetV3Output(*Frame, EntryByteCount);
+                        Frame->ResultCount = ExpectedResultCount;
+                        Frame->ByteCount = PublishedByteCount;
+                        Frame->Status = EUnifiedScriptNativeCallStatusV3::Success;
+                    };
+
+                    if (bUsePending)
+                    {
+                        if (Pending.ParentArena.Num() > static_cast<int32>(Frame->ByteCapacity))
+                        {
+                            ResetV3Output(*Frame, EntryByteCount);
+                            Frame->RequiredResultCapacity = ExpectedResultCount;
+                            Frame->RequiredByteCapacity = Pending.ParentArena.Num();
+                            Frame->Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+                            return;
+                        }
+                        PublishParentResult(Pending.ParentResultCells, Pending.ParentArena);
+                        return;
+                    }
+
+                    Pending.Reset();
+                    FUnifiedScriptParentCallResult ParentResult;
+                    if (!Bridge.InvokeParentById(
+                            {Target},
+                            MemberId,
+                            *Frame,
+                            EntryByteCount,
+                            ParentResult,
+                            Result))
+                    {
+                        InvocationFailureV3(*Frame, EntryByteCount, Result);
+                        return;
+                    }
+                    if (ParentResult.ResultCells.Num() != static_cast<int32>(
+                            ExpectedResultCount * sizeof(FUnifiedScriptNativeValueV3)) ||
+                        ParentResult.Arena.Num() < static_cast<int32>(EntryByteCount))
+                    {
+                        UnsupportedValueV3(*Frame, EntryByteCount);
+                        return;
+                    }
+                    if (ParentResult.Arena.Num() > static_cast<int32>(Frame->ByteCapacity))
+                    {
+                        Pending.bValid = true;
+                        Pending.Operation = ExpectedOperation;
+                        Pending.Target = Target;
+                        Pending.MemberId = MemberId;
+                        Pending.RequestHash = RequestHash;
+                        Pending.EncodedByteCount = ParentResult.Arena.Num();
+                        Pending.ParentResultCells = MoveTemp(ParentResult.ResultCells);
+                        Pending.ParentArena = MoveTemp(ParentResult.Arena);
+                        ResetV3Output(*Frame, EntryByteCount);
+                        Frame->RequiredResultCapacity = ExpectedResultCount;
+                        Frame->RequiredByteCapacity = Pending.EncodedByteCount;
+                        Frame->Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+                        return;
+                    }
+                    PublishParentResult(ParentResult.ResultCells, ParentResult.Arena);
+                    return;
                 }
                 if (bUsePending)
                 {
@@ -2490,7 +2617,7 @@ void InvokeByIdV3Core(
                 if (MeasuredByteCapacity > Frame->ByteCapacity)
                 {
                     Pending.bValid = true;
-                    Pending.Operation = 2;
+                    Pending.Operation = ExpectedOperation;
                     Pending.Target = Target;
                     Pending.MemberId = MemberId;
                     Pending.RequestHash = RequestHash;
@@ -3548,7 +3675,8 @@ UEUnifiedScript_GetNativeTransportV3()
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Structs) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ByteBuffers) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CallbackArguments) |
-        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CorrelatedResults);
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::CorrelatedResults) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::BlueprintParentCalls);
 
     static const FUnifiedScriptNativeTransportV3 Transport = {
         3,

@@ -6,6 +6,9 @@
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptPropertyValueCodec.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptBlueprintPrivate.h"
+#include "UnifiedScriptComponent.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 #include "Net/Core/PushModel/PushModel.h"
@@ -1673,6 +1676,468 @@ bool FUnifiedScriptInvocationBridge::InvokeById(
     {
         return false;
     }
+    FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+
+bool FUnifiedScriptInvocationBridge::InvokeParentById(
+    FUnifiedScriptObjectHandle Host,
+    uint64 MemberIdValue,
+    const FUnifiedScriptNativeCallFrameV3& InputFrame,
+    uint32 EntryByteCount,
+    FUnifiedScriptParentCallResult& OutParentResult,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Blueprint::Private;
+    using namespace UE::UnifiedScript::Invocation::Private;
+
+    OutParentResult.ResultCells.Reset();
+    OutParentResult.Arena.Reset();
+
+    UObject* HostObject = ResolveTarget(Registry, Host, OutResult);
+    if (HostObject == nullptr)
+    {
+        return false;
+    }
+
+    UUnifiedScriptComponent* Component = Cast<UUnifiedScriptComponent>(HostObject);
+    if (Component == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::TargetTypeMismatch,
+            TEXT("Blueprint parent invocation host must be a running UnifiedScript component."));
+        return false;
+    }
+    UObject* Receiver = Component->GetParentInvocationReceiver();
+    const UUnifiedScriptBlueprintGeneratedClass* ManagedClass =
+        Component->GetActiveManagedGeneratedClass();
+    if (Receiver == nullptr || ManagedClass == nullptr ||
+        !Component->OwnsActiveManagedOverride(ManagedClass))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::TargetTypeMismatch,
+            TEXT("Blueprint parent invocation has no exact active managed owner for the host component."));
+        return false;
+    }
+
+    const FUnifiedScriptManagedFunctionBinding* Binding =
+        ManagedClass->FindManagedOverrideBinding(MemberIdValue);
+    if (Binding == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::InvalidMemberPath,
+            TEXT("Blueprint parent member ID does not match an active persisted override route."));
+        return false;
+    }
+
+    UClass* DeclaringClass = FindObject<UClass>(
+        nullptr,
+        *Binding->BlueprintOverrideDeclaringTypePath);
+    if (DeclaringClass == nullptr || !Receiver->IsA(DeclaringClass))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::TargetTypeMismatch,
+            FString::Printf(
+                TEXT("Blueprint parent receiver '%s' is not an instance of declaring class '%s'."),
+                *GetPathNameSafe(Receiver),
+                *Binding->BlueprintOverrideDeclaringTypePath));
+        return false;
+    }
+
+    const FName ParentName(*Binding->BlueprintOverrideFunctionName);
+    UFunction* DeclaredParentFunction = DeclaringClass->FindFunctionByName(
+        ParentName,
+        EIncludeSuperFlag::ExcludeSuper);
+    if (DeclaredParentFunction == nullptr ||
+        !DeclaredParentFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+        DeclaredParentFunction->HasAnyFunctionFlags(FUNC_Static | FUNC_Final | FUNC_Net))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::FunctionNotCallable,
+            FString::Printf(
+                TEXT("Blueprint parent '%s:%s' is not an instance Blueprint event."),
+                *Binding->BlueprintOverrideDeclaringTypePath,
+                *Binding->BlueprintOverrideFunctionName));
+        return false;
+    }
+
+    // The declaration identifies the route, while the first local function
+    // above it is the effective implementation. This preserves an ordinary
+    // Blueprint parent body between the managed class and the native owner.
+    UFunction* ParentFunction = nullptr;
+    bool bReachedDeclaringClass = false;
+    for (UClass* Candidate = ManagedClass->GetSuperClass();
+         Candidate != nullptr;
+         Candidate = Candidate->GetSuperClass())
+    {
+        if (UFunction* CandidateFunction = Candidate->FindFunctionByName(
+                ParentName,
+                EIncludeSuperFlag::ExcludeSuper);
+            CandidateFunction != nullptr)
+        {
+            ParentFunction = CandidateFunction;
+            break;
+        }
+        if (Candidate == DeclaringClass)
+        {
+            bReachedDeclaringClass = true;
+            break;
+        }
+    }
+    if (ParentFunction == nullptr && bReachedDeclaringClass)
+    {
+        ParentFunction = DeclaredParentFunction;
+    }
+    if (ParentFunction == nullptr || !Receiver->IsA(ParentFunction->GetOuterUClass()) ||
+        !ParentFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+        ParentFunction->HasAnyFunctionFlags(FUNC_Static | FUNC_Final | FUNC_Net))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::FunctionNotCallable,
+            FString::Printf(
+                TEXT("Blueprint parent route '%s:%s' has no callable effective parent implementation."),
+                *Binding->BlueprintOverrideDeclaringTypePath,
+                *Binding->BlueprintOverrideFunctionName));
+        return false;
+    }
+
+    // A generated managed owner between the receiver and the declaring class
+    // would re-enter another managed generation through Call Parent. Refuse
+    // that unsupported C3 route before touching the parent parameter frame.
+    for (UClass* Candidate = ManagedClass->GetSuperClass();
+         Candidate != nullptr;
+         Candidate = Candidate->GetSuperClass())
+    {
+        const auto* Generated = Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+        if (Generated != nullptr &&
+            Generated->IsManagedFunctionBound(ParentName))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::FunctionNotCallable,
+                FString::Printf(
+                    TEXT("Blueprint parent route '%s:%s' crosses another managed owner; C3 parent dispatch is unsupported."),
+                    *Binding->BlueprintOverrideDeclaringTypePath,
+                    *Binding->BlueprintOverrideFunctionName));
+            return false;
+        }
+    }
+
+    if (Binding->ParameterNames.Num() != Binding->ParameterTypes.Num() ||
+        Binding->ParameterNames.Num() != Binding->ParameterDirections.Num() ||
+        InputFrame.ByteCount != EntryByteCount ||
+        EntryByteCount > 64u * 1024u ||
+        EntryByteCount > InputFrame.ByteCapacity ||
+        (EntryByteCount > 0 && InputFrame.ByteBuffer == nullptr))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::UnsupportedParameter,
+            TEXT("Blueprint parent route has an incomplete parameter contract or input arena."));
+        return false;
+    }
+
+    TArray<FProperty*, TInlineAllocator<8>> Parameters;
+    Parameters.Reserve(Binding->ParameterNames.Num());
+    for (const FName ParameterName : Binding->ParameterNames)
+    {
+        FProperty* Parameter = FindFProperty<FProperty>(ParentFunction, ParameterName);
+        if (Parameter == nullptr ||
+            !Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+            Parameter->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::UnsupportedParameter,
+                FString::Printf(
+                    TEXT("Blueprint parent '%s' cannot resolve native parameter '%s'."),
+                    *ParentFunction->GetPathName(),
+                    *ParameterName.ToString()));
+            return false;
+        }
+        bool bNativeConst = Parameter->HasAnyPropertyFlags(CPF_ConstParm);
+#if WITH_METADATA
+        bNativeConst = bNativeConst || Parameter->HasMetaData(TEXT("NativeConst"));
+#endif
+        const EUnifiedScriptManagedParameterDirection Direction =
+            Binding->ParameterDirections[Parameters.Num()];
+        const bool bValidDirection =
+            Direction == EUnifiedScriptManagedParameterDirection::Input
+                ? (!Parameter->HasAnyPropertyFlags(CPF_OutParm) || bNativeConst)
+                : Direction == EUnifiedScriptManagedParameterDirection::InputOutput
+                    ? Parameter->HasAnyPropertyFlags(CPF_ReferenceParm) && !bNativeConst
+                    : Parameter->HasAnyPropertyFlags(CPF_OutParm) && !bNativeConst;
+        if (!bValidDirection)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::UnsupportedParameter,
+                FString::Printf(
+                    TEXT("Blueprint parent parameter '%s' direction does not match managed route."),
+                    *ParameterName.ToString()));
+            return false;
+        }
+        Parameters.Add(Parameter);
+    }
+
+    uint32 ExpectedArgumentCount = 0;
+    for (const EUnifiedScriptManagedParameterDirection Direction :
+         Binding->ParameterDirections)
+    {
+        if (Direction != EUnifiedScriptManagedParameterDirection::Output)
+        {
+            ++ExpectedArgumentCount;
+        }
+    }
+    uint32 ExpectedResultCount =
+        ParentFunction->GetReturnProperty() != nullptr ? 1u : 0u;
+    for (const EUnifiedScriptManagedParameterDirection Direction :
+         Binding->ParameterDirections)
+    {
+        if (Direction != EUnifiedScriptManagedParameterDirection::Input)
+        {
+            ++ExpectedResultCount;
+        }
+    }
+    if (InputFrame.ArgumentCount != ExpectedArgumentCount ||
+        InputFrame.ResultCount != ExpectedResultCount ||
+        InputFrame.ResultCapacity < ExpectedResultCount ||
+        (ExpectedResultCount > 0 && InputFrame.Results == nullptr))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ArgumentCountMismatch,
+            FString::Printf(
+                TEXT("Blueprint parent route expected %u input and %u result cells, received %u and %u."),
+                ExpectedArgumentCount,
+                ExpectedResultCount,
+                InputFrame.ArgumentCount,
+                InputFrame.ResultCount));
+        return false;
+    }
+
+    UWorld* World = Receiver->GetWorld();
+    UUnifiedScriptWorldSubsystem* HostSubsystem = World != nullptr
+        ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (HostSubsystem == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::TransportUnavailable,
+            TEXT("Blueprint parent receiver has no managed World subsystem."));
+        return false;
+    }
+
+    FStructOnScope ParameterStorage(ParentFunction);
+    void* ParameterMemory = ParameterStorage.GetStructMemory();
+    TConstArrayView<uint8> InputArena(
+        InputFrame.ByteBuffer,
+        static_cast<int32>(InputFrame.ByteCapacity));
+    uint32 InputIndex = 0;
+    for (int32 Index = 0; Index < Parameters.Num(); ++Index)
+    {
+        const EUnifiedScriptManagedParameterDirection Direction =
+            Binding->ParameterDirections[Index];
+        if (Direction == EUnifiedScriptManagedParameterDirection::Output)
+        {
+            continue;
+        }
+        FString CodecError;
+        if (!UnpackReturnValueV2(
+                *Parameters[Index],
+                InputFrame.Arguments[InputIndex++],
+                InputArena,
+                EntryByteCount,
+                *HostSubsystem,
+                &Binding->ParameterTypes[Index],
+                {},
+                Parameters[Index]->ContainerPtrToValuePtr<void>(ParameterMemory),
+                CodecError))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(
+                    TEXT("Blueprint parent input '%s' could not be decoded: %s"),
+                    *Parameters[Index]->GetName(),
+                    *CodecError));
+            return false;
+        }
+    }
+
+    // Validate every result descriptor before invoking user Blueprint code.
+    // The managed frame carries the complete V2 type identity, while the
+    // payload offsets and scalar values are call-specific.  Packing the
+    // initialized native values gives us the same recursive container/struct
+    // schema check used for the eventual result without allowing a malformed
+    // result cell to reach ProcessEvent.
+    TArray<uint8, TInlineAllocator<512>> DescriptorArena;
+    uint32 DescriptorResultIndex = 0;
+    auto ValidateResultDescriptor = [&](
+        const FProperty& Property,
+        const FUnifiedScriptManagedValueTypeBinding* TypeBinding,
+        const FUnifiedScriptNativeValueV3& Actual,
+        const TCHAR* Label) -> bool
+    {
+        FUnifiedScriptNativeValueV3 Expected;
+        FString DescriptorError;
+        if (!PackValueV2(
+                Property,
+                ParameterMemory,
+                *HostSubsystem,
+                DescriptorArena,
+                TypeBinding,
+                {},
+                Expected,
+                DescriptorError))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(
+                    TEXT("Blueprint parent %s result schema could not be described: %s"),
+                    Label,
+                    *DescriptorError));
+            return false;
+        }
+        const bool bObjectDefault =
+            (Expected.Kind == EUnifiedScriptNativeValueKindV3::Object ||
+             Expected.Kind == EUnifiedScriptNativeValueKindV3::Class) &&
+            Expected.Flags == EUnifiedScriptNativeValueFlagsV3::Null &&
+            Actual.Flags == EUnifiedScriptNativeValueFlagsV3::None;
+        const bool bShapeMatches =
+            Expected.Kind == Actual.Kind &&
+            Expected.TypeId == Actual.TypeId &&
+            (Expected.Flags == Actual.Flags || bObjectDefault) &&
+            (Expected.Kind != EUnifiedScriptNativeValueKindV3::Struct ||
+             (Expected.Payload2 == Actual.Payload2 &&
+              Expected.Payload3 == Actual.Payload3)) &&
+            ((Expected.Kind != EUnifiedScriptNativeValueKindV3::Array &&
+              Expected.Kind != EUnifiedScriptNativeValueKindV3::Set &&
+              Expected.Kind != EUnifiedScriptNativeValueKindV3::Map) ||
+             (Actual.Payload2 == 0 &&
+              Expected.Payload3 == Actual.Payload3)) &&
+            (Expected.Kind != EUnifiedScriptNativeValueKindV3::Transform ||
+             Expected.Payload1 == Actual.Payload1);
+        if (!bShapeMatches)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(
+                    TEXT("Blueprint parent %s result descriptor does not match the native property schema."),
+                    Label));
+            return false;
+        }
+        return true;
+    };
+    if (const FProperty* ReturnProperty = ParentFunction->GetReturnProperty();
+        ReturnProperty != nullptr)
+    {
+        if (!ValidateResultDescriptor(
+                *ReturnProperty,
+                &Binding->ReturnType,
+                InputFrame.Results[DescriptorResultIndex++],
+                TEXT("return")))
+        {
+            return false;
+        }
+    }
+    for (int32 Index = 0; Index < Parameters.Num(); ++Index)
+    {
+        if (Binding->ParameterDirections[Index] ==
+            EUnifiedScriptManagedParameterDirection::Input)
+        {
+            continue;
+        }
+        if (!ValidateResultDescriptor(
+                *Parameters[Index],
+                &Binding->ParameterTypes[Index],
+                InputFrame.Results[DescriptorResultIndex++],
+                *Parameters[Index]->GetName()))
+        {
+            return false;
+        }
+    }
+
+    Receiver->ProcessEvent(ParentFunction, ParameterMemory);
+
+    TArray<uint8, TInlineAllocator<512>> Arena;
+    Arena.SetNum(EntryByteCount);
+    if (EntryByteCount > 0)
+    {
+        FMemory::Memcpy(Arena.GetData(), InputFrame.ByteBuffer, EntryByteCount);
+    }
+    TArray<FUnifiedScriptNativeValueV3, TInlineAllocator<8>> ResultCells;
+    ResultCells.SetNumZeroed(ExpectedResultCount);
+    uint32 ResultIndex = 0;
+    FString CodecError;
+    if (const FProperty* ReturnProperty = ParentFunction->GetReturnProperty();
+        ReturnProperty != nullptr &&
+        !PackValueV2(
+            *ReturnProperty,
+            ParameterMemory,
+            *HostSubsystem,
+            Arena,
+            &Binding->ReturnType,
+            {},
+            ResultCells[ResultIndex++],
+            CodecError))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ValueTypeMismatch,
+            FString::Printf(
+                TEXT("Blueprint parent return could not be encoded: %s"),
+                *CodecError));
+        return false;
+    }
+    for (int32 Index = 0; Index < Parameters.Num(); ++Index)
+    {
+        if (Binding->ParameterDirections[Index] ==
+            EUnifiedScriptManagedParameterDirection::Input)
+        {
+            continue;
+        }
+        CodecError.Reset();
+        if (!PackValueV2(
+                *Parameters[Index],
+                ParameterMemory,
+                *HostSubsystem,
+                Arena,
+                &Binding->ParameterTypes[Index],
+                {},
+                ResultCells[ResultIndex++],
+                CodecError))
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                FString::Printf(
+                    TEXT("Blueprint parent output '%s' could not be encoded: %s"),
+                    *Parameters[Index]->GetName(),
+                    *CodecError));
+            return false;
+        }
+    }
+    OutParentResult.ResultCells.SetNumUninitialized(
+        ResultCells.Num() * sizeof(FUnifiedScriptNativeValueV3));
+    if (!ResultCells.IsEmpty())
+    {
+        FMemory::Memcpy(
+            OutParentResult.ResultCells.GetData(),
+            ResultCells.GetData(),
+            OutParentResult.ResultCells.Num());
+    }
+    OutParentResult.Arena.Append(Arena.GetData(), Arena.Num());
+    Succeed(OutResult);
     FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
     return true;
 }

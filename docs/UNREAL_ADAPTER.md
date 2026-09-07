@@ -929,6 +929,60 @@ Omit `-CookAndRun` to retain the passing fixture for inspection, then use
 validates its receipt, checks UAT and packaged execution, and removes its own
 temporary Content package after the Cook/run attempt.
 
+## Explicit inherited-event parent calls
+
+`[UnrealBlueprintOverride(declaringClassPath, functionName)]` binds a public
+instance method to an existing inherited Blueprint event. The declaring path
+must name the class that actually declares that event; synchronization verifies
+the ancestry and reflected signature. `[UnrealBlueprintEvent]` continues to
+declare a new managed event. See the
+[Declaration contract](DECLARATION_IR.md#inherited-blueprint-event-declarations).
+
+The managed override chooses whether to call its parent. For a void method with
+only input parameters, use `CallParent(nameof(ManagedMethod), inputs...)`.
+For a return value or `ref`/`out` parameters, use `CallParentWithOutputs` and
+read its ordered results. Pure `out` parameters need no input placeholder:
+
+```csharp
+[UnrealBlueprintOverride(
+    "/Script/UEUnifiedScriptRuntime.UnifiedScriptEventExtensionFixture",
+    "EvaluateInherited")]
+public int EvaluateInherited(int input, ref int accumulator, out int output)
+{
+    UnrealOutputInvocationResult parent = CallParentWithOutputs(
+        nameof(EvaluateInherited), input, accumulator);
+    accumulator = (int)parent.GetOutput(0);
+    output = (int)parent.GetOutput(1);
+    return (int)parent.ReturnValue;
+}
+```
+
+This example uses the runtime test fixture; project code must use its own
+reflected event path and signature. `GetOutput(index)` supports the current
+Visual C# subset without an indexer or explicit generic member invocation.
+`CallParent<TResult>` is also available to source-only helper code for an
+input-only return contract. The
+[Demo source](../samples/Unreal/UnifiedScript.Unreal.Demo/BlueprintParentInvocationDemoScript.cs)
+includes the container form using `IReadOnlyList<int>`.
+
+Parent resolution starts above the active Script Class in the actual UE class
+chain. An ordinary Blueprint parent keeps its own implementation. The host
+component selects the receiver, including ActorComponent scripts whose target
+handle is their Actor. General managed-to-managed parent inheritance remains
+outside this checkpoint and is rejected.
+
+The optional parent bridge requires ABI v3 Parent Calls and Correlated Results
+capabilities. Result-buffer retries retain the completed parent result; each
+explicit helper call executes the parent once. Existing frame sizes and
+transport-table pointers are unchanged. Calls require an active generation and
+are rejected during managed initialization, destruction and after retirement.
+Managed state is flushed before entering the parent and hydrated afterward.
+
+Saved Blueprint/DLL contract agreement, component lifecycle-event ordering and
+the cooked extension fixture remain open in the
+[active checkpoint](plans/2026-09-07-blueprint-event-extension.md). The existing
+container/Soft Reference cooked result above predates this extension.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

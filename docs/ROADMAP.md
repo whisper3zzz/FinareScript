@@ -33,9 +33,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   the native owner and source identity through compile and asset reload.
   Undeclared collisions still fail. A managed reload barrier preserves the old
   instance when an override route or ABI changes; same-path DLL body replacement
-  passes focused execution tests. Parent-call transport, saved-Blueprint/DLL
-  agreement, UE lifecycle ordering and runtime/cooked extension proof remain
-  open. These checkpoints do not complete extension behavior.
+  passes focused execution tests. Explicit parent calls now execute native and
+  ordinary Blueprint bodies with return/ref/out values and correlated buffer
+  retry. Runtime tests cover Actor and ActorComponent receivers, exact instance
+  ownership and rejection before parent execution. Saved-Blueprint/DLL startup
+  agreement, live Sync protection, UE lifecycle ordering and broader runtime/
+  cooked extension proof remain open. These checkpoints do not complete
+  extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary

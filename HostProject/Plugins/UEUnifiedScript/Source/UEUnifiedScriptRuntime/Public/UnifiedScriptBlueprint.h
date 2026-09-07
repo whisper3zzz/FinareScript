@@ -293,6 +293,10 @@ public:
     void PrepareManagedFunctionsForRecompile();
     bool IsManagedFunctionBound(FName FunctionName) const;
 
+    /** Finds the persistent managed override route whose raw member identity matches. */
+    const FUnifiedScriptManagedFunctionBinding* FindManagedOverrideBinding(
+        uint64 MemberId) const;
+
     virtual void Bind() override;
     virtual void PurgeClass(bool bRecompilingOnLoad) override;
     virtual void PostLoad() override;

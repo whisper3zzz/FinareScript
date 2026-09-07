@@ -53,8 +53,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
             Span<byte> byteBuffer, int inputByteCount)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (Environment.CurrentManagedThreadId != _threadId || operation != UnrealNativeOperationV3.Invoke)
-                throw new InvalidOperationException("A synchronous correlated invocation must stay on its originating thread and use Invoke.");
+            if (Environment.CurrentManagedThreadId != _threadId ||
+                operation is not (UnrealNativeOperationV3.Invoke or UnrealNativeOperationV3.InvokeParent))
+                throw new InvalidOperationException("A synchronous correlated invocation must stay on its originating thread and use Invoke or InvokeParent.");
             // Invalid retry frames can be rejected before the native cache is inspected.
             // Preserve cleanup after a retry or an uncertain native response.
             bool hadPending = _pending;

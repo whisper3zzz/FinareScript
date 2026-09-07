@@ -9,6 +9,14 @@
 
 class FMulticastDelegateProperty;
 struct FUnifiedScriptNativeValueV3;
+struct FUnifiedScriptNativeCallFrameV3;
+
+/** Native parent result retained across a correlated BufferTooSmall retry. */
+struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptParentCallResult
+{
+    TArray<uint8> ResultCells;
+    TArray<uint8> Arena;
+};
 
 /** Stable 64-bit FNV-1a identity shared with generated managed wrappers. */
 constexpr uint64 UnifiedScriptMemberId(const ANSICHAR* Path)
@@ -267,6 +275,14 @@ public:
         TConstArrayView<FUnifiedScriptValue> Arguments,
         FUnifiedScriptValue& OutReturnValue,
         TArray<FUnifiedScriptValue>& OutOutputValues,
+        FUnifiedScriptInvocationResult& OutResult);
+
+    bool InvokeParentById(
+        FUnifiedScriptObjectHandle Host,
+        uint64 MemberId,
+        const FUnifiedScriptNativeCallFrameV3& InputFrame,
+        uint32 EntryByteCount,
+        FUnifiedScriptParentCallResult& OutParentResult,
         FUnifiedScriptInvocationResult& OutResult);
 
     bool InvokeInt32x2ById(

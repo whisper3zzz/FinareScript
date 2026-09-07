@@ -8,6 +8,7 @@
 #include "UnifiedScriptComponent.generated.h"
 
 class UUnifiedScriptAsset;
+class UUnifiedScriptBlueprintGeneratedClass;
 class UEnhancedInputComponent;
 class UInputAction;
 class AActor;
@@ -241,6 +242,12 @@ public:
     /** UObject whose behavior is implemented by the managed script. */
     UFUNCTION(BlueprintPure, Category="UnifiedScript")
     UObject* GetScriptTarget();
+
+    /** Exact active managed class/receiver used by the Blueprint parent bridge. */
+    const UUnifiedScriptBlueprintGeneratedClass* GetActiveManagedGeneratedClass() const;
+    UObject* GetParentInvocationReceiver() const;
+    bool OwnsActiveManagedOverride(
+        const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass) const;
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
     int32 Add(int32 Left, int32 Right) const;

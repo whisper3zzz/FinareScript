@@ -198,7 +198,10 @@ public readonly record struct UnrealOutputArgument(
 
 public sealed record UnrealOutputInvocationResult(
     object? ReturnValue,
-    IReadOnlyList<object?> Outputs);
+    IReadOnlyList<object?> Outputs)
+{
+    public object? GetOutput(int index) => Outputs[index];
+};
 
 /// <summary>
 /// ABI v3-only multi-result path used by generated wrappers for output and
@@ -208,6 +211,22 @@ public interface IUnrealOutputInvocationBridge
 {
     UnrealOutputInvocationResult InvokeWithOutputs(
         UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments);
+}
+
+/// <summary>
+/// Optional generation-owned route for explicitly invoking the inherited
+/// Blueprint implementation of a managed override.
+/// </summary>
+public interface IUnrealParentInvocationBridge
+{
+    bool SupportsParentInvocation { get; }
+
+    UnrealOutputInvocationResult InvokeParentWithOutputs(
+        UnrealObjectHandle host,
         ulong memberId,
         string memberPath,
         Type returnType,

@@ -62,7 +62,7 @@ parent chain and must not silently reparent an asset.
   48-byte value and 72-byte frame layouts unchanged. A capability-gated parent
   operation can use a defined frame flag through the existing Invoke entry;
   ordinary calls retain zero flags and unknown flags remain invalid. The
-  proposed values are `BlueprintParentCalls = 1 << 14`,
+  assigned values are `BlueprintParentCalls = 1 << 14`,
   `UnrealNativeOperationV3.InvokeParent = 3` and parent frame flag `1`.
   The existing table prefix and function pointers stay unchanged; capability
   validation precedes use, and read/write paths must still require zero flags.
@@ -72,7 +72,11 @@ parent chain and must not silently reparent an asset.
   The native host resolves the script component handle and persisted binding before
   dispatch. The generation bridge must reject calls after retirement.
   Use a separate optional parent-invocation capability and bridge interface;
-  do not add required methods to existing user bridge implementations. The
+  do not add required methods to existing user bridge implementations.
+  `IUnrealParentInvocationBridge.SupportsParentInvocation` reports the actual
+  inner transport capability, including through the generation wrapper. Check
+  it before state writeback; merely implementing the optional interface is not
+  sufficient when an older inner bridge lacks this operation. The
   managed helper uses its own host component handle for both Actor and
   ActorComponent scripts, so native code can select the actual event target
   without guessing the first component on an Actor. A generation-local method
@@ -92,11 +96,24 @@ parent chain and must not silently reparent an asset.
 - Parent calls must share the correlated-result lifetime so a larger output
   buffer retry never executes the parent twice. The pending identity includes
   the parent operation, host handle, member identity and request contents.
+  Require both Parent Calls and Correlated Results capabilities plus an actual
+  invocation-scope factory. Use the existing correlated Invoke entry with the
+  parent frame flag, and reject parent requests with correlation ID zero before
+  user code. The legacy uncorrelated single slot can be overwritten between
+  calls from different workers and cannot provide this guarantee. Ordinary
+  invocation retains its existing compatibility path and table layout.
   Decode/preflight inputs and output descriptors before user code; publish
   outputs only after every value has been read and encoded successfully.
   The existing `InvokeWithOutputs` path already encodes the reviewed value
   families; reuse it through an operation-aware internal helper. The in-process
   and correlated-scope consumers must preserve the parent operation as well.
+  Parent collection inputs may exceed the initial 4 KiB arena. Encode them once
+  within the Blueprint 64 KiB limit, then size the actual call arena from the
+  encoded input size with the existing minimum. A bounded pooled scratch arena
+  can reuse the codec without repeatedly enumerating user input collections.
+  Keep small-input calls small so output expansion still exercises result retry;
+  do not preallocate the full output budget or widen the ordinary call path's
+  input policy as a side effect of this feature.
   Native parent dispatch must share the Blueprint property codecs and the
   existing call-frame result cache. The older reflection bridge's
   `ReadValue`/`WriteValue` does not carry arbitrary managed struct field order;
@@ -162,6 +179,18 @@ name helpers and codecs. Include enum/struct paths and ordered struct fields,
 and distinguish Soft Reference kinds from strings even though their scalar
 call-frame representation overlaps. An empty override set is an explicit
 contract and must reject an unexpected new override in the DLL.
+Use the binding's persisted managed method name when matching the expected
+native route. The native class does not know which CLR base type declared that
+method; do not fabricate a qualified CLR declaring-method identity from the
+Script Asset's concrete type name. The existing managed-to-managed reload check
+continues to compare its richer reflection-derived method identity.
+Do not reuse that managed-to-managed signature string verbatim for the native
+comparison: it also contains CLR property and source parameter names that the
+saved class does not retain. Compare ordered parameter directions and codec
+shapes, and use the persisted native struct field names in their existing
+case-insensitive FName semantics. Raw route strings and the managed method name
+remain exact. Keep the existing top-level Object/Class handle compatibility
+with a refined native class; collection element contracts remain exact.
 
 Use an optional named managed creation export carrying this bounded contract;
 leave the existing transport table and legacy creation signature intact.
@@ -203,8 +232,8 @@ deployment. Evidence is under `artifacts/m13-3c-2-native-materialization/`;
 `blueprint-inherited-event-materialization-reload-dispatch-assertions.log`,
 `editor-development-build-reload-dispatch-assertions.log`, `emit-release-fresh.log` and
 `blueprint-managed-function-dispatch-regression-release-staging.log` record these
-checks. Parent-call transport and end-to-end inherited-event execution remain
-open; materialization and binding do not prove that runtime behavior.
+checks. This checkpoint covers materialization and binding; the parent-call
+runtime evidence is recorded separately below.
 
 The managed reload barrier passed 12 focused SDK 10 Release tests. They emit
 replacement DLLs to the same path with the same CLR type and exercise actual
@@ -214,7 +243,51 @@ event route additions/removals, retargeting, raw path/name casing and method/
 return/parameter changes are covered. Existing managed transaction/dispatcher
 tests passed 9, static-library reload tests 4 and source override-contract
 tests 12. Logs are under `artifacts/m13-3c-2-override-reload/`. These are managed
-tests; UE runtime, parent invocation and cooked extension proof remain open.
+tests; the runtime parent-call evidence below is a subsequent checkpoint.
+
+The parent producer/transport/consumer is implemented. Ten focused managed
+tests pass for helper contracts, initialization/destruction rejection, state
+flush/hydration, original-failure preservation, retired-generation rejection,
+correlated retry and a container input larger than 4 KiB encoded once. The
+final arena reuses one bounded pooled allocation and slices its logical call
+capacity to the encoded input size, retaining a 4 KiB minimum. The focused
+output bridge regression passes 6. Logs are
+`artifacts/m13-3c-2-override-reload/managed-parent-arena-final.log` and
+`artifacts/m13-3c-2-override-reload/managed-output-bridge-regression.log`.
+Before that arena-only refinement, the existing bridge tests passed 13 and
+in-process transport regressions passed 84; those paths did not change in the
+refinement. Their logs are under `artifacts/m13-3c-2-parent-invocation/`:
+`managed-parent-regressions.log` and `managed-correlated-regressions.log`.
+
+`BlueprintParentInvocation` passes with a real managed override calling native
+BNE and empty BIE parents, ordered return/ref/out values, repeated calls and a
+large array result that retries without executing the parent twice. An ordinary
+intermediate Blueprint also executes its own VM return/ref/out body through
+`BlueprintIntermediateParentInvocation`; its native ancestor counter remains
+unchanged. The VM fixture uses `UK2Node_VariableSetRef` for the entry's reference
+parameter and removes the graph's automatically generated parent-call node.
+Evidence: `parent-automation-final-2.log`,
+`intermediate-parent-automation-6.log` and `editor-parent-build-12.log` in the
+same directory. The Demo was freshly staged before the CLR runs.
+
+`BlueprintParentInvocationComponent` passes with a generated ActorComponent
+script hosted on an ordinary Actor. Manual activation and an inherited
+ReceiveTick call prove that the receiver is the component while its script
+target remains the Actor; this does not establish BeginPlay/EndPlay ordering.
+`BlueprintParentInvocationOwnership` passes with an inactive canonical
+component followed by an active matching owner, rejects two active owners,
+and resumes the original instance after the conflicting instance stops.
+Direct invalid Host, result descriptor and uncorrelated requests are rejected
+without executing the parent. `UnifiedScript.Unreal.NativeTransport.Abi` also
+passes. Evidence is `parent-component-automation-1.log`,
+`parent-ownership-automation-4.log`, `editor-parent-ownership-build-5.log` and
+`native-transport-abi-parent-automation.log`. Test assets were cleaned up.
+After the final managed tests, a fresh Release emit with dependency validation
+passed (`emit-release-final.log`). `parent-automation-arena-final.log` records
+successful base, Component and Ownership selectors against that staged build,
+including the large-result retry. The ordinary Blueprint intermediate and ABI
+results above predate only the managed arena refinement and additional tests;
+their native implementation was unchanged.
 
 Native integration must cover both Blueprint/state Declaration readers,
 materializer planning/rollback/idempotency, persistent generated-class binding,

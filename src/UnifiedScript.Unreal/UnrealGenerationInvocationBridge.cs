@@ -13,6 +13,7 @@ internal sealed class UnrealGenerationInvocationBridge :
     IUnrealFastInvocationBridge,
     IUnrealTypedInvocationBridge,
     IUnrealOutputInvocationBridge,
+    IUnrealParentInvocationBridge,
     IUnrealEventBridge,
     IUnrealWorldDataPlaneProvider,
     IUnrealAsyncServiceProvider,
@@ -142,6 +143,21 @@ internal sealed class UnrealGenerationInvocationBridge :
         Type returnType,
         IReadOnlyList<UnrealOutputArgument> arguments) =>
         Output.InvokeWithOutputs(target, memberId, memberPath, returnType, arguments);
+
+    public UnrealOutputInvocationResult InvokeParentWithOutputs(
+        UnrealObjectHandle host,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments) =>
+        LiveInner is IUnrealParentInvocationBridge parent
+            ? parent.InvokeParentWithOutputs(host, memberId, memberPath, returnType, arguments)
+            : throw new NotSupportedException(
+                "The World bridge does not support Blueprint parent invocation.");
+
+    public bool SupportsParentInvocation =>
+        !_disposed && LiveInner is IUnrealParentInvocationBridge parent &&
+        parent.SupportsParentInvocation;
 
     public IUnrealEventSubscription Subscribe(
         UnrealObjectHandle source,

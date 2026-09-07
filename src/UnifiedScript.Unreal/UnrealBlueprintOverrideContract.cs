@@ -24,6 +24,12 @@ internal sealed record UnrealBlueprintOverrideRoute(
         $"{DeclaringClassPath}:{FunctionName}";
 }
 
+internal sealed record UnrealBlueprintOverrideInvocationContract(
+    MethodInfo Method,
+    UnrealBlueprintOverrideAttribute Attribute,
+    UnrealManagedFunctionDispatcherV2.UnrealManagedFunctionSignature Signature,
+    ParameterInfo[] Parameters);
+
 internal static class UnrealBlueprintOverrideContract
 {
     private const BindingFlags DeclaredMethodFlags =
@@ -83,6 +89,62 @@ internal static class UnrealBlueprintOverrideContract
         }
 
         return new ReadOnlyDictionary<string, UnrealBlueprintOverrideRoute>(routes);
+    }
+
+    internal static UnrealBlueprintOverrideInvocationContract ResolveInvocation(
+        Type scriptType,
+        string managedMethodName)
+    {
+        ArgumentNullException.ThrowIfNull(scriptType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(managedMethodName);
+        MethodInfo[] activeInstanceMethods = scriptType.GetMethods(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.FlattenHierarchy);
+        UnrealBlueprintOverrideInvocationContract? resolved = null;
+        foreach (MethodInfo method in EnumerateMethods(scriptType))
+        {
+            if (!string.Equals(method.Name, managedMethodName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            UnrealBlueprintOverrideAttribute? attribute =
+                method.GetCustomAttribute<UnrealBlueprintOverrideAttribute>(inherit: false);
+            if (attribute is null)
+            {
+                continue;
+            }
+            ValidateMethod(method, attribute, scriptType);
+            if (!activeInstanceMethods.Contains(method))
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint override method '{GetMethodIdentity(method, scriptType)}' is hidden " +
+                    "from the active managed instance dispatch surface.");
+            }
+            if (!UnrealManagedFunctionDispatcherV2.TryCreateReviewedSignature(
+                    method,
+                    out UnrealManagedFunctionDispatcherV2.UnrealManagedFunctionSignature? signature) ||
+                signature is null)
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint override method '{GetMethodIdentity(method, scriptType)}' " +
+                    "does not satisfy the V2 managed function contract; its return or " +
+                    "parameter shape is unsupported or cannot be bound.");
+            }
+            if (resolved is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint override method name '{managedMethodName}' resolves to more than one " +
+                    "valid override declaration.");
+            }
+            resolved = new UnrealBlueprintOverrideInvocationContract(
+                method,
+                attribute,
+                signature,
+                method.GetParameters());
+        }
+
+        return resolved ?? throw new InvalidOperationException(
+            $"Managed method '{scriptType.FullName}.{managedMethodName}' is not an " +
+            "explicit UnrealBlueprintOverride method.");
     }
 
     private static IEnumerable<MethodInfo> EnumerateMethods(Type scriptType)

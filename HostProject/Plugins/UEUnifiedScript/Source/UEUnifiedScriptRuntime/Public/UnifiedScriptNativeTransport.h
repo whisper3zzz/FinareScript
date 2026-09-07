@@ -168,6 +168,8 @@ public:
         uint64 RequestHash = 0;
         uint32 EncodedByteCount = 0;
         bool bInFlight = false;
+        TArray<uint8> ParentResultCells;
+        TArray<uint8> ParentArena;
         FUnifiedScriptValue ReturnValue;
         TArray<FUnifiedScriptValue> OutputValues;
 
@@ -179,6 +181,8 @@ public:
             MemberId = 0;
             RequestHash = 0;
             EncodedByteCount = 0;
+            ParentResultCells.Reset();
+            ParentArena.Reset();
             ReturnValue = {};
             OutputValues.Reset();
         }
@@ -388,6 +392,13 @@ enum class EUnifiedScriptNativeCapabilitiesV3 : uint64
     ByteBuffers = 1ull << 11,
     CallbackArguments = 1ull << 12,
     CorrelatedResults = 1ull << 13,
+    BlueprintParentCalls = 1ull << 14,
+};
+
+enum class EUnifiedScriptNativeCallFrameFlagsV3 : uint32
+{
+    None = 0,
+    BlueprintParent = 1u << 0,
 };
 
 /**
@@ -415,7 +426,8 @@ struct alignas(8) FUnifiedScriptNativeValueV3
  *
  * Arguments, results, and the byte arena remain borrowed for the duration of
  * a call. BufferTooSmall reports required capacities and produces no partial
- * result. Flags and every reserved field must be zero for ABI v3.
+ * result. Flags are zero for ordinary operations and BlueprintParent for the
+ * correlated parent operation; every reserved field must remain zero.
  */
 struct alignas(8) FUnifiedScriptNativeCallFrameV3
 {

@@ -12,6 +12,7 @@ public enum UnrealNativeOperationV3 : byte
     ReadProperty,
     WriteProperty,
     Invoke,
+    InvokeParent,
 }
 
 public readonly record struct UnrealNativeCallOutcomeV3(

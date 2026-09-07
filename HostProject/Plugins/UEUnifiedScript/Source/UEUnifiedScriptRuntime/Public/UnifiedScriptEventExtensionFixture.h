@@ -11,6 +11,9 @@ class UEUNIFIEDSCRIPTRUNTIME_API AUnifiedScriptEventExtensionFixture : public AU
     GENERATED_BODY()
 
 public:
+    UPROPERTY(BlueprintReadOnly, Transient, Category="UnifiedScript|Tests")
+    int32 ParentInvocationCount = 0;
+
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="UnifiedScript|Tests")
     int32 EvaluateInherited(
         int32 NativeInput,

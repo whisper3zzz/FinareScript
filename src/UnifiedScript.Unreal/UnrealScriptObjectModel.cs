@@ -1,3 +1,6 @@
+using System.Reflection;
+using System.Runtime.ExceptionServices;
+
 namespace UnifiedScript.Unreal;
 
 /// <summary>
@@ -25,7 +28,10 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
     private CancellationTokenSource? _lifetime;
     private UnrealAsyncScope? _asyncScope;
     private UnrealScriptStateSynchronizer.StateSession? _stateSession;
+    private Dictionary<string, UnrealBlueprintOverrideInvocationContract>? _parentContracts;
     private bool _running;
+    private bool _initializing;
+    private bool _destroying;
 
     public UnrealScriptContext Context { get; private set; }
 
@@ -68,12 +74,16 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             context.Generation,
             _lifetime.Token);
         _running = true;
+        _initializing = true;
+        _parentContracts = new Dictionary<string, UnrealBlueprintOverrideInvocationContract>(
+            StringComparer.Ordinal);
         try
         {
             _stateSession = UnrealScriptStateSynchronizer.Open(this, context);
             _stateSession?.Hydrate();
             OnInitialized();
             _stateSession?.Flush();
+            _initializing = false;
         }
         catch
         {
@@ -81,9 +91,11 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             _asyncScope.Dispose();
             _asyncScope = null;
             _stateSession = null;
+            _parentContracts = null;
             _lifetime.Dispose();
             _lifetime = null;
             _running = false;
+            _initializing = false;
             Context = default;
             throw;
         }
@@ -143,6 +155,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         }
 
         CancellationTokenSource lifetime = _lifetime!;
+        _destroying = true;
         lifetime.Cancel();
         _asyncScope!.Dispose();
         try
@@ -156,8 +169,10 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             _running = false;
             _asyncScope = null;
             _stateSession = null;
+            _parentContracts = null;
             _lifetime = null;
             Context = default;
+            _destroying = false;
             lifetime.Dispose();
         }
     }
@@ -176,6 +191,253 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
 
     protected virtual void OnUnrealEvent(UnrealScriptEvent scriptEvent)
     {
+    }
+
+    /// <summary>
+    /// Calls the inherited implementation for an override whose parameters
+    /// are input-only. The parent route targets this script's host component.
+    /// </summary>
+    protected TResult CallParent<TResult>(
+        string managedMethodName,
+        params object?[] inputs)
+    {
+        UnrealBlueprintOverrideInvocationContract contract =
+            ResolveParentContract(managedMethodName);
+        if (contract.Method.ReturnType != typeof(TResult))
+        {
+            throw new InvalidOperationException(
+                $"Blueprint parent method '{managedMethodName}' returns " +
+                $"'{contract.Method.ReturnType}', not '{typeof(TResult)}'.");
+        }
+        IReadOnlyList<UnrealOutputArgument> arguments =
+            CreateParentArguments(contract, inputs, allowOutputs: false);
+        UnrealOutputInvocationResult result = InvokeParentCore(
+            contract,
+            typeof(TResult),
+            arguments);
+        return (TResult)result.ReturnValue!;
+    }
+
+    /// <summary>Calls an input-only void inherited implementation.</summary>
+    protected void CallParent(
+        string managedMethodName,
+        params object?[] inputs)
+    {
+        UnrealBlueprintOverrideInvocationContract contract =
+            ResolveParentContract(managedMethodName);
+        if (contract.Method.ReturnType != typeof(void))
+        {
+            throw new InvalidOperationException(
+                $"Blueprint parent method '{managedMethodName}' returns " +
+                $"'{contract.Method.ReturnType}', not void.");
+        }
+        IReadOnlyList<UnrealOutputArgument> arguments =
+            CreateParentArguments(contract, inputs, allowOutputs: false);
+        _ = InvokeParentCore(contract, typeof(void), arguments);
+    }
+
+    /// <summary>
+    /// Calls an inherited implementation and returns its return/ref/out values
+    /// in reflected method order. Input and ref values are supplied in source
+    /// parameter order; pure out parameters need no placeholder.
+    /// </summary>
+    protected UnrealOutputInvocationResult CallParentWithOutputs(
+        string managedMethodName,
+        params object?[] inputs)
+    {
+        UnrealBlueprintOverrideInvocationContract contract =
+            ResolveParentContract(managedMethodName);
+        IReadOnlyList<UnrealOutputArgument> arguments =
+            CreateParentArguments(contract, inputs, allowOutputs: true);
+        return InvokeParentCore(contract, contract.Method.ReturnType, arguments);
+    }
+
+    private UnrealBlueprintOverrideInvocationContract ResolveParentContract(
+        string managedMethodName)
+    {
+        _ = RequireParentContext();
+        ArgumentException.ThrowIfNullOrWhiteSpace(managedMethodName);
+        Dictionary<string, UnrealBlueprintOverrideInvocationContract> contracts =
+            _parentContracts ?? throw new InvalidOperationException(
+                "Blueprint parent calls require an active managed generation.");
+        if (!contracts.TryGetValue(managedMethodName, out UnrealBlueprintOverrideInvocationContract? contract))
+        {
+            contract = UnrealBlueprintOverrideContract.ResolveInvocation(
+                GetType(),
+                managedMethodName);
+            contracts.Add(managedMethodName, contract);
+        }
+        return contract;
+    }
+
+    private static IReadOnlyList<UnrealOutputArgument> CreateParentArguments(
+        UnrealBlueprintOverrideInvocationContract contract,
+        IReadOnlyList<object?> inputs,
+        bool allowOutputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        MethodInfo method = contract.Method;
+        var arguments = new List<UnrealOutputArgument>(contract.Parameters.Length);
+        int inputIndex = 0;
+        foreach (ParameterInfo parameter in contract.Parameters)
+        {
+            Type parameterType = parameter.ParameterType;
+            Type valueType = parameterType.IsByRef
+                ? parameterType.GetElementType() ?? typeof(void)
+                : parameterType;
+            if (valueType == typeof(void))
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint parent method '{method.Name}' has an invalid void parameter.");
+            }
+            if (!parameterType.IsByRef)
+            {
+                if (inputIndex >= inputs.Count)
+                {
+                    throw new ArgumentException(
+                        $"Blueprint parent method '{method.Name}' requires an input for parameter '{parameter.Name}'.",
+                        nameof(inputs));
+                }
+                ValidateParentInput(method, parameter, valueType, inputs[inputIndex]);
+                arguments.Add(new UnrealOutputArgument(
+                    valueType,
+                    UnrealParameterDirection.Input,
+                    inputs[inputIndex++]));
+                continue;
+            }
+
+            if (!allowOutputs)
+            {
+                throw new InvalidOperationException(
+                    $"Blueprint parent method '{method.Name}' has ref/out parameters; " +
+                    "use CallParentWithOutputs.");
+            }
+            if (parameter.IsOut)
+            {
+                arguments.Add(new UnrealOutputArgument(
+                    valueType,
+                    UnrealParameterDirection.Output,
+                    null));
+            }
+            else
+            {
+                if (inputIndex >= inputs.Count)
+                {
+                    throw new ArgumentException(
+                        $"Blueprint parent method '{method.Name}' requires an input for ref parameter '{parameter.Name}'.",
+                        nameof(inputs));
+                }
+                ValidateParentInput(method, parameter, valueType, inputs[inputIndex]);
+                arguments.Add(new UnrealOutputArgument(
+                    valueType,
+                    UnrealParameterDirection.InputOutput,
+                    inputs[inputIndex++]));
+            }
+        }
+        if (inputIndex != inputs.Count)
+        {
+            throw new ArgumentException(
+                $"Blueprint parent method '{method.Name}' received {inputs.Count} input values but consumed {inputIndex}.",
+                nameof(inputs));
+        }
+        return arguments;
+    }
+
+    private static void ValidateParentInput(
+        MethodInfo method,
+        ParameterInfo parameter,
+        Type valueType,
+        object? value)
+    {
+        if (value is null)
+        {
+            if (valueType.IsValueType && Nullable.GetUnderlyingType(valueType) is null)
+            {
+                throw new ArgumentException(
+                    $"Blueprint parent method '{method.Name}' parameter '{parameter.Name}' " +
+                    $"requires a non-null '{valueType}'.",
+                    nameof(value));
+            }
+            return;
+        }
+        if (!valueType.IsInstanceOfType(value))
+        {
+            throw new ArgumentException(
+                $"Blueprint parent method '{method.Name}' parameter '{parameter.Name}' " +
+                $"requires a value assignable to '{valueType}', received '{value.GetType()}'.",
+                nameof(value));
+        }
+    }
+
+    private UnrealOutputInvocationResult InvokeParentCore(
+        UnrealBlueprintOverrideInvocationContract contract,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments)
+    {
+        UnrealScriptContext context = RequireParentContext();
+        if (context.Bridge is not IUnrealParentInvocationBridge parentBridge)
+        {
+            throw new NotSupportedException(
+                "The active Unreal generation does not support Blueprint parent calls.");
+        }
+        if (!parentBridge.SupportsParentInvocation)
+        {
+            throw new NotSupportedException(
+                "The active Unreal generation does not advertise Blueprint parent invocation capability.");
+        }
+        string memberPath =
+            contract.Attribute.DeclaringClassPath + ":" + contract.Attribute.FunctionName;
+        ulong memberId = UnrealMemberId.FromPath(memberPath);
+        _stateSession?.Flush();
+        UnrealOutputInvocationResult result = default!;
+        ExceptionDispatchInfo? invocationFailure = null;
+        try
+        {
+            result = parentBridge.InvokeParentWithOutputs(
+                context.Host,
+                memberId,
+                memberPath,
+                returnType,
+                arguments);
+        }
+        catch (Exception exception)
+        {
+            invocationFailure = ExceptionDispatchInfo.Capture(exception);
+        }
+
+        try
+        {
+            _stateSession?.Hydrate();
+        }
+        catch (Exception hydrateFailure)
+        {
+            if (invocationFailure is not null)
+            {
+                throw new AggregateException(
+                    "Blueprint parent invocation failed and managed state hydration also failed.",
+                    invocationFailure.SourceException,
+                    hydrateFailure);
+            }
+            throw;
+        }
+        invocationFailure?.Throw();
+        return result;
+    }
+
+    private UnrealScriptContext RequireParentContext()
+    {
+        if (!_running)
+        {
+            throw new InvalidOperationException(
+                "Blueprint parent calls require an active managed generation.");
+        }
+        if (_initializing || _destroying)
+        {
+            throw new InvalidOperationException(
+                "Blueprint parent calls are unavailable during managed initialization or destruction; " +
+                "invoke them from an activated override body.");
+        }
+        return Context;
     }
 
     /// <summary>

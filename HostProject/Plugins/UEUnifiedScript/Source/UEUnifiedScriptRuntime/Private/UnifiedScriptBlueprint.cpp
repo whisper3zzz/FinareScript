@@ -137,6 +137,42 @@ UUnifiedScriptComponent* ResolveComponent(UObject* Context)
     return nullptr;
 }
 
+UUnifiedScriptComponent* ResolveOverrideComponent(
+    UObject* Context,
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass,
+    FString& OutError)
+{
+    if (UUnifiedScriptComponent* Component = Cast<UUnifiedScriptComponent>(Context))
+    {
+        if (Component->OwnsActiveManagedOverride(GeneratedClass))
+        {
+            return Component;
+        }
+        OutError = TEXT("The Blueprint override context is not owned by its active Script Component.");
+        return nullptr;
+    }
+    AActor* Actor = Cast<AActor>(Context);
+    if (Actor == nullptr)
+    {
+        OutError = TEXT("The Blueprint override context is neither an Actor nor a Script Component.");
+        return nullptr;
+    }
+    TArray<UUnifiedScriptComponent*> Matches;
+    Actor->GetComponents<UUnifiedScriptComponent>(Matches);
+    Matches.RemoveAll([&](UUnifiedScriptComponent* Component)
+    {
+        return Component == nullptr || !Component->OwnsActiveManagedOverride(GeneratedClass);
+    });
+    if (Matches.Num() != 1)
+    {
+        OutError = FString::Printf(
+            TEXT("The Blueprint override context has %d active Script Components for its generated owner; exact ownership is required."),
+            Matches.Num());
+        return nullptr;
+    }
+    return Matches[0];
+}
+
 UUnifiedScriptWorldSubsystem* ResolveWorldHost(UObject* WorldContextObject)
 {
     UWorld* World = GEngine != nullptr && WorldContextObject != nullptr
@@ -1150,6 +1186,29 @@ bool UUnifiedScriptBlueprintGeneratedClass::IsManagedFunctionBound(
     return true;
 }
 
+const FUnifiedScriptManagedFunctionBinding*
+UUnifiedScriptBlueprintGeneratedClass::FindManagedOverrideBinding(uint64 MemberId) const
+{
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         ManagedFunctionBindings)
+    {
+        const FUnifiedScriptManagedFunctionBinding& Binding = Pair.Value;
+        if (Binding.BlueprintOverrideDeclaringTypePath.IsEmpty() ||
+            Binding.BlueprintOverrideFunctionName.IsEmpty())
+        {
+            continue;
+        }
+        const FString MemberPath = Binding.BlueprintOverrideDeclaringTypePath +
+            TEXT(":") + Binding.BlueprintOverrideFunctionName;
+        const FTCHARToUTF8 Utf8(*MemberPath);
+        if (UnifiedScriptMemberId(Utf8.Get()) == MemberId)
+        {
+            return &Binding;
+        }
+    }
+    return nullptr;
+}
+
 DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFunction)
 {
     using namespace UE::UnifiedScript::Blueprint::Private;
@@ -1286,7 +1345,28 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
         }
         else
         {
-            Component = ResolveComponent(Context);
+            if (Binding->BlueprintOverrideDeclaringTypePath.IsEmpty())
+            {
+                Component = ResolveComponent(Context);
+            }
+            else
+            {
+                FString OwnershipError;
+                Component = ResolveOverrideComponent(
+                    Context,
+                    GeneratedClass,
+                    OwnershipError);
+                if (Component == nullptr)
+                {
+                    UE_LOG(
+                        LogTemp,
+                        Error,
+                        TEXT("UnifiedScript override function '%s' has no exact managed owner: %s"),
+                        *Function->GetPathName(),
+                        *OwnershipError);
+                    return;
+                }
+            }
             Host = Component != nullptr
                 ? ResolveWorldHost(Component)
                 : nullptr;

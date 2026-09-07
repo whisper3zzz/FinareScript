@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`unifiedscript.script-asset/v0.1` is the engine-neutral declaration contract for
+`unifiedscript.script-asset` is the engine-neutral declaration contract for
 UnifiedScript-authored assets. It closes the type-level gap left by method-body
 HIR and Graph: script state, defaults, exposure policy, and Visual function
 signatures are now compiler artifacts rather than Blueprint-owned data.
@@ -10,6 +10,32 @@ signatures are now compiler artifacts rather than Blueprint-owned data.
 Roslyn is the first producer, the visual editor and AI outline are consumers,
 and the future Unreal adapter will map the same exposure metadata to generated
 host properties. None of those consumers owns a second declaration model.
+
+Documents without inherited event overrides retain `v0.1`. An override selects
+`v0.2`; current readers accept both versions and reject override metadata in a
+`v0.1` document. Consumers must support `v0.2` before loading such a declaration.
+
+## Inherited Blueprint event declarations
+
+`[UnrealBlueprintOverride(declaringClassPath, functionName)]` identifies an
+existing inherited BlueprintNativeEvent or BlueprintImplementableEvent. Its
+public instance method carries `blueprintEvent.superMode = explicit` and an
+`override` record containing `declaringTypePath` and `functionName`. The source
+method's semantic ID remains stable across body edits; the inherited native
+function name and its parameter names are retained by the generated binding.
+
+The path names the class that declares the event, using its full reflected
+object path. The materializer verifies that this class is an ancestor of the
+Script Class and that the event's types, return value and parameter directions
+match. It rejects final/static/network functions, duplicate routes and
+user-owned graph collisions before mutation. The same method cannot also own a
+new Blueprint event, input, delegate, interface, RPC or RepNotify binding.
+
+Managed reload accepts body changes with the same override contract. Adding,
+removing or changing an override requires stopping the affected instance,
+synchronizing its Script Class and restarting it. Saved Blueprint/DLL agreement
+and lifecycle integration remain part of the active
+[event-extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Container and Soft Reference function declarations
 

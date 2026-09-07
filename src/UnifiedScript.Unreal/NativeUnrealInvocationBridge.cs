@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -364,6 +365,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealFastInvocationBridge,
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
+      IUnrealParentInvocationBridge,
       IUnrealEventBridge,
       IUnrealInvocationMetrics,
       IUnrealInvocationProfiler,
@@ -371,6 +373,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealAsyncServiceProvider
 {
     private const int CallFrameArenaByteCapacity = 4096;
+    private const int ParentInputArenaByteCapacity = 64 * 1024;
     private readonly IUnrealNativeInvocationTransport _transport;
     private readonly ConcurrentDictionary<string, byte> _nativeOnlyPaths = new(StringComparer.Ordinal);
     private readonly object _nativeObjectGate = new();
@@ -397,6 +400,15 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public UnrealWorldDataPlane DataPlane { get; }
+
+    public bool SupportsParentInvocation =>
+        _transport is IUnrealNativeCallFrameTransportV3 frameTransport &&
+        _transport is IUnrealNativeCallFrameScopeFactory &&
+        (frameTransport.Capabilities &
+            (UnrealNativeCapabilitiesV3.BlueprintParentCalls |
+             UnrealNativeCapabilitiesV3.CorrelatedResults)) ==
+        (UnrealNativeCapabilitiesV3.BlueprintParentCalls |
+         UnrealNativeCapabilitiesV3.CorrelatedResults);
 
     public UnrealCallbackScope Callbacks
     {
@@ -1281,6 +1293,35 @@ public sealed class NativeUnrealInvocationBridge
         string memberPath,
         Type returnType,
         IReadOnlyList<UnrealOutputArgument> arguments)
+        => InvokeWithOutputsCore(
+            UnrealNativeOperationV3.Invoke,
+            target,
+            memberId,
+            memberPath,
+            returnType,
+            arguments);
+
+    public UnrealOutputInvocationResult InvokeParentWithOutputs(
+        UnrealObjectHandle host,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments)
+        => InvokeWithOutputsCore(
+            UnrealNativeOperationV3.InvokeParent,
+            host,
+            memberId,
+            memberPath,
+            returnType,
+            arguments);
+
+    private UnrealOutputInvocationResult InvokeWithOutputsCore(
+        UnrealNativeOperationV3 operation,
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments)
     {
         ValidateFastRequest(target, memberId, memberPath);
         ArgumentNullException.ThrowIfNull(returnType);
@@ -1321,135 +1362,192 @@ public sealed class NativeUnrealInvocationBridge
         Span<UnrealNativeValueV3> results =
             resultCount == 0 ? Span<UnrealNativeValueV3>.Empty : stackalloc UnrealNativeValueV3[resultCount];
         int arenaCapacity = CallFrameArenaByteCapacity;
-        foreach (var argument in arguments)
-            if (argument.Direction != UnrealParameterDirection.Output && argument.Value is UnrealByteBuffer buffer)
-                arenaCapacity = checked(arenaCapacity + buffer.Length);
-        if (arenaCapacity > UnrealByteBuffer.MaximumCallBytes)
-            throw new NotSupportedException("Binary invocation input arena exceeds 64 MiB.");
-        Span<byte> arena = arenaCapacity == CallFrameArenaByteCapacity ? stackalloc byte[CallFrameArenaByteCapacity] : new byte[arenaCapacity];
-        int inputByteCount = 0;
-        int inputIndex = 0;
-        int resultIndex = 0;
-        UnrealNativeCapabilitiesV3 requiredCapabilities =
-            UnrealNativeCapabilitiesV3.OutputAndReference;
-
-        if (returnType != typeof(void))
+        if (operation != UnrealNativeOperationV3.InvokeParent)
         {
-            if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(
-                    returnType,
-                    out results[resultIndex++],
-                    out UnrealNativeCapabilitiesV3 returnCapability))
-            {
-                throw new NotSupportedException(
-                    $"Generated output invocation '{memberPath}' has an unsupported return type.");
-            }
-            requiredCapabilities |= returnCapability;
+            foreach (var argument in arguments)
+                if (argument.Direction != UnrealParameterDirection.Output && argument.Value is UnrealByteBuffer buffer)
+                    arenaCapacity = checked(arenaCapacity + buffer.Length);
+            if (arenaCapacity > UnrealByteBuffer.MaximumCallBytes)
+                throw new NotSupportedException("Binary invocation input arena exceeds 64 MiB.");
         }
-
-        foreach (UnrealOutputArgument argument in arguments)
+        // Encode parent inputs once into the bounded managed-function arena.
+        // The call arena is sized after encoding so a large input remains
+        // valid without preallocating the output retry buffer.
+        byte[]? parentInputArena = operation == UnrealNativeOperationV3.InvokeParent
+            ? ArrayPool<byte>.Shared.Rent(ParentInputArenaByteCapacity)
+            : null;
+        IUnrealNativeCallFrameScope? invocation = null;
+        try
         {
-            if (argument.Direction != UnrealParameterDirection.Output)
-            {
-                if (!UnrealNativeValueCodecV3.TryEncodeObject(
-                        argument.Value,
-                        argument.Type,
-                        arena,
-                        ref inputByteCount,
-                        out encodedArguments[inputIndex++],
-                        out UnrealNativeCapabilitiesV3 inputCapability))
-                {
-                    throw new NotSupportedException(
-                        $"Generated output invocation '{memberPath}' has an unsupported input value.");
-                }
-                requiredCapabilities |= inputCapability;
-            }
-            if (argument.Direction != UnrealParameterDirection.Input)
+            Span<byte> arena = parentInputArena is not null
+                ? parentInputArena.AsSpan(0, ParentInputArenaByteCapacity)
+                : arenaCapacity == CallFrameArenaByteCapacity
+                    ? stackalloc byte[CallFrameArenaByteCapacity]
+                    : new byte[arenaCapacity];
+            int inputByteCount = 0;
+            int inputIndex = 0;
+            int resultIndex = 0;
+            UnrealNativeCapabilitiesV3 requiredCapabilities =
+                UnrealNativeCapabilitiesV3.OutputAndReference |
+                (operation == UnrealNativeOperationV3.InvokeParent
+                    ? UnrealNativeCapabilitiesV3.BlueprintParentCalls |
+                      UnrealNativeCapabilitiesV3.CorrelatedResults
+                    : UnrealNativeCapabilitiesV3.None);
+
+            if (returnType != typeof(void))
             {
                 if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(
-                        argument.Type,
+                        returnType,
                         out results[resultIndex++],
-                        out UnrealNativeCapabilitiesV3 outputCapability))
+                        out UnrealNativeCapabilitiesV3 returnCapability))
                 {
                     throw new NotSupportedException(
-                        $"Generated output invocation '{memberPath}' has an unsupported output type.");
+                        $"Generated output invocation '{memberPath}' has an unsupported return type.");
                 }
-                requiredCapabilities |= outputCapability;
+                requiredCapabilities |= returnCapability;
             }
-        }
 
-        if (!TryGetCallFrameTransport(
-                requiredCapabilities,
-                out IUnrealNativeCallFrameTransportV3? transport))
-        {
-            throw new NotSupportedException(
-                $"The native Unreal transport does not advertise the required ABI v3 capabilities: {requiredCapabilities}.");
-        }
-        using var invocation = (transport as IUnrealNativeCallFrameScopeFactory)?.BeginCallFrameInvocation();
-        transport = invocation ?? transport;
-        long profilerStart = BeginProfilerSample();
-        UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
-            UnrealNativeOperationV3.Invoke,
-            target,
-            memberId,
-            encodedArguments,
-            results,
-            arena,
-            inputByteCount);
-        byte[]? retryArena = null;
-        if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
-            outcome.RequiredByteCapacity > arena.Length)
-        {
-            ValidateBinaryRetryCapacity(requiredCapabilities, outcome.RequiredByteCapacity);
-            retryArena = GC.AllocateUninitializedArray<byte>(
-                outcome.RequiredByteCapacity);
-            arena[..inputByteCount].CopyTo(retryArena);
-            outcome = transport.ExecuteById(
-                UnrealNativeOperationV3.Invoke,
+            foreach (UnrealOutputArgument argument in arguments)
+            {
+                if (argument.Direction != UnrealParameterDirection.Output)
+                {
+                    if (!UnrealNativeValueCodecV3.TryEncodeObject(
+                            argument.Value,
+                            argument.Type,
+                            arena,
+                            ref inputByteCount,
+                            out encodedArguments[inputIndex++],
+                            out UnrealNativeCapabilitiesV3 inputCapability))
+                    {
+                        throw new NotSupportedException(
+                            $"Generated output invocation '{memberPath}' has an unsupported input value.");
+                    }
+                    requiredCapabilities |= inputCapability;
+                }
+                if (argument.Direction != UnrealParameterDirection.Input)
+                {
+                    if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(
+                            argument.Type,
+                            out results[resultIndex++],
+                            out UnrealNativeCapabilitiesV3 outputCapability))
+                    {
+                        throw new NotSupportedException(
+                            $"Generated output invocation '{memberPath}' has an unsupported output type.");
+                    }
+                    requiredCapabilities |= outputCapability;
+                }
+            }
+
+            if (parentInputArena is not null)
+            {
+                if (inputByteCount > ParentInputArenaByteCapacity)
+                    throw new NotSupportedException(
+                        "Blueprint parent invocation input arena exceeds 64 KiB.");
+                arenaCapacity = Math.Max(CallFrameArenaByteCapacity, inputByteCount);
+                arena = parentInputArena.AsSpan(0, arenaCapacity);
+            }
+
+            if (!TryGetCallFrameTransport(
+                    requiredCapabilities,
+                    out IUnrealNativeCallFrameTransportV3? transport))
+            {
+                throw new NotSupportedException(
+                    $"The native Unreal transport does not advertise the required ABI v3 capabilities: {requiredCapabilities}.");
+            }
+            if (operation == UnrealNativeOperationV3.InvokeParent)
+            {
+                if (transport is not IUnrealNativeCallFrameScopeFactory scopeFactory ||
+                    (invocation = scopeFactory.BeginCallFrameInvocation()) is null)
+                {
+                    throw new NotSupportedException(
+                        "Blueprint parent invocation requires correlated ABI v3 transport support.");
+                }
+            }
+            else
+            {
+                invocation = (transport as IUnrealNativeCallFrameScopeFactory)
+                    ?.BeginCallFrameInvocation();
+            }
+            transport = invocation ?? transport;
+            long profilerStart = BeginProfilerSample();
+            UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
+                operation,
                 target,
                 memberId,
                 encodedArguments,
                 results,
-                retryArena,
+                arena,
                 inputByteCount);
-        }
-        RequireCallFrameSuccess(outcome, resultCount, target, memberId, memberPath);
-        ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
-
-        resultIndex = 0;
-        object? returnValue = null;
-        if (returnType != typeof(void) &&
-            !UnrealNativeValueCodecV3.TryDecodeObject(
-                returnType,
-                in results[resultIndex++],
-                resultArena,
-                outcome.ByteCount,
-                out returnValue))
-        {
-            throw new InvalidOperationException(
-                "The ABI v3 transport returned an incompatible generated return value.");
-        }
-        var outputs = new object?[outputCount];
-        int outputIndex = 0;
-        foreach (UnrealOutputArgument argument in arguments)
-        {
-            if (argument.Direction == UnrealParameterDirection.Input)
+            byte[]? retryArena = null;
+            if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
+                outcome.RequiredByteCapacity > arena.Length)
             {
-                continue;
+                ValidateBinaryRetryCapacity(requiredCapabilities, outcome.RequiredByteCapacity);
+                retryArena = GC.AllocateUninitializedArray<byte>(
+                    outcome.RequiredByteCapacity);
+                arena[..inputByteCount].CopyTo(retryArena);
+                outcome = transport.ExecuteById(
+                    operation,
+                    target,
+                    memberId,
+                    encodedArguments,
+                    results,
+                    retryArena,
+                    inputByteCount);
             }
-            if (!UnrealNativeValueCodecV3.TryDecodeObject(
-                    argument.Type,
+            RequireCallFrameSuccess(outcome, resultCount, target, memberId, memberPath);
+            ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
+
+            resultIndex = 0;
+            object? returnValue = null;
+            if (returnType != typeof(void) &&
+                !UnrealNativeValueCodecV3.TryDecodeObject(
+                    returnType,
                     in results[resultIndex++],
                     resultArena,
                     outcome.ByteCount,
-                    out outputs[outputIndex++]))
+                    out returnValue))
             {
                 throw new InvalidOperationException(
-                    "The ABI v3 transport returned an incompatible generated output value.");
+                    "The ABI v3 transport returned an incompatible generated return value.");
+            }
+            var outputs = new object?[outputCount];
+            int outputIndex = 0;
+            foreach (UnrealOutputArgument argument in arguments)
+            {
+                if (argument.Direction == UnrealParameterDirection.Input)
+                {
+                    continue;
+                }
+                if (!UnrealNativeValueCodecV3.TryDecodeObject(
+                        argument.Type,
+                        in results[resultIndex++],
+                        resultArena,
+                        outcome.ByteCount,
+                        out outputs[outputIndex++]))
+                {
+                    throw new InvalidOperationException(
+                        "The ABI v3 transport returned an incompatible generated output value.");
+                }
+            }
+            Interlocked.Increment(ref _callFrameInvocationCount);
+            CompleteCallFrameProfilerSample(profilerStart);
+            return new UnrealOutputInvocationResult(returnValue, outputs);
+        }
+        finally
+        {
+            try
+            {
+                invocation?.Dispose();
+            }
+            finally
+            {
+                if (parentInputArena is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(parentInputArena);
+                }
             }
         }
-        Interlocked.Increment(ref _callFrameInvocationCount);
-        CompleteCallFrameProfilerSample(profilerStart);
-        return new UnrealOutputInvocationResult(returnValue, outputs);
     }
 
     private void RequireByteBuffers()

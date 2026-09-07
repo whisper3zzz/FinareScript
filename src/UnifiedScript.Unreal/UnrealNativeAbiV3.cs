@@ -75,6 +75,14 @@ public enum UnrealNativeCapabilitiesV3 : ulong
     ByteBuffers = 1UL << 11,
     CallbackArguments = 1UL << 12,
     CorrelatedResults = 1UL << 13,
+    BlueprintParentCalls = 1UL << 14,
+}
+
+[Flags]
+public enum UnrealNativeCallFrameFlagsV3 : uint
+{
+    None = 0,
+    BlueprintParent = 1U << 0,
 }
 
 /// <summary>
