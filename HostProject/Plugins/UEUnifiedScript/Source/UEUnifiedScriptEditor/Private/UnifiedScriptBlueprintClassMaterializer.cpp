@@ -11,6 +11,8 @@
 #include "Interfaces/IPluginManager.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
+#include "K2Node_Event.h"
+#include "K2Node_CallParentFunction.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
@@ -35,7 +37,8 @@
 
 namespace UE::UnifiedScript::BlueprintClass::Private
 {
-constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
+constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
+constexpr TCHAR OverrideSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.2");
 constexpr TCHAR DefaultCategory[] = TEXT("UnifiedScript");
 
 const FName ManagedStateKey(TEXT("UnifiedScript.ManagedState"));
@@ -47,6 +50,8 @@ const FName FunctionIdKey(TEXT("UnifiedScript.FunctionId"));
 const FName ManagedFunctionNameKey(TEXT("UnifiedScript.ManagedName"));
 const FName BlueprintEventKey(TEXT("UnifiedScript.BlueprintEvent"));
 const FName BlueprintEventSuperModeKey(TEXT("UnifiedScript.SuperMode"));
+const FName BlueprintOverrideDeclaringTypePathKey(TEXT("UnifiedScript.BlueprintOverrideDeclaringTypePath"));
+const FName BlueprintOverrideFunctionNameKey(TEXT("UnifiedScript.BlueprintOverrideFunctionName"));
 const FName WorldContextObjectName(TEXT("WorldContextObject"));
 
 bool ReadJsonNumberToken(const TSharedPtr<FJsonValue>& Value, FString& OutToken)
@@ -146,6 +151,8 @@ struct FFunctionParameterDeclaration
 {
     FGuid Id;
     FName Name;
+    /** Native inherited property name; empty for ordinary managed functions. */
+    FName NativeName;
     FString TypeMetadataName;
     FEdGraphPinType PinType;
     FFunctionValueTypeDeclaration ValueType;
@@ -165,6 +172,10 @@ struct FFunctionDeclaration
     bool bHasReturnValue = false;
     bool bIsStatic = false;
     bool bBlueprintEvent = false;
+    bool bBlueprintOverride = false;
+    FString BlueprintOverrideDeclaringTypePath;
+    FString BlueprintOverrideFunctionNameText;
+    FName BlueprintOverrideFunctionName;
     bool bInterfaceFunction = false;
     EUnifiedScriptRpcTarget RpcTarget = EUnifiedScriptRpcTarget::None;
     bool bReliable = false;
@@ -623,10 +634,254 @@ FName MakeManagedFunctionInternalName(const FGuid& Id)
         *Id.ToString(EGuidFormats::Digits).ToLower()));
 }
 
+const FName& EffectiveParameterName(const FFunctionParameterDeclaration& Parameter)
+{
+    return Parameter.NativeName.IsNone() ? Parameter.Name : Parameter.NativeName;
+}
+
+const TCHAR* ParameterDirectionName(EUnifiedScriptManagedParameterDirection Direction)
+{
+    switch (Direction)
+    {
+    case EUnifiedScriptManagedParameterDirection::Input: return TEXT("input");
+    case EUnifiedScriptManagedParameterDirection::Output: return TEXT("out");
+    case EUnifiedScriptManagedParameterDirection::InputOutput: return TEXT("ref");
+    default: return TEXT("unknown");
+    }
+}
+
+bool ResolveBlueprintOverrideFunction(
+    const UBlueprint& Blueprint,
+    const FFunctionDeclaration& Declaration,
+    UFunction*& OutFunction,
+    FString& OutError)
+{
+    OutFunction = nullptr;
+    if (!Declaration.bBlueprintOverride)
+    {
+        return true;
+    }
+
+    UClass* DeclaringClass = LoadObject<UClass>(
+        nullptr,
+        *Declaration.BlueprintOverrideDeclaringTypePath);
+    if (DeclaringClass == nullptr ||
+        DeclaringClass->GetPathName() != Declaration.BlueprintOverrideDeclaringTypePath)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' cannot load declaring class '%s'."),
+            *Declaration.ManagedName.ToString(),
+            *Declaration.BlueprintOverrideDeclaringTypePath);
+        return false;
+    }
+    if (Blueprint.ParentClass == nullptr ||
+        !Blueprint.ParentClass->IsChildOf(DeclaringClass))
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' targets '%s', but Blueprint parent '%s' is not its child."),
+            *Declaration.ManagedName.ToString(),
+            *Declaration.BlueprintOverrideDeclaringTypePath,
+            *GetPathNameSafe(Blueprint.ParentClass));
+        return false;
+    }
+
+    UFunction* Function = DeclaringClass->FindFunctionByName(
+        FName(*Declaration.BlueprintOverrideFunctionNameText),
+        EIncludeSuperFlag::ExcludeSuper);
+    if (Function == nullptr || Function->GetOuterUClass() != DeclaringClass)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' requires function '%s' to be declared directly by '%s'."),
+            *Declaration.ManagedName.ToString(),
+            *Declaration.BlueprintOverrideFunctionNameText,
+            *Declaration.BlueprintOverrideDeclaringTypePath);
+        return false;
+    }
+    if (!Function->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+        Function->HasAnyFunctionFlags(FUNC_Final | FUNC_Static | FUNC_Net))
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' targets '%s:%s', which must be an instance Blueprint event without Final, Static, or Net flags."),
+            *Declaration.ManagedName.ToString(),
+            *Declaration.BlueprintOverrideDeclaringTypePath,
+            *Declaration.BlueprintOverrideFunctionNameText);
+        return false;
+    }
+    OutFunction = Function;
+    return true;
+}
+
+bool OverridePinTypesCompatible(
+    const FEdGraphPinType& ManagedType,
+    const FEdGraphPinType& NativeType)
+{
+    FEdGraphPinType Managed = ManagedType;
+    FEdGraphPinType Native = NativeType;
+
+    // C# directions carry the managed ref contract, while the inherited
+    // graph pin carries the native const/reference qualifiers. Compare the
+    // value shape after adopting those native qualifiers.
+    Managed.bIsReference = Native.bIsReference;
+    Managed.bIsConst = Native.bIsConst;
+    if (Managed == Native)
+    {
+        return true;
+    }
+
+    // Container element/value identities remain exact. Broad UObject handles
+    // are allowed only on scalar pins, where the native property may refine
+    // the class restriction to a child Actor/UClass type.
+    if (Managed.IsContainer() || Native.IsContainer())
+    {
+        return false;
+    }
+    if (Managed.PinCategory != Native.PinCategory ||
+        Managed.PinSubCategory != Native.PinSubCategory ||
+        Managed.PinValueType != Native.PinValueType ||
+        Managed.bIsWeakPointer != Native.bIsWeakPointer)
+    {
+        return false;
+    }
+    if (Managed.PinCategory != UEdGraphSchema_K2::PC_Object &&
+        Managed.PinCategory != UEdGraphSchema_K2::PC_Class)
+    {
+        return false;
+    }
+
+    const UClass* ManagedClass = Cast<UClass>(Managed.PinSubCategoryObject.Get());
+    const UClass* NativeClass = Cast<UClass>(Native.PinSubCategoryObject.Get());
+    return ManagedClass != nullptr && NativeClass != nullptr &&
+        NativeClass->IsChildOf(ManagedClass);
+}
+
+bool NativeParameterDirection(
+    const FProperty& Property,
+    EUnifiedScriptManagedParameterDirection& OutDirection)
+{
+    if (!Property.HasAnyPropertyFlags(CPF_Parm) ||
+        Property.HasAnyPropertyFlags(CPF_ReturnParm))
+    {
+        return false;
+    }
+    if (Property.HasAnyPropertyFlags(CPF_ConstParm))
+    {
+        // Native const& parameters are read-only inputs even when a producer
+        // happens to carry an additional OutParm bit.
+        OutDirection = EUnifiedScriptManagedParameterDirection::Input;
+    }
+    else if (!Property.HasAnyPropertyFlags(CPF_OutParm))
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::Input;
+    }
+    else if (Property.HasAnyPropertyFlags(CPF_ReferenceParm))
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::InputOutput;
+    }
+    else
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::Output;
+    }
+    return true;
+}
+
+bool ValidateBlueprintOverrideSignature(
+    const UFunction& NativeFunction,
+    FFunctionDeclaration& Declaration,
+    FString& OutError)
+{
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    TArray<const FProperty*> NativeParameters;
+    for (TFieldIterator<FProperty> It(
+             &NativeFunction,
+             EFieldIteratorFlags::ExcludeSuper);
+         It;
+         ++It)
+    {
+        if (It->HasAnyPropertyFlags(CPF_Parm) &&
+            !It->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            NativeParameters.Add(*It);
+        }
+    }
+    if (NativeParameters.Num() != Declaration.Parameters.Num())
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' parameter count %d does not match native '%s' count %d."),
+            *Declaration.ManagedName.ToString(),
+            Declaration.Parameters.Num(),
+            *NativeFunction.GetName(),
+            NativeParameters.Num());
+        return false;
+    }
+    for (int32 Index = 0; Index < NativeParameters.Num(); ++Index)
+    {
+        const FProperty& NativeParameter = *NativeParameters[Index];
+        FEdGraphPinType NativePinType;
+        EUnifiedScriptManagedParameterDirection NativeDirection;
+        if (!Schema->ConvertPropertyToPinType(&NativeParameter, NativePinType) ||
+            !NativeParameterDirection(NativeParameter, NativeDirection))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' cannot convert native parameter '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *NativeParameter.GetName());
+            return false;
+        }
+        FFunctionParameterDeclaration& ManagedParameter = Declaration.Parameters[Index];
+        if (ManagedParameter.Direction != NativeDirection ||
+            ManagedParameter.Direction == EUnifiedScriptManagedParameterDirection::InputOutput &&
+                !ManagedParameter.PinType.bIsReference ||
+            !OverridePinTypesCompatible(ManagedParameter.PinType, NativePinType))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' parameter '%s' (%s) does not match native '%s' (%s)."),
+                *Declaration.ManagedName.ToString(),
+                *ManagedParameter.Name.ToString(),
+                ParameterDirectionName(ManagedParameter.Direction),
+                *NativeParameter.GetName(),
+                ParameterDirectionName(NativeDirection));
+            return false;
+        }
+        ManagedParameter.NativeName = NativeParameter.GetFName();
+    }
+
+    const FProperty* NativeReturn = NativeFunction.GetReturnProperty();
+    if (Declaration.bHasReturnValue != (NativeReturn != nullptr))
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint override '%s' return shape does not match native '%s'."),
+            *Declaration.ManagedName.ToString(),
+            *NativeFunction.GetName());
+        return false;
+    }
+    if (NativeReturn != nullptr)
+    {
+        FEdGraphPinType NativeReturnType;
+        if (!Schema->ConvertPropertyToPinType(NativeReturn, NativeReturnType) ||
+            !OverridePinTypesCompatible(Declaration.ReturnPinType, NativeReturnType))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' return type does not match native '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *NativeFunction.GetName());
+            return false;
+        }
+    }
+    return true;
+}
+
+const FKismetUserDeclaredFunctionMetadata* GetFunctionEntryMetadata(
+    const UEdGraph& Graph)
+{
+    TArray<UK2Node_FunctionEntry*> EntryNodes;
+    Graph.GetNodesOfClass(EntryNodes);
+    return EntryNodes.Num() == 1 ? &EntryNodes[0]->MetaData : nullptr;
+}
+
 bool HasManagedFunctionGraphMetadata(const UEdGraph& Graph)
 {
     const FKismetUserDeclaredFunctionMetadata* Metadata =
-        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+        GetFunctionEntryMetadata(Graph);
     return Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
         Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true");
 }
@@ -669,7 +924,7 @@ bool TryReadManagedFunctionGraphId(
     FGuid& OutId)
 {
     const FKismetUserDeclaredFunctionMetadata* Metadata =
-        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+        GetFunctionEntryMetadata(Graph);
     if (HasManagedFunctionGraphMetadata(Graph))
     {
         return Metadata != nullptr && Metadata->HasMetaData(FunctionIdKey) &&
@@ -744,6 +999,36 @@ UEdGraph* FindFunctionGraphByName(const UBlueprint& Blueprint, FName Name)
             if (Graph != nullptr && Graph->GetFName() == Name)
             {
                 return Graph;
+            }
+        }
+    }
+    return nullptr;
+}
+
+UK2Node_Event* FindUserOwnedOverrideEvent(
+    const UBlueprint& Blueprint,
+    FName FunctionName)
+{
+    for (UEdGraph* Ubergraph : Blueprint.UbergraphPages)
+    {
+        if (Ubergraph == nullptr)
+        {
+            continue;
+        }
+        TArray<UK2Node_Event*> EventNodes;
+        Ubergraph->GetNodesOfClass(EventNodes);
+        for (UK2Node_Event* EventNode : EventNodes)
+        {
+            if (EventNode == nullptr || !EventNode->bOverrideFunction ||
+                EventNode->IsAutomaticallyPlacedGhostNode() ||
+                EventNode->EventReference.GetMemberName() != FunctionName)
+            {
+                continue;
+            }
+            UFunction* Signature = EventNode->FindEventSignatureFunction();
+            if (Signature != nullptr && Signature->GetFName() == FunctionName)
+            {
+                return EventNode;
             }
         }
     }
@@ -839,6 +1124,157 @@ bool FunctionGraphSignatureMatches(
     return true;
 }
 
+bool OverrideFunctionGraphSignatureMatches(
+    const UBlueprint& Blueprint,
+    const UEdGraph& Graph,
+    const FFunctionDeclaration& Declaration)
+{
+    UFunction* NativeFunction = nullptr;
+    FString UnusedError;
+    if (!ResolveBlueprintOverrideFunction(
+            Blueprint,
+            Declaration,
+            NativeFunction,
+            UnusedError) ||
+        NativeFunction == nullptr ||
+        Graph.GetFName() != Declaration.InternalName ||
+        Graph.GraphGuid != Declaration.Id)
+    {
+        return false;
+    }
+
+    TArray<UK2Node_FunctionEntry*> EntryNodes;
+    TArray<UK2Node_FunctionResult*> ResultNodes;
+    Graph.GetNodesOfClass(EntryNodes);
+    Graph.GetNodesOfClass(ResultNodes);
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    const int32 RelevantFlags = FUNC_Public | FUNC_BlueprintCallable |
+        FUNC_Event | FUNC_BlueprintEvent | FUNC_Const;
+    int32 ExpectedFlags = FUNC_Public | FUNC_BlueprintCallable |
+        FUNC_Event | FUNC_BlueprintEvent;
+    if (NativeFunction->HasAnyFunctionFlags(FUNC_Const))
+    {
+        ExpectedFlags |= FUNC_Const;
+    }
+    if (EntryNodes.Num() != 1 ||
+        EntryNodes[0]->FunctionReference.GetMemberName() !=
+            NativeFunction->GetFName() ||
+        EntryNodes[0]->FunctionReference.GetMemberParentClass() !=
+            NativeFunction->GetOuterUClass() ||
+        (EntryNodes[0]->GetExtraFlags() & RelevantFlags) != ExpectedFlags)
+    {
+        return false;
+    }
+
+    int32 ExpectedEntryPins = 0;
+    int32 ExpectedResultPins = 0;
+    for (TFieldIterator<FProperty> It(
+             NativeFunction,
+             EFieldIteratorFlags::ExcludeSuper);
+         It;
+         ++It)
+    {
+        if (!It->HasAnyPropertyFlags(CPF_Parm) ||
+            It->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            continue;
+        }
+        EUnifiedScriptManagedParameterDirection NativeDirection;
+        if (!NativeParameterDirection(**It, NativeDirection))
+        {
+            return false;
+        }
+        const bool bInput = NativeDirection !=
+            EUnifiedScriptManagedParameterDirection::Output;
+        if (bInput)
+        {
+            ++ExpectedEntryPins;
+        }
+        else
+        {
+            ++ExpectedResultPins;
+        }
+    }
+    if (NativeFunction->GetReturnProperty() != nullptr)
+    {
+        ++ExpectedResultPins;
+    }
+    auto CountDataPins = [](const UK2Node* Node)
+    {
+        return Node == nullptr
+            ? 0
+            : Node->Pins.Num() - Node->Pins.ContainsByPredicate(
+                [](const UEdGraphPin* Pin)
+                {
+                    return Pin != nullptr && Pin->PinType.PinCategory ==
+                        UEdGraphSchema_K2::PC_Exec;
+                });
+    };
+    if (CountDataPins(EntryNodes[0]) != ExpectedEntryPins ||
+        ResultNodes.Num() != (ExpectedResultPins > 0 ? 1 : 0) ||
+        (ExpectedResultPins > 0 &&
+            CountDataPins(ResultNodes[0]) != ExpectedResultPins))
+    {
+        return false;
+    }
+
+    int32 EntryIndex = 0;
+    int32 ResultIndex = 0;
+    for (TFieldIterator<FProperty> It(
+             NativeFunction,
+             EFieldIteratorFlags::ExcludeSuper);
+         It;
+         ++It)
+    {
+        if (!It->HasAnyPropertyFlags(CPF_Parm) ||
+            It->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            continue;
+        }
+        FEdGraphPinType NativePinType;
+        if (!Schema->ConvertPropertyToPinType(*It, NativePinType))
+        {
+            return false;
+        }
+        EUnifiedScriptManagedParameterDirection NativeDirection;
+        if (!NativeParameterDirection(**It, NativeDirection))
+        {
+            return false;
+        }
+        const bool bInput = NativeDirection !=
+            EUnifiedScriptManagedParameterDirection::Output;
+        const FName ExpectedName = It->GetFName();
+        UEdGraphPin* Pin = bInput
+            ? EntryNodes[0]->FindPin(ExpectedName, EGPD_Output)
+            : ResultNodes[0]->FindPin(ExpectedName, EGPD_Input);
+        if (Pin == nullptr || Pin->PinName != ExpectedName ||
+            Pin->PinType != NativePinType ||
+            Pin->Direction != (bInput ? EGPD_Output : EGPD_Input))
+        {
+            return false;
+        }
+    }
+    if (const FProperty* NativeReturn = NativeFunction->GetReturnProperty())
+    {
+        FEdGraphPinType NativeReturnType;
+        if (!Schema->ConvertPropertyToPinType(NativeReturn, NativeReturnType) ||
+            ResultNodes.Num() != 1)
+        {
+            return false;
+        }
+        UEdGraphPin* ReturnPin = ResultNodes[0]->FindPin(
+            UEdGraphSchema_K2::PN_ReturnValue,
+            EGPD_Input);
+        if (ReturnPin == nullptr ||
+            ReturnPin->PinType != NativeReturnType ||
+            ReturnPin->Direction != EGPD_Input)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool RuntimeValueTypeBindingMatches(
     const FUnifiedScriptManagedValueTypeBinding& Binding,
     const FFunctionValueTypeDeclaration& Declaration)
@@ -871,6 +1307,10 @@ bool RuntimeFunctionBindingMatches(
         Binding.bBlueprintEvent != Declaration.bBlueprintEvent ||
         Binding.bInterfaceFunction != Declaration.bInterfaceFunction ||
         Binding.BlueprintEventSuperMode != Declaration.BlueprintEventSuperMode ||
+        Binding.BlueprintOverrideDeclaringTypePath !=
+            Declaration.BlueprintOverrideDeclaringTypePath ||
+        Binding.BlueprintOverrideFunctionName !=
+            Declaration.BlueprintOverrideFunctionNameText ||
         Binding.ParameterTypes.Num() != Declaration.Parameters.Num() ||
         Binding.ParameterNames.Num() != Declaration.Parameters.Num() ||
         Binding.ParameterDirections.Num() != Declaration.Parameters.Num() ||
@@ -882,7 +1322,8 @@ bool RuntimeFunctionBindingMatches(
     }
     for (int32 Index = 0; Index < Binding.ParameterTypes.Num(); ++Index)
     {
-        if (Binding.ParameterNames[Index] != Declaration.Parameters[Index].Name ||
+        if (Binding.ParameterNames[Index] !=
+                EffectiveParameterName(Declaration.Parameters[Index]) ||
             Binding.ParameterDirections[Index] !=
                 Declaration.Parameters[Index].Direction ||
             !RuntimeValueTypeBindingMatches(
@@ -900,12 +1341,17 @@ bool FunctionGraphMatches(
     const UEdGraph& Graph,
     const FFunctionDeclaration& Declaration)
 {
-    if (!FunctionGraphSignatureMatches(Graph, Declaration))
+    if (Declaration.bBlueprintOverride
+            ? !OverrideFunctionGraphSignatureMatches(Blueprint, Graph, Declaration)
+            : !FunctionGraphSignatureMatches(Graph, Declaration))
     {
         return false;
     }
+    // Inherited function entries are not editable, so the editor helper does
+    // not expose their metadata. Read the sole entry directly; this is also
+    // the ownership marker persisted by ConfigureFunctionGraph.
     const FKismetUserDeclaredFunctionMetadata* Metadata =
-        FBlueprintEditorUtils::GetGraphFunctionMetaData(&Graph);
+        GetFunctionEntryMetadata(Graph);
     const bool bMetadataMatches =
         Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
         Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true") &&
@@ -923,6 +1369,16 @@ bool FunctionGraphMatches(
         Metadata->HasMetaData(BlueprintEventSuperModeKey) &&
         Metadata->GetMetaData(BlueprintEventSuperModeKey) ==
             (Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none")) &&
+        (!Declaration.bBlueprintOverride ||
+            (Metadata->HasMetaData(BlueprintOverrideDeclaringTypePathKey) &&
+             Metadata->GetMetaData(BlueprintOverrideDeclaringTypePathKey) ==
+                 Declaration.BlueprintOverrideDeclaringTypePath &&
+             Metadata->HasMetaData(BlueprintOverrideFunctionNameKey) &&
+             Metadata->GetMetaData(BlueprintOverrideFunctionNameKey) ==
+                 Declaration.BlueprintOverrideFunctionNameText)) &&
+        (Declaration.bBlueprintOverride ||
+            (!Metadata->HasMetaData(BlueprintOverrideDeclaringTypePathKey) &&
+             !Metadata->HasMetaData(BlueprintOverrideFunctionNameKey))) &&
         (!Declaration.bIsStatic ||
          (Metadata->HasMetaData(TEXT("WorldContext")) &&
           Metadata->GetMetaData(TEXT("WorldContext")) ==
@@ -932,13 +1388,15 @@ bool FunctionGraphMatches(
         return true;
     }
 
-    // UE reconstructs interface graphs from the native interface on load and
-    // drops their user-declared function metadata. The serialized generated
-    // class binding carries the same semantic identity and complete ABI shape,
-    // so it is the no-change authority for this graph kind.
+    // UE reconstructs interface and inherited graphs from their native owner
+    // on load and can drop their user-declared function metadata. The
+    // serialized generated class binding carries the same semantic identity
+    // and complete ABI shape, so it is the no-change authority for these
+    // graph kinds.
     const FUnifiedScriptManagedFunctionBinding* PersistedBinding =
         FindPersistedManagedFunctionBinding(Blueprint, Graph);
-    return Declaration.bInterfaceFunction && PersistedBinding != nullptr &&
+    return (Declaration.bInterfaceFunction || Declaration.bBlueprintOverride) &&
+        PersistedBinding != nullptr &&
         RuntimeFunctionBindingMatches(*PersistedBinding, Declaration);
 }
 
@@ -1809,6 +2267,7 @@ bool ParseGameplayBindings(
 
 bool ParseDeclaration(
     UUnifiedScriptAsset& ScriptAsset,
+    const UBlueprint& Blueprint,
     const FString& DeclarationJson,
     TArray<FStateDeclaration>& OutStates,
     TArray<FFunctionDeclaration>& OutFunctions,
@@ -1832,14 +2291,52 @@ bool ParseDeclaration(
     FString ParsedSchema;
     const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), ParsedSchema) ||
-        ParsedSchema != SchemaVersion ||
+        (ParsedSchema != LegacySchemaVersion && ParsedSchema != OverrideSchemaVersion) ||
         !Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr ||
         Assets->IsEmpty())
     {
         OutError = FString::Printf(
-            TEXT("Script Class declaration requires schema '%s' and a non-empty assets array."),
-            SchemaVersion);
+            TEXT("Script Class declaration requires schema '%s' or '%s' and a non-empty assets array."),
+            LegacySchemaVersion,
+            OverrideSchemaVersion);
         return false;
+    }
+
+    if (ParsedSchema == LegacySchemaVersion)
+    {
+        for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+        {
+            const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+                ? AssetValue->AsObject()
+                : nullptr;
+            const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+            if (!Asset.IsValid() ||
+                !Asset->TryGetArrayField(TEXT("functions"), Functions) ||
+                Functions == nullptr)
+            {
+                continue;
+            }
+            for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+            {
+                const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                    ? FunctionValue->AsObject()
+                    : nullptr;
+                const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+                const TSharedPtr<FJsonObject>* Override = nullptr;
+                if (Function.IsValid() &&
+                    Function->TryGetObjectField(TEXT("blueprintEvent"), BlueprintEvent) &&
+                    BlueprintEvent != nullptr && BlueprintEvent->IsValid() &&
+                    (*BlueprintEvent)->TryGetObjectField(TEXT("override"), Override) &&
+                    Override != nullptr && Override->IsValid())
+                {
+                    OutError = FString::Printf(
+                        TEXT("Script Class declaration schema '%s' cannot contain Blueprint override metadata; use '%s'."),
+                        LegacySchemaVersion,
+                        OverrideSchemaVersion);
+                    return false;
+                }
+            }
+        }
     }
 
     FString RequestedAssetPath = ScriptAsset.DeclarationAssetPath;
@@ -2211,6 +2708,7 @@ bool ParseDeclaration(
 
     TSet<FGuid> SeenFunctionIds;
     TSet<FName> SeenFunctionNames;
+    TSet<FName> SeenInternalFunctionNames;
     OutFunctions.Reserve(Functions->Num());
     for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
     {
@@ -2247,10 +2745,28 @@ bool ParseDeclaration(
         }
         if (!bIsPublic || bIsEvent)
         {
+            const TSharedPtr<FJsonObject>* InvalidBlueprintEvent = nullptr;
+            const TSharedPtr<FJsonObject>* InvalidOverride = nullptr;
+            if (Function.IsValid() &&
+                Function->TryGetObjectField(TEXT("blueprintEvent"), InvalidBlueprintEvent) &&
+                InvalidBlueprintEvent != nullptr && InvalidBlueprintEvent->IsValid() &&
+                (*InvalidBlueprintEvent)->TryGetObjectField(TEXT("override"), InvalidOverride) &&
+                InvalidOverride != nullptr && InvalidOverride->IsValid())
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' must be a public instance method and cannot be an event declaration."),
+                    *Name);
+                return false;
+            }
             continue;
         }
 
         const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+        const TSharedPtr<FJsonObject>* BlueprintOverride = nullptr;
+        FString BlueprintOverrideDeclaringTypePath;
+        FString BlueprintOverrideFunctionNameText;
+        FName BlueprintOverrideFunctionName;
+        bool bBlueprintOverride = false;
         if (Function->HasField(TEXT("blueprintEvent")))
         {
             FString SuperMode;
@@ -2270,6 +2786,44 @@ bool ParseDeclaration(
                     TEXT("Blueprint event '%s' must be an Actor or ActorComponent instance method."),
                     *Name);
                 return false;
+            }
+            if ((*BlueprintEvent)->HasField(TEXT("override")))
+            {
+                if (ParsedSchema != OverrideSchemaVersion ||
+                    !(*BlueprintEvent)->TryGetObjectField(
+                        TEXT("override"),
+                        BlueprintOverride) ||
+                    BlueprintOverride == nullptr ||
+                    !BlueprintOverride->IsValid() ||
+                    !ReadRequiredString(
+                        *BlueprintOverride,
+                        TEXT("declaringTypePath"),
+                        BlueprintOverrideDeclaringTypePath,
+                        OutError))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Blueprint override '%s' requires schema '%s' and declaringTypePath/functionName metadata."),
+                        *Name,
+                        OverrideSchemaVersion);
+                    return false;
+                }
+                if (!ReadRequiredString(
+                        *BlueprintOverride,
+                        TEXT("functionName"),
+                        BlueprintOverrideFunctionNameText,
+                        OutError))
+                {
+                    return false;
+                }
+                BlueprintOverrideFunctionName = FName(*BlueprintOverrideFunctionNameText);
+                if (BlueprintOverrideFunctionName.IsNone())
+                {
+                    OutError = FString::Printf(
+                        TEXT("Blueprint override '%s' has an invalid functionName."),
+                        *Name);
+                    return false;
+                }
+                bBlueprintOverride = true;
             }
         }
         if (bIsStatic != bStaticLibrary)
@@ -2298,6 +2852,13 @@ bool ParseDeclaration(
         Declaration.ReturnTypeMetadataName = ReturnType;
         Declaration.bIsStatic = bIsStatic;
         Declaration.bBlueprintEvent = BlueprintEvent != nullptr;
+        Declaration.bBlueprintOverride = bBlueprintOverride;
+        Declaration.BlueprintOverrideDeclaringTypePath =
+            BlueprintOverrideDeclaringTypePath;
+        Declaration.BlueprintOverrideFunctionNameText =
+            BlueprintOverrideFunctionNameText;
+        Declaration.BlueprintOverrideFunctionName =
+            BlueprintOverrideFunctionName;
         if (Function->HasField(TEXT("rpc")))
         {
             const TSharedPtr<FJsonObject>* Rpc = nullptr;
@@ -2341,9 +2902,33 @@ bool ParseDeclaration(
                 }
             }
         }
+        else if (Declaration.bBlueprintOverride)
+        {
+            Declaration.InternalName = Declaration.BlueprintOverrideFunctionName;
+        }
         else
         {
             Declaration.InternalName = MakeManagedFunctionInternalName(Declaration.Id);
+        }
+        if (SeenInternalFunctionNames.Contains(Declaration.InternalName))
+        {
+            OutError = FString::Printf(
+                TEXT("Script Class declaration maps multiple managed methods to inherited Blueprint event '%s'."),
+                *Declaration.InternalName.ToString());
+            return false;
+        }
+        if (Declaration.bBlueprintOverride)
+        {
+            UFunction* NativeOverrideFunction = nullptr;
+            if (!ResolveBlueprintOverrideFunction(
+                    Blueprint,
+                    Declaration,
+                    NativeOverrideFunction,
+                    OutError) ||
+                NativeOverrideFunction == nullptr)
+            {
+                return false;
+            }
         }
         if (!ParseFunctionValueType(
                 Function,
@@ -2454,6 +3039,46 @@ bool ParseDeclaration(
             Declaration.Parameters.Add(MoveTemp(ParameterDeclaration));
         }
 
+        if (Declaration.bBlueprintOverride)
+        {
+            const bool bHasConflictingBinding =
+                Declaration.RpcTarget != EUnifiedScriptRpcTarget::None ||
+                !Declaration.RepNotifyProperty.IsNone() ||
+                InterfaceFunctionNames.Contains(Declaration.Id) ||
+                OutInputBindings.ContainsByPredicate(
+                    [&Declaration](const FInputActionDeclaration& Binding)
+                    {
+                        return Binding.ManagedName == Declaration.ManagedName;
+                    }) ||
+                OutDelegateBindings.ContainsByPredicate(
+                    [&Declaration](const FDelegateBindingDeclaration& Binding)
+                    {
+                        return Binding.ManagedName == Declaration.ManagedName;
+                    });
+            if (bHasConflictingBinding)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' cannot own Input, Delegate, Interface, RPC, or RepNotify bindings."),
+                    *Declaration.ManagedName.ToString());
+                return false;
+            }
+
+            UFunction* NativeOverrideFunction = nullptr;
+            if (!ResolveBlueprintOverrideFunction(
+                    Blueprint,
+                    Declaration,
+                    NativeOverrideFunction,
+                    OutError) ||
+                NativeOverrideFunction == nullptr ||
+                !ValidateBlueprintOverrideSignature(
+                    *NativeOverrideFunction,
+                    Declaration,
+                    OutError))
+            {
+                return false;
+            }
+        }
+
         if (Declaration.RpcTarget != EUnifiedScriptRpcTarget::None || !Declaration.RepNotifyProperty.IsNone())
         {
             if (!bGameplayLifecycle || Declaration.bIsStatic || Declaration.bHasReturnValue ||
@@ -2477,6 +3102,7 @@ bool ParseDeclaration(
         { OutError = TEXT("RPC supports 0-4 scalar/common-value inputs; collections, Soft References and complex structures are not supported RPC payloads yet."); return false; }
         SeenFunctionIds.Add(Declaration.Id);
         SeenFunctionNames.Add(Declaration.ManagedName);
+        SeenInternalFunctionNames.Add(Declaration.InternalName);
         OutFunctions.Add(MoveTemp(Declaration));
     }
     for (const FFunctionDeclaration& Function : OutFunctions)
@@ -3013,20 +3639,35 @@ bool BuildFunctionPlan(
             return false;
         }
         UEdGraph* const* Existing = ExistingById.Find(Declaration.Id);
+        if (Declaration.bBlueprintOverride &&
+            FindUserOwnedOverrideEvent(
+                Blueprint,
+                Declaration.InternalName) != nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed Blueprint override '%s' collides with a user-owned override event '%s'."),
+                *Declaration.ManagedName.ToString(),
+                *Declaration.InternalName.ToString());
+            return false;
+        }
         UEdGraph* NameOwner = FindFunctionGraphByName(
             Blueprint,
             Declaration.InternalName);
         if (NameOwner != nullptr &&
-            (Existing == nullptr || NameOwner != *Existing) &&
-            !IsManagedFunctionGraph(Blueprint, *NameOwner))
+            (Existing == nullptr || NameOwner != *Existing))
         {
-            OutError = FString::Printf(
-                TEXT("Managed function '%s' collides with user-owned Blueprint graph '%s'."),
-                *Declaration.ManagedName.ToString(),
-                *NameOwner->GetName());
-            return false;
+            if (!IsManagedFunctionGraph(Blueprint, *NameOwner) ||
+                Declaration.bBlueprintOverride)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed function '%s' collides with user-owned Blueprint graph '%s'."),
+                    *Declaration.ManagedName.ToString(),
+                    *NameOwner->GetName());
+                return false;
+            }
         }
-        if (!Declaration.bInterfaceFunction && Blueprint.ParentClass != nullptr &&
+        if (!Declaration.bInterfaceFunction && !Declaration.bBlueprintOverride &&
+            Blueprint.ParentClass != nullptr &&
             Blueprint.ParentClass->FindFunctionByName(
                 Declaration.InternalName,
                 EIncludeSuperFlag::IncludeSuper) != nullptr)
@@ -3391,7 +4032,36 @@ bool ConfigureFunctionGraph(
     UEdGraph*& InOutGraph,
     FString& OutError)
 {
-    const bool bCreated = InOutGraph == nullptr;
+    bool bCreated = InOutGraph == nullptr;
+    UFunction* OverrideFunction = nullptr;
+    if (Declaration.bBlueprintOverride &&
+        (!ResolveBlueprintOverrideFunction(
+             Blueprint,
+             Declaration,
+             OverrideFunction,
+             OutError) ||
+         OverrideFunction == nullptr))
+    {
+        return false;
+    }
+    if (Declaration.bBlueprintOverride && !bCreated &&
+        (InOutGraph->GetFName() != Declaration.InternalName ||
+         !OverrideFunctionGraphSignatureMatches(
+             Blueprint,
+             *InOutGraph,
+             Declaration)))
+    {
+        // This graph is product-owned (BuildFunctionPlan rejected every
+        // user-owned graph/event collision). Recreate it from the newly
+        // resolved native signature so retargeting an override remains a
+        // valid transactional source update.
+        FBlueprintEditorUtils::RemoveGraph(
+            &Blueprint,
+            InOutGraph,
+            EGraphRemoveFlags::MarkTransient);
+        InOutGraph = nullptr;
+        bCreated = true;
+    }
     if (InOutGraph == nullptr)
     {
         InOutGraph = FBlueprintEditorUtils::CreateNewGraph(
@@ -3406,11 +4076,107 @@ bool ConfigureFunctionGraph(
                 *Declaration.ManagedName.ToString());
             return false;
         }
-        FBlueprintEditorUtils::AddFunctionGraph<UFunction>(
-            &Blueprint,
-            InOutGraph,
-            true,
-            nullptr);
+        if (Declaration.bBlueprintOverride)
+        {
+            FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+                &Blueprint,
+                InOutGraph,
+                false,
+                OverrideFunction->GetOuterUClass());
+        }
+        else
+        {
+            FBlueprintEditorUtils::AddFunctionGraph<UFunction>(
+                &Blueprint,
+                InOutGraph,
+                true,
+                nullptr);
+        }
+    }
+    if (Declaration.bBlueprintOverride)
+    {
+        InOutGraph->Modify();
+        InOutGraph->GraphGuid = Declaration.Id;
+        TArray<UK2Node_FunctionEntry*> EntryNodes;
+        TArray<UK2Node_FunctionResult*> ResultNodes;
+        InOutGraph->GetNodesOfClass(EntryNodes);
+        InOutGraph->GetNodesOfClass(ResultNodes);
+        if (EntryNodes.Num() != 1)
+        {
+            OutError = FString::Printf(
+                TEXT("Inherited Blueprint event '%s' requires one function entry node."),
+                *Declaration.InternalName.ToString());
+            return false;
+        }
+        UK2Node_FunctionEntry* Entry = EntryNodes[0];
+        Entry->Modify();
+        TArray<UK2Node_CallParentFunction*> ParentCalls;
+        InOutGraph->GetNodesOfClass(ParentCalls);
+        for (UK2Node_CallParentFunction* ParentCall : ParentCalls)
+        {
+            if (ParentCall != nullptr)
+            {
+                ParentCall->BreakAllNodeLinks();
+                InOutGraph->RemoveNode(ParentCall);
+            }
+        }
+        for (UK2Node_FunctionResult* Result : ResultNodes)
+        {
+            if (Result != nullptr)
+            {
+                Result->Modify();
+                Result->BreakAllNodeLinks();
+            }
+        }
+        Entry->BreakAllNodeLinks();
+        if (ResultNodes.Num() == 1)
+        {
+            UEdGraphPin* ThenPin = Entry->FindPin(
+                UEdGraphSchema_K2::PN_Then,
+                EGPD_Output);
+            UEdGraphPin* ExecutePin = ResultNodes[0]->FindPin(
+                UEdGraphSchema_K2::PN_Execute,
+                EGPD_Input);
+            if (ThenPin == nullptr || ExecutePin == nullptr ||
+                !GetDefault<UEdGraphSchema_K2>()->TryCreateConnection(
+                    ThenPin,
+                    ExecutePin))
+            {
+                OutError = FString::Printf(
+                    TEXT("Inherited Blueprint event '%s' could not create an empty managed body."),
+                    *Declaration.InternalName.ToString());
+                return false;
+            }
+        }
+        int32 ExtraFlags = FUNC_Public | FUNC_BlueprintCallable |
+            FUNC_Event | FUNC_BlueprintEvent;
+        if (OverrideFunction->HasAnyFunctionFlags(FUNC_Const))
+        {
+            ExtraFlags |= FUNC_Const;
+        }
+        Entry->CustomGeneratedFunctionName = Declaration.InternalName;
+        Entry->SetExtraFlags(ExtraFlags);
+        Entry->MetaData.Category = FText::FromString(DefaultCategory);
+        Entry->MetaData.ToolTip = FText::FromString(FString::Printf(
+            TEXT("Managed Blueprint override %s"),
+            *Declaration.ManagedName.ToString()));
+        Entry->MetaData.SetMetaData(ManagedFunctionKey, FString(TEXT("true")));
+        Entry->MetaData.SetMetaData(FunctionIdKey, FString(Declaration.SemanticId));
+        Entry->MetaData.SetMetaData(
+            ManagedFunctionNameKey,
+            FString(Declaration.ManagedName.ToString()));
+        Entry->MetaData.SetMetaData(
+            TEXT("DisplayName"),
+            FString(Declaration.ManagedName.ToString()));
+        Entry->MetaData.SetMetaData(BlueprintEventKey, FString(TEXT("true")));
+        Entry->MetaData.SetMetaData(BlueprintEventSuperModeKey, FString(TEXT("explicit")));
+        Entry->MetaData.SetMetaData(
+            BlueprintOverrideDeclaringTypePathKey,
+            Declaration.BlueprintOverrideDeclaringTypePath);
+        Entry->MetaData.SetMetaData(
+            BlueprintOverrideFunctionNameKey,
+            Declaration.BlueprintOverrideFunctionNameText);
+        return true;
     }
 
     InOutGraph->Modify();
@@ -3464,6 +4230,8 @@ bool ConfigureFunctionGraph(
     Entry->MetaData.SetMetaData(
         BlueprintEventSuperModeKey,
         FString(Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none")));
+    Entry->MetaData.RemoveMetaData(BlueprintOverrideDeclaringTypePathKey);
+    Entry->MetaData.RemoveMetaData(BlueprintOverrideFunctionNameKey);
     if (Declaration.bIsStatic)
     {
         Entry->MetaData.SetMetaData(
@@ -3814,6 +4582,10 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
                 Planned.Declaration.bInterfaceFunction;
             Binding.BlueprintEventSuperMode =
                 Planned.Declaration.BlueprintEventSuperMode;
+            Binding.BlueprintOverrideDeclaringTypePath =
+                Planned.Declaration.BlueprintOverrideDeclaringTypePath;
+            Binding.BlueprintOverrideFunctionName =
+                Planned.Declaration.BlueprintOverrideFunctionNameText;
             Binding.ReturnType = MakeRuntimeValueTypeBinding(
                 Planned.Declaration.ReturnValueType);
             Binding.ParameterTypes.Reserve(Planned.Declaration.Parameters.Num());
@@ -3825,7 +4597,7 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
             {
                 Binding.ParameterTypes.Add(
                     MakeRuntimeValueTypeBinding(Parameter.ValueType));
-                Binding.ParameterNames.Add(Parameter.Name);
+                Binding.ParameterNames.Add(EffectiveParameterName(Parameter));
                 Binding.ParameterDirections.Add(Parameter.Direction);
             }
             GeneratedClass->ManagedFunctionBindings.Add(
@@ -4398,6 +5170,7 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
     TArray<FInterfaceFunctionDeclaration> InterfaceDeclarations;
     if (!ParseDeclaration(
             ScriptAsset,
+            Blueprint,
             DeclarationJson,
             StateDeclarations,
             FunctionDeclarations,

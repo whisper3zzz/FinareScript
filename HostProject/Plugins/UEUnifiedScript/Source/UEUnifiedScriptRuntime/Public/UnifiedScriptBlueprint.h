@@ -226,6 +226,14 @@ struct FUnifiedScriptManagedFunctionBinding
     EUnifiedScriptBlueprintEventSuperMode BlueprintEventSuperMode =
         EUnifiedScriptBlueprintEventSuperMode::Explicit;
 
+    /** Exact native class object path declaring the inherited Blueprint event, when present. */
+    UPROPERTY()
+    FString BlueprintOverrideDeclaringTypePath;
+
+    /** Original inherited native event name selected by the managed override declaration, when present. */
+    UPROPERTY()
+    FString BlueprintOverrideFunctionName;
+
     /** One type contract per managed argument, excluding injected World context. */
     UPROPERTY()
     TArray<FUnifiedScriptManagedValueTypeBinding> ParameterTypes;

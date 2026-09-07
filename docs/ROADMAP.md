@@ -27,11 +27,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Active milestone: **M13.3 resumed after the M13.5 common capability breadth checkpoint**.
 - Current tranche: **M13.3C-2 — explicit extension behavior**.
   Existing `[UnrealBlueprintEvent]` support lets a child Blueprint override a
-  managed default with explicit Call Parent Function. The next contract must
-  let managed behavior extend existing BlueprintNativeEvent and
-  BlueprintImplementableEvent paths with an exact owner, explicit parent-call
-  semantics and predictable reload. The materializer currently rejects inherited
-  function collisions; do not silently turn those collisions into overrides.
+  managed default with explicit Call Parent Function. Explicit
+  `[UnrealBlueprintOverride]` declarations now materialize inherited
+  BlueprintNativeEvent and BlueprintImplementableEvent signatures, preserving
+  the native owner and source identity through compile and asset reload.
+  Undeclared collisions still fail. Parent-call transport, runtime execution,
+  lifecycle ordering and reload compatibility remain open; this is a native
+  materialization checkpoint, not completed extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary

@@ -26,7 +26,8 @@
 
 namespace UE::UnifiedScript::Declaration::Private
 {
-constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
+constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
+constexpr TCHAR OverrideSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.2");
 
 struct FStateUnrealType
 {
@@ -126,6 +127,41 @@ bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
         return false;
     }
     return FGuid::ParseExact(Digits, EGuidFormats::Digits, OutId);
+}
+
+bool HasBlueprintOverrideMetadata(
+    const TArray<TSharedPtr<FJsonValue>>& Assets)
+{
+    for (const TSharedPtr<FJsonValue>& AssetValue : Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetArrayField(TEXT("functions"), Functions) ||
+            Functions == nullptr)
+        {
+            continue;
+        }
+        for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+        {
+            const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                ? FunctionValue->AsObject()
+                : nullptr;
+            const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+            const TSharedPtr<FJsonObject>* Override = nullptr;
+            if (Function.IsValid() &&
+                Function->TryGetObjectField(TEXT("blueprintEvent"), BlueprintEvent) &&
+                BlueprintEvent != nullptr && BlueprintEvent->IsValid() &&
+                (*BlueprintEvent)->TryGetObjectField(TEXT("override"), Override) &&
+                Override != nullptr && Override->IsValid())
+            {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool IsLegalEnumValue(const UEnum* Enum, int64 Value)
@@ -2546,7 +2582,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
 
     FString ParsedSchema;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), ParsedSchema) ||
-        ParsedSchema != SchemaVersion)
+        (ParsedSchema != LegacySchemaVersion && ParsedSchema != OverrideSchemaVersion))
     {
         OutError = FString::Printf(
             TEXT("Unsupported Script Asset declaration schema '%s'."),
@@ -2558,6 +2594,14 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
     if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr || Assets->IsEmpty())
     {
         OutError = TEXT("Script Asset declaration must contain at least one asset.");
+        return false;
+    }
+    if (ParsedSchema == LegacySchemaVersion && HasBlueprintOverrideMetadata(*Assets))
+    {
+        OutError = FString::Printf(
+            TEXT("Script Asset declaration schema '%s' cannot contain Blueprint override metadata; use '%s'."),
+            LegacySchemaVersion,
+            OverrideSchemaVersion);
         return false;
     }
 

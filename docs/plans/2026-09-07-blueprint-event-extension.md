@@ -33,6 +33,16 @@ parent chain and must not silently reparent an asset.
   source semantic ID. Native parameter names and source argument order need an
   explicit mapping. Const-reference native inputs remain input values; they
   must not be mistaken for mutable ref parameters.
+  Use the UE class-signature graph-creation overload: its function entry keeps
+  an external parent reference. The UFunction-signature overload only copies
+  user pins and is explicitly intended for a new function, so it cannot create
+  this override. Remove any auto-generated parent-call body; parent execution
+  remains explicit in managed code. Compare inherited allocated pins and
+  function references for idempotency, rather than inventing user pins.
+  Ownership checks distinguish UE's automatically placed disabled ghost events
+  from user-authored or explicitly enabled/disabled events. A fresh Actor
+  Blueprint's default placeholders must not block declaring an override;
+  accepting a declaration still preserves real user event bodies.
   Scalar managed Object/Class handles can carry a more specific inherited UE
   object/class pin: preserve that native pin and validate writes against its
   reflected class rather than replacing it with UObject. Container contracts
@@ -79,8 +89,61 @@ parent chain and must not silently reparent an asset.
   The existing `InvokeWithOutputs` path already encodes the reviewed value
   families; reuse it through an operation-aware internal helper. The in-process
   and correlated-scope consumers must preserve the parent operation as well.
-  Native parent dispatch can reuse `FUnifiedScriptInvocationBridge`'s owned
-  `ReadValue`/`WriteValue` codecs and the existing call-frame result cache.
+  Native parent dispatch must share the Blueprint property codecs and the
+  existing call-frame result cache. The older reflection bridge's
+  `ReadValue`/`WriteValue` does not carry arbitrary managed struct field order;
+  its scalar Soft Reference values also differ from the string representation
+  used by Blueprint call frames. Expose the existing `PackValueV2` and
+  `UnpackReturnValueV2` through a module-private shared interface, retaining
+  persistent field bindings. Do not create a second recursive struct codec or
+  weaken the older property lane's type checks. Parent results can become owned
+  call-frame values before entering the existing retry cache.
+
+## Lifecycle integration still to resolve
+
+The native component owns the managed host handle even for ActorComponent
+scripts whose `TargetHandle` is their Actor. Parent resolution must select the
+bound generated class and actual event receiver from that host, including
+ordinary Blueprint subclasses, rather than equating TargetHandle with the
+event receiver. Generation retirement remains the managed bridge boundary.
+
+Engine Actor BeginPlay starts components before emitting ReceiveBeginPlay.
+The current script component, however, calls Super::BeginPlay before starting
+managed code and stops managed code before Super::EndPlay. Consequently its
+own inherited ReceiveBeginPlay/ReceiveEndPlay cannot simply be dispatched with
+the existing order. For component classes with these managed override bindings,
+automatic activation must precede Super::BeginPlay and retirement must follow
+Super::EndPlay, including an ordinary Blueprint child that calls its parent.
+Keep the existing order for unaffected classes and preserve the explicit
+start/stop policy; do not lazily start from generic function dispatch. A failed
+start must still finish the native lifecycle path and roll back its candidate.
+Test this in runtime integration; materialization alone does not establish
+lifecycle-event support.
+
+Parent helpers are for an activated generation. Reject use during managed
+initialization/destruction with an actionable error: native active-instance
+fields are published only after OnStart completes, and calling ordinary
+Blueprint parent code during candidate initialization could reenter the old
+managed instance. Do not mark an uncommitted candidate as active to enable
+such a call. The normal inherited-event body runs after activation and can
+invoke its parent synchronously.
+
+Instance reload currently loads the candidate and then stops the old generation;
+the static-library signature barrier is not shared by this path. Add an
+override-contract barrier before stopping either generation: method identity,
+native declaring identity, function name, Super policy and argument/return
+contracts must remain compatible. A body-only edit may swap; removal, retargeting
+or a type/direction change must preserve the old generation and request class
+resynchronization. Validate the complete override route set so a newly introduced
+override cannot silently run against an older Blueprint binding either.
+
+Cold activation also needs a loaded-type versus persisted Blueprint contract
+check before lifecycle user code. Comparing only the old and new DLLs during
+reload cannot detect an already stale saved Blueprint. The expected contract
+must come from the materialized class, not a mutable source file or a freshly
+loaded Declaration. Define its boundary before claiming runtime closure; do not
+encode this metadata in event names or diagnostic fields. A change to a live
+asset's native route must not silently redirect the still-active old generation.
 
 ## Implementation sequence and evidence
 
@@ -93,11 +156,26 @@ serialized shape. SDK 10 Release tests passed: override contract 12, asset
 lowering 51, asset JSON 10, HIR lowering 12 and managed dispatch 6. Logs are
 `artifacts/m13-3c-2-{override-contract,csharp-lowerer,script-asset-json,hir-lowerer,managed-dispatch}-release.log`.
 
-Native materialization is the active implementation step. It must accept the
-new schema, verify the actual inherited event, preserve its signature and
-persist source-to-native parameter mapping through compile and asset reload.
-The managed checkpoint alone is not usable in UE; parent-call transport and
-end-to-end execution remain open.
+The native materialization checkpoint is implemented. Both Declaration readers
+accept the new schema. Preflight verifies the actual inherited event and full
+signature before mutation; generated graphs preserve source identity and native
+parameter mapping, including const-reference inputs. Compile and package reload
+retain managed bindings for both event kinds. Product-owned overrides can be
+retargeted and resynchronized; user-owned events remain protected. Default Actor
+ghost events do not block a new declaration. This retarget test is an asset
+materialization test, not evidence for retargeting a running managed instance.
+
+Editor Development compilation and
+`UnifiedScript.Unreal.ScriptClass.BlueprintInheritedEventMaterialization` passed,
+including real Actor event ownership, invalid declarations, idempotency,
+retargeting and transactional collision rejection. The existing
+`BlueprintManagedFunctionDispatch` regression passed after fresh Release
+deployment. Evidence is under `artifacts/m13-3c-2-native-materialization/`;
+`blueprint-inherited-event-materialization-reload-dispatch-assertions.log`,
+`editor-development-build-reload-dispatch-assertions.log`, `emit-release-fresh.log` and
+`blueprint-managed-function-dispatch-regression-release-staging.log` record these
+checks. Parent-call transport and end-to-end inherited-event execution remain
+open; materialization and binding do not prove that runtime behavior.
 
 Native integration must cover both Blueprint/state Declaration readers,
 materializer planning/rollback/idempotency, persistent generated-class binding,
