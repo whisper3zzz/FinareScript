@@ -893,9 +893,23 @@ caller storage is updated.
 
 Nested containers and known unhashable Blueprint Set/Map keys fail during
 source lowering with a shape-specific diagnostic. Native reflected type
-validation remains authoritative for other leaf types. Static library contexts
-are currently World-owned; World recreation validates disposal and fresh
-dispatch, but same-World library code replacement remains a Roadmap follow-up.
+validation remains authoritative for other leaf types.
+
+Static library cache slots are World-owned and retain current, prepared and
+previous code generations during reload. The daily and selected-asset actions
+prepare all loaded World copies of a library before committing any, restore the
+previous generation on abort, and retire it on finalize. Existing callable
+signatures must remain compatible; cold Worlds stay unloaded. Optional managed
+control exports preserve ordinary dispatch with an older host while reporting
+the reload feature as unavailable. No invocation ABI layout changes are needed.
+
+The dedicated `UnifiedScript.Unreal.ScriptClass.StaticLibraryReload` CMD test
+uses separately compiled v1/v2/incompatible DLLs and ordinary Blueprint callers
+in two existing Worlds. It covers changed results, commit/abort restoration,
+rejected candidates, cold-World exclusion, daily-action target deduplication
+and World-host cleanup. Evidence is under
+`artifacts/m13-3c-1c-b-static-library-reload`. Cooked function execution remains
+the outstanding acceptance path for this slice.
 
 ## Commands
 

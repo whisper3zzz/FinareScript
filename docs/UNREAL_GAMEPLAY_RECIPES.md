@@ -287,11 +287,17 @@ and `UnrealSoftClassHandle` values. The [Demo library](../samples/Unreal/Unified
 contains exchange functions for all five families; connect their outputs to
 ordinary downstream Blueprint nodes.
 
-Component-backed functions support compatible instance reload. Static libraries
-currently keep one loaded context per World; recreating that World loads the
-current library code. Updating a static library in an existing World through
-Build & Reload remains an open integration task. Callers use generated nodes
-without a handwritten C++ facade.
+Component-backed functions support compatible instance reload. For a static
+library, edit its body and run **Build & Reload** to update the existing Worlds
+that have already called it. Selected-asset reload uses the same route. Each
+World owns its loaded code generation; static CLR fields reset with a successful
+replacement. Keep persistent gameplay state on Script Class instances.
+
+Reload validates every loaded World copy before publishing a replacement.
+Changing an existing callable signature or failing to load the candidate keeps
+the current code callable and reports the failure. Adding a callable is
+compatible. A World that has not used the library stays unloaded until its first
+call. Callers continue to use the generated Blueprint nodes.
 
 ## Blueprint event
 
