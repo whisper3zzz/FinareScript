@@ -293,6 +293,29 @@ public:
         int32 CandidateGeneration,
         FString& OutError);
 
+    /** A zero candidate means this World has a cold static-library cache and is not a target. */
+    bool PrepareManagedStaticLibraryReload(
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32& OutCandidateGeneration,
+        FString& OutError);
+    bool CommitManagedStaticLibraryReload(
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        int32& OutActiveGeneration,
+        FString& OutError);
+    bool AbortManagedStaticLibraryReload(
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        FString& OutError);
+    bool FinalizeManagedStaticLibraryReload(
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        FString& OutError);
+
     bool GetManagedScriptReloadState(
         uint64 InstanceId,
         FString& OutJson,

@@ -35,6 +35,7 @@
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptEdGraph.h"
 #include "UnifiedScriptEditorDiagnostics.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/UObjectIterator.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -584,6 +585,339 @@ FString BuildSemanticReviewText(const FUnifiedScriptAuthoringPreviewResult& Prev
     return Result.IsEmpty()
         ? TEXT("No executable graph semantics changed; review the declaration/source diff below.")
         : Result;
+}
+}
+
+namespace
+{
+struct FStaticLibraryReloadParticipant
+{
+    TWeakObjectPtr<UUnifiedScriptWorldSubsystem> World;
+    uint64 WorldHostId = 0;
+    int32 CandidateGeneration = 0;
+    int32 ActiveGeneration = 0;
+    bool bActiveGenerationKnown = false;
+};
+
+FString BuildStaticLibraryReloadTransaction(
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    const FString& IncomingTransactionJson,
+    const FString& State,
+    const TArray<TPair<FString, FString>>& Phases,
+    const TArray<FStaticLibraryReloadParticipant>& Participants,
+    const FString& Failure = FString())
+{
+    TSharedPtr<FJsonObject> Root;
+    if (!IncomingTransactionJson.IsEmpty())
+    {
+        const TSharedRef<TJsonReader<>> Reader =
+            TJsonReaderFactory<>::Create(IncomingTransactionJson);
+        FJsonSerializer::Deserialize(Reader, Root);
+    }
+    if (!Root.IsValid())
+    {
+        Root = MakeShared<FJsonObject>();
+    }
+    Root->SetStringField(
+        TEXT("schemaVersion"),
+        TEXT("unifiedscript.reload-transaction/v0.1"));
+    FString TransactionId;
+    if (!Root->TryGetStringField(TEXT("transactionId"), TransactionId) ||
+        TransactionId.IsEmpty())
+    {
+        Root->SetStringField(
+            TEXT("transactionId"),
+            FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+    }
+    FString Source;
+    if (!Root->TryGetStringField(TEXT("source"), Source) || Source.IsEmpty())
+    {
+        Root->SetStringField(TEXT("source"), TEXT("staticFunctionLibrary"));
+    }
+    Root->SetStringField(TEXT("state"), State);
+    Root->SetStringField(TEXT("scope"), TEXT("staticLibraryBatch"));
+    Root->SetStringField(TEXT("generationScope"), TEXT("perParticipant"));
+    Root->SetStringField(
+        TEXT("target"),
+        FString::Printf(TEXT("%s|%s"), *AssemblyPath, *TypeName));
+    if (!Failure.IsEmpty())
+    {
+        Root->SetStringField(TEXT("failure"), Failure);
+    }
+    else
+    {
+        Root->RemoveField(TEXT("failure"));
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* ExistingPhases = nullptr;
+    TArray<TSharedPtr<FJsonValue>> JsonPhases;
+    if (Root->TryGetArrayField(TEXT("phases"), ExistingPhases) && ExistingPhases != nullptr)
+    {
+        JsonPhases = *ExistingPhases;
+    }
+    JsonPhases.Reserve(JsonPhases.Num() + Phases.Num());
+    for (const TPair<FString, FString>& PhasePair : Phases)
+    {
+        const TSharedRef<FJsonObject> Phase = MakeShared<FJsonObject>();
+        Phase->SetStringField(TEXT("name"), PhasePair.Key);
+        Phase->SetStringField(TEXT("state"), PhasePair.Value);
+        Phase->SetNumberField(TEXT("durationMicroseconds"), 0.0);
+        Phase->SetStringField(
+            TEXT("detail"),
+            FString::Printf(TEXT("Static FunctionLibrary target %s."), *PhasePair.Value));
+        JsonPhases.Add(MakeShared<FJsonValueObject>(Phase));
+    }
+    Root->SetArrayField(TEXT("phases"), MoveTemp(JsonPhases));
+
+    TArray<TSharedPtr<FJsonValue>> GenerationTargets;
+    for (const FStaticLibraryReloadParticipant& Participant : Participants)
+    {
+        const TSharedRef<FJsonObject> Target = MakeShared<FJsonObject>();
+        Target->SetNumberField(
+            TEXT("worldHostId"),
+            static_cast<double>(Participant.WorldHostId));
+        Target->SetNumberField(
+            TEXT("candidateGeneration"),
+            static_cast<double>(FMath::Max(Participant.CandidateGeneration, 0)));
+        Target->SetBoolField(TEXT("candidateGenerationKnown"), Participant.CandidateGeneration > 0);
+        Target->SetNumberField(
+            TEXT("activeGeneration"),
+            static_cast<double>(FMath::Max(Participant.ActiveGeneration, 0)));
+        Target->SetBoolField(TEXT("activeGenerationKnown"), Participant.bActiveGenerationKnown);
+        GenerationTargets.Add(MakeShared<FJsonValueObject>(Target));
+    }
+    Root->SetArrayField(TEXT("participants"), MoveTemp(GenerationTargets));
+    Root->SetNumberField(TEXT("fromGeneration"), 0.0);
+    Root->SetNumberField(TEXT("candidateGeneration"), 0.0);
+    Root->SetNumberField(TEXT("activeGeneration"), 0.0);
+    Root->SetBoolField(TEXT("fromGenerationKnown"), false);
+    Root->SetBoolField(TEXT("candidateGenerationKnown"), false);
+    Root->SetBoolField(TEXT("activeGenerationKnown"), false);
+    if (!Participants.IsEmpty())
+    {
+        Root->SetStringField(TEXT("generationDetail"), TEXT("See participants for per-World generations."));
+    }
+
+    FString Json;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+    return FJsonSerializer::Serialize(Root, Writer) ? Json : FString();
+}
+
+FUnifiedScriptReloadBatchResult ReloadStaticLibraryForAsset(
+    const UUnifiedScriptAsset* Asset,
+    const FString& ReloadTransactionJson)
+{
+    FUnifiedScriptReloadBatchResult Result;
+    if (Asset == nullptr ||
+        Asset->ScriptClassKind != EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+    {
+        return Result;
+    }
+
+    FString AssemblyPath;
+    FString TypeName;
+    FString ResolveError;
+    if (!Asset->ResolveRuntimeConfiguration(true, AssemblyPath, TypeName, ResolveError))
+    {
+        Result.Matched = 1;
+        Result.Failed = 1;
+        Result.PrepareRejected = 1;
+        Result.ObservedReloadTransactionJson = BuildStaticLibraryReloadTransaction(
+            AssemblyPath,
+            TypeName,
+            ReloadTransactionJson,
+            TEXT("failed"),
+            {{TEXT("staticLibraryResolve"), TEXT("failed")}},
+            {},
+            ResolveError);
+        return Result;
+    }
+
+    TArray<FStaticLibraryReloadParticipant> Participants;
+    bool bPrepareFailed = false;
+    bool bAbortFailed = false;
+    FString Failure;
+    auto AppendFailure = [&Failure](const FString& Error)
+    {
+        if (Error.IsEmpty())
+        {
+            return;
+        }
+        if (!Failure.IsEmpty())
+        {
+            Failure += TEXT("; ");
+        }
+        Failure += Error;
+    };
+    for (TObjectIterator<UUnifiedScriptWorldSubsystem> It; It; ++It)
+    {
+        UUnifiedScriptWorldSubsystem* WorldSubsystem = *It;
+        if (!IsValid(WorldSubsystem) || !WorldSubsystem->IsManagedWorldReady())
+        {
+            continue;
+        }
+
+        int32 CandidateGeneration = 0;
+        FString Error;
+        if (!WorldSubsystem->PrepareManagedStaticLibraryReload(
+                AssemblyPath,
+                TypeName,
+                CandidateGeneration,
+                Error))
+        {
+            bPrepareFailed = true;
+            ++Result.Matched;
+            ++Result.PrepareRejected;
+            AppendFailure(Error);
+            continue;
+        }
+        if (CandidateGeneration == 0)
+        {
+            continue;
+        }
+        Participants.Add(FStaticLibraryReloadParticipant{
+            WorldSubsystem,
+            WorldSubsystem->GetWorldHostId(),
+            CandidateGeneration,
+            0,
+            false});
+        ++Result.Matched;
+        ++Result.Prepared;
+    }
+
+    auto AbortParticipants = [
+        &Participants,
+        &Result,
+        &AssemblyPath,
+        &TypeName,
+        &Failure,
+        &AppendFailure,
+        &bAbortFailed](
+                                 const FString& Reason)
+    {
+        (void)Reason;
+        for (FStaticLibraryReloadParticipant& Participant : Participants)
+        {
+            UUnifiedScriptWorldSubsystem* WorldSubsystem = Participant.World.Get();
+            if (WorldSubsystem == nullptr)
+            {
+                bAbortFailed = true;
+                AppendFailure(TEXT("The static-library reload World was destroyed during rollback."));
+                continue;
+            }
+            FString Error;
+            if (WorldSubsystem->AbortManagedStaticLibraryReload(
+                    AssemblyPath,
+                    TypeName,
+                    Participant.CandidateGeneration,
+                    Error))
+            {
+                ++Result.Aborted;
+                Participant.ActiveGeneration = 0;
+                Participant.bActiveGenerationKnown = false;
+            }
+            else
+            {
+                bAbortFailed = true;
+                AppendFailure(Error);
+            }
+        }
+    };
+
+    if (bPrepareFailed)
+    {
+        AbortParticipants(TEXT("prepare"));
+        Result.Failed = FMath::Max(Result.Matched, 1);
+        Result.ObservedReloadTransactionJson = BuildStaticLibraryReloadTransaction(
+            AssemblyPath,
+            TypeName,
+            ReloadTransactionJson,
+            bAbortFailed ? TEXT("rollbackFailed") : TEXT("rolledBack"),
+            {{TEXT("staticLibraryPrepare"), TEXT("failed")},
+             {TEXT("staticLibraryAbort"),
+              Participants.IsEmpty()
+                  ? TEXT("notRequired")
+                  : (bAbortFailed ? TEXT("failed") : TEXT("succeeded"))}},
+            Participants,
+            Failure);
+        return Result;
+    }
+
+    if (Participants.IsEmpty())
+    {
+        return Result;
+    }
+
+    for (FStaticLibraryReloadParticipant& Participant : Participants)
+    {
+        UUnifiedScriptWorldSubsystem* WorldSubsystem = Participant.World.Get();
+        FString Error;
+        if (WorldSubsystem == nullptr ||
+            !WorldSubsystem->CommitManagedStaticLibraryReload(
+                AssemblyPath,
+                TypeName,
+                Participant.CandidateGeneration,
+                Participant.ActiveGeneration,
+                Error))
+        {
+            ++Result.CommitRejected;
+            AppendFailure(Error);
+            AbortParticipants(TEXT("commit"));
+            Result.Committed = 0;
+            for (const FStaticLibraryReloadParticipant& Remaining : Participants)
+            {
+                Result.Committed += Remaining.ActiveGeneration > 0 ? 1 : 0;
+            }
+            Result.Failed = FMath::Max(Result.Matched, 1);
+            Result.ObservedReloadTransactionJson = BuildStaticLibraryReloadTransaction(
+                AssemblyPath,
+                TypeName,
+                ReloadTransactionJson,
+                bAbortFailed ? TEXT("rollbackFailed") : TEXT("rolledBack"),
+                {{TEXT("staticLibraryPrepare"), TEXT("succeeded")},
+                 {TEXT("staticLibraryCommit"), TEXT("failed")},
+                 {TEXT("staticLibraryAbort"),
+                  bAbortFailed ? TEXT("failed") : TEXT("succeeded")}},
+                Participants,
+                Failure);
+            return Result;
+        }
+        Participant.bActiveGenerationKnown = true;
+        ++Result.Committed;
+    }
+
+    for (FStaticLibraryReloadParticipant& Participant : Participants)
+    {
+        UUnifiedScriptWorldSubsystem* WorldSubsystem = Participant.World.Get();
+        FString Error;
+        if (WorldSubsystem == nullptr ||
+            !WorldSubsystem->FinalizeManagedStaticLibraryReload(
+                AssemblyPath,
+                TypeName,
+                Participant.CandidateGeneration,
+                Error))
+        {
+            ++Result.FinalizeFailed;
+            ++Result.Failed;
+            AppendFailure(Error);
+            continue;
+        }
+        ++Result.Reloaded;
+    }
+
+    Result.ObservedReloadTransactionJson = BuildStaticLibraryReloadTransaction(
+        AssemblyPath,
+        TypeName,
+        ReloadTransactionJson,
+        Result.Failed == 0 ? TEXT("published") : TEXT("failed"),
+        {{TEXT("staticLibraryPrepare"), TEXT("succeeded")},
+         {TEXT("staticLibraryCommit"), TEXT("succeeded")},
+         {TEXT("staticLibraryFinalize"),
+          Result.Failed == 0 ? TEXT("succeeded") : TEXT("failed")}},
+        Participants,
+        Failure);
+    return Result;
 }
 }
 
@@ -4453,7 +4787,7 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             *HistoryPersistenceDetail,
             bDailyBuildQueued ? TEXT("queued") : TEXT("failed to queue"))
         : FString::Printf(
-            TEXT("Grouped draft discarded; committed revision %lld / Workbench generation %lld remains active; history %lld undo / %lld redo; journal %s%s; Surface restored; components %d matched, %d updated, %d failed."),
+            TEXT("Grouped draft discarded; committed revision %lld / Workbench generation %lld remains active; history %lld undo / %lld redo; journal %s%s; Surface restored; %d reload targets matched, %d updated, %d failed."),
             WorkspaceRevision,
             WorkspaceGeneration,
             UndoAuthoringDepth,
@@ -4891,8 +5225,81 @@ SUnifiedScriptAuthoringSurface::ReloadAllScriptClassComponents(
         {
             continue;
         }
+        if (Asset->ScriptClassKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+        {
+            continue;
+        }
         const FUnifiedScriptReloadBatchResult Batch =
             ReloadMatchingComponentsForAsset(Asset, FString(), ReloadTransactionJson);
+        Aggregate.Matched += Batch.Matched;
+        Aggregate.Reloaded += Batch.Reloaded;
+        Aggregate.Failed += Batch.Failed;
+        Aggregate.PreflightRejected += Batch.PreflightRejected;
+        Aggregate.Prepared += Batch.Prepared;
+        Aggregate.PrepareRejected += Batch.PrepareRejected;
+        Aggregate.Committed += Batch.Committed;
+        Aggregate.CommitRejected += Batch.CommitRejected;
+        Aggregate.Aborted += Batch.Aborted;
+        Aggregate.FinalizeFailed += Batch.FinalizeFailed;
+        if (!Batch.ObservedReloadTransactionJson.IsEmpty())
+        {
+            Aggregate.ObservedReloadTransactionJson =
+                Batch.ObservedReloadTransactionJson;
+        }
+    }
+
+    TArray<TWeakObjectPtr<UUnifiedScriptAsset>> StaticAssets;
+    for (TObjectIterator<UUnifiedScriptAsset> It; It; ++It)
+    {
+        UUnifiedScriptAsset* Asset = *It;
+        if (IsValid(Asset) &&
+            !Asset->IsTemplate() &&
+            Asset->ScriptClassKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+        {
+            StaticAssets.Add(Asset);
+        }
+    }
+    StaticAssets.Sort([](
+        const TWeakObjectPtr<UUnifiedScriptAsset>& Left,
+        const TWeakObjectPtr<UUnifiedScriptAsset>& Right)
+    {
+        const UUnifiedScriptAsset* LeftAsset = Left.Get();
+        const UUnifiedScriptAsset* RightAsset = Right.Get();
+        return LeftAsset != nullptr && RightAsset != nullptr
+            ? LeftAsset->GetPathName() < RightAsset->GetPathName()
+            : LeftAsset != nullptr;
+    });
+    TArray<TPair<FString, FString>> StaticKeys;
+    for (const TWeakObjectPtr<UUnifiedScriptAsset>& WeakAsset : StaticAssets)
+    {
+        const UUnifiedScriptAsset* Asset = WeakAsset.Get();
+        if (Asset == nullptr)
+        {
+            continue;
+        }
+        FString AssemblyPath;
+        FString TypeName;
+        FString ResolveError;
+        const bool bResolved = Asset->ResolveRuntimeConfiguration(
+            true,
+            AssemblyPath,
+            TypeName,
+            ResolveError);
+        const FString ResolvedPath = bResolved ? AssemblyPath : Asset->GetPathName();
+        const FString ResolvedType = bResolved ? TypeName : FString();
+        const bool bDuplicate = StaticKeys.ContainsByPredicate(
+            [&ResolvedPath, &ResolvedType](const TPair<FString, FString>& Existing)
+            {
+                return Existing.Key.Equals(ResolvedPath, ESearchCase::CaseSensitive) &&
+                    Existing.Value.Equals(ResolvedType, ESearchCase::CaseSensitive);
+            });
+        if (bDuplicate)
+        {
+            continue;
+        }
+        StaticKeys.Add({ResolvedPath, ResolvedType});
+        const FUnifiedScriptReloadBatchResult Batch =
+            ReloadStaticLibraryForAsset(Asset, ReloadTransactionJson);
         Aggregate.Matched += Batch.Matched;
         Aggregate.Reloaded += Batch.Reloaded;
         Aggregate.Failed += Batch.Failed;
@@ -5062,6 +5469,28 @@ SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
         if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
         {
             Result.ObservedReloadTransactionJson = Component->LastReloadTransaction;
+        }
+    }
+
+    if (PreferredAsset != nullptr &&
+        PreferredAsset->ScriptClassKind == EUnifiedScriptClassKind::BlueprintFunctionLibrary)
+    {
+        const FUnifiedScriptReloadBatchResult StaticResult =
+            ReloadStaticLibraryForAsset(PreferredAsset, ReloadTransactionJson);
+        Result.Matched += StaticResult.Matched;
+        Result.Reloaded += StaticResult.Reloaded;
+        Result.Failed += StaticResult.Failed;
+        Result.PreflightRejected += StaticResult.PreflightRejected;
+        Result.Prepared += StaticResult.Prepared;
+        Result.PrepareRejected += StaticResult.PrepareRejected;
+        Result.Committed += StaticResult.Committed;
+        Result.CommitRejected += StaticResult.CommitRejected;
+        Result.Aborted += StaticResult.Aborted;
+        Result.FinalizeFailed += StaticResult.FinalizeFailed;
+        if (!StaticResult.ObservedReloadTransactionJson.IsEmpty())
+        {
+            Result.ObservedReloadTransactionJson =
+                StaticResult.ObservedReloadTransactionJson;
         }
     }
     return Result;

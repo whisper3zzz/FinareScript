@@ -23,6 +23,8 @@ generation and resets with that generation; it is not Script Class instance stat
   function rejects preparation; adding a callable does not invalidate existing
   bindings. Compare signatures without keeping candidate reflection objects in
   a process-global cache. No file polling or hashing is added to ordinary calls.
+  Preparation checks loadability and call contracts; it does not execute user
+  static constructors. They still run on the first call in that generation.
 - First implement and test the managed cache lifecycle. Then add control-plane
   entry points and native Host/World wrappers for the same four phases, keyed
   by World, program, type and candidate generation. A cold library is unmatched,
@@ -45,6 +47,13 @@ generation and resets with that generation; it is not Script Class instance stat
   Prepare all eligible Worlds before evaluating the batch barrier, so matched
   and rejected counts include every cached participant. User-visible summaries
   must describe reload targets rather than claiming static libraries are components.
+  Match the managed cache's ordinal path/type pair when deduplicating; Unreal's
+  default FString equality is case-insensitive. Keep the incoming transaction
+  identity and build phases in diagnostics. Batch receipts use
+  `scope=staticLibraryBatch` and per-World participants with known generations;
+  the legacy root generation fields are zero as a batch-only not-applicable
+  sentinel required by the existing v0.1 reader, never inferred active versions.
+  Rollback errors must remain visible rather than being labeled successful.
 - Finally prove a body change and rejected candidate through an actual Blueprint
   VM caller in the same World, then carry the function fixture through Cook and
   packaged execution. Use HostProject without onboarding over protected files.
@@ -65,6 +74,15 @@ including duplicate assets resolving to the same cache key. Cooked coverage can
 reuse the existing five-shape function fixture without coupling packaging to the
 Editor-only reload controls.
 
+For cooked acceptance, retain that generated library/caller package only under
+an explicit fixture-output option after its CMD checks succeed. Give the run a
+dedicated Content directory and a receipt with exact class paths. Direct UAT
+`BuildCookRun` can cook that directory plus `/Engine/Maps/Entry`; do not invoke
+onboarding or the whole golden-path setup over protected files. A separate
+HostProject runtime verification flag must load the cooked ordinary Blueprint
+caller, check its bytecode and all five input/ref/out/return results, then destroy
+its World and check host cleanup. Keep the verifier independent of Editor APIs.
+
 ## Managed checkpoint — 2026-09-07
 
 The managed slot lifecycle and owned signature identities are implemented.
@@ -74,4 +92,21 @@ rollback, additive callables, incompatible container/struct/soft-reference
 contracts, invalid assemblies and collectible current/pending context disposal.
 Evidence: `artifacts/m13-3c-1c-b-static-library-reload/managed-focused-release.log`.
 
-Native integration and cooked acceptance remain unimplemented at this checkpoint.
+## Native integration checkpoint — 2026-09-07
+
+Optional managed exports, native Host/World wrappers and the daily/selected-asset
+reload route are implemented. Editor compilation passed; the existing component
+batch reload, static and instance Blueprint dispatch regressions passed.
+`UnifiedScript.Unreal.ScriptClass.StaticLibraryReload` passed through ordinary
+Blueprint bytecode in two existing Worlds with three separately compiled DLL
+variants. It verifies changed v1/v2 results, restoration after commit/abort,
+rejection of incompatible candidates while current code remains callable, a
+cold World remaining unmatched, selected-asset reload, daily-action cache-key
+deduplication, preserved transaction diagnostics and World-host cleanup.
+Cooked function acceptance remains open.
+
+Current native evidence: `ue-host-editor-build-static-test-4.log`,
+`editor-static-library-reload-ue.log`,
+`editor-reload-batch-preflight-final-ue.log`, `editor-static-dispatch-ue.log`
+and `editor-instance-dispatch-final-ue.log`
+under `artifacts/m13-3c-1c-b-static-library-reload`.

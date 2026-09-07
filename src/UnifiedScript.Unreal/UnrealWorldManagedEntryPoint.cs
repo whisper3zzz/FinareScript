@@ -746,6 +746,153 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int PrepareStaticLibraryReload(
+        ulong worldId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength)
+    {
+        ClearBoundaryFailure(worldId);
+        if (assemblyPathData == 0 || assemblyPathLength is <= 0 or > 32768 ||
+            typeNameData == 0 || typeNameLength is <= 0 or > 4096)
+        {
+            return -(int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return entry.PrepareStaticLibraryReload(
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength));
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(PrepareStaticLibraryReload), exception);
+            return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int CommitStaticLibraryReload(
+        ulong worldId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (assemblyPathData == 0 || assemblyPathLength is <= 0 or > 32768 ||
+            typeNameData == 0 || typeNameLength is <= 0 or > 4096 || candidateGeneration <= 0)
+        {
+            return -(int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return entry.CommitStaticLibraryReload(
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength),
+                candidateGeneration);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(CommitStaticLibraryReload), exception);
+            return -(int)UnrealWorldManagedEntryStatus.ScriptNotFound;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(CommitStaticLibraryReload), exception);
+            return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int AbortStaticLibraryReload(
+        ulong worldId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (assemblyPathData == 0 || assemblyPathLength is <= 0 or > 32768 ||
+            typeNameData == 0 || typeNameLength is <= 0 or > 4096 || candidateGeneration <= 0)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            entry.AbortStaticLibraryReload(
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength),
+                candidateGeneration);
+            return (int)UnrealWorldManagedEntryStatus.Success;
+        }
+        catch (KeyNotFoundException exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(AbortStaticLibraryReload), exception);
+            return (int)UnrealWorldManagedEntryStatus.ScriptNotFound;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(AbortStaticLibraryReload), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FinalizeStaticLibraryReload(
+        ulong worldId,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength,
+        int candidateGeneration)
+    {
+        ClearBoundaryFailure(worldId);
+        if (assemblyPathData == 0 || assemblyPathLength is <= 0 or > 32768 ||
+            typeNameData == 0 || typeNameLength is <= 0 or > 4096 || candidateGeneration <= 0)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            entry.FinalizeStaticLibraryReload(
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength),
+                candidateGeneration);
+            return (int)UnrealWorldManagedEntryStatus.Success;
+        }
+        catch (KeyNotFoundException exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(FinalizeStaticLibraryReload), exception);
+            return (int)UnrealWorldManagedEntryStatus.ScriptNotFound;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, 0, nameof(FinalizeStaticLibraryReload), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DestroyScript(ulong worldId, ulong instanceId)
     {
         ClearBoundaryFailure(worldId);
@@ -1269,7 +1416,7 @@ public static class UnrealWorldManagedEntryPoint
         private ManagedStaticLibrary RequireStaticLibrary(string key) =>
             _staticLibraries.TryGetValue(key, out ManagedStaticLibrary? library)
                 ? library
-                : throw new InvalidOperationException(
+                : throw new KeyNotFoundException(
                     "The managed static library cache slot is not loaded for this World.");
 
         public int ReloadScript(

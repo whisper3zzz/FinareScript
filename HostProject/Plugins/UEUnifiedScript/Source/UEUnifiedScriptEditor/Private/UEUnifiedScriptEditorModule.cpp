@@ -739,7 +739,7 @@ private:
                     Result.Status = TEXT("failed");
                 }
                 Result.Summary = FString::Printf(
-                    TEXT("Daily Build completed: %d stages ran, %d skipped, %d deferred; %d components matched, %d reloaded, %d failed."),
+                    TEXT("Daily Build completed: %d stages ran, %d skipped, %d deferred; %d reload targets matched, %d reloaded, %d failed."),
                     Result.ExecutedStages,
                     Result.SkippedStages,
                     Result.DeferredStages,

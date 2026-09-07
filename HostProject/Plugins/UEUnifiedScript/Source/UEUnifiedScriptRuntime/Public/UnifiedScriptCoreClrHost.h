@@ -142,6 +142,33 @@ public:
         uint64 InstanceId,
         int32 CandidateGeneration,
         FString& OutError);
+
+    /** A zero candidate means this World has a cold static-library cache and is not a target. */
+    bool PrepareManagedStaticLibraryReload(
+        uint64 WorldHostId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32& OutCandidateGeneration,
+        FString& OutError);
+    bool CommitManagedStaticLibraryReload(
+        uint64 WorldHostId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        int32& OutActiveGeneration,
+        FString& OutError);
+    bool AbortManagedStaticLibraryReload(
+        uint64 WorldHostId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        FString& OutError);
+    bool FinalizeManagedStaticLibraryReload(
+        uint64 WorldHostId,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        int32 CandidateGeneration,
+        FString& OutError);
     bool DestroyManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -190,6 +217,10 @@ private:
     void* CommitScriptReloadEntryPoint = nullptr;
     void* AbortScriptReloadEntryPoint = nullptr;
     void* FinalizeScriptReloadEntryPoint = nullptr;
+    void* PrepareStaticLibraryReloadEntryPoint = nullptr;
+    void* CommitStaticLibraryReloadEntryPoint = nullptr;
+    void* AbortStaticLibraryReloadEntryPoint = nullptr;
+    void* FinalizeStaticLibraryReloadEntryPoint = nullptr;
     void* DestroyScriptEntryPoint = nullptr;
     void* GetScriptCountEntryPoint = nullptr;
     void* GetInvocationMetricsEntryPoint = nullptr;

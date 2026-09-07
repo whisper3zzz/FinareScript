@@ -126,6 +126,19 @@ using FCommitScriptReloadEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 InstanceId,
     int32 CandidateGeneration);
 using FReloadControlEntryPoint = FCommitScriptReloadEntryPoint;
+using FPrepareStaticLibraryReloadEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength);
+using FStaticLibraryReloadControlEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength,
+    int32 CandidateGeneration);
 using FDestroyScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId);
@@ -409,6 +422,10 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     CommitScriptReloadEntryPoint = nullptr;
     AbortScriptReloadEntryPoint = nullptr;
     FinalizeScriptReloadEntryPoint = nullptr;
+    PrepareStaticLibraryReloadEntryPoint = nullptr;
+    CommitStaticLibraryReloadEntryPoint = nullptr;
+    AbortStaticLibraryReloadEntryPoint = nullptr;
+    FinalizeStaticLibraryReloadEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;
@@ -1373,6 +1390,227 @@ bool FUnifiedScriptCoreClrHost::FinalizeManagedScriptReload(
     return true;
 }
 
+bool FUnifiedScriptCoreClrHost::PrepareManagedStaticLibraryReload(
+    uint64 WorldHostId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32& OutCandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    OutCandidateGeneration = 0;
+    FPrepareStaticLibraryReloadEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            PrepareStaticLibraryReloadEntryPoint == nullptr ||
+            CommitStaticLibraryReloadEntryPoint == nullptr ||
+            AbortStaticLibraryReloadEntryPoint == nullptr ||
+            FinalizeStaticLibraryReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT(
+                "The managed static-library reload prepare entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FPrepareStaticLibraryReloadEntryPoint>(
+            PrepareStaticLibraryReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty())
+    {
+        OutError = TEXT("The managed static-library assembly path is empty.");
+        return false;
+    }
+    if (TypeName.IsEmpty())
+    {
+        OutError = TEXT("The managed static-library type name is empty.");
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length());
+    if (Result < 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed static-library reload prepare"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutCandidateGeneration = Result;
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::CommitManagedStaticLibraryReload(
+    uint64 WorldHostId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    int32& OutActiveGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    OutActiveGeneration = 0;
+    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            CommitStaticLibraryReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT(
+                "The managed static-library reload commit entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+            CommitStaticLibraryReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+    {
+        OutError = TEXT("The managed static-library reload commit arguments are invalid.");
+        return false;
+    }
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length(),
+        CandidateGeneration);
+    if (Result <= 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed static-library reload commit"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutActiveGeneration = Result;
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::AbortManagedStaticLibraryReload(
+    uint64 WorldHostId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            AbortStaticLibraryReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT(
+                "The managed static-library reload abort entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+            AbortStaticLibraryReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+    {
+        OutError = TEXT("The managed static-library reload abort arguments are invalid.");
+        return false;
+    }
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length(),
+        CandidateGeneration);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed static-library reload abort"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::FinalizeManagedStaticLibraryReload(
+    uint64 WorldHostId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            FinalizeStaticLibraryReloadEntryPoint == nullptr)
+        {
+            OutError = TEXT(
+                "The managed static-library reload finalize entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+            FinalizeStaticLibraryReloadEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+    {
+        OutError = TEXT("The managed static-library reload finalize arguments are invalid.");
+        return false;
+    }
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length(),
+        CandidateGeneration);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed static-library reload finalize"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
 bool FUnifiedScriptCoreClrHost::DestroyManagedScript(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -1641,6 +1879,10 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         TEXT("AbortScriptReload"), &AbortScriptReloadEntryPoint);
     const int32 FinalizeReloadResult = LoadEntryPoint(
         TEXT("FinalizeScriptReload"), &FinalizeScriptReloadEntryPoint);
+    LoadEntryPoint(TEXT("PrepareStaticLibraryReload"), &PrepareStaticLibraryReloadEntryPoint);
+    LoadEntryPoint(TEXT("CommitStaticLibraryReload"), &CommitStaticLibraryReloadEntryPoint);
+    LoadEntryPoint(TEXT("AbortStaticLibraryReload"), &AbortStaticLibraryReloadEntryPoint);
+    LoadEntryPoint(TEXT("FinalizeStaticLibraryReload"), &FinalizeStaticLibraryReloadEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
@@ -1686,6 +1928,10 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         "AbortScriptReload", &AbortScriptReloadEntryPoint);
     const int32 FinalizeReloadResult = LoadEntryPoint(
         "FinalizeScriptReload", &FinalizeScriptReloadEntryPoint);
+    LoadEntryPoint("PrepareStaticLibraryReload", &PrepareStaticLibraryReloadEntryPoint);
+    LoadEntryPoint("CommitStaticLibraryReload", &CommitStaticLibraryReloadEntryPoint);
+    LoadEntryPoint("AbortStaticLibraryReload", &AbortStaticLibraryReloadEntryPoint);
+    LoadEntryPoint("FinalizeStaticLibraryReload", &FinalizeStaticLibraryReloadEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
@@ -1801,6 +2047,10 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     CommitScriptReloadEntryPoint = nullptr;
     AbortScriptReloadEntryPoint = nullptr;
     FinalizeScriptReloadEntryPoint = nullptr;
+    PrepareStaticLibraryReloadEntryPoint = nullptr;
+    CommitStaticLibraryReloadEntryPoint = nullptr;
+    AbortStaticLibraryReloadEntryPoint = nullptr;
+    FinalizeStaticLibraryReloadEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;

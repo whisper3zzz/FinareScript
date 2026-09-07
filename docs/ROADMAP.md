@@ -29,17 +29,20 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   The checked-in `DemoLibrary` exchange methods now pass actual Blueprint VM
   callers for all five families, including downstream output use, caller output
   forwarding and package reload. Source diagnostics reject nested containers
-  and known unhashable Set/Map leaves. Next close static-library code reload and
-  verify the cooked execution path; native `ProcessEvent` regression checks
+  and known unhashable Set/Map leaves. Static-library code reload now passes
+  actual Blueprint callers in existing Worlds. Next verify the cooked execution
+  path; native `ProcessEvent` regression checks
   remain distinct from Blueprint caller bytecode evidence.
   Reuse the local HostProject packaging facilities without modifying protected
   files or an external project.
   The managed static-library cache now has prepared/current/retained code
-  generations, compatible-signature validation and rollback. Native control
-  entry points and daily/selected-asset Build & Reload integration remain open;
-  the editor action still reloads only Script Components. Close that gap with a
-  real same-World Blueprint caller before claiming the ordinary static Function
-  Library workflow complete. See
+  generations, compatible-signature validation and rollback (`37986b6`). Native
+  control entry points and daily/selected-asset Build & Reload integration are
+  implemented and validated. The new CMD test observes v1/v2 body replacement
+  in two existing Worlds, commit/abort restoration, incompatible-candidate
+  rejection, cold-World exclusion and daily-action target deduplication. Editor
+  compilation and existing dispatch/component reload regressions pass. Cooked
+  function execution remains open. See
   `docs/plans/2026-09-07-static-library-reload.md` for the active handoff.
 - Latest delivered M13.5 checkpoint: **collection state and defaults**,
   with core serialization/runtime commit `e30045f`, following soft-reference

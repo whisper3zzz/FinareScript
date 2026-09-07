@@ -904,6 +904,86 @@ bool UUnifiedScriptWorldSubsystem::FinalizeManagedScriptReload(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::PrepareManagedStaticLibraryReload(
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32& OutCandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutCandidateGeneration = 0;
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().PrepareManagedStaticLibraryReload(
+        WorldHostId,
+        AssemblyPath,
+        TypeName,
+        OutCandidateGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::CommitManagedStaticLibraryReload(
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    int32& OutActiveGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutActiveGeneration = 0;
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().CommitManagedStaticLibraryReload(
+        WorldHostId,
+        AssemblyPath,
+        TypeName,
+        CandidateGeneration,
+        OutActiveGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::AbortManagedStaticLibraryReload(
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().AbortManagedStaticLibraryReload(
+        WorldHostId,
+        AssemblyPath,
+        TypeName,
+        CandidateGeneration,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::FinalizeManagedStaticLibraryReload(
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32 CandidateGeneration,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().FinalizeManagedStaticLibraryReload(
+        WorldHostId,
+        AssemblyPath,
+        TypeName,
+        CandidateGeneration,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::GetManagedScriptReloadState(
     uint64 InstanceId,
     FString& OutJson,
