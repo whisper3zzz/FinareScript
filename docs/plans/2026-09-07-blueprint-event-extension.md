@@ -162,11 +162,11 @@ candidate while preserving the old instance. The transaction records an
 `overrideContractValidation` phase and an unchanged rollback on rejection.
 Malformed, hidden or unsupported override methods fail during dispatcher
 creation rather than disappearing from the route set. Signature validation
-does not compile a second dispatch delegate. This managed barrier is implemented;
-it does not yet compare the DLL with a saved native Blueprint contract.
+does not compile a second dispatch delegate. This managed-to-managed barrier
+retains the richer CLR identity alongside the activation contract below.
 
-Cold activation also needs a loaded-type versus persisted Blueprint contract
-check before lifecycle user code. Comparing only the old and new DLLs during
+Cold activation checks the loaded type against the persisted Blueprint contract
+before constructor and lifecycle user code. Comparing only the old and new DLLs during
 reload cannot detect an already stale saved Blueprint. The expected contract
 must come from the materialized class, not a mutable source file or a freshly
 loaded Declaration. Define its boundary before claiming runtime closure; do not
@@ -202,6 +202,51 @@ asset mutation, with a stop/resynchronize/restart diagnostic. Unchanged contract
 and ordinary Blueprint child bodies remain allowed. This avoids redirecting a
 live old generation during class Sync; general live class-shape migration is
 outside this checkpoint.
+
+### Activation contract boundary
+
+The native-to-managed creation payload uses
+`unifiedscript.blueprint-override-contract/v0.1`, bounded to 256 KiB of UTF-8.
+It contains an explicit `overrides` array. Each route has `managedName`, raw
+`declaringClassPath` and `functionName`, `superMode: explicit`, a `returnType`
+and ordered `parameters` with `direction` (`in`, `ref`, `out`) and `type`.
+Value shapes carry `kind`, the shared codec's `nativeName` and `typePath`
+(enum/custom struct path; otherwise empty). Custom structs retain ordered
+`fields` with native names and recursive types; arrays/sets have `element` and
+maps have `key`/`value`. Fixed Vector, Rotator and Transform codecs stay scalar.
+`void` is return-only and has empty `nativeName` and `typePath`. Shape recursion
+retains the existing depth bound and method arity retains the V2 limit of four
+parameters. No source parameter names or CLR field/declaring-type identities
+cross this boundary.
+
+`CreateScriptWithBlueprintContract` appends a contract pointer/byte count to the
+existing eight creation arguments. Its parsed, immutable expected contract is
+stored on the managed instance and checked before constructor activation for
+both initial load and reload candidates. The legacy managed export supplies
+an explicit empty contract, so it cannot silently activate an override-bearing
+type. Internal managed-only fixture creation can still omit the expectation;
+production World creation cannot. The new native creation path requires the
+named export even for an empty expected set, since absence cannot prove that
+the loaded DLL has no unexpected override. Resolving this export remains
+optional for World startup and existing legacy native creation callers.
+
+Build the payload after generated-class identity validation and before claiming
+candidate gameplay ownership. Select the Script Asset's exact generated class,
+including when the receiver is an ordinary Blueprint child. Validate its own
+persistent override bindings against local reflected functions and use their
+native parameter mapping and struct-field order. A missing asset or a class
+without overrides supplies an explicit empty set. Construction failure follows
+the current handle/state/ownership rollback and never publishes an instance.
+
+The persisted function binding version is `3`, independently of the managed
+dispatcher class's V2 name. Reject unreviewed binding versions. Resolve native
+parameters by the binding's ordered names rather than reflected field order,
+and require unique names. Local and directly declared parent properties must
+have the same native type and direction before projecting their shared managed
+codec shape; this retains native object-class restrictions. Consume every
+persisted struct/container field path exactly once, including reserved
+container markers. Runtime class identity comes from the resolved class object
+and strict superclass ancestry, not display casing in `GetPathName()`.
 
 ## Implementation sequence and evidence
 
@@ -301,3 +346,54 @@ type/owner/collision rejection without mutation, same-World body replacement,
 retired-generation rejection and World cleanup. Include typed return/ref/out
 and one large parent result that needs a buffer retry. Package the working
 fixture through HostProject once the runtime contract is complete.
+
+The managed activation boundary is implemented. `CreateScript` now supplies an
+explicit empty expectation; `CreateScriptWithBlueprintContract` accepts the
+bounded native payload. Production World creation requires an expectation,
+and both initial and candidate generation loads compare it before Activator.
+The existing full managed-to-managed reload barrier remains in place. The
+comparison reports the first mismatched route/member/type position and retains
+only immutable, reflection-free expected data on the live instance.
+
+SDK 10 Release validation passed: activation contract 12, actual legacy/new
+exports 1, override reload 13 (including the persisted-expectation candidate
+test), managed dispatch 6, reload transaction 3 and source override contract 12.
+The cold mismatch fixture proves that neither constructor nor OnStart executes.
+The same-path DLL reload fixture rejects a changed return type before stopping
+the old instance, then accepts a compatible body replacement. Typed comparison
+also covers enum identity, struct field order, CLR-only field renaming,
+Soft Reference/string distinctions and collection shapes.
+Evidence is in `artifacts/m13-3c-2-activation-contract/`:
+`activation-contract-tests-final-4.log`, `activation-entrypoint-tests-final.log`,
+`override-reload-final.log`, `managed-dispatch-regression.log`,
+`managed-reload-regression.log`, `override-source-contract.log` and
+`managed-build-final.log`.
+
+The native activation path is integrated. The exact generated class builds the
+contract from its own persisted bindings and actual native properties; it does
+not read Declaration data to reconstruct the expectation. Component startup
+builds that contract before claiming gameplay ownership and invokes the new
+validated export. Missing exports fail this path with a staging diagnostic,
+while legacy callers and World readiness keep their existing entrypoints.
+
+Fresh Release Demo emission and dependency validation passed
+(`native-emit-release.log`), followed by the Editor build
+(`native-editor-build-12.log`). Seven focused CMD Automation selectors passed:
+`blueprint-activation-shapes-3.log` covers enum, fixed FVector, both Soft
+Reference kinds, Array/Set/Map and ordered FHitResult fields, plus invalid field
+paths, missing/duplicate/extra container markers and fixed native arrays.
+`blueprint-inherited-materialization-contract-3.log` proves that an actual
+save/unload/load preserves the complete contract JSON. `blueprint-parent-final.log`
+covers the Actor, Component and Ownership selectors, including native-route and
+managed-name rejection through the actual startup boundary. Managed count,
+registered handles and lifecycle claims remain at their stopped values after
+managed rejection; restoring the binding restores normal startup and dispatch.
+`blueprint-intermediate-parent-after-contract.log` and
+`blueprint-managed-dispatch-after-contract.log` retain ordinary Blueprint parent
+and non-override dispatch behavior. All logs are in the activation artifact
+directory above. The final build differs from the shape/materializer/intermediate/
+dispatch runs only by additional parent-test rollback assertions.
+
+Cold activation agreement is now closed. Live Sync contract-change protection,
+component lifecycle-event ordering and the broader runtime/cooked extension
+proof remain open; M13.3C-2 is still in progress.

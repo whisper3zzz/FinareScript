@@ -53,6 +53,18 @@ using FCreateScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     int32 AssemblyPathLength,
     const uint8* TypeNameData,
     int32 TypeNameLength);
+using FCreateScriptWithBlueprintContractEntryPoint = int32(
+    UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    uint64 Host,
+    uint64 Target,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength,
+    const uint8* ContractData,
+    int32 ContractLength);
 using FTickScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -404,6 +416,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     GetWorldCountEntryPoint = nullptr;
     CollectRetiredLoadContextsEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
+    CreateScriptWithBlueprintContractEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
     ConfigureScriptDebugEntryPoint = nullptr;
     BeginScriptDebugTickEntryPoint = nullptr;
@@ -566,6 +579,79 @@ bool FUnifiedScriptCoreClrHost::CreateManagedScript(
     {
         OutError = DescribeManagedFailure(
             TEXT("Managed script creation"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::CreateManagedScriptWithBlueprintContract(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    uint64 Host,
+    uint64 Target,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    const FString& BlueprintOverrideContractJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FCreateScriptWithBlueprintContractEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            CreateScriptWithBlueprintContractEntryPoint == nullptr)
+        {
+            OutError = TEXT(
+                "The validated managed script entry point is unavailable; stage the updated UnifiedScript.Unreal runtime.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FCreateScriptWithBlueprintContractEntryPoint>(
+            CreateScriptWithBlueprintContractEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The managed script assembly does not exist: '%s'."),
+            *AssemblyPath);
+        return false;
+    }
+    if (TypeName.IsEmpty())
+    {
+        OutError = TEXT("The managed script type name is empty.");
+        return false;
+    }
+    if (BlueprintOverrideContractJson.IsEmpty())
+    {
+        OutError = TEXT("The validated Blueprint override activation contract is empty.");
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const FTCHARToUTF8 ContractUtf8(*BlueprintOverrideContractJson);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        Host,
+        Target,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length(),
+        reinterpret_cast<const uint8*>(ContractUtf8.Get()),
+        ContractUtf8.Length());
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Validated managed script creation"),
             Result,
             ErrorEntryPoint,
             WorldHostId);
@@ -1846,6 +1932,9 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         TEXT("CollectRetiredLoadContexts"),
         &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
+    LoadEntryPoint(
+        TEXT("CreateScriptWithBlueprintContract"),
+        &CreateScriptWithBlueprintContractEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
     const int32 ConfigureDebugResult = LoadEntryPoint(
         TEXT("ConfigureScriptDebug"), &ConfigureScriptDebugEntryPoint);
@@ -1895,6 +1984,9 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         "CollectRetiredLoadContexts",
         &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
+    LoadEntryPoint(
+        "CreateScriptWithBlueprintContract",
+        &CreateScriptWithBlueprintContractEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
     const int32 ConfigureDebugResult = LoadEntryPoint(
         "ConfigureScriptDebug", &ConfigureScriptDebugEntryPoint);
@@ -2028,7 +2120,9 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     CreateWorldEntryPoint = nullptr;
     DestroyWorldEntryPoint = nullptr;
     GetWorldCountEntryPoint = nullptr;
+    CollectRetiredLoadContextsEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
+    CreateScriptWithBlueprintContractEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
     ConfigureScriptDebugEntryPoint = nullptr;
     BeginScriptDebugTickEntryPoint = nullptr;

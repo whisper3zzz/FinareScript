@@ -216,6 +216,14 @@ public:
         const FString& AssemblyPath,
         const FString& TypeName,
         FString& OutError);
+    bool CreateManagedScriptWithBlueprintContract(
+        uint64 InstanceId,
+        FUnifiedScriptObjectHandle Host,
+        FUnifiedScriptObjectHandle Target,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        const FString& BlueprintOverrideContractJson,
+        FString& OutError);
 
     bool TickManagedScript(
         uint64 InstanceId,

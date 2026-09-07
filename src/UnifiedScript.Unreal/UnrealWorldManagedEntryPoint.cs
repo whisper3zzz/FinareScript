@@ -198,11 +198,82 @@ public static class UnrealWorldManagedEntryPoint
                 new UnrealObjectHandle(host),
                 new UnrealObjectHandle(target),
                 ReadUtf8(assemblyPathData, assemblyPathLength),
-                ReadUtf8(typeNameData, typeNameLength));
+                ReadUtf8(typeNameData, typeNameLength),
+                UnrealBlueprintOverrideActivationContract.Empty);
+        }
+        catch (UnrealBlueprintOverrideActivationException exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(CreateScript), exception);
+            return (int)UnrealWorldManagedEntryStatus.ScriptContractMismatch;
         }
         catch (Exception exception)
         {
             ReportBoundaryFailure(worldId, instanceId, nameof(CreateScript), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    /// <summary>
+    /// Optional v0.1 creation boundary. Native generated Blueprint classes use
+    /// this entry when they have a persisted inherited-event contract. The
+    /// legacy CreateScript export remains available for old callers, but it
+    /// passes an explicit empty contract and therefore cannot bypass validation.
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int CreateScriptWithBlueprintContract(
+        ulong worldId,
+        ulong instanceId,
+        ulong host,
+        ulong target,
+        nint assemblyPathData,
+        int assemblyPathLength,
+        nint typeNameData,
+        int typeNameLength,
+        nint contractData,
+        int contractLength)
+    {
+        ClearBoundaryFailure(worldId);
+        if (instanceId == 0 || host == 0 || target == 0 ||
+            contractData == nint.Zero ||
+            contractLength <= 0 ||
+            contractLength > UnrealBlueprintOverrideActivationContract.MaximumUtf8Bytes)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+
+        try
+        {
+            UnrealBlueprintOverrideActivationContract contract =
+                UnrealBlueprintOverrideActivationContract.Parse(
+                    ReadUtf8(contractData, contractLength));
+            return (int)entry.CreateScript(
+                instanceId,
+                new UnrealObjectHandle(host),
+                new UnrealObjectHandle(target),
+                ReadUtf8(assemblyPathData, assemblyPathLength),
+                ReadUtf8(typeNameData, typeNameLength),
+                contract);
+        }
+        catch (UnrealBlueprintOverrideActivationException exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(CreateScriptWithBlueprintContract),
+                exception);
+            return (int)UnrealWorldManagedEntryStatus.ScriptContractMismatch;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(CreateScriptWithBlueprintContract),
+                exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -1097,7 +1168,8 @@ public static class UnrealWorldManagedEntryPoint
             UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
-            string typeName)
+            string typeName,
+            UnrealBlueprintOverrideActivationContract expectedBlueprintOverrideContract)
         {
             lock (_gate)
             {
@@ -1114,7 +1186,8 @@ public static class UnrealWorldManagedEntryPoint
                     host,
                     target,
                     assemblyPath,
-                    typeName);
+                    typeName,
+                    expectedBlueprintOverrideContract);
                 try
                 {
                     script.Start();
@@ -1558,6 +1631,7 @@ public static class UnrealWorldManagedEntryPoint
         private readonly IUnrealInvocationBridge _bridge;
         private readonly UnrealObjectHandle _host;
         private readonly UnrealObjectHandle _target;
+        private readonly UnrealBlueprintOverrideActivationContract? _expectedBlueprintOverrideContract;
         private string _assemblyPath;
         private string _typeName;
         private ScriptGeneration _current;
@@ -1575,13 +1649,15 @@ public static class UnrealWorldManagedEntryPoint
             UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
-            string typeName)
+            string typeName,
+            UnrealBlueprintOverrideActivationContract? expectedBlueprintOverrideContract)
         {
             _worldId = worldId;
             _instanceId = instanceId;
             _bridge = bridge;
             _host = host;
             _target = target;
+            _expectedBlueprintOverrideContract = expectedBlueprintOverrideContract;
             _assemblyPath = Path.GetFullPath(assemblyPath);
             _typeName = typeName;
             _current = LoadGeneration(1, _assemblyPath, _typeName);
@@ -1599,8 +1675,17 @@ public static class UnrealWorldManagedEntryPoint
             UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
-            string typeName)
-            => new(worldId, instanceId, bridge, host, target, assemblyPath, typeName);
+            string typeName,
+            UnrealBlueprintOverrideActivationContract? expectedBlueprintOverrideContract = null)
+            => new(
+                worldId,
+                instanceId,
+                bridge,
+                host,
+                target,
+                assemblyPath,
+                typeName,
+                expectedBlueprintOverrideContract);
 
         public void Start()
         {
@@ -1800,6 +1885,14 @@ public static class UnrealWorldManagedEntryPoint
                     phaseStart,
                     "succeeded",
                     "Loaded the candidate assembly into a collectible script context."));
+                if (_expectedBlueprintOverrideContract is not null)
+                {
+                    phases.Add(new UnrealManagedReloadPhase(
+                        "activationContractValidation",
+                        "succeeded",
+                        0,
+                        "The loaded managed type matches the persisted Blueprint override contract before activation."));
+                }
                 phaseStart = Stopwatch.GetTimestamp();
                 ValidateBlueprintOverrideCompatibility(previous, next);
                 phases.Add(CompletePhase(
@@ -1810,9 +1903,11 @@ public static class UnrealWorldManagedEntryPoint
             }
             catch (Exception exception)
             {
-                string failedPhase = generationLoaded
-                    ? "overrideContractValidation"
-                    : "generationLoad";
+                string failedPhase = exception is UnrealBlueprintOverrideActivationException
+                    ? "activationContractValidation"
+                    : generationLoaded
+                        ? "overrideContractValidation"
+                        : "generationLoad";
                 phases.Add(CompletePhase(
                     failedPhase,
                     phaseStart,
@@ -2360,6 +2455,7 @@ public static class UnrealWorldManagedEntryPoint
                 loadContext.ValidateEntryType(assembly, typeName);
                 Type type = assembly.GetType(typeName, throwOnError: true)!;
                 long typeTicks = Stopwatch.GetTimestamp() - phaseStarted;
+                _expectedBlueprintOverrideContract?.ValidateType(type);
                 phaseStarted = Stopwatch.GetTimestamp();
                 if (Activator.CreateInstance(type) is not IUnrealManagedScript script)
                 {

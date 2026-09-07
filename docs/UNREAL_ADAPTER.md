@@ -978,7 +978,23 @@ transport-table pointers are unchanged. Calls require an active generation and
 are rejected during managed initialization, destruction and after retirement.
 Managed state is flushed before entering the parent and hydrated afterward.
 
-Saved Blueprint/DLL contract agreement, component lifecycle-event ordering and
+Startup obtains the override contract from the Script Asset's exact generated
+class, including when its receiver is an ordinary Blueprint child. Persistent
+bindings and actual UFunction properties define the expected routes, ordered
+parameter directions and nested codec shapes. The loaded DLL must match before
+its constructor or lifecycle code runs; reload candidates retain the same
+immutable expectation. A mismatch reports the route and requires stopping the
+instance, synchronizing the Script Class and restarting it. Failed activation
+uses the existing state, handle and ownership rollback.
+
+This uses the optional named `CreateScriptWithBlueprintContract` managed export
+without changing transport-table layouts. Component startup requires that export
+even when the expected override set is empty, so stale classes cannot silently
+activate new override methods. The legacy creation export remains available for
+non-override types. If the validated export is absent, stage the updated managed
+runtime before starting a Script Component.
+
+Live synchronization protection, component lifecycle-event ordering and
 the cooked extension fixture remain open in the
 [active checkpoint](plans/2026-09-07-blueprint-event-extension.md). The existing
 container/Soft Reference cooked result above predates this extension.

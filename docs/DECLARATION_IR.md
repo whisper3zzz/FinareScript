@@ -33,8 +33,12 @@ new Blueprint event, input, delegate, interface, RPC or RepNotify binding.
 
 Managed reload accepts body changes with the same override contract. Adding,
 removing or changing an override requires stopping the affected instance,
-synchronizing its Script Class and restarting it. Saved Blueprint/DLL agreement
-and lifecycle integration remain part of the active
+synchronizing its Script Class and restarting it. Startup compares the loaded
+DLL with the exact generated class's persisted routes and reflected value
+shapes before executing the managed constructor. An empty saved override set
+also rejects unexpected new overrides. The same immutable expectation applies
+to reload candidates. Live synchronization protection and lifecycle integration
+remain part of the active
 [event-extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Container and Soft Reference function declarations

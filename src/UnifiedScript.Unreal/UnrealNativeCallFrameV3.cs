@@ -139,6 +139,191 @@ internal static class UnrealNativeValueCodecV3
         return TryCreateContractIdentity(type, new HashSet<Type>(), depth: 0, out identity);
     }
 
+    /// <summary>
+    /// Projects one CLR value type into the engine-owned shape used by the
+    /// Blueprint override activation contract. This deliberately reuses the
+    /// same descriptor, enum, struct, and container recognizers as ABI v3;
+    /// it does not create a second native type table.
+    /// </summary>
+    internal static bool TryCreateBlueprintOverrideShape(
+        Type type,
+        out UnrealBlueprintOverrideActivationShape shape,
+        out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return TryCreateBlueprintOverrideShape(
+            type,
+            new HashSet<Type>(),
+            depth: 0,
+            out shape,
+            out error);
+    }
+
+    private static bool TryCreateBlueprintOverrideShape(
+        Type type,
+        HashSet<Type> visiting,
+        int depth,
+        out UnrealBlueprintOverrideActivationShape shape,
+        out string? error)
+    {
+        shape = null!;
+        error = null;
+        if (depth > 16)
+        {
+            error = "the nested value shape exceeds the ABI recursion depth of 16";
+            return false;
+        }
+        if (!visiting.Add(type))
+        {
+            error = $"the value shape recursively references '{type.FullName ?? type.Name}'";
+            return false;
+        }
+
+        try
+        {
+            if (type == typeof(void))
+            {
+                shape = new UnrealBlueprintOverrideActivationShape("void", string.Empty, string.Empty);
+                return true;
+            }
+            if (!TryCreateResultDescriptor(type, out _, out _))
+            {
+                error = $"'{type.FullName ?? type.Name}' is not supported by ABI v3";
+                return false;
+            }
+            if (TryGetEnumShape(type, out UnrealEnumShape enumShape))
+            {
+                shape = new UnrealBlueprintOverrideActivationShape(
+                    "enum",
+                    enumShape.Attribute.NativeName,
+                    enumShape.Attribute.Path);
+                return true;
+            }
+            if (TryGetStructShape(type, out UnrealStructShape structShape))
+            {
+                var fields = new List<UnrealBlueprintOverrideActivationField>(
+                    structShape.Fields.Length);
+                var nativeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (PropertyInfo field in structShape.Fields)
+                {
+                    UnrealStructFieldAttribute fieldAttribute =
+                        field.GetCustomAttribute<UnrealStructFieldAttribute>()!;
+                    string nativeFieldName = string.IsNullOrEmpty(fieldAttribute.NativeName)
+                        ? field.Name
+                        : fieldAttribute.NativeName;
+                    if (!nativeNames.Add(nativeFieldName))
+                    {
+                        error =
+                            $"struct '{structShape.Attribute.Path}' contains duplicate native field '{nativeFieldName}'";
+                        return false;
+                    }
+                    if (!TryCreateBlueprintOverrideShape(
+                            field.PropertyType,
+                            visiting,
+                            depth + 1,
+                            out UnrealBlueprintOverrideActivationShape fieldShape,
+                            out error))
+                    {
+                        error =
+                            $"struct field '{nativeFieldName}' has an invalid shape: {error}";
+                        return false;
+                    }
+                    fields.Add(new UnrealBlueprintOverrideActivationField(nativeFieldName, fieldShape));
+                }
+                shape = new UnrealBlueprintOverrideActivationShape(
+                    "struct",
+                    structShape.Attribute.NativeName,
+                    structShape.Attribute.Path,
+                    fields.AsReadOnly());
+                return true;
+            }
+            if (TryGetContainerShape(
+                    type,
+                    out UnrealNativeValueKindV3 kind,
+                    out Type? elementType,
+                    out Type? keyType,
+                    out Type? valueType,
+                    out string nativeName))
+            {
+                string kindName = kind switch
+                {
+                    UnrealNativeValueKindV3.Array => "array",
+                    UnrealNativeValueKindV3.Set => "set",
+                    UnrealNativeValueKindV3.Map => "map",
+                    _ => string.Empty,
+                };
+                if (kindName.Length == 0)
+                {
+                    error = $"container '{type.FullName ?? type.Name}' has an unsupported ABI kind";
+                    return false;
+                }
+                if (kind == UnrealNativeValueKindV3.Map)
+                {
+                    if (keyType is null || valueType is null ||
+                        !TryCreateBlueprintOverrideShape(
+                            keyType,
+                            visiting,
+                            depth + 1,
+                            out UnrealBlueprintOverrideActivationShape keyShape,
+                            out error))
+                    {
+                        error = $"map key has an invalid shape: {error}";
+                        return false;
+                    }
+                    if (!TryCreateBlueprintOverrideShape(
+                            valueType!,
+                            visiting,
+                            depth + 1,
+                            out UnrealBlueprintOverrideActivationShape valueShape,
+                            out error))
+                    {
+                        error = $"map value has an invalid shape: {error}";
+                        return false;
+                    }
+                    shape = new UnrealBlueprintOverrideActivationShape(
+                        kindName,
+                        nativeName,
+                        string.Empty,
+                        Key: keyShape,
+                        Value: valueShape);
+                    return true;
+                }
+                if (elementType is null ||
+                    !TryCreateBlueprintOverrideShape(
+                        elementType,
+                        visiting,
+                        depth + 1,
+                        out UnrealBlueprintOverrideActivationShape elementShape,
+                        out error))
+                {
+                    error = $"container element has an invalid shape: {error}";
+                    return false;
+                }
+                shape = new UnrealBlueprintOverrideActivationShape(
+                    kindName,
+                    nativeName,
+                    string.Empty,
+                    Element: elementShape);
+                return true;
+            }
+            if (TryGetNativeName(type, out string primitiveNativeName) &&
+                primitiveNativeName.Length != 0)
+            {
+                shape = new UnrealBlueprintOverrideActivationShape(
+                    "value",
+                    primitiveNativeName,
+                    string.Empty);
+                return true;
+            }
+            error = $"'{type.FullName ?? type.Name}' has no supported native ABI name";
+            return false;
+        }
+        finally
+        {
+            visiting.Remove(type);
+        }
+    }
+
     private static bool TryCreateContractIdentity(
         Type type,
         HashSet<Type> visiting,

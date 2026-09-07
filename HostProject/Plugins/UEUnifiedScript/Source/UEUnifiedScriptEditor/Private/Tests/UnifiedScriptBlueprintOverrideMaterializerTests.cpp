@@ -2,6 +2,8 @@
 
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -14,6 +16,8 @@
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "PackageTools.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptEventExtensionFixture.h"
@@ -261,6 +265,34 @@ bool FUnifiedScriptBlueprintOverrideMaterializerTest::RunTest(const FString& Par
         GeneratedClass->IsManagedFunctionBound(TEXT("EvaluateInherited")));
     TestTrue(TEXT("Receive uses generic managed native dispatch"),
         GeneratedClass->IsManagedFunctionBound(TEXT("ReceiveInherited")));
+    FString ActivationContractJson;
+    FString ActivationContractError;
+    const bool bActivationContract =
+        GeneratedClass->BuildBlueprintOverrideActivationContract(
+            ActivationContractJson,
+            ActivationContractError);
+    TestTrue(*FString::Printf(
+        TEXT("Native Blueprint override activation contract builds: %s"),
+        *ActivationContractError),
+        bActivationContract);
+    if (bActivationContract)
+    {
+        TSharedPtr<FJsonObject> ActivationRoot;
+        const TSharedRef<TJsonReader<>> ActivationReader =
+            TJsonReaderFactory<>::Create(ActivationContractJson);
+        const TArray<TSharedPtr<FJsonValue>>* ActivationRoutes = nullptr;
+        TestTrue(TEXT("Activation contract JSON parses"),
+            FJsonSerializer::Deserialize(ActivationReader, ActivationRoot) &&
+                ActivationRoot.IsValid());
+        TestTrue(TEXT("Activation contract uses v0.1 schema"),
+            ActivationRoot.IsValid() &&
+                ActivationRoot->GetStringField(TEXT("schema")) ==
+                    TEXT("unifiedscript.blueprint-override-contract/v0.1"));
+        TestTrue(TEXT("Activation contract retains both inherited routes"),
+            ActivationRoot.IsValid() &&
+                ActivationRoot->TryGetArrayField(TEXT("overrides"), ActivationRoutes) &&
+                ActivationRoutes != nullptr && ActivationRoutes->Num() == 2);
+    }
     const UEdGraph* EvaluateGraph = FindFunctionGraph(*Blueprint, TEXT("EvaluateInherited"));
     const UEdGraph* ReceiveGraph = FindFunctionGraph(*Blueprint, TEXT("ReceiveInherited"));
     TestNotNull(TEXT("Evaluate graph uses the inherited native function name"), EvaluateGraph);
@@ -434,6 +466,19 @@ bool FUnifiedScriptBlueprintOverrideMaterializerTest::RunTest(const FString& Par
                     ReloadedBinding->BlueprintOverrideFunctionName,
                     FString(TEXT("EvaluateInherited")));
             }
+            FString ReloadedActivationJson;
+            FString ReloadedActivationError;
+            TestTrue(*FString::Printf(
+                TEXT("Reloaded class rebuilds native activation contract: %s"),
+                *ReloadedActivationError),
+                ReloadedClass != nullptr &&
+                    ReloadedClass->BuildBlueprintOverrideActivationContract(
+                        ReloadedActivationJson,
+                        ReloadedActivationError));
+            TestEqual(
+                TEXT("Saved/reloaded activation contract preserves the complete JSON"),
+                ReloadedActivationJson,
+                ActivationContractJson);
 
             const FString RetargetFunctions = FString::Join(
                 TArray<FString>{

@@ -40,6 +40,16 @@ public:
         const FString& AssemblyPath,
         const FString& TypeName,
         FString& OutError);
+    /** Creates a script through the validated activation-contract export. */
+    bool CreateManagedScriptWithBlueprintContract(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        uint64 Host,
+        uint64 Target,
+        const FString& AssemblyPath,
+        const FString& TypeName,
+        const FString& BlueprintOverrideContractJson,
+        FString& OutError);
     bool TickManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -199,6 +209,7 @@ private:
     void* GetWorldCountEntryPoint = nullptr;
     void* CollectRetiredLoadContextsEntryPoint = nullptr;
     void* CreateScriptEntryPoint = nullptr;
+    void* CreateScriptWithBlueprintContractEntryPoint = nullptr;
     void* TickScriptEntryPoint = nullptr;
     void* ConfigureScriptDebugEntryPoint = nullptr;
     void* BeginScriptDebugTickEntryPoint = nullptr;

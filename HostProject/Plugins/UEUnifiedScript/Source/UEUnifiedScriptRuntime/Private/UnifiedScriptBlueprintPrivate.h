@@ -30,4 +30,11 @@ bool UnpackReturnValueV2(
     void* Result,
     FString& OutError);
 
+/** Builds the activation shape with the same reflected codec used by the class producer. */
+bool BuildActivationShapeJson(
+    const FProperty& Property,
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    FString& OutJson,
+    FString& OutError);
+
 }

@@ -7,6 +7,9 @@
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptPropertyValueCodec.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -231,6 +234,510 @@ void CollectDirectStructFields(
             OutNames.Add(Field.Segments.Last());
         }
     }
+}
+
+constexpr TCHAR BlueprintOverrideActivationSchema[] =
+    TEXT("unifiedscript.blueprint-override-contract/v0.1");
+constexpr int32 BlueprintOverrideActivationMaximumBytes = 256 * 1024;
+constexpr int32 BlueprintOverrideActivationMaximumDepth = 16;
+
+TSharedPtr<FJsonObject> MakeActivationShape(
+    const TCHAR* Kind,
+    const FString& NativeName,
+    const FString& TypePath)
+{
+    TSharedPtr<FJsonObject> Shape = MakeShared<FJsonObject>();
+    Shape->SetStringField(TEXT("kind"), Kind);
+    Shape->SetStringField(TEXT("nativeName"), NativeName);
+    Shape->SetStringField(TEXT("typePath"), TypePath);
+    return Shape;
+}
+
+bool HasBindingPath(
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    TConstArrayView<FName> Path)
+{
+    return Binding.StructFields.ContainsByPredicate(
+        [&Path](const FUnifiedScriptManagedStructFieldPath& Field)
+        {
+            return Field.Segments.Num() == Path.Num() &&
+                PathStartsWith(Field.Segments, Path);
+        });
+}
+
+bool IsNativeConstParameter(const FProperty& Property)
+{
+    if (Property.HasAnyPropertyFlags(CPF_ConstParm))
+    {
+        return true;
+    }
+#if WITH_METADATA
+    return Property.HasMetaData(TEXT("NativeConst"));
+#else
+    return false;
+#endif
+}
+
+bool GetNativeParameterDirection(
+    const FProperty& Property,
+    EUnifiedScriptManagedParameterDirection& OutDirection)
+{
+    if (!Property.HasAnyPropertyFlags(CPF_Parm) ||
+        Property.HasAnyPropertyFlags(CPF_ReturnParm))
+    {
+        return false;
+    }
+    if (IsNativeConstParameter(Property) ||
+        !Property.HasAnyPropertyFlags(CPF_OutParm))
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::Input;
+    }
+    else if (Property.HasAnyPropertyFlags(CPF_ReferenceParm))
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::InputOutput;
+    }
+    else
+    {
+        OutDirection = EUnifiedScriptManagedParameterDirection::Output;
+    }
+    return true;
+}
+
+bool BuildActivationShape(
+    const FProperty& Property,
+    const FUnifiedScriptManagedValueTypeBinding* Binding,
+    TConstArrayView<FName> Prefix,
+    int32 Depth,
+    TArray<TArray<FName>>* ConsumedPaths,
+    TSharedPtr<FJsonObject>& OutShape,
+    FString& OutError)
+{
+    if (Property.ArrayDim != 1)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint activation property '%s' uses a fixed native array, which has no reviewed ABI shape."),
+            *Property.GetName());
+        return false;
+    }
+    if (Depth > BlueprintOverrideActivationMaximumDepth)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint activation shape for '%s' exceeds the %d-level nesting limit."),
+            *Property.GetName(),
+            BlueprintOverrideActivationMaximumDepth);
+        return false;
+    }
+    if (Binding == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint activation shape for '%s' has no persistent type binding."),
+            *Property.GetName());
+        return false;
+    }
+    if (ConsumedPaths != nullptr && !Prefix.IsEmpty() &&
+        !ConsumedPaths->ContainsByPredicate(
+            [&Prefix](const TArray<FName>& Existing)
+            {
+                return Existing.Num() == Prefix.Num() &&
+                    PathStartsWith(Existing, Prefix);
+            }))
+    {
+        TArray<FName>& Consumed = ConsumedPaths->AddDefaulted_GetRef();
+        Consumed.Append(Prefix.GetData(), Prefix.Num());
+    }
+
+    const FString NativeName =
+        UE::UnifiedScript::PropertyValueCodec::ContainerValueNativeName(Property);
+    const bool bTopLevel = Prefix.IsEmpty();
+    const auto RequireEmptyBinding = [&]()
+    {
+        if (bTopLevel &&
+            (!Binding->UnrealTypePath.IsEmpty() || !Binding->StructFields.IsEmpty()))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation shape for '%s' has unexpected struct/type metadata."),
+                *Property.GetName());
+            return false;
+        }
+        return true;
+    };
+
+    if (const FSoftClassProperty* SoftClass = CastField<FSoftClassProperty>(&Property))
+    {
+        (void)SoftClass;
+        if (!RequireEmptyBinding()) return false;
+        OutShape = MakeActivationShape(TEXT("value"), NativeName, TEXT(""));
+        return true;
+    }
+    if (const FSoftObjectProperty* SoftObject = CastField<FSoftObjectProperty>(&Property))
+    {
+        (void)SoftObject;
+        if (!RequireEmptyBinding()) return false;
+        OutShape = MakeActivationShape(TEXT("value"), NativeName, TEXT(""));
+        return true;
+    }
+
+    const UEnum* Enum = nullptr;
+    if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property))
+    {
+        Enum = EnumProperty->GetEnum();
+    }
+    else if (const FByteProperty* ByteProperty = CastField<FByteProperty>(&Property))
+    {
+        Enum = ByteProperty->Enum;
+    }
+    if (Enum != nullptr)
+    {
+        const FString TypePath = Enum->GetPathName();
+        if (bTopLevel && Binding->UnrealTypePath != TypePath)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation enum '%s' resolved '%s', expected '%s'."),
+                *Property.GetName(),
+                *TypePath,
+                *Binding->UnrealTypePath);
+            return false;
+        }
+        if (bTopLevel && !Binding->StructFields.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation enum '%s' has unexpected field paths."),
+                *Property.GetName());
+            return false;
+        }
+        OutShape = MakeActivationShape(TEXT("enum"), NativeName, TypePath);
+        return true;
+    }
+
+    if (const FArrayProperty* Array = CastField<FArrayProperty>(&Property))
+    {
+        if (bTopLevel && !Binding->UnrealTypePath.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation array '%s' has unexpected type path '%s'."),
+                *Property.GetName(),
+                *Binding->UnrealTypePath);
+            return false;
+        }
+        TArray<FName, TInlineAllocator<8>> ChildPrefix;
+        ChildPrefix.Append(Prefix.GetData(), Prefix.Num());
+        ChildPrefix.Add(FName(TEXT("$element")));
+        if (!HasBindingPath(*Binding, ChildPrefix))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation array '%s' is missing its $element contract."),
+                *Property.GetName());
+            return false;
+        }
+        TSharedPtr<FJsonObject> Element;
+        if (!BuildActivationShape(
+                *Array->Inner,
+                Binding,
+                ChildPrefix,
+                Depth + 1,
+                ConsumedPaths,
+                Element,
+                OutError))
+        {
+            return false;
+        }
+        OutShape = MakeActivationShape(TEXT("array"), NativeName, TEXT(""));
+        OutShape->SetObjectField(TEXT("element"), Element);
+        return true;
+    }
+    if (const FSetProperty* Set = CastField<FSetProperty>(&Property))
+    {
+        if (bTopLevel && !Binding->UnrealTypePath.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation set '%s' has unexpected type path '%s'."),
+                *Property.GetName(),
+                *Binding->UnrealTypePath);
+            return false;
+        }
+        TArray<FName, TInlineAllocator<8>> ChildPrefix;
+        ChildPrefix.Append(Prefix.GetData(), Prefix.Num());
+        ChildPrefix.Add(FName(TEXT("$element")));
+        if (!HasBindingPath(*Binding, ChildPrefix))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation set '%s' is missing its $element contract."),
+                *Property.GetName());
+            return false;
+        }
+        TSharedPtr<FJsonObject> Element;
+        if (!BuildActivationShape(
+                *Set->ElementProp,
+                Binding,
+                ChildPrefix,
+                Depth + 1,
+                ConsumedPaths,
+                Element,
+                OutError))
+        {
+            return false;
+        }
+        OutShape = MakeActivationShape(TEXT("set"), NativeName, TEXT(""));
+        OutShape->SetObjectField(TEXT("element"), Element);
+        return true;
+    }
+    if (const FMapProperty* Map = CastField<FMapProperty>(&Property))
+    {
+        if (bTopLevel && !Binding->UnrealTypePath.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation map '%s' has unexpected type path '%s'."),
+                *Property.GetName(),
+                *Binding->UnrealTypePath);
+            return false;
+        }
+        TArray<FName, TInlineAllocator<8>> KeyPrefix;
+        KeyPrefix.Append(Prefix.GetData(), Prefix.Num());
+        KeyPrefix.Add(FName(TEXT("$key")));
+        TArray<FName, TInlineAllocator<8>> ValuePrefix;
+        ValuePrefix.Append(Prefix.GetData(), Prefix.Num());
+        ValuePrefix.Add(FName(TEXT("$value")));
+        if (!HasBindingPath(*Binding, KeyPrefix) ||
+            !HasBindingPath(*Binding, ValuePrefix))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation map '%s' is missing its $key or $value contract."),
+                *Property.GetName());
+            return false;
+        }
+        TSharedPtr<FJsonObject> Key;
+        TSharedPtr<FJsonObject> Value;
+        if (!BuildActivationShape(
+                *Map->KeyProp,
+                Binding,
+                KeyPrefix,
+                Depth + 1,
+                ConsumedPaths,
+                Key,
+                OutError) ||
+            !BuildActivationShape(
+                *Map->ValueProp,
+                Binding,
+                ValuePrefix,
+                Depth + 1,
+                ConsumedPaths,
+                Value,
+                OutError))
+        {
+            return false;
+        }
+        OutShape = MakeActivationShape(TEXT("map"), NativeName, TEXT(""));
+        OutShape->SetObjectField(TEXT("key"), Key);
+        OutShape->SetObjectField(TEXT("value"), Value);
+        return true;
+    }
+
+    if (const FStructProperty* Struct = CastField<FStructProperty>(&Property))
+    {
+        if (Struct->Struct == TBaseStructure<FVector>::Get() ||
+            Struct->Struct == TBaseStructure<FRotator>::Get() ||
+            Struct->Struct == TBaseStructure<FTransform>::Get())
+        {
+            if (!RequireEmptyBinding()) return false;
+            OutShape = MakeActivationShape(TEXT("value"), NativeName, TEXT(""));
+            return true;
+        }
+        const FString TypePath = Struct->Struct->GetPathName();
+        if (bTopLevel && Binding->UnrealTypePath != TypePath)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation struct '%s' resolved '%s', expected '%s'."),
+                *Property.GetName(),
+                *TypePath,
+                *Binding->UnrealTypePath);
+            return false;
+        }
+        TArray<FName, TInlineAllocator<32>> FieldNames;
+        CollectDirectStructFields(*Binding, Prefix, FieldNames);
+        if (FieldNames.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation struct '%s' has no persisted direct fields."),
+                *TypePath);
+            return false;
+        }
+        TSet<FName> SeenFields;
+        TArray<TSharedPtr<FJsonValue>> Fields;
+        for (int32 Index = 0; Index < FieldNames.Num(); ++Index)
+        {
+            const FName FieldName = FieldNames[Index];
+            if (SeenFields.Contains(FieldName))
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint activation struct '%s' repeats field '%s'."),
+                    *TypePath,
+                    *FieldName.ToString());
+                return false;
+            }
+            SeenFields.Add(FieldName);
+            const FProperty* Field = FindFProperty<FProperty>(Struct->Struct, FieldName);
+            if (Field == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint activation struct '%s' no longer contains field '%s'."),
+                    *TypePath,
+                    *FieldName.ToString());
+                return false;
+            }
+            TArray<FName, TInlineAllocator<8>> ChildPrefix;
+            ChildPrefix.Append(Prefix.GetData(), Prefix.Num());
+            ChildPrefix.Add(FieldName);
+            TSharedPtr<FJsonObject> FieldShape;
+            if (!BuildActivationShape(
+                    *Field,
+                    Binding,
+                    ChildPrefix,
+                    Depth + 1,
+                    ConsumedPaths,
+                    FieldShape,
+                    OutError))
+            {
+                return false;
+            }
+            TSharedPtr<FJsonObject> FieldObject = MakeShared<FJsonObject>();
+            FieldObject->SetStringField(TEXT("nativeName"), Field->GetName());
+            FieldObject->SetObjectField(TEXT("type"), FieldShape);
+            Fields.Add(MakeShared<FJsonValueObject>(FieldObject));
+        }
+        OutShape = MakeActivationShape(TEXT("struct"), NativeName, TypePath);
+        OutShape->SetArrayField(TEXT("fields"), MoveTemp(Fields));
+        return true;
+    }
+
+    if (!RequireEmptyBinding() || NativeName.IsEmpty())
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation property '%s' uses an unsupported native shape '%s'."),
+                *Property.GetName(),
+                *Property.GetClass()->GetName());
+        }
+        return false;
+    }
+    OutShape = MakeActivationShape(TEXT("value"), NativeName, TEXT(""));
+    return true;
+}
+
+bool BuildValidatedActivationShape(
+    const FProperty& Property,
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    TSharedPtr<FJsonObject>& OutShape,
+    FString& OutError)
+{
+    OutError.Reset();
+    TArray<FName> Prefix;
+    TArray<TArray<FName>> ConsumedPaths;
+    if (!BuildActivationShape(
+            Property,
+            &Binding,
+            Prefix,
+            0,
+            &ConsumedPaths,
+            OutShape,
+            OutError))
+    {
+        return false;
+    }
+
+    const auto HasPath = [](const TArray<TArray<FName>>& Paths,
+                            const TArray<FName>& Path)
+    {
+        return Paths.ContainsByPredicate(
+            [&Path](const TArray<FName>& Candidate)
+            {
+                return Candidate.Num() == Path.Num() &&
+                    PathStartsWith(Candidate, Path);
+            });
+    };
+    if (ConsumedPaths.Num() != Binding.StructFields.Num())
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint activation shape for '%s' does not consume every persisted field path."),
+            *Property.GetName());
+        return false;
+    }
+    for (const FUnifiedScriptManagedStructFieldPath& Field : Binding.StructFields)
+    {
+        if (!HasPath(ConsumedPaths, Field.Segments))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint activation shape for '%s' leaves persisted field path '%s' unused."),
+                *Property.GetName(),
+                *FString::JoinBy(Field.Segments, TEXT("."),
+                    [](const FName& Segment) { return Segment.ToString(); }));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool BuildActivationShapeJson(
+    const FProperty& Property,
+    const FUnifiedScriptManagedValueTypeBinding& Binding,
+    FString& OutJson,
+    FString& OutError)
+{
+    OutJson.Reset();
+    TSharedPtr<FJsonObject> Shape;
+    if (!BuildValidatedActivationShape(Property, Binding, Shape, OutError))
+    {
+        return false;
+    }
+
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+    if (!FJsonSerializer::Serialize(Shape.ToSharedRef(), Writer))
+    {
+        OutError = FString::Printf(
+            TEXT("Failed to serialize the activation shape for '%s'."),
+            *Property.GetName());
+        OutJson.Reset();
+        return false;
+    }
+    const FTCHARToUTF8 Utf8(*OutJson);
+    if (Utf8.Length() > BlueprintOverrideActivationMaximumBytes)
+    {
+        OutJson.Reset();
+        OutError = FString::Printf(
+            TEXT("The activation shape for '%s' exceeds the %d-byte UTF-8 limit."),
+            *Property.GetName(),
+            BlueprintOverrideActivationMaximumBytes);
+        return false;
+    }
+    return true;
+}
+
+bool SerializeActivationContract(
+    const TArray<TSharedPtr<FJsonValue>>& Routes,
+    FString& OutJson,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schema"), BlueprintOverrideActivationSchema);
+    Root->SetArrayField(TEXT("overrides"), Routes);
+    OutJson.Reset();
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+    if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer))
+    {
+        OutError = TEXT("Failed to serialize the Blueprint override activation contract.");
+        return false;
+    }
+    const FTCHARToUTF8 Utf8(*OutJson);
+    if (Utf8.Length() > BlueprintOverrideActivationMaximumBytes)
+    {
+        OutJson.Reset();
+        OutError = FString::Printf(
+            TEXT("The Blueprint override activation contract exceeds the %d-byte UTF-8 limit."),
+            BlueprintOverrideActivationMaximumBytes);
+        return false;
+    }
+    return true;
 }
 
 bool PackValueV2(
@@ -1117,6 +1624,359 @@ void UUnifiedScriptBlueprintGeneratedClass::BindManagedFunctions()
 #endif
     }
     bManagedFunctionsBound = bAllFunctionsBound;
+}
+
+bool UUnifiedScriptBlueprintGeneratedClass::BuildBlueprintOverrideActivationContract(
+    FString& OutJson,
+    FString& OutError) const
+{
+    using namespace UE::UnifiedScript::Blueprint::Private;
+    check(IsInGameThread());
+    OutJson.Reset();
+    OutError.Reset();
+
+    TArray<FName> OverrideNames;
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         ManagedFunctionBindings)
+    {
+        const FUnifiedScriptManagedFunctionBinding& Binding = Pair.Value;
+        const bool bHasDeclaringPath =
+            !Binding.BlueprintOverrideDeclaringTypePath.IsEmpty();
+        const bool bHasFunctionName = !Binding.BlueprintOverrideFunctionName.IsEmpty();
+        if (bHasDeclaringPath != bHasFunctionName)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed binding '%s' has an incomplete Blueprint override route."),
+                *Pair.Key.ToString());
+            return false;
+        }
+        if (bHasDeclaringPath)
+        {
+            OverrideNames.Add(Pair.Key);
+        }
+    }
+    OverrideNames.Sort(
+        [this](const FName& Left, const FName& Right)
+        {
+            const FUnifiedScriptManagedFunctionBinding& A =
+                ManagedFunctionBindings.FindChecked(Left);
+            const FUnifiedScriptManagedFunctionBinding& B =
+                ManagedFunctionBindings.FindChecked(Right);
+            const FString ARoute = A.BlueprintOverrideDeclaringTypePath +
+                TEXT("\n") + A.BlueprintOverrideFunctionName;
+            const FString BRoute = B.BlueprintOverrideDeclaringTypePath +
+                TEXT("\n") + B.BlueprintOverrideFunctionName;
+            if (ARoute != BRoute) return ARoute < BRoute;
+            return A.ManagedName < B.ManagedName;
+        });
+
+    TArray<TSharedPtr<FJsonValue>> Routes;
+    TArray<FString> SeenDeclaringPaths;
+    TArray<FString> SeenFunctionNames;
+    TArray<FString> SeenManagedNames;
+    for (const FName& InternalName : OverrideNames)
+    {
+        const FUnifiedScriptManagedFunctionBinding& Binding =
+            ManagedFunctionBindings.FindChecked(InternalName);
+        const FString& DeclaringTypePath =
+            Binding.BlueprintOverrideDeclaringTypePath;
+        const FString& OverrideFunctionName = Binding.BlueprintOverrideFunctionName;
+        if (!Binding.bBlueprintEvent || Binding.bStatic ||
+            Binding.RpcTarget != EUnifiedScriptRpcTarget::None ||
+            Binding.bInterfaceFunction || !Binding.RepNotifyProperty.IsNone() ||
+            Binding.BlueprintEventSuperMode !=
+                EUnifiedScriptBlueprintEventSuperMode::Explicit)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override binding '%s' has conflicting flags; it must be an instance Explicit Blueprint event without interface, RPC, or RepNotify routes."),
+                *Binding.ManagedName);
+            return false;
+        }
+        if (Binding.AbiVersion != 3)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override binding '%s' uses ABI version %d; activation requires persisted ABI v3."),
+                *Binding.ManagedName,
+                Binding.AbiVersion);
+            return false;
+        }
+        if (Binding.ManagedName.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override binding '%s' has no managed method name."),
+                *InternalName.ToString());
+            return false;
+        }
+        for (int32 Index = 0; Index < SeenDeclaringPaths.Num(); ++Index)
+        {
+            if (SeenDeclaringPaths[Index].Equals(DeclaringTypePath, ESearchCase::IgnoreCase) &&
+                SeenFunctionNames[Index].Equals(OverrideFunctionName, ESearchCase::IgnoreCase))
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override route '%s:%s' is duplicated by managed method '%s'."),
+                    *DeclaringTypePath,
+                    *OverrideFunctionName,
+                    *Binding.ManagedName);
+                return false;
+            }
+        }
+        if (SeenManagedNames.ContainsByPredicate(
+                [&Binding](const FString& Name)
+                {
+                    return Name == Binding.ManagedName;
+                }))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override managed method '%s' is duplicated."),
+                *Binding.ManagedName);
+            return false;
+        }
+        SeenDeclaringPaths.Add(DeclaringTypePath);
+        SeenFunctionNames.Add(OverrideFunctionName);
+        SeenManagedNames.Add(Binding.ManagedName);
+
+        UFunction* LocalFunction = FindFunctionByName(
+            InternalName,
+            EIncludeSuperFlag::ExcludeSuper);
+        if (LocalFunction == nullptr ||
+            LocalFunction->GetOuterUClass() != this ||
+            !LocalFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+            LocalFunction->HasAnyFunctionFlags(FUNC_Static | FUNC_Net | FUNC_Final))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' has no valid local Blueprint event '%s' on generated class '%s'."),
+                *Binding.ManagedName,
+                *InternalName.ToString(),
+                *GetPathName());
+            return false;
+        }
+
+        UClass* DeclaringClass = FSoftClassPath(DeclaringTypePath).TryLoadClass<UObject>();
+        if (DeclaringClass == nullptr ||
+            this == DeclaringClass ||
+            !IsChildOf(DeclaringClass))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' declaring class '%s' is not an exact ancestor of '%s'."),
+                *Binding.ManagedName,
+                *DeclaringTypePath,
+                *GetPathName());
+            return false;
+        }
+        if (InternalName != FName(*OverrideFunctionName))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' must use inherited event name '%s' as its local function name, but the binding key is '%s'."),
+                *Binding.ManagedName,
+                *OverrideFunctionName,
+                *InternalName.ToString());
+            return false;
+        }
+        UFunction* ParentFunction = DeclaringClass->FindFunctionByName(
+            FName(*OverrideFunctionName),
+            EIncludeSuperFlag::ExcludeSuper);
+        if (ParentFunction == nullptr ||
+            ParentFunction->GetOuterUClass() != DeclaringClass ||
+            !ParentFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+            ParentFunction->HasAnyFunctionFlags(FUNC_Final | FUNC_Static | FUNC_Net))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' target '%s:%s' is not a directly declared instance Blueprint event."),
+                *Binding.ManagedName,
+                *DeclaringTypePath,
+                *OverrideFunctionName);
+            return false;
+        }
+
+        if (Binding.ParameterTypes.Num() != Binding.ParameterNames.Num() ||
+            Binding.ParameterTypes.Num() != Binding.ParameterDirections.Num() ||
+            Binding.ParameterTypes.Num() > 4)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' has inconsistent or unsupported persisted parameter metadata."),
+                *Binding.ManagedName);
+            return false;
+        }
+
+        TArray<const FProperty*> LocalParameters;
+        for (TFieldIterator<FProperty> It(
+                 LocalFunction,
+                 EFieldIteratorFlags::ExcludeSuper);
+             It;
+             ++It)
+        {
+            if (It->HasAnyPropertyFlags(CPF_Parm) &&
+                !It->HasAnyPropertyFlags(CPF_ReturnParm))
+            {
+                LocalParameters.Add(*It);
+            }
+        }
+        TArray<const FProperty*> ParentParameters;
+        for (TFieldIterator<FProperty> It(
+                 ParentFunction,
+                 EFieldIteratorFlags::ExcludeSuper);
+             It;
+             ++It)
+        {
+            if (It->HasAnyPropertyFlags(CPF_Parm) &&
+                !It->HasAnyPropertyFlags(CPF_ReturnParm))
+            {
+                ParentParameters.Add(*It);
+            }
+        }
+        if (LocalParameters.Num() != Binding.ParameterTypes.Num() ||
+            ParentParameters.Num() != Binding.ParameterTypes.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' persisted %d parameters, local function has %d, parent has %d."),
+                *Binding.ManagedName,
+                Binding.ParameterTypes.Num(),
+                LocalParameters.Num(),
+                ParentParameters.Num());
+            return false;
+        }
+
+        auto FindParameter = [](const TArray<const FProperty*>& Parameters, FName Name)
+            -> const FProperty*
+        {
+            for (const FProperty* Parameter : Parameters)
+            {
+                if (Parameter != nullptr && Parameter->GetFName() == Name)
+                {
+                    return Parameter;
+                }
+            }
+            return nullptr;
+        };
+        TArray<TSharedPtr<FJsonValue>> Parameters;
+        TSet<FName> SeenParameterNames;
+        for (int32 Index = 0; Index < Binding.ParameterTypes.Num(); ++Index)
+        {
+            if (Binding.ParameterNames[Index].IsNone() ||
+                SeenParameterNames.Contains(Binding.ParameterNames[Index]))
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' contains a duplicate or empty persisted native parameter name at index %d."),
+                    *Binding.ManagedName,
+                    Index);
+                return false;
+            }
+            SeenParameterNames.Add(Binding.ParameterNames[Index]);
+            const FProperty* LocalParameter = FindParameter(
+                LocalParameters,
+                Binding.ParameterNames[Index]);
+            const FProperty* ParentParameter = FindParameter(
+                ParentParameters,
+                Binding.ParameterNames[Index]);
+            if (LocalParameter == nullptr || ParentParameter == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' persisted parameter '%s' is missing from the local or inherited function."),
+                    *Binding.ManagedName,
+                    *Binding.ParameterNames[Index].ToString());
+                return false;
+            }
+            EUnifiedScriptManagedParameterDirection LocalDirection;
+            EUnifiedScriptManagedParameterDirection ParentDirection;
+            if (!GetNativeParameterDirection(*LocalParameter, LocalDirection) ||
+                !GetNativeParameterDirection(*ParentParameter, ParentDirection) ||
+                LocalDirection != ParentDirection ||
+                Binding.ParameterDirections[Index] != ParentDirection)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' parameter %d direction does not match its persisted native contract."),
+                    *Binding.ManagedName,
+                    Index);
+                return false;
+            }
+            if (Binding.ParameterNames[Index].IsNone() ||
+                Binding.ParameterNames[Index] != LocalParameter->GetFName() ||
+                Binding.ParameterNames[Index] != ParentParameter->GetFName())
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint override '%s' parameter %d native name does not match the persisted binding."),
+                    *Binding.ManagedName,
+                    Index);
+                return false;
+            }
+            TSharedPtr<FJsonObject> LocalShape;
+            if (!BuildValidatedActivationShape(
+                    *LocalParameter,
+                    Binding.ParameterTypes[Index],
+                    LocalShape,
+                    OutError) ||
+                !LocalParameter->SameType(ParentParameter))
+            {
+                if (OutError.IsEmpty())
+                {
+                    OutError = FString::Printf(
+                        TEXT("Blueprint override '%s' parameter '%s' local and inherited native properties differ."),
+                        *Binding.ManagedName,
+                        *Binding.ParameterNames[Index].ToString());
+                }
+                return false;
+            }
+            TSharedPtr<FJsonObject> Parameter = MakeShared<FJsonObject>();
+            Parameter->SetStringField(
+                TEXT("direction"),
+                ParentDirection == EUnifiedScriptManagedParameterDirection::Input
+                    ? TEXT("in")
+                    : ParentDirection == EUnifiedScriptManagedParameterDirection::InputOutput
+                        ? TEXT("ref")
+                        : TEXT("out"));
+            Parameter->SetObjectField(TEXT("type"), LocalShape);
+            Parameters.Add(MakeShared<FJsonValueObject>(Parameter));
+        }
+
+        TSharedPtr<FJsonObject> LocalReturn;
+        TSharedPtr<FJsonObject> ParentReturn;
+        const FProperty* LocalReturnProperty = LocalFunction->GetReturnProperty();
+        const FProperty* ParentReturnProperty = ParentFunction->GetReturnProperty();
+        if ((LocalReturnProperty == nullptr) != (ParentReturnProperty == nullptr) ||
+            (LocalReturnProperty == nullptr &&
+                (!Binding.ReturnType.UnrealTypePath.IsEmpty() ||
+                 !Binding.ReturnType.StructFields.IsEmpty())))
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint override '%s' local, inherited, and persisted return shapes differ."),
+                *Binding.ManagedName);
+            return false;
+        }
+        if (LocalReturnProperty != nullptr)
+        {
+            if (!BuildValidatedActivationShape(
+                    *LocalReturnProperty,
+                    Binding.ReturnType,
+                    LocalReturn,
+                    OutError) ||
+                !LocalReturnProperty->SameType(ParentReturnProperty))
+            {
+                if (OutError.IsEmpty())
+                {
+                    OutError = FString::Printf(
+                        TEXT("Blueprint override '%s' local and inherited native return properties differ."),
+                        *Binding.ManagedName);
+                }
+                return false;
+            }
+        }
+        else
+        {
+            ParentReturn = MakeActivationShape(TEXT("void"), TEXT(""), TEXT(""));
+        }
+
+        TSharedPtr<FJsonObject> Route = MakeShared<FJsonObject>();
+        Route->SetStringField(TEXT("managedName"), Binding.ManagedName);
+        Route->SetStringField(TEXT("declaringClassPath"), DeclaringTypePath);
+        Route->SetStringField(TEXT("functionName"), OverrideFunctionName);
+        Route->SetStringField(TEXT("superMode"), TEXT("explicit"));
+        Route->SetObjectField(TEXT("returnType"), LocalReturn != nullptr
+            ? LocalReturn
+            : ParentReturn);
+        Route->SetArrayField(TEXT("parameters"), MoveTemp(Parameters));
+        Routes.Add(MakeShared<FJsonValueObject>(Route));
+    }
+    return SerializeActivationContract(Routes, OutJson, OutError);
 }
 
 void UUnifiedScriptBlueprintGeneratedClass::PrepareManagedFunctionsForRecompile()

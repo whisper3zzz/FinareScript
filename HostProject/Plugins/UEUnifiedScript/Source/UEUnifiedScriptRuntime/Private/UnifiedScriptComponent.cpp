@@ -627,6 +627,31 @@ bool UUnifiedScriptComponent::StartScript()
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
+    FString BlueprintOverrideActivationContract =
+        TEXT("{\"schema\":\"unifiedscript.blueprint-override-contract/v0.1\",\"overrides\":[]}");
+    if (ResolvedAsset != nullptr &&
+        ResolvedAsset->ScriptClassKind != EUnifiedScriptClassKind::None)
+    {
+        UClass* ResolvedGeneratedClass =
+            ResolvedAsset->GeneratedClassPath.TryLoadClass<UObject>();
+        UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(ResolvedGeneratedClass);
+        if (GeneratedClass == nullptr ||
+            !GeneratedClass->BuildBlueprintOverrideActivationContract(
+                BlueprintOverrideActivationContract,
+                Error))
+        {
+            if (Error.IsEmpty())
+            {
+                Error = FString::Printf(
+                    TEXT("UnifiedScript Class '%s' has no exact generated class carrier at '%s' for activation contract construction."),
+                    *ResolvedAsset->GetPathName(),
+                    *ResolvedAsset->GeneratedClassPath.ToString());
+            }
+            SetScriptFailure(MoveTemp(Error));
+            return false;
+        }
+    }
     const FName ResolvedOwnershipKey = LifecycleOwnershipKey.IsNone()
         ? FName(*ResolvedTypeName)
         : LifecycleOwnershipKey;
@@ -697,12 +722,13 @@ bool UUnifiedScriptComponent::StartScript()
     ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
     bScriptStateOverrideBaselineInitialized = true;
     PhaseStartSeconds = FPlatformTime::Seconds();
-    if (!Host->CreateManagedScript(
+    if (!Host->CreateManagedScriptWithBlueprintContract(
             InstanceId,
             HostHandle,
             TargetHandle,
             ResolvedAssemblyPath,
             ResolvedTypeName,
+            BlueprintOverrideActivationContract,
             Error))
     {
         ScriptState = MoveTemp(PreviousScriptState);

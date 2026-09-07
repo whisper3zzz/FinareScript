@@ -532,6 +532,94 @@ bool FUnifiedScriptBlueprintParentInvocationTest::RunTest(const FString& Paramet
     TestTrue(TEXT("Parent invocation startup has no error"),
         Component->LastScriptError.IsEmpty());
 
+    // Exercise the native producer at the real component activation boundary:
+    // a persisted-route mutation is rejected before the managed candidate is
+    // created, and restoring the binding permits the same generation to start.
+    const int32 ManagedScriptsBeforeActivationMismatch = Host->GetManagedScriptCount();
+    FUnifiedScriptManagedFunctionBinding* EvaluateBindingForActivation =
+        GeneratedClass->ManagedFunctionBindings.Find(TEXT("EvaluateInherited"));
+    const FString OriginalEvaluateRoute = EvaluateBindingForActivation != nullptr
+        ? EvaluateBindingForActivation->BlueprintOverrideFunctionName
+        : FString();
+    Component->StopScript();
+    if (EvaluateBindingForActivation != nullptr)
+    {
+        EvaluateBindingForActivation->BlueprintOverrideFunctionName =
+            TEXT("EvaluateInheritedMissing");
+    }
+    AddExpectedError(
+        TEXT("must use inherited event name"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    TestFalse(TEXT("Activation rejects a persisted inherited-event route mismatch"),
+        Component->StartScript());
+    TestEqual(TEXT("Activation mismatch does not create a managed candidate"),
+        Host->GetManagedScriptCount(),
+        ManagedScriptsBeforeActivationMismatch - 1);
+    TestTrue(TEXT("Activation mismatch reports a native contract diagnostic"),
+        Component->LastScriptError.Contains(TEXT("activation")) ||
+            Component->LastScriptError.Contains(TEXT("binding")) ||
+            Component->LastScriptError.Contains(TEXT("override")));
+    if (EvaluateBindingForActivation != nullptr)
+    {
+        EvaluateBindingForActivation->BlueprintOverrideFunctionName = OriginalEvaluateRoute;
+    }
+    TestTrue(TEXT("Restored inherited-event route starts again"), Component->StartScript());
+    TestEqual(TEXT("Restored route returns to its original managed count"),
+        Host->GetManagedScriptCount(),
+        ManagedScriptsBeforeActivationMismatch);
+
+    // The native class contract still validates when only the persisted
+    // managed method identity is stale; the validated managed export must
+    // reject before constructing the candidate instance.
+    const FString OriginalManagedName = EvaluateBindingForActivation != nullptr
+        ? EvaluateBindingForActivation->ManagedName
+        : FString();
+    const int32 ManagedScriptsBeforeManagedNameMismatch =
+        Host->GetManagedScriptCount();
+    const int32 RegisteredObjectsBeforeManagedNameMismatch =
+        Host->NumRegisteredObjects();
+    const int32 LifecycleClaimsBeforeManagedNameMismatch =
+        Host->GetGameplayLifecycleClaimCount();
+    Component->StopScript();
+    const int32 RegisteredObjectsAfterStop = Host->NumRegisteredObjects();
+    const int32 LifecycleClaimsAfterStop = Host->GetGameplayLifecycleClaimCount();
+    if (EvaluateBindingForActivation != nullptr)
+    {
+        EvaluateBindingForActivation->ManagedName = TEXT("EvaluateInheritedRenamed");
+    }
+    AddExpectedError(
+        TEXT("managedName expected"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    TestFalse(TEXT("Activation rejects a stale managed override identity"),
+        Component->StartScript());
+    TestEqual(TEXT("Managed identity mismatch does not create a candidate"),
+        Host->GetManagedScriptCount(),
+        ManagedScriptsBeforeManagedNameMismatch - 1);
+    TestEqual(TEXT("Managed identity mismatch leaves no registered handle"),
+        Host->NumRegisteredObjects(),
+        RegisteredObjectsAfterStop);
+    TestEqual(TEXT("Managed identity mismatch leaves lifecycle ownership released"),
+        Host->GetGameplayLifecycleClaimCount(),
+        LifecycleClaimsAfterStop);
+    TestTrue(TEXT("Managed identity mismatch reports the route"),
+        Component->LastScriptError.Contains(TEXT("managedName")));
+    if (EvaluateBindingForActivation != nullptr)
+    {
+        EvaluateBindingForActivation->ManagedName = OriginalManagedName;
+    }
+    TestTrue(TEXT("Restored managed identity starts again"), Component->StartScript());
+    TestEqual(TEXT("Restored managed identity keeps the managed count"),
+        Host->GetManagedScriptCount(),
+        ManagedScriptsBeforeManagedNameMismatch);
+    TestEqual(TEXT("Restored managed identity restores registered handles"),
+        Host->NumRegisteredObjects(),
+        RegisteredObjectsBeforeManagedNameMismatch);
+    TestEqual(TEXT("Restored managed identity restores lifecycle ownership"),
+        Host->GetGameplayLifecycleClaimCount(),
+        LifecycleClaimsBeforeManagedNameMismatch);
+
     const FProperty* NativeInput = FindFProperty<FProperty>(Evaluate, TEXT("NativeInput"));
     const FProperty* NativeAccumulator = FindFProperty<FProperty>(Evaluate, TEXT("NativeAccumulator"));
     const FProperty* NativeOutput = FindFProperty<FProperty>(Evaluate, TEXT("NativeOutput"));

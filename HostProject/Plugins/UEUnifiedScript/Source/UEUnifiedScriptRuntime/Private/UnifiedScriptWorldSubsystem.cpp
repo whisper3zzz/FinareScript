@@ -623,6 +623,36 @@ bool UUnifiedScriptWorldSubsystem::CreateManagedScript(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::CreateManagedScriptWithBlueprintContract(
+    uint64 InstanceId,
+    FUnifiedScriptObjectHandle Host,
+    FUnifiedScriptObjectHandle Target,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    const FString& BlueprintOverrideContractJson,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    if (InstanceId == 0 || Host.IsNull() || Target.IsNull())
+    {
+        OutError = TEXT("A managed script requires non-null instance, host, and target handles.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().CreateManagedScriptWithBlueprintContract(
+        WorldHostId,
+        InstanceId,
+        Host.Value,
+        Target.Value,
+        AssemblyPath,
+        TypeName,
+        BlueprintOverrideContractJson,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::TickManagedScript(
     uint64 InstanceId,
     float DeltaSeconds,

@@ -74,6 +74,58 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
         }
     }
 
+    [Fact]
+    public void PersistedActivationContractRejectsCandidateBeforeOldStopThenAllowsCompatibleBody()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "OverrideReloadFixture.dll");
+        const string typeName = "OverrideReloadFixture.ReloadScript";
+        EmitOverrideScript(assemblyPath, "body1");
+        var transport = new OverrideReloadTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport, worldHostId: 402);
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 402);
+        UnrealBlueprintOverrideActivationContract expected =
+            CreateExpectedActivationContract();
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 402,
+            instanceId: 3,
+            bridge,
+            host,
+            host,
+            assemblyPath,
+            typeName,
+            expected);
+        try
+        {
+            instance.Start();
+            Assert.Equal("body1-start", transport.LastMarker);
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+
+            EmitOverrideScript(assemblyPath, "return");
+            UnrealBlueprintOverrideActivationException failure =
+                Assert.Throws<UnrealBlueprintOverrideActivationException>(
+                () => instance.PrepareReload(assemblyPath, typeName));
+            Assert.Contains("returnType.nativeName", failure.Message, StringComparison.Ordinal);
+            Assert.Equal("body1-start", transport.LastMarker);
+            Assert.Equal(1, instance.GetDiagnosticContext().Generation);
+            Assert.Contains(
+                ReadReloadState(instance).GetProperty("phases").EnumerateArray(),
+                static phase => phase.GetProperty("name").GetString() == "activationContractValidation" &&
+                    phase.GetProperty("state").GetString() == "failed");
+
+            EmitOverrideScript(assemblyPath, "body2");
+            int compatibleCandidate = instance.PrepareReload(assemblyPath, typeName);
+            Assert.Equal(compatibleCandidate, instance.CommitPreparedReload(compatibleCandidate));
+            instance.FinalizePreparedReload(compatibleCandidate);
+            Assert.Equal(3, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
     [Theory]
     [MemberData(nameof(IncompatibleCandidates))]
     public void IncompatibleOverrideRouteSetLeavesOldGenerationRunning(
@@ -294,6 +346,17 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
             result.Success,
             string.Join(Environment.NewLine, result.Diagnostics));
     }
+
+    private static UnrealBlueprintOverrideActivationContract CreateExpectedActivationContract() =>
+        UnrealBlueprintOverrideActivationContract.Parse(
+            """
+            {"schema":"unifiedscript.blueprint-override-contract/v0.1","overrides":[
+              {"managedName":"Evaluate","declaringClassPath":"/Script/Engine.Actor",
+               "functionName":"ReceiveBeginPlay","superMode":"explicit",
+               "returnType":{"kind":"value","nativeName":"int32","typePath":""},
+               "parameters":[{"direction":"in",
+                              "type":{"kind":"value","nativeName":"int32","typePath":""}}]}]}
+            """);
 
     private static string CreateTempDirectory()
     {

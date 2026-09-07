@@ -293,6 +293,15 @@ public:
     void PrepareManagedFunctionsForRecompile();
     bool IsManagedFunctionBound(FName FunctionName) const;
 
+    /**
+     * Builds the native-authoritative Blueprint override activation contract
+     * retained by this exact generated class.  The result is always a valid
+     * v0.1 JSON document on success, including an explicit empty route set.
+     */
+    bool BuildBlueprintOverrideActivationContract(
+        FString& OutJson,
+        FString& OutError) const;
+
     /** Finds the persistent managed override route whose raw member identity matches. */
     const FUnifiedScriptManagedFunctionBinding* FindManagedOverrideBinding(
         uint64 MemberId) const;
