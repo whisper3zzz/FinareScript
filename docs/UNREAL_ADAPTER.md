@@ -876,6 +876,27 @@ complete 29/29 CMD Automation suite plus a focused live static dispatch pass.
 The 345,567 ms Cook/Archive/packaged Golden Path is recorded under
 `artifacts/m13-3c1c/golden-path-final/`.
 
+## Container and Soft Reference Blueprint VM checkpoint
+
+Generated functions carry reviewed `IReadOnlyList<T>`, `IReadOnlySet<T>` and
+`IReadOnlyDictionary<TKey, TValue>` values, plus soft-object and soft-class
+handles, through input, return, `ref` and `out`. A saved ordinary Blueprint
+caller now exercises all five families through compiled bytecode, including
+downstream use of an output and forwarding it through the caller's own output.
+Native `ProcessEvent` calls remain covered independently.
+
+A nested VM call must retain the output addresses captured while stepping its
+arguments. The enclosing frame's `OutParms` can contain the same source name
+with a different destination; those records only supply destinations not already
+captured for the current call. Output decoding remains transactional before
+caller storage is updated.
+
+Nested containers and known unhashable Blueprint Set/Map keys fail during
+source lowering with a shape-specific diagnostic. Native reflected type
+validation remains authoritative for other leaf types. Static library contexts
+are currently World-owned; World recreation validates disposal and fresh
+dispatch, but same-World library code replacement remains a Roadmap follow-up.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

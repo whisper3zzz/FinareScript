@@ -1343,6 +1343,69 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Theory]
+    [InlineData("IReadOnlyList<IReadOnlyList<int>>", "nested containers are not supported")]
+    [InlineData("IReadOnlyDictionary<bool, int>", "map key type has no Blueprint hash identity")]
+    [InlineData("IReadOnlySet<bool>", "set element type has no Blueprint hash identity")]
+    [InlineData("IReadOnlySet<UnrealText>", "set element type has no Blueprint hash identity")]
+    public void UnsupportedFunctionValueShapesFailBeforeBlueprintEmission(
+        string valueType, string expectedMessage)
+    {
+        CSharpAnalysisResult result = AnalyzeFunctionShape(valueType);
+
+        Assert.False(result.Succeeded);
+        UnifiedDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            static item => item.Code == DeclarationDiagnosticCodes.UnsupportedFunctionSignature);
+        Assert.Contains(expectedMessage, diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnsupportedParameterShapeRetainsSpecificReasonWithValidReturn()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+            namespace Game;
+            [ScriptAsset("Game/TypedLibrary", ClassId = "us_00000000000000000000000000000006")]
+            [UnrealScriptClass(UnrealScriptClassKind.BlueprintFunctionLibrary)]
+            public static class TypedLibrary
+            {
+                [Visual]
+                public static int Echo(ref IReadOnlySet<UnrealText> value, out int copy)
+                {
+                    copy = 0;
+                    return 0;
+                }
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "FunctionParameterShape",
+                [new CSharpSourceDocument("Game/TypedLibrary.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        UnifiedDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            static item => item.Code == DeclarationDiagnosticCodes.UnsupportedFunctionSignature);
+        Assert.Contains(
+            "set element type has no Blueprint hash identity",
+            diagnostic.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnsupportedFunctionLeafFailsTheGraphSafeContract()
+    {
+        CSharpAnalysisResult result = AnalyzeFunctionShape("System.DateTime");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == SemanticDiagnosticCodes.GraphUnsafeSignature);
+    }
+
+    [Theory]
     [InlineData("UnrealSoftObjectHandle")]
     [InlineData("UnrealSoftClassHandle")]
     public void SoftReferenceFunctionsPreserveBuiltInTypeAndDirections(string valueType)

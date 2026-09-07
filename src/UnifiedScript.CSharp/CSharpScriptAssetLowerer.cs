@@ -392,6 +392,44 @@ internal sealed class CSharpScriptAssetLowerer
                     method.Id));
                 continue;
             }
+            string? unsupportedShapeReason = null;
+            if (methodSymbol is not null)
+            {
+                bool hasUnsupportedShape = HasUnsupportedFunctionContainerShape(
+                    compilation,
+                    methodSymbol.ReturnType,
+                    allowVoid: true,
+                    out unsupportedShapeReason);
+                if (!hasUnsupportedShape)
+                {
+                    // Keep the parameter failure reason too; using Any(out _)
+                    // here would erase the contract detail for parameter-only
+                    // failures.
+                    foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+                    {
+                        if (HasUnsupportedFunctionContainerShape(
+                                compilation,
+                                parameter.Type,
+                                allowVoid: false,
+                                out unsupportedShapeReason))
+                        {
+                            hasUnsupportedShape = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (unsupportedShapeReason is not null)
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                    UnifiedDiagnosticSeverity.Error,
+                    $"Blueprint-callable function '{type.QualifiedName}.{method.Name}' has an unsupported " +
+                    $"container value shape: {unsupportedShapeReason}",
+                    method.Span,
+                    method.Id));
+                continue;
+            }
             ScriptParameterDeclaration[] parameters = method.Parameters
                 .Select((parameter, index) => new ScriptParameterDeclaration(
                     parameter.Id,
@@ -951,6 +989,90 @@ internal sealed class CSharpScriptAssetLowerer
             .SingleOrDefault(static accessor => accessor.Keyword.ValueText is "set" or "init");
         return getter is { Body: null, ExpressionBody: null } &&
             setter is { Body: null, ExpressionBody: null };
+    }
+
+    private static bool HasUnsupportedFunctionContainerShape(
+        CSharpCompilation compilation,
+        ITypeSymbol type,
+        bool allowVoid,
+        out string? reason)
+    {
+        reason = null;
+        if (allowVoid && type.SpecialType == SpecialType.System_Void)
+        {
+            return false;
+        }
+
+        if (type is INamedTypeSymbol namedType &&
+            TryGetFunctionContainerKind(compilation, namedType, out ScriptFunctionValueTypeKind kind))
+        {
+            if (namedType.TypeArguments.Any(argument =>
+                    argument is INamedTypeSymbol nested &&
+                    TryGetFunctionContainerKind(compilation, nested, out _)))
+            {
+                reason = "nested containers are not supported";
+                return true;
+            }
+            if ((kind == ScriptFunctionValueTypeKind.Map ||
+                 kind == ScriptFunctionValueTypeKind.Set) &&
+                    IsUnhashableFunctionKey(namedType.TypeArguments[0]))
+            {
+                reason = kind == ScriptFunctionValueTypeKind.Set
+                    ? "the set element type has no Blueprint hash identity"
+                    : "the map key type has no Blueprint hash identity";
+                return true;
+            }
+            foreach (ITypeSymbol argument in namedType.TypeArguments)
+            {
+                if (HasUnsupportedFunctionContainerShape(
+                        compilation,
+                        argument,
+                        allowVoid: false,
+                        out reason))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFunctionContainerKind(
+        CSharpCompilation compilation,
+        ITypeSymbol type,
+        out ScriptFunctionValueTypeKind kind)
+    {
+        kind = default;
+        if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)
+        {
+            return false;
+        }
+
+        foreach ((string metadataName, ScriptFunctionValueTypeKind candidate) in new[]
+        {
+            ("System.Collections.Generic.IReadOnlyList`1", ScriptFunctionValueTypeKind.Array),
+            ("System.Collections.Generic.IReadOnlySet`1", ScriptFunctionValueTypeKind.Set),
+            ("System.Collections.Generic.IReadOnlyDictionary`2", ScriptFunctionValueTypeKind.Map),
+        })
+        {
+            if (SymbolEqualityComparer.Default.Equals(
+                    namedType.OriginalDefinition,
+                    compilation.GetTypeByMetadataName(metadataName)))
+            {
+                kind = candidate;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsUnhashableFunctionKey(ITypeSymbol type)
+    {
+        string metadataName = type.ToDisplayString(TypeMetadataFormat);
+        return type.SpecialType == SpecialType.System_Boolean ||
+            metadataName == "UnifiedScript.Unreal.UnrealText";
     }
 
     private static bool TryClassifyType(

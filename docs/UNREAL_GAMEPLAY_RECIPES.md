@@ -278,11 +278,20 @@ public static class GameplayLibrary
 }
 ```
 
-Build & Reload creates an ordinary Blueprint Function Library node. The return
+Building creates an ordinary Blueprint Function Library node. The return
 pin is followed by the `ref`/`out` result pins in source order, while stable
 parameter names keep that contract intact even if Unreal internally reorders
-output properties. Verify the node once through direct Blueprint execution and
-once after a compatible reload; callers never need a handwritten C++ facade.
+output properties. The same directions support reviewed `IReadOnlyList<T>`,
+`IReadOnlySet<T>`, `IReadOnlyDictionary<TKey, TValue>`, `UnrealSoftObjectHandle`
+and `UnrealSoftClassHandle` values. The [Demo library](../samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs)
+contains exchange functions for all five families; connect their outputs to
+ordinary downstream Blueprint nodes.
+
+Component-backed functions support compatible instance reload. Static libraries
+currently keep one loaded context per World; recreating that World loads the
+current library code. Updating a static library in an existing World through
+Build & Reload remains an open integration task. Callers use generated nodes
+without a handwritten C++ facade.
 
 ## Blueprint event
 

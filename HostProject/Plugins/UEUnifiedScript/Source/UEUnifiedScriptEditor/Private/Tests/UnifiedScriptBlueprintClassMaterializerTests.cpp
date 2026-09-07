@@ -3,6 +3,8 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
 #include "Dom/JsonObject.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
 #include "Engine/Engine.h"
 #include "Engine/EngineTypes.h"
@@ -16,6 +18,10 @@
 #include "InputAction.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_Event.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "HAL/FileManager.h"
@@ -2032,6 +2038,19 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         return false;
     }
+    const FString CallerAssetName = AssetName + TEXT("_Caller");
+    UBlueprint* CallerBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        AActor::StaticClass(),
+        Package,
+        FName(*CallerAssetName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptBlueprintManagedStaticFunctionCaller")));
+    if (!TestNotNull(TEXT("Creates a normal Blueprint VM caller"), CallerBlueprint))
+    {
+        return false;
+    }
 
     constexpr const TCHAR* LibraryClassId = TEXT("0fdbad6aa2af414e8d8f073115cf03ab");
     constexpr const TCHAR* LibraryQualifiedName =
@@ -2213,10 +2232,200 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     if (!TestTrue(
             *FString::Printf(
                 TEXT("Materializes the static managed FunctionLibrary: %s"),
-                *Error),
+            *Error),
             bSynchronized))
     {
         return false;
+    }
+
+    // Exercise the generated functions through real Blueprint bytecode.  Each
+    // The wrapper is a user function in a normal Actor Blueprint, so the K2
+    // compiler supplies the hidden __WorldContext parameter and the VM
+    // executes the generated managed call node rather than ProcessEvent on the
+    // library function directly.
+    TArray<FName> BlueprintCallerNames;
+    TMap<FName, FName> BlueprintObservedOutputNames;
+    UUnifiedScriptBlueprintGeneratedClass* MaterializedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Materialized FunctionLibrary class is available for VM callers"), MaterializedClass))
+    {
+        return false;
+    }
+    const UEdGraphSchema_K2* GraphSchema = GetDefault<UEdGraphSchema_K2>();
+    for (const FExchangeShape& Shape : ExchangeShapes)
+    {
+        const FName ExchangeName(*FString::Printf(TEXT("USF_%s"), Shape.Id));
+        UFunction* Exchange = MaterializedClass->FindFunctionByName(
+            ExchangeName,
+            EIncludeSuperFlag::ExcludeSuper);
+        if (!TestNotNull(*FString::Printf(TEXT("%s target exists before creating VM caller"), Shape.Name), Exchange))
+        {
+            return false;
+        }
+
+        const FName CallerName(*FString::Printf(TEXT("Call_%s"), Shape.Name));
+        UEdGraph* CallerGraph = FBlueprintEditorUtils::CreateNewGraph(
+            CallerBlueprint,
+            CallerName,
+            UEdGraph::StaticClass(),
+            UEdGraphSchema_K2::StaticClass());
+        if (!TestNotNull(*FString::Printf(TEXT("%s Blueprint caller graph is created"), Shape.Name), CallerGraph))
+        {
+            return false;
+        }
+        FBlueprintEditorUtils::AddFunctionGraph<UClass>(CallerBlueprint, CallerGraph, true, nullptr);
+
+        TArray<UK2Node_FunctionEntry*> Entries;
+        CallerGraph->GetNodesOfClass(Entries);
+        TArray<UK2Node_FunctionResult*> Results;
+        CallerGraph->GetNodesOfClass(Results);
+        if (Entries.Num() == 1 && Results.Num() == 0)
+        {
+            if (UK2Node_FunctionResult* CreatedResult =
+                    FBlueprintEditorUtils::FindOrCreateFunctionResultNode(Entries[0]))
+            {
+                Results.Add(CreatedResult);
+            }
+        }
+        if (!TestEqual(*FString::Printf(TEXT("%s caller has one function entry"), Shape.Name), Entries.Num(), 1) ||
+            !TestEqual(*FString::Printf(TEXT("%s caller has one function result"), Shape.Name), Results.Num(), 1))
+        {
+            return false;
+        }
+
+        UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(CallerGraph);
+        CallNode->FunctionReference.SetExternalMember(ExchangeName, MaterializedClass);
+        CallerGraph->AddNode(CallNode, true, false);
+        CallNode->AllocateDefaultPins();
+        if (!TestTrue(
+                *FString::Printf(TEXT("%s caller resolves generated CallFunction pins"), Shape.Name),
+                CallNode->FindPin(TEXT("replacement")) != nullptr &&
+                    CallNode->FindPin(TEXT("value")) != nullptr &&
+                    CallNode->FindPin(TEXT("previous")) != nullptr &&
+                    CallNode->GetReturnValuePin() != nullptr))
+        {
+            return false;
+        }
+        const FName ObservedOutputName(*FString::Printf(TEXT("Observed_%s"), Shape.Name));
+        if (!TestTrue(
+                *FString::Printf(TEXT("%s caller adds an output observation property"), Shape.Name),
+                FBlueprintEditorUtils::AddMemberVariable(
+                    CallerBlueprint,
+                    ObservedOutputName,
+                    CallNode->FindPin(TEXT("previous"))->PinType)))
+        {
+            return false;
+        }
+        BlueprintObservedOutputNames.Add(FName(Shape.Id), ObservedOutputName);
+
+        UK2Node_FunctionEntry* Entry = Entries[0];
+        UK2Node_FunctionResult* Result = Results[0];
+        UEdGraphPin* CallWorldContext = CallNode->FindPin(TEXT("WorldContextObject"));
+        if (CallWorldContext != nullptr && Entry->FindPin(TEXT("WorldContextObject")) == nullptr)
+        {
+            Entry->CreateUserDefinedPin(
+                TEXT("WorldContextObject"),
+                CallWorldContext->PinType,
+                EGPD_Output,
+                false);
+        }
+        for (const FName PinName : {FName(TEXT("replacement")), FName(TEXT("value"))})
+        {
+            UEdGraphPin* CallPin = CallNode->FindPin(PinName);
+            if (CallPin == nullptr ||
+                Entry->CreateUserDefinedPin(PinName, CallPin->PinType, EGPD_Output) == nullptr)
+            {
+                AddError(*FString::Printf(TEXT("%s caller could not create input pin %s"), Shape.Name, *PinName.ToString()));
+                return false;
+            }
+        }
+        for (const FName PinName : {FName(TEXT("previous")), FName(TEXT("ReturnValue"))})
+        {
+            UEdGraphPin* CallPin = PinName == TEXT("ReturnValue")
+                ? CallNode->GetReturnValuePin()
+                : CallNode->FindPin(PinName);
+            if (CallPin == nullptr ||
+                Result->CreateUserDefinedPin(PinName, CallPin->PinType, EGPD_Input) == nullptr)
+            {
+                AddError(*FString::Printf(TEXT("%s caller could not create output pin %s"), Shape.Name, *PinName.ToString()));
+                return false;
+            }
+        }
+
+        UK2Node_VariableSet* ObserveOutput = NewObject<UK2Node_VariableSet>(CallerGraph);
+        ObserveOutput->VariableReference.SetSelfMember(
+            BlueprintObservedOutputNames.FindChecked(FName(Shape.Id)));
+        CallerGraph->AddNode(ObserveOutput, true, false);
+        ObserveOutput->AllocateDefaultPins();
+        UEdGraphPin* ObserveValue = ObserveOutput->FindPin(
+            BlueprintObservedOutputNames.FindChecked(FName(Shape.Id)),
+            EGPD_Input);
+        if (!TestNotNull(
+                *FString::Printf(TEXT("%s caller creates persistent out observation pin"), Shape.Name),
+                ObserveValue))
+        {
+            return false;
+        }
+
+        UEdGraphPin* EntryThen = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        UEdGraphPin* CallExecute = CallNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* CallThen = CallNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        UEdGraphPin* ResultExecute = Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* ObserveExecute = ObserveOutput->GetExecPin();
+        UEdGraphPin* ObserveThen = ObserveOutput->GetThenPin();
+        UEdGraphPin* EntryWorldContext = Entry->FindPin(TEXT("WorldContextObject"));
+        if (EntryWorldContext == nullptr)
+        {
+            EntryWorldContext = Entry->GetAutoWorldContextPin();
+        }
+        const bool bConnectedExec =
+            EntryThen != nullptr && CallExecute != nullptr && CallThen != nullptr &&
+            ObserveExecute != nullptr && ObserveThen != nullptr && ResultExecute != nullptr &&
+            GraphSchema->TryCreateConnection(EntryThen, CallExecute) &&
+            GraphSchema->TryCreateConnection(CallThen, ObserveExecute) &&
+            GraphSchema->TryCreateConnection(ObserveThen, ResultExecute);
+        UEdGraphPin* EntryKismetWorldContext = Entry->GetAutoWorldContextPin();
+        UEdGraphPin* CallKismetWorldContext = CallNode->FindPin(TEXT("__WorldContext"));
+        const bool bConnectedInputs =
+            bConnectedExec &&
+            EntryWorldContext != nullptr && CallWorldContext != nullptr &&
+            GraphSchema->TryCreateConnection(EntryWorldContext, CallWorldContext) &&
+            (EntryKismetWorldContext == nullptr || CallKismetWorldContext == nullptr ||
+             GraphSchema->TryCreateConnection(EntryKismetWorldContext, CallKismetWorldContext)) &&
+            GraphSchema->TryCreateConnection(Entry->FindPin(TEXT("replacement")), CallNode->FindPin(TEXT("replacement"))) &&
+            GraphSchema->TryCreateConnection(Entry->FindPin(TEXT("value")), CallNode->FindPin(TEXT("value")));
+        const bool bConnectedOutputs =
+            bConnectedInputs &&
+            GraphSchema->TryCreateConnection(CallNode->FindPin(TEXT("previous")), Result->FindPin(TEXT("previous"))) &&
+            GraphSchema->TryCreateConnection(CallNode->FindPin(TEXT("previous")), ObserveValue) &&
+            GraphSchema->TryCreateConnection(CallNode->GetReturnValuePin(), Result->FindPin(TEXT("ReturnValue")));
+        if (!TestTrue(*FString::Printf(TEXT("%s caller connects typed input/ref/out/return pins"), Shape.Name), bConnectedOutputs))
+        {
+            return false;
+        }
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(CallerBlueprint);
+        BlueprintCallerNames.Add(CallerName);
+    }
+    FKismetEditorUtilities::CompileBlueprint(CallerBlueprint);
+    if (!TestEqual(TEXT("Normal Blueprint with VM callers compiles"), CallerBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    UBlueprintGeneratedClass* CallerGeneratedClass =
+        Cast<UBlueprintGeneratedClass>(CallerBlueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Compiled Blueprint retains VM caller class"), CallerGeneratedClass))
+    {
+        return false;
+    }
+    for (const FName CallerName : BlueprintCallerNames)
+    {
+        UFunction* Caller = CallerGeneratedClass->FindFunctionByName(CallerName, EIncludeSuperFlag::ExcludeSuper);
+        TestNotNull(*FString::Printf(TEXT("Blueprint VM caller %s exists"), *CallerName.ToString()), Caller);
+        if (Caller != nullptr)
+        {
+            TestTrue(*FString::Printf(TEXT("Blueprint VM caller %s has bytecode"), *CallerName.ToString()), Caller->Script.Num() > 0);
+            TestFalse(*FString::Printf(TEXT("Blueprint VM caller %s is not native"), *CallerName.ToString()), Caller->HasAnyFunctionFlags(FUNC_Native));
+        }
     }
     FSavePackageArgs SaveArguments;
     SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
@@ -2245,9 +2454,13 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     Blueprint = Package != nullptr
         ? FindObject<UUnifiedScriptBlueprint>(Package, *AssetName)
         : nullptr;
+    CallerBlueprint = Package != nullptr
+        ? FindObject<UBlueprint>(Package, *CallerAssetName)
+        : nullptr;
     ScriptAsset = Blueprint != nullptr ? Blueprint->ScriptAsset.Get() : nullptr;
     if (!TestNotNull(TEXT("Persistent typed FunctionLibrary package reloads"), Package) ||
         !TestNotNull(TEXT("Persistent typed FunctionLibrary Blueprint reloads"), Blueprint) ||
+        !TestNotNull(TEXT("Persistent normal Blueprint caller reloads"), CallerBlueprint) ||
         !TestNotNull(TEXT("Persistent typed FunctionLibrary Script Asset reloads"), ScriptAsset))
     {
         return false;
@@ -2258,6 +2471,13 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
         Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
     if (!TestNotNull(TEXT("Static proxy retains the product GeneratedClass"), GeneratedClass))
+    {
+        return false;
+    }
+    CallerGeneratedClass = CallerBlueprint != nullptr
+        ? Cast<UBlueprintGeneratedClass>(CallerBlueprint->GeneratedClass)
+        : nullptr;
+    if (!TestNotNull(TEXT("Reloaded Blueprint retains the VM caller class"), CallerGeneratedClass))
     {
         return false;
     }
@@ -2435,6 +2655,7 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
     {
         WorldContext->RegisterComponentWithWorld(World);
         UObject* LibraryObject = GeneratedClass->GetDefaultObject();
+        UObject* CallerObject = CallerGeneratedClass->GetDefaultObject();
         for (const FExchangeShape& Shape : ExchangeShapes)
         {
             UFunction* Exchange = GeneratedClass->FindFunctionByName(
@@ -2493,6 +2714,97 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
                 Return->Identical(Return->ContainerPtrToValuePtr<void>(Memory), Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
             TestTrue(*FString::Printf(TEXT("%s writes the previous value to out"), Shape.Name),
                 Previous->Identical(Previous->ContainerPtrToValuePtr<void>(Memory), Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+        }
+
+        for (const FExchangeShape& Shape : ExchangeShapes)
+        {
+            const FName CallerName(*FString::Printf(TEXT("Call_%s"), Shape.Name));
+            UFunction* Caller = CallerGeneratedClass->FindFunctionByName(
+                CallerName,
+                EIncludeSuperFlag::ExcludeSuper);
+            if (!TestNotNull(*FString::Printf(TEXT("%s Blueprint VM caller survives package reload"), Shape.Name), Caller))
+            {
+                continue;
+            }
+            TestTrue(*FString::Printf(TEXT("%s caller has compiled Blueprint bytecode"), Shape.Name), Caller->Script.Num() > 0);
+            TestFalse(*FString::Printf(TEXT("%s caller is not a native shortcut"), Shape.Name), Caller->HasAnyFunctionFlags(FUNC_Native));
+            const FProperty* Replacement = FindFProperty<FProperty>(Caller, TEXT("replacement"));
+            const FProperty* Value = FindFProperty<FProperty>(Caller, TEXT("value"));
+            const FProperty* Previous = FindFProperty<FProperty>(Caller, TEXT("previous"));
+            const FProperty* Return = Caller->GetReturnProperty();
+            const FProperty* Observed = FindFProperty<FProperty>(
+                CallerGeneratedClass,
+                BlueprintObservedOutputNames.FindChecked(FName(Shape.Id)));
+            const FObjectPropertyBase* Context = FindFProperty<FObjectPropertyBase>(Caller, TEXT("WorldContextObject"));
+            if (Context == nullptr)
+            {
+                Context = FindFProperty<FObjectPropertyBase>(Caller, TEXT("__WorldContext"));
+            }
+            if (!TestTrue(
+                    *FString::Printf(TEXT("%s caller retains typed input/ref/out/return and explicit WorldContext pins"), Shape.Name),
+                    Replacement != nullptr && Value != nullptr && Previous != nullptr && Return != nullptr &&
+                    Observed != nullptr && Context != nullptr))
+            {
+                continue;
+            }
+            const FObjectPropertyBase* KismetContext =
+                FindFProperty<FObjectPropertyBase>(Caller, TEXT("__WorldContext"));
+            FStructOnScope Call(Caller);
+            FStructOnScope Before(Caller);
+            void* Memory = Call.GetStructMemory();
+            const FString Path = TEXT("/Game/Test/OldAsset.OldAsset");
+            const FString ReplacementPath = TEXT("/Game/Test/NewAsset.NewAsset");
+            auto Fill = [&](const FProperty& Property, void* Address, bool bReplacement)
+            {
+                const FString SelectedPath = bReplacement ? ReplacementPath : Path;
+                if (const FArrayProperty* Typed = CastField<FArrayProperty>(&Property))
+                {
+                    FScriptArrayHelper Array(Typed, Address);
+                    Array.AddValues(2);
+                    CastFieldChecked<FIntProperty>(Typed->Inner)->SetPropertyValue(Array.GetRawPtr(0), bReplacement ? 42 : 7);
+                    CastFieldChecked<FIntProperty>(Typed->Inner)->SetPropertyValue(Array.GetRawPtr(1), bReplacement ? 99 : -3);
+                }
+                else if (const FSetProperty* SetType = CastField<FSetProperty>(&Property))
+                {
+                    FScriptSetHelper Set(SetType, Address);
+                    const int32 Index = Set.AddDefaultValue_Invalid_NeedsRehash();
+                    CastFieldChecked<FNameProperty>(SetType->ElementProp)->SetPropertyValue(Set.GetElementPtr(Index), bReplacement ? TEXT("New") : TEXT("Old"));
+                    Set.Rehash();
+                }
+                else if (const FMapProperty* MapType = CastField<FMapProperty>(&Property))
+                {
+                    FScriptMapHelper Map(MapType, Address);
+                    const int32 Index = Map.AddDefaultValue_Invalid_NeedsRehash();
+                    CastFieldChecked<FStrProperty>(MapType->KeyProp)->SetPropertyValue(Map.GetKeyPtr(Index), bReplacement ? TEXT("New") : TEXT("Old"));
+                    CastFieldChecked<FSoftObjectProperty>(MapType->ValueProp)->SetPropertyValue(Map.GetValuePtr(Index), FSoftObjectPtr(FSoftObjectPath(SelectedPath)));
+                    Map.Rehash();
+                }
+                else
+                {
+                    CastFieldChecked<FSoftObjectProperty>(&Property)->SetPropertyValue(Address, FSoftObjectPtr(FSoftObjectPath(SelectedPath)));
+                }
+            };
+            Context->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            if (KismetContext != nullptr)
+            {
+                KismetContext->SetObjectPropertyValue_InContainer(Memory, WorldContext);
+            }
+            Fill(*Replacement, Replacement->ContainerPtrToValuePtr<void>(Memory), true);
+            Fill(*Value, Value->ContainerPtrToValuePtr<void>(Memory), false);
+            Value->CopyCompleteValue_InContainer(Before.GetStructMemory(), Memory);
+            CallerObject->ProcessEvent(Caller, Memory);
+            TestTrue(*FString::Printf(TEXT("%s Blueprint VM writes replacement to ref"), Shape.Name),
+                Value->Identical(Value->ContainerPtrToValuePtr<void>(Memory), Replacement->ContainerPtrToValuePtr<void>(Memory)));
+            TestTrue(*FString::Printf(TEXT("%s Blueprint VM returns the original value"), Shape.Name),
+                Return->Identical(Return->ContainerPtrToValuePtr<void>(Memory), Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+            TestTrue(*FString::Printf(TEXT("%s Blueprint VM writes the original value to its Previous out parameter"), Shape.Name),
+                Previous->Identical(
+                    Previous->ContainerPtrToValuePtr<void>(Memory),
+                    Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+            TestTrue(*FString::Printf(TEXT("%s Blueprint VM writes the original value to out"), Shape.Name),
+                Observed->Identical(
+                    Observed->ContainerPtrToValuePtr<void>(CallerObject),
+                    Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
         }
         const FObjectPropertyBase* ContextProperty =
             FindFProperty<FObjectPropertyBase>(DescribeFunction, TEXT("WorldContextObject"));
@@ -2701,7 +3013,117 @@ bool FUnifiedScriptBlueprintManagedStaticFunctionDispatchTest::RunTest(
         TEXT("Static library collectible context retires with its World"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
-    return bRuntimeReady && !HasAnyErrors();
+
+    bool bRecreatedRuntimeReady = true;
+    if (bRuntimeReady)
+    {
+        UWorld* RecreatedWorld = UWorld::CreateWorld(EWorldType::Game, false);
+        bRecreatedRuntimeReady = TestNotNull(
+            TEXT("Recreates a gameplay World after static dispatch teardown"),
+            RecreatedWorld);
+        if (RecreatedWorld != nullptr)
+        {
+            RecreatedWorld->AddToRoot();
+            UUnifiedScriptWorldSubsystem* RecreatedHost =
+                RecreatedWorld->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+            UUnifiedScriptComponent* RecreatedContext =
+                NewObject<UUnifiedScriptComponent>(RecreatedWorld);
+            bRecreatedRuntimeReady =
+                TestNotNull(TEXT("Recreated World has a managed host"), RecreatedHost) &&
+                TestNotNull(TEXT("Recreated World has a context object"), RecreatedContext);
+            if (bRecreatedRuntimeReady)
+            {
+                RecreatedContext->RegisterComponentWithWorld(RecreatedWorld);
+                UObject* CallerObject = CallerGeneratedClass->GetDefaultObject();
+                UFunction* Caller = CallerGeneratedClass->FindFunctionByName(
+                    TEXT("Call_ExchangeArray"), EIncludeSuperFlag::ExcludeSuper);
+                const FProperty* Replacement = Caller != nullptr
+                    ? FindFProperty<FProperty>(Caller, TEXT("replacement"))
+                    : nullptr;
+                const FProperty* Value = Caller != nullptr
+                    ? FindFProperty<FProperty>(Caller, TEXT("value"))
+                    : nullptr;
+                const FProperty* Previous = Caller != nullptr
+                    ? FindFProperty<FProperty>(Caller, TEXT("previous"))
+                    : nullptr;
+                const FProperty* Return = Caller != nullptr
+                    ? Caller->GetReturnProperty()
+                    : nullptr;
+                const FProperty* Observed = FindFProperty<FProperty>(
+                    CallerGeneratedClass,
+                    BlueprintObservedOutputNames.FindChecked(FName(TEXT("71717171717171717171717171717171"))));
+                const FObjectPropertyBase* Context = Caller != nullptr
+                    ? FindFProperty<FObjectPropertyBase>(Caller, TEXT("WorldContextObject"))
+                    : nullptr;
+                if (Context == nullptr && Caller != nullptr)
+                {
+                    Context = FindFProperty<FObjectPropertyBase>(Caller, TEXT("__WorldContext"));
+                }
+                const FObjectPropertyBase* KismetContext = Caller != nullptr
+                    ? FindFProperty<FObjectPropertyBase>(Caller, TEXT("__WorldContext"))
+                    : nullptr;
+                bRecreatedRuntimeReady =
+                    TestNotNull(TEXT("Recreated World retains the Array VM caller"), Caller) &&
+                    TestNotNull(TEXT("Recreated Array VM caller retains its context"), Context) &&
+                    TestNotNull(TEXT("Recreated Array VM caller retains its ref pin"), Value) &&
+                    TestNotNull(TEXT("Recreated Array VM caller retains its out pin"), Previous) &&
+                    TestNotNull(TEXT("Recreated Array VM caller retains its return pin"), Return) &&
+                    TestNotNull(TEXT("Recreated Array VM caller retains its observation"), Observed);
+                if (bRecreatedRuntimeReady)
+                {
+                    FStructOnScope Call(Caller);
+                    FStructOnScope Before(Caller);
+                    void* Memory = Call.GetStructMemory();
+                    auto FillArray = [](const FProperty& Property, void* Address, bool bReplacement)
+                    {
+                        const FArrayProperty* ArrayProperty = CastField<FArrayProperty>(&Property);
+                        FScriptArrayHelper Array(ArrayProperty, Address);
+                        Array.AddValues(2);
+                        FIntProperty* Inner = CastFieldChecked<FIntProperty>(ArrayProperty->Inner);
+                        Inner->SetPropertyValue(Array.GetRawPtr(0), bReplacement ? 42 : 7);
+                        Inner->SetPropertyValue(Array.GetRawPtr(1), bReplacement ? 99 : -3);
+                    };
+                    Context->SetObjectPropertyValue_InContainer(Memory, RecreatedContext);
+                    if (KismetContext != nullptr)
+                    {
+                        KismetContext->SetObjectPropertyValue_InContainer(Memory, RecreatedContext);
+                    }
+                    FillArray(*Replacement, Replacement->ContainerPtrToValuePtr<void>(Memory), true);
+                    FillArray(*Value, Value->ContainerPtrToValuePtr<void>(Memory), false);
+                    Value->CopyCompleteValue_InContainer(Before.GetStructMemory(), Memory);
+                    CallerObject->ProcessEvent(Caller, Memory);
+                    TestTrue(
+                        TEXT("Recreated World Array VM still writes the ref value"),
+                        Value->Identical(
+                            Value->ContainerPtrToValuePtr<void>(Memory),
+                            Replacement->ContainerPtrToValuePtr<void>(Memory)));
+                    TestTrue(
+                        TEXT("Recreated World Array VM still writes the caller Previous out"),
+                        Previous->Identical(
+                            Previous->ContainerPtrToValuePtr<void>(Memory),
+                            Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+                    TestTrue(
+                        TEXT("Recreated World Array VM still writes the return value"),
+                        Return->Identical(
+                            Return->ContainerPtrToValuePtr<void>(Memory),
+                            Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+                    TestTrue(
+                        TEXT("Recreated World Array VM still reaches the downstream observation"),
+                        Observed->Identical(
+                            Observed->ContainerPtrToValuePtr<void>(CallerObject),
+                            Value->ContainerPtrToValuePtr<void>(Before.GetStructMemory())));
+                }
+                RecreatedContext->UnregisterComponent();
+            }
+            RecreatedWorld->RemoveFromRoot();
+            RecreatedWorld->DestroyWorld(false);
+        }
+        TestEqual(
+            TEXT("Recreated static dispatch World also retires its collectible context"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialManagedWorldCount);
+    }
+    return bRuntimeReady && bRecreatedRuntimeReady && !HasAnyErrors();
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

@@ -1,6 +1,6 @@
 # UnifiedScript product roadmap
 
-Last reviewed: **2026-09-05**
+Last reviewed: **2026-09-07**
 
 This document owns current priorities, capability boundaries, and delivery
 order. Detailed implementation logs and earlier acceptance results live in
@@ -26,13 +26,18 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 
 - Active milestone: **M13.3 resumed after the M13.5 common capability breadth checkpoint**.
 - Current tranche: **M13.3C-1c-b — container and Soft Reference function closure**.
-  Continue from the implemented typed functions and checked-in `DemoLibrary`
-  exchange methods. Exercise generated nodes through an actual Blueprint VM
-  caller, complete focused rejected-shape coverage, and verify reload and cooked
-  execution. Existing native `ProcessEvent` calls into generated functions are
-  useful dispatch evidence but do not prove the Blueprint caller's bytecode path.
+  The checked-in `DemoLibrary` exchange methods now pass actual Blueprint VM
+  callers for all five families, including downstream output use, caller output
+  forwarding and package reload. Source diagnostics reject nested containers
+  and known unhashable Set/Map leaves. Next close static-library code reload and
+  verify the cooked execution path; native `ProcessEvent` regression checks
+  remain distinct from Blueprint caller bytecode evidence.
   Reuse the local HostProject packaging facilities without modifying protected
   files or an external project.
+  The current static-library cache lasts for the World, and daily Build & Reload
+  only reloads Script Components. World recreation proves lifetime cleanup, not
+  same-World library code replacement. Close that authoring/reload gap before
+  claiming the ordinary static Function Library workflow complete.
 - Latest delivered M13.5 checkpoint: **collection state and defaults**,
   with core serialization/runtime commit `e30045f`, following soft-reference
   state/defaults (`9249194`), common value state/defaults (`2397d75`),
@@ -629,6 +634,15 @@ the historical cursor. Formal release requirements remain in
 [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 ## Evidence and technical references
+
+The function VM checkpoint passes 51 `CSharpScriptAssetLowererTests`, an Editor
+build, and both static and instance dispatch CMD cases. Evidence:
+`artifacts/m13-3c-1c-b-blueprint-vm/blueprint-managed-static-dispatch-vm-recreated2-engine.log`
+and `blueprint-managed-instance-dispatch-release2-engine.log` under that directory.
+The first run found stale chunk dependency digests; the passing runs use a
+freshly emitted/staged Release Demo. Static tests cover five container/soft
+families after package reload, and a fresh World repeats the Array VM call.
+This is not same-World library source reload or cooked acceptance.
 
 The collection-state checkpoint passes 134 affected managed tests in
 `artifacts/m13-5-collection-state/managed-collection-focused-current.log`,

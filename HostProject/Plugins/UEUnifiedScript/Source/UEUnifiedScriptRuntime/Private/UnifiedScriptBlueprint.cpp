@@ -1222,8 +1222,9 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
     }
     // ProcessEvent copies the caller's parameter block into Stack.Locals and
     // exposes the original out/ref destinations through Stack.OutParms. A
-    // Blueprint VM call may also populate this chain, so prefer it whenever
-    // available and retain the MostRecentPropertyAddress fallback above.
+    // Blueprint VM call may also populate this chain with the enclosing
+    // frame's destination, so preserve the decoded output net when it is
+    // already present and use Stack.OutParms for direct ProcessEvent calls.
     for (FOutParmRec* OutParameter = Stack.OutParms;
          OutParameter != nullptr;
          OutParameter = OutParameter->NextOutParm)
@@ -1232,7 +1233,13 @@ DEFINE_FUNCTION(UUnifiedScriptBlueprintGeneratedClass::execDispatchManagedFuncti
             OutParameter->PropAddr != nullptr &&
             !OutParameter->Property->HasAnyPropertyFlags(CPF_ReturnParm))
         {
-            DecodedOutputDestinations.Add(
+            // During a nested Blueprint VM call, Stack.Step has already
+            // captured the caller's temporary output net.  The OutParms chain
+            // can point at the enclosing ProcessEvent frame instead; replacing
+            // the temporary would make downstream Blueprint nodes observe the
+            // pre-call default.  Direct ProcessEvent calls have no earlier net
+            // and continue to use the OutParms destination.
+            DecodedOutputDestinations.FindOrAdd(
                 OutParameter->Property->GetFName(),
                 OutParameter->PropAddr);
         }
