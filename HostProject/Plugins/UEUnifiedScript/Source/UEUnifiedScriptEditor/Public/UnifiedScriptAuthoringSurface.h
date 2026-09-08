@@ -152,12 +152,22 @@ struct FUnifiedScriptAuthoringAsset
     TArray<FUnifiedScriptAuthoringFunction> Functions;
 };
 
+struct FUnifiedScriptAuthoringDeclarationOwner
+{
+    FString DeclarationId;
+    FString OwnerAssetId;
+};
+
 struct FUnifiedScriptAuthoringSurfaceDocument
 {
     FString SchemaVersion;
     FString SourceCompilationId;
     FString SemanticConfigurationId;
     TArray<FUnifiedScriptAuthoringAsset> Assets;
+    TArray<FUnifiedScriptAuthoringDeclarationOwner> DeclarationOwners;
+
+    const FUnifiedScriptAuthoringAsset* FindDeclarationOwnerAsset(
+        const FString& DeclarationId) const;
 
     int32 GetStateCount() const;
     int32 GetFunctionCount() const;
@@ -165,7 +175,7 @@ struct FUnifiedScriptAuthoringSurfaceDocument
     int32 GetEdgeCount() const;
 };
 
-/** Strict reader for the engine-neutral Authoring Surface v0.4 editing contract. */
+/** Strict reader for the engine-neutral Authoring Surface v0.4/v0.5 editing contract. */
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptAuthoringSurfaceReader
 {
 public:

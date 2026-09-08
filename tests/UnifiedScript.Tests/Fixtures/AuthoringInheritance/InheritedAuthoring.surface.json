@@ -1,0 +1,2350 @@
+{
+  "schemaVersion": "unifiedscript.authoring-surface/v0.5",
+  "sourceCompilationId": "us_b2bb7475a6d073b8e5bfbb28d2d3860b",
+  "semanticConfigurationId": "us_77f1d2b6581294161c3faed8d6ca8caf",
+  "assets": [
+    {
+      "id": "us_e2d153cb5a0317c1b163f35198293c58",
+      "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.AOverride",
+      "assetPath": "Game/AOverride",
+      "span": {
+        "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+        "start": {
+          "line": 37,
+          "column": 1
+        },
+        "end": {
+          "line": 44,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_6dcde343cfa943a7f2bd4f180b774314",
+          "name": "Seed",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 77,
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 13,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 39
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          }
+        },
+        {
+          "id": "us_2f78947bde10ee5e5eee4888e1ae7147",
+          "name": "Values",
+          "typeDisplayName": "IReadOnlyList\u003Cint\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+          "typeKind": "array",
+          "defaultValue": [
+            2,
+            4
+          ],
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 16,
+              "column": 5
+            },
+            "end": {
+              "line": 17,
+              "column": 77
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          },
+          "unrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_9035eabbdc172f3d2e73f6b337553601",
+          "name": "Forward",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.AOverride.Forward(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_334ce57679bae45608761a9121787b2d",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+          "regions": [
+            {
+              "id": "us_1a94cd62877595a756f674b0c481cca7",
+              "kind": "function",
+              "sourceNodeId": "us_9035eabbdc172f3d2e73f6b337553601",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "directActionIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "childRegionIds": [
+                "us_dc9a004b06dcfab96e0ab6ab3f116b9b"
+              ]
+            },
+            {
+              "id": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "kind": "block",
+              "parentRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "sourceNodeId": "us_8f8fe2e6c172c4c15575225befab8c00",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 32,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_e28196690b719dfcca2095d9e443af8b"
+              ],
+              "directActionIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_93382750b51f9bf21dc2c39ff6c10bf1",
+                "us_e28196690b719dfcca2095d9e443af8b",
+                "us_86c1c86647e3c7b98621e8c58fc94ab8"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "Forward",
+              "summary": "int Forward(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "regionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_9035eabbdc172f3d2e73f6b337553601",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 9
+                },
+                "end": {
+                  "line": 33,
+                  "column": 32
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "debugTargetId": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get ReadSeed",
+              "summary": "ReadSeed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 24
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data"
+                }
+              ],
+              "properties": {
+                "name": "ReadSeed",
+                "nullFlowState": "unknown",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913"
+              }
+            },
+            {
+              "id": "us_e28196690b719dfcca2095d9e443af8b",
+              "graphKind": "invocation",
+              "category": "call",
+              "title": "int SharedBase.ReadSeed(int value)",
+              "summary": "ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 31
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "arg0",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "authoringBoundary": "visualGraph",
+                "calleeBodyEditable": "true",
+                "calleeBodyRepresentation": "visualGraph",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "method": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase.ReadSeed(System.Int32)",
+                "methodId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 25
+                },
+                "end": {
+                  "line": 33,
+                  "column": 30
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_334ce57679bae45608761a9121787b2d",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_a3f8de7a265720391686faaa1ad4d66c",
+              "kind": "control",
+              "fromNode": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "fromPort": "then",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_21a5d619388ba6cf956b71bfe9b1eabf",
+              "kind": "control",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "execOut",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "in"
+            },
+            {
+              "id": "us_ae2ff14aae676c84884b7de37d2a2438",
+              "kind": "data",
+              "fromNode": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "arg0"
+            },
+            {
+              "id": "us_09fb9ebc3659e89971908356027b52c1",
+              "kind": "data",
+              "fromNode": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "target"
+            },
+            {
+              "id": "us_fd0a42b81f5dd1b00fa402c0a86642ce",
+              "kind": "data",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "value",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "value"
+            }
+          ]
+        },
+        {
+          "id": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+          "name": "ReadSeed",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.AOverride.ReadSeed(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_30d031f78712414a3de2918e66028933",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+          "regions": [
+            {
+              "id": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "kind": "function",
+              "sourceNodeId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "directActionIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "childRegionIds": [
+                "us_4bf44de9425735f729b08a48a6170392"
+              ]
+            },
+            {
+              "id": "us_4bf44de9425735f729b08a48a6170392",
+              "kind": "block",
+              "parentRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "sourceNodeId": "us_c261654a303d0aea4bfa0a6e358f62e0",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 26,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c"
+              ],
+              "directActionIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c",
+                "us_7178998ee4c1c369027b008811436b73",
+                "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                "us_30af146e19ccf5cd4246011efec728e3"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_c34e32c25829dec256ae2c90777fcd81",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "ReadSeed",
+              "summary": "int ReadSeed(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "regionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return (Seed \u002B value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 9
+                },
+                "end": {
+                  "line": 27,
+                  "column": 29
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "debugTargetId": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_935fd83b94dcdcfc6a0fb7681b6e2016",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_7178998ee4c1c369027b008811436b73",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get Seed",
+              "summary": "Seed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 20
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "declarationId": "us_6dcde343cfa943a7f2bd4f180b774314",
+                "graphSafe": "true",
+                "name": "Seed",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_dee780aea71cd6cdf050c3ff8f9d54fa",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u002B",
+              "summary": "\u002B \u00B7 Seed, value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_c48d98bfd91cb3810498b8af5ad50948",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "nullFlowState": "notNull",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_26dd2632dcd70a8167142551379f49cf",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_30af146e19ccf5cd4246011efec728e3",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 23
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_30d031f78712414a3de2918e66028933",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_0cf1ea847bec6419d1006c57a5e4e4b1",
+              "kind": "control",
+              "fromNode": "us_c34e32c25829dec256ae2c90777fcd81",
+              "fromPort": "then",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "in"
+            },
+            {
+              "id": "us_a37324975eadb2ed94b8b3f3431008ad",
+              "kind": "data",
+              "fromNode": "us_30af146e19ccf5cd4246011efec728e3",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "right"
+            },
+            {
+              "id": "us_db4587205ccc980a291d581223e140fe",
+              "kind": "data",
+              "fromNode": "us_7178998ee4c1c369027b008811436b73",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "left"
+            },
+            {
+              "id": "us_00b4ecd93559c1ae596f11434e4898db",
+              "kind": "data",
+              "fromNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "fromPort": "value",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "value"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "us_8db1f26d0a27fbac5ebdbe2a258d2642",
+      "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.BFollower",
+      "assetPath": "Game/BFollower",
+      "span": {
+        "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+        "start": {
+          "line": 46,
+          "column": 1
+        },
+        "end": {
+          "line": 49,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_6dcde343cfa943a7f2bd4f180b774314",
+          "name": "Seed",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 3,
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 13,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 39
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          }
+        },
+        {
+          "id": "us_2f78947bde10ee5e5eee4888e1ae7147",
+          "name": "Values",
+          "typeDisplayName": "IReadOnlyList\u003Cint\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+          "typeKind": "array",
+          "defaultValue": [
+            2,
+            4
+          ],
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 16,
+              "column": 5
+            },
+            "end": {
+              "line": 17,
+              "column": 77
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          },
+          "unrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_9035eabbdc172f3d2e73f6b337553601",
+          "name": "Forward",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.BFollower.Forward(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_334ce57679bae45608761a9121787b2d",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+          "regions": [
+            {
+              "id": "us_1a94cd62877595a756f674b0c481cca7",
+              "kind": "function",
+              "sourceNodeId": "us_9035eabbdc172f3d2e73f6b337553601",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "directActionIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "childRegionIds": [
+                "us_dc9a004b06dcfab96e0ab6ab3f116b9b"
+              ]
+            },
+            {
+              "id": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "kind": "block",
+              "parentRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "sourceNodeId": "us_8f8fe2e6c172c4c15575225befab8c00",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 32,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_e28196690b719dfcca2095d9e443af8b"
+              ],
+              "directActionIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_93382750b51f9bf21dc2c39ff6c10bf1",
+                "us_e28196690b719dfcca2095d9e443af8b",
+                "us_86c1c86647e3c7b98621e8c58fc94ab8"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "Forward",
+              "summary": "int Forward(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "regionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_9035eabbdc172f3d2e73f6b337553601",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 9
+                },
+                "end": {
+                  "line": 33,
+                  "column": 32
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "debugTargetId": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get ReadSeed",
+              "summary": "ReadSeed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 24
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data"
+                }
+              ],
+              "properties": {
+                "name": "ReadSeed",
+                "nullFlowState": "unknown",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913"
+              }
+            },
+            {
+              "id": "us_e28196690b719dfcca2095d9e443af8b",
+              "graphKind": "invocation",
+              "category": "call",
+              "title": "int SharedBase.ReadSeed(int value)",
+              "summary": "ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 31
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "arg0",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "authoringBoundary": "visualGraph",
+                "calleeBodyEditable": "true",
+                "calleeBodyRepresentation": "visualGraph",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "method": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase.ReadSeed(System.Int32)",
+                "methodId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 25
+                },
+                "end": {
+                  "line": 33,
+                  "column": 30
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_334ce57679bae45608761a9121787b2d",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_a3f8de7a265720391686faaa1ad4d66c",
+              "kind": "control",
+              "fromNode": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "fromPort": "then",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_21a5d619388ba6cf956b71bfe9b1eabf",
+              "kind": "control",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "execOut",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "in"
+            },
+            {
+              "id": "us_ae2ff14aae676c84884b7de37d2a2438",
+              "kind": "data",
+              "fromNode": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "arg0"
+            },
+            {
+              "id": "us_09fb9ebc3659e89971908356027b52c1",
+              "kind": "data",
+              "fromNode": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "target"
+            },
+            {
+              "id": "us_fd0a42b81f5dd1b00fa402c0a86642ce",
+              "kind": "data",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "value",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "value"
+            }
+          ]
+        },
+        {
+          "id": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+          "name": "ReadSeed",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.BFollower.ReadSeed(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_30d031f78712414a3de2918e66028933",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+          "regions": [
+            {
+              "id": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "kind": "function",
+              "sourceNodeId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "directActionIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "childRegionIds": [
+                "us_4bf44de9425735f729b08a48a6170392"
+              ]
+            },
+            {
+              "id": "us_4bf44de9425735f729b08a48a6170392",
+              "kind": "block",
+              "parentRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "sourceNodeId": "us_c261654a303d0aea4bfa0a6e358f62e0",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 26,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c"
+              ],
+              "directActionIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c",
+                "us_7178998ee4c1c369027b008811436b73",
+                "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                "us_30af146e19ccf5cd4246011efec728e3"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_c34e32c25829dec256ae2c90777fcd81",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "ReadSeed",
+              "summary": "int ReadSeed(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "regionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return (Seed \u002B value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 9
+                },
+                "end": {
+                  "line": 27,
+                  "column": 29
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "debugTargetId": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_935fd83b94dcdcfc6a0fb7681b6e2016",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_7178998ee4c1c369027b008811436b73",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get Seed",
+              "summary": "Seed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 20
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "declarationId": "us_6dcde343cfa943a7f2bd4f180b774314",
+                "graphSafe": "true",
+                "name": "Seed",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_dee780aea71cd6cdf050c3ff8f9d54fa",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u002B",
+              "summary": "\u002B \u00B7 Seed, value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_c48d98bfd91cb3810498b8af5ad50948",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "nullFlowState": "notNull",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_26dd2632dcd70a8167142551379f49cf",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_30af146e19ccf5cd4246011efec728e3",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 23
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_30d031f78712414a3de2918e66028933",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_0cf1ea847bec6419d1006c57a5e4e4b1",
+              "kind": "control",
+              "fromNode": "us_c34e32c25829dec256ae2c90777fcd81",
+              "fromPort": "then",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "in"
+            },
+            {
+              "id": "us_a37324975eadb2ed94b8b3f3431008ad",
+              "kind": "data",
+              "fromNode": "us_30af146e19ccf5cd4246011efec728e3",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "right"
+            },
+            {
+              "id": "us_db4587205ccc980a291d581223e140fe",
+              "kind": "data",
+              "fromNode": "us_7178998ee4c1c369027b008811436b73",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "left"
+            },
+            {
+              "id": "us_00b4ecd93559c1ae596f11434e4898db",
+              "kind": "data",
+              "fromNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "fromPort": "value",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "value"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "us_4a1f3c2d7e8b4a6190c5d8e2f7a314b6",
+      "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase",
+      "assetPath": "Game/ZBase",
+      "span": {
+        "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 9,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_6dcde343cfa943a7f2bd4f180b774314",
+          "name": "Seed",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 3,
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 13,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 39
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          }
+        },
+        {
+          "id": "us_2f78947bde10ee5e5eee4888e1ae7147",
+          "name": "Values",
+          "typeDisplayName": "IReadOnlyList\u003Cint\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+          "typeKind": "array",
+          "defaultValue": [
+            2,
+            4
+          ],
+          "span": {
+            "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+            "start": {
+              "line": 16,
+              "column": 5
+            },
+            "end": {
+              "line": 17,
+              "column": 77
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Inherited"
+          },
+          "unrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_9035eabbdc172f3d2e73f6b337553601",
+          "name": "Forward",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase.Forward(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_334ce57679bae45608761a9121787b2d",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+          "regions": [
+            {
+              "id": "us_1a94cd62877595a756f674b0c481cca7",
+              "kind": "function",
+              "sourceNodeId": "us_9035eabbdc172f3d2e73f6b337553601",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "directActionIds": [
+                "us_73845b4981eb7027d2280c4ce410b0e1"
+              ],
+              "childRegionIds": [
+                "us_dc9a004b06dcfab96e0ab6ab3f116b9b"
+              ]
+            },
+            {
+              "id": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "kind": "block",
+              "parentRegionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "sourceNodeId": "us_8f8fe2e6c172c4c15575225befab8c00",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 32,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_e28196690b719dfcca2095d9e443af8b"
+              ],
+              "directActionIds": [
+                "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+                "us_93382750b51f9bf21dc2c39ff6c10bf1",
+                "us_e28196690b719dfcca2095d9e443af8b",
+                "us_86c1c86647e3c7b98621e8c58fc94ab8"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "Forward",
+              "summary": "int Forward(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 30,
+                  "column": 5
+                },
+                "end": {
+                  "line": 34,
+                  "column": 6
+                }
+              },
+              "regionId": "us_1a94cd62877595a756f674b0c481cca7",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_9035eabbdc172f3d2e73f6b337553601",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 9
+                },
+                "end": {
+                  "line": 33,
+                  "column": 32
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "debugTargetId": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get ReadSeed",
+              "summary": "ReadSeed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 24
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data"
+                }
+              ],
+              "properties": {
+                "name": "ReadSeed",
+                "nullFlowState": "unknown",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913"
+              }
+            },
+            {
+              "id": "us_e28196690b719dfcca2095d9e443af8b",
+              "graphKind": "invocation",
+              "category": "call",
+              "title": "int SharedBase.ReadSeed(int value)",
+              "summary": "ReadSeed(value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 16
+                },
+                "end": {
+                  "line": 33,
+                  "column": 31
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "arg0",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "authoringBoundary": "visualGraph",
+                "calleeBodyEditable": "true",
+                "calleeBodyRepresentation": "visualGraph",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "method": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase.ReadSeed(System.Int32)",
+                "methodId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 33,
+                  "column": 25
+                },
+                "end": {
+                  "line": 33,
+                  "column": 30
+                }
+              },
+              "regionId": "us_dc9a004b06dcfab96e0ab6ab3f116b9b",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_334ce57679bae45608761a9121787b2d",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_a3f8de7a265720391686faaa1ad4d66c",
+              "kind": "control",
+              "fromNode": "us_73845b4981eb7027d2280c4ce410b0e1",
+              "fromPort": "then",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_21a5d619388ba6cf956b71bfe9b1eabf",
+              "kind": "control",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "execOut",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "in"
+            },
+            {
+              "id": "us_ae2ff14aae676c84884b7de37d2a2438",
+              "kind": "data",
+              "fromNode": "us_86c1c86647e3c7b98621e8c58fc94ab8",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "arg0"
+            },
+            {
+              "id": "us_09fb9ebc3659e89971908356027b52c1",
+              "kind": "data",
+              "fromNode": "us_93382750b51f9bf21dc2c39ff6c10bf1",
+              "fromPort": "value",
+              "toNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "toPort": "target"
+            },
+            {
+              "id": "us_fd0a42b81f5dd1b00fa402c0a86642ce",
+              "kind": "data",
+              "fromNode": "us_e28196690b719dfcca2095d9e443af8b",
+              "fromPort": "value",
+              "toNode": "us_36160a773d5a9d8b1f9e31e31c33c5f1",
+              "toPort": "value"
+            }
+          ]
+        },
+        {
+          "id": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+          "name": "ReadSeed",
+          "qualifiedName": "UnifiedScript.Tests.Fixtures.AuthoringInheritance.SharedBase.ReadSeed(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_30d031f78712414a3de2918e66028933",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+          "regions": [
+            {
+              "id": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "kind": "function",
+              "sourceNodeId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "directActionIds": [
+                "us_c34e32c25829dec256ae2c90777fcd81"
+              ],
+              "childRegionIds": [
+                "us_4bf44de9425735f729b08a48a6170392"
+              ]
+            },
+            {
+              "id": "us_4bf44de9425735f729b08a48a6170392",
+              "kind": "block",
+              "parentRegionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "sourceNodeId": "us_c261654a303d0aea4bfa0a6e358f62e0",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 26,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c"
+              ],
+              "directActionIds": [
+                "us_a1217d015b0e276960b4ba60dd3d4d8c",
+                "us_7178998ee4c1c369027b008811436b73",
+                "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                "us_30af146e19ccf5cd4246011efec728e3"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_c34e32c25829dec256ae2c90777fcd81",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "ReadSeed",
+              "summary": "int ReadSeed(int value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 24,
+                  "column": 5
+                },
+                "end": {
+                  "line": 28,
+                  "column": 6
+                }
+              },
+              "regionId": "us_88b6cd55e70975f58d01c65408ebbed9",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ],
+              "properties": {
+                "declaredSymbolId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "nullFlowState": "unknown",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return (Seed \u002B value)",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 9
+                },
+                "end": {
+                  "line": 27,
+                  "column": 29
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "debugTargetId": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_935fd83b94dcdcfc6a0fb7681b6e2016",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {}
+            },
+            {
+              "id": "us_7178998ee4c1c369027b008811436b73",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get Seed",
+              "summary": "Seed",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 20
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "declarationId": "us_6dcde343cfa943a7f2bd4f180b774314",
+                "graphSafe": "true",
+                "name": "Seed",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_dee780aea71cd6cdf050c3ff8f9d54fa",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u002B",
+              "summary": "\u002B \u00B7 Seed, value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 16
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [
+                "us_6dcde343cfa943a7f2bd4f180b774314"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_c48d98bfd91cb3810498b8af5ad50948",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 27",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "nullFlowState": "notNull",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_26dd2632dcd70a8167142551379f49cf",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            },
+            {
+              "id": "us_30af146e19ccf5cd4246011efec728e3",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "tests/UnifiedScript.Tests/Fixtures/AuthoringInheritance/InheritedAuthoring.cs",
+                "start": {
+                  "line": 27,
+                  "column": 23
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_4bf44de9425735f729b08a48a6170392",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "nullFlowState": "notNull",
+                "referencedSymbolId": "us_30d031f78712414a3de2918e66028933",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "typeNullability": "notNull"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_0cf1ea847bec6419d1006c57a5e4e4b1",
+              "kind": "control",
+              "fromNode": "us_c34e32c25829dec256ae2c90777fcd81",
+              "fromPort": "then",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "in"
+            },
+            {
+              "id": "us_a37324975eadb2ed94b8b3f3431008ad",
+              "kind": "data",
+              "fromNode": "us_30af146e19ccf5cd4246011efec728e3",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "right"
+            },
+            {
+              "id": "us_db4587205ccc980a291d581223e140fe",
+              "kind": "data",
+              "fromNode": "us_7178998ee4c1c369027b008811436b73",
+              "fromPort": "value",
+              "toNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "toPort": "left"
+            },
+            {
+              "id": "us_00b4ecd93559c1ae596f11434e4898db",
+              "kind": "data",
+              "fromNode": "us_b79c41e14b9e44dcbc1ffccd599f80f6",
+              "fromPort": "value",
+              "toNode": "us_a1217d015b0e276960b4ba60dd3d4d8c",
+              "toPort": "value"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "declarationOwners": [
+    {
+      "declarationId": "us_0eebfc28ed938fa3cb390b8f7ae97913",
+      "ownerAssetId": "us_4a1f3c2d7e8b4a6190c5d8e2f7a314b6"
+    },
+    {
+      "declarationId": "us_2f78947bde10ee5e5eee4888e1ae7147",
+      "ownerAssetId": "us_4a1f3c2d7e8b4a6190c5d8e2f7a314b6"
+    },
+    {
+      "declarationId": "us_6dcde343cfa943a7f2bd4f180b774314",
+      "ownerAssetId": "us_4a1f3c2d7e8b4a6190c5d8e2f7a314b6"
+    },
+    {
+      "declarationId": "us_9035eabbdc172f3d2e73f6b337553601",
+      "ownerAssetId": "us_4a1f3c2d7e8b4a6190c5d8e2f7a314b6"
+    }
+  ]
+}

@@ -27,7 +27,7 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptAuthoringSurfaceTest,
-    "UnifiedScript.Unreal.Editor.AuthoringSurface",
+    "UnifiedScript.Unreal.Editor.AuthoringSurface.Workbench",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
@@ -2663,6 +2663,115 @@ bool FUnifiedScriptAuthoringSurfaceStructDefaultTest::RunTest(const FString& Par
                 (*ReplacementObject)->TryGetObjectField(TEXT("defaultValue"), ExpectedDefault));
         }
     }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptAuthoringSurfaceScalarDefaultTest,
+    "UnifiedScript.Unreal.Editor.AuthoringSurface.ScalarDefaultRoundtrip",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptAuthoringSurfaceScalarDefaultTest::RunTest(const FString& Parameters)
+{
+    const FString SurfaceJson = TEXT(
+        "{\"schemaVersion\":\"unifiedscript.authoring-surface/v0.4\","
+        "\"sourceCompilationId\":\"us_d9a16db3c198f736637b39c80c423d65\","
+        "\"semanticConfigurationId\":\"us_1e2264a1ca2a4790b19667426236fc4a\","
+        "\"assets\":[{\"id\":\"us_cefc9ee5805e3ed5610154145ea986dd\","
+        "\"qualifiedName\":\"Game.ScalarDefaults\",\"assetPath\":\"Game/ScalarDefaults\","
+        "\"span\":{\"filePath\":\"Game/ScalarDefaults.cs\",\"start\":{\"line\":1,\"column\":1},"
+        "\"end\":{\"line\":20,\"column\":1}},\"states\":["
+        "{\"id\":\"us_d4463d57397c77264a0e282ca6c29432\",\"name\":\"Enabled\","
+        "\"typeDisplayName\":\"bool\",\"typeMetadataName\":\"System.Boolean\",\"typeKind\":\"boolean\","
+        "\"defaultValue\":true,\"span\":{\"filePath\":\"Game/ScalarDefaults.cs\",\"start\":{\"line\":5,\"column\":5},\"end\":{\"line\":5,\"column\":40}},"
+        "\"exposure\":{\"instanceEditable\":true,\"saveGame\":false,\"replicated\":false,\"category\":\"Gameplay\"}},"
+        "{\"id\":\"us_5a6cf3e7604d4a958f0f9968e4b0b1ce\",\"name\":\"Label\","
+        "\"typeDisplayName\":\"string\",\"typeMetadataName\":\"System.String\",\"typeKind\":\"string\","
+        "\"defaultValue\":\"hello\",\"span\":{\"filePath\":\"Game/ScalarDefaults.cs\",\"start\":{\"line\":6,\"column\":5},\"end\":{\"line\":6,\"column\":40}},"
+        "\"exposure\":{\"instanceEditable\":true,\"saveGame\":false,\"replicated\":false,\"category\":\"Gameplay\"}},"
+        "{\"id\":\"us_7f4c1e6d4a34435a96e567c27344a7d1\",\"name\":\"Nothing\","
+        "\"typeDisplayName\":\"object\",\"typeMetadataName\":\"System.Object\",\"typeKind\":\"object\","
+        "\"defaultValue\":null,\"span\":{\"filePath\":\"Game/ScalarDefaults.cs\",\"start\":{\"line\":7,\"column\":5},\"end\":{\"line\":7,\"column\":40}},"
+        "\"exposure\":{\"instanceEditable\":true,\"saveGame\":false,\"replicated\":false,\"category\":\"Gameplay\"}}],"
+        "\"functions\":[]}]}" );
+
+    FUnifiedScriptAuthoringSurfaceDocument Document;
+    FString Error;
+    TestTrue(
+        TEXT("Scalar defaults parse from the authoring surface"),
+        FUnifiedScriptAuthoringSurfaceReader::ParseJson(SurfaceJson, Document, Error));
+    if (Document.Assets.Num() != 1 || Document.Assets[0].States.Num() != 3)
+    {
+        AddError(Error.IsEmpty() ? TEXT("Scalar default fixture did not load.") : Error);
+        return false;
+    }
+
+    TestEqual(TEXT("Boolean scalar keeps JSON spelling"),
+        Document.Assets[0].States[0].DefaultValue, FString(TEXT("true")));
+    TestEqual(TEXT("String scalar keeps JSON quoting"),
+        Document.Assets[0].States[1].DefaultValue, FString(TEXT("\"hello\"")));
+    TestEqual(TEXT("Null scalar keeps JSON spelling"),
+        Document.Assets[0].States[2].DefaultValue, FString(TEXT("null")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptAuthoringSurfaceV05DuplicateFunctionTest,
+    "UnifiedScript.Unreal.Editor.AuthoringSurface.V05RejectsWithinAssetDuplicateFunction",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptAuthoringSurfaceV05DuplicateFunctionTest::RunTest(const FString& Parameters)
+{
+    FString SurfacePath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectDir(),
+        TEXT(".."),
+        TEXT("samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.surface.json")));
+    FPaths::NormalizeFilename(SurfacePath);
+
+    FString SurfaceJson;
+    TestTrue(TEXT("V05 duplicate fixture source is readable"),
+        FFileHelper::LoadFileToString(SurfaceJson, *SurfacePath));
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(SurfaceJson);
+    TestTrue(TEXT("V05 duplicate fixture source is valid JSON"),
+        FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid());
+    if (!Root.IsValid())
+    {
+        return false;
+    }
+
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.authoring-surface/v0.5"));
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    TestTrue(TEXT("V05 duplicate fixture has assets"),
+        Root->TryGetArrayField(TEXT("assets"), Assets) && Assets != nullptr && Assets->Num() == 1);
+    if (Assets == nullptr || Assets->Num() != 1)
+    {
+        return false;
+    }
+    const TSharedPtr<FJsonObject> Asset = (*Assets)[0]->AsObject();
+    const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+    TestTrue(TEXT("V05 duplicate fixture has functions"),
+        Asset.IsValid() && Asset->TryGetArrayField(TEXT("functions"), Functions) &&
+            Functions != nullptr && Functions->Num() > 0);
+    if (!Asset.IsValid() || Functions == nullptr || Functions->Num() == 0)
+    {
+        return false;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> DuplicatedFunctions = *Functions;
+    DuplicatedFunctions.Add((*Functions)[0]);
+    Asset->SetArrayField(TEXT("functions"), MoveTemp(DuplicatedFunctions));
+    FString DuplicatedJson;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&DuplicatedJson);
+    TestTrue(TEXT("V05 duplicate fixture serializes"),
+        FJsonSerializer::Serialize(Root.ToSharedRef(), Writer));
+
+    FUnifiedScriptAuthoringSurfaceDocument Document;
+    FString Error;
+    TestFalse(TEXT("V05 rejects duplicate functions within one asset"),
+        FUnifiedScriptAuthoringSurfaceReader::ParseJson(DuplicatedJson, Document, Error));
+    TestTrue(TEXT("V05 duplicate rejection identifies the asset-local function"),
+        Error.Contains(TEXT("duplicate function")));
     return true;
 }
 

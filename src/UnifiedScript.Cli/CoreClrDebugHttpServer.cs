@@ -2565,7 +2565,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
             AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
                 scriptAssets,
-                snapshot.Graph);
+                snapshot.Graph,
+                snapshot.Analysis.DeclarationOwners);
             if (artifactOutputs.DeclarationPath is not null)
             {
                 outputs.Add(new AuthoringOutput(
@@ -2669,7 +2670,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
             AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
                 scriptAssets,
-                snapshot.Graph);
+                snapshot.Graph,
+                snapshot.Analysis.DeclarationOwners);
             return new AuthoringWorkspaceResponse(
                 "unifiedscript.authoring-workspace/v0.5",
                 snapshot.Revision,

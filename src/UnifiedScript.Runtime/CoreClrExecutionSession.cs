@@ -194,39 +194,57 @@ public sealed class CoreClrExecutionSession : IDisposable
             return null;
         }
 
-        ScriptAssetDeclaration? asset = image.ScriptAssets.Assets.SingleOrDefault(candidate =>
-            string.Equals(candidate.QualifiedName, hirType.QualifiedName, StringComparison.Ordinal));
-        if (asset is null)
-        {
-            throw new ExecutionInvocationException(
-                "UVR1004",
-                "An instance Visual method is executable only through a declared Script Asset receiver.");
-        }
-
-        if (requestedReceiver is null || requestedReceiver.AssetId != asset.Id)
+        if (requestedReceiver is null)
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Script Asset method '{hirType.QualifiedName}.{hirMethod.Name}' requires receiver '{asset.Id}'.");
+                $"Script Asset method '{hirType.QualifiedName}.{hirMethod.Name}' requires receiver asset.");
         }
 
-        Type runtimeType = assembly.GetType(hirType.QualifiedName, throwOnError: false) ??
+        ScriptAssetDeclaration? asset = image.ScriptAssets.Assets.SingleOrDefault(candidate =>
+            candidate.Id == requestedReceiver.AssetId);
+        if (asset is null)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Receiver Script Asset '{requestedReceiver.AssetId}' is unknown.");
+        }
+
+        if (!asset.Functions.Any(candidate => candidate.Id == hirMethod.Id))
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Visual method '{hirType.QualifiedName}.{hirMethod.Name}' is not projected by receiver asset '{asset.Id}'.");
+        }
+
+        Type declaringRuntimeType = assembly.GetType(hirType.QualifiedName, throwOnError: false) ??
             throw new ExecutionInvocationException(
                 "UVR1007",
-                $"Emitted type '{hirType.QualifiedName}' was not found in the CoreCLR image.");
+                $"Emitted declaring type '{hirType.QualifiedName}' was not found in the CoreCLR image.");
+        Type runtimeType = assembly.GetType(asset.QualifiedName, throwOnError: false) ??
+            throw new ExecutionInvocationException(
+                "UVR1007",
+                $"Emitted receiver type '{asset.QualifiedName}' was not found in the CoreCLR image.");
+        if (!declaringRuntimeType.IsAssignableFrom(runtimeType))
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Receiver asset '{asset.Id}' type '{asset.QualifiedName}' is unrelated to declaring type '{hirType.QualifiedName}'.");
+        }
+
         object receiver;
         try
         {
             receiver = Activator.CreateInstance(runtimeType) ??
                 throw new ExecutionInvocationException(
                     "UVR1008",
-                    $"Script Asset '{hirType.QualifiedName}' could not be constructed.");
+                    $"Script Asset '{asset.QualifiedName}' could not be constructed.");
         }
         catch (Exception exception) when (exception is MissingMethodException or MemberAccessException)
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Script Asset '{hirType.QualifiedName}' requires an accessible parameterless constructor.");
+                $"Script Asset '{asset.QualifiedName}' requires an accessible parameterless constructor.");
         }
 
         IReadOnlyDictionary<SemanticId, ScriptStateDeclaration> states = asset.States

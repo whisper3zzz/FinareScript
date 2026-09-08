@@ -101,11 +101,18 @@ public sealed record AuthoringAssetSurface(
     IReadOnlyList<ScriptStateDeclaration> States,
     IReadOnlyList<AuthoringFunctionSurface> Functions);
 
+public sealed record AuthoringDeclarationOwner(
+    SemanticId DeclarationId,
+    SemanticId OwnerAssetId);
+
 public sealed record AuthoringSurfaceDocument(
     string SchemaVersion,
     SemanticId SourceCompilationId,
     SemanticId SemanticConfigurationId,
     IReadOnlyList<AuthoringAssetSurface> Assets)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.4";
+    public const string LegacySchemaVersion = "unifiedscript.authoring-surface/v0.4";
+    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.5";
+
+    public IReadOnlyList<AuthoringDeclarationOwner> DeclarationOwners { get; init; } = [];
 }

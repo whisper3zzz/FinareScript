@@ -155,6 +155,7 @@ private:
     friend class SUnifiedScriptCanvasMinimap;
 #if WITH_DEV_AUTOMATION_TESTS
     friend class FUnifiedScriptProjectRefreshCommand;
+    friend class FUnifiedScriptInheritedAuthoringSurfaceTest;
 #endif
 
     FReply HandleLoad();
@@ -310,7 +311,8 @@ private:
     void AddRegionTree(
         const FUnifiedScriptAuthoringFunction& Function,
         const FUnifiedScriptAuthoringRegion& Region,
-        const FUnifiedScriptSurfaceTreeItemPtr& Parent);
+        const FUnifiedScriptSurfaceTreeItemPtr& Parent,
+        bool bIndexItems = true);
     void RebuildGraph(const FUnifiedScriptSurfaceTreeItemPtr& FunctionItem);
     UUnifiedScriptEdGraphNode* AddGraphNode(
         const FUnifiedScriptSurfaceTreeItemPtr& Item,

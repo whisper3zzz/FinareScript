@@ -5901,7 +5901,11 @@ void SUnifiedScriptAuthoringSurface::RebuildTree()
                 StateItem->SemanticId = State.Id;
                 StateItem->Category = State.Exposure.Category;
                 StateItem->Span = State.Span;
-                SurfaceItemsById.Add(StateItem->SemanticId, StateItem);
+                if (const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(State.Id);
+                    Owner != nullptr && Owner->Id == Asset.Id)
+                {
+                    SurfaceItemsById.Add(StateItem->SemanticId, StateItem);
+                }
                 StateGroup->Children.Add(MoveTemp(StateItem));
             }
             AssetItem->Children.Add(MoveTemp(StateGroup));
@@ -5920,15 +5924,20 @@ void SUnifiedScriptAuthoringSurface::RebuildTree()
                 FunctionItem->Label = Function.Name;
                 FunctionItem->Detail = BuildFunctionSignature(Function);
                 FunctionItem->SemanticId = Function.Id;
-                SurfaceItemsById.Add(FunctionItem->SemanticId, FunctionItem);
-                if (!FirstFunctionItem.IsValid())
+                const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(Function.Id);
+                const bool bIndexFunction = Owner != nullptr && Owner->Id == Asset.Id;
+                if (bIndexFunction)
                 {
-                    FirstFunctionItem = FunctionItem;
+                    SurfaceItemsById.Add(FunctionItem->SemanticId, FunctionItem);
+                    if (!FirstFunctionItem.IsValid())
+                    {
+                        FirstFunctionItem = FunctionItem;
+                    }
                 }
                 if (const FUnifiedScriptAuthoringRegion* Root = Function.FindRegion(Function.RootRegionId))
                 {
                     FunctionItem->Span = Root->Span;
-                    AddRegionTree(Function, *Root, FunctionItem);
+                    AddRegionTree(Function, *Root, FunctionItem, bIndexFunction);
                 }
                 FunctionGroup->Children.Add(MoveTemp(FunctionItem));
             }
@@ -5982,7 +5991,8 @@ void SUnifiedScriptAuthoringSurface::RebuildTree()
 void SUnifiedScriptAuthoringSurface::AddRegionTree(
     const FUnifiedScriptAuthoringFunction& Function,
     const FUnifiedScriptAuthoringRegion& Region,
-    const FUnifiedScriptSurfaceTreeItemPtr& Parent)
+    const FUnifiedScriptSurfaceTreeItemPtr& Parent,
+    bool bIndexItems)
 {
     FUnifiedScriptSurfaceTreeItemPtr RegionItem = MakeShared<FUnifiedScriptSurfaceTreeItem>();
     RegionItem->Kind = EUnifiedScriptSurfaceTreeItemKind::Region;
@@ -5991,7 +6001,10 @@ void SUnifiedScriptAuthoringSurface::AddRegionTree(
     RegionItem->SemanticId = Region.Id;
     RegionItem->Category = Region.Kind;
     RegionItem->Span = Region.Span;
-    SurfaceItemsById.Add(RegionItem->SemanticId, RegionItem);
+    if (bIndexItems)
+    {
+        SurfaceItemsById.Add(RegionItem->SemanticId, RegionItem);
+    }
 
     struct FOrderedChild
     {
@@ -6028,7 +6041,7 @@ void SUnifiedScriptAuthoringSurface::AddRegionTree(
         {
             if (const FUnifiedScriptAuthoringRegion* ChildRegion = Function.FindRegion(Child.Id))
             {
-                AddRegionTree(Function, *ChildRegion, RegionItem);
+                AddRegionTree(Function, *ChildRegion, RegionItem, bIndexItems);
             }
         }
         else if (const FUnifiedScriptAuthoringAction* Action = Function.FindAction(Child.Id))
@@ -6042,7 +6055,10 @@ void SUnifiedScriptAuthoringSurface::AddRegionTree(
             ActionItem->GraphKind = Action->GraphKind;
             ActionItem->Span = Action->Span;
             ActionItem->Edits = Action->EditCapabilities;
-            SurfaceItemsById.Add(ActionItem->SemanticId, ActionItem);
+            if (bIndexItems)
+            {
+                SurfaceItemsById.Add(ActionItem->SemanticId, ActionItem);
+            }
             RegionItem->Children.Add(MoveTemp(ActionItem));
         }
     }
@@ -6432,17 +6448,34 @@ void SUnifiedScriptAuthoringSurface::RefreshDebugNodeStates()
 const FUnifiedScriptAuthoringFunction* SUnifiedScriptAuthoringSurface::FindFunction(
     const FString& FunctionId) const
 {
-    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(FunctionId);
+    if (Owner != nullptr)
     {
-        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        for (const FUnifiedScriptAuthoringFunction& Function : Owner->Functions)
         {
             if (Function.Id == FunctionId)
             {
                 return &Function;
             }
         }
+        return nullptr;
     }
-    return nullptr;
+    const FUnifiedScriptAuthoringFunction* Match = nullptr;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            if (Function.Id == FunctionId)
+            {
+                if (Match != nullptr)
+                {
+                    return nullptr;
+                }
+                Match = &Function;
+            }
+        }
+    }
+    return Match;
 }
 
 const FUnifiedScriptAuthoringAsset* SUnifiedScriptAuthoringSurface::FindAsset(
@@ -6458,38 +6491,62 @@ const FUnifiedScriptAuthoringAsset* SUnifiedScriptAuthoringSurface::FindAsset(
 const FUnifiedScriptAuthoringAsset* SUnifiedScriptAuthoringSurface::FindOwningAsset(
     const FString& DeclarationId) const
 {
-    return Document.Assets.FindByPredicate([&DeclarationId](
-        const FUnifiedScriptAuthoringAsset& Asset)
+    if (const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(DeclarationId))
     {
-        return Asset.Id == DeclarationId ||
-            Asset.States.ContainsByPredicate([&DeclarationId](
-                const FUnifiedScriptAuthoringState& State)
+        return Owner;
+    }
+    const FUnifiedScriptAuthoringAsset* Match = nullptr;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        if (Asset.Id == DeclarationId ||
+            Asset.States.ContainsByPredicate([&DeclarationId](const FUnifiedScriptAuthoringState& State)
             {
                 return State.Id == DeclarationId;
             }) ||
-            Asset.Functions.ContainsByPredicate([&DeclarationId](
-                const FUnifiedScriptAuthoringFunction& Function)
+            Asset.Functions.ContainsByPredicate([&DeclarationId](const FUnifiedScriptAuthoringFunction& Function)
             {
                 return Function.Id == DeclarationId;
-            });
-    });
+            }))
+        {
+            if (Match != nullptr)
+            {
+                return nullptr;
+            }
+            Match = &Asset;
+        }
+    }
+    return Match;
 }
 
 const FUnifiedScriptAuthoringState* SUnifiedScriptAuthoringSurface::FindState(
     const FString& StateId) const
 {
-    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(StateId);
+    if (Owner != nullptr)
     {
-        if (const FUnifiedScriptAuthoringState* State = Asset.States.FindByPredicate(
+        return Owner->States.FindByPredicate(
                 [&StateId](const FUnifiedScriptAuthoringState& Candidate)
                 {
                     return Candidate.Id == StateId;
-                }))
+                });
+    }
+    const FUnifiedScriptAuthoringState* Match = nullptr;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        if (const FUnifiedScriptAuthoringState* State = Asset.States.FindByPredicate(
+            [&StateId](const FUnifiedScriptAuthoringState& Candidate)
+            {
+                return Candidate.Id == StateId;
+            }))
         {
-            return State;
+            if (Match != nullptr)
+            {
+                return nullptr;
+            }
+            Match = State;
         }
     }
-    return nullptr;
+    return Match;
 }
 
 bool SUnifiedScriptAuthoringSurface::IsLifecycleFunction(
@@ -8096,6 +8153,22 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
         .AutoWrapText(true)
         .ColorAndOpacity(FLinearColor(0.68f, 0.7f, 0.74f))
     ];
+
+    if ((Item->Kind == EUnifiedScriptSurfaceTreeItemKind::State ||
+            Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Function) &&
+        !Item->SemanticId.IsEmpty())
+    {
+        if (const FUnifiedScriptAuthoringAsset* Owner =
+                Document.FindDeclarationOwnerAsset(Item->SemanticId))
+        {
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                    TEXT("SOURCE OWNER"),
+                    FString::Printf(TEXT("%s  ·  %s"), *Owner->QualifiedName, *Owner->AssetPath))
+            ];
+        }
+    }
 
     if (ActiveAction != nullptr)
     {

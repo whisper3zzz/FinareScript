@@ -180,6 +180,91 @@ public sealed class CoreClrExecutionHostTests
     }
 
     [Fact]
+    public void Execute_UsesProjectedInheritedMethodWithSelectedLeafReceiver()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/InheritedBase")]
+            public class InheritedBase
+            {
+                protected int BaseValue { get; set; } = 3;
+
+                [Visual]
+                public int ReadBaseValue()
+                {
+                    return BaseValue;
+                }
+            }
+
+            [ScriptAsset("Tests/InheritedOverride")]
+            public sealed class InheritedOverride : InheritedBase
+            {
+                public InheritedOverride()
+                {
+                    BaseValue = 77;
+                }
+            }
+
+            [ScriptAsset("Tests/InheritedFollower")]
+            public sealed class InheritedFollower : InheritedBase
+            {
+            }
+
+            [ScriptAsset("Tests/UnrelatedReceiver")]
+            public sealed class UnrelatedReceiver
+            {
+            }
+            """;
+        using CoreClrExecutionSession session = CreateSession(source);
+        Core.ScriptAssetDeclaration baseAsset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.InheritedBase");
+        Core.ScriptAssetDeclaration overrideAsset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.InheritedOverride");
+        Core.ScriptAssetDeclaration followerAsset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.InheritedFollower");
+        Core.ScriptAssetDeclaration unrelatedAsset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.UnrelatedReceiver");
+        Core.ScriptStateDeclaration overrideState = Assert.Single(overrideAsset.States);
+        Assert.Equal("3", Assert.Single(baseAsset.States).DefaultValue.GetRawText());
+        Assert.Equal("77", overrideState.DefaultValue.GetRawText());
+        Assert.Equal("3", Assert.Single(followerAsset.States).DefaultValue.GetRawText());
+
+        // The method is declared on the base HIR type, while the selected
+        // receiver asset is a projected leaf with its own effective default.
+        Core.SemanticId methodId = session.ResolveVisualMethodId(
+            "Tests.Execution.InheritedBase.ReadBaseValue");
+        ExecutionResult overrideDefault = session.Execute(new ExecutionInvocation(
+            methodId,
+            [],
+            new ScriptAssetReceiver(overrideAsset.Id)));
+        ExecutionResult overrideExplicit = session.Execute(new ExecutionInvocation(
+            methodId,
+            [],
+            new ScriptAssetReceiver(
+                overrideAsset.Id,
+                [new ScriptStateOverride(overrideState.Id, "99")])));
+        ExecutionResult followerDefault = session.Execute(new ExecutionInvocation(
+            methodId,
+            [],
+            new ScriptAssetReceiver(followerAsset.Id)));
+
+        Assert.Equal("77", overrideDefault.ReturnValue!.Json);
+        Assert.Equal("99", overrideExplicit.ReturnValue!.Json);
+        Assert.Equal("3", followerDefault.ReturnValue!.Json);
+
+        ExecutionInvocationException unrelated = Assert.Throws<ExecutionInvocationException>(() =>
+            session.Execute(new ExecutionInvocation(
+                methodId,
+                [],
+                new ScriptAssetReceiver(unrelatedAsset.Id))));
+        Assert.Equal("UVR1008", unrelated.Code);
+        Assert.Contains("not projected", unrelated.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Execute_AppliesInheritedNullableReferenceStateOverride()
     {
         const string source = """

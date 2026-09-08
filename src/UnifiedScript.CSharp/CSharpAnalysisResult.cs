@@ -16,6 +16,9 @@ public sealed record CSharpAnalysisResult(
     public IReadOnlyDictionary<SemanticId, SemanticId> DeclarationReferences { get; init; } =
         new Dictionary<SemanticId, SemanticId>();
 
+    public IReadOnlyDictionary<SemanticId, SemanticId> DeclarationOwners { get; init; } =
+        new Dictionary<SemanticId, SemanticId>();
+
     public VisualProfileReport Profile { get; init; } = new(
         VisualProfileReport.CurrentSchemaVersion,
         VisualCSharpProfileContract.Current,

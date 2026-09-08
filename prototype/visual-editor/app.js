@@ -58,7 +58,106 @@ function toPascalCase(value) {
 
 function artifactDefaultText(item) {
   if (item.typeKind === 'floatingPoint' && Number.isInteger(item.defaultValue)) return `${item.defaultValue}.0`;
-  return String(item.defaultValue ?? 'null');
+  if (item.defaultValue === undefined || item.defaultValue === null) return 'null';
+  return typeof item.defaultValue === 'object' ? JSON.stringify(item.defaultValue) : String(item.defaultValue);
+}
+
+function cloneJsonValue(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function canonicalJson(value, ignoredKeys = new Set(), applyIgnoredKeys = true) {
+  if (Array.isArray(value)) return value.map(item => canonicalJson(item, ignoredKeys, false));
+  if (value && typeof value === 'object') {
+    return Object.keys(value).filter(key => !applyIgnoredKeys || !ignoredKeys.has(key)).sort()
+      .reduce((result, key) => {
+        result[key] = canonicalJson(value[key], ignoredKeys, false);
+        return result;
+      }, {});
+  }
+  return value;
+}
+
+function sameJsonContract(left, right, ignoredKeys = new Set()) {
+  return JSON.stringify(canonicalJson(left, ignoredKeys)) ===
+    JSON.stringify(canonicalJson(right, ignoredKeys));
+}
+
+function surfaceDeclarationMatches(asset, declarationId, kind = null) {
+  if (!asset) return false;
+  return (kind === 'function' ? asset.functions : kind === 'state' ? asset.states : [
+    ...(asset.states || []), ...(asset.functions || []),
+  ]).some(declaration => declaration.id === declarationId);
+}
+
+function surfaceDeclarationOwner(surface, declarationId, kind = null) {
+  const projections = (surface?.assets || []).filter(asset =>
+    surfaceDeclarationMatches(asset, declarationId, kind));
+  const explicit = (surface?.declarationOwners || []).find(owner =>
+    owner.declarationId === declarationId);
+  if (explicit) {
+    const owner = surface.assets.find(asset => asset.id === explicit.ownerAssetId);
+    assertArtifact(owner && surfaceDeclarationMatches(owner, declarationId, kind),
+      `Surface owner for ${declarationId} does not contain the declaration`);
+    return owner;
+  }
+  return projections.length === 1 ? projections[0] : null;
+}
+
+function validateAuthoringSurface(surface) {
+  const isLegacy = surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.4';
+  const isCurrent = surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.5';
+  assertArtifact(isLegacy || isCurrent, 'Unsupported Authoring Surface artifact');
+  assertArtifact(Array.isArray(surface.assets), 'Authoring Surface assets are missing');
+  const assetsById = new Map();
+  const projections = new Map();
+  const declarationKinds = new Map();
+  surface.assets.forEach(asset => {
+    assertArtifact(asset?.id && !assetsById.has(asset.id), `Duplicate Surface asset ${asset?.id || '<missing>'}`);
+    assetsById.set(asset.id, asset);
+    const localIds = new Set();
+    [...(asset.states || []).map(item => ({ ...item, kind: 'state' })),
+      ...(asset.functions || []).map(item => ({ ...item, kind: 'function' }))].forEach(item => {
+      assertArtifact(item.id && !localIds.has(item.id),
+        `Asset ${asset.id} contains a duplicate declaration ${item.id || '<missing>'}`);
+      localIds.add(item.id);
+      const previousKind = declarationKinds.get(item.id);
+      assertArtifact(!previousKind || previousKind === item.kind,
+        `Declaration ${item.id} is both a state and a function`);
+      declarationKinds.set(item.id, item.kind);
+      if (!projections.has(item.id)) projections.set(item.id, []);
+      projections.get(item.id).push({ asset, item });
+    });
+  });
+
+  const ownerEntries = new Map();
+  (surface.declarationOwners || []).forEach(owner => {
+    assertArtifact(owner?.declarationId && owner?.ownerAssetId && !ownerEntries.has(owner.declarationId),
+      `Duplicate Surface declaration owner ${owner?.declarationId || '<missing>'}`);
+    const ownerAsset = assetsById.get(owner.ownerAssetId);
+    assertArtifact(ownerAsset && surfaceDeclarationMatches(
+      ownerAsset, owner.declarationId, declarationKinds.get(owner.declarationId)),
+    `Surface owner ${owner.ownerAssetId} does not contain ${owner.declarationId}`);
+    ownerEntries.set(owner.declarationId, owner.ownerAssetId);
+  });
+
+  projections.forEach((entries, declarationId) => {
+    const kind = declarationKinds.get(declarationId);
+    const ignored = new Set(kind === 'function' ? ['qualifiedName'] : ['defaultValue']);
+    for (const entry of entries.slice(1)) {
+      assertArtifact(sameJsonContract(entries[0].item, entry.item, ignored),
+        `Shared ${kind} ${declarationId} has an inconsistent contract`);
+    }
+    if (entries.length > 1 && kind === 'function') {
+      assertArtifact(!isLegacy, `Legacy Surface repeats function ${declarationId}`);
+      assertArtifact(ownerEntries.has(declarationId),
+        `Shared function ${declarationId} requires an explicit source owner`);
+    }
+    if (entries.length > 1 && isCurrent) {
+      assertArtifact(ownerEntries.has(declarationId),
+        `Shared state ${declarationId} requires an explicit source owner`);
+    }
+  });
 }
 
 function activeBreakpointNodeIds() {
@@ -115,7 +214,7 @@ async function loadWorkspaceArtifacts() {
 function validateWorkspaceArtifacts(artifact, graph, surface) {
   assertArtifact(artifact?.schemaVersion === 'unifiedscript.script-asset/v0.1', 'Unsupported Declaration IR artifact');
   assertArtifact(graph?.schemaVersion === 'unifiedscript.graph/v0.13', 'Unsupported Graph artifact');
-  assertArtifact(surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.4', 'Unsupported Authoring Surface artifact');
+  validateAuthoringSurface(surface);
   assertArtifact(artifact.sourceCompilationId === graph.sourceCompilationId &&
     artifact.sourceCompilationId === surface.sourceCompilationId, 'Source compilation identity mismatch');
   assertArtifact(artifact.semanticConfigurationId === graph.semanticConfigurationId &&
@@ -368,7 +467,11 @@ function selectInsightNode(nodeId) {
 function focusInsightNode() {
   const node = state.authoringInsight?.nodes.find(item => item.nodeId === state.selectedInsightNodeId);
   if (!node?.actionId) return;
-  const asset = state.surface.assets.find(candidate => candidate.functions.some(func => func.id === node.methodId));
+  if (state.graphDirty) {
+    showToast('Save or discard the pending patch first', 'Insight navigation would discard local edits');
+    return;
+  }
+  const asset = surfaceDeclarationOwner(state.surface, node.methodId, 'function');
   const func = asset?.functions.find(candidate => candidate.id === node.methodId);
   if (!asset || !func) return;
   insightDrawer.classList.remove('visible');
@@ -503,13 +606,16 @@ function selectAsset(assetId, revealInspector = true, preferredFunctionId = null
   document.getElementById('assetPathLabel').textContent = surfaceAsset.qualifiedName;
   state.declarations = asset.states.map(item => ({
     id: item.id, name: item.name, type: item.typeDisplayName, typeKind: item.typeKind,
+    typeMetadataName: item.typeMetadataName, rawDefaultValue: cloneJsonValue(item.defaultValue),
     defaultValue: artifactDefaultText(item), editable: item.exposure.instanceEditable,
     save: item.exposure.saveGame, replicated: item.exposure.replicated,
     category: item.exposure.category || '', semanticId: item.id,
+    sourceFilePath: item.span?.filePath || state.sourcePath,
     sourceStartLine: item.span.start.line, sourceEndLine: item.span.end.line,
+    sourceOwnerAssetId: surfaceDeclarationOwner(state.surface, item.id, 'state')?.id || null,
     original: {
       name: item.name, typeMetadataName: item.typeMetadataName, typeKind: item.typeKind,
-      defaultValue: item.defaultValue,
+      defaultValue: cloneJsonValue(item.defaultValue),
       exposure: {
         instanceEditable: item.exposure.instanceEditable, saveGame: item.exposure.saveGame,
         replicated: item.exposure.replicated,
@@ -704,6 +810,7 @@ function csharpLineMarkup(line) {
 function renderSourceArtifact() {
   const statesByLine = new Map();
   state.declarations.forEach(item => {
+    if (item.sourceFilePath && item.sourceFilePath !== state.sourcePath) return;
     for (let line = item.sourceStartLine; line <= item.sourceEndLine; line += 1) statesByLine.set(line, item);
   });
   const lines = state.sourceText.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
@@ -728,9 +835,11 @@ function selectDeclaration(id, revealInspector = true) {
     element.classList.toggle('selected', element.dataset.kind === 'state' && element.dataset.id === item.id));
   document.querySelectorAll('.flow-node, .semantic-region').forEach(element => element.classList.remove('selected'));
   document.querySelectorAll('.state-line').forEach(line =>
-    line.classList.toggle('state-highlight', line.dataset.stateId === item.id));
+    line.classList.toggle('state-highlight', line.dataset.stateId === item.id &&
+      (!item.sourceFilePath || item.sourceFilePath === state.sourcePath)));
   document.querySelectorAll('#codeEditor [data-line]').forEach(line => line.classList.remove('highlighted'));
-  document.getElementById('selectedLine').textContent = String(item.sourceStartLine || 1);
+  document.getElementById('selectedLine').textContent = item.sourceFilePath && item.sourceFilePath !== state.sourcePath
+    ? `${item.sourceFilePath}:${item.sourceStartLine || 1}` : String(item.sourceStartLine || 1);
   renderStateInspector(item);
   if (revealInspector) showCompactInspector();
 }
@@ -754,33 +863,60 @@ function canonicalDeclaration(item) {
   return `${exposureText(item)}public ${item.type} ${item.name} { get; set; } = ${normalizedDefault(item)};`;
 }
 
-function toggleRow(id, title, subtitle, checked) {
-  return `<label class="toggle-row"><span><strong>${title}</strong><small>${subtitle}</small></span><input id="${id}" type="checkbox"${checked ? ' checked' : ''}><i></i></label>`;
+function toggleRow(id, title, subtitle, checked, disabled = false) {
+  return `<label class="toggle-row"><span><strong>${title}</strong><small>${subtitle}</small></span><input id="${id}" type="checkbox"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}><i></i></label>`;
+}
+
+function supportedStateType(item) {
+  return ['bool', 'int', 'float', 'string'].includes(item.type);
 }
 
 function renderStateInspector(item) {
   inspectorTitle.textContent = item.name;
+  const owner = surfaceDeclarationOwner(state.surface, item.semanticId, 'state');
+  const sourceOwner = owner || (!item.original ? state.surfaceAsset : null);
+  const isOwner = item.original ? owner?.id === state.selectedAssetId : true;
+  const canEdit = isOwner && supportedStateType(item);
+  const typeEditor = supportedStateType(item)
+    ? `<select id="propertyType"${canEdit ? '' : ' disabled'}>${['int', 'float', 'bool', 'string'].map(type => `<option${type === item.type ? ' selected' : ''}>${type}</option>`).join('')}</select>`
+    : `<input id="propertyType" type="text" value="${escapeHtml(item.type)}" disabled>`;
+  const sourceLocation = item.sourceFilePath && item.sourceFilePath !== state.sourcePath
+    ? `${item.sourceFilePath}:${item.sourceStartLine}` : `line ${item.sourceStartLine}`;
+  const ownerSection = sourceOwner ? `
+    <section class="inspector-section source-owner"><h3>SOURCE OWNER</h3>
+      <div class="fact-grid"><span>${escapeHtml(sourceOwner.assetPath)}</span><strong>${isOwner ? 'SELECTED' : 'EFFECTIVE PROJECTION'}</strong></div>
+      <p class="node-inspector-copy">This row shows the selected asset's effective default. Edits apply to the source owner.</p>
+      <button id="sourceOwnerButton" class="button secondary" type="button"${isOwner ? ' disabled' : ''}>NAVIGATE TO SOURCE OWNER</button>
+    </section>` : `
+    <section class="inspector-section source-owner"><h3>SOURCE OWNER</h3>
+      <p class="node-inspector-copy">This legacy projection has no unambiguous source owner and is read-only.</p>
+    </section>`;
+  const supportNotice = supportedStateType(item) ? '' :
+    '<p class="node-inspector-copy">This state type is preserved as typed JSON and is read-only in the prototype editor.</p>';
   inspectorBody.innerHTML = `
     <div class="selection-kind"><span class="selection-icon">S</span><div><strong>SCRIPT STATE</strong><small>Declaration IR · persistent identity</small></div></div>
+    ${ownerSection}
     <section class="inspector-section"><h3>DECLARATION</h3>
-      <label class="field-label">Name<input id="propertyName" type="text" value="${escapeHtml(item.name)}"></label>
-      <div class="field-grid"><label class="field-label">Type<select id="propertyType">${['int', 'float', 'bool', 'string'].map(type => `<option${type === item.type ? ' selected' : ''}>${type}</option>`).join('')}</select></label>
-      <label class="field-label">Default<input id="propertyDefault" type="text" value="${escapeHtml(item.defaultValue)}"></label></div>
-      <label class="field-label">Category<input id="propertyCategory" type="text" value="${escapeHtml(item.category)}" placeholder="Optional"></label>
+      <label class="field-label">Name<input id="propertyName" type="text" value="${escapeHtml(item.name)}"${canEdit ? '' : ' disabled'}></label>
+      <div class="field-grid"><label class="field-label">Type${typeEditor}</label>
+      <label class="field-label">Default<input id="propertyDefault" type="text" value="${escapeHtml(item.defaultValue)}"${canEdit ? '' : ' disabled'}></label></div>
+      <label class="field-label">Category<input id="propertyCategory" type="text" value="${escapeHtml(item.category)}" placeholder="Optional"${canEdit ? '' : ' disabled'}></label>
+      ${supportNotice}
+      <div class="fact-grid"><span>Source</span><strong>${escapeHtml(sourceLocation)}</strong></div>
     </section>
     <section class="inspector-section"><h3>ENGINE EXPOSURE</h3>
-      ${toggleRow('toggleEditable', 'Instance Editable', 'Future UE Details panel', item.editable)}
-      ${toggleRow('toggleSave', 'Save Game', 'Persistent state', item.save)}
-      ${toggleRow('toggleReplicated', 'Replicated', 'Network contract', item.replicated)}
+      ${toggleRow('toggleEditable', 'Instance Editable', 'Future UE Details panel', item.editable, !canEdit)}
+      ${toggleRow('toggleSave', 'Save Game', 'Persistent state', item.save, !canEdit)}
+      ${toggleRow('toggleReplicated', 'Replicated', 'Network contract', item.replicated, !canEdit)}
     </section>
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>CANONICAL TEXT</h3><span>AI READABLE</span></div><pre id="canonicalDeclaration">${escapeHtml(canonicalDeclaration(item))}</pre></section>
     <section class="inspector-section identity-section"><h3>SEMANTIC IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(item.semanticId)}</button><div class="identity-facts"><span>TEXT <b>✓</b></span><span>SURFACE <b>✓</b></span><span>AI <b>✓</b></span></div></section>
-    <button id="removeStateButton" class="inspector-danger" type="button">REMOVE STATE</button>
+    <button id="removeStateButton" class="inspector-danger" type="button"${canEdit ? '' : ' disabled'}>REMOVE STATE</button>
     <div class="prototype-warning"><strong>DECLARATION IR + PATCH v0.2</strong><p>变量只声明一次；文本、可视化、AI 与未来 UE 反射层共享同一个语义身份。</p></div>`;
-  bindStateInspector(item);
+  bindStateInspector(item, canEdit, owner);
 }
 
-function bindStateInspector(item) {
+function bindStateInspector(item, canEdit, owner) {
   const controls = {
     name: document.getElementById('propertyName'), type: document.getElementById('propertyType'),
     defaultValue: document.getElementById('propertyDefault'), category: document.getElementById('propertyCategory'),
@@ -788,6 +924,7 @@ function bindStateInspector(item) {
     replicated: document.getElementById('toggleReplicated'),
   };
   const update = () => {
+    if (!canEdit) return;
     item.name = controls.name.value || item.name;
     item.type = controls.type.value;
     item.defaultValue = controls.defaultValue.value;
@@ -805,11 +942,28 @@ function bindStateInspector(item) {
   Object.values(controls).forEach(control => control.addEventListener('input', update));
   document.getElementById('semanticId').addEventListener('click', () => copyText(item.semanticId, 'Semantic ID copied'));
   document.getElementById('removeStateButton').addEventListener('click', () => removeDeclaration(item));
+  document.getElementById('sourceOwnerButton')?.addEventListener('click', () => {
+    if (!owner || owner.id === state.selectedAssetId) return;
+    if (state.graphDirty) {
+      showToast('Save or discard the pending patch first', 'Source-owner navigation would discard local edits');
+      return;
+    }
+    selectAsset(owner.id, true, state.selectedFunctionId, { kind: 'state', id: item.semanticId });
+  });
 }
 
 function removeDeclaration(item) {
   const index = state.declarations.indexOf(item);
   if (index < 0) return;
+  if (item.original && !supportedStateType(item)) {
+    showToast('Unsupported state types are read-only', 'This declaration cannot be removed from the prototype editor');
+    return;
+  }
+  const owner = surfaceDeclarationOwner(state.surface, item.semanticId, 'state');
+  if (item.original && (!owner || owner.id !== state.selectedAssetId)) {
+    showToast('Select the source owner to remove this state', 'Effective inherited projections are read-only');
+    return;
+  }
   if (item.original) state.removedDeclarations.push(item);
   state.declarations.splice(index, 1);
   renderDeclarationList();
@@ -831,8 +985,11 @@ function selectNode(id, revealInspector = true) {
   document.querySelectorAll('.flow-node, .semantic-region').forEach(element =>
     element.classList.toggle('selected', element.dataset.nodeId === id));
   document.querySelectorAll('#codeEditor [data-line]').forEach(line =>
-    line.classList.toggle('highlighted', Number(line.dataset.line) === node.span.start.line));
-  document.getElementById('selectedLine').textContent = String(node.span.start.line);
+    line.classList.toggle('highlighted', (!node.span.filePath || node.span.filePath === state.sourcePath) &&
+      Number(line.dataset.line) === node.span.start.line));
+  const nodeSourcePath = node.span.filePath || state.sourcePath;
+  document.getElementById('selectedLine').textContent = nodeSourcePath !== state.sourcePath
+    ? `${nodeSourcePath}:${node.span.start.line}` : String(node.span.start.line);
   renderNodeInspector(node);
   if (revealInspector) showCompactInspector();
 }
@@ -846,6 +1003,7 @@ function editControl(edit) {
 
 function renderNodeInspector(node) {
   inspectorTitle.textContent = node.title;
+  const nodeSourcePath = node.span?.filePath || state.sourcePath;
   const isOpaqueCall = node.properties?.authoringBoundary === 'sourceOnly';
   const opaqueBoundarySection = isOpaqueCall ? `
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>OPAQUE CODE BOUNDARY</h3><span>SOURCE ONLY</span></div>
@@ -863,7 +1021,7 @@ function renderNodeInspector(node) {
     <div class="selection-kind"><span class="selection-icon">N</span><div><strong>${escapeHtml(node.category)} · ${escapeHtml(node.graphKind)}</strong><small>Authoring Surface action</small></div></div>
     <section class="inspector-section"><h3>INTENT</h3><div class="node-inspector-title">${escapeHtml(node.title)}</div><p class="node-inspector-copy">${escapeHtml(node.summary)}</p></section>
     <section class="inspector-section"><h3>SOURCE + REFERENCES</h3>
-      <div class="fact-grid"><span>${escapeHtml(state.sourcePath.split('/').at(-1))}</span><strong>Line ${node.span.start.line}</strong></div>
+      <div class="fact-grid"><span>${escapeHtml(nodeSourcePath)}</span><strong>Line ${node.span.start.line}</strong></div>
       <div class="fact-grid"><span>Owned by region</span><strong>${semanticShort(node.regionId)}</strong></div>
       <div class="fact-grid"><span>Script state</span><strong>${escapeHtml(references.join(', ') || 'none')}</strong></div>
     </section>${opaqueBoundarySection}${editSection}
@@ -932,6 +1090,16 @@ function metadataTypeFor(type) {
 }
 
 function typedDefault(item) {
+  if (!supportedStateType(item)) return cloneJsonValue(item.rawDefaultValue);
+  const originalDefaultText = item.original
+    ? artifactDefaultText({ typeKind: item.typeKind, defaultValue: item.original.defaultValue }) : null;
+  const sameTypeAsOriginal = item.original &&
+    metadataTypeFor(item.type) === item.original.typeMetadataName &&
+    typeKindFor(item.type) === item.original.typeKind;
+  if (sameTypeAsOriginal && item.defaultValue === originalDefaultText &&
+      JSON.stringify(item.rawDefaultValue) === JSON.stringify(item.original.defaultValue)) {
+    return cloneJsonValue(item.original.defaultValue);
+  }
   const text = item.defaultValue.trim();
   if (item.type === 'bool') {
     if (!/^(true|false)$/i.test(text)) throw new Error(`${item.name} requires true or false`);
@@ -947,7 +1115,7 @@ function typedDefault(item) {
     if (!text || !Number.isFinite(value)) throw new Error(`${item.name} has an invalid float default`);
     return value;
   }
-  return item.defaultValue;
+  return item.type === 'string' ? item.defaultValue : cloneJsonValue(item.rawDefaultValue);
 }
 
 function exposureContract(item) {
@@ -958,6 +1126,7 @@ function exposureContract(item) {
 }
 
 function replacementContract(item) {
+  if (!supportedStateType(item)) throw new Error(`${item.name} is read-only because its state type is not supported by this editor`);
   return {
     name: item.name, typeName: item.type, typeKind: typeKindFor(item.type),
     defaultValue: typedDefault(item), exposure: exposureContract(item),
@@ -967,7 +1136,9 @@ function replacementContract(item) {
 function declarationChanged(item) {
   if (!item.original) return true;
   return JSON.stringify({
-    name: item.name, typeMetadataName: metadataTypeFor(item.type), typeKind: typeKindFor(item.type),
+    name: item.name,
+    typeMetadataName: supportedStateType(item) ? metadataTypeFor(item.type) : item.typeMetadataName,
+    typeKind: typeKindFor(item.type) || item.typeKind,
     defaultValue: typedDefault(item), exposure: exposureContract(item),
   }) !== JSON.stringify(item.original);
 }
@@ -977,10 +1148,21 @@ function buildDeclarationPatch() {
   const operations = declarations.flatMap(item => {
     if (!item.original) return [{ operation: 'addState', targetAssetId: state.selectedAssetId, state: replacementContract(item) }];
     if (!declarationChanged(item)) return [];
+    const owner = surfaceDeclarationOwner(state.surface, item.semanticId, 'state');
+    if (owner?.id !== state.selectedAssetId) {
+      throw new Error(`${item.name} belongs to source owner ${owner?.assetPath || 'an ambiguous legacy projection'}; select that owner before editing`);
+    }
     return [{ operation: 'updateState', targetStateId: item.semanticId, expected: item.original, replacement: replacementContract(item) }];
-  }).concat(state.removedDeclarations.map(item => ({
-    operation: 'removeState', targetStateId: item.semanticId, expected: item.original,
-  })));
+  }).concat(state.removedDeclarations.map(item => {
+    if (!supportedStateType(item)) {
+      throw new Error(`${item.name} is read-only because its state type is not supported by this editor`);
+    }
+    const owner = surfaceDeclarationOwner(state.surface, item.semanticId, 'state');
+    if (owner?.id !== state.selectedAssetId) {
+      throw new Error(`${item.name} belongs to source owner ${owner?.assetPath || 'an ambiguous legacy projection'}; select that owner before removing it`);
+    }
+    return { operation: 'removeState', targetStateId: item.semanticId, expected: item.original };
+  }));
   return {
     schemaVersion: 'unifiedscript.declaration-patch/v0.2',
     sourceCompilationId: state.sourceCompilationId,
@@ -1582,7 +1764,8 @@ async function runDebug() {
     if (!func.isStatic) {
       request.receiver = {
         assetId: state.selectedAssetId,
-        stateOverrides: state.declarations.filter(item => item.original)
+        stateOverrides: state.declarations.filter(item =>
+          item.original && supportedStateType(item) && declarationChanged(item))
           .map(item => ({ stateId: item.semanticId, value: typedDefault(item) })),
       };
     }

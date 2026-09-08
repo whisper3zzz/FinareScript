@@ -2850,7 +2850,9 @@ def main() -> int:
         and "data-semantic-id" in prototype_source
         and "data-debug-semantic-id" in prototype_source
         and "unifiedscript.authoring-surface/v0.4" in prototype_source
+        and "unifiedscript.authoring-surface/v0.5" in prototype_source
         and "unifiedscript.authoring-surface/v0.4" in authoring_model_source
+        and "unifiedscript.authoring-surface/v0.5" in authoring_model_source
         and "CollectEditCapabilities" in authoring_projector_source
         and "DamagePolicy" not in prototype_source
         and "Math.Clamp" not in prototype_source,

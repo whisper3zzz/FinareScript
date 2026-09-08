@@ -3202,7 +3202,10 @@ internal static class Program
         string graphJson = GraphJson.Serialize(graph);
         string assetJson = ScriptAssetJson.Serialize(result.ScriptAssets);
         string authoringSurfaceJson = AuthoringSurfaceJson.Serialize(
-            new AuthoringSurfaceProjector().Project(result.ScriptAssets, graph));
+            new AuthoringSurfaceProjector().Project(
+                result.ScriptAssets,
+                graph,
+                result.DeclarationOwners));
         if (options.OutputDirectory is null)
         {
             Console.WriteLine(graphJson);

@@ -23,10 +23,12 @@ public static class AuthoringSurfaceJson
     public static AuthoringSurfaceDocument NormalizeAndValidate(AuthoringSurfaceDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (document.SchemaVersion != AuthoringSurfaceDocument.CurrentSchemaVersion)
+        bool isLegacy = document.SchemaVersion == AuthoringSurfaceDocument.LegacySchemaVersion;
+        if (!isLegacy && document.SchemaVersion != AuthoringSurfaceDocument.CurrentSchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported authoring surface schema '{document.SchemaVersion}'. Expected " +
+                $"'{AuthoringSurfaceDocument.LegacySchemaVersion}' or " +
                 $"'{AuthoringSurfaceDocument.CurrentSchemaVersion}'.");
         }
 
@@ -37,10 +39,63 @@ public static class AuthoringSurfaceJson
         }
 
         var assetIds = new HashSet<SemanticId>();
-        var functionIds = new HashSet<SemanticId>();
+        var statesById = new Dictionary<SemanticId, List<(SemanticId AssetId, ScriptStateDeclaration State)>>();
+        var functionsById = new Dictionary<SemanticId, List<(SemanticId AssetId, AuthoringFunctionSurface Function)>>();
         foreach (AuthoringAssetSurface? asset in document.Assets)
         {
-            ValidateAsset(asset, assetIds, functionIds);
+            ValidateAsset(asset, assetIds);
+            foreach (ScriptStateDeclaration state in asset!.States)
+            {
+                statesById.TryAdd(state.Id, []);
+                statesById[state.Id].Add((asset.Id, state));
+            }
+
+            foreach (AuthoringFunctionSurface function in asset.Functions)
+            {
+                functionsById.TryAdd(function.Id, []);
+                functionsById[function.Id].Add((asset.Id, function));
+            }
+        }
+
+        var declarationIds = statesById.Keys.Concat(functionsById.Keys).ToHashSet();
+        if (declarationIds.Count != statesById.Count + functionsById.Count)
+        {
+            throw new JsonException("A declaration ID cannot be used by both a state and a function.");
+        }
+
+        foreach (KeyValuePair<SemanticId, List<(SemanticId AssetId, ScriptStateDeclaration State)>> group in statesById)
+        {
+            ValidateSharedStates(group.Key, group.Value);
+        }
+
+        foreach (KeyValuePair<SemanticId, List<(SemanticId AssetId, AuthoringFunctionSurface Function)>> group in functionsById)
+        {
+            if (isLegacy && group.Value.Count > 1)
+            {
+                throw new JsonException(
+                    $"Legacy authoring surface schema cannot represent repeated function '{group.Key}' without ownership metadata.");
+            }
+
+            ValidateSharedFunctions(group.Key, group.Value);
+        }
+
+        IReadOnlyList<AuthoringDeclarationOwner> owners = ValidateDeclarationOwners(
+            document.DeclarationOwners ?? [],
+            assetIds,
+            statesById,
+            functionsById);
+
+        if (!isLegacy)
+        {
+            foreach (KeyValuePair<SemanticId, List<(SemanticId AssetId, ScriptStateDeclaration State)>> group in statesById)
+            {
+                RequireSharedOwner(group.Key, group.Value.Select(static item => item.AssetId).ToArray(), owners);
+            }
+
+            foreach (KeyValuePair<SemanticId, List<(SemanticId AssetId, AuthoringFunctionSurface Function)>> group in functionsById)
+            {
+                RequireSharedOwner(group.Key, group.Value.Select(static item => item.AssetId).ToArray(), owners);
+            }
         }
 
         return document with
@@ -50,13 +105,16 @@ public static class AuthoringSurfaceJson
                 .ThenBy(static asset => asset.Id.Value, StringComparer.Ordinal)
                 .Select(NormalizeAsset)
                 .ToArray(),
+            DeclarationOwners = owners
+                .OrderBy(static owner => owner.DeclarationId.Value, StringComparer.Ordinal)
+                .ThenBy(static owner => owner.OwnerAssetId.Value, StringComparer.Ordinal)
+                .ToArray(),
         };
     }
 
     private static void ValidateAsset(
         AuthoringAssetSurface? asset,
-        ISet<SemanticId> assetIds,
-        ISet<SemanticId> functionIds)
+        ISet<SemanticId> assetIds)
     {
         if (asset is null || asset.Id.IsEmpty || string.IsNullOrWhiteSpace(asset.QualifiedName) ||
             string.IsNullOrWhiteSpace(asset.AssetPath) || !IsValidSpan(asset.Span) ||
@@ -75,9 +133,141 @@ public static class AuthoringSurfaceJson
             }
         }
 
+        var functionIds = new HashSet<SemanticId>();
         foreach (AuthoringFunctionSurface? function in asset.Functions)
         {
             ValidateFunction(function, functionIds);
+        }
+    }
+
+    private static void ValidateSharedStates(
+        SemanticId declarationId,
+        IReadOnlyList<(SemanticId AssetId, ScriptStateDeclaration State)> projections)
+    {
+        ScriptStateDeclaration first = projections[0].State;
+        foreach ((SemanticId _, ScriptStateDeclaration state) in projections.Skip(1))
+        {
+            if (!string.Equals(first.Name, state.Name, StringComparison.Ordinal) ||
+                !string.Equals(first.TypeDisplayName, state.TypeDisplayName, StringComparison.Ordinal) ||
+                !string.Equals(first.TypeMetadataName, state.TypeMetadataName, StringComparison.Ordinal) ||
+                first.TypeKind != state.TypeKind ||
+                first.Span != state.Span ||
+                first.Exposure != state.Exposure ||
+                !EquivalentValueType(first.UnrealType, state.UnrealType))
+            {
+                throw new JsonException(
+                    $"Shared state '{declarationId}' has inconsistent declaration metadata across projections.");
+            }
+        }
+    }
+
+    private static bool EquivalentValueType(
+        ScriptFunctionValueTypeDeclaration? left,
+        ScriptFunctionValueTypeDeclaration? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.Kind != right.Kind || left.UnrealTypePath != right.UnrealTypePath ||
+            left.UnrealNativeName != right.UnrealNativeName || left.Fields.Count != right.Fields.Count ||
+            (left.TypeArguments?.Count ?? 0) != (right.TypeArguments?.Count ?? 0))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Fields.Count; index++)
+        {
+            ScriptFunctionStructFieldDeclaration leftField = left.Fields[index];
+            ScriptFunctionStructFieldDeclaration rightField = right.Fields[index];
+            if (leftField.Index != rightField.Index || leftField.NativeName != rightField.NativeName ||
+                leftField.TypeMetadataName != rightField.TypeMetadataName ||
+                !EquivalentValueType(leftField.UnrealType, rightField.UnrealType))
+            {
+                return false;
+            }
+        }
+
+        for (int index = 0; index < (left.TypeArguments?.Count ?? 0); index++)
+        {
+            ScriptFunctionTypeArgumentDeclaration leftArgument = left.TypeArguments![index];
+            ScriptFunctionTypeArgumentDeclaration rightArgument = right.TypeArguments![index];
+            if (leftArgument.TypeMetadataName != rightArgument.TypeMetadataName ||
+                !EquivalentValueType(leftArgument.UnrealType, rightArgument.UnrealType))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void ValidateSharedFunctions(
+        SemanticId declarationId,
+        IReadOnlyList<(SemanticId AssetId, AuthoringFunctionSurface Function)> projections)
+    {
+        string canonical = SerializeFunctionContract(projections[0].Function);
+        foreach ((SemanticId _, AuthoringFunctionSurface function) in projections.Skip(1))
+        {
+            if (!string.Equals(canonical, SerializeFunctionContract(function), StringComparison.Ordinal))
+            {
+                throw new JsonException(
+                    $"Shared function '{declarationId}' has an inconsistent graph or signature across projections.");
+            }
+        }
+    }
+
+    private static string SerializeFunctionContract(AuthoringFunctionSurface function) =>
+        JsonSerializer.Serialize(
+            NormalizeFunction(function with { QualifiedName = string.Empty }),
+            UnifiedJson.CreateOptions(false));
+
+    private static IReadOnlyList<AuthoringDeclarationOwner> ValidateDeclarationOwners(
+        IReadOnlyList<AuthoringDeclarationOwner> owners,
+        ISet<SemanticId> assetIds,
+        IReadOnlyDictionary<SemanticId, List<(SemanticId AssetId, ScriptStateDeclaration State)>> statesById,
+        IReadOnlyDictionary<SemanticId, List<(SemanticId AssetId, AuthoringFunctionSurface Function)>> functionsById)
+    {
+        var seen = new HashSet<SemanticId>();
+        foreach (AuthoringDeclarationOwner? owner in owners)
+        {
+            if (owner is null || owner.DeclarationId.IsEmpty || owner.OwnerAssetId.IsEmpty ||
+                !seen.Add(owner.DeclarationId) || !assetIds.Contains(owner.OwnerAssetId))
+            {
+                throw new JsonException("An authoring declaration owner has invalid or duplicate required fields.");
+            }
+
+            bool containsDeclaration = statesById.TryGetValue(owner.DeclarationId, out var states) &&
+                states.Any(item => item.AssetId == owner.OwnerAssetId) ||
+                functionsById.TryGetValue(owner.DeclarationId, out var functions) &&
+                functions.Any(item => item.AssetId == owner.OwnerAssetId);
+            if (!containsDeclaration)
+            {
+                throw new JsonException(
+                    $"Declaration owner '{owner.OwnerAssetId}' does not contain declaration '{owner.DeclarationId}'.");
+            }
+        }
+
+        return owners;
+    }
+
+    private static void RequireSharedOwner(
+        SemanticId declarationId,
+        IReadOnlyList<SemanticId> projectionAssetIds,
+        IReadOnlyList<AuthoringDeclarationOwner> owners)
+    {
+        if (projectionAssetIds.Count <= 1)
+        {
+            return;
+        }
+
+        AuthoringDeclarationOwner[] matches = owners
+            .Where(owner => owner.DeclarationId == declarationId)
+            .ToArray();
+        if (matches.Length != 1 || !projectionAssetIds.Contains(matches[0].OwnerAssetId))
+        {
+            throw new JsonException(
+                $"Shared declaration '{declarationId}' requires exactly one source owner in schema v0.5.");
         }
     }
 

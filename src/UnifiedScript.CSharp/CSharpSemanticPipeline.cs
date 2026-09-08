@@ -104,6 +104,7 @@ public sealed class CSharpSemanticPipeline
             ? new ScriptAssetLoweringResult(
                 null,
                 new Dictionary<SemanticId, SemanticId>(),
+                new Dictionary<SemanticId, SemanticId>(),
                 [])
             : new CSharpScriptAssetLowerer().Lower(
                 compilation,
@@ -126,6 +127,9 @@ public sealed class CSharpSemanticPipeline
             DeclarationReferences = hasErrors
                 ? new Dictionary<SemanticId, SemanticId>()
                 : assetLowering.DeclarationReferences,
+            DeclarationOwners = hasErrors
+                ? new Dictionary<SemanticId, SemanticId>()
+                : assetLowering.DeclarationOwners,
             Profile = profile,
         };
     }

@@ -69,7 +69,7 @@ flowchart LR
     Projector --> Graph["Graph JSON"]
     Declaration --> Authoring["Authoring Surface Projector"]
     Graph --> Authoring
-    Authoring --> Surface["Authoring Surface v0.4 pins + edges"]
+    Authoring --> Surface["Authoring Surface v0.5 ownership + pins + edges"]
     Surface --> Presentation["Lossless Graph Presentation policy"]
     Presentation --> Workbench["Browser / native UE GraphEditor"]
     Projector --> EmitGate["Execution Graph/CFG gate"]
@@ -238,7 +238,8 @@ the previous script running. Cook-time dependency discovery remains open.
 - exact function/block/if/loop region ownership
 - declaration references, source spans, and debug-target identities
 - schema-driven literal/operator Semantic Patch capabilities
-- strict Authoring Surface v0.4 JSON with endpoint/type invariants
+- strict Authoring Surface v0.5 JSON with declaration ownership and endpoint/type invariants
+- coherent inherited state/function projections with legacy v0.4 reading
 
 It depends only on Core and Graph. It does not parse source, host Roslyn or
 CoreCLR, render a browser/Slate UI, apply patches, or depend on UE. A frontend

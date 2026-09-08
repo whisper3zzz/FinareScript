@@ -168,6 +168,106 @@ public sealed class CoreClrAuthoringHttpServerTests
     }
 
     [Fact]
+    public async Task DebugStartUsesSelectedInheritedReceiverAssetAndGeneration()
+    {
+        const string inheritedSource = """
+            using UnifiedScript;
+
+            namespace Tests.HttpInherited;
+
+            [ScriptAsset("Tests/HttpInheritedBase")]
+            public class InheritedBase
+            {
+                protected int BaseValue { get; set; } = 3;
+
+                [Visual]
+                public int ReadBaseValue()
+                {
+                    return BaseValue;
+                }
+            }
+
+            [ScriptAsset("Tests/HttpInheritedOverride")]
+            public sealed class InheritedOverride : InheritedBase
+            {
+                public InheritedOverride() { BaseValue = 77; }
+            }
+
+            [ScriptAsset("Tests/HttpInheritedFollower")]
+            public sealed class InheritedFollower : InheritedBase { }
+            """;
+        string directory = Path.Combine(Path.GetTempPath(), $"unifiedscript-inherited-debug-http-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "Inherited.cs");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, inheritedSource);
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            inheritedSource,
+            logicalPath,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(logicalPath));
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(request, sourcePath, null, contentRoot, port);
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+
+            AuthoringWorkspaceResponse workspace = await GetWorkspaceAsync(client);
+            ScriptAssetDeclaration baseAsset = workspace.ScriptAssets.Assets.Single(
+                static asset => asset.QualifiedName == "Tests.HttpInherited.InheritedBase");
+            ScriptAssetDeclaration overrideAsset = workspace.ScriptAssets.Assets.Single(
+                static asset => asset.QualifiedName == "Tests.HttpInherited.InheritedOverride");
+            ScriptStateDeclaration state = Assert.Single(overrideAsset.States);
+            SemanticId methodId = Assert.Single(baseAsset.Functions).Id;
+            Assert.Contains(overrideAsset.Functions, function => function.Id == methodId);
+            Assert.Equal("3", Assert.Single(baseAsset.States).DefaultValue.GetRawText());
+            Assert.Equal("77", state.DefaultValue.GetRawText());
+
+            var startRequest = new DebugStartRequest(
+                methodId,
+                [],
+                new DebugReceiverRequest(
+                    overrideAsset.Id,
+                    [new DebugStateOverrideRequest(state.Id, Json("99"))]),
+                [],
+                workspace.ScriptAssets.SourceCompilationId,
+                workspace.ScriptAssets.SemanticConfigurationId);
+            using HttpResponseMessage startResponse = await client.PostAsync(
+                "api/debug/start",
+                JsonContent(JsonSerializer.Serialize(startRequest, UnifiedJson.CreateOptions())));
+            startResponse.EnsureSuccessStatusCode();
+            DebugSessionResponse started = JsonSerializer.Deserialize<DebugSessionResponse>(
+                await startResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+            Assert.Equal(workspace.Generation.GenerationId, started.Generation.GenerationId);
+            Assert.Equal(workspace.Generation.Number, started.Generation.Number);
+
+            using HttpResponseMessage waitResponse = await client.PostAsync(
+                "api/debug/wait",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugExecutionRequest(started.Generation.GenerationId, started.ExecutionId),
+                    UnifiedJson.CreateOptions())));
+            waitResponse.EnsureSuccessStatusCode();
+            DebugSessionResponse completed = JsonSerializer.Deserialize<DebugSessionResponse>(
+                await waitResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+            Assert.Equal("completed", completed.State);
+            Assert.Equal("99", completed.Result?.ReturnValue?.Json);
+            Assert.Equal(started.Generation.GenerationId, completed.Generation.GenerationId);
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SourceTextEndpointRequiresAndCommitsTheExactPreviewCandidate()
     {
         string directory = Path.Combine(

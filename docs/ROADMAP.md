@@ -46,8 +46,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   source-owner declaration editing with focused managed validation. Three-level
   managed inheritance now passes the two-World and cooked Actor state fixture,
   including complete collections and exclusion of unexposed helper properties.
-  Continue with native authoring owner selection and shared function projections; the
-  asset-operation lane does not verify active managed rename.
+  Surface v0.5 now carries source-owner identity through CLI, native Slate and
+  browser editing, including shared Visual functions and selected derived
+  CoreCLR receivers. Editing the owner default preserves explicit derived
+  overrides and stable declaration IDs. Continue with active managed
+  Rename/Duplicate and subsequent rebuild/reload; the existing asset-operation
+  lane verifies native instances without starting its managed source.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and

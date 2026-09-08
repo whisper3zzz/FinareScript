@@ -396,56 +396,110 @@ managed source/deployment from `9310b22`. Evidence is under
   source packages and three staged program files. The archive remains at
   `package/Windows/UEUnifiedScriptHost`.
 
-The remaining native authoring selection and active managed rename boundaries
-below still prevent closing C-3 as a whole.
+Active managed Rename/Duplicate followed by rebuild/reload remains open and
+prevents closing C-3 as a whole. The earlier asset-operation checkpoint uses
+native instances without starting its managed source. The authoring ownership
+checkpoint below addresses a separate defect: shared declaration IDs previously
+selected edit preconditions from the first asset and navigation rows from the
+last asset, while the readers rejected shared function projections entirely.
 
-Native authoring needs a subsequent owner-aware selection check as well.
-`SUnifiedScriptAuthoringSurface::FindState` returns the first asset containing
-an ID; `BuildStateUpdatePatch` then uses that projection's
-effective default as the source-edit precondition. With shared state IDs this
-can select a derived override instead of the source owner's default. Do not
-claim general authoring closure from managed patch tests. Resolve ownership
-explicitly, including partial source owners, or reject unavailable ownership
-without mutating a projection selected by document order. The native JSON and
-binary materializers already validate state identity per selected asset and
-do not need a new format merely to read these shared IDs.
+The selected authoring contract is Surface v0.5 with explicit
+`declarationOwners` entries (`declarationId`, `ownerAssetId`). Analysis exposes
+the same mapping without depending on Authoring; CLI and debug-server
+projection boundaries pass it into the engine-neutral surface. Owners come
+from Roslyn declaration symbols and resolved asset IDs, including explicit
+ClassId and partial types. Runtime declaration and chunk schemas stay unchanged.
+The managed and native readers retain v0.4 support; managed legacy roundtrip
+preserves that version.
+Unique legacy declarations remain editable; ambiguous legacy shared state
+remains displayable without an editable owner. New shared projections require
+an explicit owner and coherent contracts. Derived state defaults may differ;
+shared function contents must agree except for the projection's qualified name.
 
-Prefer source-analysis ownership metadata on the authoring surface, separate
-from runtime declaration serialization. The source lowering already knows the
-declaring type and persistent asset ID, including partial types. Carry that
-ownership to editing and navigation instead of inferring it from asset order
-or a single type span. Keep the selected derived projection's effective value
-distinct from the source owner's edit contract. An older surface with a shared
-ID and no provable owner must not silently select an editable declaration.
-`RebuildTree` also overwrites `SurfaceItemsById` for each shared state/function
-projection, so navigation must not depend on the last asset in the document.
-The tree row already captures its own projection's default in `Detail`; retain
-that distinction when routing edits to the source owner. `FindOwningAsset` has
-the same first-match implementation but currently has no callers; the active
-state edit/removal consumer is `FindState`.
+Native state/function lookup, patch preconditions and semantic navigation now
+use the source owner. Only owner rows populate the semantic index, including
+the shared actions and regions of inherited functions; derived rows retain
+their effective defaults. Surface parsing validates a candidate before replacing
+the loaded document. The lowerer also projects inherited functions onto assets
+with no methods of their own, preserving the source method's persistent ID.
 
-Inherited Visual functions have an earlier authoring boundary as well:
-`AuthoringSurfaceJson` and the native surface reader reject a function ID
-repeated across assets. Address both readers together with explicit ownership;
-do not merely relax one validator. Shared state projections already reach the
-native first-match edit path. Function navigation collisions become reachable
-when their reader boundary is corrected. Independently, persistent function
-IDs must agree across HIR, bound method descriptors, declarations, Graph and
-CoreCLR; a declaration-only identity mapping would break existing single-asset
-authoring and execution even before this inheritance boundary.
+The browser retains effective state drafts on the selected derived asset and
+offers explicit navigation to edit the source owner. Pending drafts block that
+navigation. Only declarations owned by the selected asset can produce update/
+removal operations; untouched inherited rows do not block local declarations.
+Unsupported editor types remain read-only and retain their typed JSON for
+display. Debug requests send only edited supported overrides; unchanged values
+come from the selected receiver's constructor. This also avoids rewriting wide
+integers through JavaScript's lossy JSON number representation. The workspace
+still exposes one primary source text, even
+when compilation includes several files; spans from other files display their
+real location without highlighting unrelated primary-source lines.
 
-The next authoring slice should carry declaration-ID to source-owner-asset-ID
-metadata from source analysis into the authoring document. Keep Authoring
-dependent on Core/Graph rather than CSharp: pass the ownership data through
-the CLI and debug-server projection boundaries. Validate that each owner asset
-actually contains the declaration. Permit repeated function projections only
-with a coherent owner and matching function contract/graph; retain rejection
-of duplicate IDs within an asset. Native edit preconditions and declaration
-navigation must use that owner, while a selected derived row continues to
-display its own effective default. Legacy unique declarations remain usable;
-ambiguous shared declarations without ownership must not become editable by
-array order. Rebuild the semantic navigation index using owner rows, including
-the shared actions/regions below inherited functions.
+CoreCLR resolves the requested receiver asset, checks that it projects the
+invoked method and that its runtime type derives from the method's declaring
+type, then constructs the selected type. State overrides use that asset's
+contract and actual hierarchy. The declaring base is never substituted for a
+selected leaf receiver. Static methods still reject instance receivers.
+
+The producer/native/CLI declaration roundtrip now has direct evidence under
+`artifacts/m13-3c-3-authoring-ownership/`. The official single-file CLI analysis
+publishes AOverride first with default 77, BFollower with 3 and the explicit
+ZBase owner with 3; all three project the same two Visual functions. The real
+Slate widget exports a source-owner patch that renames Seed to RenamedSeed and
+changes the owner default to 11. CLI apply plus reanalysis preserves the shared
+state ID, both function IDs and explicit owner ID; BFollower/ZBase become 11
+while AOverride remains 77. See `native-cli-roundtrip-result.json`,
+`native-cli-apply.log` and `native-cli-reanalysis.log`.
+
+This path exposed a native reader defect: UE's JSON writer cannot serialize a
+primitive as the document root, and the old fallback silently displayed it as
+null. State defaults now serialize through a one-element array using condensed
+JSON; missing values or serialization failure are errors, while explicit null
+remains a valid value. Another verification defect hid the existing Workbench
+Automation test when its name became a parent of other tests. UE's report
+enumerator only schedules leaf nodes, so its name is now the Workbench child
+of the same AuthoringSurface prefix.
+
+The final native ownership test passes in `native-authoring-3.log` with Success
+and Queue Empty (one test), after `editor-build-5.log` compiled the final test.
+The preceding `native-authoring-2.log` passes Workbench, ScalarDefaultRoundtrip,
+StructDefaultPrecondition and V05RejectsWithinAssetDuplicateFunction. Its only
+failed test asserted that a root region was a visible sidebar child; root
+regions are indexed but intentionally omitted from that tree. The corrected
+test checks that constructing a derived projection cannot replace the owner
+function/region/action index entries. The CLI roundtrip inputs and product code
+did not change after that earlier run.
+
+The browser's live workflow also passes against a separate artifact-directory
+copy of the fixture. AOverride's inherited Forward with the default argument 12
+returns 89. Its Seed inspector shows effective 77 and a read-only declaration;
+source-owner navigation selects Game/ZBase and shows 3. The actual Commit Patch
+and reviewed-source confirmation publish 11 in revision 2 / CoreCLR generation
+2. BFollower then returns 23 while AOverride still returns 89; both retain the
+typed Values array `[2,4]`. A pending local ArmorRatio declaration blocks owner
+navigation and remains in the browser draft. No checked-in fixture source was
+edited by this interaction. `browser-workspace-after.json` captures the committed
+server workspace; the isolated source and transaction journal are retained in
+`browser-workspace/`. This is browser interaction evidence, not a physical Slate
+toolbar or cooked-runtime claim.
+
+The final browser request filter was checked again with the same committed
+fixture: constructor-backed AOverride/BFollower execution returns 89/23 without
+resending unchanged state. Five Node regressions pass in
+`visual-authoring-behavior-final-4.log`, exercising the actual validator,
+declaration patch builder and debug request function through a VM harness.
+The focused managed results are 12 CoreCLR tests in
+`coreclr-inherited-receiver-2.log`, the inherited HTTP workspace/debug test in
+`coreclr-inherited-http-3.log`, and four ownership tests including an actual
+graph-content mismatch in `authoring-ownership-graph-negative.log`. The earlier
+111-test regression is retained in `managed-existing-regression.log`; it predates
+the selected-receiver change and is not a rerun of that later code.
+
+Repository validation stops at the existing API Contract/visual catalog
+consistency assertion (`repository-validation.log`), before the changed Surface
+schema check. That full validator is not reported as passing. No unrelated API
+generation, host staging or protected-file replacement was performed for this
+authoring checkpoint.
 
 ## Relevant verification
 

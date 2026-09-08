@@ -14,12 +14,14 @@
 #include "Interfaces/IPluginManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
 namespace UE::UnifiedScript::AuthoringSurface::Private
 {
-constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.authoring-surface/v0.4");
+constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.authoring-surface/v0.4");
+constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.authoring-surface/v0.5");
 
 bool IsSemanticId(const FString& Value)
 {
@@ -100,6 +102,62 @@ bool ReadOptionalString(
     return true;
 }
 
+bool ReadDeclarationOwners(
+    const TSharedPtr<FJsonObject>& Root,
+    TArray<FUnifiedScriptAuthoringDeclarationOwner>& OutOwners,
+    FString& OutError)
+{
+    OutOwners.Reset();
+    if (!Root->HasField(TEXT("declarationOwners")))
+    {
+        return true;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+    if (!Root->TryGetArrayField(TEXT("declarationOwners"), Values) || Values == nullptr)
+    {
+        OutError = TEXT("Authoring Surface declarationOwners must be an array.");
+        return false;
+    }
+    TSet<FString> DeclarationIds;
+    for (const TSharedPtr<FJsonValue>& Value : *Values)
+    {
+        const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+        FUnifiedScriptAuthoringDeclarationOwner Owner;
+        if (!ReadRequiredId(Object, TEXT("declarationId"), Owner.DeclarationId, OutError) ||
+            !ReadRequiredId(Object, TEXT("ownerAssetId"), Owner.OwnerAssetId, OutError) ||
+            DeclarationIds.Contains(Owner.DeclarationId))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Authoring Surface declarationOwners contains a duplicate declaration.");
+            }
+            return false;
+        }
+        DeclarationIds.Add(Owner.DeclarationId);
+        OutOwners.Add(MoveTemp(Owner));
+    }
+    return true;
+}
+
+bool CompareRawProjectionWithoutField(
+    const TSharedPtr<FJsonObject>& Left,
+    const TSharedPtr<FJsonObject>& Right,
+    const TCHAR* IgnoredField)
+{
+    if (!Left.IsValid() || !Right.IsValid())
+    {
+        return false;
+    }
+    const TSharedPtr<FJsonObject> LeftCopy = MakeShared<FJsonObject>(*Left);
+    const TSharedPtr<FJsonObject> RightCopy = MakeShared<FJsonObject>(*Right);
+    LeftCopy->RemoveField(IgnoredField);
+    RightCopy->RemoveField(IgnoredField);
+    const FJsonValueObject LeftValue(LeftCopy);
+    const FJsonValueObject RightValue(RightCopy);
+    return FJsonValue::CompareEqual(LeftValue, RightValue);
+}
+
 bool ReadSpan(
     const TSharedPtr<FJsonObject>& Owner,
     FUnifiedScriptAuthoringSpan& OutSpan,
@@ -177,19 +235,41 @@ bool ReadIdArray(
     return true;
 }
 
-FString JsonScalarToString(const TSharedPtr<FJsonValue>& Value)
+bool JsonScalarToString(
+    const TSharedPtr<FJsonValue>& Value,
+    FString& OutValue,
+    FString& OutError)
 {
-    if (!Value.IsValid() || Value->IsNull())
+    if (!Value.IsValid())
     {
-        return TEXT("null");
+        OutError = TEXT("Authoring Surface state is missing its defaultValue JSON field.");
+        return false;
     }
+    if (Value->IsNull())
+    {
+        OutValue = TEXT("null");
+        return true;
+    }
+
+    // UE's JSON serializer only accepts an object/array as a root value.  Wrap
+    // the scalar in a one-element array so numbers, booleans, strings, and
+    // nested values retain their actual JSON representation instead of being
+    // silently turned into null when authoring metadata is read.
+    TArray<TSharedPtr<FJsonValue>> Container;
+    Container.Add(Value);
     FString Json;
-    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
-    if (FJsonSerializer::Serialize(Value.ToSharedRef(), TEXT(""), Writer))
+    const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+        TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
+    if (!FJsonSerializer::Serialize(Container, Writer) ||
+        !Json.StartsWith(TEXT("[")) ||
+        !Json.EndsWith(TEXT("]")))
     {
-        return Json;
+        OutError = TEXT("Authoring Surface could not serialize a JSON scalar default value.");
+        return false;
     }
-    return TEXT("null");
+
+    OutValue = Json.Mid(1, Json.Len() - 2);
+    return true;
 }
 
 bool ReadState(
@@ -207,7 +287,11 @@ bool ReadState(
         return false;
     }
 
-    OutState.DefaultValue = JsonScalarToString(Object->TryGetField(TEXT("defaultValue")));
+    if (!Object->HasField(TEXT("defaultValue")) ||
+        !JsonScalarToString(Object->TryGetField(TEXT("defaultValue")), OutState.DefaultValue, OutError))
+    {
+        return false;
+    }
     const TSharedPtr<FJsonObject>* Exposure = nullptr;
     if (!Object->TryGetObjectField(TEXT("exposure"), Exposure) || Exposure == nullptr)
     {
@@ -673,6 +757,7 @@ bool ReadAsset(
         StateNames.Add(State.Name);
         OutAsset.States.Add(MoveTemp(State));
     }
+    TSet<FString> FunctionIds;
     for (const TSharedPtr<FJsonValue>& Value : *Functions)
     {
         FUnifiedScriptAuthoringFunction Function;
@@ -680,6 +765,15 @@ bool ReadAsset(
         {
             return false;
         }
+        if (FunctionIds.Contains(Function.Id))
+        {
+            OutError = FString::Printf(
+                TEXT("Asset '%s' contains duplicate function '%s'."),
+                *OutAsset.AssetPath,
+                *Function.Id);
+            return false;
+        }
+        FunctionIds.Add(Function.Id);
         OutAsset.Functions.Add(MoveTemp(Function));
     }
     return true;
@@ -743,6 +837,44 @@ int32 FUnifiedScriptAuthoringSurfaceDocument::GetStateCount() const
         Count += Asset.States.Num();
     }
     return Count;
+}
+
+const FUnifiedScriptAuthoringAsset* FUnifiedScriptAuthoringSurfaceDocument::FindDeclarationOwnerAsset(
+    const FString& DeclarationId) const
+{
+    const FUnifiedScriptAuthoringDeclarationOwner* ExplicitOwner = DeclarationOwners.FindByPredicate(
+        [&DeclarationId](const FUnifiedScriptAuthoringDeclarationOwner& Owner)
+        {
+            return Owner.DeclarationId == DeclarationId;
+        });
+    if (ExplicitOwner != nullptr)
+    {
+        return Assets.FindByPredicate([ExplicitOwner](const FUnifiedScriptAuthoringAsset& Asset)
+        {
+            return Asset.Id == ExplicitOwner->OwnerAssetId;
+        });
+    }
+
+    const FUnifiedScriptAuthoringAsset* UniqueOwner = nullptr;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Assets)
+    {
+        const bool Contains = Asset.States.ContainsByPredicate([&DeclarationId](const FUnifiedScriptAuthoringState& State)
+        {
+            return State.Id == DeclarationId;
+        }) || Asset.Functions.ContainsByPredicate([&DeclarationId](const FUnifiedScriptAuthoringFunction& Function)
+        {
+            return Function.Id == DeclarationId;
+        });
+        if (Contains)
+        {
+            if (UniqueOwner != nullptr)
+            {
+                return nullptr;
+            }
+            UniqueOwner = &Asset;
+        }
+    }
+    return UniqueOwner;
 }
 
 int32 FUnifiedScriptAuthoringSurfaceDocument::GetFunctionCount() const
@@ -814,11 +946,12 @@ bool FUnifiedScriptAuthoringSurfaceReader::ParseJson(
 
     FUnifiedScriptAuthoringSurfaceDocument Candidate;
     if (!ReadRequiredString(Root, TEXT("schemaVersion"), Candidate.SchemaVersion, OutError) ||
-        Candidate.SchemaVersion != SchemaVersion ||
+        (Candidate.SchemaVersion != LegacySchemaVersion && Candidate.SchemaVersion != SchemaVersion) ||
         !ReadRequiredId(Root, TEXT("sourceCompilationId"), Candidate.SourceCompilationId, OutError) ||
-        !ReadRequiredId(Root, TEXT("semanticConfigurationId"), Candidate.SemanticConfigurationId, OutError))
+        !ReadRequiredId(Root, TEXT("semanticConfigurationId"), Candidate.SemanticConfigurationId, OutError) ||
+        !ReadDeclarationOwners(Root, Candidate.DeclarationOwners, OutError))
     {
-        if (Candidate.SchemaVersion != SchemaVersion)
+        if (Candidate.SchemaVersion != LegacySchemaVersion && Candidate.SchemaVersion != SchemaVersion)
         {
             OutError = FString::Printf(TEXT("Unsupported Authoring Surface schema '%s'."), *Candidate.SchemaVersion);
         }
@@ -835,26 +968,164 @@ bool FUnifiedScriptAuthoringSurfaceReader::ParseJson(
     TSet<FString> AssetIds;
     TSet<FString> AssetPaths;
     TSet<FString> FunctionIds;
+    TMap<FString, TArray<TSharedPtr<FJsonObject>>> RawStateProjections;
+    TMap<FString, TArray<TSharedPtr<FJsonObject>>> RawFunctionProjections;
+    const bool bLegacySchema = Candidate.SchemaVersion == LegacySchemaVersion;
     for (const TSharedPtr<FJsonValue>& Value : *Assets)
     {
+        const TSharedPtr<FJsonObject> RawAsset = Value.IsValid() ? Value->AsObject() : nullptr;
         FUnifiedScriptAuthoringAsset Asset;
-        if (!Value.IsValid() || !ReadAsset(Value->AsObject(), Asset, OutError) ||
+        if (!RawAsset.IsValid() || !ReadAsset(RawAsset, Asset, OutError) ||
             AssetIds.Contains(Asset.Id) || AssetPaths.Contains(Asset.AssetPath))
         {
             return false;
         }
         for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
         {
-            if (FunctionIds.Contains(Function.Id))
+            if (bLegacySchema && FunctionIds.Contains(Function.Id))
             {
                 OutError = FString::Printf(TEXT("Duplicate Authoring Surface function '%s'."), *Function.Id);
                 return false;
             }
             FunctionIds.Add(Function.Id);
         }
+        const TArray<TSharedPtr<FJsonValue>>* RawStates = nullptr;
+        if (RawAsset->TryGetArrayField(TEXT("states"), RawStates) && RawStates != nullptr)
+        {
+            for (const TSharedPtr<FJsonValue>& RawStateValue : *RawStates)
+            {
+                const TSharedPtr<FJsonObject> RawState = RawStateValue.IsValid()
+                    ? RawStateValue->AsObject()
+                    : nullptr;
+                FString StateId;
+                if (RawState.IsValid() && RawState->TryGetStringField(TEXT("id"), StateId))
+                {
+                    RawStateProjections.FindOrAdd(StateId).Add(RawState);
+                }
+            }
+        }
+        const TArray<TSharedPtr<FJsonValue>>* RawFunctions = nullptr;
+        if (RawAsset->TryGetArrayField(TEXT("functions"), RawFunctions) && RawFunctions != nullptr)
+        {
+            for (const TSharedPtr<FJsonValue>& RawFunctionValue : *RawFunctions)
+            {
+                const TSharedPtr<FJsonObject> RawFunction = RawFunctionValue.IsValid()
+                    ? RawFunctionValue->AsObject()
+                    : nullptr;
+                FString FunctionId;
+                if (RawFunction.IsValid() && RawFunction->TryGetStringField(TEXT("id"), FunctionId))
+                {
+                    RawFunctionProjections.FindOrAdd(FunctionId).Add(RawFunction);
+                }
+            }
+        }
         AssetIds.Add(Asset.Id);
         AssetPaths.Add(Asset.AssetPath);
         Candidate.Assets.Add(MoveTemp(Asset));
+    }
+
+    TMap<FString, TArray<int32>> StateProjectionIndices;
+    TMap<FString, TArray<int32>> FunctionProjectionIndices;
+    for (int32 AssetIndex = 0; AssetIndex < Candidate.Assets.Num(); ++AssetIndex)
+    {
+        const FUnifiedScriptAuthoringAsset& Asset = Candidate.Assets[AssetIndex];
+        for (const FUnifiedScriptAuthoringState& State : Asset.States)
+        {
+            StateProjectionIndices.FindOrAdd(State.Id).Add(AssetIndex);
+        }
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            FunctionProjectionIndices.FindOrAdd(Function.Id).Add(AssetIndex);
+        }
+    }
+
+    for (const TPair<FString, TArray<int32>>& Pair : StateProjectionIndices)
+    {
+        if (FunctionProjectionIndices.Contains(Pair.Key))
+        {
+            OutError = FString::Printf(TEXT("Declaration '%s' is both a state and a function."), *Pair.Key);
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonObject>>* RawProjections = RawStateProjections.Find(Pair.Key);
+        for (int32 Index = 1; Index < Pair.Value.Num(); ++Index)
+        {
+            if (RawProjections == nullptr || RawProjections->Num() != Pair.Value.Num() ||
+                !CompareRawProjectionWithoutField(
+                    (*RawProjections)[0],
+                    (*RawProjections)[Index],
+                    TEXT("defaultValue")))
+            {
+                OutError = FString::Printf(TEXT("Shared state '%s' has inconsistent declaration metadata."), *Pair.Key);
+                return false;
+            }
+        }
+    }
+
+    for (const TPair<FString, TArray<int32>>& Pair : FunctionProjectionIndices)
+    {
+        const TArray<TSharedPtr<FJsonObject>>* RawProjections = RawFunctionProjections.Find(Pair.Key);
+        for (int32 Index = 1; Index < Pair.Value.Num(); ++Index)
+        {
+            if (RawProjections == nullptr || RawProjections->Num() != Pair.Value.Num() ||
+                !CompareRawProjectionWithoutField(
+                    (*RawProjections)[0],
+                    (*RawProjections)[Index],
+                    TEXT("qualifiedName")))
+            {
+                OutError = FString::Printf(TEXT("Shared function '%s' has inconsistent signature or graph."), *Pair.Key);
+                return false;
+            }
+        }
+    }
+
+    TSet<FString> OwnerDeclarationIds;
+    for (const FUnifiedScriptAuthoringDeclarationOwner& Owner : Candidate.DeclarationOwners)
+    {
+        if (OwnerDeclarationIds.Contains(Owner.DeclarationId))
+        {
+            OutError = FString::Printf(TEXT("Duplicate declaration owner '%s'."), *Owner.DeclarationId);
+            return false;
+        }
+        OwnerDeclarationIds.Add(Owner.DeclarationId);
+        const int32 OwnerAssetIndex = Candidate.Assets.IndexOfByPredicate([&Owner](const FUnifiedScriptAuthoringAsset& Asset)
+        {
+            return Asset.Id == Owner.OwnerAssetId;
+        });
+        const bool bState = StateProjectionIndices.Contains(Owner.DeclarationId);
+        const bool bFunction = FunctionProjectionIndices.Contains(Owner.DeclarationId);
+        const bool bContains = OwnerAssetIndex != INDEX_NONE &&
+            ((bState && Candidate.Assets[OwnerAssetIndex].States.ContainsByPredicate([&Owner](const FUnifiedScriptAuthoringState& State)
+            {
+                return State.Id == Owner.DeclarationId;
+            })) || (bFunction && Candidate.Assets[OwnerAssetIndex].Functions.ContainsByPredicate([&Owner](const FUnifiedScriptAuthoringFunction& Function)
+            {
+                return Function.Id == Owner.DeclarationId;
+            })));
+        if (!bContains)
+        {
+            OutError = FString::Printf(TEXT("Declaration owner '%s' does not contain '%s'."), *Owner.OwnerAssetId, *Owner.DeclarationId);
+            return false;
+        }
+    }
+
+    if (!bLegacySchema)
+    {
+        for (const TPair<FString, TArray<int32>>& Pair : StateProjectionIndices)
+        {
+            if (Pair.Value.Num() > 1 && !OwnerDeclarationIds.Contains(Pair.Key))
+            {
+                OutError = FString::Printf(TEXT("Shared state '%s' requires an explicit source owner."), *Pair.Key);
+                return false;
+            }
+        }
+        for (const TPair<FString, TArray<int32>>& Pair : FunctionProjectionIndices)
+        {
+            if (Pair.Value.Num() > 1 && !OwnerDeclarationIds.Contains(Pair.Key))
+            {
+                OutError = FString::Printf(TEXT("Shared function '%s' requires an explicit source owner."), *Pair.Key);
+                return false;
+            }
+        }
     }
 
     OutDocument = MoveTemp(Candidate);
@@ -3157,9 +3428,22 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStateUpdatePatch(
 {
     using namespace UE::UnifiedScript::AuthoringSurface::Private;
     using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(State.Id);
+    const FUnifiedScriptAuthoringState* ExpectedState = Owner != nullptr
+        ? Owner->States.FindByPredicate(
+            [&State](const FUnifiedScriptAuthoringState& Candidate)
+            {
+                return Candidate.Id == State.Id;
+            })
+        : nullptr;
+    if (ExpectedState == nullptr)
+    {
+        OutError = TEXT("The selected state has no unambiguous source owner.");
+        return false;
+    }
     TSharedPtr<FJsonObject> Expected;
     TSharedPtr<FJsonObject> Replacement;
-    if (!IsSemanticId(State.Id) || !MakeStateExpected(State, Expected, OutError) ||
+    if (!IsSemanticId(State.Id) || !MakeStateExpected(*ExpectedState, Expected, OutError) ||
         !MakeStateSpec(
             Name,
             TypeName,
@@ -3192,8 +3476,21 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStateRemovalPatch(
 {
     using namespace UE::UnifiedScript::AuthoringSurface::Private;
     using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(State.Id);
+    const FUnifiedScriptAuthoringState* ExpectedState = Owner != nullptr
+        ? Owner->States.FindByPredicate(
+            [&State](const FUnifiedScriptAuthoringState& Candidate)
+            {
+                return Candidate.Id == State.Id;
+            })
+        : nullptr;
+    if (ExpectedState == nullptr)
+    {
+        OutError = TEXT("The selected state has no unambiguous source owner.");
+        return false;
+    }
     TSharedPtr<FJsonObject> Expected;
-    if (!IsSemanticId(State.Id) || !MakeStateExpected(State, Expected, OutError))
+    if (!IsSemanticId(State.Id) || !MakeStateExpected(*ExpectedState, Expected, OutError))
     {
         if (OutError.IsEmpty()) OutError = TEXT("Removing state requires an exact current state.");
         return false;
@@ -3255,6 +3552,19 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionUpdatePatch(
 {
     using namespace UE::UnifiedScript::AuthoringSurface::Private;
     using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(Function.Id);
+    const FUnifiedScriptAuthoringFunction* ExpectedFunction = Owner != nullptr
+        ? Owner->Functions.FindByPredicate(
+            [&Function](const FUnifiedScriptAuthoringFunction& Candidate)
+            {
+                return Candidate.Id == Function.Id;
+            })
+        : nullptr;
+    if (ExpectedFunction == nullptr)
+    {
+        OutError = TEXT("The selected function has no unambiguous source owner.");
+        return false;
+    }
     if (!IsSemanticId(Function.Id) || Name.IsEmpty() || ReturnTypeName.IsEmpty() ||
         Parameters.Num() != Function.Parameters.Num())
     {
@@ -3264,7 +3574,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionUpdatePatch(
     const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
     Operation->SetStringField(TEXT("operation"), TEXT("updateFunction"));
     Operation->SetStringField(TEXT("targetFunctionId"), Function.Id);
-    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(Function));
+    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(*ExpectedFunction));
     Operation->SetObjectField(
         TEXT("replacement"),
         MakeFunctionSpec(Name, ReturnTypeName, bStatic, Parameters));
@@ -3283,6 +3593,19 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionRemovalPatch(
 {
     using namespace UE::UnifiedScript::AuthoringSurface::Private;
     using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAsset* Owner = Document.FindDeclarationOwnerAsset(Function.Id);
+    const FUnifiedScriptAuthoringFunction* ExpectedFunction = Owner != nullptr
+        ? Owner->Functions.FindByPredicate(
+            [&Function](const FUnifiedScriptAuthoringFunction& Candidate)
+            {
+                return Candidate.Id == Function.Id;
+            })
+        : nullptr;
+    if (ExpectedFunction == nullptr)
+    {
+        OutError = TEXT("The selected function has no unambiguous source owner.");
+        return false;
+    }
     if (!IsSemanticId(Function.Id))
     {
         OutError = TEXT("Removing a function requires an exact current function.");
@@ -3291,7 +3614,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionRemovalPatch(
     const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
     Operation->SetStringField(TEXT("operation"), TEXT("removeFunction"));
     Operation->SetStringField(TEXT("targetFunctionId"), Function.Id);
-    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(Function));
+    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(*ExpectedFunction));
     return SerializeRoot(
         MakeDeclarationPatchRoot(Document, Operation),
         OutPatchJson,

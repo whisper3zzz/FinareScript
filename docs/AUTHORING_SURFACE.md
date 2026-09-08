@@ -1,19 +1,21 @@
-# Authoring Surface v0.4
+# Authoring Surface v0.5
 
-`unifiedscript.authoring-surface/v0.4` is the versioned, engine-neutral contract
+`unifiedscript.authoring-surface/v0.5` is the versioned, engine-neutral contract
 between the compiler pipeline and an authoring UI. It prevents a browser, a UE
 editor panel, or an AI client from re-implementing Graph interpretation and
 from accumulating sample-specific adapters.
 
 ## Inputs and output
 
-`AuthoringSurfaceProjector` consumes two artifacts from the same successful
-analysis:
+`AuthoringSurfaceProjector` consumes two artifacts and source ownership from the
+same successful analysis:
 
 - Script Asset / Declaration IR v0.1 for asset paths, states, exposure policy,
   Visual signatures, and declaration identities;
 - Graph v0.13 for expression dataflow, direct region ownership, structured
-  control flow, source spans, and debug-target identities.
+  control flow, source spans, and debug-target identities;
+- declaration-to-owner asset identities from source analysis, passed as data
+  without introducing a dependency on CSharp or Roslyn.
 
 It emits one deterministic document containing all Script Assets and their
 Visual functions. The Surface is a projection; it does not become another
@@ -26,6 +28,7 @@ the canonical text.
 An `AuthoringSurfaceDocument` owns:
 
 - compilation and semantic-configuration preconditions;
+- `declarationOwners` records containing `declarationId` and `ownerAssetId`;
 - `AuthoringAssetSurface` records with state declarations and functions;
 - `AuthoringFunctionSurface` records with signature, root region, regions,
   complete Graph nodes, and compiler-owned edges;
@@ -49,6 +52,33 @@ matching parent. Every edit has a stable capability ID and a real expression
 target ID. `AuthoringSurfaceJson` rejects dangling, duplicate, multiply owned,
 or incompletely typed records before a UI sees them.
 
+## Inherited declarations and compatibility
+
+A state or Visual function keeps its declaration ID when projected into a
+derived asset. Source analysis resolves its owner from the declaring symbol
+and the owner's actual asset ID, including partial types and explicit ClassId
+values. Each supplied owner must exist and contain that declaration. A shared
+declaration in v0.5 requires explicit ownership; array order, projected qualified
+names and type-span containment are not ownership evidence.
+
+Shared state projections may have different effective defaults. Their remaining
+declaration contract, exposure and source span must agree. Shared function
+projections may differ in qualified name; the signature and complete graph
+must agree. Duplicate declaration IDs within an asset and state/function ID
+collisions remain invalid.
+
+Declaration editing uses the source owner's contract, including the owner's
+effective default as the patch precondition. A derived row continues to display
+its own effective default. Semantic navigation resolves shared declarations and
+their graph descendants through owner rows. Runtime invocation still uses the
+explicitly selected receiver asset, which can be a derived class.
+
+Readers also accept v0.4 and preserve that version on serialization. A unique
+legacy declaration can resolve to its only containing asset. Shared legacy
+state without an explicit owner remains displayable but has no editable source
+owner. Legacy duplicate functions remain invalid. This Surface version change
+does not change the Declaration IR or executable chunk formats.
+
 ## Full graph projection and presentation compaction
 
 The projector publishes every Graph node and edge. Entry, executable steps,
@@ -69,7 +99,7 @@ kind/type mismatches, and duplicate data inputs before rendering.
 
 ## Semantic edit capabilities
 
-v0.4 retains two inline editor capabilities:
+The Surface retains two inline editor capabilities:
 
 - `replaceLiteral` includes the target expression ID, current/expected text,
   and source location;
@@ -99,7 +129,7 @@ labels do not hide or manufacture executable changes. Three-way merge is
 conservative at the Visual-function boundary; see
 [SEMANTIC_DIFF_AND_MERGE.md](SEMANTIC_DIFF_AND_MERGE.md).
 
-Surface v0.4 publishes enough structural preconditions for a client to author
+The Surface publishes enough structural preconditions for a client to author
 whole statements without treating screen coordinates as semantics. The UE
 client inserts locals, `if`, `while`, `do/while`, bounded `for`, nearest-region
 `break`/`continue`, and typed `return` statements against a real source block
@@ -210,7 +240,7 @@ Surface JSON. No sample class, function, state, or API call is encoded in
 
 The UE adapter consumes this contract rather than parsing C#, rebuilding Graph
 regions, or owning Blueprint declarations. Its transient `UEdGraph` allocates
-real execution/data pins and links directly from Surface v0.4. Dragging a
+real execution/data pins and links directly from the Surface. Dragging a
 compatible output onto an occupied data input submits a direct rewire or an
 automatic shared-value patch plan to the Workbench. Alt-click submits a typed
 default disconnection. A sequential control-pin drag inside one block submits a

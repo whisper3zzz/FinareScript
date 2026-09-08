@@ -11,6 +11,7 @@ namespace UnifiedScript.CSharp;
 internal sealed record ScriptAssetLoweringResult(
     ScriptAssetDocument? Document,
     IReadOnlyDictionary<SemanticId, SemanticId> DeclarationReferences,
+    IReadOnlyDictionary<SemanticId, SemanticId> DeclarationOwners,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics);
 
 internal sealed class CSharpScriptAssetLowerer
@@ -66,6 +67,7 @@ internal sealed class CSharpScriptAssetLowerer
         var semanticMethods = semantics.Methods.ToDictionary(static method => method.Id);
         var declarations = new List<ScriptAssetDeclaration>();
         var declarationReferences = new Dictionary<SemanticId, SemanticId>();
+        var declarationOwnerNames = new Dictionary<SemanticId, string>();
         var visitedTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
         foreach (SyntaxTree syntaxTree in syntaxTrees)
@@ -110,17 +112,18 @@ internal sealed class CSharpScriptAssetLowerer
                     compilation,
                     declarationIdentities,
                     declarationReferences,
+                    declarationOwnerNames,
                     diagnostics);
-                IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
-                    ? []
-                    : LowerFunctions(
-                        compilation,
-                        typeSymbol,
-                        hirType,
-                        hirTypes,
-                        semanticTypes,
-                        semanticMethods,
-                        diagnostics);
+                IReadOnlyList<ScriptFunctionDeclaration> functions = LowerFunctions(
+                    compilation,
+                    typeSymbol,
+                    qualifiedName,
+                    hirType?.Methods.Count ?? 0,
+                    hirTypes,
+                    semanticTypes,
+                    semanticMethods,
+                    declarationOwnerNames,
+                    diagnostics);
                 IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
                     LowerLifecycleHooks(typeSymbol);
                 SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
@@ -183,21 +186,45 @@ internal sealed class CSharpScriptAssetLowerer
 
         if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
-            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
+            return new ScriptAssetLoweringResult(null, declarationReferences, new Dictionary<SemanticId, SemanticId>(), diagnostics);
+        }
+
+        var assetsByQualifiedName = declarations.ToDictionary(
+            static asset => asset.QualifiedName,
+            StringComparer.Ordinal);
+        var declarationOwners = new Dictionary<SemanticId, SemanticId>();
+        foreach ((SemanticId declarationId, string ownerName) in declarationOwnerNames)
+        {
+            if (!assetsByQualifiedName.TryGetValue(ownerName, out ScriptAssetDeclaration? owner))
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.UnsupportedStateShape,
+                    UnifiedDiagnosticSeverity.Error,
+                    $"Declaration '{declarationId}' is owned by source type '{ownerName}', but that type has no Script Asset projection.",
+                    hir.Span,
+                    declarationId));
+                continue;
+            }
+
+            declarationOwners[declarationId] = owner.Id;
+        }
+        if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
+        {
+            return new ScriptAssetLoweringResult(null, declarationReferences, new Dictionary<SemanticId, SemanticId>(), diagnostics);
         }
 
         try
         {
             ScriptAssetDocument document = ScriptAssetJson.NormalizeAndValidate(ScriptAssetDocument.Create(
                 hir.Id, semantics.ConfigurationId, declarations));
-            return new ScriptAssetLoweringResult(document, declarationReferences, diagnostics);
+            return new ScriptAssetLoweringResult(document, declarationReferences, declarationOwners, diagnostics);
         }
         catch (JsonException exception) when (declarations.Any(a => a.Functions.Any(f => f.Rpc is not null || f.RepNotifyProperty is not null) ||
             a.States.Any(s => s.Exposure.ReplicationCondition != global::UnifiedScript.ReplicationCondition.None)))
         {
             diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
                 UnifiedDiagnosticSeverity.Error, exception.Message, hir.Span));
-            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
+            return new ScriptAssetLoweringResult(null, declarationReferences, new Dictionary<SemanticId, SemanticId>(), diagnostics);
         }
         catch (JsonException exception)
         {
@@ -206,7 +233,7 @@ internal sealed class CSharpScriptAssetLowerer
                 UnifiedDiagnosticSeverity.Error,
                 exception.Message,
                 hir.Span));
-            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
+            return new ScriptAssetLoweringResult(null, declarationReferences, new Dictionary<SemanticId, SemanticId>(), diagnostics);
         }
     }
 
@@ -228,11 +255,34 @@ internal sealed class CSharpScriptAssetLowerer
         return false;
     }
 
+    private static void RecordDeclarationOwner(
+        IDictionary<SemanticId, string> ownerNames,
+        SemanticId declarationId,
+        string ownerName,
+        SourceSpan span,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        if (ownerNames.TryGetValue(declarationId, out string? existingOwner) &&
+            !string.Equals(existingOwner, ownerName, StringComparison.Ordinal))
+        {
+            diagnostics.Add(new UnifiedDiagnostic(
+                DeclarationDiagnosticCodes.UnsupportedStateShape,
+                UnifiedDiagnosticSeverity.Error,
+                $"Declaration '{declarationId}' has conflicting source owners '{existingOwner}' and '{ownerName}'.",
+                span,
+                declarationId));
+            return;
+        }
+
+        ownerNames[declarationId] = ownerName;
+    }
+
     private static IReadOnlyList<ScriptStateDeclaration> LowerStates(
         INamedTypeSymbol type,
         CSharpCompilation compilation,
         IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities,
         IDictionary<SemanticId, SemanticId> declarationReferences,
+        IDictionary<SemanticId, string> declarationOwnerNames,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
         var states = new List<ScriptStateDeclaration>();
@@ -376,6 +426,12 @@ internal sealed class CSharpScriptAssetLowerer
                 continue;
             }
             declarationReferences[propertyReference] = declarationId;
+            RecordDeclarationOwner(
+                declarationOwnerNames,
+                declarationId,
+                containingName,
+                RoslynSourceSpan.FromNode(stateSyntax, stateSyntax.SyntaxTree.FilePath),
+                diagnostics);
             states.Add(new ScriptStateDeclaration(
                 declarationId,
                 property.Name,
@@ -394,13 +450,16 @@ internal sealed class CSharpScriptAssetLowerer
     private static IReadOnlyList<ScriptFunctionDeclaration> LowerFunctions(
         CSharpCompilation compilation,
         INamedTypeSymbol typeSymbol,
-        HirTypeDeclaration type,
+        string projectionQualifiedName,
+        int initialCapacity,
         IReadOnlyDictionary<string, HirTypeDeclaration> hirTypes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IDictionary<SemanticId, string> declarationOwnerNames,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
-        var declarations = new List<HirMethodDeclaration>(type.Methods.Count);
+        var declarations = new List<HirMethodDeclaration>(initialCapacity);
+        var declarationOwnerNamesByMethod = new Dictionary<SemanticId, string>();
         var shadowedNames = new HashSet<string>(StringComparer.Ordinal);
         INamedTypeSymbol? currentSymbol = typeSymbol;
         bool inherited = false;
@@ -415,6 +474,7 @@ internal sealed class CSharpScriptAssetLowerer
                         (method.IsPublic && !method.IsStatic && !shadowedNames.Contains(method.Name)))
                     {
                         declarations.Add(method);
+                        declarationOwnerNamesByMethod[method.Id] = currentName;
                     }
                 }
             }
@@ -445,7 +505,7 @@ internal sealed class CSharpScriptAssetLowerer
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Blueprint-callable function '{type.QualifiedName}.{method.Name}' cannot use " +
+                    $"Blueprint-callable function '{projectionQualifiedName}.{method.Name}' cannot use " +
                     "a ref return or C# in parameter. Use a value return and input, out, or ref parameters.",
                     method.Span,
                     method.Id));
@@ -483,7 +543,7 @@ internal sealed class CSharpScriptAssetLowerer
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Blueprint-callable function '{type.QualifiedName}.{method.Name}' has an unsupported " +
+                    $"Blueprint-callable function '{projectionQualifiedName}.{method.Name}' has an unsupported " +
                     $"container value shape: {unsupportedShapeReason}",
                     method.Span,
                     method.Id));
@@ -505,7 +565,7 @@ internal sealed class CSharpScriptAssetLowerer
                         _ => ScriptParameterDirection.Input,
                     }))
                 .ToArray();
-            string signature = $"{type.QualifiedName}.{method.Name}({string.Join(',',
+            string signature = $"{projectionQualifiedName}.{method.Name}({string.Join(',',
                 parameterTypeNames.Select((parameterType, index) =>
                     method.Parameters[index].Direction switch
                     {
@@ -559,7 +619,7 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics.Add(new UnifiedDiagnostic(
                         DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                         UnifiedDiagnosticSeverity.Error,
-                        $"Blueprint override '{type.QualifiedName}.{method.Name}' requires a public instance method, an exact declaring class path, a valid Unreal function identifier, and only SuperMode=Explicit.",
+                        $"Blueprint override '{projectionQualifiedName}.{method.Name}' requires a public instance method, an exact declaring class path, a valid Unreal function identifier, and only SuperMode=Explicit.",
                         method.Span,
                         method.Id));
                 }
@@ -569,7 +629,7 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics.Add(new UnifiedDiagnostic(
                         DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                         UnifiedDiagnosticSeverity.Error,
-                        $"Blueprint override '{type.QualifiedName}.{method.Name}' cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
+                        $"Blueprint override '{projectionQualifiedName}.{method.Name}' cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
                         method.Span,
                         method.Id));
                 }
@@ -581,7 +641,7 @@ internal sealed class CSharpScriptAssetLowerer
                         diagnostics.Add(new UnifiedDiagnostic(
                             DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                             UnifiedDiagnosticSeverity.Error,
-                            $"Script asset '{type.QualifiedName}' declares duplicate Blueprint override route '{declaringClassPath}:{functionName}' (case-insensitive) on method '{type.QualifiedName}.{method.Name}'.",
+                            $"Script asset '{projectionQualifiedName}' declares duplicate Blueprint override route '{declaringClassPath}:{functionName}' (case-insensitive) on method '{projectionQualifiedName}.{method.Name}'.",
                             method.Span,
                             method.Id));
                     }
@@ -640,6 +700,14 @@ internal sealed class CSharpScriptAssetLowerer
                 interfaceFunctions,
                 rpc,
                 repNotifyProperty));
+            RecordDeclarationOwner(
+                declarationOwnerNames,
+                method.Id,
+                methodSymbol is null
+                    ? declarationOwnerNamesByMethod[method.Id]
+                    : GetMetadataName(methodSymbol.ContainingType),
+                method.Span,
+                diagnostics);
         }
 
         return functions;

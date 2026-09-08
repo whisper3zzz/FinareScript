@@ -8,7 +8,8 @@ public sealed class AuthoringSurfaceProjector
 {
     public AuthoringSurfaceDocument Project(
         ScriptAssetDocument scriptAssets,
-        GraphDocument graph)
+        GraphDocument graph,
+        IReadOnlyDictionary<SemanticId, SemanticId>? declarationOwners = null)
     {
         ArgumentNullException.ThrowIfNull(scriptAssets);
         ArgumentNullException.ThrowIfNull(graph);
@@ -58,7 +59,14 @@ public sealed class AuthoringSurfaceProjector
             AuthoringSurfaceDocument.CurrentSchemaVersion,
             scriptAssets.SourceCompilationId,
             scriptAssets.SemanticConfigurationId,
-            assets));
+            assets)
+        {
+            DeclarationOwners = declarationOwners is null
+                ? []
+                : declarationOwners
+                    .Select(static pair => new AuthoringDeclarationOwner(pair.Key, pair.Value))
+                    .ToArray(),
+        });
     }
 
     private static AuthoringFunctionSurface ProjectFunction(

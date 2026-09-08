@@ -297,7 +297,7 @@ The repository currently implements:
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
   strict deterministic JSON;
-- engine-neutral Authoring Surface v0.4 projected from Declaration IR and Graph,
+- engine-neutral Authoring Surface v0.5 projected from Declaration IR and Graph,
   with multi-asset/function navigation, exact structured-region ownership,
   compiler-owned typed pins/control-data edges, source/debug identities, and
   typed edit capabilities;
@@ -497,7 +497,8 @@ M5.5 is therefore complete before Unreal integration begins.
 
 M6.0 removes the last sample-specific browser adapter before that integration.
 The new `UnifiedScript.Authoring` project projects every Script Asset and Visual
-function into strict `unifiedscript.authoring-surface/v0.4` JSON. The Workbench
+function into strict `unifiedscript.authoring-surface/v0.5` JSON with source-owner
+identities for inherited declarations. Readers retain v0.4 compatibility. The Workbench
 now renders asset/function navigation, `if` and loop regions, compact actions,
 state references, semantic edit controls, source selection, AI outlines, and
 CoreCLR breakpoints from that Surface. `analyze --out` emits the Surface beside
@@ -866,7 +867,7 @@ Current Unreal adapter path:
   -> UE Script Asset resolution + transactional entry-type reload
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
   -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
-  -> Authoring Surface v0.4 -> native Slate GraphEditor pins/wires + inspector
+  -> Authoring Surface v0.5 -> native Slate GraphEditor pins/wires + inspector
   -> typed edit capability -> semantic-patch v0.28 Workbench transaction
   -> typed callable extraction -> inferred inputs + zero/one live result
   -> identity-safe same-method range copy/paste -> fresh copied subtree IDs

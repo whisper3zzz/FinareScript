@@ -36,12 +36,12 @@ and receiver without any sample-specific frontend adapter.
 2. Inspect compact action cards. Literals, identifiers, binary expressions,
    member access, and pure calls stay inline instead of becoming tiny nodes.
 3. Inspect `if` and loop regions. Their lanes come directly from Graph region
-   ownership plus graph pins/edges through Authoring Surface v0.4.
+   ownership plus graph pins/edges through Authoring Surface v0.5.
 4. Select a card with an `EDIT` badge. The inspector renders every literal or
    operator capability declared by the Surface and submits Semantic Patch
    v0.19 with complete typed preconditions.
 5. Select a state declaration, change its name/type/default/exposure, and
-   commit Declaration Patch v0.1. State is never declared in Blueprint.
+   commit Declaration Patch v0.2. State is never declared in Blueprint.
 6. Add a state with `+`; text, Surface, AI, and a future UE reflection adapter
    receive one declaration and one semantic identity.
 7. Switch among Behavior, Dual, and Source.
@@ -58,7 +58,7 @@ The live page loads `unifiedscript.authoring-workspace/v0.5`, validates the
 published Visual C# v0.3/opaque-code boundary, and shows source-only method
 counts and call-node ownership. One committed
 workspace revision contains canonical source, Declaration IR v0.1, Graph
-v0.13, Authoring Surface v0.4, transaction history, and a CoreCLR generation. After a declaration or
+v0.13, Authoring Surface v0.5, transaction history, and a CoreCLR generation. After a declaration or
 behavior write, the server prepares and validates a full candidate, reloads the
 same CoreCLR transport, transactionally commits C# plus identity sidecar, and
 returns a completely regenerated workspace.
@@ -78,6 +78,26 @@ translates an advertised capability to its existing patch operation.
 The checked-in `data/damage-policy.*` files provide a read-only fallback. They
 include source, Declaration IR, Graph, and Surface generated from the same
 sample and compilation identities.
+
+The checked-in Surface remains a supported v0.4 fixture. Live v0.5 surfaces
+carry explicit source-owner asset IDs for inherited states and functions.
+Derived state rows show their effective defaults; declaration edits navigate
+to the source owner. Running an inherited function uses the selected asset's
+receiver and effective state. A shared legacy state with no provable source
+owner is displayable but cannot be edited by guessing from asset order.
+
+The prototype edits `int`, `float`, `bool` and `string` state. Other supported
+runtime state types remain visible and read-only here. Debug requests send only
+edited supported state overrides; unchanged values come from the selected
+receiver's constructor, preserving collections, nulls and wide integers without
+rewriting them through browser JSON numbers. Owner navigation preserves pending
+drafts by requiring the current patch to be committed or discarded first.
+
+Run the browser contract and request-construction regressions with:
+
+```bash
+node --test prototype/visual-editor/app.behavior.test.mjs
+```
 
 ## Interface direction
 
