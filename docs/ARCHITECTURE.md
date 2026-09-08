@@ -742,6 +742,13 @@ rehashed after restoration. Both validation-only and apply reject incompatible
 type changes when a descendant owns an override. This does not automatically
 save every dependent Blueprint or cover templates other than derived CDOs.
 
+Before adding a state field, synchronization checks loaded descendants' own
+user Blueprint variables for name collisions. Validation-only and apply reject
+the conflict before changing the original hierarchy, preserving the user's
+variable name, GUID and value instead of allowing the compiler to rename it.
+New fields use Unreal's normal default propagation; the instance snapshot path
+remains responsible for existing collection overrides and their followers.
+
 Reviewed public non-event `[Visual]` instance methods also project onto that
 exact Blueprint as stable `USF_<semantic-id>` UFunctions. Their managed name is
 display/binding metadata, so source rename preserves graph identity while stale

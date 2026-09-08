@@ -300,6 +300,68 @@ int32 FindVariableByStateId(const UBlueprint& Blueprint, const FString& Semantic
         });
 }
 
+bool ValidateAddedStateNameConflicts(
+    const UBlueprint& Blueprint,
+    TConstArrayView<FStateDeclaration> Declarations,
+    FString& OutError)
+{
+    OutError.Reset();
+    if (Blueprint.GeneratedClass == nullptr)
+    {
+        return true;
+    }
+
+    TArray<const FStateDeclaration*> AddedDeclarations;
+    for (const FStateDeclaration& Declaration : Declarations)
+    {
+        if (FindVariableByGuid(Blueprint, Declaration.Id) == INDEX_NONE &&
+            FindVariableByStateId(Blueprint, Declaration.SemanticId) == INDEX_NONE)
+        {
+            AddedDeclarations.Add(&Declaration);
+        }
+    }
+    if (AddedDeclarations.IsEmpty())
+    {
+        return true;
+    }
+
+    for (TObjectIterator<UBlueprint> It; It; ++It)
+    {
+        UBlueprint* Descendant = *It;
+        UClass* DescendantClass = Descendant != nullptr
+            ? Descendant->GeneratedClass
+            : nullptr;
+        if (Descendant == nullptr || DescendantClass == nullptr ||
+            DescendantClass == Blueprint.GeneratedClass ||
+            !DescendantClass->IsChildOf(Blueprint.GeneratedClass) ||
+            DescendantClass->HasAnyClassFlags(CLASS_NewerVersionExists | CLASS_Deprecated) ||
+            DescendantClass->ClassGeneratedBy != Descendant)
+        {
+            continue;
+        }
+        for (const FBPVariableDescription& Variable : Descendant->NewVariables)
+        {
+            if (IsManagedState(Variable))
+            {
+                continue;
+            }
+            for (const FStateDeclaration* Declaration : AddedDeclarations)
+            {
+                if (Variable.VarName == Declaration->Name)
+                {
+                    OutError = FString::Printf(
+                        TEXT("New state '%s' conflicts with user Blueprint variable '%s' on loaded descendant '%s'."),
+                        *Declaration->Name.ToString(),
+                        *Variable.VarName.ToString(),
+                        *Descendant->GetPathName());
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool ResolvePinType(
     const FString& TypeKind,
     const FString& MetadataName,
@@ -5537,6 +5599,11 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             DelegateDeclarations,
             InterfaceDeclarations,
             OutError))
+    {
+        return false;
+    }
+
+    if (!ValidateAddedStateNameConflicts(Blueprint, StateDeclarations, OutError))
     {
         return false;
     }

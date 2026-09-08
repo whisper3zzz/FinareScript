@@ -2127,6 +2127,799 @@ bool FUnifiedScriptInheritedCollectionDefaultsTest::RunTest(const FString& Param
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptInheritedAddedStateDefaultsTest,
+    "UnifiedScript.Unreal.ScriptClass.InheritedAddedStateDefaults",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptInheritedAddedStateDefaultsTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::Tests;
+
+    const FString ArrayType = TEXT(R"JSON({
+      "kind":"array", "unrealTypePath":"", "unrealNativeName":"TArray",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString SetType = TEXT(R"JSON({
+      "kind":"set", "unrealTypePath":"", "unrealNativeName":"TSet",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString MapType = TEXT(R"JSON({
+      "kind":"map", "unrealTypePath":"", "unrealNativeName":"TMap",
+      "fields":[], "typeArguments":[
+        {"typeMetadataName":"System.Int32"},
+        {"typeMetadataName":"System.Int32"}
+      ]
+    })JSON");
+    constexpr const TCHAR* AssetId = TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    constexpr const TCHAR* SentinelId = TEXT("11111111111111111111111111111111");
+    constexpr const TCHAR* AddedIntId = TEXT("22222222222222222222222222222222");
+    constexpr const TCHAR* AddedArrayId = TEXT("33333333333333333333333333333333");
+    constexpr const TCHAR* AddedSetId = TEXT("44444444444444444444444444444444");
+    constexpr const TCHAR* AddedMapId = TEXT("55555555555555555555555555555555");
+    constexpr const TCHAR* ConflictId = TEXT("66666666666666666666666666666666");
+    const auto MakeDocument = [&](bool bIncludeAdded,
+                                  bool bIncludeConflict,
+                                  const TCHAR* AddedArrayDefault,
+                                  const TCHAR* AddedSetDefault,
+                                  const TCHAR* AddedMapDefault)
+    {
+        TArray<FString> States;
+        States.Add(State(
+            SentinelId,
+            TEXT("Sentinel"),
+            TEXT("int"),
+            TEXT("System.Int32"),
+            TEXT("integer"),
+            TEXT("17")));
+        if (bIncludeAdded)
+        {
+            States.Add(State(
+                AddedIntId,
+                TEXT("AddedInt"),
+                TEXT("int"),
+                TEXT("System.Int32"),
+                TEXT("integer"),
+                TEXT("42")));
+            States.Add(State(
+                AddedArrayId,
+                TEXT("AddedArray"),
+                TEXT("array"),
+                TEXT("System.Collections.Generic.IReadOnlyList<System.Int32>"),
+                TEXT("array"),
+                AddedArrayDefault,
+                true,
+                false,
+                false,
+                TEXT("Added"),
+                ArrayType));
+            States.Add(State(
+                AddedSetId,
+                TEXT("AddedSet"),
+                TEXT("set"),
+                TEXT("System.Collections.Generic.IReadOnlySet<System.Int32>"),
+                TEXT("set"),
+                AddedSetDefault,
+                true,
+                false,
+                false,
+                TEXT("Added"),
+                SetType));
+            States.Add(State(
+                AddedMapId,
+                TEXT("AddedMap"),
+                TEXT("map"),
+                TEXT("System.Collections.Generic.IReadOnlyDictionary<System.Int32, System.Int32>"),
+                TEXT("map"),
+                AddedMapDefault,
+                true,
+                false,
+                false,
+                TEXT("Added"),
+                MapType));
+        }
+        if (bIncludeConflict)
+        {
+            States.Add(State(
+                ConflictId,
+                TEXT("UserConflict"),
+                TEXT("int"),
+                TEXT("System.Int32"),
+                TEXT("integer"),
+                TEXT("99")));
+        }
+        return Document(
+            FString::Join(States, TEXT(",")),
+            FString(),
+            AssetId,
+            TEXT("Tests.InheritedAddedStateActor"),
+            TEXT("Tests/InheritedAddedStateActor"));
+    };
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString FixtureDirectory = TEXT("/Game/UnifiedScriptAddedState_") + Suffix;
+    const FString BaseName = TEXT("AddedStateBase");
+    const FString ChildName = TEXT("AddedStateChild");
+    const FString SiblingName = TEXT("AddedStateSibling");
+    const FString GrandchildName = TEXT("AddedStateGrandchild");
+    const TArray<FString> PackageNames{
+        FixtureDirectory + TEXT("/") + BaseName,
+        FixtureDirectory + TEXT("/") + ChildName,
+        FixtureDirectory + TEXT("/") + SiblingName,
+        FixtureDirectory + TEXT("/") + GrandchildName};
+    TArray<FString> PackageFilenames;
+    for (const FString& PackageName : PackageNames)
+    {
+        FString Filename = FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension());
+        Filename = FPaths::ConvertRelativePathToFull(Filename);
+        FPaths::NormalizeFilename(Filename);
+        PackageFilenames.Add(Filename);
+    }
+
+    UPackage* BasePackage = nullptr;
+    UPackage* ChildPackage = nullptr;
+    UPackage* SiblingPackage = nullptr;
+    UPackage* GrandchildPackage = nullptr;
+    UUnifiedScriptBlueprint* BaseBlueprint = nullptr;
+    UUnifiedScriptAsset* ScriptAsset = nullptr;
+    UBlueprint* ChildBlueprint = nullptr;
+    UBlueprint* SiblingBlueprint = nullptr;
+    UBlueprint* GrandchildBlueprint = nullptr;
+    UWorld* FirstWorld = nullptr;
+    UWorld* SecondWorld = nullptr;
+    AActor* FirstChild = nullptr;
+    AActor* SecondChild = nullptr;
+    AActor* FirstGrandchild = nullptr;
+    AActor* SecondGrandchild = nullptr;
+    AActor* FirstSibling = nullptr;
+    const auto DestroyFixtureWorld = [](UWorld*& World)
+    {
+        if (World == nullptr)
+        {
+            return;
+        }
+        if (GEngine != nullptr)
+        {
+            GEngine->DestroyWorldContext(World);
+        }
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        World = nullptr;
+    };
+    ON_SCOPE_EXIT
+    {
+        FirstChild = nullptr;
+        SecondChild = nullptr;
+        FirstGrandchild = nullptr;
+        SecondGrandchild = nullptr;
+        FirstSibling = nullptr;
+        DestroyFixtureWorld(FirstWorld);
+        DestroyFixtureWorld(SecondWorld);
+        TArray<UPackage*> PackagesToUnload;
+        for (const FString& PackageName : PackageNames)
+        {
+            if (UPackage* Package = FindPackage(nullptr, *PackageName))
+            {
+                Package->SetDirtyFlag(false);
+                PackagesToUnload.Add(Package);
+            }
+        }
+        if (!PackagesToUnload.IsEmpty())
+        {
+            UPackageTools::UnloadPackages(PackagesToUnload);
+        }
+        for (const FString& Filename : PackageFilenames)
+        {
+            IFileManager::Get().Delete(*Filename, false, true, true);
+        }
+        IFileManager::Get().DeleteDirectory(*FPaths::ConvertRelativePathToFull(
+            FPackageName::LongPackageNameToFilename(
+                FixtureDirectory,
+                TEXT(""))), false, false);
+    };
+
+    BasePackage = CreatePackage(*PackageNames[0]);
+    BaseBlueprint = Cast<UUnifiedScriptBlueprint>(FKismetEditorUtilities::CreateBlueprint(
+        AActor::StaticClass(),
+        BasePackage,
+        FName(*BaseName),
+        BPTYPE_Normal,
+        UUnifiedScriptBlueprint::StaticClass(),
+        UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedAddedStateDefaults"))));
+    if (!TestNotNull(TEXT("Creates added-state base Blueprint"), BaseBlueprint) ||
+        !TestNotNull(TEXT("Added-state base has generated class"),
+            BaseBlueprint != nullptr ? BaseBlueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+    ScriptAsset = NewObject<UUnifiedScriptAsset>(BasePackage);
+    ScriptAsset->SetFlags(RF_Public | RF_Standalone);
+    ScriptAsset->ScriptClassId = Guid(AssetId);
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass);
+    ScriptAsset->ScriptTypeName = TEXT("Tests.InheritedAddedStateActor");
+    ScriptAsset->DeclarationAssetPath = TEXT("Tests/InheritedAddedStateActor");
+    BaseBlueprint->SetFlags(RF_Public | RF_Standalone);
+    BaseBlueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult Result;
+    FString Error;
+    TestTrue(TEXT("Initial sentinel state materializes"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *BaseBlueprint,
+            MakeDocument(false, false, TEXT("[4,5]"), TEXT("[6,7]"), TEXT("[{\"key\":8,\"value\":9}]")),
+            false,
+            Result,
+            Error));
+    if (BaseBlueprint->GeneratedClass == nullptr)
+    {
+        return false;
+    }
+
+    ChildPackage = CreatePackage(*PackageNames[1]);
+    ChildBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        BaseBlueprint->GeneratedClass,
+        ChildPackage,
+        FName(*ChildName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedAddedStateChild")));
+    SiblingPackage = CreatePackage(*PackageNames[2]);
+    SiblingBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        BaseBlueprint->GeneratedClass,
+        SiblingPackage,
+        FName(*SiblingName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedAddedStateSibling")));
+    if (!TestNotNull(TEXT("Creates added-state child"), ChildBlueprint) ||
+        !TestNotNull(TEXT("Creates added-state sibling"), SiblingBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    FKismetEditorUtilities::CompileBlueprint(SiblingBlueprint);
+
+    GrandchildPackage = CreatePackage(*PackageNames[3]);
+    GrandchildBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        ChildBlueprint->GeneratedClass,
+        GrandchildPackage,
+        FName(*GrandchildName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedAddedStateGrandchild")));
+    if (!TestNotNull(TEXT("Creates added-state grandchild"), GrandchildBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(GrandchildBlueprint);
+
+    const FIntProperty* ChildSentinel = FindFProperty<FIntProperty>(
+        ChildBlueprint->GeneratedClass,
+        TEXT("Sentinel"));
+    TestNotNull(TEXT("Child has sentinel before adding states"), ChildSentinel);
+    if (ChildSentinel != nullptr)
+    {
+        ChildSentinel->SetPropertyValue_InContainer(
+            ChildBlueprint->GeneratedClass->GetDefaultObject(),
+            77);
+    }
+
+    auto MakeWorld = []() -> UWorld*
+    {
+        UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+        if (World == nullptr || GEngine == nullptr)
+        {
+            return nullptr;
+        }
+        World->AddToRoot();
+        FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+        Context.SetCurrentWorld(World);
+        World->InitializeActorsForPlay(FURL());
+        return World;
+    };
+    FirstWorld = MakeWorld();
+    SecondWorld = MakeWorld();
+    if (!TestNotNull(TEXT("Creates first added-state world"), FirstWorld) ||
+        !TestNotNull(TEXT("Creates second added-state world"), SecondWorld))
+    {
+        return false;
+    }
+    FirstChild = FirstWorld->SpawnActor<AActor>(ChildBlueprint->GeneratedClass);
+    SecondChild = SecondWorld->SpawnActor<AActor>(ChildBlueprint->GeneratedClass);
+    FirstGrandchild = FirstWorld->SpawnActor<AActor>(GrandchildBlueprint->GeneratedClass);
+    SecondGrandchild = SecondWorld->SpawnActor<AActor>(GrandchildBlueprint->GeneratedClass);
+    FirstSibling = FirstWorld->SpawnActor<AActor>(SiblingBlueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Creates first added-state child instance"), FirstChild) ||
+        !TestNotNull(TEXT("Creates second added-state child instance"), SecondChild) ||
+        !TestNotNull(TEXT("Creates first added-state grandchild instance"), FirstGrandchild) ||
+        !TestNotNull(TEXT("Creates second added-state grandchild instance"), SecondGrandchild) ||
+        !TestNotNull(TEXT("Creates added-state sibling instance"), FirstSibling))
+    {
+        return false;
+    }
+    const FName FirstChildName = FirstChild->GetFName();
+    const FName SecondChildName = SecondChild->GetFName();
+    const FName FirstGrandchildName = FirstGrandchild->GetFName();
+    const FName SecondGrandchildName = SecondGrandchild->GetFName();
+    const FName FirstSiblingName = FirstSibling->GetFName();
+
+    const FString AddedDocument = MakeDocument(
+        true,
+        false,
+        TEXT("[4,5]"),
+        TEXT("[6,7]"),
+        TEXT("[{\"key\":8,\"value\":9}]"));
+    Error.Reset();
+    TestTrue(*FString::Printf(TEXT("Adding states to an existing Blueprint hierarchy succeeds: %s"), *Error),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *BaseBlueprint,
+            AddedDocument,
+            false,
+            Result,
+            Error));
+
+    const auto FindActorByName = [](UWorld* World, FName Name) -> AActor*
+    {
+        if (World == nullptr)
+        {
+            return nullptr;
+        }
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetFName() == Name)
+            {
+                return *It;
+            }
+        }
+        return nullptr;
+    };
+    FirstChild = FindActorByName(FirstWorld, FirstChildName);
+    SecondChild = FindActorByName(SecondWorld, SecondChildName);
+    FirstGrandchild = FindActorByName(FirstWorld, FirstGrandchildName);
+    SecondGrandchild = FindActorByName(SecondWorld, SecondGrandchildName);
+    FirstSibling = FindActorByName(FirstWorld, FirstSiblingName);
+    if (!TestNotNull(TEXT("First child is reacquired after adding states"), FirstChild) ||
+        !TestNotNull(TEXT("Second child is reacquired after adding states"), SecondChild) ||
+        !TestNotNull(TEXT("First grandchild is reacquired after adding states"), FirstGrandchild) ||
+        !TestNotNull(TEXT("Second grandchild is reacquired after adding states"), SecondGrandchild) ||
+        !TestNotNull(TEXT("Sibling is reacquired after adding states"), FirstSibling))
+    {
+        return false;
+    }
+
+    auto ReadInt = [](UObject* Object, const TCHAR* Name) -> int32
+    {
+        const FIntProperty* Property = Object != nullptr
+            ? FindFProperty<FIntProperty>(Object->GetClass(), Name)
+            : nullptr;
+        return Property != nullptr
+            ? Property->GetPropertyValue_InContainer(Object)
+            : MIN_int32;
+    };
+    auto ReadArray = [](UObject* Object, const TCHAR* Name)
+    {
+        TArray<int32> Values;
+        const FArrayProperty* Property = Object != nullptr
+            ? FindFProperty<FArrayProperty>(Object->GetClass(), Name)
+            : nullptr;
+        const FIntProperty* Inner = Property != nullptr
+            ? CastField<FIntProperty>(Property->Inner)
+            : nullptr;
+        if (Property == nullptr || Inner == nullptr)
+        {
+            return Values;
+        }
+        FScriptArrayHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.Num(); ++Index)
+        {
+            Values.Add(Inner->GetPropertyValue(Helper.GetRawPtr(Index)));
+        }
+        return Values;
+    };
+    auto ReadSet = [](UObject* Object, const TCHAR* Name)
+    {
+        TSet<int32> Values;
+        const FSetProperty* Property = Object != nullptr
+            ? FindFProperty<FSetProperty>(Object->GetClass(), Name)
+            : nullptr;
+        const FIntProperty* Element = Property != nullptr
+            ? CastField<FIntProperty>(Property->ElementProp)
+            : nullptr;
+        if (Property == nullptr || Element == nullptr)
+        {
+            return Values;
+        }
+        FScriptSetHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+        {
+            if (Helper.IsValidIndex(Index))
+            {
+                Values.Add(Element->GetPropertyValue(Helper.GetElementPtr(Index)));
+            }
+        }
+        return Values;
+    };
+    auto ReadMap = [](UObject* Object, const TCHAR* Name)
+    {
+        TMap<int32, int32> Values;
+        const FMapProperty* Property = Object != nullptr
+            ? FindFProperty<FMapProperty>(Object->GetClass(), Name)
+            : nullptr;
+        const FIntProperty* Key = Property != nullptr
+            ? CastField<FIntProperty>(Property->KeyProp)
+            : nullptr;
+        const FIntProperty* Value = Property != nullptr
+            ? CastField<FIntProperty>(Property->ValueProp)
+            : nullptr;
+        if (Property == nullptr || Key == nullptr || Value == nullptr)
+        {
+            return Values;
+        }
+        FScriptMapHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+        {
+            if (Helper.IsValidIndex(Index))
+            {
+                Values.Add(
+                    Key->GetPropertyValue(Helper.GetKeyPtr(Index)),
+                    Value->GetPropertyValue(Helper.GetValuePtr(Index)));
+            }
+        }
+        return Values;
+    };
+    const auto WriteArray = [](UObject* Object, const TCHAR* Name, const TCHAR* Text)
+    {
+        const FArrayProperty* Property = Object != nullptr
+            ? FindFProperty<FArrayProperty>(Object->GetClass(), Name)
+            : nullptr;
+        return Object != nullptr && Property != nullptr &&
+            Property->ImportText_Direct(
+                Text,
+                Property->ContainerPtrToValuePtr<void>(Object),
+                Object,
+                PPF_None,
+                nullptr) != nullptr;
+    };
+    const auto WriteSet = [](UObject* Object, const TCHAR* Name, const TCHAR* Text)
+    {
+        const FSetProperty* Property = Object != nullptr
+            ? FindFProperty<FSetProperty>(Object->GetClass(), Name)
+            : nullptr;
+        return Object != nullptr && Property != nullptr &&
+            Property->ImportText_Direct(
+                Text,
+                Property->ContainerPtrToValuePtr<void>(Object),
+                Object,
+                PPF_None,
+                nullptr) != nullptr;
+    };
+    const auto WriteMap = [](UObject* Object, const TCHAR* Name, int32 Key, int32 Value)
+    {
+        const FMapProperty* Property = Object != nullptr
+            ? FindFProperty<FMapProperty>(Object->GetClass(), Name)
+            : nullptr;
+        if (Object == nullptr || Property == nullptr)
+        {
+            return false;
+        }
+        FScriptMapHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        Helper.EmptyValues();
+        const int32 PairIndex = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        CastField<FIntProperty>(Property->KeyProp)->SetPropertyValue(Helper.GetKeyPtr(PairIndex), Key);
+        CastField<FIntProperty>(Property->ValueProp)->SetPropertyValue(Helper.GetValuePtr(PairIndex), Value);
+        Helper.Rehash();
+        return true;
+    };
+    const auto CheckAddedDefaults = [&](const TCHAR* Label, UObject* Object)
+    {
+        const TArray<int32> Array = ReadArray(Object, TEXT("AddedArray"));
+        const TSet<int32> Set = ReadSet(Object, TEXT("AddedSet"));
+        const TMap<int32, int32> Map = ReadMap(Object, TEXT("AddedMap"));
+        TestEqual(*FString::Printf(TEXT("%s receives added int default"), Label), ReadInt(Object, TEXT("AddedInt")), 42);
+        TestTrue(*FString::Printf(TEXT("%s receives added array default"), Label), Array.Num() == 2 && Array[0] == 4 && Array[1] == 5);
+        TestTrue(*FString::Printf(TEXT("%s receives added set default"), Label), Set.Num() == 2 && Set.Contains(6) && Set.Contains(7));
+        TestTrue(*FString::Printf(TEXT("%s receives added map default"), Label), Map.Num() == 1 && Map.FindRef(8) == 9);
+        const int32 ExpectedSentinel = Object != nullptr &&
+            ChildBlueprint->GeneratedClass != nullptr &&
+            Object->GetClass() == ChildBlueprint->GeneratedClass
+            ? 77
+            : 17;
+        TestEqual(*FString::Printf(TEXT("%s retains sentinel override/default"), Label), ReadInt(Object, TEXT("Sentinel")), ExpectedSentinel);
+    };
+    CheckAddedDefaults(TEXT("Base CDO"), BaseBlueprint->GeneratedClass->GetDefaultObject());
+    CheckAddedDefaults(TEXT("Child CDO"), ChildBlueprint->GeneratedClass->GetDefaultObject());
+    CheckAddedDefaults(TEXT("Sibling CDO"), SiblingBlueprint->GeneratedClass->GetDefaultObject());
+    CheckAddedDefaults(TEXT("Grandchild CDO"), GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    CheckAddedDefaults(TEXT("First child instance"), FirstChild);
+    CheckAddedDefaults(TEXT("Second child instance"), SecondChild);
+    CheckAddedDefaults(TEXT("First grandchild instance"), FirstGrandchild);
+    CheckAddedDefaults(TEXT("Second grandchild instance"), SecondGrandchild);
+    CheckAddedDefaults(TEXT("Sibling instance"), FirstSibling);
+
+    // Establish whole-value overrides on the existing child CDO, then change
+    // the base declaration defaults.  The grandchild remains an archetype
+    // follower of the child and the sibling remains a follower of the base.
+    TestTrue(TEXT("Child gets an added array whole-value override"),
+        WriteArray(ChildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedArray"), TEXT("(20,21)")));
+    TestTrue(TEXT("Child gets an added set whole-value override"),
+        WriteSet(ChildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedSet"), TEXT("(30,40)")));
+    TestTrue(TEXT("Child gets an added map whole-value override"),
+        WriteMap(ChildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedMap"), 5, 6));
+    // The objects were spawned before the child CDO override was authored.
+    // Bring them to their current archetype values so the next sync tests
+    // follower preservation rather than treating stale values as overrides.
+    for (UObject* Follower : {
+             static_cast<UObject*>(GrandchildBlueprint->GeneratedClass->GetDefaultObject()),
+             static_cast<UObject*>(FirstChild),
+             static_cast<UObject*>(SecondChild),
+             static_cast<UObject*>(FirstGrandchild),
+             static_cast<UObject*>(SecondGrandchild)})
+    {
+        TestTrue(TEXT("Follower copies child added array override"),
+            WriteArray(Follower, TEXT("AddedArray"), TEXT("(20,21)")));
+        TestTrue(TEXT("Follower copies child added set override"),
+            WriteSet(Follower, TEXT("AddedSet"), TEXT("(30,40)")));
+        TestTrue(TEXT("Follower copies child added map override"),
+            WriteMap(Follower, TEXT("AddedMap"), 5, 6));
+    }
+    const FString UpdatedAddedDocument = MakeDocument(
+        true,
+        false,
+        TEXT("[40,41]"),
+        TEXT("[42,43]"),
+        TEXT("[{\"key\":44,\"value\":45}]"));
+    Error.Reset();
+    TestTrue(*FString::Printf(TEXT("Changing added collection defaults succeeds: %s"), *Error),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *BaseBlueprint,
+            UpdatedAddedDocument,
+            false,
+            Result,
+            Error));
+    FirstChild = FindActorByName(FirstWorld, FirstChildName);
+    SecondChild = FindActorByName(SecondWorld, SecondChildName);
+    FirstGrandchild = FindActorByName(FirstWorld, FirstGrandchildName);
+    SecondGrandchild = FindActorByName(SecondWorld, SecondGrandchildName);
+    FirstSibling = FindActorByName(FirstWorld, FirstSiblingName);
+    TestNotNull(TEXT("First child is reacquired after added collection update"), FirstChild);
+    TestNotNull(TEXT("Second child is reacquired after added collection update"), SecondChild);
+    TestNotNull(TEXT("First grandchild is reacquired after added collection update"), FirstGrandchild);
+    TestNotNull(TEXT("Second grandchild is reacquired after added collection update"), SecondGrandchild);
+    TestNotNull(TEXT("Sibling is reacquired after added collection update"), FirstSibling);
+    const auto CheckCollectionValues = [&](const TCHAR* Label,
+                                           UObject* Object,
+                                           const TArray<int32>& ExpectedArray,
+                                           const TSet<int32>& ExpectedSet,
+                                           int32 ExpectedMapKey,
+                                           int32 ExpectedMapValue)
+    {
+        const TArray<int32> ActualArray = ReadArray(Object, TEXT("AddedArray"));
+        const TSet<int32> ActualSet = ReadSet(Object, TEXT("AddedSet"));
+        const TMap<int32, int32> ActualMap = ReadMap(Object, TEXT("AddedMap"));
+        TestTrue(*FString::Printf(TEXT("%s keeps complete added array"), Label), ActualArray == ExpectedArray);
+        bool bSetMatches = ActualSet.Num() == ExpectedSet.Num();
+        for (const int32 Value : ExpectedSet)
+        {
+            bSetMatches = bSetMatches && ActualSet.Contains(Value);
+        }
+        TestTrue(*FString::Printf(TEXT("%s keeps complete added set"), Label), bSetMatches);
+        TestTrue(*FString::Printf(TEXT("%s keeps complete added map"), Label),
+            ActualMap.Num() == 1 && ActualMap.FindRef(ExpectedMapKey) == ExpectedMapValue);
+    };
+    CheckCollectionValues(TEXT("Child CDO"), ChildBlueprint->GeneratedClass->GetDefaultObject(),
+        {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Grandchild CDO follower"), GrandchildBlueprint->GeneratedClass->GetDefaultObject(),
+        {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Sibling CDO follower"), SiblingBlueprint->GeneratedClass->GetDefaultObject(),
+        {40, 41}, {42, 43}, 44, 45);
+    CheckCollectionValues(TEXT("First child instance"), FirstChild, {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("First grandchild instance"), FirstGrandchild, {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Sibling instance"), FirstSibling, {40, 41}, {42, 43}, 44, 45);
+
+    FSavePackageArgs SaveArguments;
+    SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArguments.SaveFlags = SAVE_NoError;
+    TArray<UObject*> SaveObjects{BaseBlueprint, ChildBlueprint, SiblingBlueprint, GrandchildBlueprint};
+    for (int32 Index = 0; Index < SaveObjects.Num(); ++Index)
+    {
+        TestTrue(*FString::Printf(TEXT("Added-state package %d saves"), Index),
+            UPackage::SavePackage(
+                SaveObjects[Index]->GetOutermost(),
+                SaveObjects[Index],
+                *PackageFilenames[Index],
+                SaveArguments));
+    }
+    // The asset is deliberately standalone while it is saved.  Clear that
+    // transient lifetime pin before unloading so the weak-reference check
+    // proves the saved package can actually be released.
+    ScriptAsset->ClearFlags(RF_Standalone);
+
+    TWeakObjectPtr<UBlueprint> BaseBeforeUnload(BaseBlueprint);
+    TWeakObjectPtr<UBlueprint> ChildBeforeUnload(ChildBlueprint);
+    TWeakObjectPtr<UBlueprint> SiblingBeforeUnload(SiblingBlueprint);
+    TWeakObjectPtr<UBlueprint> GrandchildBeforeUnload(GrandchildBlueprint);
+    TWeakObjectPtr<UUnifiedScriptAsset> ScriptAssetBeforeUnload(ScriptAsset);
+    FirstChild = nullptr;
+    SecondChild = nullptr;
+    FirstGrandchild = nullptr;
+    SecondGrandchild = nullptr;
+    FirstSibling = nullptr;
+    DestroyFixtureWorld(FirstWorld);
+    DestroyFixtureWorld(SecondWorld);
+    BaseBlueprint = nullptr;
+    ScriptAsset = nullptr;
+    ChildBlueprint = nullptr;
+    SiblingBlueprint = nullptr;
+    GrandchildBlueprint = nullptr;
+    BasePackage = nullptr;
+    ChildPackage = nullptr;
+    SiblingPackage = nullptr;
+    GrandchildPackage = nullptr;
+    TArray<UPackage*> PackagesToUnload;
+    for (const FString& PackageName : PackageNames)
+    {
+        if (UPackage* Package = FindPackage(nullptr, *PackageName))
+        {
+            Package->SetDirtyFlag(false);
+            PackagesToUnload.Add(Package);
+        }
+    }
+    TestTrue(TEXT("Added-state packages unload after save"),
+        UPackageTools::UnloadPackages(PackagesToUnload));
+    CollectGarbage(RF_NoFlags);
+    TestFalse(TEXT("Saved base Blueprint is unloaded"), BaseBeforeUnload.IsValid());
+    TestFalse(TEXT("Saved child Blueprint is unloaded"), ChildBeforeUnload.IsValid());
+    TestFalse(TEXT("Saved sibling Blueprint is unloaded"), SiblingBeforeUnload.IsValid());
+    TestFalse(TEXT("Saved grandchild Blueprint is unloaded"), GrandchildBeforeUnload.IsValid());
+    TestFalse(TEXT("Saved Script Asset is unloaded"), ScriptAssetBeforeUnload.IsValid());
+
+    BasePackage = LoadPackage(nullptr, *PackageNames[0], LOAD_None);
+    ChildPackage = LoadPackage(nullptr, *PackageNames[1], LOAD_None);
+    SiblingPackage = LoadPackage(nullptr, *PackageNames[2], LOAD_None);
+    GrandchildPackage = LoadPackage(nullptr, *PackageNames[3], LOAD_None);
+    BaseBlueprint = BasePackage != nullptr
+        ? FindObject<UUnifiedScriptBlueprint>(BasePackage, *BaseName)
+        : nullptr;
+    ChildBlueprint = ChildPackage != nullptr
+        ? FindObject<UBlueprint>(ChildPackage, *ChildName)
+        : nullptr;
+    SiblingBlueprint = SiblingPackage != nullptr
+        ? FindObject<UBlueprint>(SiblingPackage, *SiblingName)
+        : nullptr;
+    GrandchildBlueprint = GrandchildPackage != nullptr
+        ? FindObject<UBlueprint>(GrandchildPackage, *GrandchildName)
+        : nullptr;
+    ScriptAsset = BaseBlueprint != nullptr ? BaseBlueprint->ScriptAsset.Get() : nullptr;
+    if (!TestNotNull(TEXT("Reloaded added-state base Blueprint"), BaseBlueprint) ||
+        !TestNotNull(TEXT("Reloaded added-state child Blueprint"), ChildBlueprint) ||
+        !TestNotNull(TEXT("Reloaded added-state sibling Blueprint"), SiblingBlueprint) ||
+        !TestNotNull(TEXT("Reloaded added-state grandchild Blueprint"), GrandchildBlueprint) ||
+        !TestNotNull(TEXT("Reloaded added-state Script Asset"), ScriptAsset))
+    {
+        return false;
+    }
+    TestTrue(TEXT("Reloaded Script Asset keeps stable identity and generated class"),
+        ScriptAsset->ScriptClassId == Guid(AssetId) &&
+        ScriptAsset->GeneratedClassPath == FSoftClassPath(BaseBlueprint->GeneratedClass) &&
+        ScriptAsset->ScriptTypeName == TEXT("Tests.InheritedAddedStateActor") &&
+        ScriptAsset->DeclarationAssetPath == TEXT("Tests/InheritedAddedStateActor"));
+    TestEqual(TEXT("Reloaded base keeps added int default"),
+        ReadInt(BaseBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedInt")), 42);
+    TestEqual(TEXT("Reloaded child keeps added int default"),
+        ReadInt(ChildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedInt")), 42);
+    TestEqual(TEXT("Reloaded sibling keeps added int default"),
+        ReadInt(SiblingBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedInt")), 42);
+    TestEqual(TEXT("Reloaded grandchild keeps added int default"),
+        ReadInt(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("AddedInt")), 42);
+    CheckCollectionValues(TEXT("Reloaded base CDO"), BaseBlueprint->GeneratedClass->GetDefaultObject(),
+        {40, 41}, {42, 43}, 44, 45);
+    CheckCollectionValues(TEXT("Reloaded child CDO"), ChildBlueprint->GeneratedClass->GetDefaultObject(),
+        {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Reloaded sibling CDO"), SiblingBlueprint->GeneratedClass->GetDefaultObject(),
+        {40, 41}, {42, 43}, 44, 45);
+    CheckCollectionValues(TEXT("Reloaded grandchild CDO"), GrandchildBlueprint->GeneratedClass->GetDefaultObject(),
+        {20, 21}, {30, 40}, 5, 6);
+    FirstWorld = MakeWorld();
+    FirstChild = FirstWorld != nullptr
+        ? FirstWorld->SpawnActor<AActor>(ChildBlueprint->GeneratedClass)
+        : nullptr;
+    FirstGrandchild = FirstWorld != nullptr
+        ? FirstWorld->SpawnActor<AActor>(GrandchildBlueprint->GeneratedClass)
+        : nullptr;
+    FirstSibling = FirstWorld != nullptr
+        ? FirstWorld->SpawnActor<AActor>(SiblingBlueprint->GeneratedClass)
+        : nullptr;
+    if (!TestNotNull(TEXT("Reloaded child spawns with added defaults"), FirstChild) ||
+        !TestNotNull(TEXT("Reloaded grandchild spawns with added defaults"), FirstGrandchild) ||
+        !TestNotNull(TEXT("Reloaded sibling spawns with added defaults"), FirstSibling))
+    {
+        return false;
+    }
+    CheckCollectionValues(TEXT("Reloaded child instance"), FirstChild, {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Reloaded grandchild instance"), FirstGrandchild, {20, 21}, {30, 40}, 5, 6);
+    CheckCollectionValues(TEXT("Reloaded sibling instance"), FirstSibling, {40, 41}, {42, 43}, 44, 45);
+
+    FEdGraphPinType ConflictPin;
+    ConflictPin.PinCategory = UEdGraphSchema_K2::PC_Int;
+    const FName ConflictName(TEXT("UserConflict"));
+    TestTrue(TEXT("Adds a user-owned descendant variable for conflict coverage"),
+        FBlueprintEditorUtils::AddMemberVariable(
+            ChildBlueprint,
+            ConflictName,
+            ConflictPin,
+            TEXT("13")));
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ChildBlueprint);
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    const int32 ChildVariableCountBeforeConflict = ChildBlueprint->NewVariables.Num();
+    const int32 BaseVariableCountBeforeConflict = BaseBlueprint->NewVariables.Num();
+    const UClass* BaseClassBeforeConflict = BaseBlueprint->GeneratedClass;
+    const UClass* ChildClassBeforeConflict = ChildBlueprint->GeneratedClass;
+    const FGuid ConflictVariableGuid = ChildBlueprint->NewVariables.Last().VarGuid;
+    const int32 ConflictValueBefore = ReadInt(
+        ChildBlueprint->GeneratedClass->GetDefaultObject(),
+        TEXT("UserConflict"));
+    const bool BaseDirtyBeforeConflict = BasePackage->IsDirty();
+    const bool ChildDirtyBeforeConflict = ChildPackage->IsDirty();
+    Error.Reset();
+    TestFalse(TEXT("Descendant user variable conflict is rejected in validate-only"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *BaseBlueprint,
+            MakeDocument(
+                true,
+                true,
+                TEXT("[4,5]"),
+                TEXT("[6,7]"),
+                TEXT("[{\"key\":8,\"value\":9}]")),
+            true,
+            Result,
+            Error));
+    TestTrue(*FString::Printf(TEXT("Conflict diagnostic identifies the descendant: %s"), *Error),
+        Error.Contains(TEXT("UserConflict")) && Error.Contains(ChildName));
+    Error.Reset();
+    TestFalse(TEXT("Descendant user variable conflict is rejected in apply"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *BaseBlueprint,
+            MakeDocument(
+                true,
+                true,
+                TEXT("[4,5]"),
+                TEXT("[6,7]"),
+                TEXT("[{\"key\":8,\"value\":9}]")),
+            false,
+            Result,
+            Error));
+    TestTrue(TEXT("Conflict rejection preserves Blueprint identities and hierarchy"),
+        BaseBlueprint->GeneratedClass == BaseClassBeforeConflict &&
+        ChildBlueprint->GeneratedClass == ChildClassBeforeConflict &&
+        ChildBlueprint->GeneratedClass->GetSuperClass() == BaseClassBeforeConflict);
+    TestTrue(TEXT("Conflict rejection preserves user variable identity and value"),
+        ChildBlueprint->NewVariables.Num() == ChildVariableCountBeforeConflict &&
+        BaseBlueprint->NewVariables.Num() == BaseVariableCountBeforeConflict &&
+        ChildBlueprint->NewVariables.ContainsByPredicate(
+            [&ConflictVariableGuid](const FBPVariableDescription& Variable)
+            {
+                return Variable.VarGuid == ConflictVariableGuid &&
+                    Variable.VarName == TEXT("UserConflict");
+            }) &&
+        ReadInt(ChildBlueprint->GeneratedClass->GetDefaultObject(), TEXT("UserConflict")) == ConflictValueBefore);
+    TestTrue(TEXT("Conflict rejection preserves package dirty flags"),
+        BasePackage->IsDirty() == BaseDirtyBeforeConflict &&
+        ChildPackage->IsDirty() == ChildDirtyBeforeConflict);
+    return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptBlueprintManagedFunctionDispatchTest,
     "UnifiedScript.Unreal.ScriptClass.BlueprintManagedFunctionDispatch",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
