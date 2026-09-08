@@ -1059,6 +1059,24 @@ state, native component ownership and per-World lifecycle/reload checks; see the
 [inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md) for the
 current runtime and cook evidence.
 
+With the HostEditor target built, run
+`tools/run-unreal-inherited-state.ps1 -CookAndRun` to prepare the inherited Actor
+fixture, cook it into a Win64 Development archive and run the packaged verifier.
+The default output is `artifacts/m13-3c-3-inherited-cook`; `-FixtureOutputRoot`
+and `-ArchiveDirectory` choose subdirectories below `artifacts`. Without
+`-CookAndRun`, the command retains a successfully verified fixture for a later
+`-UseExistingFixture -CookAndRun` run. That reuse mode consumes its existing
+staged program files and saved receipt.
+
+The four GUID-named content packages refer to three fixture program files under
+`{PluginDir}/Binaries/Managed/InheritedState/<fixtureId>`. The archived verifier
+checks cooked classes and complete inherited state against that archive's chunk
+and bundled hostfxr. The driver removes its source fixture packages and program
+files after the cook/run attempt, retaining the archive, receipt and logs. The
+[inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md) records
+the latest verified boundary; this workflow does not close general C# base-state
+inheritance or class asset-operation coverage by itself.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

@@ -191,19 +191,59 @@ Evidence is under `artifacts/m13-3c-3-inherited-runtime`:
 
 Only the builder's GUID/package case checks and generated identity sidecar were
 updated after that run; the tested C#/native runtime behavior is unchanged.
-Cooked execution and broader managed-class/asset-operation identity coverage
-remain open, so C-3 is not complete.
+Broader managed-class/asset-operation identity coverage remains open, so C-3 is
+not complete.
 
-The next cooked slice should retain the same four GUID-named packages only
-after the Editor runtime fixture succeeds. Put the fixture chunk, assembly and
-declaration in its own `Binaries/Managed/InheritedState/<fixtureId>` directory,
-and save `{PluginDir}` paths on the Script Asset. The existing Runtime module
-already stages `Binaries/Managed/...`; do not overwrite shared host DLLs or Demo
-programs. A receipt should identify the exact four packages and generated class
-paths. The packaged verifier must load cooked classes, consume the archived
-chunk and bundled hostfxr, exercise inherited state and component ownership in
-two Worlds, and check independent reload and teardown. Clean up only those
-owned source packages and fixture program files after archiving and execution.
+The cooked path now retains those four GUID-named packages only after the
+Editor runtime assertions and package unload succeed. The driver stages the
+fixture chunk, assembly and declaration under
+`Binaries/Managed/InheritedState/<fixtureId>`; the saved Script Asset uses
+`{PluginDir}` paths. The existing Runtime module stages these files, while the
+receipt identifies the exact four packages and generated class paths.
+`-UseExistingFixture` consumes the retained stage without replacing its programs.
+
+The Win64 Development archive passes the native Host verifier. It loads the
+cooked base/ordinary child/grandchild classes and exact sidecar, checks complete
+defaults and immediate component archetypes, and starts the archived chunk in
+two Game Worlds. Each World retains its scalar/Array/Set/Map state and runtime
+identity through reload. After the first Actor and World are destroyed, the
+second continues ticking and completes its own reload. Script, lifecycle-claim
+and managed World counts return to their initial values. The verifier checks
+that both the program and actual loaded hostfxr belong to the executing archive.
+
+Cooked evidence is under `artifacts/m13-3c-3-inherited-cook`:
+
+- `editor-build-cooked-inherited-state-5.log` compiles the fixture changes;
+  `fixture/editor-fixture-generation.log` reports `InheritedActorStateRuntime`
+  Success and `Automation Test Queue Empty 1 tests performed` with portable paths.
+- `fixture/packaged-build-cook.log` builds the final Host verifier for Editor and
+  Game, then completes Win64 Development cook, stage and archive with exit 0.
+- `fixture/packaged-inherited-state.log` and
+  `fixture/inherited-state-cook-result.txt` record the archived executable's PASS,
+  actual chunk startup in both Worlds and archive-local hostfxr.
+- `fixture/build-cook-run.log` records successful execution and deletion of the
+  four owned source `.uasset` files and three staged program files. The archive
+  remains at `package/Windows/UEUnifiedScriptHost`; shared host/Demo inputs were
+  not replaced or removed.
+
+After cooked coverage, extend the existing class asset-operation regression with
+ordinary child/grandchild Blueprint referencers and inherited native components.
+`UnifiedScriptClassAssetOperationsTests.cpp` currently checks a separate Script
+Asset's soft class reference, not that inheritance chain. Use the real factory
+and the existing Rename/Duplicate transactions: verify parent links, stable
+Script Asset identity on rename, a new owner on duplicate, complete defaults,
+redirect fixup and failure preservation. The duplicate path already assigns
+the new sidecar before and after compilation; test descendants of the result
+before changing that path. The isolated runtime fixture's generated class-path
+constant is not the normal factory-authored source form used by those operations.
+
+General managed-base state remains a distinct contract gap: `LowerStates` in
+`CSharpScriptAssetLowerer.cs` enumerates only the current type's members, and
+`UnrealScriptStateSynchronizer.StateContract.Create` likewise uses
+`BindingFlags.DeclaredOnly`. The inherited public visual-method test does not
+cover inherited auto-properties. Before extending this scope, define matching
+declaration/runtime rules for state ownership, stable IDs, member hiding and
+generated native paths; ordinary Blueprint inheritance does not prove them.
 
 ## Relevant verification
 

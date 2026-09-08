@@ -493,6 +493,78 @@ bool UnloadByName(const TArray<FString>& PackageNames)
     }
     return true;
 }
+
+FString CookStageDirectory(const FFixtureConfig& Config)
+{
+    return FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectDir(),
+        TEXT("Plugins/UEUnifiedScript/Binaries/Managed/InheritedState"),
+        Config.FixtureId));
+}
+
+FString CookStagePath(const FFixtureConfig& Config, const TCHAR* LeafName)
+{
+    return FPaths::Combine(CookStageDirectory(Config), LeafName);
+}
+
+FString CookRuntimePath(const FFixtureConfig& Config, const TCHAR* LeafName)
+{
+    return FString::Printf(
+        TEXT("{PluginDir}/Binaries/Managed/InheritedState/%s/%s"),
+        *Config.FixtureId,
+        LeafName);
+}
+
+bool WriteCookReceipt(
+    const FString& ReceiptPath,
+    const FFixtureConfig& Config,
+    const TArray<FString>& PackageNames,
+    const TArray<FString>& PackageFilenames,
+    const FString& BaseClassPath,
+    const FString& ChildClassPath,
+    const FString& GrandchildClassPath,
+    const FString& ScriptAssetPath,
+    FString& OutError)
+{
+    if (PackageNames.Num() != 4 || PackageFilenames.Num() != 4)
+    {
+        OutError = TEXT("Cook receipt requires exactly four inherited-state packages.");
+        return false;
+    }
+    TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.inherited-state-cook-fixture/v0.1"));
+    Root->SetStringField(TEXT("fixtureId"), Config.FixtureId);
+    Root->SetStringField(TEXT("packageDirectory"), Config.PackageDirectory);
+    Root->SetStringField(TEXT("scriptClassId"), Config.ScriptClassId);
+    Root->SetStringField(TEXT("scriptTypeName"), Config.ScriptTypeName);
+    Root->SetStringField(TEXT("stageDirectory"),
+        FString::Printf(TEXT("{PluginDir}/Binaries/Managed/InheritedState/%s"), *Config.FixtureId));
+    Root->SetStringField(TEXT("baseClassPath"), BaseClassPath);
+    Root->SetStringField(TEXT("childClassPath"), ChildClassPath);
+    Root->SetStringField(TEXT("grandchildClassPath"), GrandchildClassPath);
+    Root->SetStringField(TEXT("scriptAssetPath"), ScriptAssetPath);
+    TArray<TSharedPtr<FJsonValue>> Packages;
+    for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+    {
+        TSharedRef<FJsonObject> Package = MakeShared<FJsonObject>();
+        Package->SetStringField(TEXT("packageName"), PackageNames[Index]);
+        Package->SetStringField(TEXT("packageFilename"), FPaths::ConvertRelativePathToFull(PackageFilenames[Index]));
+        Packages.Add(MakeShared<FJsonValueObject>(Package));
+    }
+    Root->SetArrayField(TEXT("packages"), Packages);
+    FString Json;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+    if (!FJsonSerializer::Serialize(Root, Writer) ||
+        !FFileHelper::SaveStringToFile(
+            Json + TEXT("\n"),
+            *ReceiptPath,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+    {
+        OutError = FString::Printf(TEXT("Could not write inherited-state cook receipt '%s'."), *ReceiptPath);
+        return false;
+    }
+    return true;
+}
 } // namespace UE::UnifiedScript::InheritedActorStateTests
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -513,6 +585,18 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
             TEXT("../artifacts/m13-3c-3-inherited-runtime/fixture/BlueprintInheritedStateFixture.config.json"));
     }
     ConfigPath = FPaths::ConvertRelativePathToFull(ConfigPath);
+
+    FString CookReceiptPath;
+    const bool bCookFixture = FParse::Value(
+        FCommandLine::Get(),
+        TEXT("-UnifiedScriptInheritedStateCookReceipt="),
+        CookReceiptPath);
+    CookReceiptPath.TrimQuotesInline();
+    if (bCookFixture)
+    {
+        CookReceiptPath = FPaths::ConvertRelativePathToFull(CookReceiptPath);
+    }
+    bool bKeepCookFixture = false;
 
     FFixtureConfig Config;
     FString Error;
@@ -572,7 +656,20 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
     FWorldFixture First;
     FWorldFixture Second;
     const int32 InitialWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
-    const int32 InitialManagedCount = 0;
+    const FString CookChunkPath = CookStagePath(Config, TEXT("BlueprintInheritedStateFixture.uschunk"));
+    const FString CookAssemblyPath = CookStagePath(Config, TEXT("BlueprintInheritedStateFixture.dll"));
+    const FString CookDeclarationPath = CookStagePath(Config, TEXT("BlueprintInheritedStateFixture.asset.json"));
+    const FString RuntimeChunkPath = bCookFixture ? CookRuntimePath(Config, TEXT("BlueprintInheritedStateFixture.uschunk")) : Config.ChunkPath;
+    const FString RuntimeAssemblyPath = bCookFixture ? CookRuntimePath(Config, TEXT("BlueprintInheritedStateFixture.dll")) : Config.AssemblyPath;
+    const FString RuntimeDeclarationPath = bCookFixture ? CookRuntimePath(Config, TEXT("BlueprintInheritedStateFixture.asset.json")) : Config.DeclarationPath;
+    if (bCookFixture &&
+        (!FPaths::FileExists(CookChunkPath) ||
+         !FPaths::FileExists(CookAssemblyPath) ||
+         !FPaths::FileExists(CookDeclarationPath)))
+    {
+        AddError(FString::Printf(TEXT("Cook fixture stage is missing one or more files below '%s'."), *CookStageDirectory(Config)));
+        return false;
+    }
 
     ON_SCOPE_EXIT
     {
@@ -583,23 +680,26 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
         ChildBlueprint = nullptr;
         GrandchildBlueprint = nullptr;
         ScriptAsset = nullptr;
-        Test.TestTrue(TEXT("Unloads all inherited-state packages during cleanup"), UnloadByName(PackageNames));
-        CollectGarbage(RF_NoFlags);
-        for (const FString& Filename : PackageFilenames)
+        if (!bKeepCookFixture)
         {
-            if (IFileManager::Get().FileExists(*Filename))
+            Test.TestTrue(TEXT("Unloads all inherited-state packages during cleanup"), UnloadByName(PackageNames));
+            CollectGarbage(RF_NoFlags);
+            for (const FString& Filename : PackageFilenames)
             {
-                Test.TestTrue(
-                    *FString::Printf(TEXT("Deletes inherited-state package %s"), *Filename),
-                    IFileManager::Get().Delete(*Filename, false, true, true));
+                if (IFileManager::Get().FileExists(*Filename))
+                {
+                    Test.TestTrue(
+                        *FString::Printf(TEXT("Deletes inherited-state package %s"), *Filename),
+                        IFileManager::Get().Delete(*Filename, false, true, true));
+                }
+                Test.TestFalse(
+                    *FString::Printf(TEXT("Inherited-state package file is absent %s"), *Filename),
+                    IFileManager::Get().FileExists(*Filename));
             }
-            Test.TestFalse(
-                *FString::Printf(TEXT("Inherited-state package file is absent %s"), *Filename),
-                IFileManager::Get().FileExists(*Filename));
+            const FString FixtureDirectory = FPackageName::LongPackageNameToFilename(
+                PackagePrefix, TEXT(""));
+            IFileManager::Get().DeleteDirectory(*FixtureDirectory, false, false);
         }
-        const FString FixtureDirectory = FPackageName::LongPackageNameToFilename(
-            PackagePrefix, TEXT(""));
-        IFileManager::Get().DeleteDirectory(*FixtureDirectory, false, false);
         Test.TestEqual(
             TEXT("Inherited-state World hosts return to baseline"),
             FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
@@ -630,10 +730,10 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
     ScriptAsset->ScriptClassId = ClassId;
     ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
     ScriptAsset->GeneratedClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass);
-    ScriptAsset->CompiledChunkPath = Config.ChunkPath;
-    ScriptAsset->ScriptAssemblyPath = Config.AssemblyPath;
+    ScriptAsset->CompiledChunkPath = RuntimeChunkPath;
+    ScriptAsset->ScriptAssemblyPath = RuntimeAssemblyPath;
     ScriptAsset->ScriptTypeName = Config.ScriptTypeName;
-    ScriptAsset->DeclarationPath = Config.DeclarationPath;
+    ScriptAsset->DeclarationPath = RuntimeDeclarationPath;
     ScriptAsset->DeclarationAssetPath = Config.DeclarationAssetPath;
     BaseBlueprint->ScriptAsset = ScriptAsset;
     AUnifiedScriptActor* BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
@@ -949,8 +1049,15 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
     const int32 SecondInitialClaims = Second.Host->GetGameplayLifecycleClaimCount();
     Test.TestEqual(TEXT("First World claims one inherited actor lifecycle"), FirstInitialClaims, 1);
     Test.TestEqual(TEXT("Second World claims one inherited actor lifecycle"), SecondInitialClaims, 1);
-    Test.TestTrue(TEXT("First chunk path is the fixture chunk"), SameFilename(First.Component->GetActiveProgramPath(), Config.ChunkPath));
-    Test.TestTrue(TEXT("Second chunk path is the fixture chunk"), SameFilename(Second.Component->GetActiveProgramPath(), Config.ChunkPath));
+    const FString ExpectedChunkPath = bCookFixture ? CookChunkPath : Config.ChunkPath;
+    if (!SameFilename(First.Component->GetActiveProgramPath(), ExpectedChunkPath))
+    {
+        AddError(FString::Printf(TEXT("First chunk path mismatch: actual=%s expected=%s"), *First.Component->GetActiveProgramPath(), *ExpectedChunkPath));
+    }
+    if (!SameFilename(Second.Component->GetActiveProgramPath(), ExpectedChunkPath))
+    {
+        AddError(FString::Printf(TEXT("Second chunk path mismatch: actual=%s expected=%s"), *Second.Component->GetActiveProgramPath(), *ExpectedChunkPath));
+    }
     const FString FirstMarker = FString::Printf(TEXT("InheritedState:%d:Ticks:0"), Signature(FirstState));
     const FString SecondMarker = FString::Printf(TEXT("InheritedState:%d:Ticks:0"), Signature(ChildState));
     Test.TestEqual(TEXT("First managed state consumes all inherited collections"), First.Component->ManagedState, FirstMarker);
@@ -1099,7 +1206,43 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
         TEXT("Second World destruction restores managed World count"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialWorldCount);
-    return true;
+    if (bCookFixture && !HasAnyErrors())
+    {
+        const FString BaseClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass).ToString();
+        const FString ChildClassPath = FSoftClassPath(ChildBlueprint->GeneratedClass).ToString();
+        const FString GrandchildClassPath = FSoftClassPath(GrandchildBlueprint->GeneratedClass).ToString();
+        const FString ScriptAssetPath = ScriptAsset->GetPathName();
+        FString ReceiptError;
+        BaseBlueprint = nullptr;
+        ChildBlueprint = nullptr;
+        GrandchildBlueprint = nullptr;
+        ScriptAsset = nullptr;
+        if (!Test.TestTrue(TEXT("Unloads inherited-state packages before publishing cook receipt"), UnloadByName(PackageNames)))
+        {
+            AddError(TEXT("Could not unload inherited-state packages before publishing cook receipt."));
+            return false;
+        }
+        CollectGarbage(RF_NoFlags);
+        if (!HasAnyErrors() &&
+            !WriteCookReceipt(
+                CookReceiptPath,
+                Config,
+                PackageNames,
+                PackageFilenames,
+                BaseClassPath,
+                ChildClassPath,
+                GrandchildClassPath,
+                ScriptAssetPath,
+                ReceiptError))
+        {
+            AddError(ReceiptError);
+        }
+        if (!HasAnyErrors())
+        {
+            bKeepCookFixture = true;
+        }
+    }
+    return !HasAnyErrors();
 }
 
 #endif
