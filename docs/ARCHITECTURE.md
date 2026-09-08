@@ -732,6 +732,16 @@ existing invocation bridge, preserving the fast path without retaining a
 collectible hot-reload generation. ActorComponent classes use the component host
 handle; Actor/Object classes use the target handle.
 
+Flat collection state preserves whole-value overrides across Blueprint
+reinstancing. For loaded ordinary Blueprint descendants, each CDO and live
+instance is compared with its immediate archetype. Overrides keep an owned
+value snapshot; followers copy their archetype's final value after overrides
+are restored in inheritance order. Stable state IDs resolve renamed properties,
+the engine replacement map fixes object references, and Set/Map values are
+rehashed after restoration. Both validation-only and apply reject incompatible
+type changes when a descendant owns an override. This does not automatically
+save every dependent Blueprint or cover templates other than derived CDOs.
+
 Reviewed public non-event `[Visual]` instance methods also project onto that
 exact Blueprint as stable `USF_<semantic-id>` UFunctions. Their managed name is
 display/binding metadata, so source rename preserves graph identity while stale

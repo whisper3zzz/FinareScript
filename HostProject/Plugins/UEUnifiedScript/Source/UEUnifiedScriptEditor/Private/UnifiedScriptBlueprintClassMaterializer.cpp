@@ -4814,6 +4814,8 @@ struct FCollectionInstanceOverrideSnapshot
 {
     UObject* OldObject = nullptr;
     TStrongObjectPtr<UObject> OldObjectRoot;
+    TStrongObjectPtr<UObject> OldArchetypeRoot;
+    bool bFollowsArchetype = false;
     FName OldPropertyName;
     FName NewPropertyName;
     FGuid StateId;
@@ -4985,7 +4987,7 @@ bool CaptureCollectionInstanceOverrides(
     }
 
     TArray<UObject*> Instances;
-    GetObjectsOfClass(OldClass, Instances, false, RF_ClassDefaultObject | RF_MirroredGarbage);
+    GetObjectsOfClass(OldClass, Instances, true, RF_MirroredGarbage);
     for (const FPlannedState& Planned : Plan.States)
     {
         const bool bNewCollection = IsCollectionPin(Planned.Declaration.PinType);
@@ -5028,28 +5030,72 @@ bool CaptureCollectionInstanceOverrides(
             ExistingVariable->VarType == Planned.Declaration.PinType;
         for (UObject* Instance : Instances)
         {
-            if (Instance == nullptr || Instance == OldCdo || Instance->IsTemplate() ||
+            if (Instance == nullptr || Instance == OldCdo ||
+                Instance->HasAnyFlags(RF_BeginDestroyed | RF_FinishDestroyed | RF_MirroredGarbage) ||
                 !Property->HasAnyPropertyFlags(CPF_Edit))
             {
                 continue;
             }
-            if (Property->Identical_InContainer(Instance, OldCdo, 0, PPF_None))
+            UClass* InstanceClass = Instance->GetClass();
+            if (InstanceClass == nullptr || !InstanceClass->IsChildOf(OldClass) ||
+                InstanceClass->HasAnyClassFlags(CLASS_NewerVersionExists | CLASS_Deprecated))
             {
                 continue;
             }
-            if (!bNewCollection || !bExistingPinCompatible)
+            // GetObjectsOfClass(includeDerived=true) also sees skeleton,
+            // reinstanced, and other transient generated classes.  Only a
+            // class whose Blueprint still points back to this exact generated
+            // class represents a live persisted CDO/instance that can carry
+            // user defaults.
+            UBlueprint* GeneratedBy = Cast<UBlueprint>(InstanceClass->ClassGeneratedBy);
+            if (GeneratedBy == nullptr || GeneratedBy->GeneratedClass != InstanceClass)
+            {
+                continue;
+            }
+            const bool bDerivedClassDefaultObject =
+                Instance->HasAnyFlags(RF_ClassDefaultObject) && InstanceClass != OldClass;
+            if (!bDerivedClassDefaultObject && Instance->IsTemplate())
+            {
+                continue;
+            }
+
+            UObject* OldArchetype = Instance->GetArchetype();
+            FProperty* ArchetypeProperty = nullptr;
+            if (OldArchetype != nullptr && OldArchetype != Instance &&
+                OldArchetype->GetClass() != nullptr)
+            {
+                ArchetypeProperty = FindStateProperty(
+                    OldArchetype->GetClass(),
+                    Planned.Declaration.Id,
+                    OldPropertyName);
+            }
+            const bool bFollowsArchetype = ArchetypeProperty != nullptr &&
+                Property->SameType(ArchetypeProperty) &&
+                Property->Identical_InContainer(Instance, OldArchetype, 0, PPF_None);
+            if (bFollowsArchetype && !bNewCollection)
+            {
+                continue;
+            }
+            if (!bFollowsArchetype && (!bNewCollection || !bExistingPinCompatible))
             {
                 OutError = FString::Printf(
-                    TEXT("Collection state '%s' has an instance override but its existing Blueprint pin type is incompatible with the new declaration."),
-                    *Planned.Declaration.Name.ToString());
+                    TEXT("Collection state '%s' has a whole-value instance override on '%s' but its existing Blueprint pin type is incompatible with the new declaration."),
+                    *Planned.Declaration.Name.ToString(),
+                    *Instance->GetPathName());
                 return false;
             }
             FCollectionInstanceOverrideSnapshot& Snapshot = OutSnapshots.AddDefaulted_GetRef();
             Snapshot.OldObject = Instance;
             Snapshot.OldObjectRoot = TStrongObjectPtr<UObject>(Instance);
+            Snapshot.OldArchetypeRoot = TStrongObjectPtr<UObject>(OldArchetype);
+            Snapshot.bFollowsArchetype = bFollowsArchetype;
             Snapshot.OldPropertyName = OldPropertyName;
             Snapshot.NewPropertyName = Planned.Declaration.Name;
             Snapshot.StateId = Planned.Declaration.Id;
+            if (bFollowsArchetype)
+            {
+                continue;
+            }
             if (Snapshot.Value.AddProperty(CollectionSnapshotValueName, Property) !=
                 EPropertyBagAlterationResult::Success)
             {
@@ -5088,12 +5134,16 @@ bool RestoreCollectionInstanceOverrides(
         UObject* Object = nullptr;
         FProperty* Property = nullptr;
         const FProperty* SnapshotProperty = nullptr;
+        UObject* Archetype = nullptr;
+        const FProperty* ArchetypeProperty = nullptr;
+        bool bFollowsArchetype = false;
     };
 
     TArray<FRestoreTarget> Targets;
     for (FCollectionInstanceOverrideSnapshot& Snapshot : Snapshots)
     {
-        if (Snapshot.OldObject == nullptr || !Snapshot.Value.IsValid())
+        if (Snapshot.OldObject == nullptr ||
+            (!Snapshot.bFollowsArchetype && !Snapshot.Value.IsValid()))
         {
             continue;
         }
@@ -5113,15 +5163,6 @@ bool RestoreCollectionInstanceOverrides(
             // needs an override restored.
             continue;
         }
-        const FPropertyBagPropertyDesc* SnapshotDesc =
-            Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
-        if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
-        {
-            OutError = FString::Printf(
-                TEXT("Collection state override '%s' has no owned value descriptor."),
-                *Snapshot.NewPropertyName.ToString());
-            return false;
-        }
         const FName TargetName = bRollback
             ? Snapshot.OldPropertyName
             : Snapshot.NewPropertyName;
@@ -5129,7 +5170,45 @@ bool RestoreCollectionInstanceOverrides(
             NewObject->GetClass(),
             Snapshot.StateId,
             TargetName);
-        if (NewProperty == nullptr ||
+        if (NewProperty == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' could not be restored on '%s' after Blueprint reinstancing."),
+                *TargetName.ToString(),
+                *NewObject->GetPathName());
+            return false;
+        }
+        if (Snapshot.bFollowsArchetype)
+        {
+            UObject* NewArchetype = NewObject->GetArchetype();
+            FProperty* NewArchetypeProperty = NewArchetype != nullptr
+                ? FindStateProperty(NewArchetype->GetClass(), Snapshot.StateId, TargetName)
+                : nullptr;
+            if (NewArchetype == nullptr || NewArchetype == NewObject ||
+                NewArchetype->HasAnyFlags(RF_MirroredGarbage) ||
+                NewArchetypeProperty == nullptr ||
+                !NewProperty->SameType(NewArchetypeProperty) ||
+                NewProperty->GetSize() != NewArchetypeProperty->GetSize())
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state follower '%s' could not resolve its final archetype on '%s' after Blueprint reinstancing."),
+                    *TargetName.ToString(),
+                    *NewObject->GetPathName());
+                return false;
+            }
+            Targets.Add({
+                &Snapshot,
+                NewObject,
+                NewProperty,
+                nullptr,
+                NewArchetype,
+                NewArchetypeProperty,
+                true});
+            continue;
+        }
+        const FPropertyBagPropertyDesc* SnapshotDesc =
+            Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+        if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr ||
             !NewProperty->SameType(SnapshotDesc->CachedProperty) ||
             NewProperty->GetSize() != SnapshotDesc->CachedProperty->GetSize())
         {
@@ -5139,11 +5218,74 @@ bool RestoreCollectionInstanceOverrides(
                 *NewObject->GetPathName());
             return false;
         }
-        Targets.Add({&Snapshot, NewObject, NewProperty, SnapshotDesc->CachedProperty});
+        Targets.Add({&Snapshot, NewObject, NewProperty, SnapshotDesc->CachedProperty, nullptr, nullptr, false});
     }
+
+    auto GetArchetypeDepth = [](UObject* Object)
+    {
+        int32 Depth = 0;
+        TSet<UObject*> Visited;
+        for (UObject* Current = Object != nullptr ? Object->GetArchetype() : nullptr;
+             Current != nullptr && !Visited.Contains(Current) && Depth < 256;
+             Current = Current->GetArchetype())
+        {
+            Visited.Add(Current);
+            ++Depth;
+        }
+        return Depth;
+    };
+    const auto IsArchetypeOf = [](UObject* Candidate, UObject* Object)
+    {
+        TSet<UObject*> Visited;
+        for (UObject* Current = Object != nullptr ? Object->GetArchetype() : nullptr;
+             Current != nullptr && !Visited.Contains(Current);
+             Current = Current->GetArchetype())
+        {
+            if (Current == Candidate)
+            {
+                return true;
+            }
+            Visited.Add(Current);
+        }
+        return false;
+    };
+    Targets.Sort([&GetArchetypeDepth, &IsArchetypeOf](const FRestoreTarget& Left, const FRestoreTarget& Right)
+    {
+        if (IsArchetypeOf(Left.Object, Right.Object))
+        {
+            return true;
+        }
+        if (IsArchetypeOf(Right.Object, Left.Object))
+        {
+            return false;
+        }
+        return GetArchetypeDepth(Left.Object) < GetArchetypeDepth(Right.Object);
+    });
 
     const TMap<UObject*, UObject*> FlattenedReplacedObjects =
         FlattenReplacedObjects(ReplacedObjects);
+    TArray<TStrongObjectPtr<UPackage>> DerivedPackagesToDirty;
+    const auto QueueDerivedPackageDirty = [&DerivedPackagesToDirty](UObject* Object)
+    {
+        if (Object == nullptr || !Object->HasAnyFlags(RF_ClassDefaultObject) ||
+            Object->GetClass() == nullptr || Object->GetClass()->ClassGeneratedBy == nullptr)
+        {
+            return;
+        }
+        UPackage* Package = Object->GetOutermost();
+        if (Package == nullptr)
+        {
+            return;
+        }
+        for (const TStrongObjectPtr<UPackage>& Existing : DerivedPackagesToDirty)
+        {
+            if (Existing.Get() == Package)
+            {
+                return;
+            }
+        }
+        DerivedPackagesToDirty.Emplace(Package);
+    };
     for (const FRestoreTarget& Target : Targets)
     {
         if (Target.Object == nullptr ||
@@ -5154,21 +5296,46 @@ bool RestoreCollectionInstanceOverrides(
             continue;
         }
         FCollectionInstanceOverrideSnapshot& Snapshot = *Target.Snapshot;
-        void* SnapshotValue = Target.SnapshotProperty->ContainerPtrToValuePtr<void>(
-            Snapshot.Value.GetMutableValue().GetMemory());
-
-        // Object/Class leaves need the same old-to-new mapping that Blueprint
-        // reinstancing used for the containing instance.  Soft references are
-        // handled by the archive as well and remain unloaded.
-        FArchiveReplaceObjectRef<UObject> ReplaceArchive(
-            Target.Object,
-            FlattenedReplacedObjects,
-            EArchiveReplaceObjectFlags::DelayStart);
-        FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
-        Target.SnapshotProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
-
         void* NewValue = Target.Property->ContainerPtrToValuePtr<void>(Target.Object);
-        Target.Property->CopyCompleteValue(NewValue, SnapshotValue);
+        bool bValueChanged = false;
+        if (Target.bFollowsArchetype)
+        {
+            if (Target.Archetype == nullptr ||
+                Target.Archetype->HasAnyFlags(RF_MirroredGarbage))
+            {
+                OutError = FString::Printf(
+                    TEXT("Collection state follower '%s' lost its final archetype before restore."),
+                    *Snapshot.NewPropertyName.ToString());
+                return false;
+            }
+            const void* ArchetypeValue = Target.ArchetypeProperty->ContainerPtrToValuePtr<void>(
+                Target.Archetype);
+            bValueChanged = !Target.Property->Identical(
+                NewValue,
+                ArchetypeValue,
+                PPF_None);
+            Target.Property->CopyCompleteValue(NewValue, ArchetypeValue);
+        }
+        else
+        {
+            void* SnapshotValue = Target.SnapshotProperty->ContainerPtrToValuePtr<void>(
+                Snapshot.Value.GetMutableValue().GetMemory());
+
+            // Object/Class leaves need the same old-to-new mapping that Blueprint
+            // reinstancing used for the containing instance.  Soft references are
+            // handled by the archive as well and remain unloaded.
+            FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+                Target.Object,
+                FlattenedReplacedObjects,
+                EArchiveReplaceObjectFlags::DelayStart);
+            FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
+            Target.SnapshotProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
+            bValueChanged = !Target.SnapshotProperty->Identical(
+                NewValue,
+                SnapshotValue,
+                PPF_None);
+            Target.Property->CopyCompleteValue(NewValue, SnapshotValue);
+        }
 
         if (const FSetProperty* SetProperty = CastField<FSetProperty>(Target.Property))
         {
@@ -5183,6 +5350,21 @@ bool RestoreCollectionInstanceOverrides(
                 MapProperty,
                 MapProperty->ContainerPtrToValuePtr<void>(Target.Object));
             MapHelper.Rehash();
+        }
+
+        if (!bRollback && bValueChanged)
+        {
+            QueueDerivedPackageDirty(Target.Object);
+        }
+    }
+    if (!bRollback)
+    {
+        for (const TStrongObjectPtr<UPackage>& Package : DerivedPackagesToDirty)
+        {
+            if (Package.IsValid())
+            {
+                Package->SetDirtyFlag(true);
+            }
         }
     }
     return true;
@@ -5202,6 +5384,7 @@ void DestroyCollectionInstanceOverrides(
         Snapshot.NewPropertyName = NAME_None;
         Snapshot.StateId.Invalidate();
         Snapshot.OldObjectRoot.Reset();
+        Snapshot.OldArchetypeRoot.Reset();
     }
     Snapshots.Reset();
 }
@@ -5430,9 +5613,55 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             InterfaceDeclarations,
             Plan,
             OutResult,
-            OutError) ||
-        bValidateOnly || !OutResult.bChanged)
+            OutError))
     {
+        return OutError.IsEmpty();
+    }
+
+    if (!OutResult.bChanged)
+    {
+        return OutError.IsEmpty();
+    }
+
+    // Capture before validate-only returns and before the transactional
+    // duplicate is applied.  Derived CDOs and live instances may own whole
+    // collection values; followers are intentionally represented without a
+    // value so restore can copy their final archetype instead of freezing the
+    // old base value.
+    TArray<FCollectionInstanceOverrideSnapshot> CollectionInstanceOverrides;
+    FString CaptureError;
+    if (!CaptureCollectionInstanceOverrides(
+            Blueprint,
+            Plan,
+            CollectionInstanceOverrides,
+            CaptureError))
+    {
+        OutError = CaptureError;
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        return false;
+    }
+    FCollectionSnapshotReferenceGuard SnapshotReferenceGuard(CollectionInstanceOverrides);
+
+    FCollectionReplacementMap ReplacedObjects;
+    const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
+        [&ReplacedObjects](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
+        {
+            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
+            {
+                // The delegate is the only point where the replacement value
+                // is guaranteed to be a live UObject.  Convert it to a weak
+                // reference here; all later traversals use Weak.Get() and
+                // never dereference a stale raw destination from the map.
+                FCollectionReplacementTarget Target;
+                Target.Identity = Pair.Value;
+                Target.Weak = TWeakObjectPtr<UObject>(Pair.Value);
+                ReplacedObjects.Add(Pair.Key, MoveTemp(Target));
+            }
+        });
+    if (bValidateOnly)
+    {
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         return OutError.IsEmpty();
     }
 
@@ -5450,38 +5679,10 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         {
             OutError = TEXT("Could not create a transactional Blueprint materialization preflight.");
         }
-        return false;
-    }
-
-    TArray<FCollectionInstanceOverrideSnapshot> CollectionInstanceOverrides;
-    FString CaptureError;
-    if (!CaptureCollectionInstanceOverrides(
-            Blueprint,
-            Plan,
-            CollectionInstanceOverrides,
-            CaptureError))
-    {
-        OutError = CaptureError;
         DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         return false;
     }
-    FCollectionSnapshotReferenceGuard SnapshotReferenceGuard(CollectionInstanceOverrides);
-    FCollectionReplacementMap ReplacedObjects;
-    const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
-        [&ReplacedObjects](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
-        {
-            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
-            {
-                // The delegate is the only point where the replacement value
-                // is guaranteed to be a live UObject.  Convert it to a weak
-                // reference here; all later traversals use Weak.Get() and
-                // never dereference a stale raw destination from the map.
-                FCollectionReplacementTarget Target;
-                Target.Identity = Pair.Value;
-                Target.Weak = TWeakObjectPtr<UObject>(Pair.Value);
-                ReplacedObjects.Add(Pair.Key, MoveTemp(Target));
-            }
-        });
 
     const TArray<FBPVariableDescription> OriginalVariables = Blueprint.NewVariables;
     const bool bApplied = ApplyPlan(Blueprint, Plan, OutError);

@@ -1463,6 +1463,670 @@ bool FUnifiedScriptCollectionBlueprintStateMaterializationTest::RunTest(const FS
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptInheritedCollectionDefaultsTest,
+    "UnifiedScript.Unreal.ScriptClass.InheritedCollectionDefaults",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptInheritedCollectionDefaultsTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::Tests;
+
+    const FString ArrayType = TEXT(R"JSON({
+      "kind":"array", "unrealTypePath":"", "unrealNativeName":"TArray",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString SetType = TEXT(R"JSON({
+      "kind":"set", "unrealTypePath":"", "unrealNativeName":"TSet",
+      "fields":[], "typeArguments":[{"typeMetadataName":"System.Int32"}]
+    })JSON");
+    const FString MapType = TEXT(R"JSON({
+      "kind":"map", "unrealTypePath":"", "unrealNativeName":"TMap",
+      "fields":[], "typeArguments":[
+        {"typeMetadataName":"System.Int32"},
+        {"typeMetadataName":"System.Int32"}
+      ]
+    })JSON");
+    const FString ArrayId = TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1");
+    const FString SetId = TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2");
+    const FString MapId = TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb3");
+    const auto MakeDocument = [&](bool bArrayAsSet,
+                                  const TCHAR* ArrayName,
+                                  const TCHAR* SetName,
+                                  const TCHAR* MapName,
+                                  const TCHAR* ArrayDefault,
+                                  const TCHAR* SetDefault,
+                                  const TCHAR* MapDefault)
+    {
+        const FString ArrayMetadata = bArrayAsSet
+            ? TEXT("System.Collections.Generic.IReadOnlySet<System.Int32>")
+            : TEXT("System.Collections.Generic.IReadOnlyList<System.Int32>");
+        const FString ArrayKind = bArrayAsSet ? TEXT("set") : TEXT("array");
+        const FString& ArrayShape = bArrayAsSet ? SetType : ArrayType;
+        return Document(
+            FString::Join(
+                TArray<FString>{
+                    State(*ArrayId, ArrayName, *ArrayMetadata, *ArrayMetadata,
+                        *ArrayKind, ArrayDefault, true, false, false, TEXT("Collections"), ArrayShape),
+                    State(*SetId, SetName,
+                        TEXT("System.Collections.Generic.IReadOnlySet<System.Int32>"),
+                        TEXT("System.Collections.Generic.IReadOnlySet<System.Int32>"),
+                        TEXT("set"), SetDefault, true, false, false, TEXT("Collections"), SetType),
+                    State(*MapId, MapName,
+                        TEXT("System.Collections.Generic.IReadOnlyDictionary<System.Int32, System.Int32>"),
+                        TEXT("System.Collections.Generic.IReadOnlyDictionary<System.Int32, System.Int32>"),
+                        TEXT("map"), MapDefault, true, false, false, TEXT("Collections"), MapType),
+                },
+                TEXT(",")),
+            FString(),
+            TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            TEXT("Tests.InheritedCollectionActor"),
+            TEXT("Tests/InheritedCollectionActor"));
+    };
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString BaseName = TEXT("BP_UnifiedScriptInheritedCollections_") + Suffix;
+    const FString ChildName = BaseName + TEXT("_Child");
+    const FString SiblingName = BaseName + TEXT("_Sibling");
+    const FString GrandchildName = BaseName + TEXT("_Grandchild");
+    const FString BasePackageName = TEXT("/Engine/Transient/") + BaseName;
+    const FString ChildPackageName = TEXT("/Engine/Transient/") + ChildName;
+    const FString SiblingPackageName = TEXT("/Engine/Transient/") + SiblingName;
+    const FString GrandchildPackageName = TEXT("/Engine/Transient/") + GrandchildName;
+    UPackage* BasePackage = CreatePackage(*BasePackageName);
+    UPackage* ChildPackage = nullptr;
+    UPackage* SiblingPackage = nullptr;
+    UPackage* GrandchildPackage = nullptr;
+    UUnifiedScriptBlueprint* BaseBlueprint = Cast<UUnifiedScriptBlueprint>(
+        FKismetEditorUtilities::CreateBlueprint(
+            AActor::StaticClass(),
+            BasePackage,
+            FName(*BaseName),
+            BPTYPE_Normal,
+            UUnifiedScriptBlueprint::StaticClass(),
+            UUnifiedScriptBlueprintGeneratedClass::StaticClass(),
+            FName(TEXT("UnifiedScriptInheritedCollectionDefaults"))));
+    if (!TestNotNull(TEXT("Creates the generated collection base Blueprint"), BaseBlueprint))
+    {
+        return false;
+    }
+    UUnifiedScriptAsset* ScriptAsset = NewObject<UUnifiedScriptAsset>(BasePackage);
+    ScriptAsset->ScriptClassId = Guid(TEXT("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass);
+    ScriptAsset->ScriptTypeName = TEXT("Tests.InheritedCollectionActor");
+    ScriptAsset->DeclarationAssetPath = TEXT("Tests/InheritedCollectionActor");
+    BaseBlueprint->ScriptAsset = ScriptAsset;
+    TStrongObjectPtr<UUnifiedScriptBlueprint> BaseBlueprintRoot(BaseBlueprint);
+    TStrongObjectPtr<UUnifiedScriptAsset> ScriptAssetRoot(ScriptAsset);
+
+    UBlueprint* ChildBlueprint = nullptr;
+    UBlueprint* SiblingBlueprint = nullptr;
+    UBlueprint* GrandchildBlueprint = nullptr;
+    UWorld* FirstWorld = nullptr;
+    UWorld* SecondWorld = nullptr;
+    AActor* FirstChild = nullptr;
+    AActor* SecondChild = nullptr;
+    AActor* FirstSibling = nullptr;
+    AActor* NewSibling = nullptr;
+    AActor* FirstGrandchild = nullptr;
+    AActor* SecondGrandchild = nullptr;
+    ON_SCOPE_EXIT
+    {
+        // Reinstancing and world teardown can release actor UObjects before
+        // the package cleanup runs.  Drop all raw actor references first and
+        // look packages up by their stable names below.
+        FirstChild = nullptr;
+        SecondChild = nullptr;
+        FirstSibling = nullptr;
+        NewSibling = nullptr;
+        FirstGrandchild = nullptr;
+        SecondGrandchild = nullptr;
+        if (GEngine != nullptr)
+        {
+            if (FirstWorld != nullptr)
+            {
+                GEngine->DestroyWorldContext(FirstWorld);
+            }
+            if (SecondWorld != nullptr)
+            {
+                GEngine->DestroyWorldContext(SecondWorld);
+            }
+        }
+        if (FirstWorld != nullptr)
+        {
+            FirstWorld->RemoveFromRoot();
+            FirstWorld->DestroyWorld(false);
+            FirstWorld = nullptr;
+        }
+        if (SecondWorld != nullptr)
+        {
+            SecondWorld->RemoveFromRoot();
+            SecondWorld->DestroyWorld(false);
+            SecondWorld = nullptr;
+        }
+        BaseBlueprintRoot.Reset();
+        ScriptAssetRoot.Reset();
+        TArray<UPackage*> PackagesToUnload;
+        for (const FString& PackageName : {BasePackageName, ChildPackageName, SiblingPackageName, GrandchildPackageName})
+        {
+            if (UPackage* Package = FindPackage(nullptr, *PackageName))
+            {
+                Package->SetDirtyFlag(false);
+                PackagesToUnload.Add(Package);
+            }
+        }
+        UPackageTools::UnloadPackages(PackagesToUnload);
+    };
+
+    FUnifiedScriptBlueprintClassSyncResult Result;
+    FString Error;
+    const FString InitialDocument = MakeDocument(
+        false, TEXT("Numbers"), TEXT("NumbersSet"), TEXT("Mapping"),
+        TEXT("[1,2]"), TEXT("[3,4]"), TEXT("[{\"key\":1,\"value\":2}]"));
+    TestTrue(TEXT("Initial collection defaults materialize"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *BaseBlueprint, InitialDocument, false, Result, Error));
+    if (BaseBlueprint->GeneratedClass == nullptr)
+    {
+        return false;
+    }
+
+    // The parent is fully materialized before ordinary child Blueprints are
+    // created.  Package lifetimes are kept by the Blueprint outers and the
+    // cleanup resolves them by name, so this also covers early failures.
+    ChildPackage = CreatePackage(*ChildPackageName);
+    ChildBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        BaseBlueprint->GeneratedClass,
+        ChildPackage,
+        FName(*ChildName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedCollectionDefaultsChild")));
+    TestNotNull(TEXT("Creates an ordinary Blueprint child"), ChildBlueprint);
+    if (ChildBlueprint == nullptr)
+    {
+        return false;
+    }
+    SiblingPackage = CreatePackage(*SiblingPackageName);
+    SiblingBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        BaseBlueprint->GeneratedClass,
+        SiblingPackage,
+        FName(*SiblingName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedCollectionDefaultsSibling")));
+    TestNotNull(TEXT("Creates an untouched ordinary Blueprint sibling"), SiblingBlueprint);
+    if (SiblingBlueprint == nullptr)
+    {
+        return false;
+    }
+
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    FKismetEditorUtilities::CompileBlueprint(SiblingBlueprint);
+
+    auto SetArrayValue = [](UObject* Object, const FArrayProperty* Property, const TCHAR* Text)
+    {
+        return Object != nullptr && Property != nullptr &&
+            Property->ImportText_Direct(
+                Text,
+                Property->ContainerPtrToValuePtr<void>(Object),
+                Object,
+                PPF_None,
+                nullptr) != nullptr;
+    };
+    auto SetSetValue = [](UObject* Object, const FSetProperty* Property, const TCHAR* Text)
+    {
+        return Object != nullptr && Property != nullptr &&
+            Property->ImportText_Direct(
+                Text,
+                Property->ContainerPtrToValuePtr<void>(Object),
+                Object,
+                PPF_None,
+                nullptr) != nullptr;
+    };
+    auto SetMapValue = [](UObject* Object, const FMapProperty* Property, int32 Key, int32 Value)
+    {
+        if (Object == nullptr || Property == nullptr)
+        {
+            return false;
+        }
+        FScriptMapHelper Helper(
+            Property,
+            Property->ContainerPtrToValuePtr<void>(Object));
+        Helper.EmptyValues();
+        const int32 PairIndex = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        CastField<FIntProperty>(Property->KeyProp)->SetPropertyValue(Helper.GetKeyPtr(PairIndex), Key);
+        CastField<FIntProperty>(Property->ValueProp)->SetPropertyValue(Helper.GetValuePtr(PairIndex), Value);
+        Helper.Rehash();
+        return true;
+    };
+    auto ReadArray = [](UObject* Object, const FArrayProperty* Property)
+    {
+        TArray<int32> Values;
+        if (Object == nullptr || Property == nullptr || CastField<FIntProperty>(Property->Inner) == nullptr)
+        {
+            return Values;
+        }
+        const FIntProperty* Inner = CastField<FIntProperty>(Property->Inner);
+        FScriptArrayHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.Num(); ++Index)
+        {
+            Values.Add(Inner->GetPropertyValue(Helper.GetRawPtr(Index)));
+        }
+        return Values;
+    };
+    auto ReadSet = [](UObject* Object, const FSetProperty* Property)
+    {
+        TSet<int32> Values;
+        if (Object == nullptr || Property == nullptr || CastField<FIntProperty>(Property->ElementProp) == nullptr)
+        {
+            return Values;
+        }
+        const FIntProperty* Element = CastField<FIntProperty>(Property->ElementProp);
+        FScriptSetHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+        {
+            if (Helper.IsValidIndex(Index))
+            {
+                Values.Add(Element->GetPropertyValue(Helper.GetElementPtr(Index)));
+            }
+        }
+        return Values;
+    };
+    auto ReadMap = [](UObject* Object, const FMapProperty* Property)
+    {
+        TMap<int32, int32> Values;
+        if (Object == nullptr || Property == nullptr ||
+            CastField<FIntProperty>(Property->KeyProp) == nullptr ||
+            CastField<FIntProperty>(Property->ValueProp) == nullptr)
+        {
+            return Values;
+        }
+        const FIntProperty* Key = CastField<FIntProperty>(Property->KeyProp);
+        const FIntProperty* Value = CastField<FIntProperty>(Property->ValueProp);
+        FScriptMapHelper Helper(Property, Property->ContainerPtrToValuePtr<void>(Object));
+        for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+        {
+            if (Helper.IsValidIndex(Index))
+            {
+                Values.Add(
+                    Key->GetPropertyValue(Helper.GetKeyPtr(Index)),
+                    Value->GetPropertyValue(Helper.GetValuePtr(Index)));
+            }
+        }
+        return Values;
+    };
+    const auto ArrayMatches = [](const TArray<int32>& Actual, std::initializer_list<int32> Expected)
+    {
+        if (Actual.Num() != static_cast<int32>(Expected.size()))
+        {
+            return false;
+        }
+        int32 Index = 0;
+        for (const int32 Value : Expected)
+        {
+            if (Actual[Index++] != Value)
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    UClass* ChildClass = ChildBlueprint->GeneratedClass;
+    UClass* SiblingClass = SiblingBlueprint->GeneratedClass;
+    const FArrayProperty* ChildArray = FindFProperty<FArrayProperty>(ChildClass, TEXT("Numbers"));
+    const FSetProperty* ChildSet = FindFProperty<FSetProperty>(ChildClass, TEXT("NumbersSet"));
+    const FMapProperty* ChildMap = FindFProperty<FMapProperty>(ChildClass, TEXT("Mapping"));
+    const FArrayProperty* SiblingArray = FindFProperty<FArrayProperty>(SiblingClass, TEXT("Numbers"));
+    const FSetProperty* SiblingSet = FindFProperty<FSetProperty>(SiblingClass, TEXT("NumbersSet"));
+    const FMapProperty* SiblingMap = FindFProperty<FMapProperty>(SiblingClass, TEXT("Mapping"));
+    TestNotNull(TEXT("Child inherits array property"), ChildArray);
+    TestNotNull(TEXT("Child inherits set property"), ChildSet);
+    TestNotNull(TEXT("Child inherits map property"), ChildMap);
+    TestNotNull(TEXT("Sibling inherits array property"), SiblingArray);
+    TestNotNull(TEXT("Sibling inherits set property"), SiblingSet);
+    TestNotNull(TEXT("Sibling inherits map property"), SiblingMap);
+    if (ChildArray == nullptr || ChildSet == nullptr || ChildMap == nullptr ||
+        SiblingArray == nullptr || SiblingSet == nullptr || SiblingMap == nullptr)
+    {
+        return false;
+    }
+
+    UObject* ChildCdo = ChildClass->GetDefaultObject();
+    TestTrue(TEXT("Child array whole-value override is established"), SetArrayValue(ChildCdo, ChildArray, TEXT("(20,21)")));
+    TestTrue(TEXT("Child set whole-value override is established"), SetSetValue(ChildCdo, ChildSet, TEXT("(30,40)")));
+    TestTrue(TEXT("Child map whole-value override is established"), SetMapValue(ChildCdo, ChildMap, 5, 6));
+
+    GrandchildPackage = CreatePackage(*GrandchildPackageName);
+    GrandchildBlueprint = FKismetEditorUtilities::CreateBlueprint(
+        ChildBlueprint->GeneratedClass,
+        GrandchildPackage,
+        FName(*GrandchildName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptInheritedCollectionDefaultsGrandchild")));
+    TestNotNull(TEXT("Creates an ordinary Blueprint grandchild"), GrandchildBlueprint);
+    if (GrandchildBlueprint == nullptr)
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(GrandchildBlueprint);
+    UClass* GrandchildClass = GrandchildBlueprint->GeneratedClass;
+    const FArrayProperty* GrandchildArray = FindFProperty<FArrayProperty>(GrandchildClass, TEXT("Numbers"));
+    const FSetProperty* GrandchildSet = FindFProperty<FSetProperty>(GrandchildClass, TEXT("NumbersSet"));
+    const FMapProperty* GrandchildMap = FindFProperty<FMapProperty>(GrandchildClass, TEXT("Mapping"));
+    TestNotNull(TEXT("Grandchild inherits array property"), GrandchildArray);
+    TestNotNull(TEXT("Grandchild inherits set property"), GrandchildSet);
+    TestNotNull(TEXT("Grandchild inherits map property"), GrandchildMap);
+    if (GrandchildArray == nullptr || GrandchildSet == nullptr || GrandchildMap == nullptr)
+    {
+        return false;
+    }
+    UObject* GrandchildCdo = GrandchildClass->GetDefaultObject();
+    TestTrue(TEXT("Grandchild independent map override is established"), SetMapValue(GrandchildCdo, GrandchildMap, 9, 10));
+    TestTrue(TEXT("Grandchild array initially follows child"),
+        ArrayMatches(ReadArray(GrandchildCdo, GrandchildArray), {20, 21}));
+
+    auto MakeWorld = [&]() -> UWorld*
+    {
+        UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+        if (World == nullptr || GEngine == nullptr)
+        {
+            return nullptr;
+        }
+        World->AddToRoot();
+        FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+        Context.SetCurrentWorld(World);
+        World->InitializeActorsForPlay(FURL());
+        return World;
+    };
+    FirstWorld = MakeWorld();
+    SecondWorld = MakeWorld();
+    TestNotNull(TEXT("Creates first collection inheritance world"), FirstWorld);
+    TestNotNull(TEXT("Creates second collection inheritance world"), SecondWorld);
+    if (FirstWorld == nullptr || SecondWorld == nullptr)
+    {
+        return false;
+    }
+    FirstChild = FirstWorld->SpawnActor<AActor>(ChildClass);
+    SecondChild = SecondWorld->SpawnActor<AActor>(ChildClass);
+    FirstSibling = FirstWorld->SpawnActor<AActor>(SiblingClass);
+    FirstGrandchild = FirstWorld->SpawnActor<AActor>(GrandchildClass);
+    SecondGrandchild = SecondWorld->SpawnActor<AActor>(GrandchildClass);
+    TestNotNull(TEXT("Creates first child instance"), FirstChild);
+    TestNotNull(TEXT("Creates second child instance"), SecondChild);
+    TestNotNull(TEXT("Creates an untouched sibling instance"), FirstSibling);
+    TestNotNull(TEXT("Creates first grandchild instance"), FirstGrandchild);
+    TestNotNull(TEXT("Creates second grandchild instance"), SecondGrandchild);
+    if (FirstChild == nullptr || SecondChild == nullptr || FirstSibling == nullptr ||
+        FirstGrandchild == nullptr || SecondGrandchild == nullptr)
+    {
+        return false;
+    }
+    const FArrayProperty* SecondChildArray = FindFProperty<FArrayProperty>(SecondChild->GetClass(), TEXT("Numbers"));
+    TestTrue(TEXT("Second child gets an independent whole-value override"),
+        SetArrayValue(SecondChild, SecondChildArray, TEXT("(70,71)")));
+    const FName FirstChildName = FirstChild->GetFName();
+    const FName SecondChildName = SecondChild->GetFName();
+    const FName FirstSiblingName = FirstSibling->GetFName();
+    const FName FirstGrandchildName = FirstGrandchild->GetFName();
+    const FName SecondGrandchildName = SecondGrandchild->GetFName();
+    ChildPackage->SetDirtyFlag(false);
+    SiblingPackage->SetDirtyFlag(false);
+    GrandchildPackage->SetDirtyFlag(false);
+
+    const FString UpdatedDocument = MakeDocument(
+        false, TEXT("NumbersRenamed"), TEXT("NumbersSetRenamed"), TEXT("MappingRenamed"),
+        TEXT("[8,9]"), TEXT("[10,11]"), TEXT("[{\"key\":6,\"value\":7}]"));
+    Error.Reset();
+    TestTrue(*FString::Printf(TEXT("Renaming base collection states succeeds: %s"), *Error),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *BaseBlueprint, UpdatedDocument, false, Result, Error));
+
+    const auto FindActorByName = [](UWorld* World, FName Name) -> AActor*
+    {
+        if (World == nullptr)
+        {
+            return nullptr;
+        }
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetFName() == Name)
+            {
+                return *It;
+            }
+        }
+        return nullptr;
+    };
+    FirstChild = FindActorByName(FirstWorld, FirstChildName);
+    SecondChild = FindActorByName(SecondWorld, SecondChildName);
+    FirstSibling = FindActorByName(FirstWorld, FirstSiblingName);
+    FirstGrandchild = FindActorByName(FirstWorld, FirstGrandchildName);
+    SecondGrandchild = FindActorByName(SecondWorld, SecondGrandchildName);
+    TestNotNull(TEXT("First child is reacquired after Blueprint reinstancing"), FirstChild);
+    TestNotNull(TEXT("Second child is reacquired after Blueprint reinstancing"), SecondChild);
+    TestNotNull(TEXT("Sibling is reacquired after Blueprint reinstancing"), FirstSibling);
+    TestNotNull(TEXT("First grandchild is reacquired after Blueprint reinstancing"), FirstGrandchild);
+    TestNotNull(TEXT("Second grandchild is reacquired after Blueprint reinstancing"), SecondGrandchild);
+
+    const FArrayProperty* BaseRenamedArray = FindFProperty<FArrayProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* BaseRenamedSet = FindFProperty<FSetProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersSetRenamed"));
+    const FMapProperty* BaseRenamedMap = FindFProperty<FMapProperty>(BaseBlueprint->GeneratedClass, TEXT("MappingRenamed"));
+    SiblingClass = SiblingBlueprint->GeneratedClass;
+    const FArrayProperty* SiblingRenamedArray = FindFProperty<FArrayProperty>(SiblingClass, TEXT("NumbersRenamed"));
+    const FSetProperty* SiblingRenamedSet = FindFProperty<FSetProperty>(SiblingClass, TEXT("NumbersSetRenamed"));
+    const FMapProperty* SiblingRenamedMap = FindFProperty<FMapProperty>(SiblingClass, TEXT("MappingRenamed"));
+    const FArrayProperty* ChildRenamedArray = FindFProperty<FArrayProperty>(ChildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* ChildRenamedSet = FindFProperty<FSetProperty>(ChildBlueprint->GeneratedClass, TEXT("NumbersSetRenamed"));
+    const FMapProperty* ChildRenamedMap = FindFProperty<FMapProperty>(ChildBlueprint->GeneratedClass, TEXT("MappingRenamed"));
+    const FArrayProperty* GrandchildRenamedArray = FindFProperty<FArrayProperty>(GrandchildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* GrandchildRenamedSet = FindFProperty<FSetProperty>(GrandchildBlueprint->GeneratedClass, TEXT("NumbersSetRenamed"));
+    const FMapProperty* GrandchildRenamedMap = FindFProperty<FMapProperty>(GrandchildBlueprint->GeneratedClass, TEXT("MappingRenamed"));
+    TestNotNull(TEXT("Base array rename exists"), BaseRenamedArray);
+    TestNotNull(TEXT("Base set rename exists"), BaseRenamedSet);
+    TestNotNull(TEXT("Base map rename exists"), BaseRenamedMap);
+    TestNotNull(TEXT("Sibling array rename exists"), SiblingRenamedArray);
+    TestNotNull(TEXT("Sibling set rename exists"), SiblingRenamedSet);
+    TestNotNull(TEXT("Sibling map rename exists"), SiblingRenamedMap);
+    TestTrue(TEXT("Child whole array override survives rename"),
+        ArrayMatches(ReadArray(ChildBlueprint->GeneratedClass->GetDefaultObject(), ChildRenamedArray), {20, 21}));
+    TestTrue(TEXT("Grandchild follower copies the final child array"),
+        ArrayMatches(ReadArray(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedArray), {20, 21}));
+    TestTrue(TEXT("Second child instance keeps its own array override"),
+        ArrayMatches(ReadArray(SecondChild, FindFProperty<FArrayProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed"))), {70, 71}));
+    TestTrue(TEXT("First child follower copies child CDO array"),
+        ArrayMatches(ReadArray(FirstChild, FindFProperty<FArrayProperty>(FirstChild->GetClass(), TEXT("NumbersRenamed"))), {20, 21}));
+    const TSet<int32> GrandchildSetValues = ReadSet(
+        GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedSet);
+    TestTrue(TEXT("Grandchild follower copies final child set"),
+        GrandchildSetValues.Num() == 2 &&
+        GrandchildSetValues.Contains(30) && GrandchildSetValues.Contains(40));
+    const TMap<int32, int32> ChildMapValues = ReadMap(
+        ChildBlueprint->GeneratedClass->GetDefaultObject(), ChildRenamedMap);
+    TestTrue(TEXT("Child whole map override survives rename without hybrid entries"),
+        ChildMapValues.Num() == 1 && ChildMapValues.FindRef(5) == 6);
+    const TMap<int32, int32> GrandchildMapValues = ReadMap(
+        GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedMap);
+    TestTrue(TEXT("Grandchild independent map override survives rename"),
+        GrandchildMapValues.Num() == 1 && GrandchildMapValues.FindRef(9) == 10);
+    TestTrue(TEXT("Base array receives the new declaration default"),
+        ArrayMatches(ReadArray(BaseBlueprint->GeneratedClass->GetDefaultObject(), BaseRenamedArray), {8, 9}));
+    TestTrue(TEXT("Untouched sibling CDO follows the new array default"),
+        ArrayMatches(ReadArray(SiblingClass->GetDefaultObject(), SiblingRenamedArray), {8, 9}));
+    const TSet<int32> SiblingSetValues = ReadSet(SiblingClass->GetDefaultObject(), SiblingRenamedSet);
+    TestTrue(TEXT("Untouched sibling CDO follows the new set default"),
+        SiblingSetValues.Num() == 2 && SiblingSetValues.Contains(10) && SiblingSetValues.Contains(11));
+    const TMap<int32, int32> SiblingMapValues = ReadMap(SiblingClass->GetDefaultObject(), SiblingRenamedMap);
+    TestTrue(TEXT("Untouched sibling CDO follows the complete new map default"),
+        SiblingMapValues.Num() == 1 && SiblingMapValues.FindRef(6) == 7);
+    TestTrue(TEXT("Collection restoration marks the changed child package dirty"), ChildPackage->IsDirty());
+    TestTrue(TEXT("Collection restoration marks the changed grandchild package dirty"), GrandchildPackage->IsDirty());
+    NewSibling = FirstWorld->SpawnActor<AActor>(SiblingClass);
+    TestNotNull(TEXT("New sibling instance can be spawned after reinstance"), NewSibling);
+    TestTrue(TEXT("New sibling instance follows the new array default"),
+        ArrayMatches(ReadArray(NewSibling, SiblingRenamedArray), {8, 9}));
+    TestTrue(TEXT("New sibling instance follows the complete new set default"),
+        ReadSet(NewSibling, SiblingRenamedSet).Num() == 2 &&
+        ReadSet(NewSibling, SiblingRenamedSet).Contains(10) &&
+        ReadSet(NewSibling, SiblingRenamedSet).Contains(11));
+    const TMap<int32, int32> NewSiblingMapValues = ReadMap(NewSibling, SiblingRenamedMap);
+    TestTrue(TEXT("New sibling instance follows the complete new map default"),
+        NewSiblingMapValues.Num() == 1 && NewSiblingMapValues.FindRef(6) == 7);
+    const FName NewSiblingName = NewSibling->GetFName();
+
+    const UClass* BaseClassBeforeReject = BaseBlueprint->GeneratedClass;
+    const UClass* ChildClassBeforeReject = ChildBlueprint->GeneratedClass;
+    const UClass* GrandchildClassBeforeReject = GrandchildBlueprint->GeneratedClass;
+    const UClass* SiblingClassBeforeReject = SiblingBlueprint->GeneratedClass;
+    const UClass* ChildParentBeforeReject = ChildBlueprint->GeneratedClass->GetSuperClass();
+    const TArray<int32> ChildArrayBeforeReject = ReadArray(
+        ChildBlueprint->GeneratedClass->GetDefaultObject(), ChildRenamedArray);
+    const TArray<int32> SecondChildArrayBeforeReject = ReadArray(
+        SecondChild, FindFProperty<FArrayProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed")));
+    const TArray<int32> NewSiblingArrayBeforeReject = ReadArray(
+        NewSibling, FindFProperty<FArrayProperty>(NewSibling->GetClass(), TEXT("NumbersRenamed")));
+    const TMap<int32, int32> NewSiblingMapBeforeReject = ReadMap(
+        NewSibling, FindFProperty<FMapProperty>(NewSibling->GetClass(), TEXT("MappingRenamed")));
+    const TMap<int32, int32> GrandchildMapBeforeReject = ReadMap(
+        GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedMap);
+    const bool ChildPackageDirtyBeforeReject = ChildPackage->IsDirty();
+    const bool SiblingPackageDirtyBeforeReject = SiblingPackage->IsDirty();
+    const bool GrandchildPackageDirtyBeforeReject = GrandchildPackage->IsDirty();
+
+    const FString TypeChangedDocument = MakeDocument(
+        true, TEXT("NumbersRenamed"), TEXT("NumbersSetRenamed"), TEXT("MappingRenamed"),
+        TEXT("[8,9]"), TEXT("[10,11]"), TEXT("[{\"key\":6,\"value\":7}]"));
+    Error.Reset();
+    TestFalse(TEXT("Validate-only rejects a collection retype with derived overrides"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *BaseBlueprint, TypeChangedDocument, true, Result, Error));
+    TestTrue(TEXT("Validate-only retype rejection names the instance override"),
+        Error.Contains(TEXT("instance override")));
+    Error.Reset();
+    TestFalse(TEXT("Apply rejects a collection retype with derived overrides"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *BaseBlueprint, TypeChangedDocument, false, Result, Error));
+    TestTrue(TEXT("Apply retype rejection leaves the old array property"),
+        FindFProperty<FArrayProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersRenamed")) != nullptr);
+    TestTrue(TEXT("Rejected retype preserves generated class identities and parent relation"),
+        BaseBlueprint->GeneratedClass == BaseClassBeforeReject &&
+        ChildBlueprint->GeneratedClass == ChildClassBeforeReject &&
+        GrandchildBlueprint->GeneratedClass == GrandchildClassBeforeReject &&
+        SiblingBlueprint->GeneratedClass == SiblingClassBeforeReject &&
+        ChildBlueprint->GeneratedClass->GetSuperClass() == ChildParentBeforeReject);
+    TestTrue(TEXT("Rejected retype preserves derived CDO and independent instance values"),
+        ReadArray(ChildBlueprint->GeneratedClass->GetDefaultObject(), ChildRenamedArray) == ChildArrayBeforeReject &&
+        ReadArray(SecondChild, FindFProperty<FArrayProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed"))) ==
+            SecondChildArrayBeforeReject &&
+        ReadArray(NewSibling, FindFProperty<FArrayProperty>(NewSibling->GetClass(), TEXT("NumbersRenamed"))) ==
+            NewSiblingArrayBeforeReject &&
+        ReadMap(NewSibling, FindFProperty<FMapProperty>(NewSibling->GetClass(), TEXT("MappingRenamed"))).Num() ==
+            NewSiblingMapBeforeReject.Num() &&
+        ReadMap(NewSibling, FindFProperty<FMapProperty>(NewSibling->GetClass(), TEXT("MappingRenamed"))).FindRef(5) ==
+            NewSiblingMapBeforeReject.FindRef(5) &&
+        ReadMap(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedMap).Num() ==
+            GrandchildMapBeforeReject.Num() &&
+        ReadMap(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), GrandchildRenamedMap).FindRef(9) ==
+            GrandchildMapBeforeReject.FindRef(9));
+    TestTrue(TEXT("Rejected retype preserves child package dirty state"),
+        ChildPackage->IsDirty() == ChildPackageDirtyBeforeReject);
+    TestTrue(TEXT("Rejected retype preserves sibling package dirty state"),
+        SiblingPackage->IsDirty() == SiblingPackageDirtyBeforeReject);
+    TestTrue(TEXT("Rejected retype preserves grandchild package dirty state"),
+        GrandchildPackage->IsDirty() == GrandchildPackageDirtyBeforeReject);
+
+    // Make every derived object a follower, then the same retype is allowed.
+    const FArrayProperty* CurrentBaseArray = FindFProperty<FArrayProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FArrayProperty* CurrentChildArray = FindFProperty<FArrayProperty>(ChildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FArrayProperty* CurrentGrandchildArray = FindFProperty<FArrayProperty>(GrandchildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    SetArrayValue(ChildBlueprint->GeneratedClass->GetDefaultObject(), CurrentChildArray, TEXT("(8,9)"));
+    SetArrayValue(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), CurrentGrandchildArray, TEXT("(8,9)"));
+    SetArrayValue(FirstChild, FindFProperty<FArrayProperty>(FirstChild->GetClass(), TEXT("NumbersRenamed")), TEXT("(8,9)"));
+    SetArrayValue(SecondChild, FindFProperty<FArrayProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed")), TEXT("(8,9)"));
+    SetArrayValue(FirstGrandchild, FindFProperty<FArrayProperty>(FirstGrandchild->GetClass(), TEXT("NumbersRenamed")), TEXT("(8,9)"));
+    SetArrayValue(SecondGrandchild, FindFProperty<FArrayProperty>(SecondGrandchild->GetClass(), TEXT("NumbersRenamed")), TEXT("(8,9)"));
+    TestNotNull(TEXT("Pure follower retype starts with the base array"), CurrentBaseArray);
+    Error.Reset();
+    TestTrue(TEXT("Pure followers accept collection retype"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *BaseBlueprint, TypeChangedDocument, false, Result, Error));
+    FirstChild = FindActorByName(FirstWorld, FirstChildName);
+    SecondChild = FindActorByName(SecondWorld, SecondChildName);
+    FirstGrandchild = FindActorByName(FirstWorld, FirstGrandchildName);
+    SecondGrandchild = FindActorByName(SecondWorld, SecondGrandchildName);
+    NewSibling = FindActorByName(FirstWorld, NewSiblingName);
+    TestNotNull(TEXT("First child is reacquired after pure follower retype"), FirstChild);
+    TestNotNull(TEXT("Second child is reacquired after pure follower retype"), SecondChild);
+    TestNotNull(TEXT("First grandchild is reacquired after pure follower retype"), FirstGrandchild);
+    TestNotNull(TEXT("Second grandchild is reacquired after pure follower retype"), SecondGrandchild);
+    TestNotNull(TEXT("New sibling is reacquired after pure follower retype"), NewSibling);
+    if (FirstChild == nullptr || SecondChild == nullptr || FirstGrandchild == nullptr ||
+        SecondGrandchild == nullptr || NewSibling == nullptr)
+    {
+        return false;
+    }
+    SiblingClass = SiblingBlueprint->GeneratedClass;
+    TestNotNull(TEXT("Pure follower retype produces a Set property"),
+        FindFProperty<FSetProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersRenamed")));
+    const FSetProperty* RetypedBaseSet = FindFProperty<FSetProperty>(BaseBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* RetypedChildSet = FindFProperty<FSetProperty>(ChildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* RetypedSiblingSet = FindFProperty<FSetProperty>(SiblingBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    const FSetProperty* RetypedGrandchildSet = FindFProperty<FSetProperty>(GrandchildBlueprint->GeneratedClass, TEXT("NumbersRenamed"));
+    TestTrue(TEXT("Pure follower retype updates all derived CDOs"),
+        RetypedBaseSet != nullptr && RetypedChildSet != nullptr &&
+        RetypedSiblingSet != nullptr && RetypedGrandchildSet != nullptr &&
+        ReadSet(BaseBlueprint->GeneratedClass->GetDefaultObject(), RetypedBaseSet).Num() == 2 &&
+        ReadSet(BaseBlueprint->GeneratedClass->GetDefaultObject(), RetypedBaseSet).Contains(8) &&
+        ReadSet(BaseBlueprint->GeneratedClass->GetDefaultObject(), RetypedBaseSet).Contains(9) &&
+        ReadSet(ChildBlueprint->GeneratedClass->GetDefaultObject(), RetypedChildSet).Num() == 2 &&
+        ReadSet(ChildBlueprint->GeneratedClass->GetDefaultObject(), RetypedChildSet).Contains(8) &&
+        ReadSet(ChildBlueprint->GeneratedClass->GetDefaultObject(), RetypedChildSet).Contains(9) &&
+        ReadSet(SiblingBlueprint->GeneratedClass->GetDefaultObject(), RetypedSiblingSet).Num() == 2 &&
+        ReadSet(SiblingBlueprint->GeneratedClass->GetDefaultObject(), RetypedSiblingSet).Contains(8) &&
+        ReadSet(SiblingBlueprint->GeneratedClass->GetDefaultObject(), RetypedSiblingSet).Contains(9) &&
+        ReadSet(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), RetypedGrandchildSet).Num() == 2 &&
+        ReadSet(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), RetypedGrandchildSet).Contains(8) &&
+        ReadSet(GrandchildBlueprint->GeneratedClass->GetDefaultObject(), RetypedGrandchildSet).Contains(9));
+    TestTrue(TEXT("Pure follower retype updates both existing world instances"),
+        ReadSet(FirstChild, FindFProperty<FSetProperty>(FirstChild->GetClass(), TEXT("NumbersRenamed"))).Num() == 2 &&
+        ReadSet(FirstChild, FindFProperty<FSetProperty>(FirstChild->GetClass(), TEXT("NumbersRenamed"))).Contains(8) &&
+        ReadSet(SecondChild, FindFProperty<FSetProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed"))).Num() == 2 &&
+        ReadSet(SecondChild, FindFProperty<FSetProperty>(SecondChild->GetClass(), TEXT("NumbersRenamed"))).Contains(9) &&
+        ReadSet(FirstGrandchild, FindFProperty<FSetProperty>(FirstGrandchild->GetClass(), TEXT("NumbersRenamed"))).Num() == 2 &&
+        ReadSet(FirstGrandchild, FindFProperty<FSetProperty>(FirstGrandchild->GetClass(), TEXT("NumbersRenamed"))).Contains(8) &&
+        ReadSet(SecondGrandchild, FindFProperty<FSetProperty>(SecondGrandchild->GetClass(), TEXT("NumbersRenamed"))).Num() == 2 &&
+        ReadSet(SecondGrandchild, FindFProperty<FSetProperty>(SecondGrandchild->GetClass(), TEXT("NumbersRenamed"))).Contains(9));
+    const FSetProperty* NewSiblingRetypedSet =
+        FindFProperty<FSetProperty>(NewSibling->GetClass(), TEXT("NumbersRenamed"));
+    const TSet<int32> NewSiblingRetypedSetValues = ReadSet(NewSibling, NewSiblingRetypedSet);
+    const FSetProperty* NewSiblingExistingSet =
+        FindFProperty<FSetProperty>(NewSibling->GetClass(), TEXT("NumbersSetRenamed"));
+    const TSet<int32> NewSiblingExistingSetValues = ReadSet(NewSibling, NewSiblingExistingSet);
+    const FSetProperty* SiblingCdoExistingSet =
+        FindFProperty<FSetProperty>(SiblingClass, TEXT("NumbersSetRenamed"));
+    const TSet<int32> SiblingCdoExistingSetValues = ReadSet(SiblingClass->GetDefaultObject(), SiblingCdoExistingSet);
+    TestTrue(TEXT("New sibling keeps the complete set after pure follower retype"),
+        NewSiblingRetypedSetValues.Num() == 2 &&
+        NewSiblingRetypedSetValues.Contains(8) &&
+        NewSiblingRetypedSetValues.Contains(9));
+    TestTrue(TEXT("New sibling keeps the existing set state after pure follower retype"),
+        NewSiblingExistingSetValues.Num() == 2 &&
+        NewSiblingExistingSetValues.Contains(10) &&
+        NewSiblingExistingSetValues.Contains(11) &&
+        SiblingCdoExistingSetValues.Num() == 2 &&
+        SiblingCdoExistingSetValues.Contains(10) &&
+        SiblingCdoExistingSetValues.Contains(11));
+    TestTrue(TEXT("New sibling keeps the complete map while array follows retype"),
+        ReadMap(NewSibling, FindFProperty<FMapProperty>(NewSibling->GetClass(), TEXT("MappingRenamed"))).Num() == 1 &&
+        ReadMap(NewSibling, FindFProperty<FMapProperty>(NewSibling->GetClass(), TEXT("MappingRenamed"))).FindRef(6) == 7);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptBlueprintManagedFunctionDispatchTest,
     "UnifiedScript.Unreal.ScriptClass.BlueprintManagedFunctionDispatch",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

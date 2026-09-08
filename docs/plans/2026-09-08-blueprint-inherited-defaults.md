@@ -37,14 +37,14 @@ identity relationships. No production ownership fallback was needed. This does
 not exercise managed startup or establish the exact cause of the old transient
 fixture failure.
 
-Collection defaults are the next related boundary. The existing
 `CaptureCollectionInstanceOverrides` in `UnifiedScriptBlueprintClassMaterializer.cpp`
-calls `GetObjectsOfClass` without derived classes and excludes templates. Extend
-the established preservation behavior to derived class defaults and instances
-only after their immediate archetype/default ownership is explicit. Untouched
-values should inherit a new source default; deliberate overrides should retain
-their whole value, with reference fixup and rejection before mutation for
-incompatible shapes.
+now includes current generated descendant CDOs and live instances, excluding
+skeleton/obsolete classes and other templates. It records whether each value
+follows its immediate archetype or owns a whole-value override. Both validation
+and apply reject incompatible shapes before compiling the original Blueprint.
+Restoration preserves stable IDs and the existing object-reference fixup/rehash
+path. Derived packages whose CDO values were repaired are marked dirty only
+after restoration succeeds; dependent assets are not automatically saved.
 
 The inheritance rule is per immediate archetype, not a comparison of every
 descendant against the base class CDO. A child CDO may own an override while
@@ -56,6 +56,15 @@ relationship through the existing replacement map and preflight all target
 properties before writing. Reject incompatible types when any affected class
 default or instance owns an override; untouched values may follow the new type.
 
+The first collection checkpoint starts with a materialized base before creating
+its ordinary descendants. A temporary fixture that created descendants before
+the initial state materialization left the untouched sibling with different
+defaults (`artifacts/m13-3c-3-inherited-collections/inherited-collections-cmd-3.log`).
+Adding new state fields to an already-existing hierarchy still needs its own
+source-grounded regression; the existing-field preservation checkpoint does not
+close that boundary. Package persistence, inherited managed startup/reload and
+cooked execution also remain outstanding.
+
 The factory uses public saved assets and calls `MarkBlueprintAsModified`, which
 refreshes Unreal's cached post-construction property list. The regression uses
 that authoring path instead of assigning ownership separately to descendants.
@@ -66,6 +75,27 @@ passes after a HostEditor build. Evidence is under
 and `inherited-defaults-cmd-cleanup-final.log` (Success and Queue Empty). The
 test unloads only its four GUID-named packages before removing their files;
 the final run cleans them without manual intervention.
+
+Existing-collection checkpoint: `InheritedCollectionDefaults` covers complete
+Array/Set/Map overrides, a following grandchild, an untouched sibling, instances
+in two Worlds, new instances, stable-ID rename, rejected incompatible retype and
+accepted pure-follower retype. Rejections preserve generated-class identities,
+values and package dirty flags. The final native checks pass with Success and
+Queue Empty under `artifacts/m13-3c-3-inherited-collections`:
+
+- `editor-build-final-5.log` compiles the final materializer; `editor-build-final-8.log`
+  compiles the final test and links the Editor.
+- `inherited-collections-cmd-final-5.log` — `InheritedCollectionDefaults`.
+- `collection-state-cmd-final.log` — existing `CollectionStateMaterialization`,
+  including object-reference Map replacement/rehash.
+- `blueprint-state-cmd-final.log` — `BlueprintStateMaterialization`.
+
+The additional `CommonStateMaterialization` run fails during managed activation:
+`CreateScriptWithBlueprintContract` cannot load `UnifiedScript.Unreal, Version=1.0.0.0`.
+See `common-state-cmd-final.log`. The subsequent managed behavior assertions are
+not passing evidence. This checkpoint changes no managed assembly or deployment;
+resolve the staged-runtime loading issue before claiming the remaining managed
+startup/reload coverage.
 
 ## Relevant verification
 

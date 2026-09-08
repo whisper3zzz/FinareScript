@@ -28,9 +28,11 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Current tranche: **M13.3C-3 — inheritance, defaults and subobject identity**.
   The real Actor factory preserves the exact Script Asset, native component
   identity and edited bool defaults through ordinary child/grandchild inheritance,
-  compile and package reload. Continue with collection-default preservation for
-  derived class defaults and instances, followed by managed multi-World startup
-  and the affected cooked path. The bounded
+  compile and package reload. Existing collection fields now preserve derived
+  CDO and instance overrides against each immediate archetype, including rename
+  and incompatible-type rejection. Continue with new fields on an existing
+  hierarchy, collection package persistence, inherited managed multi-World
+  startup/reload and the affected cooked path. The bounded
   entrypoint is `docs/plans/2026-09-08-blueprint-inherited-defaults.md`.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and
