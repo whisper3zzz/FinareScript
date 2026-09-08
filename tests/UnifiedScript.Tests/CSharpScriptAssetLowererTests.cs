@@ -167,6 +167,213 @@ public sealed class CSharpScriptAssetLowererTests
     }
 
     [Fact]
+    public void ScriptStateProjectionWalksOwnersAndAppliesDerivedConstructorDefaults()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            public class FrameworkHelper : UnrealActorScript
+            {
+                [Expose]
+                public int ExposedHelper { get; set; } = 5;
+
+                public int HiddenHelper { get; set; } = 6;
+            }
+
+            [ScriptAsset("Game/BaseState")]
+            public class BaseState : FrameworkHelper
+            {
+                public int Seed { get; set; } = 3;
+            }
+
+            [ScriptAsset("Game/MiddleState")]
+            public class MiddleState : BaseState
+            {
+                public IReadOnlyList<int> Values { get; set; } =
+                    new List<int> { 2, 4 };
+                public MiddleState()
+                {
+                    base.Seed = 7;
+                    Values = new List<int> { 6, 8 };
+                }
+            }
+
+            [ScriptAsset("Game/ConcreteState")]
+            [UnrealScriptClass(
+                UnrealScriptClassKind.Actor,
+                GeneratedClassPath = "/Game/Tests/BP_ConcreteState.BP_ConcreteState_C")]
+            public sealed class ConcreteState : MiddleState
+            {
+                public IReadOnlySet<int> Enabled { get; set; } =
+                    new HashSet<int> { 11, 13 };
+                public IReadOnlyDictionary<int, int> Weights { get; set; } =
+                    new Dictionary<int, int> { { 17, 19 } };
+                public ConcreteState()
+                {
+                    Seed = 9;
+                    if (Seed < 0) return;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InheritedStateProjection",
+                [new CSharpSourceDocument("Game/InheritedStateProjection.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDeclaration concrete = result.ScriptAssets!.Assets.Single(
+            static asset => asset.QualifiedName == "Game.ConcreteState");
+        IReadOnlyDictionary<string, ScriptStateDeclaration> states = concrete.States
+            .ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Assert.Equal(9, states["Seed"].DefaultValue.GetInt32());
+        Assert.Equal(5, states["ExposedHelper"].DefaultValue.GetInt32());
+        Assert.DoesNotContain("HiddenHelper", states.Keys);
+        Assert.DoesNotContain("Context", states.Keys);
+        Assert.DoesNotContain("Bridge", states.Keys);
+        Assert.DoesNotContain("HostHandle", states.Keys);
+        Assert.DoesNotContain("TargetHandle", states.Keys);
+        Assert.Equal([6, 8], states["Values"].DefaultValue.EnumerateArray()
+            .Select(static value => value.GetInt32()).ToArray());
+        Assert.Equal([11, 13], states["Enabled"].DefaultValue.EnumerateArray()
+            .Select(static value => value.GetInt32()).ToArray());
+        Assert.Equal(17, states["Weights"].DefaultValue[0].GetProperty("key").GetInt32());
+        Assert.Equal(19, states["Weights"].DefaultValue[0].GetProperty("value").GetInt32());
+
+        ScriptAssetDeclaration baseAsset = result.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.BaseState");
+        Assert.Equal(states["Seed"].Id, baseAsset.States.Single(static state => state.Name == "Seed").Id);
+    }
+
+    [Fact]
+    public void ExposedFieldsStaticMembersAndUnaryConstructorWritesAreRejectedWithoutPublication()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            public class InvalidHelper
+            {
+                [Expose]
+                public int Field = 1;
+
+                [Expose]
+                public static int StaticValue { get; set; } = 2;
+            }
+
+            [ScriptAsset("Game.InvalidInheritedState")]
+            public sealed class InvalidInheritedState : InvalidHelper
+            {
+                public int Seed { get; set; } = 1;
+
+                public InvalidInheritedState()
+                {
+                    Seed++;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "InvalidInheritedState",
+                [new CSharpSourceDocument("Game/InvalidInheritedState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.ScriptAssets);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedStateShape &&
+            diagnostic.Message.Contains("Field", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedStateShape &&
+            diagnostic.Message.Contains("StaticValue", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.StateDefaultRequired &&
+            diagnostic.Message.Contains("increment/decrement", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void StateHidingOverrideAndUnrealNameCollisionsAreRejected()
+    {
+        const string newSource = """
+            using UnifiedScript;
+
+            [ScriptAsset("Game.NewBase")]
+            public class NewBase
+            {
+                public int Value { get; set; } = 1;
+            }
+
+            [ScriptAsset("Game.NewLeaf")]
+            public sealed class NewLeaf : NewBase
+            {
+                public new int Value { get; set; } = 2;
+            }
+            """;
+        const string overrideSource = """
+            using UnifiedScript;
+
+            [ScriptAsset("Game.OverrideBase")]
+            public class OverrideBase
+            {
+                public virtual int Value { get; set; } = 1;
+            }
+
+            [ScriptAsset("Game.OverrideLeaf")]
+            public sealed class OverrideLeaf : OverrideBase
+            {
+                public override int Value { get; set; } = 2;
+            }
+            """;
+        const string unrealCaseSource = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [ScriptAsset("Game.UnrealBase")]
+            [UnrealScriptClass(
+                UnrealScriptClassKind.Actor,
+                GeneratedClassPath = "/Game/Tests/BP_UnrealBase.BP_UnrealBase_C")]
+            public class UnrealBase : UnrealActorScript
+            {
+                public int Value { get; set; } = 1;
+            }
+
+            [ScriptAsset("Game.UnrealLeaf")]
+            [UnrealScriptClass(
+                UnrealScriptClassKind.Actor,
+                GeneratedClassPath = "/Game/Tests/BP_UnrealLeaf.BP_UnrealLeaf_C")]
+            public sealed class UnrealLeaf : UnrealBase
+            {
+                public int value { get; set; } = 2;
+            }
+            """;
+
+        foreach ((string Name, string Source) candidate in new[]
+        {
+            ("new", newSource),
+            ("override", overrideSource),
+            ("unreal-case", unrealCaseSource),
+        })
+        {
+            CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+                new CSharpCompilationRequest(
+                    $"StateCollision_{candidate.Name}",
+                    [new CSharpSourceDocument($"Game/{candidate.Name}.cs", candidate.Source)],
+                    [typeof(UnrealObjectScript).Assembly.Location]));
+
+            Assert.False(result.Succeeded, candidate.Name);
+            Assert.Null(result.ScriptAssets);
+            Assert.Contains(result.Diagnostics, diagnostic =>
+                diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedStateShape &&
+                diagnostic.Message.Contains("conflicts", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public void CommonUnrealValueAndReferenceStatesLowerWithTypedDefaults()
     {
         const string source = """
@@ -391,6 +598,8 @@ public sealed class CSharpScriptAssetLowererTests
     [InlineData("if (System.DateTime.UtcNow.Ticks > 0) { Count = 7; }")]
     [InlineData("Count = System.Environment.TickCount;")]
     [InlineData("void SetDefault() { Count = 7; } SetDefault();")]
+    [InlineData("if (System.DateTime.UtcNow.Ticks > 0) return; Count = 7;")]
+    [InlineData("goto Complete; Count = 7; Complete: ;")]
     public void NonDeterministicConstructorDefaultsAreRejected(string constructorBody)
     {
         string source = $$"""

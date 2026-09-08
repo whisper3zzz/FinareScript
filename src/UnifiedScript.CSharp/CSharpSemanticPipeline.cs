@@ -38,6 +38,7 @@ public sealed class CSharpSemanticPipeline
             };
         }
 
+        CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
         var identitySidecars = new List<IdentitySidecarDocument>();
         var declarationIdentities = new Dictionary<SemanticId, SemanticId>();
         var identityReconciler = new CSharpIdentityReconciler();
@@ -52,7 +53,8 @@ public sealed class CSharpSemanticPipeline
             IdentityReconciliationResult reconciliation = identityReconciler.Reconcile(
                 source,
                 syntaxTrees[index],
-                lowerings[index].CompilationUnit!);
+                lowerings[index].CompilationUnit!,
+                compilation);
             diagnostics.AddRange(reconciliation.Diagnostics);
             identitySidecars.Add(reconciliation.Sidecar);
             foreach (KeyValuePair<SemanticId, SemanticId> identity in reconciliation.DeclarationIdentities)
@@ -75,7 +77,6 @@ public sealed class CSharpSemanticPipeline
         }
 
         HirCompilationUnit hir = MergeCompilationUnits(request, lowerings);
-        CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
         diagnostics.AddRange(compilation
             .GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error)

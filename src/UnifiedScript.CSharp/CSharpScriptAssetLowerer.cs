@@ -53,7 +53,7 @@ internal sealed class CSharpScriptAssetLowerer
         IReadOnlyList<SyntaxTree> syntaxTrees,
         HirCompilationUnit hir,
         BoundCompilation semantics,
-        IReadOnlyDictionary<SemanticId, SemanticId>? declarationIdentities = null)
+        IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities)
     {
         ArgumentNullException.ThrowIfNull(compilation);
         ArgumentNullException.ThrowIfNull(syntaxTrees);
@@ -107,9 +107,8 @@ internal sealed class CSharpScriptAssetLowerer
 
                 IReadOnlyList<ScriptStateDeclaration> states = LowerStates(
                     typeSymbol,
-                    assetAttribute is not null,
                     compilation,
-                    declarationIdentities ?? new Dictionary<SemanticId, SemanticId>(),
+                    declarationIdentities,
                     declarationReferences,
                     diagnostics);
                 IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
@@ -231,37 +230,79 @@ internal sealed class CSharpScriptAssetLowerer
 
     private static IReadOnlyList<ScriptStateDeclaration> LowerStates(
         INamedTypeSymbol type,
-        bool ownsAllProperties,
         CSharpCompilation compilation,
         IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities,
         IDictionary<SemanticId, SemanticId> declarationReferences,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
         var states = new List<ScriptStateDeclaration>();
-        foreach (ISymbol member in type.GetMembers().OrderBy(static member => member.MetadataName, StringComparer.Ordinal))
+        StringComparer stateNameComparer = FindAttribute(type, UnrealScriptClassAttributeName) is not null
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var selectedProperties = new Dictionary<string, (INamedTypeSymbol Owner, IPropertySymbol Property, AttributeData? Exposure)>(stateNameComparer);
+        foreach (INamedTypeSymbol owner in EnumerateTypeHierarchy(type))
         {
-            AttributeData? exposureAttribute = FindAttribute(member, ExposeAttributeName);
-            bool isCandidate =
-                (member is IPropertySymbol candidateProperty &&
-                    !candidateProperty.IsStatic && ownsAllProperties) ||
-                exposureAttribute is not null;
-            if (!isCandidate)
+            bool ownsAllProperties = FindAttribute(owner, ScriptAssetAttributeName) is not null;
+            foreach (ISymbol member in owner.GetMembers()
+                         .OrderBy(static member => member.MetadataName, StringComparer.Ordinal))
             {
-                continue;
-            }
+                IPropertySymbol? property = member as IPropertySymbol;
+                AttributeData? exposureAttribute = FindAttribute(member, ExposeAttributeName);
+                bool isCandidate =
+                    (property is not null && !property.IsStatic && ownsAllProperties) ||
+                    exposureAttribute is not null;
+                if (!isCandidate)
+                {
+                    if (property is not null && !property.IsStatic && selectedProperties.ContainsKey(property.Name))
+                    {
+                        diagnostics.Add(new UnifiedDiagnostic(
+                            DeclarationDiagnosticCodes.UnsupportedStateShape,
+                            UnifiedDiagnosticSeverity.Error,
+                            $"Script state property '{property.Name}' on '{GetMetadataName(owner)}' hides an inherited state property; use the inherited property instead of declaring a second state owner.",
+                            GetMemberSpan(member, type),
+                            CSharpSemanticIds.ForRoslynSymbol(property)));
+                    }
+                    continue;
+                }
 
-            if (member is not IPropertySymbol property || property.IsStatic || property.IsIndexer ||
+                if (property is null || property.IsStatic)
+                {
+                    diagnostics.Add(new UnifiedDiagnostic(
+                        DeclarationDiagnosticCodes.UnsupportedStateShape,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Script state '{member.Name}' must be a non-static, non-indexed auto-property with get and set accessors.",
+                        GetMemberSpan(member, type),
+                        CSharpSemanticIds.ForRoslynSymbol(member)));
+                    continue;
+                }
+
+                if (selectedProperties.ContainsKey(property.Name))
+                {
+                    diagnostics.Add(new UnifiedDiagnostic(
+                        DeclarationDiagnosticCodes.UnsupportedStateShape,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Script state property '{property.Name}' on '{GetMetadataName(owner)}' conflicts with an inherited state property. Hiding or overriding a projected state is not supported.",
+                        GetMemberSpan(member, type),
+                        CSharpSemanticIds.ForRoslynSymbol(property)));
+                    continue;
+                }
+
+                selectedProperties[property.Name] = (owner, property, exposureAttribute);
+            }
+        }
+
+        foreach ((INamedTypeSymbol owner, IPropertySymbol property, AttributeData? exposureAttribute) in selectedProperties.Values)
+        {
+            if (property.IsIndexer ||
                 !TryGetAutoPropertySyntax(property, out PropertyDeclarationSyntax? propertySyntax) ||
                 property.GetMethod is null || property.SetMethod is null)
             {
-                SyntaxNode? syntax = member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedStateShape,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Script state '{member.Name}' must be a non-static, non-indexed auto-property with get and set accessors.",
-                    syntax is null
-                        ? SourceSpan.Unknown(type.Locations.FirstOrDefault()?.SourceTree?.FilePath ?? "<compilation>")
-                        : RoslynSourceSpan.FromNode(syntax, syntax.SyntaxTree.FilePath)));
+                    $"Script state '{property.Name}' must be a non-static, non-indexed auto-property with get and set accessors.",
+                    GetPropertySpan(property, type),
+                    CSharpSemanticIds.ForRoslynSymbol(property)));
                 continue;
             }
 
@@ -277,18 +318,20 @@ internal sealed class CSharpScriptAssetLowerer
                     DeclarationDiagnosticCodes.UnsupportedStateType,
                     UnifiedDiagnosticSeverity.Error,
                     $"Script state '{property.Name}' uses '{property.Type.ToDisplayString()}', but the reviewed Blueprint state matrix supports scalar, enum, FName, FText, UObject/UClass handles, and FVector values.",
-                    RoslynSourceSpan.FromNode(stateSyntax.Type, stateSyntax.SyntaxTree.FilePath)));
+                    RoslynSourceSpan.FromNode(stateSyntax.Type, stateSyntax.SyntaxTree.FilePath),
+                    CSharpSemanticIds.ForRoslynSymbol(property)));
                 continue;
             }
 
-            if (!TryResolveStateDefault(
-                    type,
-                    property,
-                    stateSyntax,
-                    compilation,
-                    out JsonElement defaultValue,
-                    out SyntaxNode defaultDiagnosticNode,
-                    out string defaultDiagnosticMessage))
+            if (!TryResolveProjectedStateDefault(
+                owner,
+                property,
+                stateSyntax,
+                type,
+                compilation,
+                out JsonElement defaultValue,
+                out SyntaxNode defaultDiagnosticNode,
+                out string defaultDiagnosticMessage))
             {
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.StateDefaultRequired,
@@ -296,11 +339,12 @@ internal sealed class CSharpScriptAssetLowerer
                     $"Script state '{property.Name}' {defaultDiagnosticMessage}",
                     RoslynSourceSpan.FromNode(
                         defaultDiagnosticNode,
-                        defaultDiagnosticNode.SyntaxTree.FilePath)));
+                        defaultDiagnosticNode.SyntaxTree.FilePath),
+                    CSharpSemanticIds.ForRoslynSymbol(property)));
                 continue;
             }
 
-            string containingName = GetMetadataName(type);
+            string containingName = GetMetadataName(owner);
             SemanticId deterministicId = CSharpSemanticIds.ForSymbol(
                 "state",
                 $"{containingName}.{property.MetadataName}");
@@ -319,7 +363,19 @@ internal sealed class CSharpScriptAssetLowerer
             SemanticId declarationId = declarationIdentities.GetValueOrDefault(
                 deterministicId,
                 deterministicId);
-            declarationReferences.Add(CSharpSemanticIds.ForRoslynSymbol(property), declarationId);
+            SemanticId propertyReference = CSharpSemanticIds.ForRoslynSymbol(property);
+            if (declarationReferences.TryGetValue(propertyReference, out SemanticId existingDeclarationId) &&
+                existingDeclarationId != declarationId)
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.UnsupportedStateShape,
+                    UnifiedDiagnosticSeverity.Error,
+                    $"Script state '{property.Name}' has conflicting persistent declaration identities '{existingDeclarationId}' and '{declarationId}'.",
+                    RoslynSourceSpan.FromNode(stateSyntax, stateSyntax.SyntaxTree.FilePath),
+                    propertyReference));
+                continue;
+            }
+            declarationReferences[propertyReference] = declarationId;
             states.Add(new ScriptStateDeclaration(
                 declarationId,
                 property.Name,
@@ -1301,7 +1357,196 @@ internal sealed class CSharpScriptAssetLowerer
         return supported;
     }
 
-    private static bool TryResolveStateDefault(
+    private static IEnumerable<INamedTypeSymbol> EnumerateTypeHierarchy(INamedTypeSymbol type)
+    {
+        var chain = new List<INamedTypeSymbol>();
+        for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+        {
+            chain.Add(current);
+        }
+
+        chain.Reverse();
+        return chain;
+    }
+
+    private static SourceSpan GetPropertySpan(IPropertySymbol property, INamedTypeSymbol fallbackType)
+    {
+        return GetMemberSpan(property, fallbackType);
+    }
+
+    private static SourceSpan GetMemberSpan(ISymbol member, INamedTypeSymbol fallbackType)
+    {
+        SyntaxNode? syntax = member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+        return syntax is not null
+            ? RoslynSourceSpan.FromNode(syntax, syntax.SyntaxTree.FilePath)
+            : SourceSpan.Unknown(fallbackType.Locations.FirstOrDefault()?.SourceTree?.FilePath ?? "<compilation>");
+    }
+
+    private static bool TryResolveProjectedStateDefault(
+        INamedTypeSymbol owner,
+        IPropertySymbol property,
+        PropertyDeclarationSyntax propertySyntax,
+        INamedTypeSymbol projectionType,
+        CSharpCompilation compilation,
+        out JsonElement value,
+        out SyntaxNode diagnosticNode,
+        out string diagnosticMessage)
+    {
+        if (!TryResolveDeclaredStateDefault(
+                owner,
+                property,
+                propertySyntax,
+                compilation,
+                out value,
+                out diagnosticNode,
+                out diagnosticMessage))
+        {
+            return false;
+        }
+
+        bool reachedOwner = false;
+        foreach (INamedTypeSymbol current in EnumerateTypeHierarchy(projectionType))
+        {
+            if (!reachedOwner)
+            {
+                reachedOwner = SymbolEqualityComparer.Default.Equals(current, owner);
+                continue;
+            }
+
+            if (!TryApplyConstructorStateOverride(
+                    current,
+                    property,
+                    compilation,
+                    ref value,
+                    out diagnosticNode,
+                    out diagnosticMessage))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryApplyConstructorStateOverride(
+        INamedTypeSymbol containingType,
+        IPropertySymbol property,
+        CSharpCompilation compilation,
+        ref JsonElement value,
+        out SyntaxNode diagnosticNode,
+        out string diagnosticMessage)
+    {
+        diagnosticNode = property.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ??
+            containingType.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ??
+            property.Locations.FirstOrDefault()?.SourceTree?.GetRoot() ??
+            throw new InvalidOperationException("A source syntax node is required for state default analysis.");
+        diagnosticMessage = string.Empty;
+
+        IMethodSymbol[] explicitConstructors = containingType.InstanceConstructors
+            .Where(static constructor => !constructor.IsImplicitlyDeclared)
+            .ToArray();
+        if (explicitConstructors.Length == 0)
+        {
+            return true;
+        }
+
+        IMethodSymbol? parameterlessConstructor = explicitConstructors
+            .SingleOrDefault(static constructor => constructor.Parameters.Length == 0);
+        if (parameterlessConstructor is null)
+        {
+            diagnosticNode = containingType.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ?? diagnosticNode;
+            diagnosticMessage =
+                $"requires a deterministic default; '{GetMetadataName(containingType)}' has no parameterless constructor for the inherited state contract.";
+            return false;
+        }
+
+        ConstructorDeclarationSyntax? constructorSyntax = parameterlessConstructor
+            .DeclaringSyntaxReferences
+            .Select(static reference => reference.GetSyntax())
+            .OfType<ConstructorDeclarationSyntax>()
+            .SingleOrDefault();
+        if (constructorSyntax is null)
+        {
+            return true;
+        }
+
+        if (constructorSyntax.Initializer is { ArgumentList.Arguments.Count: > 0 })
+        {
+            diagnosticNode = constructorSyntax.Initializer;
+            diagnosticMessage =
+                "requires a deterministic default; parameter-dependent base/this constructor chains are not supported.";
+            return false;
+        }
+
+        SemanticModel constructorModel = compilation.GetSemanticModel(
+            constructorSyntax.SyntaxTree,
+            ignoreAccessibility: false);
+        if (TryFindUnsupportedUnaryStateWrite(constructorSyntax, property, constructorModel, out SyntaxNode? unaryWrite))
+        {
+            diagnosticNode = unaryWrite!;
+            diagnosticMessage =
+                "requires a deterministic default; increment/decrement constructor writes are not supported.";
+            return false;
+        }
+        var assignments = new List<AssignmentExpressionSyntax>();
+        foreach (AssignmentExpressionSyntax assignment in constructorSyntax
+                     .DescendantNodes()
+                     .OfType<AssignmentExpressionSyntax>())
+        {
+            if (!TargetsCurrentInstanceProperty(assignment.Left, property, constructorModel))
+            {
+                continue;
+            }
+
+            bool isDirectBodyStatement = assignment.Parent is ExpressionStatementSyntax statement &&
+                statement.Parent == constructorSyntax.Body;
+            bool isDirectExpressionBody = constructorSyntax.ExpressionBody?.Expression == assignment;
+            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
+                (!isDirectBodyStatement && !isDirectExpressionBody))
+            {
+                diagnosticNode = assignment;
+                diagnosticMessage =
+                    "requires a deterministic default; constructor assignments must be unconditional top-level simple assignments.";
+                return false;
+            }
+
+            assignments.Add(assignment);
+        }
+
+        if (assignments.Count == 0)
+        {
+            return true;
+        }
+
+        AssignmentExpressionSyntax finalAssignment = assignments[^1];
+        if (TryFindConstructorControlFlowBypass(
+                constructorSyntax,
+                finalAssignment,
+                constructorModel,
+                out SyntaxNode? bypass))
+        {
+            diagnosticNode = bypass!;
+            diagnosticMessage =
+                "requires a deterministic default; constructor control flow can bypass the selected state assignment.";
+            return false;
+        }
+        if (!TryCreateDefaultValue(
+                property.Type,
+                finalAssignment.Right,
+                constructorModel,
+                out JsonElement overrideValue))
+        {
+            diagnosticNode = finalAssignment.Right;
+            diagnosticMessage =
+                "requires a finite, JSON-representable compile-time constant default in every derived parameterless constructor.";
+            return false;
+        }
+
+        value = overrideValue;
+        return true;
+    }
+
+    private static bool TryResolveDeclaredStateDefault(
         INamedTypeSymbol containingType,
         IPropertySymbol property,
         PropertyDeclarationSyntax propertySyntax,
@@ -1315,18 +1560,45 @@ internal sealed class CSharpScriptAssetLowerer
             ? null
             : compilation.GetSemanticModel(expression.SyntaxTree);
 
-        IMethodSymbol? parameterlessConstructor = containingType.InstanceConstructors
-            .SingleOrDefault(static constructor =>
-                !constructor.IsImplicitlyDeclared &&
-                constructor.Parameters.Length == 0);
+        IMethodSymbol[] explicitConstructors = containingType.InstanceConstructors
+            .Where(static constructor => !constructor.IsImplicitlyDeclared)
+            .ToArray();
+        IMethodSymbol? parameterlessConstructor = explicitConstructors
+            .SingleOrDefault(static constructor => constructor.Parameters.Length == 0);
+        if (explicitConstructors.Length != 0 && parameterlessConstructor is null)
+        {
+            value = default;
+            diagnosticNode = containingType.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ??
+                propertySyntax;
+            diagnosticMessage =
+                $"requires a deterministic default; '{GetMetadataName(containingType)}' has no parameterless constructor for the inherited state contract.";
+            return false;
+        }
         if (parameterlessConstructor is not null &&
             parameterlessConstructor.DeclaringSyntaxReferences
                 .Select(static reference => reference.GetSyntax())
                 .OfType<ConstructorDeclarationSyntax>()
                 .SingleOrDefault() is ConstructorDeclarationSyntax constructorSyntax)
         {
+            if (constructorSyntax.Initializer is { ArgumentList.Arguments.Count: > 0 })
+            {
+                value = default;
+                diagnosticNode = constructorSyntax.Initializer;
+                diagnosticMessage =
+                    "requires a deterministic default; parameter-dependent base/this constructor chains are not supported.";
+                return false;
+            }
+
             SemanticModel constructorModel = compilation.GetSemanticModel(
                 constructorSyntax.SyntaxTree);
+            if (TryFindUnsupportedUnaryStateWrite(constructorSyntax, property, constructorModel, out SyntaxNode? unaryWrite))
+            {
+                value = default;
+                diagnosticNode = unaryWrite!;
+                diagnosticMessage =
+                    "requires a deterministic default; increment/decrement constructor writes are not supported.";
+                return false;
+            }
             var directAssignments = new List<AssignmentExpressionSyntax>();
             foreach (AssignmentExpressionSyntax assignment in constructorSyntax
                          .DescendantNodes()
@@ -1365,6 +1637,18 @@ internal sealed class CSharpScriptAssetLowerer
             if (directAssignments.Count != 0)
             {
                 AssignmentExpressionSyntax finalAssignment = directAssignments[^1];
+                if (TryFindConstructorControlFlowBypass(
+                        constructorSyntax,
+                        finalAssignment,
+                        constructorModel,
+                        out SyntaxNode? bypass))
+                {
+                    value = default;
+                    diagnosticNode = bypass!;
+                    diagnosticMessage =
+                        "requires a deterministic default; constructor control flow can bypass the selected state assignment.";
+                    return false;
+                }
                 expression = finalAssignment.Right;
                 semanticModel = constructorModel;
             }
@@ -1417,6 +1701,114 @@ internal sealed class CSharpScriptAssetLowerer
         return true;
     }
 
+    private static bool TryFindUnsupportedUnaryStateWrite(
+        ConstructorDeclarationSyntax constructor,
+        IPropertySymbol property,
+        SemanticModel semanticModel,
+        out SyntaxNode? write)
+    {
+        foreach (PrefixUnaryExpressionSyntax expression in constructor
+                     .DescendantNodes()
+                     .OfType<PrefixUnaryExpressionSyntax>()
+                     .Where(static expression =>
+                         expression.IsKind(SyntaxKind.PreIncrementExpression) ||
+                         expression.IsKind(SyntaxKind.PreDecrementExpression)))
+        {
+            if (TargetsCurrentInstanceProperty(expression.Operand, property, semanticModel))
+            {
+                write = expression;
+                return true;
+            }
+        }
+
+        foreach (PostfixUnaryExpressionSyntax expression in constructor
+                     .DescendantNodes()
+                     .OfType<PostfixUnaryExpressionSyntax>()
+                     .Where(static expression =>
+                         expression.IsKind(SyntaxKind.PostIncrementExpression) ||
+                         expression.IsKind(SyntaxKind.PostDecrementExpression)))
+        {
+            if (TargetsCurrentInstanceProperty(expression.Operand, property, semanticModel))
+            {
+                write = expression;
+                return true;
+            }
+        }
+
+        write = null;
+        return false;
+    }
+
+    private static bool TryFindConstructorControlFlowBypass(
+        ConstructorDeclarationSyntax constructor,
+        AssignmentExpressionSyntax selectedAssignment,
+        SemanticModel semanticModel,
+        out SyntaxNode? bypass)
+    {
+        if (constructor.Body is not BlockSyntax body)
+        {
+            bypass = null;
+            return false;
+        }
+
+        // Analyze the complete body so Roslyn resolves exits through nested
+        // branches. Only exits before the selected top-level assignment can
+        // leave a successfully constructed object with the inherited value.
+        ControlFlowAnalysis? flow = semanticModel.AnalyzeControlFlow(body);
+        SyntaxNode? exit = flow?.ExitPoints
+            .Where(candidate => candidate.SpanStart < selectedAssignment.SpanStart)
+            .Where(candidate => IsConstructorExecutableNode(candidate, constructor))
+            .OrderBy(static candidate => candidate.SpanStart)
+            .FirstOrDefault();
+        if (exit is not null)
+        {
+            bypass = exit;
+            return true;
+        }
+
+        // A goto whose label is after the selected assignment is an explicit
+        // source-level bypass. Roslyn's ExitPoints does not expose this jump
+        // as an exit from the enclosing constructor body.
+        Dictionary<string, LabeledStatementSyntax> labels = body
+            .DescendantNodes()
+            .OfType<LabeledStatementSyntax>()
+            .Where(label => IsConstructorExecutableNode(label, constructor))
+            .GroupBy(static label => label.Identifier.ValueText, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
+        GotoStatementSyntax? jump = body
+            .DescendantNodes()
+            .OfType<GotoStatementSyntax>()
+            .Where(jumpNode => jumpNode.Expression is IdentifierNameSyntax)
+            .Where(jumpNode => jumpNode.SpanStart < selectedAssignment.SpanStart)
+            .Where(jumpNode => IsConstructorExecutableNode(jumpNode, constructor))
+            .FirstOrDefault(jumpNode => labels.TryGetValue(
+                jumpNode.Expression!.ToString(),
+                out LabeledStatementSyntax? label) &&
+                label.SpanStart > selectedAssignment.SpanStart);
+        if (jump is not null)
+        {
+            bypass = jump;
+            return true;
+        }
+
+        bypass = null;
+        return false;
+    }
+
+    private static bool IsConstructorExecutableNode(
+        SyntaxNode node,
+        ConstructorDeclarationSyntax constructor)
+    {
+        for (SyntaxNode? current = node.Parent; current is not null && current != constructor; current = current.Parent)
+        {
+            if (current is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            {
+                return false;
+            }
+        }
+        return node.AncestorsAndSelf().Contains(constructor);
+    }
+
     private static bool TargetsCurrentInstanceProperty(
         ExpressionSyntax left,
         IPropertySymbol property,
@@ -1429,7 +1821,10 @@ internal sealed class CSharpScriptAssetLowerer
         }
 
         return left is IdentifierNameSyntax ||
-            left is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax };
+            left is MemberAccessExpressionSyntax
+            {
+                Expression: ThisExpressionSyntax or BaseExpressionSyntax,
+            };
     }
 
     private static bool TryCreateDefaultValue(

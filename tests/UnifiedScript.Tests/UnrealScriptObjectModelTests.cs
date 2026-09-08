@@ -1,4 +1,5 @@
 using UnifiedScript;
+using System.Collections.Generic;
 using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
@@ -169,6 +170,69 @@ public sealed class UnrealScriptObjectModelTests
     }
 
     [Fact]
+    public void ActorScriptSynchronizesInheritedStateDeclaredByEachOwner()
+    {
+        var script = new InheritedLeafStateScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle host = UnrealObjectHandle.Create(30, 50);
+        UnrealObjectHandle target = UnrealObjectHandle.Create(31, 51);
+        var bridge = new StateBridge();
+        bridge.Set(target, InheritedLeafStatePath + ":BaseCount", 40);
+        bridge.Set(target, InheritedLeafStatePath + ":LeafCount", 2);
+
+        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 81, 1));
+
+        Assert.Equal(41, script.BaseCount);
+        Assert.Equal(4, script.LeafCount);
+        Assert.Equal(41, bridge.Get<int>(target, InheritedLeafStatePath + ":BaseCount"));
+        Assert.Equal(4, bridge.Get<int>(target, InheritedLeafStatePath + ":LeafCount"));
+        lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void ActorScriptSynchronizesInheritedCollectionsAcrossStartTickAndStop()
+    {
+        var script = new InheritedCollectionLeafScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle host = UnrealObjectHandle.Create(32, 52);
+        UnrealObjectHandle target = UnrealObjectHandle.Create(33, 53);
+        var bridge = new StateBridge();
+        bridge.Set(target, InheritedCollectionPath + ":Values", (IReadOnlyList<int>)[1, 2]);
+        bridge.Set(target, InheritedCollectionPath + ":Enabled", (IReadOnlySet<int>)new HashSet<int> { 3, 4 });
+        bridge.Set(
+            target,
+            InheritedCollectionPath + ":Weights",
+            (IReadOnlyDictionary<int, int>)new Dictionary<int, int> { [5] = 6 });
+        bridge.Set(target, InheritedCollectionPath + ":TickCount", 0);
+
+        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 82, 1));
+
+        Assert.Equal([11, 22], bridge.Get<IReadOnlyList<int>>(
+            target,
+            InheritedCollectionPath + ":Values"));
+        Assert.Equal(
+            [3, 4, 9],
+            bridge.Get<IReadOnlySet<int>>(target, InheritedCollectionPath + ":Enabled").Order());
+        Assert.Equal(
+            new Dictionary<int, int> { [5] = 6, [11] = 22 },
+            bridge.Get<IReadOnlyDictionary<int, int>>(
+                target,
+                InheritedCollectionPath + ":Weights"));
+
+        bridge.Set(target, InheritedCollectionPath + ":Values", (IReadOnlyList<int>)[7, 8]);
+        lifecycle.OnTick(0.25f);
+        Assert.Equal([17, 28], bridge.Get<IReadOnlyList<int>>(
+            target,
+            InheritedCollectionPath + ":Values"));
+        Assert.Equal(1, bridge.Get<int>(target, InheritedCollectionPath + ":TickCount"));
+
+        lifecycle.OnStop();
+        Assert.Equal([99], bridge.Get<IReadOnlyList<int>>(
+            target,
+            InheritedCollectionPath + ":Values"));
+    }
+
+    [Fact]
     public void ComponentScriptSynchronizesStateThroughItsHostHandle()
     {
         var script = new StateComponentScript();
@@ -184,6 +248,38 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Equal(8, bridge.Get<int>(host, StateComponentPath + ":Value"));
         Assert.DoesNotContain(bridge.Writes, write => write.Handle == owner);
         lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void ComponentScriptSynchronizesInheritedStateThroughHostAcrossLifecycle()
+    {
+        var script = new InheritedComponentLeafScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle host = UnrealObjectHandle.Create(18, 38);
+        UnrealObjectHandle actor = UnrealObjectHandle.Create(19, 39);
+        var bridge = new StateBridge();
+        bridge.Set(host, InheritedComponentPath + ":BaseValue", 10);
+        bridge.Set(host, InheritedComponentPath + ":LeafValue", 2);
+        bridge.Set(host, InheritedComponentPath + ":TickCount", 0);
+
+        lifecycle.OnStart(new UnrealScriptContext(bridge, host, actor, 75, 7));
+
+        Assert.Equal(11, bridge.Get<int>(host, InheritedComponentPath + ":BaseValue"));
+        Assert.Equal(4, bridge.Get<int>(host, InheritedComponentPath + ":LeafValue"));
+        Assert.Equal(0, bridge.Get<int>(host, InheritedComponentPath + ":TickCount"));
+        Assert.DoesNotContain(bridge.Writes, write => write.Handle == actor);
+
+        lifecycle.OnTick(0.25f);
+
+        Assert.Equal(21, bridge.Get<int>(host, InheritedComponentPath + ":BaseValue"));
+        Assert.Equal(1, bridge.Get<int>(host, InheritedComponentPath + ":TickCount"));
+        Assert.DoesNotContain(bridge.Writes, write => write.Handle == actor);
+
+        lifecycle.OnStop();
+
+        Assert.Equal(121, bridge.Get<int>(host, InheritedComponentPath + ":BaseValue"));
+        Assert.Equal(1004, bridge.Get<int>(host, InheritedComponentPath + ":LeafValue"));
+        Assert.DoesNotContain(bridge.Writes, write => write.Handle == actor);
     }
 
     [Fact]
@@ -205,8 +301,33 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Equal(0, script.BeginPlayCount);
     }
 
+    [Fact]
+    public void AmbiguousInheritedStateFailsBeforeBridgeIo()
+    {
+        var script = new AmbiguousLeafStateScript();
+        IUnrealManagedScript lifecycle = script;
+        var bridge = new StateBridge();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            lifecycle.OnStart(new UnrealScriptContext(
+                bridge,
+                UnrealObjectHandle.Create(16, 36),
+                UnrealObjectHandle.Create(17, 37),
+                74,
+                6)));
+
+        Assert.Contains("ambiguous", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, bridge.ReadCount);
+        Assert.Empty(bridge.Writes);
+        Assert.False(script.IsRunning);
+    }
+
     private const string StateActorPath = "/Game/Tests/BP_StateActor.BP_StateActor_C";
     private const string StateComponentPath = "/Game/Tests/BP_StateComponent.BP_StateComponent_C";
+    private const string InheritedComponentPath = "/Game/Tests/BP_InheritedComponent.BP_InheritedComponent_C";
+    private const string InheritedLeafStatePath = "/Game/Tests/BP_InheritedLeaf.BP_InheritedLeaf_C";
+    private const string InheritedCollectionPath = "/Game/Tests/BP_InheritedCollections.BP_InheritedCollections_C";
+    private const string AmbiguousStatePath = "/Game/Tests/BP_AmbiguousState.BP_AmbiguousState_C";
 
     private sealed class ProbeActorScript : UnrealActorScript
     {
@@ -358,6 +479,80 @@ public sealed class UnrealScriptObjectModelTests
         }
     }
 
+    [ScriptAsset("Tests/InheritedStateBase")]
+    private class InheritedBaseStateScript : UnrealActorScript
+    {
+        public int BaseCount { get; set; }
+    }
+
+    [ScriptAsset("Tests/InheritedStateLeaf")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = InheritedLeafStatePath)]
+    private sealed class InheritedLeafStateScript : InheritedBaseStateScript
+    {
+        public int LeafCount { get; set; }
+
+        protected override void OnBeginPlay()
+        {
+            ++BaseCount;
+            LeafCount += 2;
+        }
+    }
+
+    [ScriptAsset("Tests/InheritedCollectionBase")]
+    private class InheritedCollectionBaseScript : UnrealActorScript
+    {
+        public IReadOnlyList<int> Values { get; set; } = [0];
+
+        public IReadOnlySet<int> Enabled { get; set; } = new HashSet<int>();
+
+        public IReadOnlyDictionary<int, int> Weights { get; set; } =
+            new Dictionary<int, int>();
+    }
+
+    [ScriptAsset("Tests/InheritedCollectionLeaf")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = InheritedCollectionPath)]
+    private sealed class InheritedCollectionLeafScript : InheritedCollectionBaseScript
+    {
+        public int TickCount { get; set; }
+
+        protected override void OnBeginPlay()
+        {
+            Values = [Values[0] + 10, Values[1] + 20];
+            Enabled = new HashSet<int>(Enabled) { 9 };
+            Weights = new Dictionary<int, int>(Weights) { [11] = 22 };
+        }
+
+        protected override void OnTick(float deltaSeconds)
+        {
+            Values = [Values[0] + 10, Values[1] + 20];
+            ++TickCount;
+        }
+
+        protected override void OnEndPlay()
+        {
+            Values = [99];
+        }
+    }
+
+    [ScriptAsset("Tests/AmbiguousStateBase")]
+    private class AmbiguousBaseStateScript : UnrealActorScript
+    {
+        public int Value { get; set; } = 1;
+    }
+
+    [ScriptAsset("Tests/AmbiguousStateLeaf")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = AmbiguousStatePath)]
+    private sealed class AmbiguousLeafStateScript : AmbiguousBaseStateScript
+    {
+        public int value { get; set; } = 2;
+    }
+
     [ScriptAsset("Tests/StateComponent")]
     [UnrealScriptClass(
         UnrealScriptClassKind.ActorComponent,
@@ -368,6 +563,41 @@ public sealed class UnrealScriptObjectModelTests
         public int Value { get; set; }
 
         protected override void OnBeginPlay() => ++Value;
+    }
+
+    [ScriptAsset("Tests/InheritedComponentBase")]
+    private class InheritedComponentBaseScript : UnrealActorComponentScript
+    {
+        public int BaseValue { get; set; }
+    }
+
+    [ScriptAsset("Tests/InheritedComponentLeaf")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.ActorComponent,
+        GeneratedClassPath = InheritedComponentPath)]
+    private sealed class InheritedComponentLeafScript : InheritedComponentBaseScript
+    {
+        public int LeafValue { get; set; }
+
+        public int TickCount { get; set; }
+
+        protected override void OnBeginPlay()
+        {
+            ++BaseValue;
+            LeafValue += 2;
+        }
+
+        protected override void OnTick(float deltaSeconds)
+        {
+            BaseValue += 10;
+            ++TickCount;
+        }
+
+        protected override void OnEndPlay()
+        {
+            BaseValue += 100;
+            LeafValue += 1000;
+        }
     }
 
     [ScriptAsset("Tests/UnsupportedState")]
@@ -423,14 +653,19 @@ public sealed class UnrealScriptObjectModelTests
 
         public List<(UnrealObjectHandle Handle, string Path, object Value)> Writes { get; } = [];
 
+        public int ReadCount { get; private set; }
+
         public void Set<T>(UnrealObjectHandle handle, string path, T value)
             where T : notnull => _values[(handle, path)] = value;
 
         public T Get<T>(UnrealObjectHandle handle, string path) =>
             (T)_values[(handle, path)];
 
-        public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath) =>
-            Get<T>(target, propertyPath);
+        public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
+        {
+            ++ReadCount;
+            return Get<T>(target, propertyPath);
+        }
 
         public void WriteProperty<T>(UnrealObjectHandle target, string propertyPath, T value)
         {

@@ -9027,6 +9027,7 @@ public sealed class CSharpSourcePatchApplier
 
     private static bool IdentitySyntaxMatches(HirNode hirNode, SyntaxNode syntax) => hirNode switch
     {
+        HirMethodDeclaration => syntax is MethodDeclarationSyntax,
         HirParameter => syntax is ParameterSyntax,
         HirBlockStatement => syntax is BlockSyntax or SwitchSectionSyntax,
         HirVariableDeclarationStatement => syntax is LocalDeclarationStatementSyntax,
@@ -9073,6 +9074,7 @@ public sealed class CSharpSourcePatchApplier
 
     private static bool IdentitySyntaxMatches(string kind, SyntaxNode syntax) => kind switch
     {
+        "function" => syntax is MethodDeclarationSyntax,
         "state" => syntax is PropertyDeclarationSyntax,
         "parameter" => syntax is ParameterSyntax,
         "block" => syntax is BlockSyntax or SwitchSectionSyntax,

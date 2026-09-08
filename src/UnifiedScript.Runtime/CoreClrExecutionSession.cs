@@ -9,6 +9,8 @@ namespace UnifiedScript.Runtime;
 
 public sealed class CoreClrExecutionSession : IDisposable
 {
+    private const string UnrealScriptClassAttributeFullName =
+        "UnifiedScript.Unreal.UnrealScriptClassAttribute";
     private AssemblyLoadContext? loadContext;
     private Assembly? assembly;
     private readonly CSharpProgramImage image;
@@ -238,14 +240,75 @@ public sealed class CoreClrExecutionSession : IDisposable
                     $"State '{stateOverride.StateId}' does not belong to Script Asset '{asset.Id}'.");
             }
 
-            PropertyInfo property = runtimeType.GetProperty(
-                state.Name,
-                BindingFlags.Public | BindingFlags.NonPublic |
-                BindingFlags.Instance | BindingFlags.DeclaredOnly) ??
+            PropertyInfo? property = null;
+            bool sawNonCandidateHider = false;
+            StringComparison propertyNameComparison = HasUnrealScriptClassAttribute(runtimeType)
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+            for (Type? current = runtimeType; current is not null; current = current.BaseType)
+            {
+                PropertyInfo[] matches = current.GetProperties(
+                        BindingFlags.Public | BindingFlags.NonPublic |
+                        BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .Where(candidate => string.Equals(
+                        candidate.Name,
+                        state.Name,
+                        propertyNameComparison))
+                    .ToArray();
+                if (matches.Length == 0)
+                {
+                    continue;
+                }
+
+                if (matches.Length != 1)
+                {
+                    throw new ExecutionInvocationException(
+                        "UVR1008",
+                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{asset.Id}'.");
+                }
+
+                PropertyInfo candidate = matches[0];
+                bool isStatic = candidate.GetMethod?.IsStatic == true ||
+                    candidate.SetMethod?.IsStatic == true;
+                bool ownsAllProperties = current.GetCustomAttribute<ScriptAssetAttribute>(inherit: false) is not null;
+                bool isCandidate = !isStatic &&
+                    (ownsAllProperties || candidate.GetCustomAttribute<ExposeAttribute>(inherit: false) is not null);
+                if (!isCandidate)
+                {
+                    if (!isStatic && property is null)
+                    {
+                        sawNonCandidateHider = true;
+                    }
+                    continue;
+                }
+
+                if (property is not null || sawNonCandidateHider)
+                {
+                    throw new ExecutionInvocationException(
+                        "UVR1008",
+                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{asset.Id}'.");
+                }
+
+                property = candidate;
+            }
+
+            if (property is null)
+            {
                 throw new ExecutionInvocationException(
                     "UVR1008",
                     $"Runtime state property '{state.Name}' was not found on Script Asset '{asset.Id}'.");
-            if (property.SetMethod is null)
+            }
+
+            string runtimeTypeName = ExecutionValueCodec.GetMetadataName(property.PropertyType);
+            if (!MetadataTypesMatch(runtimeTypeName, state.TypeMetadataName))
+            {
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    $"Runtime state property '{state.Name}' has type '{runtimeTypeName}', expected '{state.TypeMetadataName}'.");
+            }
+            if (property.GetIndexParameters().Length != 0 ||
+                property.GetMethod is null ||
+                property.SetMethod is null)
             {
                 throw new ExecutionInvocationException(
                     "UVR1008",
@@ -260,6 +323,20 @@ public sealed class CoreClrExecutionSession : IDisposable
 
         return receiver;
     }
+
+    private static bool MetadataTypesMatch(string runtimeTypeName, string declaredTypeName) =>
+        string.Equals(runtimeTypeName, declaredTypeName, StringComparison.Ordinal) ||
+        string.Equals(
+            runtimeTypeName.Replace("?", string.Empty, StringComparison.Ordinal),
+            declaredTypeName.Replace("?", string.Empty, StringComparison.Ordinal),
+            StringComparison.Ordinal);
+
+    private static bool HasUnrealScriptClassAttribute(Type type) => type
+        .GetCustomAttributes(inherit: false)
+        .Any(attribute => string.Equals(
+            attribute.GetType().FullName,
+            UnrealScriptClassAttributeFullName,
+            StringComparison.Ordinal));
 
     private (HirTypeDeclaration Type, HirMethodDeclaration Method) FindHirMethod(
         SemanticId methodId)

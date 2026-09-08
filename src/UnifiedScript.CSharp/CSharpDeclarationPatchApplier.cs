@@ -13,6 +13,8 @@ public sealed class CSharpDeclarationPatchApplier
     private const string AssetAnnotationKind = "UnifiedScript.DeclarationPatch.Asset";
     private const string StateAnnotationKind = "UnifiedScript.DeclarationPatch.State";
     private const string FunctionAnnotationKind = "UnifiedScript.DeclarationPatch.Function";
+    private const string ConstructorAssignmentAnnotationKind =
+        "UnifiedScript.DeclarationPatch.ConstructorAssignment";
     private readonly CSharpSemanticPipeline pipeline = new();
     private readonly CSharpCompilationHost compilationHost = new();
 
@@ -48,19 +50,43 @@ public sealed class CSharpDeclarationPatchApplier
                 SourceSpan.Unknown("<declaration-patch>")));
         }
 
+        SyntaxTree[] syntaxTrees = request.Sources
+            .Select(source => CSharpSyntaxTree.ParseText(
+                source.Source,
+                request.Settings.ParseOptions,
+                source.LogicalPath))
+            .ToArray();
+        CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
+        var contexts = syntaxTrees.ToDictionary(
+            static tree => tree.FilePath,
+            tree => new RewriteContext(
+                tree,
+                tree.GetRoot(),
+                compilation.GetSemanticModel(tree, ignoreAccessibility: false)),
+            StringComparer.Ordinal);
+
         var assets = original.ScriptAssets.Assets.ToDictionary(static asset => asset.Id);
-        var states = original.ScriptAssets.Assets
-            .SelectMany(asset => asset.States.Select(state => new StateLocation(asset, state)))
-            .ToDictionary(static location => location.State.Id);
-        IReadOnlyDictionary<SemanticId, HirMethodDeclaration> hirMethods = original.Hir!.Types
+        var methods = original.Hir!.Types
             .SelectMany(static type => type.Methods)
             .ToDictionary(static method => method.Id);
-        var functions = original.ScriptAssets.Assets
+        StateLocation[] stateLocations = original.ScriptAssets.Assets
+            .SelectMany(asset => asset.States.Select(state => new StateLocation(asset, state)))
+            .ToArray();
+        if (!TryResolveStateLocations(stateLocations, contexts, out var states, out UnifiedDiagnostic? stateOwnerFailure))
+        {
+            return Failure(stateOwnerFailure!);
+        }
+
+        FunctionLocation[] functionLocations = original.ScriptAssets.Assets
             .SelectMany(asset => asset.Functions.Select(function => new FunctionLocation(
                 asset,
                 function,
-                hirMethods[function.Id])))
-            .ToDictionary(static location => location.Function.Id);
+                methods[function.Id])))
+            .ToArray();
+        if (!TryResolveFunctionLocations(functionLocations, contexts, out var functions, out UnifiedDiagnostic? functionOwnerFailure))
+        {
+            return Failure(functionOwnerFailure!);
+        }
         var assetAdds = new List<AssetAddPlan>();
         var assetUpdates = new List<AssetUpdatePlan>();
         var assetRemoves = new List<AssetRemovePlan>();
@@ -312,21 +338,6 @@ public sealed class CSharpDeclarationPatchApplier
             return Failure(finalContractFailure);
         }
 
-        SyntaxTree[] syntaxTrees = request.Sources
-            .Select(source => CSharpSyntaxTree.ParseText(
-                source.Source,
-                request.Settings.ParseOptions,
-                source.LogicalPath))
-            .ToArray();
-        CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
-        var contexts = syntaxTrees.ToDictionary(
-            static tree => tree.FilePath,
-            tree => new RewriteContext(
-                tree,
-                tree.GetRoot(),
-                compilation.GetSemanticModel(tree, ignoreAccessibility: false)),
-            StringComparer.Ordinal);
-
         if (!TryAnnotateTargets(
                 contexts,
                 assetUpdates,
@@ -344,8 +355,12 @@ public sealed class CSharpDeclarationPatchApplier
             return Failure(annotationFailure!);
         }
 
+        var constructorDefaultUpdates = new HashSet<SemanticId>();
+        IReadOnlyList<ConstructorDefaultLocation> constructorDefaultLocations =
+            PrepareConstructorDefaultChanges(contexts, updates);
         RenameReferences(contexts, updates, functionUpdates);
-        ApplyPropertyChanges(contexts, updates, removes);
+        ApplyConstructorDefaultChanges(constructorDefaultLocations, constructorDefaultUpdates);
+        ApplyPropertyChanges(contexts, updates, constructorDefaultUpdates, removes);
         ApplyAssetChanges(contexts, assetUpdates, assetRemoves);
         ApplyFunctionChanges(contexts, functionUpdates, functionRemoves);
         ApplyAdditions(contexts, adds);
@@ -367,7 +382,9 @@ public sealed class CSharpDeclarationPatchApplier
                 source,
                 contexts[source.LogicalPath].Root,
                 effectiveSidecars.GetValueOrDefault(source.LogicalPath),
-                updates.Where(update => update.State.Span.FilePath == source.LogicalPath).ToArray()))
+                updates.Where(update => update.State.Span.FilePath == source.LogicalPath).ToArray(),
+                functionUpdates.Where(update =>
+                    update.Location.Method.Span.FilePath == source.LogicalPath).ToArray()))
             .ToArray();
         var patchedRequest = new CSharpCompilationRequest(
             request.AssemblyName,
@@ -387,13 +404,38 @@ public sealed class CSharpDeclarationPatchApplier
             patch,
             original.ScriptAssets,
             patchedAnalysis.ScriptAssets,
-            patchedAnalysis.Hir!);
+            patchedAnalysis.Hir!,
+            states,
+            functions,
+            functionUpdates
+                .Where(update => request.Sources.Any(source =>
+                    source.IdentitySidecar?.Entries.Any(entry =>
+                        entry.Id == update.Location.Function.Id &&
+                        entry.Kind == "function") == true))
+                .Select(update => update.Location.Function.Id)
+                .ToHashSet());
         if (postconditionFailure is not null)
         {
             return Failure(postconditionFailure);
         }
 
-        return new CSharpPatchResult(patchedRequest, patchedAnalysis, patchedAnalysis.Diagnostics);
+        IdentitySidecarDocument[] persistedSidecars = patchedAnalysis.IdentitySidecars.ToArray();
+        var persistedSources = patchedRequest.Sources
+            .Select(source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                persistedSidecars.SingleOrDefault(sidecar =>
+                    string.Equals(sidecar.SourcePath, source.LogicalPath, StringComparison.Ordinal))))
+            .ToArray();
+        var persistedRequest = new CSharpCompilationRequest(
+            patchedRequest.AssemblyName,
+            persistedSources,
+            patchedRequest.ReferencePaths,
+            patchedRequest.EffectCatalog,
+            patchedRequest.Settings,
+            patchedRequest.RuntimeReferencePaths,
+            patchedRequest.IncludeDefaultReferences);
+        return new CSharpPatchResult(persistedRequest, patchedAnalysis, patchedAnalysis.Diagnostics);
     }
 
     private static bool TryAnnotateTargets(
@@ -581,6 +623,7 @@ public sealed class CSharpDeclarationPatchApplier
     private static void ApplyPropertyChanges(
         IReadOnlyDictionary<string, RewriteContext> contexts,
         IReadOnlyList<UpdatePlan> updates,
+        IReadOnlySet<SemanticId> constructorDefaultUpdates,
         IReadOnlyList<RemovePlan> removes)
     {
         foreach (UpdatePlan update in updates)
@@ -593,7 +636,8 @@ public sealed class CSharpDeclarationPatchApplier
             PropertyDeclarationSyntax replacement = RewriteProperty(
                     property,
                     update.Replacement,
-                    context.SemanticModel)
+                    context.SemanticModel,
+                    !constructorDefaultUpdates.Contains(update.State.Id))
                 .WithAdditionalAnnotations(StateAnnotation(update.State.Id));
             context.Root = context.Root.ReplaceNode(property, replacement);
         }
@@ -607,6 +651,119 @@ public sealed class CSharpDeclarationPatchApplier
                 remove.State.Id);
             context.Root = context.Root.RemoveNode(property, SyntaxRemoveOptions.KeepExteriorTrivia) ??
                 throw new InvalidOperationException("Removing a script-state property removed the source root.");
+        }
+    }
+
+    private static IReadOnlyList<ConstructorDefaultLocation> PrepareConstructorDefaultChanges(
+        IReadOnlyDictionary<string, RewriteContext> contexts,
+        IReadOnlyList<UpdatePlan> updates)
+    {
+        // Resolve every final assignment against the original semantic trees before
+        // replacing any RHS.  A longer replacement in one constructor otherwise
+        // moves the absolute Span of subsequent assignments in the mutable root.
+        var locations = new List<ConstructorDefaultLocation>();
+        foreach (UpdatePlan update in updates)
+        {
+            RewriteContext propertyContext = contexts[update.State.Span.FilePath];
+            PropertyDeclarationSyntax property = propertyContext.Tree.GetRoot()
+                .DescendantNodes()
+                .OfType<PropertyDeclarationSyntax>()
+                .Single(candidate => RoslynSourceSpan.FromNode(
+                    candidate,
+                    update.State.Span.FilePath) == update.State.Span);
+            IPropertySymbol? propertySymbol = propertyContext.SemanticModel.GetDeclaredSymbol(property);
+            if (propertySymbol is null)
+            {
+                continue;
+            }
+
+            IMethodSymbol[] constructors = propertySymbol.ContainingType.InstanceConstructors
+                .Where(static constructor =>
+                    !constructor.IsImplicitlyDeclared &&
+                    constructor.Parameters.Length == 0)
+                .ToArray();
+            if (constructors.Length == 0)
+            {
+                continue;
+            }
+
+            IMethodSymbol constructor = constructors.Single();
+            ConstructorDeclarationSyntax? sourceConstructor = constructor.DeclaringSyntaxReferences
+                .Select(static reference => reference.GetSyntax())
+                .OfType<ConstructorDeclarationSyntax>()
+                .SingleOrDefault();
+            if (sourceConstructor is null ||
+                !contexts.TryGetValue(sourceConstructor.SyntaxTree.FilePath, out RewriteContext? constructorContext))
+            {
+                continue;
+            }
+
+            AssignmentExpressionSyntax[] assignments = sourceConstructor
+                .DescendantNodes()
+                .OfType<AssignmentExpressionSyntax>()
+                .Where(assignment =>
+                    TargetsCurrentInstanceProperty(
+                        assignment.Left,
+                        propertySymbol,
+                        constructorContext.SemanticModel) &&
+                    assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    ((assignment.Parent is ExpressionStatementSyntax statement &&
+                        statement.Parent == sourceConstructor.Body) ||
+                        sourceConstructor.ExpressionBody?.Expression == assignment))
+                .ToArray();
+            if (assignments.Length == 0)
+            {
+                continue;
+            }
+
+            AssignmentExpressionSyntax currentAssignment = constructorContext.Root
+                .DescendantNodes()
+                .OfType<AssignmentExpressionSyntax>()
+                .Single(candidate => candidate.Span == assignments[^1].Span);
+            locations.Add(new ConstructorDefaultLocation(
+                update,
+                constructorContext,
+                currentAssignment));
+        }
+
+        // Attach stable annotations in one pass per syntax tree.  Each assignment
+        // is still the node from the original tree, so no earlier replacement can
+        // invalidate the locator used for a later update.
+        foreach (IGrouping<RewriteContext, ConstructorDefaultLocation> group in locations.GroupBy(
+                     static location => location.Context))
+        {
+            Dictionary<AssignmentExpressionSyntax, ConstructorDefaultLocation> byAssignment =
+                group.ToDictionary(static location => location.Assignment);
+            group.First().Context.Root = group.First().Context.Root.ReplaceNodes(
+                byAssignment.Keys,
+                (original, rewritten) => rewritten.WithAdditionalAnnotations(
+                    ConstructorAssignmentAnnotation(byAssignment[(AssignmentExpressionSyntax)original]
+                        .Update.State.Id)));
+        }
+
+        return locations;
+    }
+
+    private static void ApplyConstructorDefaultChanges(
+        IReadOnlyList<ConstructorDefaultLocation> locations,
+        ISet<SemanticId> constructorDefaultUpdates)
+    {
+        foreach (ConstructorDefaultLocation location in locations)
+        {
+            AssignmentExpressionSyntax currentAssignment = GetAnnotatedNode<AssignmentExpressionSyntax>(
+                location.Context.Root,
+                ConstructorAssignmentAnnotationKind,
+                location.Update.State.Id);
+            ExpressionSyntax replacement = SyntaxFactory.ParseExpression(
+                    RenderDefault(
+                        location.Update.Replacement,
+                        location.Context.SemanticModel,
+                        location.Assignment.Right.SpanStart))
+                .WithTriviaFrom(currentAssignment.Right);
+            location.Context.Root = location.Context.Root.ReplaceNode(
+                currentAssignment,
+                currentAssignment.WithRight(replacement));
+            constructorDefaultUpdates.Add(location.Update.State.Id);
         }
     }
 
@@ -1055,7 +1212,8 @@ public sealed class CSharpDeclarationPatchApplier
     private static PropertyDeclarationSyntax RewriteProperty(
         PropertyDeclarationSyntax property,
         ScriptStatePatchSpec spec,
-        SemanticModel semanticModel)
+        SemanticModel semanticModel,
+        bool rewriteInitializer)
     {
         SyntaxTriviaList leading = property.GetLeadingTrivia();
         SyntaxTriviaList trailing = property.GetTrailingTrivia();
@@ -1073,11 +1231,13 @@ public sealed class CSharpDeclarationPatchApplier
                 property.Identifier.LeadingTrivia,
                 spec.Name,
                 property.Identifier.TrailingTrivia))
-            .WithInitializer(SyntaxFactory.EqualsValueClause(
-                SyntaxFactory.ParseExpression(RenderDefault(
-                    spec,
-                    semanticModel,
-                    property.SpanStart))))
+            .WithInitializer(rewriteInitializer
+                ? SyntaxFactory.EqualsValueClause(
+                    SyntaxFactory.ParseExpression(RenderDefault(
+                        spec,
+                        semanticModel,
+                        property.SpanStart)))
+                : property.Initializer)
             .WithSemicolonToken(property.SemicolonToken.IsKind(SyntaxKind.None)
                 ? SyntaxFactory.Token(SyntaxKind.SemicolonToken)
                 : property.SemicolonToken);
@@ -1088,6 +1248,24 @@ public sealed class CSharpDeclarationPatchApplier
         return NormalizeProperty(updated, indentationWidth, newline)
             .WithLeadingTrivia(leading)
             .WithTrailingTrivia(trailing);
+    }
+
+    private static bool TargetsCurrentInstanceProperty(
+        ExpressionSyntax left,
+        IPropertySymbol property,
+        SemanticModel semanticModel)
+    {
+        ISymbol? target = semanticModel.GetSymbolInfo(left).Symbol;
+        if (!SymbolEqualityComparer.Default.Equals(target, property))
+        {
+            return false;
+        }
+
+        return left is IdentifierNameSyntax ||
+            left is MemberAccessExpressionSyntax
+            {
+                Expression: ThisExpressionSyntax or BaseExpressionSyntax,
+            };
     }
 
     private static PropertyDeclarationSyntax CreateProperty(
@@ -1486,7 +1664,8 @@ public sealed class CSharpDeclarationPatchApplier
         CSharpSourceDocument source,
         SyntaxNode patchedRoot,
         IdentitySidecarDocument? effectiveSidecar,
-        IReadOnlyList<UpdatePlan> updates)
+        IReadOnlyList<UpdatePlan> updates,
+        IReadOnlyList<FunctionUpdatePlan> functionUpdates)
     {
         string patchedText = patchedRoot.ToFullString();
         if (effectiveSidecar is null)
@@ -1494,7 +1673,7 @@ public sealed class CSharpDeclarationPatchApplier
             return new CSharpSourceDocument(source.LogicalPath, patchedText);
         }
 
-        CSharpIdentityPin[] pins = updates.Select(update =>
+        CSharpIdentityPin[] statePins = updates.Select(update =>
         {
             PropertyDeclarationSyntax property = GetAnnotatedNode<PropertyDeclarationSyntax>(
                 patchedRoot,
@@ -1505,24 +1684,43 @@ public sealed class CSharpDeclarationPatchApplier
                 "state",
                 RoslynSourceSpan.FromNode(property, source.LogicalPath));
         }).ToArray();
+        CSharpIdentityPin[] functionPins = functionUpdates
+            .Where(update => effectiveSidecar.Entries.Any(entry =>
+                entry.Id == update.Location.Function.Id &&
+                entry.Kind == "function"))
+            .Select(update =>
+        {
+            MethodDeclarationSyntax method = GetAnnotatedNode<MethodDeclarationSyntax>(
+                patchedRoot,
+                FunctionAnnotationKind,
+                update.Location.Function.Id);
+            return new CSharpIdentityPin(
+                update.Location.Function.Id,
+                "function",
+                RoslynSourceSpan.FromNode(method, source.LogicalPath));
+        }).ToArray();
         return new CSharpSourceDocument(
             source.LogicalPath,
             patchedText,
             effectiveSidecar,
-            pins);
+            statePins.Concat(functionPins));
     }
 
     private static UnifiedDiagnostic? ValidatePostconditions(
         DeclarationPatchDocument patch,
         ScriptAssetDocument before,
         ScriptAssetDocument after,
-        HirCompilationUnit afterHir)
+        HirCompilationUnit afterHir,
+        IReadOnlyDictionary<SemanticId, StateLocation> beforeStates,
+        IReadOnlyDictionary<SemanticId, FunctionLocation> beforeFunctions,
+        IReadOnlySet<SemanticId> persistentFunctionIds)
     {
         var beforeAssets = before.Assets.ToDictionary(static asset => asset.Id);
         var afterAssets = after.Assets.ToDictionary(static asset => asset.Id);
         var afterStates = after.Assets
             .SelectMany(static asset => asset.States)
-            .ToDictionary(static state => state.Id);
+            .GroupBy(static state => state.Id)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
         foreach (DeclarationPatchOperation operation in patch.Operations)
         {
             switch (operation)
@@ -1567,13 +1765,23 @@ public sealed class CSharpDeclarationPatchApplier
 
                     break;
                 case UpdateScriptStatePatchOperation update:
-                    if (!afterStates.TryGetValue(update.TargetStateId, out ScriptStateDeclaration? state) ||
-                        !Matches(state, update.Replacement))
+                {
+                    if (!beforeStates.TryGetValue(update.TargetStateId, out StateLocation? beforeStateLocation))
+                    {
+                        return PostconditionFailed(update.TargetStateId, "updated state contract and identity");
+                    }
+
+                    ScriptAssetDeclaration? afterStateOwner = afterAssets.GetValueOrDefault(
+                        beforeStateLocation.Asset.Id);
+                    if (afterStateOwner is null ||
+                        !afterStateOwner.States.Any(state =>
+                            state.Id == update.TargetStateId && Matches(state, update.Replacement)))
                     {
                         return PostconditionFailed(update.TargetStateId, "updated state contract and identity");
                     }
 
                     break;
+                }
                 case RemoveScriptStatePatchOperation remove:
                     if (afterStates.ContainsKey(remove.TargetStateId) ||
                         beforeAssets.Values.All(asset => asset.States.All(state => state.Id != remove.TargetStateId)))
@@ -1595,20 +1803,30 @@ public sealed class CSharpDeclarationPatchApplier
                     }
                     break;
                 case UpdateScriptFunctionPatchOperation updateFunction:
-                    ScriptAssetDeclaration? beforeFunctionAsset = before.Assets.SingleOrDefault(asset =>
-                        asset.Functions.Any(function => function.Id == updateFunction.TargetFunctionId));
-                    if (beforeFunctionAsset is null ||
-                        !afterAssets.TryGetValue(
-                            beforeFunctionAsset.Id,
-                            out ScriptAssetDeclaration? afterFunctionAsset) ||
-                        afterFunctionAsset.Functions.Count(function =>
-                            Matches(function, updateFunction.Replacement)) != 1)
+                {
+                    if (!beforeFunctions.TryGetValue(
+                            updateFunction.TargetFunctionId,
+                            out FunctionLocation? beforeFunctionLocation))
+                    {
+                        return PostconditionFailed(
+                            updateFunction.TargetFunctionId,
+                            "updated visual function contract");
+                    }
+
+                    ScriptAssetDeclaration? afterFunctionOwner = afterAssets.GetValueOrDefault(
+                        beforeFunctionLocation.Asset.Id);
+                    if (afterFunctionOwner is null ||
+                        !afterFunctionOwner.Functions.Any(function =>
+                            (!persistentFunctionIds.Contains(updateFunction.TargetFunctionId) ||
+                                function.Id == updateFunction.TargetFunctionId) &&
+                            Matches(function, updateFunction.Replacement)))
                     {
                         return PostconditionFailed(
                             updateFunction.TargetFunctionId,
                             "updated visual function contract");
                     }
                     break;
+                }
                 case RemoveScriptFunctionPatchOperation removeFunction:
                     if (after.Assets.SelectMany(static asset => asset.Functions)
                             .Any(function => function.Id == removeFunction.TargetFunctionId) ||
@@ -2131,6 +2349,172 @@ public sealed class CSharpDeclarationPatchApplier
         _ => throw new InvalidOperationException($"Unsupported lifecycle hook '{hook}'."),
     };
 
+    private static bool TryResolveStateLocations(
+        IReadOnlyList<StateLocation> locations,
+        IReadOnlyDictionary<string, RewriteContext> contexts,
+        out IReadOnlyDictionary<SemanticId, StateLocation> resolved,
+        out UnifiedDiagnostic? failure)
+    {
+        var result = new Dictionary<SemanticId, StateLocation>();
+        foreach (IGrouping<SemanticId, StateLocation> group in locations.GroupBy(
+                     static location => location.State.Id))
+        {
+            StateLocation[] candidates = group.ToArray();
+            string spanKey = SpanKey(candidates[0].State.Span);
+            if (candidates.Any(candidate =>
+                    !string.Equals(SpanKey(candidate.State.Span), spanKey, StringComparison.Ordinal)))
+            {
+                failure = InvalidReplacement(
+                    $"State identity '{group.Key}' resolves to multiple source declarations; the declaration owner is ambiguous.",
+                    candidates[0].State.Span);
+                resolved = result;
+                return false;
+            }
+
+            if (!contexts.TryGetValue(candidates[0].State.Span.FilePath, out RewriteContext? context))
+            {
+                failure = MissingSyntax(group.Key, candidates[0].State.Span, "script state property source");
+                resolved = result;
+                return false;
+            }
+
+            PropertyDeclarationSyntax[] syntax = context.Root.DescendantNodes()
+                .OfType<PropertyDeclarationSyntax>()
+                .Where(property => RoslynSourceSpan.FromNode(
+                    property,
+                    candidates[0].State.Span.FilePath) == candidates[0].State.Span)
+                .ToArray();
+            if (syntax.Length != 1)
+            {
+                failure = MissingSyntax(group.Key, candidates[0].State.Span, "script state property");
+                resolved = result;
+                return false;
+            }
+
+            IPropertySymbol? symbol = context.SemanticModel.GetDeclaredSymbol(syntax[0]);
+            INamedTypeSymbol? containingType = symbol?.ContainingType;
+            if (containingType is null)
+            {
+                failure = InvalidReplacement(
+                    $"State identity '{group.Key}' has no Roslyn declaration owner.",
+                    candidates[0].State.Span);
+                resolved = result;
+                return false;
+            }
+
+            string ownerName = GetMetadataName(containingType);
+            StateLocation[] ownerLocations = candidates
+                .Where(candidate => string.Equals(
+                    candidate.Asset.QualifiedName,
+                    ownerName,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (ownerLocations.Length != 1)
+            {
+                failure = InvalidReplacement(
+                    $"State identity '{group.Key}' source owner '{ownerName}' does not map to exactly one Script Asset projection.",
+                    candidates[0].State.Span);
+                resolved = result;
+                return false;
+            }
+
+            result.Add(group.Key, ownerLocations[0]);
+        }
+
+        resolved = result;
+        failure = null;
+        return true;
+    }
+
+    private static bool TryResolveFunctionLocations(
+        IReadOnlyList<FunctionLocation> locations,
+        IReadOnlyDictionary<string, RewriteContext> contexts,
+        out IReadOnlyDictionary<SemanticId, FunctionLocation> resolved,
+        out UnifiedDiagnostic? failure)
+    {
+        var result = new Dictionary<SemanticId, FunctionLocation>();
+        foreach (IGrouping<SemanticId, FunctionLocation> group in locations.GroupBy(
+                     static location => location.Function.Id))
+        {
+            FunctionLocation[] candidates = group.ToArray();
+            string spanKey = SpanKey(candidates[0].Method.Span);
+            if (candidates.Any(candidate =>
+                    !string.Equals(SpanKey(candidate.Method.Span), spanKey, StringComparison.Ordinal)))
+            {
+                failure = InvalidReplacement(
+                    $"Function identity '{group.Key}' resolves to multiple source declarations; the declaration owner is ambiguous.",
+                    candidates[0].Method.Span);
+                resolved = result;
+                return false;
+            }
+
+            if (!contexts.TryGetValue(candidates[0].Method.Span.FilePath, out RewriteContext? context))
+            {
+                failure = MissingSyntax(group.Key, candidates[0].Method.Span, "script function source");
+                resolved = result;
+                return false;
+            }
+
+            MethodDeclarationSyntax[] syntax = context.Root.DescendantNodes()
+                .OfType<MethodDeclarationSyntax>()
+                .Where(method => RoslynSourceSpan.FromNode(
+                    method,
+                    candidates[0].Method.Span.FilePath) == candidates[0].Method.Span)
+                .ToArray();
+            if (syntax.Length != 1)
+            {
+                failure = MissingSyntax(group.Key, candidates[0].Method.Span, "script function method");
+                resolved = result;
+                return false;
+            }
+
+            IMethodSymbol? symbol = context.SemanticModel.GetDeclaredSymbol(syntax[0]);
+            INamedTypeSymbol? containingType = symbol?.ContainingType;
+            if (containingType is null)
+            {
+                failure = InvalidReplacement(
+                    $"Function identity '{group.Key}' has no Roslyn declaration owner.",
+                    candidates[0].Method.Span);
+                resolved = result;
+                return false;
+            }
+
+            string ownerName = GetMetadataName(containingType);
+            FunctionLocation[] ownerLocations = candidates
+                .Where(candidate => string.Equals(
+                    candidate.Asset.QualifiedName,
+                    ownerName,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (ownerLocations.Length != 1)
+            {
+                failure = InvalidReplacement(
+                    $"Function identity '{group.Key}' source owner '{ownerName}' does not map to exactly one Script Asset projection.",
+                    candidates[0].Method.Span);
+                resolved = result;
+                return false;
+            }
+
+            result.Add(group.Key, ownerLocations[0]);
+        }
+
+        resolved = result;
+        failure = null;
+        return true;
+    }
+
+    private static string GetMetadataName(INamedTypeSymbol type) =>
+        type.ToDisplayString(new SymbolDisplayFormat(
+            globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+                SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
+
+    private static string SpanKey(SourceSpan span) =>
+        $"{span.FilePath}\u0000{span.Start.Line:D8}:{span.Start.Column:D8}\u0000" +
+        $"{span.End.Line:D8}:{span.End.Column:D8}";
+
     private static CSharpSourceDocument GetSource(CSharpCompilationRequest request, string path) =>
         request.Sources.Single(source => string.Equals(source.LogicalPath, path, StringComparison.Ordinal));
 
@@ -2139,6 +2523,9 @@ public sealed class CSharpDeclarationPatchApplier
 
     private static SyntaxAnnotation StateAnnotation(SemanticId id) =>
         new(StateAnnotationKind, id.Value);
+
+    private static SyntaxAnnotation ConstructorAssignmentAnnotation(SemanticId id) =>
+        new(ConstructorAssignmentAnnotationKind, id.Value);
 
     private static SyntaxAnnotation FunctionAnnotation(SemanticId id) =>
         new(FunctionAnnotationKind, id.Value);
@@ -2273,6 +2660,11 @@ public sealed class CSharpDeclarationPatchApplier
         ScriptAssetDeclaration Asset,
         ScriptStateDeclaration State,
         ScriptStatePatchSpec Replacement) : StateMutationPlan(Asset, State);
+
+    private sealed record ConstructorDefaultLocation(
+        UpdatePlan Update,
+        RewriteContext Context,
+        AssignmentExpressionSyntax Assignment);
 
     private sealed record RemovePlan(
         ScriptAssetDeclaration Asset,

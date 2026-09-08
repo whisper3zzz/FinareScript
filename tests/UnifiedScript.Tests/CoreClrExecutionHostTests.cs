@@ -132,6 +132,98 @@ public sealed class CoreClrExecutionHostTests
     }
 
     [Fact]
+    public void Execute_AppliesStateOverrideToPrivateBaseDeclarationOnLeafReceiver()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/InheritedBase")]
+            public class InheritedBase
+            {
+                private int BaseValue { get; set; } = 7;
+
+                protected int ReadBaseValueFromBase()
+                {
+                    return BaseValue;
+                }
+            }
+
+            [ScriptAsset("Tests/InheritedLeaf")]
+            public sealed class InheritedLeaf : InheritedBase
+            {
+                [Visual]
+                public int ReadBaseValue()
+                {
+                    return ReadBaseValueFromBase();
+                }
+            }
+            """;
+        using CoreClrExecutionSession session = CreateSession(source);
+        Core.ScriptAssetDeclaration asset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.InheritedLeaf");
+        Core.ScriptStateDeclaration state = asset.States.Single(
+            static candidate => candidate.Name == "BaseValue");
+        Core.SemanticId methodId = session.ResolveVisualMethodId(
+            "Tests.Execution.InheritedLeaf.ReadBaseValue");
+
+        ExecutionResult result = session.Execute(new ExecutionInvocation(
+            methodId,
+            [],
+            new ScriptAssetReceiver(
+                asset.Id,
+                [new ScriptStateOverride(state.Id, "42")])));
+
+        Assert.Equal(ExecutionOutcome.Returned, result.Outcome);
+        Assert.Equal("42", result.ReturnValue!.Json);
+    }
+
+    [Fact]
+    public void Execute_AppliesInheritedNullableReferenceStateOverride()
+    {
+        const string source = """
+            #nullable enable
+            using UnifiedScript;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/NullableInheritedBase")]
+            public class NullableInheritedBase
+            {
+                public string? Label { get; set; } = "base";
+            }
+
+            [ScriptAsset("Tests/NullableInheritedLeaf")]
+            public sealed class NullableInheritedLeaf : NullableInheritedBase
+            {
+                [Visual]
+                public string ReadLabel()
+                {
+                    return Label ?? "missing";
+                }
+            }
+            """;
+        using CoreClrExecutionSession session = CreateSession(source);
+        Core.ScriptAssetDeclaration asset = session.ScriptAssets.Assets.Single(
+            static candidate => candidate.QualifiedName == "Tests.Execution.NullableInheritedLeaf");
+        Core.ScriptStateDeclaration state = asset.States.Single(
+            static candidate => candidate.Name == "Label");
+        Core.SemanticId methodId = session.ResolveVisualMethodId(
+            "Tests.Execution.NullableInheritedLeaf.ReadLabel");
+
+        ExecutionResult result = session.Execute(new ExecutionInvocation(
+            methodId,
+            [],
+            new ScriptAssetReceiver(
+                asset.Id,
+                [new ScriptStateOverride(state.Id, "\"override\"")])));
+
+        Assert.Equal(ExecutionOutcome.Returned, result.Outcome);
+        Assert.Equal("\"override\"", result.ReturnValue!.Json);
+    }
+
+    [Fact]
     public void Execute_RejectsInstanceEntryPointWithoutScriptAssetReceiverContract()
     {
         const string source = """

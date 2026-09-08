@@ -41,8 +41,11 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   chunk and bundled hostfxr. Factory Rename/Duplicate transactions now retain
   ordinary child/grandchild component ownership, explicit defaults and persistent
   identity through rollback and package reload, with native Actor instances
-  from the original and duplicated branches. Continue with managed-base state
-  contracts; this asset-operation lane does not verify active managed rename.
+  from the original and duplicated branches. Managed-base state now has matching
+  source/runtime ownership, persistent identities, constructor defaults and
+  source-owner declaration editing with focused managed validation. Continue
+  with its two-World/cooked fixture and native authoring owner selection; the
+  asset-operation lane does not verify active managed rename.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and

@@ -102,23 +102,59 @@ internal static class UnrealScriptStateSynchronizer
                     $"'{classAttribute.GeneratedClassPath}'.");
             }
 
-            bool ownsAllProperties = scriptType
-                .GetCustomAttribute<global::UnifiedScript.ScriptAssetAttribute>(inherit: false) is not null;
+            StringComparer stateNameComparer = classAttribute is not null
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            var selectedProperties = new Dictionary<string, (Type Owner, PropertyInfo Property, global::UnifiedScript.ExposeAttribute? Exposure)>(stateNameComparer);
             var bindings = new List<StateBinding>();
-            foreach (PropertyInfo property in scriptType
-                         .GetProperties(
-                             BindingFlags.Instance |
-                             BindingFlags.Public |
-                             BindingFlags.NonPublic |
-                             BindingFlags.DeclaredOnly)
-                         .OrderBy(static property => property.Name, StringComparer.Ordinal))
+            foreach (Type owner in EnumerateTypeHierarchy(scriptType))
             {
-                bool exposed = property
-                    .GetCustomAttribute<global::UnifiedScript.ExposeAttribute>(inherit: false) is not null;
-                if (!ownsAllProperties && !exposed)
+                bool ownsAllProperties = owner
+                    .GetCustomAttribute<global::UnifiedScript.ScriptAssetAttribute>(inherit: false) is not null;
+                foreach (MemberInfo member in owner
+                             .GetMembers(
+                                 BindingFlags.Instance |
+                                 BindingFlags.Public |
+                                 BindingFlags.NonPublic |
+                                 BindingFlags.DeclaredOnly)
+                             .OrderBy(static member => member.Name, StringComparer.Ordinal))
                 {
-                    continue;
+                    PropertyInfo? property = member as PropertyInfo;
+                    global::UnifiedScript.ExposeAttribute? exposure = member
+                        .GetCustomAttribute<global::UnifiedScript.ExposeAttribute>(inherit: false);
+                    bool isStatic = property is not null &&
+                        (property.GetMethod?.IsStatic == true || property.SetMethod?.IsStatic == true);
+                    bool isCandidate =
+                        (property is not null && !isStatic && ownsAllProperties) ||
+                        exposure is not null;
+                    if (!isCandidate)
+                    {
+                        if (property is not null && !isStatic && selectedProperties.ContainsKey(property.Name))
+                        {
+                            throw new InvalidOperationException(
+                                $"Script state '{scriptType.FullName}.{member.Name}' hides an inherited state property; state ownership is ambiguous.");
+                        }
+                        continue;
+                    }
+
+                    if (property is null || isStatic)
+                    {
+                        throw new InvalidOperationException(
+                            $"Script state '{scriptType.FullName}.{member.Name}' must be a non-static, readable, writable instance property.");
+                    }
+
+                    if (selectedProperties.ContainsKey(property.Name))
+                    {
+                        throw new InvalidOperationException(
+                            $"Script state '{scriptType.FullName}.{property.Name}' conflicts with an inherited state property; state ownership is ambiguous.");
+                    }
+
+                    selectedProperties[property.Name] = (owner, property, exposure);
                 }
+            }
+
+            foreach ((Type owner, PropertyInfo property, global::UnifiedScript.ExposeAttribute? exposure) in selectedProperties.Values)
+            {
                 if (property.GetIndexParameters().Length != 0 ||
                     property.GetMethod is null || property.SetMethod is null ||
                     property.GetMethod.IsStatic || property.SetMethod.IsStatic)
@@ -129,10 +165,22 @@ internal static class UnrealScriptStateSynchronizer
 
                 string memberPath = $"{generatedClassPath}:{property.Name}";
                 StateBinding binding = StateBinding.Create(property, memberPath);
-                binding.Replicated = property.GetCustomAttribute<global::UnifiedScript.ExposeAttribute>()?.Replicated == true;
+                binding.Replicated = exposure?.Replicated == true;
                 bindings.Add(binding);
             }
-            return new StateContract(classAttribute.Kind, bindings);
+            return new StateContract(classAttribute!.Kind, bindings);
+        }
+
+        private static IEnumerable<Type> EnumerateTypeHierarchy(Type type)
+        {
+            var chain = new List<Type>();
+            for (Type? current = type; current is not null; current = current.BaseType)
+            {
+                chain.Add(current);
+            }
+
+            chain.Reverse();
+            return chain;
         }
     }
 

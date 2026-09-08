@@ -419,6 +419,30 @@ non-deterministic constructor shapes fail before native class mutation. This
 keeps generated CDO defaults, managed state hydration, compatible override
 migration, and packaged reload on one typed declaration contract.
 
+Source-defined managed base state is projected into each concrete Script Asset.
+Exposure is decided by each declaring type: its own `[ScriptAsset]` includes
+its instance auto-properties, while a plain helper base contributes only its
+explicit `[Expose]` properties. The leaf's attribute does not export unexposed
+helper or framework properties. A projected state keeps the declaring
+property's persistent `.usids` identity and source span; different leaves can
+share that ID with different effective constructor defaults. Defaults follow
+the reviewed parameterless constructor chain, including `this`/`base` property
+assignments. This does not evaluate arbitrary constructor logic or constructor
+argument chains. Ambiguous property hiding/overrides are rejected; Unreal
+Script Classes use case-insensitive native state names.
+
+Declaration patches resolve the actual source owner, including partial types,
+before checking an inherited state's edit precondition. Updating a source
+default changes the initializer or final owner-constructor assignment that
+defines it, preserving derived constructor overrides. Failed edits publish no
+partial source or sidecar. Runtime bindings use the concrete generated class
+path for every inherited property, with Actor state on the Target and component
+state on the Host; CoreCLR receiver overrides can also reach eligible private
+base properties. This contract does not infer a native Blueprint parent from
+the C# base type. Managed-inheritance UE runtime/cooked validation and native
+authoring owner selection remain tracked in the
+[inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md).
+
 The compiled declaration payload uses v1.4 for collection state,
 v1.3 for soft-reference state and v1.2
 for generated Unreal enum wrappers, Rotator and Transform state. Older shapes

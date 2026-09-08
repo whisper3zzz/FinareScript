@@ -44,6 +44,46 @@ public sealed class CSharpIdentityReconcilerTests
     }
 
     [Fact]
+    public void Analyze_DoesNotPersistStateIdentityForSameNamedForeignAttributes()
+    {
+        const string source = """
+            using System;
+
+            namespace Other
+            {
+                [AttributeUsage(AttributeTargets.Class)]
+                public sealed class ScriptAssetAttribute : Attribute
+                {
+                    public ScriptAssetAttribute(string path) { }
+                }
+
+                [AttributeUsage(AttributeTargets.Property)]
+                public sealed class ExposeAttribute : Attribute { }
+            }
+
+            namespace Game
+            {
+                [Other.ScriptAsset("Game/Foreign")]
+                public sealed class Foreign
+                {
+                    [Other.Expose]
+                    public int Value { get; set; } = 7;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = AnalyzeWithIdentity(
+            source,
+            IdentitySidecarDocument.CreateEmpty(Path));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.DoesNotContain(
+            Assert.Single(result.IdentitySidecars).Entries,
+            static entry => entry.Kind == "state");
+        Assert.Empty(result.ScriptAssets!.Assets);
+    }
+
+    [Fact]
     public void Analyze_PreservesIdentitiesAcrossCommentAndWhitespaceChanges()
     {
         CSharpAnalysisResult initial = AnalyzeWithIdentity(Source, IdentitySidecarDocument.CreateEmpty(Path));

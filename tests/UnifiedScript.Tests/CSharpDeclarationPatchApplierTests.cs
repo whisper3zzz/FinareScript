@@ -60,6 +60,345 @@ public sealed class CSharpDeclarationPatchApplierTests
     }
 
     [Fact]
+    public void ApplyResolvesInheritedStateAndFunctionByTheirSourceOwners()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            [ScriptAsset("Game/BasePolicy")]
+            public class BasePolicy
+            {
+                public int Seed { get; set; } = 3;
+
+                [Visual]
+                public int ReadSeed()
+                {
+                    return Seed;
+                }
+
+                [Visual]
+                public int ReadSeedCaller()
+                {
+                    return ReadSeed();
+                }
+            }
+
+            [ScriptAsset("Game/LeafPolicy")]
+            public sealed class LeafPolicy : BasePolicy
+            {
+                public int LeafValue { get; set; } = 4;
+
+                [Visual]
+                public int LeafRead()
+                {
+                    return LeafValue;
+                }
+            }
+            """;
+        CSharpCompilationRequest initialRequest = new(
+            "InheritedDeclarationPatch",
+            [new CSharpSourceDocument(
+                "Game/InheritedDeclarationPatch.cs",
+                source,
+                IdentitySidecarDocument.CreateEmpty("Game/InheritedDeclarationPatch.cs"))]);
+        CSharpAnalysisResult initial = new CSharpSemanticPipeline().Analyze(initialRequest);
+        IdentitySidecarDocument sidecar = Assert.Single(initial.IdentitySidecars);
+        CSharpCompilationRequest request = new(
+            "InheritedDeclarationPatch",
+            [new CSharpSourceDocument("Game/InheritedDeclarationPatch.cs", source, sidecar)]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration baseAsset = original.ScriptAssets!.Assets.Single(
+            static asset => asset.QualifiedName == "Game.BasePolicy");
+        ScriptAssetDeclaration leafAsset = original.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.LeafPolicy");
+        ScriptStateDeclaration baseState = baseAsset.States.Single(static state => state.Name == "Seed");
+        ScriptStateDeclaration leafState = leafAsset.States.Single(static state => state.Name == "Seed");
+        ScriptFunctionDeclaration inheritedFunction = leafAsset.Functions.Single(
+            static function => function.Name == "ReadSeed");
+        Assert.Equal(baseState.Id, leafState.Id);
+
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new UpdateScriptStatePatchOperation(
+                leafState.Id,
+                Expected(baseState),
+                Spec("RenamedSeed", "int", ScriptStateTypeKind.Integer, 5, baseState.Exposure)),
+            new UpdateScriptFunctionPatchOperation(
+                inheritedFunction.Id,
+                Expected(inheritedFunction),
+                new ScriptFunctionPatchSpec(
+                    "ReadRenamedSeed",
+                    "int",
+                    IsStatic: false,
+                    [])));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.All(result.Analysis!.ScriptAssets!.Assets, asset =>
+        {
+            Assert.Equal(
+                baseState.Id,
+                asset.States.Single(static state => state.Name == "RenamedSeed").Id);
+            Assert.Contains(asset.Functions, static function => function.Name == "ReadRenamedSeed");
+        });
+        Assert.All(
+            result.Analysis.ScriptAssets.Assets.SelectMany(static asset => asset.Functions)
+                .Where(static function => function.Name == "ReadRenamedSeed"),
+            function => Assert.Equal(inheritedFunction.Id, function.Id));
+        Assert.Contains(
+            "return RenamedSeed;",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return ReadRenamedSeed();",
+            Assert.Single(result.PatchedRequest.Sources).Source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplyUpdatesInheritedOwnerWhilePreservingDerivedConstructorOverride()
+    {
+        const string derivedSource = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            [ScriptAsset("Game/FollowerLeaf")]
+            public sealed class FollowerLeaf : SharedBase
+            {
+            }
+
+            [ScriptAsset("Game/AOverrideLeaf")]
+            public sealed class OverrideLeaf : SharedBase
+            {
+                public OverrideLeaf()
+                {
+                    base.Seed = 77;
+                }
+            }
+            """;
+        const string ownerSource = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            [ScriptAsset("Game/SharedBase")]
+            public partial class SharedBase
+            {
+            }
+            """;
+        const string stateSource = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            public partial class SharedBase
+            {
+                public int Seed { get; set; } = 3;
+            }
+            """;
+        const string constructorSource = """
+            namespace Game;
+
+            public partial class SharedBase
+            {
+                public SharedBase()
+                {
+                    Seed = 5;
+                    Seed = 3;
+                }
+            }
+            """;
+        const string derivedPath = "Game/Derived.cs";
+        const string ownerPath = "Game/BaseOwner.cs";
+        const string statePath = "Game/BaseState.cs";
+        const string constructorPath = "Game/BaseConstructor.cs";
+        CSharpCompilationRequest initialRequest = new(
+            "InheritedOwnerPatch",
+            [
+                new CSharpSourceDocument(
+                    derivedPath,
+                    derivedSource,
+                    IdentitySidecarDocument.CreateEmpty(derivedPath)),
+                new CSharpSourceDocument(
+                    ownerPath,
+                    ownerSource,
+                    IdentitySidecarDocument.CreateEmpty(ownerPath)),
+                new CSharpSourceDocument(
+                    statePath,
+                    stateSource,
+                    IdentitySidecarDocument.CreateEmpty(statePath)),
+                new CSharpSourceDocument(
+                    constructorPath,
+                    constructorSource,
+                    IdentitySidecarDocument.CreateEmpty(constructorPath)),
+            ]);
+        CSharpAnalysisResult initialized = Analyze(initialRequest);
+        CSharpCompilationRequest request = new(
+            "InheritedOwnerPatch",
+            initialRequest.Sources.Select(source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                initialized.IdentitySidecars.Single(sidecar =>
+                    sidecar.SourcePath == source.LogicalPath))).ToArray());
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration baseAsset = original.ScriptAssets!.Assets.Single(
+            static asset => asset.QualifiedName == "Game.SharedBase");
+        ScriptStateDeclaration baseState = baseAsset.States.Single();
+        ScriptStateDeclaration followerState = original.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.FollowerLeaf").States.Single();
+        ScriptStateDeclaration overrideState = original.ScriptAssets.Assets.Single(
+            static asset => asset.QualifiedName == "Game.OverrideLeaf").States.Single();
+        Assert.Equal(baseState.Id, followerState.Id);
+        Assert.Equal(baseState.Id, overrideState.Id);
+        Assert.Equal(3, followerState.DefaultValue.GetInt32());
+        Assert.Equal(77, overrideState.DefaultValue.GetInt32());
+        Assert.Equal("Game/AOverrideLeaf", original.ScriptAssets.Assets[0].AssetPath);
+        Assert.Equal(77, original.ScriptAssets.Assets[0].States.Single().DefaultValue.GetInt32());
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(
+                original,
+                new UpdateScriptStatePatchOperation(
+                    followerState.Id,
+                    Expected(baseState),
+                    Spec("RenamedSeed", "int", ScriptStateTypeKind.Integer, 11, baseState.Exposure))));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDocument after = result.Analysis!.ScriptAssets!;
+        Assert.Equal(
+            11,
+            after.Assets.Single(static asset => asset.QualifiedName == "Game.SharedBase")
+                .States.Single().DefaultValue.GetInt32());
+        Assert.Equal(
+            11,
+            after.Assets.Single(static asset => asset.QualifiedName == "Game.FollowerLeaf")
+                .States.Single().DefaultValue.GetInt32());
+        Assert.Equal(
+            77,
+            after.Assets.Single(static asset => asset.QualifiedName == "Game.OverrideLeaf")
+                .States.Single().DefaultValue.GetInt32());
+        Assert.All(after.Assets, asset => Assert.Equal(baseState.Id, asset.States.Single().Id));
+        Assert.Contains("base.RenamedSeed = 77", result.PatchedRequest!.Sources.Single(
+            static source => source.LogicalPath == derivedPath).Source, StringComparison.Ordinal);
+        string patchedState = result.PatchedRequest.Sources.Single(
+            static source => source.LogicalPath == statePath).Source;
+        Assert.Contains("public int RenamedSeed { get; set; } = 3;", patchedState, StringComparison.Ordinal);
+        string patchedConstructor = result.PatchedRequest.Sources.Single(
+            static source => source.LogicalPath == constructorPath).Source;
+        Assert.Contains("RenamedSeed = 5;", patchedConstructor, StringComparison.Ordinal);
+        Assert.Contains("RenamedSeed = 11;", patchedConstructor, StringComparison.Ordinal);
+
+        string[] sourceBeforeFailure = request.Sources.Select(static source => source.Source).ToArray();
+        string[] sidecarsBeforeFailure = request.Sources
+            .Select(source => source.IdentitySidecar is null
+                ? string.Empty
+                : IdentitySidecarJson.Serialize(source.IdentitySidecar))
+            .ToArray();
+        CSharpPatchResult invalidRemoval = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(
+                original,
+                new RemoveScriptStatePatchOperation(
+                    baseState.Id,
+                    Expected(baseState) with { Name = "WrongSharedName" })));
+
+        AssertFailure(invalidRemoval, DeclarationPatchDiagnosticCodes.StatePreconditionFailed);
+        Assert.Equal(sourceBeforeFailure, request.Sources.Select(static source => source.Source).ToArray());
+        Assert.Equal(
+            sidecarsBeforeFailure,
+            request.Sources.Select(source => source.IdentitySidecar is null
+                ? string.Empty
+                : IdentitySidecarJson.Serialize(source.IdentitySidecar)).ToArray());
+
+        CSharpPatchResult invalidUpdate = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(
+                original,
+                new UpdateScriptStatePatchOperation(
+                    baseState.Id,
+                    Expected(baseState) with
+                    {
+                        DefaultValue = JsonSerializer.SerializeToElement(999),
+                    },
+                    Spec("RenamedSeed", "int", ScriptStateTypeKind.Integer, 11, baseState.Exposure))));
+
+        AssertFailure(invalidUpdate, DeclarationPatchDiagnosticCodes.StatePreconditionFailed);
+        Assert.Equal(sourceBeforeFailure, request.Sources.Select(static source => source.Source).ToArray());
+        Assert.Equal(
+            sidecarsBeforeFailure,
+            request.Sources.Select(source => source.IdentitySidecar is null
+                ? string.Empty
+                : IdentitySidecarJson.Serialize(source.IdentitySidecar)).ToArray());
+    }
+
+    [Fact]
+    public void ApplyUpdatesMultipleDefaultsInOneConstructorAfterAnRhsLengthChange()
+    {
+        const string path = "Game/BatchConstructorDefaults.cs";
+        const string source = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            [ScriptAsset("Game/BatchConstructorDefaults")]
+            public sealed class BatchConstructorDefaults
+            {
+                public int First { get; set; } = 0;
+                public int Second { get; set; } = 0;
+
+                public BatchConstructorDefaults()
+                {
+                    First = 1;
+                    Second = 2;
+                }
+            }
+            """;
+        CSharpCompilationRequest initialRequest = new(
+            "BatchConstructorDefaults",
+            [new CSharpSourceDocument(
+                path,
+                source,
+                IdentitySidecarDocument.CreateEmpty(path))]);
+        CSharpAnalysisResult initial = Analyze(initialRequest);
+        IdentitySidecarDocument sidecar = Assert.Single(initial.IdentitySidecars);
+        CSharpCompilationRequest request = new(
+            "BatchConstructorDefaults",
+            [new CSharpSourceDocument(path, source, sidecar)]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        ScriptStateDeclaration first = asset.States.Single(static state => state.Name == "First");
+        ScriptStateDeclaration second = asset.States.Single(static state => state.Name == "Second");
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(
+                original,
+                new UpdateScriptStatePatchOperation(
+                    first.Id,
+                    Expected(first),
+                    Spec("First", "int", ScriptStateTypeKind.Integer, 1000, first.Exposure)),
+                new UpdateScriptStatePatchOperation(
+                    second.Id,
+                    Expected(second),
+                    Spec("RenamedSecond", "int", ScriptStateTypeKind.Integer, 22, second.Exposure))));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDeclaration patchedAsset = Assert.Single(result.Analysis!.ScriptAssets!.Assets);
+        Assert.Equal(1000, patchedAsset.States.Single(static state => state.Name == "First")
+            .DefaultValue.GetInt32());
+        Assert.Equal(22, patchedAsset.States.Single(static state => state.Name == "RenamedSecond")
+            .DefaultValue.GetInt32());
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("First = 1000;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("RenamedSecond = 22;", patchedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ApplyUpdatesContractRenamesReferencesAndPreservesStateIdentity()
     {
         (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest();

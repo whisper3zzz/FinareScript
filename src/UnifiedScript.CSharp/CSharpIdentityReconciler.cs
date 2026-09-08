@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using UnifiedScript.Core;
@@ -11,6 +12,12 @@ namespace UnifiedScript.CSharp;
 public sealed class CSharpIdentityReconciler
 {
     private const int ContextTokenCount = 4;
+    private static readonly SymbolDisplayFormat TypeMetadataFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
     private readonly Func<SemanticId> idFactory;
 
     public CSharpIdentityReconciler(Func<SemanticId>? idFactory = null)
@@ -21,7 +28,14 @@ public sealed class CSharpIdentityReconciler
     public IdentityReconciliationResult Reconcile(
         CSharpSourceDocument source,
         SyntaxTree syntaxTree,
-        HirCompilationUnit compilation)
+        HirCompilationUnit compilation) =>
+        Reconcile(source, syntaxTree, compilation, semanticCompilation: null);
+
+    public IdentityReconciliationResult Reconcile(
+        CSharpSourceDocument source,
+        SyntaxTree syntaxTree,
+        HirCompilationUnit compilation,
+        CSharpCompilation? semanticCompilation)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(syntaxTree);
@@ -29,12 +43,16 @@ public sealed class CSharpIdentityReconciler
         IdentitySidecarDocument previous = source.IdentitySidecar ??
             throw new ArgumentException("Identity reconciliation requires a source sidecar.", nameof(source));
         var diagnostics = new List<UnifiedDiagnostic>();
-        List<IdentityCandidate> candidates = CreateCandidates(source, syntaxTree, compilation);
+        List<IdentityCandidate> candidates = CreateCandidates(
+            source,
+            syntaxTree,
+            compilation,
+            semanticCompilation);
         var oldEntries = previous.Entries.ToDictionary(static entry => entry.Id);
         var tombstoneIds = previous.Tombstones.Select(static tombstone => tombstone.Id).ToHashSet();
         var usedOldIds = new HashSet<SemanticId>();
         var assignedIds = compilation.DescendantsAndSelf()
-            .Where(static node => node is HirCompilationUnit or HirTypeDeclaration or HirMethodDeclaration)
+            .Where(static node => node is HirCompilationUnit or HirTypeDeclaration)
             .Select(static node => node.Id)
             .ToHashSet();
 
@@ -64,9 +82,11 @@ public sealed class CSharpIdentityReconciler
         foreach (IdentityCandidate candidate in candidates)
         {
             SemanticId id = candidate.AssignedId ??
-                (isInitialBaseline && !unavailableIds.Contains(candidate.Node.Id)
+                (candidate.Kind == "function" && !unavailableIds.Contains(candidate.Node.Id)
                     ? candidate.Node.Id
-                    : AllocateId(unavailableIds, assignedIds));
+                    : isInitialBaseline && !unavailableIds.Contains(candidate.Node.Id)
+                        ? candidate.Node.Id
+                        : AllocateId(unavailableIds, assignedIds));
             assignedIds.Add(id);
             unavailableIds.Add(id);
             rewriteMap.Add(candidate.Node.Id, id);
@@ -88,8 +108,9 @@ public sealed class CSharpIdentityReconciler
             generation,
             entries,
             tombstones));
+        HirCompilationUnit rewrittenCompilation = HirIdentityRewriter.Rewrite(compilation, rewriteMap);
         return new IdentityReconciliationResult(
-            HirIdentityRewriter.Rewrite(compilation, rewriteMap),
+            rewrittenCompilation,
             sidecar,
             diagnostics)
         {
@@ -288,9 +309,13 @@ public sealed class CSharpIdentityReconciler
     private static List<IdentityCandidate> CreateCandidates(
         CSharpSourceDocument source,
         SyntaxTree syntaxTree,
-        HirCompilationUnit compilation)
+        HirCompilationUnit compilation,
+        CSharpCompilation? semanticCompilation)
     {
         SourceText sourceText = syntaxTree.GetText();
+        SemanticModel? semanticModel = semanticCompilation?.GetSemanticModel(
+            syntaxTree,
+            ignoreAccessibility: false);
         SyntaxToken[] tokens = syntaxTree.GetRoot().DescendantTokens().ToArray();
         var fingerprintCache = new Dictionary<HirNode, string>(ReferenceEqualityComparer.Instance);
         var candidates = new List<IdentityCandidate>();
@@ -299,13 +324,22 @@ public sealed class CSharpIdentityReconciler
                      .OfType<TypeDeclarationSyntax>())
         {
             string qualifiedTypeName = GetQualifiedTypeName(typeSyntax);
-            bool ownsProperties = HasAttribute(typeSyntax.AttributeLists, "ScriptAsset");
+            INamedTypeSymbol? typeSymbol = semanticModel?.GetDeclaredSymbol(typeSyntax);
+            bool ownsProperties = typeSymbol is not null
+                ? HasAttribute(typeSymbol, "ScriptAsset")
+                : HasAttribute(typeSyntax.AttributeLists, "ScriptAsset");
             string typeParent = GetDigest($"scriptAsset|{qualifiedTypeName}");
             foreach (PropertyDeclarationSyntax property in typeSyntax.Members
                          .OfType<PropertyDeclarationSyntax>()
                          .Where(property =>
-                             !property.Modifiers.Any(static modifier => modifier.ValueText == "static") &&
-                             (ownsProperties || HasAttribute(property.AttributeLists, "Expose"))))
+                         {
+                             IPropertySymbol? propertySymbol = semanticModel?.GetDeclaredSymbol(property);
+                             return !property.Modifiers.Any(static modifier => modifier.ValueText == "static") &&
+                                 (ownsProperties ||
+                                     (propertySymbol is not null
+                                         ? HasAttribute(propertySymbol, "Expose")
+                                         : HasAttribute(property.AttributeLists, "Expose")));
+                         }))
             {
                 var state = new HirStateDeclaration(
                     CSharpSemanticIds.ForSymbol(
@@ -325,6 +359,9 @@ public sealed class CSharpIdentityReconciler
                 string owner = $"{type.QualifiedName}.{method.Name}(" +
                     string.Join(',', method.Parameters.Select(static parameter => parameter.TypeName)) + ")";
                 string methodParent = GetDigest($"method|{owner}");
+                // Persist function declaration identities so renames keep the
+                // method ID consumed by every projected script asset.
+                Add(method, owner, "function", methodParent);
                 foreach (HirParameter parameter in method.Parameters)
                 {
                     Add(parameter, owner, "parameter", methodParent);
@@ -657,6 +694,7 @@ public sealed class CSharpIdentityReconciler
     private static string GetKind(HirNode node) => node switch
     {
         HirStateDeclaration => "state",
+        HirMethodDeclaration => "function",
         HirParameter => "parameter",
         HirBlockStatement => "block",
         HirVariableDeclarationStatement => "variableDeclaration",
@@ -748,6 +786,13 @@ public sealed class CSharpIdentityReconciler
             (name == shortName || name == $"{shortName}Attribute" ||
                 name.EndsWith($".{shortName}", StringComparison.Ordinal) ||
                 name.EndsWith($".{shortName}Attribute", StringComparison.Ordinal)));
+
+    private static bool HasAttribute(ISymbol symbol, string shortName) => symbol
+        .GetAttributes()
+        .Any(attribute => string.Equals(
+            attribute.AttributeClass?.ToDisplayString(TypeMetadataFormat),
+            $"UnifiedScript.{shortName}Attribute",
+            StringComparison.Ordinal));
 
     private static string GetQualifiedTypeName(TypeDeclarationSyntax type)
     {

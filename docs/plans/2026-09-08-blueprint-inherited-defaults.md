@@ -272,33 +272,140 @@ Asset-operation evidence is under `artifacts/m13-3c-3-inherited-asset-ops`:
 - `class-asset-operations-cmd-2-runtime.log` reports the existing `AssetOperations`
   regression Success and Queue Empty with one test performed.
 
-General managed-base state remains a distinct contract gap: `LowerStates` in
-`CSharpScriptAssetLowerer.cs` enumerates only the current type's members, and
-`UnrealScriptStateSynchronizer.StateContract.Create` likewise uses
-`BindingFlags.DeclaredOnly`. The inherited public visual-method test does not
-cover inherited auto-properties. Before extending this scope, define matching
-declaration/runtime rules for state ownership, stable IDs, member hiding and
-generated native paths; ordinary Blueprint inheritance does not prove them.
+The managed-state checkpoint replaces leaf-only enumeration in
+`CSharpScriptAssetLowerer` and `UnrealScriptStateSynchronizer` with matching
+declaring-type rules. Each type's own `ScriptAsset` exposes its instance
+auto-properties; plain helpers contribute only explicit `Expose` properties.
+Unexposed helper/framework properties remain outside the contract. The declaring
+property retains its sidecar identity and source span in every projection.
+JSON and compiled chunk identity validation remains scoped per asset; shared
+projections do not require a runtime serialization version change.
 
-The next state-contract change must retain the declaring property's identity:
-`CSharpIdentityReconciler` records a state under its declaring type, and the
-same Roslyn property may appear in several derived assets. Keep exposure
-selection local to each declaring type instead of treating the concrete
-`ScriptAsset` attribute as permission to export every framework-base property.
-Effective defaults must account for base construction and subsequent derived
-constructor assignments; changing member enumeration alone would miss them.
-Resolve ambiguous hiding before publication and keep runtime bindings on the
-concrete generated class path. This managed-property contract does not imply
-native Blueprint parent materialization: the current materializer rejects a
-new state that masks an existing native parent property.
+Effective defaults follow reviewed parameterless base-to-leaf constructor
+assignments. Conditional/deferred/compound writes and return/goto paths that
+can bypass the selected assignment are rejected. This is not an arbitrary C#
+constructor interpreter. Ambiguous hiding is rejected before publication, with
+case-insensitive Unreal names. Runtime bindings use the concrete generated
+class path, Actor Target and component Host. CoreCLR receiver overrides resolve
+eligible private base properties and nullable reference metadata before a
+concrete leaf's own Visual method executes. Inherited-method receiver dispatch
+remains separate work. Native Blueprint parent materialization is not inferred
+from C# inheritance; a new state masking a native parent property is rejected.
 
-Include declaration editing in that change. `CSharpDeclarationPatchApplier`
-currently flattens all asset states into a dictionary keyed only by state ID,
-both before editing and during postcondition checks. Inherited projections
-would repeat the declaring ID and may carry different effective defaults.
-Resolve the source declaration owner explicitly and validate its affected
-projections rather than arbitrarily selecting the first asset or assigning a
-new ID to each derived appearance.
+Declaration patches resolve the Roslyn source owner of shared state/function
+IDs, including partial source files, and check that owner's precondition and
+postcondition. Updating a default changes its effective owner constructor
+assignment when present, preserving earlier assignments, initializers and
+derived overrides. Function identities are persisted in sidecars so declaration
+patch renames retain the shared ID and repair callers. Semantic identity selection uses the
+actual UnifiedScript attributes, including attributes on another partial file;
+the existing syntax-only reconciler overload remains available. Failed edits
+publish no partial source or sidecar.
+
+The Release managed check passed 224 tests across
+`CSharpScriptAssetLowererTests`, `CSharpDeclarationPatchApplierTests`,
+`CSharpIdentityReconcilerTests`, `CSharpSourcePatchApplierTests`,
+`CoreClrExecutionHostTests`, `UnrealScriptObjectModelTests` and
+`InheritedStateContractTests`. It used the bundled UE SDK's `dotnet test` with
+`--no-restore -p:UnifiedScriptSkipManagedHostStaging=true` and a combined
+FullyQualifiedName filter for those classes. This result is recorded in tool
+stdout; no log/TRX was saved. Coverage includes shared-ID JSON/binary roundtrip,
+cross-file source-owner edits, derived defaults, full collection lifecycle on
+Actor/Component hosts, runtime hiding rejection and private/nullable CoreCLR
+state overrides. UE runtime and cooked proof for this changed managed code are
+still pending below.
+
+Review found two integration defects in the initial implementation. Multiple
+constructor default edits could invalidate later absolute syntax spans; the
+patch now annotates every final assignment before renaming references or
+replacing values. The focused patch checks passed 133 tests in
+`artifacts/m13-3c-3-managed-base-state/managed-patch-batch.log`.
+
+The first function identity implementation changed only declaration IDs, which
+left HIR/Graph and CoreCLR on different method IDs. Persistent IDs now enter at
+HIR reconciliation, before semantic binding; declarations, callers, Graph and
+execution share that ID without a consumer fallback. Old sidecars without
+function entries retain available canonical method IDs on upgrade. Arbitrary
+text renames without identity pins do not receive a new cross-owner guessing
+rule. The supported rename proof uses the actual declaration patch and its
+identity pins, then projects Authoring and executes the renamed program.
+
+The final identity integration regression passed 194 tests in
+`artifacts/m13-3c-3-managed-base-state/managed-function-identities-3.log`.
+It uses the same Release/no-restore/staging-disabled test command with a
+FullyQualifiedName filter for `FunctionIdentityPipelineTests`,
+`CSharpIdentityReconcilerTests`, `CSharpDeclarationPatchApplierTests`,
+`CSharpSourcePatchApplierTests`, `AuthoringSurfaceProjectorTests`,
+`CoreClrExecutionHostTests`, `CSharpProgramEmitterTests`,
+`CompiledProgramChunkTests` and `CompiledChunkTests`. The initial failing
+identity integration run remains in `managed-function-identities.log`;
+`managed-function-identities-2.log` records the earlier 148-test passing run.
+The final two pipeline tests were rerun after strengthening the canonical-ID
+upgrade and renamed caller-binding assertions; both pass in
+`managed-function-identities-final.log`. No product code changed after the
+194-test regression.
+
+For the native proof, distribute the existing isolated inherited-state fixture
+across source-defined base, middle and concrete classes. Preserve its final
+scalar and complete Array/Set/Map defaults through deterministic constructor
+assignments, and explicitly check that an unexposed helper property does not
+become a native field. Its ordinary Blueprint child/grandchild, two-World
+startup/reload and cooked verifier then exercise the projected managed state.
+Build the changed managed host and CLI coherently before fixture emission;
+routine managed checks keep host staging disabled until that deliberate
+deployment step. This source change needs new runtime evidence, unlike the
+earlier native-only asset-operation checkpoint.
+The three-layer fixture source and unexposed-helper CDO assertions are prepared.
+`artifacts/m13-3c-3-managed-base-state/editor-build.log` records successful
+HostEditor compilation; this is not yet runtime or cooked evidence.
+
+Native authoring needs a subsequent owner-aware selection check as well.
+`SUnifiedScriptAuthoringSurface::FindState` returns the first asset containing
+an ID; `BuildStateUpdatePatch` then uses that projection's
+effective default as the source-edit precondition. With shared state IDs this
+can select a derived override instead of the source owner's default. Do not
+claim general authoring closure from managed patch tests. Resolve ownership
+explicitly, including partial source owners, or reject unavailable ownership
+without mutating a projection selected by document order. The native JSON and
+binary materializers already validate state identity per selected asset and
+do not need a new format merely to read these shared IDs.
+
+Prefer source-analysis ownership metadata on the authoring surface, separate
+from runtime declaration serialization. The source lowering already knows the
+declaring type and persistent asset ID, including partial types. Carry that
+ownership to editing and navigation instead of inferring it from asset order
+or a single type span. Keep the selected derived projection's effective value
+distinct from the source owner's edit contract. An older surface with a shared
+ID and no provable owner must not silently select an editable declaration.
+`RebuildTree` also overwrites `SurfaceItemsById` for each shared state/function
+projection, so navigation must not depend on the last asset in the document.
+The tree row already captures its own projection's default in `Detail`; retain
+that distinction when routing edits to the source owner. `FindOwningAsset` has
+the same first-match implementation but currently has no callers; the active
+state edit/removal consumer is `FindState`.
+
+Inherited Visual functions have an earlier authoring boundary as well:
+`AuthoringSurfaceJson` and the native surface reader reject a function ID
+repeated across assets. Address both readers together with explicit ownership;
+do not merely relax one validator. Shared state projections already reach the
+native first-match edit path. Function navigation collisions become reachable
+when their reader boundary is corrected. Independently, persistent function
+IDs must agree across HIR, bound method descriptors, declarations, Graph and
+CoreCLR; a declaration-only identity mapping would break existing single-asset
+authoring and execution even before this inheritance boundary.
+
+The next authoring slice should carry declaration-ID to source-owner-asset-ID
+metadata from source analysis into the authoring document. Keep Authoring
+dependent on Core/Graph rather than CSharp: pass the ownership data through
+the CLI and debug-server projection boundaries. Validate that each owner asset
+actually contains the declaration. Permit repeated function projections only
+with a coherent owner and matching function contract/graph; retain rejection
+of duplicate IDs within an asset. Native edit preconditions and declaration
+navigation must use that owner, while a selected derived row continues to
+display its own effective default. Legacy unique declarations remain usable;
+ambiguous shared declarations without ownership must not become editable by
+array order. Rebuild the semantic navigation index using owner rows, including
+the shared actions/regions below inherited functions.
 
 ## Relevant verification
 

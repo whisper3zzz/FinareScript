@@ -23,6 +23,7 @@ internal static class HirIdentityRewriter
         HirMethodDeclaration method,
         IReadOnlyDictionary<SemanticId, SemanticId> identities) => method with
         {
+            Id = GetId(method, identities),
             Parameters = method.Parameters.Select(parameter => parameter with
             {
                 Id = GetId(parameter, identities),
