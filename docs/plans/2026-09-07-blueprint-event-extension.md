@@ -506,10 +506,10 @@ parent calls (`cmd-parent-intermediate-final.log`), Live Sync
 test expansion; its implementation was unchanged. These fixtures execute in
 HostEditor and do not establish cooked support.
 
-The broader runtime/cooked extension proof remains open; M13.3C-2 is still in
-progress.
+The cooked extension checkpoint below is now verified. Real-UE DLL body
+replacement remains open; M13.3C-2 is still in progress.
 
-## Cooked extension checkpoint in progress
+## Cooked extension checkpoint
 
 Reuse the checked-in parent-invocation and component-lifecycle managed scripts.
 An Editor fixture creates six separate packages under one GUID-named
@@ -524,7 +524,7 @@ preserve generated bindings and ordinary Blueprint bytecode.
 
 Only a successful fixture writes a `unifiedscript.event-extension-fixture/v0.1`
 receipt. It names the exact package directory, all six package names/filenames,
-and five executable generated-class paths. The tool validates that each path
+and six generated-class paths. The tool validates that each path
 belongs to those packages in the dedicated HostProject Content directory before
 cooking or cleanup. It cooks that directory with `/Engine/Maps/Entry`, leaving
 existing Demo assets and protected project configuration intact.
@@ -539,7 +539,42 @@ must restore managed instances, handles, lifecycle claims and World counts.
 The verifier requires cooked data and a chunk/hostfxr resolved inside the
 executing archive; it reports PASS only after these assertions and cleanup.
 
+The implementation passed on 2026-09-08. The Game target compilation passed in
+`artifacts/m13-3c-2-runtime/host-build-event-verifier-5.log`. Final evidence is
+under `artifacts/m13-3c-2-runtime/fixture-final/`: `editor-build-final.log`
+explicitly compiles the current BlueprintParentInvocationTests.cpp and links
+the Editor plugin. Fixture generation then passed with a normal Automation
+queue exit (`editor-fixture-generation.log`). This includes inherited child CDO
+configuration, public cross-package Script Asset references and cleanup by the
+six exact package names. Earlier Editor binaries predated those fixture changes
+and are not the evidence for them.
+
+`packaged-build-cook.log` records successful Win64 Development BuildCookRun and
+exit code 0 in 36.40 seconds. The executing archive then wrote PASS in
+`event-extension-result.txt`, with 25 managed fast calls and the packaged
+hostfxr path. `packaged-event-extension.log` records the runtime;
+`build-cook-run.log` records the driver. Temporary source fixture packages were
+removed; the archive, receipt and results remain in the final evidence directory.
+
+The first runtime attempts failed the final registry assertion with managed
+instances and lifecycle claims already at zero, but one UObject registration
+remaining. ReceiveInherited passes a separate Actor through the real registry;
+Actor.Destroy does not immediately invoke the UObject delete listener. The
+verifier now destroys its Actors, clears its pointers and performs GC while the
+World is still rooted, then asserts all three counts return to baseline before
+destroying the World. The final PASS includes that cleanup and the managed
+World-count assertion. This changes the fixture's verification timing, not the
+runtime registry contract.
+
 This checkpoint does not replace the remaining real-UE DLL body replacement
 proof. The existing override reload tests use the real managed instance and
 transaction machinery with a fixture native transport. A changed body still
 needs to be exercised through a live UE generated class before C-2 closes.
+Use an isolated test DLL with v1, compatible v2 and incompatible-route variants,
+leaving the staged Demo untouched. Materialize the baseline emitted Declaration
+and keep its generated class fixed while replacing the DLL at one active path.
+Two existing Worlds must initially execute v1; reloading one instance must
+change its managed return value while its explicit native parent executes once
+and the other World retains v1. Rejecting the incompatible variant must leave
+generation, callable behavior and ownership unchanged. Restoring compatible v2
+must permit the other instance to reload through the production component API.

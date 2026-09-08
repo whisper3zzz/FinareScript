@@ -1015,9 +1015,20 @@ Disabled or failed automatic startup still completes the native lifecycle and
 retains the existing exact-owner diagnostics for events without an active
 generation. Generic dispatch does not start a script; a later manual start does
 not replay ReceiveBeginPlay. Native lifecycle, child Blueprint and activation
-failure tests pass. The cooked extension fixture remains open in the
-[active checkpoint](plans/2026-09-07-blueprint-event-extension.md); the existing
-container/Soft Reference cooked result above predates this extension.
+failure tests pass. Win64 Development cooked execution also passes native and
+ordinary Blueprint parent bodies, scalar return/ref/out, a 258-item array
+result and all three component lifecycle traces. The fixture saves six packages
+with persistent CDO startup configuration, reloads their classes, then cooks and
+runs them with the chunk and hostfxr from the executing archive. Managed
+instances and lifecycle claims are released at teardown; UObject registry
+entries return to baseline after native destruction and GC.
+
+Run `tools/run-unreal-event-extension.ps1 -CookAndRun` after staging the Release
+Demo and building HostEditor. The tool generates its dedicated fixture, verifies
+the packaged result and removes only its six temporary assets. Logs and the
+receipt are under `artifacts/m13-3c-2-runtime/`. Real-UE DLL body replacement
+remains open in the
+[active checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Commands
 

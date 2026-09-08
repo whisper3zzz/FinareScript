@@ -20,13 +20,16 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/Parse.h"
 #include "Misc/PackageName.h"
 #include "Misc/ScopeExit.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 
 #include "PackageTools.h"
@@ -370,6 +373,169 @@ bool AddLifecycleChildEvent(
         {
             OutError = TEXT("Lifecycle child ReceiveEndPlay could not connect EndPlayReason.");
             return false;
+        }
+    }
+    return true;
+}
+
+bool AddObservedReceiveInheritedBody(
+    UBlueprint& Blueprint,
+    FString& OutError)
+{
+    const FName ObservedTextName(TEXT("ObservedText"));
+    const FName ObservedActorName(TEXT("ObservedActor"));
+    FEdGraphPinType TextType;
+    TextType.PinCategory = UEdGraphSchema_K2::PC_String;
+    FBlueprintEditorUtils::AddMemberVariable(&Blueprint, ObservedTextName, TextType);
+    FEdGraphPinType ActorType;
+    ActorType.PinCategory = UEdGraphSchema_K2::PC_Object;
+    ActorType.PinSubCategoryObject = AActor::StaticClass();
+    FBlueprintEditorUtils::AddMemberVariable(&Blueprint, ObservedActorName, ActorType);
+
+    UEdGraph* EventGraph = Blueprint.UbergraphPages.IsEmpty()
+        ? nullptr
+        : Blueprint.UbergraphPages[0];
+    if (EventGraph == nullptr)
+    {
+        OutError = TEXT("The ordinary parent Blueprint has no Ubergraph page.");
+        return false;
+    }
+
+    int32 NodePositionY = 400;
+    UK2Node_Event* Event = FKismetEditorUtilities::AddDefaultEventNode(
+        &Blueprint,
+        EventGraph,
+        FName(TEXT("ReceiveInherited")),
+        AUnifiedScriptEventExtensionFixture::StaticClass(),
+        NodePositionY);
+    if (Event == nullptr)
+    {
+        OutError = TEXT("Could not add ReceiveInherited to the ordinary parent Blueprint.");
+        return false;
+    }
+    Event->SetEnabledState(ENodeEnabledState::Enabled, true);
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    UEdGraphPin* EventThen = Event->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* EventText = Event->FindPin(TEXT("NativeText"), EGPD_Output);
+    UEdGraphPin* EventActor = Event->FindPin(TEXT("NativeActor"), EGPD_Output);
+    if (EventThen == nullptr || EventText == nullptr || EventActor == nullptr)
+    {
+        OutError = TEXT("ReceiveInherited event pins were not materialized.");
+        return false;
+    }
+
+    auto CreateSet = [&Blueprint, EventGraph](const FName MemberName)
+    {
+        UK2Node_VariableSet* Set = NewObject<UK2Node_VariableSet>(EventGraph);
+        Set->VariableReference.SetSelfMember(MemberName);
+        Set->CreateNewGuid();
+        EventGraph->AddNode(Set, true, false);
+        Set->AllocateDefaultPins();
+        return Set;
+    };
+    UK2Node_VariableSet* SetText = CreateSet(ObservedTextName);
+    UK2Node_VariableSet* SetActor = CreateSet(ObservedActorName);
+    UEdGraphPin* SetTextValue = SetText->FindPin(ObservedTextName, EGPD_Input);
+    UEdGraphPin* SetActorValue = SetActor->FindPin(ObservedActorName, EGPD_Input);
+    UEdGraphPin* SetTextExec = SetText->GetExecPin();
+    UEdGraphPin* SetTextThen = SetText->GetThenPin();
+    UEdGraphPin* SetActorExec = SetActor->GetExecPin();
+    if (SetTextValue == nullptr || SetActorValue == nullptr ||
+        SetTextExec == nullptr || SetTextThen == nullptr || SetActorExec == nullptr ||
+        !Schema->TryCreateConnection(EventThen, SetTextExec) ||
+        !Schema->TryCreateConnection(EventText, SetTextValue) ||
+        !Schema->TryCreateConnection(SetTextThen, SetActorExec) ||
+        !Schema->TryCreateConnection(EventActor, SetActorValue))
+    {
+        OutError = TEXT("Could not wire ReceiveInherited observations in the ordinary parent Blueprint.");
+        return false;
+    }
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
+    return true;
+}
+
+bool ReadCommandLineValue(const TCHAR* Prefix, FString& OutValue)
+{
+    if (!FParse::Value(FCommandLine::Get(), Prefix, OutValue))
+    {
+        return false;
+    }
+    OutValue.TrimQuotesInline();
+    return !OutValue.IsEmpty();
+}
+
+bool SaveFixturePackage(
+    UPackage* Package,
+    UObject* Asset,
+    const FString& PackageFilename,
+    FString& OutError)
+{
+    if (Package == nullptr || Asset == nullptr)
+    {
+        OutError = TEXT("Fixture package or top-level asset is null.");
+        return false;
+    }
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(PackageFilename), true);
+    FSavePackageArgs SaveArguments;
+    SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArguments.SaveFlags = SAVE_NoError;
+    if (!UPackage::SavePackage(
+            Package,
+            Asset,
+            *PackageFilename,
+            SaveArguments))
+    {
+        OutError = FString::Printf(
+            TEXT("Could not save fixture package '%s'."),
+            *PackageFilename);
+        return false;
+    }
+    return true;
+}
+
+bool UnloadFixturePackages(TArray<UPackage*>& Packages)
+{
+    TArray<UPackage*> ToUnload;
+    for (int32 Index = Packages.Num() - 1; Index >= 0; --Index)
+    {
+        if (Packages[Index] != nullptr)
+        {
+            Packages[Index]->SetDirtyFlag(false);
+            ToUnload.Add(Packages[Index]);
+            Packages[Index] = nullptr;
+        }
+    }
+    if (ToUnload.Num() > 0)
+    {
+        return UPackageTools::UnloadPackages(ToUnload);
+    }
+    return true;
+}
+
+bool ValidateReloadedFixtureClasses(
+    const TArray<FString>& ClassPaths,
+    FString& OutError)
+{
+    for (const FString& ClassPath : ClassPaths)
+    {
+        UClass* LoadedClass = LoadObject<UClass>(nullptr, *ClassPath);
+        if (LoadedClass == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Saved fixture class '%s' could not be loaded."),
+                *ClassPath);
+            return false;
+        }
+        if (const UUnifiedScriptBlueprintGeneratedClass* ManagedClass =
+                Cast<UUnifiedScriptBlueprintGeneratedClass>(LoadedClass))
+        {
+            if (ManagedClass->ManagedFunctionBindings.Num() == 0)
+            {
+                OutError = FString::Printf(
+                    TEXT("Reloaded managed fixture class '%s' lost its persisted bindings."),
+                    *ClassPath);
+                return false;
+            }
         }
     }
     return true;
@@ -3133,6 +3299,517 @@ bool FUnifiedScriptBlueprintComponentLifecycleTest::RunTest(const FString& Param
     {
         return false;
     }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintEventExtensionCookFixtureTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintEventExtensionCookFixture",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintEventExtensionCookFixtureTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::ParentInvocationTests;
+
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (!TestNotNull(TEXT("UEUnifiedScript plugin is installed"), Plugin.Get()))
+    {
+        return false;
+    }
+    const FString DemoDirectory = FPaths::Combine(
+        Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"));
+    const FString DeclarationPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.asset.json"));
+    const FString ChunkPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.uschunk"));
+    const FString AssemblyPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.dll"));
+    FString Declaration;
+    FString Error;
+    if (!TestTrue(TEXT("Cook fixture Demo declaration is staged"),
+            FFileHelper::LoadFileToString(Declaration, *DeclarationPath)) ||
+        !TestTrue(TEXT("Cook fixture Demo chunk is staged"),
+            IFileManager::Get().FileExists(*ChunkPath)) ||
+        !TestTrue(TEXT("Cook fixture Demo assembly is staged"),
+            IFileManager::Get().FileExists(*AssemblyPath)))
+    {
+        return false;
+    }
+
+    FDemoAsset ParentAsset;
+    FDemoAsset LifecycleAsset;
+    const FString ParentTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.BlueprintParentInvocationDemoScript");
+    const FString LifecycleTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.BlueprintComponentLifecycleDemoScript");
+    if (!TestTrue(TEXT("Cook fixture parent asset identity is present"),
+            ReadDemoAsset(Declaration, ParentTypeName, ParentAsset, Error)) ||
+        !TestTrue(TEXT("Cook fixture lifecycle asset identity is present"),
+            ReadDemoAsset(Declaration, LifecycleTypeName, LifecycleAsset, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    FString OutputRoot;
+    const bool bRetainFixture = ReadCommandLineValue(
+        TEXT("UnifiedScriptEventExtensionFixtureOutput="),
+        OutputRoot);
+    if (bRetainFixture)
+    {
+        OutputRoot = FPaths::ConvertRelativePathToFull(OutputRoot);
+        FPaths::NormalizeFilename(OutputRoot);
+        IFileManager::Get().MakeDirectory(*OutputRoot, true);
+    }
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString PackageDirectory =
+        TEXT("/Game/UnifiedScriptEventExtensionFixture_") + Suffix;
+    const FString FixtureChunkPath =
+        TEXT("{ProjectDir}/Plugins/UEUnifiedScript/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
+    const FString FixtureAssemblyPath =
+        TEXT("{ProjectDir}/Plugins/UEUnifiedScript/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    const FString FixtureDeclarationPath =
+        TEXT("{ProjectDir}/Plugins/UEUnifiedScript/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
+
+    TArray<UPackage*> Packages;
+    TArray<FString> PackageNames;
+    TArray<FString> PackageFilenames;
+    TArray<UObject*> PackageAssets;
+    TArray<FString> ClassPaths;
+    bool bFixtureSucceeded = false;
+    FString ReceiptPath;
+    const TArray<FString> FixtureLeafNames{
+        TEXT("NativeManagedActor"),
+        TEXT("OrdinaryParentActor"),
+        TEXT("IntermediateManagedActor"),
+        TEXT("ComponentBase"),
+        TEXT("ComponentChildWithParent"),
+        TEXT("ComponentChildWithoutParent")};
+    for (const FString& LeafName : FixtureLeafNames)
+    {
+        const FString PackageName = PackageDirectory + TEXT("/") + LeafName;
+        PackageNames.Add(PackageName);
+        PackageFilenames.Add(FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension()));
+        PackageAssets.Add(nullptr);
+    }
+    ON_SCOPE_EXIT
+    {
+        for (const FString& PackageName : PackageNames)
+        {
+            if (UPackage* Package = FindPackage(nullptr, *PackageName))
+            {
+                Packages.AddUnique(Package);
+            }
+        }
+        UnloadFixturePackages(Packages);
+        if (!(bFixtureSucceeded && bRetainFixture))
+        {
+            for (const FString& PackageFilename : PackageFilenames)
+            {
+                IFileManager::Get().Delete(*PackageFilename, false, true, true);
+            }
+            const FString FixtureRoot = PackageFilenames.Num() > 0
+                ? FPaths::GetPath(PackageFilenames[0])
+                : FString();
+            if (IFileManager::Get().DirectoryExists(*FixtureRoot))
+            {
+                IFileManager::Get().DeleteDirectory(*FixtureRoot, false, false);
+            }
+            if (!ReceiptPath.IsEmpty())
+            {
+                IFileManager::Get().Delete(*ReceiptPath, false, true, true);
+            }
+        }
+    };
+
+    auto AddPackage = [&](const FString& LeafName, const FString& AssetName, UBlueprint* Blueprint)
+    {
+        const FString PackageName = PackageDirectory + TEXT("/") + LeafName;
+        UPackage* Package = Blueprint != nullptr ? Blueprint->GetOutermost() : nullptr;
+        const int32 PackageIndex = PackageNames.IndexOfByKey(PackageName);
+        check(PackageIndex != INDEX_NONE);
+        PackageAssets[PackageIndex] = Blueprint;
+        Packages.AddUnique(Package);
+    };
+
+    auto ConfigureActorScriptAsset = [&](UUnifiedScriptBlueprint& Blueprint,
+                                         UUnifiedScriptAsset& ScriptAsset)
+    {
+        ScriptAsset.CompiledChunkPath = FixtureChunkPath;
+        ScriptAsset.ScriptAssemblyPath = FixtureAssemblyPath;
+        ScriptAsset.DeclarationPath = FixtureDeclarationPath;
+        Blueprint.ScriptAsset = &ScriptAsset;
+        if (AUnifiedScriptActor* CDO = Blueprint.GeneratedClass != nullptr
+                ? Cast<AUnifiedScriptActor>(Blueprint.GeneratedClass->GetDefaultObject())
+                : nullptr)
+        {
+            if (CDO->ScriptComponent != nullptr)
+            {
+                CDO->ScriptComponent->ScriptAsset = &ScriptAsset;
+                CDO->ScriptComponent->bStartAutomatically = true;
+                CDO->ScriptComponent->bTickAutomatically = false;
+            }
+        }
+    };
+
+    auto ConfigureComponentScriptAsset = [&](UUnifiedScriptBlueprint& Blueprint,
+                                              UUnifiedScriptAsset& ScriptAsset)
+    {
+        ScriptAsset.CompiledChunkPath = FixtureChunkPath;
+        ScriptAsset.ScriptAssemblyPath = FixtureAssemblyPath;
+        ScriptAsset.DeclarationPath = FixtureDeclarationPath;
+        Blueprint.ScriptAsset = &ScriptAsset;
+        if (UUnifiedScriptComponent* CDO = Blueprint.GeneratedClass != nullptr
+                ? Cast<UUnifiedScriptComponent>(Blueprint.GeneratedClass->GetDefaultObject())
+                : nullptr)
+        {
+            CDO->ScriptAsset = &ScriptAsset;
+            CDO->bStartAutomatically = true;
+            CDO->bTickAutomatically = false;
+        }
+    };
+
+    const FString NativePackageName = PackageDirectory + TEXT("/NativeManagedActor");
+    UPackage* NativePackage = nullptr;
+    UUnifiedScriptBlueprint* NativeBlueprint = CreateBlueprint(
+        NativePackageName,
+        TEXT("BP_NativeManagedActor_") + Suffix,
+        NativePackage);
+    UUnifiedScriptAsset* NativeScriptAsset = NativeBlueprint != nullptr
+        ? AttachScriptAsset(
+            *NativeBlueprint,
+            ParentAsset,
+            ChunkPath,
+            AssemblyPath,
+            DeclarationPath,
+            EUnifiedScriptClassKind::Actor)
+        : nullptr;
+    if (!TestNotNull(TEXT("Native managed actor Blueprint is created"), NativeBlueprint) ||
+        !TestNotNull(TEXT("Native managed actor ScriptAsset is created"), NativeScriptAsset))
+    {
+        return false;
+    }
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!TestTrue(TEXT("Native managed actor overrides materialize"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *NativeScriptAsset, *NativeBlueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    ConfigureActorScriptAsset(*NativeBlueprint, *NativeScriptAsset);
+    NativeScriptAsset->SetFlags(RF_Public | RF_Standalone);
+    AddPackage(TEXT("NativeManagedActor"), TEXT("BP_NativeManagedActor_" ) + Suffix, NativeBlueprint);
+    ClassPaths.Add(NativeBlueprint->GeneratedClass->GetPathName());
+
+    const FString OrdinaryPackageName = PackageDirectory + TEXT("/OrdinaryParentActor");
+    UPackage* OrdinaryPackage = nullptr;
+    UBlueprint* OrdinaryBlueprint = CreateNormalBlueprint(
+        AUnifiedScriptEventExtensionFixture::StaticClass(),
+        OrdinaryPackageName,
+        TEXT("BP_OrdinaryParentActor_") + Suffix,
+        OrdinaryPackage);
+    if (!TestNotNull(TEXT("Ordinary parent Blueprint is created"), OrdinaryBlueprint) ||
+        !TestTrue(TEXT("Ordinary parent Evaluate body is created"),
+            OrdinaryBlueprint != nullptr &&
+                CreateIntermediateEvaluateBody(*OrdinaryBlueprint, Error)) ||
+        !TestTrue(TEXT("Ordinary parent Receive body is created"),
+            OrdinaryBlueprint != nullptr &&
+                AddObservedReceiveInheritedBody(*OrdinaryBlueprint, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(OrdinaryBlueprint);
+    if (!TestEqual(TEXT("Ordinary parent Blueprint compiles"), OrdinaryBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    AddPackage(TEXT("OrdinaryParentActor"), TEXT("BP_OrdinaryParentActor_") + Suffix, OrdinaryBlueprint);
+    ClassPaths.Add(OrdinaryBlueprint->GeneratedClass->GetPathName());
+
+    const FString IntermediatePackageName = PackageDirectory + TEXT("/IntermediateManagedActor");
+    UPackage* IntermediatePackage = nullptr;
+    UUnifiedScriptBlueprint* IntermediateBlueprint = CreateScriptBlueprint(
+        OrdinaryBlueprint->GeneratedClass,
+        IntermediatePackageName,
+        TEXT("BP_IntermediateManagedActor_") + Suffix,
+        IntermediatePackage,
+        FName(TEXT("UnifiedScriptBlueprintEventExtensionCookFixture")));
+    UUnifiedScriptAsset* IntermediateScriptAsset = IntermediateBlueprint != nullptr
+        ? AttachScriptAsset(
+            *IntermediateBlueprint,
+            ParentAsset,
+            ChunkPath,
+            AssemblyPath,
+            DeclarationPath,
+            EUnifiedScriptClassKind::Actor)
+        : nullptr;
+    if (!TestNotNull(TEXT("Intermediate managed actor Blueprint is created"), IntermediateBlueprint) ||
+        !TestNotNull(TEXT("Intermediate managed actor ScriptAsset is created"), IntermediateScriptAsset) ||
+        !TestTrue(TEXT("Intermediate managed actor overrides materialize"),
+            IntermediateBlueprint != nullptr && IntermediateScriptAsset != nullptr &&
+                FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                    *IntermediateScriptAsset, *IntermediateBlueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    ConfigureActorScriptAsset(*IntermediateBlueprint, *IntermediateScriptAsset);
+    IntermediateScriptAsset->SetFlags(RF_Public | RF_Standalone);
+    AddPackage(TEXT("IntermediateManagedActor"), TEXT("BP_IntermediateManagedActor_") + Suffix, IntermediateBlueprint);
+    ClassPaths.Add(IntermediateBlueprint->GeneratedClass->GetPathName());
+
+    const FString ComponentPackageName = PackageDirectory + TEXT("/ComponentBase");
+    UPackage* ComponentPackage = nullptr;
+    UUnifiedScriptBlueprint* ComponentBlueprint = CreateScriptBlueprint(
+        UUnifiedScriptComponent::StaticClass(),
+        ComponentPackageName,
+        TEXT("BP_ComponentBase_") + Suffix,
+        ComponentPackage,
+        FName(TEXT("UnifiedScriptBlueprintEventExtensionCookFixture")));
+    UUnifiedScriptAsset* ComponentScriptAsset = ComponentBlueprint != nullptr
+        ? AttachScriptAsset(
+            *ComponentBlueprint,
+            LifecycleAsset,
+            ChunkPath,
+            AssemblyPath,
+            DeclarationPath,
+            EUnifiedScriptClassKind::ActorComponent)
+        : nullptr;
+    if (!TestNotNull(TEXT("Component base Blueprint is created"), ComponentBlueprint) ||
+        !TestNotNull(TEXT("Component base ScriptAsset is created"), ComponentScriptAsset) ||
+        !TestTrue(TEXT("Component base lifecycle overrides materialize"),
+            ComponentBlueprint != nullptr && ComponentScriptAsset != nullptr &&
+                FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                    *ComponentScriptAsset, *ComponentBlueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    ConfigureComponentScriptAsset(*ComponentBlueprint, *ComponentScriptAsset);
+    ComponentScriptAsset->SetFlags(RF_Public | RF_Standalone);
+    UClass* ComponentGeneratedClass = ComponentBlueprint->GeneratedClass;
+    if (!TestNotNull(TEXT("Component base generated class is available"), ComponentGeneratedClass))
+    {
+        return false;
+    }
+    AddPackage(TEXT("ComponentBase"), TEXT("BP_ComponentBase_") + Suffix, ComponentBlueprint);
+    ClassPaths.Add(ComponentGeneratedClass->GetPathName());
+
+    const FString ChildWithParentPackageName = PackageDirectory + TEXT("/ComponentChildWithParent");
+    UPackage* ChildParentPackage = nullptr;
+    UBlueprint* ChildWithParent = CreateNormalBlueprint(
+        ComponentGeneratedClass,
+        ChildWithParentPackageName,
+        TEXT("BP_ComponentChildWithParent_") + Suffix,
+        ChildParentPackage);
+    if (!TestNotNull(TEXT("Component child with parent Blueprint is created"), ChildWithParent))
+    {
+        AddError(TEXT("Could not create the component child with parent package."));
+        return false;
+    }
+    Error.Reset();
+    if (!AddLifecycleChildEvent(
+            *ChildWithParent,
+            *ComponentGeneratedClass,
+            FName(TEXT("ReceiveBeginPlay")),
+            true,
+            Error) ||
+        !AddLifecycleChildEvent(
+            *ChildWithParent,
+            *ComponentGeneratedClass,
+            FName(TEXT("ReceiveEndPlay")),
+            true,
+            Error))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildWithParent);
+    if (!TestEqual(TEXT("Component child with parent compiles"), ChildWithParent->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    AddPackage(TEXT("ComponentChildWithParent"), TEXT("BP_ComponentChildWithParent_") + Suffix, ChildWithParent);
+    ClassPaths.Add(ChildWithParent->GeneratedClass->GetPathName());
+
+    const FString ChildWithoutParentPackageName = PackageDirectory + TEXT("/ComponentChildWithoutParent");
+    UPackage* ChildWithoutParentPackage = nullptr;
+    UBlueprint* ChildWithoutParent = CreateNormalBlueprint(
+        ComponentGeneratedClass,
+        ChildWithoutParentPackageName,
+        TEXT("BP_ComponentChildWithoutParent_") + Suffix,
+        ChildWithoutParentPackage);
+    if (!TestNotNull(TEXT("Component child without parent Blueprint is created"), ChildWithoutParent))
+    {
+        return false;
+    }
+    Error.Reset();
+    if (!AddLifecycleChildEvent(
+            *ChildWithoutParent,
+            *ComponentGeneratedClass,
+            FName(TEXT("ReceiveBeginPlay")),
+            false,
+            Error) ||
+        !AddLifecycleChildEvent(
+            *ChildWithoutParent,
+            *ComponentGeneratedClass,
+            FName(TEXT("ReceiveEndPlay")),
+            false,
+            Error))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildWithoutParent);
+    if (!TestEqual(TEXT("Component child without parent compiles"), ChildWithoutParent->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    AddPackage(TEXT("ComponentChildWithoutParent"), TEXT("BP_ComponentChildWithoutParent_") + Suffix, ChildWithoutParent);
+    ClassPaths.Add(ChildWithoutParent->GeneratedClass->GetPathName());
+
+    if (!TestEqual(TEXT("Cook fixture has six packages"), Packages.Num(), 6) ||
+        !TestEqual(TEXT("Cook fixture has six class paths"), ClassPaths.Num(), 6))
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+    {
+        UPackage* Package = FindPackage(nullptr, *PackageNames[Index]);
+        if (!TestTrue(
+                *FString::Printf(TEXT("Cook fixture package %d saves"), Index),
+                SaveFixturePackage(
+                    Package,
+                    PackageAssets[Index],
+                    PackageFilenames[Index],
+                    Error)))
+        {
+            AddError(Error);
+            return false;
+        }
+    }
+    if (!TestTrue(TEXT("Cook fixture unloads saved packages"), UnloadFixturePackages(Packages)) ||
+        !TestTrue(TEXT("Cook fixture reloads saved classes"),
+            ValidateReloadedFixtureClasses(ClassPaths, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    UClass* ReloadedOrdinaryClass = LoadObject<UClass>(nullptr, *ClassPaths[1]);
+    UFunction* ReloadedEvaluate = ReloadedOrdinaryClass != nullptr
+        ? ReloadedOrdinaryClass->FindFunctionByName(
+            TEXT("EvaluateInherited"),
+            EIncludeSuperFlag::ExcludeSuper)
+        : nullptr;
+    UFunction* ReloadedReceive = ReloadedOrdinaryClass != nullptr
+        ? ReloadedOrdinaryClass->FindFunctionByName(
+            TEXT("ReceiveInherited"),
+            EIncludeSuperFlag::ExcludeSuper)
+        : nullptr;
+    if (!TestNotNull(TEXT("Reloaded ordinary parent class exists"), ReloadedOrdinaryClass) ||
+        !TestNotNull(TEXT("Reloaded ordinary Evaluate function exists"), ReloadedEvaluate) ||
+        !TestNotNull(TEXT("Reloaded ordinary Receive function exists"), ReloadedReceive) ||
+        !TestTrue(TEXT("Reloaded ordinary Evaluate retains Blueprint VM bytecode"),
+            ReloadedEvaluate != nullptr && ReloadedEvaluate->Script.Num() > 0 &&
+                !ReloadedEvaluate->HasAnyFunctionFlags(FUNC_Native)) ||
+        !TestTrue(TEXT("Reloaded ordinary Receive retains Blueprint VM bytecode"),
+            ReloadedReceive != nullptr && ReloadedReceive->Script.Num() > 0 &&
+                !ReloadedReceive->HasAnyFunctionFlags(FUNC_Native)))
+    {
+        return false;
+    }
+    const FString ExpectedNativeAssetClassPath = ClassPaths[0];
+    const FString ExpectedIntermediateAssetClassPath = ClassPaths[2];
+    const FString ExpectedComponentAssetClassPath = ClassPaths[3];
+    for (const TPair<FString, FString>& Pair : TArray<TPair<FString, FString>>{
+             {ClassPaths[0], ExpectedNativeAssetClassPath},
+             {ClassPaths[2], ExpectedIntermediateAssetClassPath}})
+    {
+        UClass* ReloadedClass = LoadObject<UClass>(nullptr, *Pair.Key);
+        AUnifiedScriptActor* CDO = ReloadedClass != nullptr
+            ? Cast<AUnifiedScriptActor>(ReloadedClass->GetDefaultObject())
+            : nullptr;
+        if (!TestNotNull(TEXT("Reloaded actor CDO exists"), CDO) ||
+            !TestNotNull(TEXT("Reloaded actor CDO retains ScriptAsset"),
+                CDO != nullptr && CDO->ScriptComponent != nullptr
+                    ? CDO->ScriptComponent->ScriptAsset.Get()
+                    : nullptr) ||
+            !TestTrue(TEXT("Reloaded actor CDO ScriptAsset targets its exact class"),
+                CDO != nullptr && CDO->ScriptComponent != nullptr &&
+                CDO->ScriptComponent->ScriptAsset != nullptr &&
+                CDO->ScriptComponent->ScriptAsset->GeneratedClassPath.ToString().Equals(
+                    Pair.Value,
+                    ESearchCase::CaseSensitive)))
+        {
+            return false;
+        }
+    }
+    for (const FString& PackageName : PackageNames)
+    {
+        if (UPackage* ReloadedPackage = FindPackage(nullptr, *PackageName))
+        {
+            Packages.AddUnique(ReloadedPackage);
+        }
+    }
+    for (const FString& ComponentClassPath : TArray<FString>{
+             ClassPaths[3], ClassPaths[4], ClassPaths[5]})
+    {
+        UClass* ReloadedClass = LoadObject<UClass>(nullptr, *ComponentClassPath);
+        UUnifiedScriptComponent* CDO = ReloadedClass != nullptr
+            ? Cast<UUnifiedScriptComponent>(ReloadedClass->GetDefaultObject())
+            : nullptr;
+        if (!TestNotNull(TEXT("Reloaded component CDO exists"), CDO) ||
+            !TestNotNull(TEXT("Reloaded component CDO retains ScriptAsset"),
+                CDO != nullptr ? CDO->ScriptAsset.Get() : nullptr) ||
+            !TestTrue(TEXT("Reloaded component CDO ScriptAsset targets the base class"),
+                CDO != nullptr && CDO->ScriptAsset != nullptr &&
+                CDO->ScriptAsset->GeneratedClassPath.ToString().Equals(
+                    ExpectedComponentAssetClassPath,
+                    ESearchCase::CaseSensitive)))
+        {
+            return false;
+        }
+    }
+
+    if (bRetainFixture)
+    {
+        ReceiptPath = FPaths::Combine(OutputRoot, TEXT("event-extension-receipt.json"));
+        TSharedRef<FJsonObject> Receipt = MakeShared<FJsonObject>();
+        Receipt->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.event-extension-fixture/v0.1"));
+        Receipt->SetStringField(TEXT("packageDirectory"), PackageDirectory);
+        TArray<TSharedPtr<FJsonValue>> PackageValues;
+        for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+        {
+            TSharedRef<FJsonObject> PackageObject = MakeShared<FJsonObject>();
+            PackageObject->SetStringField(TEXT("packageName"), PackageNames[Index]);
+            PackageObject->SetStringField(TEXT("packageFilename"), FPaths::ConvertRelativePathToFull(PackageFilenames[Index]));
+            PackageValues.Add(MakeShared<FJsonValueObject>(PackageObject));
+        }
+        Receipt->SetArrayField(TEXT("packages"), PackageValues);
+        Receipt->SetStringField(TEXT("nativeActorClassPath"), ClassPaths[0]);
+        Receipt->SetStringField(TEXT("ordinaryParentActorClassPath"), ClassPaths[1]);
+        Receipt->SetStringField(TEXT("intermediateActorClassPath"), ClassPaths[2]);
+        Receipt->SetStringField(TEXT("componentClassPath"), ClassPaths[3]);
+        Receipt->SetStringField(TEXT("componentChildWithParentClassPath"), ClassPaths[4]);
+        Receipt->SetStringField(TEXT("componentChildWithoutParentClassPath"), ClassPaths[5]);
+        FString ReceiptJson;
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&ReceiptJson);
+        if (!FJsonSerializer::Serialize(Receipt, Writer) ||
+            !FFileHelper::SaveStringToFile(
+                ReceiptJson,
+                *ReceiptPath,
+                FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+        {
+            AddError(TEXT("Could not write the event extension fixture receipt."));
+            return false;
+        }
+    }
+    bFixtureSucceeded = true;
     return true;
 }
 

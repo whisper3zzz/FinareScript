@@ -19,6 +19,7 @@
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UnifiedScriptUMGThunks.h"
 #include "UnifiedScriptAsyncDemoVerification.h"
+#include "UnifiedScriptEventExtensionVerification.h"
 #include "UnifiedScriptFunctionClosureVerification.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -648,6 +649,14 @@ public:
         }
         if (FParse::Param(
                 FCommandLine::Get(),
+                TEXT("UnifiedScriptEventExtensionVerify")))
+        {
+            EventExtensionVerifierInitHandle =
+                FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
+                    &UE::UnifiedScript::EventExtensionVerification::Run);
+        }
+        if (FParse::Param(
+                FCommandLine::Get(),
                 TEXT("UnifiedScriptFrameWorkload")))
         {
             FrameBenchmarkInitHandle =
@@ -677,6 +686,12 @@ public:
             FCoreDelegates::OnFEngineLoopInitComplete.Remove(
                 FunctionClosureVerifierInitHandle);
             FunctionClosureVerifierInitHandle.Reset();
+        }
+        if (EventExtensionVerifierInitHandle.IsValid())
+        {
+            FCoreDelegates::OnFEngineLoopInitComplete.Remove(
+                EventExtensionVerifierInitHandle);
+            EventExtensionVerifierInitHandle.Reset();
         }
         if (FrameBenchmarkInitHandle.IsValid())
         {
@@ -1038,6 +1053,7 @@ private:
     FDelegateHandle SmokeDelegateHandle;
     FDelegateHandle ScriptClassSmokeDelegateHandle;
     FDelegateHandle FunctionClosureVerifierInitHandle;
+    FDelegateHandle EventExtensionVerifierInitHandle;
     FDelegateHandle FrameBenchmarkInitHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkStartTickerHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkTickerHandle;

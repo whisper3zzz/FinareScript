@@ -45,8 +45,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   instances, stopped synchronization and restart, and other-class isolation.
   ActorComponent lifecycle overrides now run between managed activation and
   retirement. Native BeginPlay/EndPlay tests cover ordinary Blueprint children,
-  manual startup and failed activation. Broader runtime/cooked extension proof
-  remains open.
+  manual startup and failed activation. Win64 Development cooked execution now
+  covers native and ordinary Blueprint parent bodies, typed return/ref/out,
+  a large array result and component lifecycle children. Real-UE DLL body
+  replacement remains open.
   These checkpoints do not complete extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.
