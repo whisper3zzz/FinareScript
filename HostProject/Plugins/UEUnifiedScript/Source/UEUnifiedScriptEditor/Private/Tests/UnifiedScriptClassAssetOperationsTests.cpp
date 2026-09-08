@@ -101,11 +101,14 @@ UUnifiedScriptAsset* GetScriptAsset(UBlueprint* Blueprint)
 
 struct FScopedOperationCleanup
 {
+    FAutomationTestBase* Test = nullptr;
     FString DeploymentPath;
     TArray<uint8> DeploymentBytes;
+    bool bDeploymentSnapshotReady = false;
     FString FirstPlayRequestPath;
     bool bHadFirstPlayRequest = false;
     TArray<uint8> FirstPlayRequestBytes;
+    bool bFirstPlayRequestSnapshotReady = false;
     TArray<FString> SourcePaths;
     TArray<FString> PackageNames;
     TArray<TWeakObjectPtr<UObject>> Assets;
@@ -123,21 +126,38 @@ struct FScopedOperationCleanup
                 FPackageName::GetAssetPackageExtension());
             IFileManager::Get().Delete(*Filename, false, true);
         }
-        if (!DeploymentPath.IsEmpty())
+        if (bDeploymentSnapshotReady)
         {
-            FFileHelper::SaveArrayToFile(DeploymentBytes, *DeploymentPath);
+            if (!FFileHelper::SaveArrayToFile(DeploymentBytes, *DeploymentPath) && Test != nullptr)
+            {
+                Test->AddError(FString::Printf(
+                    TEXT("Class asset operations cleanup could not restore deployment manifest %s"),
+                    *DeploymentPath));
+            }
         }
-        if (!FirstPlayRequestPath.IsEmpty())
+        if (bFirstPlayRequestSnapshotReady)
         {
             if (bHadFirstPlayRequest)
             {
-                FFileHelper::SaveArrayToFile(
-                    FirstPlayRequestBytes,
-                    *FirstPlayRequestPath);
+                if (!FFileHelper::SaveArrayToFile(
+                        FirstPlayRequestBytes,
+                        *FirstPlayRequestPath) && Test != nullptr)
+                {
+                    Test->AddError(FString::Printf(
+                        TEXT("Class asset operations cleanup could not restore first-play request %s"),
+                        *FirstPlayRequestPath));
+                }
             }
             else
             {
-                IFileManager::Get().Delete(*FirstPlayRequestPath, false, true);
+                if (IFileManager::Get().FileExists(*FirstPlayRequestPath) &&
+                    !IFileManager::Get().Delete(*FirstPlayRequestPath, false, true) &&
+                    IFileManager::Get().FileExists(*FirstPlayRequestPath) && Test != nullptr)
+                {
+                    Test->AddError(FString::Printf(
+                        TEXT("Class asset operations cleanup could not remove first-play request %s"),
+                        *FirstPlayRequestPath));
+                }
             }
         }
     }
@@ -315,6 +335,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         return false;
     }
     FScopedOperationCleanup Cleanup;
+    Cleanup.Test = this;
     FString SettingsError;
     const bool bResolvedDeployment = ResolveProjectDeploymentPath(
         Cleanup.DeploymentPath,
@@ -333,6 +354,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     {
         return false;
     }
+    Cleanup.bDeploymentSnapshotReady = true;
     Cleanup.FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
         FPaths::ProjectDir());
     Cleanup.bHadFirstPlayRequest = IFileManager::Get().FileExists(
@@ -343,6 +365,7 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
         AddError(TEXT("Cannot snapshot the existing first-Play request."));
         return false;
     }
+    Cleanup.bFirstPlayRequestSnapshotReady = true;
 
     const FString Suffix = FGuid::NewGuid()
         .ToString(EGuidFormats::Digits)

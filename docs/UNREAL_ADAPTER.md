@@ -1077,6 +1077,16 @@ files after the cook/run attempt, retaining the archive, receipt and logs. The
 the latest verified boundary; this workflow does not close general C# base-state
 inheritance or class asset-operation coverage by itself.
 
+Run CMD Automation selector
+`UnifiedScript.Unreal.ScriptClass.InheritedClassAssetOperations` for the separate
+factory Rename/Duplicate/Delete inheritance regression. It uses the configured
+onboarding deployment manifest, creates GUID-named ordinary child/grandchild
+assets, verifies native defaults and ownership through rollback and package
+reload, and restores its shared-file snapshots during cleanup. Its native Actor
+spawn checks do not start the factory-generated managed source. The existing
+`UnifiedScript.Unreal.ScriptClass.AssetOperations` selector covers the associated
+source/deployment transaction and soft-reference cases.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

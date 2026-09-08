@@ -226,16 +226,51 @@ Cooked evidence is under `artifacts/m13-3c-3-inherited-cook`:
   remains at `package/Windows/UEUnifiedScriptHost`; shared host/Demo inputs were
   not replaced or removed.
 
-After cooked coverage, extend the existing class asset-operation regression with
-ordinary child/grandchild Blueprint referencers and inherited native components.
-`UnifiedScriptClassAssetOperationsTests.cpp` currently checks a separate Script
-Asset's soft class reference, not that inheritance chain. Use the real factory
-and the existing Rename/Duplicate transactions: verify parent links, stable
-Script Asset identity on rename, a new owner on duplicate, complete defaults,
-redirect fixup and failure preservation. The duplicate path already assigns
-the new sidecar before and after compilation; test descendants of the result
-before changing that path. The isolated runtime fixture's generated class-path
-constant is not the normal factory-authored source form used by those operations.
+The separate `InheritedClassAssetOperations` regression uses the real Actor
+factory and its normal source identity form. The base owns ordinary native
+Blueprint scalar/Array/Set/Map user variables; its child owns complete value
+overrides and explicitly disables automatic start/tick, and a grandchild follows
+that child. These native user variables use names distinct from the factory's
+managed properties.
+The test saves packages and scans their real Asset Registry dependencies before
+calling the existing complete-class Rename/Duplicate/Delete transactions.
+
+Dirty child referencers reject Rename before mutation. The rename publication
+failure seam restores source/deployment/first-play bytes, package dirty flags
+and the inherited hierarchy. Clean Rename retains ClassId and variable GUIDs,
+repairs the child referencer, removes the old package files, and survives
+package unload/reload with exact class/sidecar identity and complete defaults.
+Duplicate creates a separate ClassId and sidecar; its new ordinary child and
+grandchild inherit the copied base values and automatic component settings.
+Failure injection with both branches present preserves their configuration,
+dirty boundaries and both managed source files. Native Actors spawned from
+the saved/reloaded branches retain their respective full state and component
+name, outer, immediate archetype, sidecar and start/tick settings. Delete rejects
+the duplicated class while ordinary descendants reference it.
+
+No production asset-operation repair was required. An early Map fixture used
+an invalid text import form, and the initial grandchild was created before its
+parent's complete overrides were established. Later instance checks used an
+original-chain pointer after the duplicate unload/GC pass had collected it.
+The final fixture establishes the child values before creating its follower
+and reacquires both branches by saved paths after GC. These failures do not
+establish product inheritance or rename defects.
+
+Both asset-operation tests arm shared-file restoration only after successful
+snapshots; restoration failures are reported to Automation. The new fixture
+unloads its owned packages and deletes their source/asset files, then removes
+only its empty package directory. This lane spawns native Actors without
+BeginPlay of the factory's uncompiled managed source. Active managed
+rename/rebuild/reload coherence remains unverified by this lane; the earlier
+isolated managed runtime/cooked fixture does not supply that evidence either.
+
+Asset-operation evidence is under `artifacts/m13-3c-3-inherited-asset-ops`:
+
+- `editor-build-17.log` compiles both final test files and links the HostEditor.
+- `inherited-class-asset-ops-cmd-17-runtime.log` reports
+  `InheritedClassAssetOperations` Success and Queue Empty with one test performed.
+- `class-asset-operations-cmd-2-runtime.log` reports the existing `AssetOperations`
+  regression Success and Queue Empty with one test performed.
 
 General managed-base state remains a distinct contract gap: `LowerStates` in
 `CSharpScriptAssetLowerer.cs` enumerates only the current type's members, and
@@ -244,6 +279,26 @@ General managed-base state remains a distinct contract gap: `LowerStates` in
 cover inherited auto-properties. Before extending this scope, define matching
 declaration/runtime rules for state ownership, stable IDs, member hiding and
 generated native paths; ordinary Blueprint inheritance does not prove them.
+
+The next state-contract change must retain the declaring property's identity:
+`CSharpIdentityReconciler` records a state under its declaring type, and the
+same Roslyn property may appear in several derived assets. Keep exposure
+selection local to each declaring type instead of treating the concrete
+`ScriptAsset` attribute as permission to export every framework-base property.
+Effective defaults must account for base construction and subsequent derived
+constructor assignments; changing member enumeration alone would miss them.
+Resolve ambiguous hiding before publication and keep runtime bindings on the
+concrete generated class path. This managed-property contract does not imply
+native Blueprint parent materialization: the current materializer rejects a
+new state that masks an existing native parent property.
+
+Include declaration editing in that change. `CSharpDeclarationPatchApplier`
+currently flattens all asset states into a dictionary keyed only by state ID,
+both before editing and during postcondition checks. Inherited projections
+would repeat the declaring ID and may carry different effective defaults.
+Resolve the source declaration owner explicitly and validate its affected
+projections rather than arbitrarily selecting the first asset or assigning a
+new ID to each derived appearance.
 
 ## Relevant verification
 

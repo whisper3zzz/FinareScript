@@ -38,9 +38,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   retain component identity and reload independently in two Worlds; teardown
   restores script, lifecycle-claim and World counts. The same inherited Actor
   hierarchy now passes Win64 Development cooked execution using the archive's
-  chunk and bundled hostfxr. Continue with inherited class rename/duplicate
-  identity, then managed-base state contracts. The bounded
-  entrypoint is `docs/plans/2026-09-08-blueprint-inherited-defaults.md`.
+  chunk and bundled hostfxr. Factory Rename/Duplicate transactions now retain
+  ordinary child/grandchild component ownership, explicit defaults and persistent
+  identity through rollback and package reload, with native Actor instances
+  from the original and duplicated branches. Continue with managed-base state
+  contracts; this asset-operation lane does not verify active managed rename.
+  See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and
   ImplementableEvent signatures with exact ownership, persisted activation
