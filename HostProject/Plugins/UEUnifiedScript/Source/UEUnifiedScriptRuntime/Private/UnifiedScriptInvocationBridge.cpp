@@ -9,6 +9,7 @@
 #include "UnifiedScriptBlueprintPrivate.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptWorldSubsystem.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 #include "Net/Core/PushModel/PushModel.h"

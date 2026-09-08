@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UnifiedScriptObjectRegistry.h"
+#include "UObject/ScriptDelegates.h"
 
 struct FUnifiedScriptNativeValueV3;
 struct FUnifiedScriptValue;

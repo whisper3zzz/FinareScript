@@ -23,6 +23,7 @@
 #include "StructUtils/PropertyBagMapRef.h"
 #include "UnifiedScriptCompiledChunk.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/TextProperty.h"
 
 namespace UE::UnifiedScript::Declaration::Private
 {

@@ -472,9 +472,11 @@ the live bindings to manufacture a source change.
 An unintended `BuildPlugin -Rocket` run is recorded separately in
 `editor-build-live-sync-final-3.log`. Its UnrealGame compilation failed on missing
 `FScriptDelegate`, `FTextProperty` and `UWorld` declarations in the callback
-transport, declaration materializer and invocation bridge. Those distribution
-build failures remain unresolved and are not covered by the successful
-HostEditor/CMD evidence.
+transport, declaration materializer and invocation bridge. These direct
+dependencies are now included explicitly. The Host Win64 Development target
+check passed (`artifacts/m13-3c-2-runtime/runtime-build-headers.log`); the final
+check waited for an existing build and reported the target up to date. This is
+non-Editor target evidence; BuildPlugin distribution acceptance was not rerun.
 
 ActorComponent lifecycle integration is implemented and verified on 2026-09-08.
 The fixture exercises native DispatchBeginPlay/RouteEndPlay with ScriptAssetPath
@@ -504,5 +506,40 @@ parent calls (`cmd-parent-intermediate-final.log`), Live Sync
 test expansion; its implementation was unchanged. These fixtures execute in
 HostEditor and do not establish cooked support.
 
-The broader runtime/cooked extension proof and the distribution header failures
-above remain open; M13.3C-2 is still in progress.
+The broader runtime/cooked extension proof remains open; M13.3C-2 is still in
+progress.
+
+## Cooked extension checkpoint in progress
+
+Reuse the checked-in parent-invocation and component-lifecycle managed scripts.
+An Editor fixture creates six separate packages under one GUID-named
+`/Game/UnifiedScriptEventExtensionFixture_<GUID>/` directory: a managed Actor
+over the native fixture; an ordinary Blueprint Actor parent with real scalar
+and ReceiveInherited bodies; its managed Actor child; a managed component; and
+two ordinary Blueprint component children with and without explicit parent
+calls. Separate packages preserve each Script Asset's identity. Persist the
+Script Asset configuration on the owning CDO before saving, and retain
+project-relative managed payload paths. Saving, unloading and loading must
+preserve generated bindings and ordinary Blueprint bytecode.
+
+Only a successful fixture writes a `unifiedscript.event-extension-fixture/v0.1`
+receipt. It names the exact package directory, all six package names/filenames,
+and five executable generated-class paths. The tool validates that each path
+belongs to those packages in the dedicated HostProject Content directory before
+cooking or cleanup. It cooks that directory with `/Engine/Maps/Entry`, leaving
+existing Demo assets and protected project configuration intact.
+
+The Host verifier loads the cooked classes and uses their persisted startup
+configuration. Native calls must enter the managed override and execute its
+native or ordinary Blueprint parent, retaining scalar return/ref/out values and
+all 258 array results while executing the parent once. The ordinary Blueprint
+ReceiveInherited body must observe both its text and Actor arguments. Native
+BeginPlay/EndPlay must retain the three reviewed component traces, and teardown
+must restore managed instances, handles, lifecycle claims and World counts.
+The verifier requires cooked data and a chunk/hostfxr resolved inside the
+executing archive; it reports PASS only after these assertions and cleanup.
+
+This checkpoint does not replace the remaining real-UE DLL body replacement
+proof. The existing override reload tests use the real managed instance and
+transaction machinery with a fixture native transport. A changed body still
+needs to be exercised through a live UE generated class before C-2 closes.
