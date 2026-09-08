@@ -661,9 +661,9 @@ void CollectReferencedStructs(
         CollectReferencedStructs(Map->KeyProp, Structs, Depth + 1);
         CollectReferencedStructs(Map->ValueProp, Structs, Depth + 1);
     }
-    else if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property); Delegate && Delegate->SignatureFunction)
+    else if (const UFunction* Signature = DelegateSignature(Property); Signature != nullptr)
     {
-        for (TFieldIterator<FProperty> It(Delegate->SignatureFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
             if (It->HasAnyPropertyFlags(CPF_Parm)) CollectReferencedStructs(*It, Structs, Depth + 1);
     }
 }
@@ -694,9 +694,9 @@ void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums
         CollectReferencedEnums(Map->KeyProp, Enums, Depth + 1);
         CollectReferencedEnums(Map->ValueProp, Enums, Depth + 1);
     }
-    else if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property); Delegate && Delegate->SignatureFunction)
+    else if (const UFunction* Signature = DelegateSignature(Property); Signature != nullptr)
     {
-        for (TFieldIterator<FProperty> It(Delegate->SignatureFunction, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
             if (It->HasAnyPropertyFlags(CPF_Parm)) CollectReferencedEnums(*It, Enums, Depth + 1);
     }
 }
@@ -1205,11 +1205,20 @@ bool FUnifiedScriptReflectionExporter::Export(
     {
         for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
         {
-            if (!It->HasAnyPropertyFlags(CPF_Parm) &&
-                It->HasAnyPropertyFlags(CPF_BlueprintVisible))
+            const FProperty* Property = *It;
+            if (DelegateSignature(Property) != nullptr)
             {
-                CollectReferencedStructs(*It, ReferencedStructSet);
-                CollectReferencedEnums(*It, ReferencedEnumSet);
+                if (Property->HasAnyPropertyFlags(CPF_BlueprintAssignable | CPF_BlueprintCallable))
+                {
+                    CollectReferencedStructs(Property, ReferencedStructSet);
+                    CollectReferencedEnums(Property, ReferencedEnumSet);
+                }
+            }
+            else if (!Property->HasAnyPropertyFlags(CPF_Parm) &&
+                     Property->HasAnyPropertyFlags(CPF_BlueprintVisible))
+            {
+                CollectReferencedStructs(Property, ReferencedStructSet);
+                CollectReferencedEnums(Property, ReferencedEnumSet);
             }
         }
         for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)

@@ -4180,6 +4180,16 @@
       ]
     },
     {
+      "path": "/Script/Engine.EEndPlayReason",
+      "name": "EEndPlayReason",
+      "managedTypeName": "EEndPlayReason",
+      "category": "Unreal API|EEndPlayReason",
+      "properties": [],
+      "functions": [],
+      "delegates": [],
+      "nodes": []
+    },
+    {
       "path": "/Script/Engine.ETickingGroup",
       "name": "ETickingGroup",
       "managedTypeName": "ETickingGroup",

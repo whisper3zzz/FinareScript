@@ -14,6 +14,8 @@
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_CallParentFunction.h"
+#include "K2Node_Event.h"
+#include "K2Node_VariableSet.h"
 #include "K2Node_VariableSetRef.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -265,6 +267,110 @@ bool CreateIntermediateEvaluateBody(
     {
         OutError = TEXT("The ordinary Blueprint intermediate did not compile.");
         return false;
+    }
+    return true;
+}
+
+bool AddLifecycleChildEvent(
+    UBlueprint& Blueprint,
+    UClass& ParentClass,
+    FName EventName,
+    bool bCallParent,
+    FString& OutError)
+{
+    UEdGraph* EventGraph = Blueprint.UbergraphPages.IsEmpty()
+        ? nullptr
+        : Blueprint.UbergraphPages[0];
+    if (EventGraph == nullptr)
+    {
+        OutError = TEXT("The lifecycle child Blueprint has no Ubergraph page.");
+        return false;
+    }
+
+    int32 NodePositionY = 0;
+    UK2Node_Event* Event = FKismetEditorUtilities::AddDefaultEventNode(
+        &Blueprint,
+        EventGraph,
+        EventName,
+        &ParentClass,
+        NodePositionY);
+    if (Event == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Could not add lifecycle event '%s' to the child Blueprint."),
+            *EventName.ToString());
+        return false;
+    }
+    Event->SetEnabledState(ENodeEnabledState::Enabled, true);
+    UK2Node_VariableSet* SetState = NewObject<UK2Node_VariableSet>(EventGraph);
+    SetState->VariableReference.SetSelfMember(TEXT("ManagedState"));
+    SetState->CreateNewGuid();
+    EventGraph->AddNode(SetState, true, false);
+    SetState->AllocateDefaultPins();
+    UEdGraphPin* StateValue = SetState->FindPin(TEXT("ManagedState"), EGPD_Input);
+    const FString StateMarker = EventName == FName(TEXT("ReceiveBeginPlay"))
+        ? TEXT("ChildBegin")
+        : TEXT("ChildEnd");
+    if (StateValue == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Lifecycle child event '%s' has no ManagedState value pin."),
+            *EventName.ToString());
+        return false;
+    }
+    StateValue->DefaultValue = StateMarker;
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    UEdGraphPin* EventThen = Event->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* SetExec = SetState->GetExecPin();
+    UEdGraphPin* SetThen = SetState->GetThenPin();
+    if (EventThen == nullptr || SetExec == nullptr || SetThen == nullptr ||
+        !Schema->TryCreateConnection(EventThen, SetExec))
+    {
+        OutError = FString::Printf(
+            TEXT("Lifecycle child event '%s' could not connect its state body."),
+            *EventName.ToString());
+        return false;
+    }
+
+    if (!bCallParent)
+    {
+        return true;
+    }
+
+    UFunction* ParentFunction = ParentClass.FindFunctionByName(
+        EventName,
+        EIncludeSuperFlag::IncludeSuper);
+    if (ParentFunction == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Lifecycle child event '%s' has no parent UFunction."),
+            *EventName.ToString());
+        return false;
+    }
+    FGraphNodeCreator<UK2Node_CallParentFunction> Creator(*EventGraph);
+    UK2Node_CallParentFunction* ParentCall = Creator.CreateNode();
+    ParentCall->SetFromFunction(ParentFunction);
+    ParentCall->AllocateDefaultPins();
+    Creator.Finalize();
+    UEdGraphPin* ParentExec = ParentCall->GetExecPin();
+    if (ParentExec == nullptr || !Schema->TryCreateConnection(SetThen, ParentExec))
+    {
+        OutError = FString::Printf(
+            TEXT("Lifecycle child event '%s' could not connect its parent exec pin."),
+            *EventName.ToString());
+        return false;
+    }
+
+    if (EventName == FName(TEXT("ReceiveEndPlay")))
+    {
+        UEdGraphPin* EventReason = Event->FindPin(TEXT("EndPlayReason"), EGPD_Output);
+        UEdGraphPin* ParentReason = ParentCall->FindPin(TEXT("EndPlayReason"), EGPD_Input);
+        if (EventReason == nullptr || ParentReason == nullptr ||
+            !Schema->TryCreateConnection(EventReason, ParentReason))
+        {
+            OutError = TEXT("Lifecycle child ReceiveEndPlay could not connect EndPlayReason.");
+            return false;
+        }
     }
     return true;
 }
@@ -2525,6 +2631,508 @@ bool FUnifiedScriptBlueprintOverrideLiveSyncTest::RunTest(const FString& Paramet
         SyncResult,
         Error);
     RefreshLiveWorldAfterBlueprintReinstance(First);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintComponentLifecycleTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintComponentLifecycle",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintComponentLifecycleTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::ParentInvocationTests;
+
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (!TestNotNull(TEXT("UEUnifiedScript plugin is installed"), Plugin.Get()))
+    {
+        return false;
+    }
+    const FString DemoDirectory = FPaths::Combine(
+        Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"));
+    const FString DeclarationPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.asset.json"));
+    const FString ChunkPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.uschunk"));
+    const FString AssemblyPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.dll"));
+    FString Declaration;
+    if (!TestTrue(TEXT("Demo declaration is staged"),
+            FFileHelper::LoadFileToString(Declaration, *DeclarationPath)) ||
+        !TestTrue(TEXT("Demo chunk is staged"), IFileManager::Get().FileExists(*ChunkPath)) ||
+        !TestTrue(TEXT("Demo assembly is staged"), IFileManager::Get().FileExists(*AssemblyPath)))
+    {
+        return false;
+    }
+
+    FDemoAsset DemoAsset;
+    FString Error;
+    const FString DemoTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.BlueprintComponentLifecycleDemoScript");
+    if (!TestTrue(TEXT("Component lifecycle fixture identity is present"),
+            ReadDemoAsset(Declaration, DemoTypeName, DemoAsset, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString PackageName = TEXT("/Game/UnifiedScriptComponentLifecycle_") + Suffix;
+    const FString AssetName = TEXT("BP_UnifiedScriptComponentLifecycle_") + Suffix;
+    const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+        PackageName,
+        FPackageName::GetAssetPackageExtension());
+    UPackage* Package = nullptr;
+    UUnifiedScriptBlueprint* Blueprint = CreateScriptBlueprint(
+        UUnifiedScriptComponent::StaticClass(),
+        PackageName,
+        AssetName,
+        Package,
+        FName(TEXT("UnifiedScriptBlueprintComponentLifecycle")));
+    UUnifiedScriptAsset* ScriptAsset = Blueprint != nullptr
+        ? AttachScriptAsset(
+            *Blueprint,
+            DemoAsset,
+            ChunkPath,
+            AssemblyPath,
+            DeclarationPath,
+            EUnifiedScriptClassKind::ActorComponent)
+        : nullptr;
+    UWorld* World = nullptr;
+    FWorldContext* WorldContext = nullptr;
+    AActor* Actor = nullptr;
+    UUnifiedScriptComponent* Component = nullptr;
+    AActor* ManualStartActor = nullptr;
+    UUnifiedScriptComponent* ManualStartComponent = nullptr;
+    AActor* FailedStartActor = nullptr;
+    UUnifiedScriptComponent* FailedStartComponent = nullptr;
+    UPackage* ChildWithParentPackage = nullptr;
+    UPackage* ChildWithoutParentPackage = nullptr;
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+
+    ON_SCOPE_EXIT
+    {
+        if (Component != nullptr)
+        {
+            if (Component->HasBegunPlay())
+            {
+                Component->EndPlay(EEndPlayReason::Destroyed);
+            }
+            Component->DestroyComponent();
+            Component = nullptr;
+        }
+        if (Actor != nullptr && !Actor->IsActorBeingDestroyed())
+        {
+            Actor->Destroy();
+            Actor = nullptr;
+        }
+        if (ManualStartComponent != nullptr)
+        {
+            if (ManualStartComponent->HasBegunPlay())
+            {
+                ManualStartComponent->EndPlay(EEndPlayReason::Destroyed);
+            }
+            ManualStartComponent->DestroyComponent();
+            ManualStartComponent = nullptr;
+        }
+        if (ManualStartActor != nullptr && !ManualStartActor->IsActorBeingDestroyed())
+        {
+            ManualStartActor->Destroy();
+            ManualStartActor = nullptr;
+        }
+        if (FailedStartComponent != nullptr)
+        {
+            if (FailedStartComponent->HasBegunPlay())
+            {
+                FailedStartComponent->EndPlay(EEndPlayReason::Destroyed);
+            }
+            FailedStartComponent->DestroyComponent();
+            FailedStartComponent = nullptr;
+        }
+        if (FailedStartActor != nullptr && !FailedStartActor->IsActorBeingDestroyed())
+        {
+            FailedStartActor->Destroy();
+            FailedStartActor = nullptr;
+        }
+        if (WorldContext != nullptr && GEngine != nullptr)
+        {
+            GEngine->DestroyWorldContext(World);
+            WorldContext = nullptr;
+        }
+        if (World != nullptr)
+        {
+            World->RemoveFromRoot();
+            World->DestroyWorld(false);
+            World = nullptr;
+        }
+        Blueprint = nullptr;
+        if (Package != nullptr)
+        {
+            Package->SetDirtyFlag(false);
+            TArray<UPackage*> Packages{Package};
+            UPackageTools::UnloadPackages(Packages);
+            Package = nullptr;
+        }
+        if (ChildWithParentPackage != nullptr)
+        {
+            ChildWithParentPackage->SetDirtyFlag(false);
+            TArray<UPackage*> Packages{ChildWithParentPackage};
+            UPackageTools::UnloadPackages(Packages);
+            ChildWithParentPackage = nullptr;
+        }
+        if (ChildWithoutParentPackage != nullptr)
+        {
+            ChildWithoutParentPackage->SetDirtyFlag(false);
+            TArray<UPackage*> Packages{ChildWithoutParentPackage};
+            UPackageTools::UnloadPackages(Packages);
+            ChildWithoutParentPackage = nullptr;
+        }
+        IFileManager::Get().Delete(*PackageFilename, false, true, true);
+        TestEqual(
+            TEXT("Component lifecycle cleanup releases managed state"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialManagedWorldCount);
+    };
+
+    if (!TestNotNull(TEXT("Component lifecycle Blueprint is created"), Blueprint) ||
+        !TestNotNull(TEXT("Component lifecycle generated class is created"),
+            Blueprint != nullptr ? Blueprint->GeneratedClass.Get() : nullptr) ||
+        !TestNotNull(TEXT("Component lifecycle Script Asset is attached"), ScriptAsset))
+    {
+        return false;
+    }
+
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!TestTrue(TEXT("Materializes component lifecycle overrides"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset, *Blueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Component lifecycle generated class is typed"), GeneratedClass))
+    {
+        return false;
+    }
+    TestTrue(TEXT("ReceiveBeginPlay is bound to managed dispatch"),
+        GeneratedClass->IsManagedFunctionBound(TEXT("ReceiveBeginPlay")));
+    TestTrue(TEXT("ReceiveEndPlay is bound to managed dispatch"),
+        GeneratedClass->IsManagedFunctionBound(TEXT("ReceiveEndPlay")));
+
+    World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Component lifecycle World is created"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    if (GEngine != nullptr)
+    {
+        WorldContext = &GEngine->CreateNewWorldContext(EWorldType::Game);
+        WorldContext->SetCurrentWorld(World);
+    }
+    World->InitializeActorsForPlay(FURL());
+    Actor = World->SpawnActor<AActor>();
+    UUnifiedScriptWorldSubsystem* Host = World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    Component = Actor != nullptr
+        ? NewObject<UUnifiedScriptComponent>(
+            Actor,
+            GeneratedClass,
+            FName(TEXT("ComponentLifecycle")))
+        : nullptr;
+    if (Actor != nullptr && Component != nullptr)
+    {
+        Actor->AddInstanceComponent(Component);
+        Component->ScriptAsset = nullptr;
+        Component->ScriptAssetPath = ScriptAsset->GetPathName();
+        Component->bStartAutomatically = true;
+        Component->bTickAutomatically = false;
+        Component->LifecycleOwnershipKey = FName(TEXT("ComponentLifecycleTest"));
+        Component->RegisterComponent();
+    }
+    if (!TestNotNull(TEXT("Component lifecycle Actor spawns"), Actor) ||
+        !TestNotNull(TEXT("Component lifecycle World host exists"), Host) ||
+        !TestNotNull(TEXT("Generated component instance exists"), Component))
+    {
+        return false;
+    }
+
+    Actor->DispatchBeginPlay();
+    TestTrue(TEXT("Actor DispatchBeginPlay reaches the component"), Actor->HasActorBegunPlay());
+    TestTrue(TEXT("Component DispatchBeginPlay reaches the component"), Component->HasBegunPlay());
+    TestTrue(TEXT("Component lifecycle script starts automatically"), Component->bScriptRunning);
+    TestEqual(
+        TEXT("BeginPlay starts managed code before native ReceiveBeginPlay"),
+        Component->ManagedState,
+        FString(TEXT("Initialized|ReceiveBegin")));
+    TestTrue(TEXT("Component lifecycle startup has no error"), Component->LastScriptError.IsEmpty());
+
+    // EndPlay must continue to use the published ActiveScriptAsset even after
+    // the configured path is cleared, so the inherited event runs before the
+    // managed generation is stopped.
+    Component->ScriptAssetPath.Reset();
+    Component->ScriptAsset = nullptr;
+    Actor->RouteEndPlay(EEndPlayReason::Quit);
+    TestFalse(TEXT("Component lifecycle script stops after native EndPlay"), Component->bScriptRunning);
+    TestFalse(TEXT("Component lifecycle component has ended play"), Component->HasBegunPlay());
+    TestEqual(
+        TEXT("EndPlay dispatches before managed destruction"),
+        Component->ManagedState,
+        FString(TEXT("Initialized|ReceiveBegin|ReceiveEnd:4|Stopped")));
+    TestTrue(TEXT("Component lifecycle EndPlay has no error"), Component->LastScriptError.IsEmpty());
+
+    // A manually started component still receives the native lifecycle, but
+    // it must not synthesize ReceiveBeginPlay when StartScript is called
+    // after DispatchBeginPlay. EndPlay remains ordered from the active asset.
+    ManualStartActor = World->SpawnActor<AActor>();
+    ManualStartComponent = ManualStartActor != nullptr
+        ? NewObject<UUnifiedScriptComponent>(
+            ManualStartActor,
+            GeneratedClass,
+            FName(TEXT("ManualStartLifecycleComponent")))
+        : nullptr;
+    if (ManualStartActor != nullptr && ManualStartComponent != nullptr)
+    {
+        ManualStartActor->AddInstanceComponent(ManualStartComponent);
+        ManualStartComponent->ScriptAsset = ScriptAsset;
+        ManualStartComponent->bStartAutomatically = false;
+        ManualStartComponent->bTickAutomatically = false;
+        ManualStartComponent->LifecycleOwnershipKey = FName(TEXT("ManualLifecycleTest"));
+        ManualStartComponent->RegisterComponent();
+    }
+    TestNotNull(TEXT("Manual lifecycle Actor spawns"), ManualStartActor);
+    TestNotNull(TEXT("Manual lifecycle component exists"), ManualStartComponent);
+    if (ManualStartActor == nullptr || ManualStartComponent == nullptr)
+    {
+        return false;
+    }
+    AddExpectedError(
+        TEXT("has no exact managed owner"),
+        EAutomationExpectedErrorFlags::Contains,
+        3);
+    AddExpectedError(
+        TEXT("The managed script assembly does not exist"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    ManualStartActor->DispatchBeginPlay();
+    TestTrue(TEXT("Manual lifecycle Actor begins native play"), ManualStartActor->HasActorBegunPlay());
+    TestTrue(TEXT("Manual lifecycle component begins native play"), ManualStartComponent->HasBegunPlay());
+    TestFalse(TEXT("Manual lifecycle component does not auto start"), ManualStartComponent->bScriptRunning);
+    TestTrue(TEXT("Manual lifecycle has no managed state before explicit start"), ManualStartComponent->ManagedState.IsEmpty());
+    TestTrue(TEXT("Manual lifecycle starts only when requested"), ManualStartComponent->StartScript());
+    TestEqual(
+        TEXT("Manual lifecycle start does not replay ReceiveBeginPlay"),
+        ManualStartComponent->ManagedState,
+        FString(TEXT("Initialized")));
+    ManualStartActor->RouteEndPlay(EEndPlayReason::Quit);
+    TestFalse(TEXT("Manual lifecycle component stops after EndPlay"), ManualStartComponent->bScriptRunning);
+    TestFalse(TEXT("Manual lifecycle component has ended play"), ManualStartComponent->HasBegunPlay());
+    TestEqual(
+        TEXT("Manual lifecycle still dispatches EndPlay before destruction"),
+        ManualStartComponent->ManagedState,
+        FString(TEXT("Initialized|ReceiveEnd:4|Stopped")));
+    ManualStartComponent->DestroyComponent();
+    ManualStartComponent = nullptr;
+    ManualStartActor->Destroy();
+    ManualStartActor = nullptr;
+
+    // A non-empty but missing assembly keeps the exact generated class
+    // recognizable, so BeginPlay still runs native lifecycle code even though
+    // managed activation fails before publishing an owner.
+    UUnifiedScriptAsset* FailedScriptAsset = NewObject<UUnifiedScriptAsset>(
+        Package,
+        *FString::Printf(TEXT("FailedComponentLifecycleScriptAsset_%s"), *Suffix));
+    FailedScriptAsset->ScriptClassId = DemoAsset.ClassId;
+    FailedScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::ActorComponent;
+    FailedScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    FailedScriptAsset->CompiledChunkPath.Reset();
+    FailedScriptAsset->ScriptAssemblyPath = FPaths::Combine(
+        DemoDirectory,
+        TEXT("Missing/BlueprintComponentLifecycle.dll"));
+    FailedScriptAsset->ScriptTypeName = DemoAsset.TypeName;
+    FailedScriptAsset->DeclarationPath = DeclarationPath;
+    FailedScriptAsset->DeclarationAssetPath = DemoAsset.AssetPath;
+    FailedStartActor = World->SpawnActor<AActor>();
+    FailedStartComponent = FailedStartActor != nullptr
+        ? NewObject<UUnifiedScriptComponent>(
+            FailedStartActor,
+            GeneratedClass,
+            FName(TEXT("FailedStartLifecycleComponent")))
+        : nullptr;
+    if (FailedStartActor != nullptr && FailedStartComponent != nullptr)
+    {
+        FailedStartActor->AddInstanceComponent(FailedStartComponent);
+        FailedStartComponent->ScriptAsset = FailedScriptAsset;
+        FailedStartComponent->bStartAutomatically = true;
+        FailedStartComponent->bTickAutomatically = false;
+        FailedStartComponent->LifecycleOwnershipKey = FName(TEXT("FailedLifecycleTest"));
+        FailedStartComponent->RegisterComponent();
+    }
+    TestNotNull(TEXT("Failed lifecycle Actor spawns"), FailedStartActor);
+    TestNotNull(TEXT("Failed lifecycle component exists"), FailedStartComponent);
+    if (FailedStartActor == nullptr || FailedStartComponent == nullptr)
+    {
+        return false;
+    }
+    const int32 ManagedScriptsBeforeFailedStart = Host->GetManagedScriptCount();
+    const int32 RegisteredObjectsBeforeFailedStart = Host->NumRegisteredObjects();
+    const int32 LifecycleClaimsBeforeFailedStart = Host->GetGameplayLifecycleClaimCount();
+    FailedStartActor->DispatchBeginPlay();
+    TestTrue(TEXT("Failed lifecycle Actor still begins native play"), FailedStartActor->HasActorBegunPlay());
+    TestTrue(TEXT("Failed lifecycle component still begins native play"), FailedStartComponent->HasBegunPlay());
+    TestFalse(TEXT("Failed lifecycle does not publish a managed generation"), FailedStartComponent->bScriptRunning);
+    TestTrue(TEXT("Failed lifecycle records the missing assembly"),
+        FailedStartComponent->LastScriptError.Contains(TEXT("BlueprintComponentLifecycle.dll")));
+    TestEqual(
+        TEXT("Failed lifecycle does not register a managed script"),
+        Host->GetManagedScriptCount(),
+        ManagedScriptsBeforeFailedStart);
+    TestEqual(
+        TEXT("Failed lifecycle does not register an object"),
+        Host->NumRegisteredObjects(),
+        RegisteredObjectsBeforeFailedStart);
+    TestEqual(
+        TEXT("Failed lifecycle does not claim gameplay ownership"),
+        Host->GetGameplayLifecycleClaimCount(),
+        LifecycleClaimsBeforeFailedStart);
+    FailedStartActor->RouteEndPlay(EEndPlayReason::Quit);
+    TestFalse(TEXT("Failed lifecycle component has ended native play"), FailedStartComponent->HasBegunPlay());
+    TestFalse(TEXT("Failed lifecycle remains stopped after EndPlay"), FailedStartComponent->bScriptRunning);
+    TestEqual(
+        TEXT("Failed lifecycle leaves managed registration unchanged after EndPlay"),
+        Host->NumRegisteredObjects(),
+        RegisteredObjectsBeforeFailedStart);
+    FailedStartComponent->DestroyComponent();
+    FailedStartComponent = nullptr;
+    FailedStartActor->Destroy();
+    FailedStartActor = nullptr;
+
+    // A regular Blueprint child owns the event body. With an explicit Call
+    // Parent node the managed inherited event still runs; without it, the
+    // child intentionally consumes the event while the managed generation
+    // still starts and stops around the native lifecycle.
+    if (Component != nullptr)
+    {
+        Component->DestroyComponent();
+        Component = nullptr;
+    }
+    if (Actor != nullptr && !Actor->IsActorBeingDestroyed())
+    {
+        Actor->Destroy();
+        Actor = nullptr;
+    }
+
+    auto RunChildLifecycle = [this, &World, &ScriptAsset, &GeneratedClass](
+                                 UBlueprint& ChildBlueprint,
+                                 bool bCallParent,
+                                 const FString& ExpectedState) -> bool
+    {
+        FString ChildError;
+        TestTrue(
+            *FString::Printf(
+                TEXT("Child lifecycle %s event graph is configured"),
+                bCallParent ? TEXT("with parent") : TEXT("without parent")),
+            AddLifecycleChildEvent(
+                ChildBlueprint,
+                *GeneratedClass,
+                FName(TEXT("ReceiveBeginPlay")),
+                bCallParent,
+                ChildError));
+        TestTrue(
+            *FString::Printf(
+                TEXT("Child lifecycle %s end graph is configured"),
+                bCallParent ? TEXT("with parent") : TEXT("without parent")),
+            AddLifecycleChildEvent(
+                ChildBlueprint,
+                *GeneratedClass,
+                FName(TEXT("ReceiveEndPlay")),
+                bCallParent,
+                ChildError));
+        if (!ChildError.IsEmpty())
+        {
+            AddError(ChildError);
+            return false;
+        }
+        FKismetEditorUtilities::CompileBlueprint(&ChildBlueprint);
+        if (!TestEqual(
+                TEXT("Lifecycle child Blueprint compiles"),
+                ChildBlueprint.Status,
+                BS_UpToDate))
+        {
+            return false;
+        }
+
+        AActor* ChildActor = World->SpawnActor<AActor>();
+        UUnifiedScriptComponent* ChildComponent = ChildActor != nullptr
+            ? NewObject<UUnifiedScriptComponent>(
+                ChildActor,
+                ChildBlueprint.GeneratedClass,
+                FName(TEXT("ChildLifecycleComponent")))
+            : nullptr;
+        if (ChildActor != nullptr && ChildComponent != nullptr)
+        {
+            ChildActor->AddInstanceComponent(ChildComponent);
+            ChildComponent->ScriptAsset = ScriptAsset;
+            ChildComponent->bStartAutomatically = true;
+            ChildComponent->bTickAutomatically = false;
+            ChildComponent->LifecycleOwnershipKey = FName(
+                bCallParent ? TEXT("LifecycleChildWithParent") : TEXT("LifecycleChildWithoutParent"));
+            ChildComponent->RegisterComponent();
+        }
+        TestNotNull(TEXT("Lifecycle child Actor spawns"), ChildActor);
+        TestNotNull(TEXT("Lifecycle child component exists"), ChildComponent);
+        if (ChildActor == nullptr || ChildComponent == nullptr)
+        {
+            return false;
+        }
+        ChildActor->DispatchBeginPlay();
+        TestTrue(TEXT("Lifecycle child Actor begins play"), ChildActor->HasActorBegunPlay());
+        TestTrue(TEXT("Lifecycle child component begins play"), ChildComponent->HasBegunPlay());
+        TestTrue(TEXT("Lifecycle child starts its managed generation"), ChildComponent->bScriptRunning);
+        TestEqual(
+            TEXT("Lifecycle child BeginPlay parent behavior"),
+            ChildComponent->ManagedState,
+            bCallParent ? FString(TEXT("ChildBegin|ReceiveBegin")) : FString(TEXT("ChildBegin")));
+        ChildActor->RouteEndPlay(EEndPlayReason::Quit);
+        TestFalse(TEXT("Lifecycle child stops after EndPlay"), ChildComponent->bScriptRunning);
+        TestEqual(TEXT("Lifecycle child event parent behavior"), ChildComponent->ManagedState, ExpectedState);
+        if (ChildComponent->HasBegunPlay())
+        {
+            ChildComponent->EndPlay(EEndPlayReason::Destroyed);
+        }
+        ChildComponent->DestroyComponent();
+        ChildActor->Destroy();
+        return true;
+    };
+
+    UBlueprint* ChildWithParent = CreateNormalBlueprint(
+        GeneratedClass,
+        TEXT("/Engine/Transient/UnifiedScriptLifecycleChildWithParent_") + Suffix,
+        TEXT("BP_UnifiedScriptLifecycleChildWithParent_") + Suffix,
+        ChildWithParentPackage);
+    UBlueprint* ChildWithoutParent = CreateNormalBlueprint(
+        GeneratedClass,
+        TEXT("/Engine/Transient/UnifiedScriptLifecycleChildWithoutParent_") + Suffix,
+        TEXT("BP_UnifiedScriptLifecycleChildWithoutParent_") + Suffix,
+        ChildWithoutParentPackage);
+    if (!TestNotNull(TEXT("Lifecycle child with parent is created"), ChildWithParent) ||
+        !TestNotNull(TEXT("Lifecycle child without parent is created"), ChildWithoutParent))
+    {
+        return false;
+    }
+    if (!RunChildLifecycle(
+            *ChildWithParent,
+            true,
+            TEXT("ChildEnd|ReceiveEnd:4|Stopped")) ||
+        !RunChildLifecycle(
+            *ChildWithoutParent,
+            false,
+            TEXT("ChildEnd|Stopped")))
+    {
+        return false;
+    }
     return true;
 }
 

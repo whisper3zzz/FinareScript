@@ -90,9 +90,16 @@ public static class UnrealApiContractJson
         foreach (UnrealApiContractType? type in contract.Types)
         {
             if (type is null || !IsReflectedTypePath(type.Path) || type.Members is null ||
-                type.Members.Count == 0 || !typePaths.Add(type.Path))
+                !typePaths.Add(type.Path))
             {
                 throw new JsonException("The Unreal API contract contains an invalid type selector.");
+            }
+            if (contract.SchemaVersion == UnrealApiContract.LegacySchemaVersion &&
+                type.Members.Count == 0)
+            {
+                throw new JsonException(
+                    $"Unreal API contract schema '{UnrealApiContract.LegacySchemaVersion}' " +
+                    $"does not support an empty member selector for '{type.Path}'.");
             }
             string[] members = type.Members
                 .Select(static member => member?.Trim() ?? string.Empty)
@@ -222,6 +229,23 @@ public static class UnrealApiContractProjector
             {
                 throw new JsonException(
                     $"Unreal API contract type '{selector.Path}' is absent from reflection input.");
+            }
+
+            if (selector.Members.Count == 0)
+            {
+                if (type.Kind != UnrealReflectedTypeKind.Enum)
+                {
+                    throw new JsonException(
+                        $"Unreal API contract type '{selector.Path}' uses an empty member " +
+                        "selector, but only reflected enum types may be selected without members.");
+                }
+                selectedTypes.Add(type with
+                {
+                    Properties = [],
+                    Functions = [],
+                    Delegates = [],
+                });
+                continue;
             }
 
             var members = new Dictionary<string, (string Kind, object Value)>(StringComparer.Ordinal);

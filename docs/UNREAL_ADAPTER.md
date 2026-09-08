@@ -1002,8 +1002,21 @@ same-contract synchronization remains allowed. The guard also applies to
 validation-only requests. Case-only changes in managed names or raw route strings
 are contract changes and are persisted after stopping the affected instances.
 
-Component lifecycle-event ordering and the cooked extension fixture remain open in the
-[active checkpoint](plans/2026-09-07-blueprint-event-extension.md). The existing
+For ActorComponent scripts, managed `OnBeginPlay` is the activation hook and
+`ReceiveBeginPlay` is the inherited native event. When the configured Script
+Asset's exact generated class owns a ReceiveBeginPlay override, automatic
+activation runs before `Super::BeginPlay`. An active ReceiveEndPlay override
+runs through `Super::EndPlay` before managed retirement, using the active asset
+even if configuration changed after startup. Ordinary Blueprint children retain
+their event bodies and explicit Call Parent behavior. EndPlay receives the
+generated `EEndPlayReason` value type.
+
+Disabled or failed automatic startup still completes the native lifecycle and
+retains the existing exact-owner diagnostics for events without an active
+generation. Generic dispatch does not start a script; a later manual start does
+not replay ReceiveBeginPlay. Native lifecycle, child Blueprint and activation
+failure tests pass. The cooked extension fixture remains open in the
+[active checkpoint](plans/2026-09-07-blueprint-event-extension.md); the existing
 container/Soft Reference cooked result above predates this extension.
 
 ## Commands

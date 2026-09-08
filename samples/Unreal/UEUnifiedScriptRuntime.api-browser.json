@@ -12,10 +12,10 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "8b20ccd3e9a9116aa41dcaaf8f3e9768fae8854064624d9b0162ce133db9dd6c"
+    "inputSha256": "f8c8c0f0c2b5d4d634fd07e9e374f2e3f52eaa809f8dc6c59eeda3a96c75062f"
   },
   "summary": {
-    "typeCount": 21,
+    "typeCount": 22,
     "memberCount": 190,
     "nodeCount": 212,
     "directThunkCount": 66,
@@ -2051,6 +2051,13 @@
           "diagnosticCodes": []
         }
       ]
+    },
+    {
+      "path": "/Script/Engine.EEndPlayReason",
+      "name": "EEndPlayReason",
+      "managedTypeName": "EEndPlayReason",
+      "category": "Unreal API|EEndPlayReason",
+      "members": []
     },
     {
       "path": "/Script/Engine.ETickingGroup",

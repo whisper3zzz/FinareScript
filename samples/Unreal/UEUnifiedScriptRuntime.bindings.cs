@@ -244,6 +244,27 @@ public sealed partial class Actor : global::UnifiedScript.Unreal.UnrealObject
         => Invoke<ETickingGroup>(0x6D54E7B208E979BFUL, "/Script/Engine.Actor:SetTickGroup", newTickGroup);
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EEnd Play Reason", Tooltip = "\u6307\u5B9A\u6B63\u5728\u4ECE\u5173\u5361\u4E2D\u5220\u9664/\u79FB\u9664actor\u7684\u539F\u56E0")]
+[global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/Engine.EEndPlayReason", "EEndPlayReason")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct EEndPlayReason(long Value) : global::UnifiedScript.Unreal.IUnrealEnumValue
+{
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(0)]
+    public static EEndPlayReason Destroyed { get; } = new(0);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(1)]
+    public static EEndPlayReason LevelTransition { get; } = new(1);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(2)]
+    public static EEndPlayReason EndPlayInEditor { get; } = new(2);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(3)]
+    public static EEndPlayReason RemovedFromWorld { get; } = new(3);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(4)]
+    public static EEndPlayReason Quit { get; } = new(4);
+    [global::UnifiedScript.Unreal.UnrealEnumConstantAttribute(5)]
+    public static EEndPlayReason EEndPlayReason_MAX { get; } = new(5);
+
+    public global::UnifiedScript.Unreal.UnrealEnumValue ToUntyped() => new("/Script/Engine.EEndPlayReason", Value);
+}
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "ETicking Group", Tooltip = "\u51B3\u5B9Atick\u51FD\u6570\u6240\u5C5E\u7684tick\u7EC4\u3002")]
 [global::UnifiedScript.Unreal.UnrealEnumAttribute("/Script/Engine.ETickingGroup", "ETickingGroup")]
 [global::UnifiedScript.Unreal.UnrealValueAttribute]

@@ -641,6 +641,14 @@ type/member selectors. Type paths and member names must exist in the supplied
 Unknown fields, duplicate
 selectors, stale types, and stale members fail generation.
 
+An empty `members` list explicitly includes a complete reflected enum type,
+for example `{"path":"/Script/Engine.EEndPlayReason","members":[]}`. The
+projector checks the reflected kind before accepting this selector. Empty
+member lists for classes, structs and native objects still fail, and an enum
+selector cannot expose callable members. Existing selectors and enum dependency
+closure retain their behavior. Older readers that require a nonempty list reject
+this extension explicitly; they do not silently omit the selected enum.
+
 ```json
 {
   "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",

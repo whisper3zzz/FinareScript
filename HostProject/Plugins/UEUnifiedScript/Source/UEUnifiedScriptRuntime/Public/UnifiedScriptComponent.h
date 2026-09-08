@@ -355,6 +355,8 @@ private:
         FString& OutTypeName,
         UUnifiedScriptAsset*& OutAsset,
         FString& OutError) const;
+    bool HasConfiguredManagedLifecycleOverride(FName FunctionName) const;
+    bool HasActiveManagedLifecycleOverride(FName FunctionName) const;
     bool BuildScriptState(
         const UUnifiedScriptAsset* ResolvedAsset,
         const FInstancedPropertyBag& ExistingState,

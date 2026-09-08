@@ -7909,6 +7909,7 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
 }
 #include "UnifiedScriptNativeObjectValues.h"
 #include "Engine/EngineBaseTypes.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/HitResult.h"
 #include "EnhancedInputSubsystemInterface.h"
 #include "GameFramework/Actor.h"

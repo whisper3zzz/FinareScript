@@ -22,6 +22,10 @@
       "members": ["Counter", "Scale(int32)", "Scale(double)", "Multiply", "Accumulate", "Reset", "Payload", "BinaryCalls", "StoreBytes", "ReadBytes", "TransformBytes"]
     },
     {
+      "path": "/Script/Engine.EEndPlayReason",
+      "members": []
+    },
+    {
       "path": "/Script/Engine.HitResult",
       "members": [
         "bBlockingHit",

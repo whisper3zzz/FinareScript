@@ -43,7 +43,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   exact-class owner remains active across Worlds, including validation-only
   requests. Focused execution covers rejection without disturbing the active
   instances, stopped synchronization and restart, and other-class isolation.
-  UE lifecycle ordering and broader runtime/cooked extension proof remain open.
+  ActorComponent lifecycle overrides now run between managed activation and
+  retirement. Native BeginPlay/EndPlay tests cover ordinary Blueprint children,
+  manual startup and failed activation. Broader runtime/cooked extension proof
+  remains open.
   These checkpoints do not complete extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.

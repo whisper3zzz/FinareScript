@@ -78,6 +78,81 @@ public sealed class UnrealApiContractTests
     }
 
     [Fact]
+    public void EmptyMemberSelectorsAreReservedForReflectedEnums()
+    {
+        UnrealReflectionManifest fixture = LoadFixture();
+        const string enumPath = "/Script/Engine.EEndPlayReason";
+        UnrealReflectedType endPlayReason = new(
+            enumPath,
+            "EEndPlayReason",
+            "EEndPlayReason",
+            "Engine",
+            UnrealReflectedTypeKind.Enum,
+            null,
+            new UnrealTypeTraits(Abstract: false, BlueprintType: true),
+            [],
+            [],
+            "Engine/EngineTypes.h")
+        {
+            EnumValues =
+            [
+                new UnrealEnumValueDefinition("Destroyed", 0),
+                new UnrealEnumValueDefinition("LevelTransition", 1),
+                new UnrealEnumValueDefinition("EndPlayInEditor", 2),
+                new UnrealEnumValueDefinition("RemovedFromWorld", 3),
+                new UnrealEnumValueDefinition("Quit", 4),
+            ],
+        };
+        if (!fixture.Types.Any(type => type.Path == enumPath))
+        {
+            fixture = fixture with { Types = [.. fixture.Types, endPlayReason] };
+        }
+
+        UnrealApiContract enumContract = new(
+            UnrealApiContract.CurrentSchemaVersion,
+            "Tests.EnumSelector",
+            "UnifiedScript.Unreal.Generated",
+            "UnifiedScriptGeneratedThunks.h",
+            "UE::UnifiedScript::Generated::Tests",
+            [new(enumPath, [])]);
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            fixture,
+            enumContract);
+        UnrealReflectedType selectedEnum = Assert.Single(projection.Reflection.Types);
+        Assert.Equal(UnrealReflectedTypeKind.Enum, selectedEnum.Kind);
+        Assert.Empty(selectedEnum.Properties);
+        Assert.Empty(selectedEnum.Functions);
+        Assert.Empty(selectedEnum.Delegates);
+
+        JsonException emptyClass = Assert.Throws<JsonException>(() =>
+            UnrealApiContractProjector.Project(
+                fixture,
+                enumContract with
+                {
+                    Types =
+                    [new(
+                        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                        [])],
+                }));
+        Assert.Contains("only reflected enum", emptyClass.Message, StringComparison.Ordinal);
+
+        JsonException missingEnum = Assert.Throws<JsonException>(() =>
+            UnrealApiContractProjector.Project(
+                fixture,
+                enumContract with { Types = [new("/Script/Engine.MissingEnum", [])] }));
+        Assert.Contains("absent", missingEnum.Message, StringComparison.OrdinalIgnoreCase);
+
+        string legacyEmptySelector = UnrealApiContractJson.Serialize(enumContract)
+            .Replace(
+                UnrealApiContract.CurrentSchemaVersion,
+                UnrealApiContract.LegacySchemaVersion,
+                StringComparison.Ordinal);
+        JsonException legacyRejected = Assert.Throws<JsonException>(() =>
+            UnrealApiContractJson.Deserialize(legacyEmptySelector));
+        Assert.Contains("does not support an empty member selector", legacyRejected.Message);
+    }
+
+    [Fact]
     public void ContractJsonIsStrictCanonicalAndDeterministic()
     {
         UnrealApiContract contract = CreateContract("StartScript", "Add");

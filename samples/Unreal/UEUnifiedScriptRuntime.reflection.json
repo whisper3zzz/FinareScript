@@ -39544,6 +39544,62 @@
 			]
 		},
 		{
+			"path": "/Script/Engine.EEndPlayReason",
+			"name": "EEndPlayReason",
+			"nativeName": "EEndPlayReason",
+			"module": "Engine",
+			"headerPath": "Engine/EngineTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EEnd Play Reason",
+				"tooltip": "指定正在从关卡中删除/移除actor的原因",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Destroyed",
+					"value": 0,
+					"displayName": "Destroyed"
+				},
+				{
+					"name": "LevelTransition",
+					"value": 1,
+					"displayName": "Level Transition"
+				},
+				{
+					"name": "EndPlayInEditor",
+					"value": 2,
+					"displayName": "End Play in Editor"
+				},
+				{
+					"name": "RemovedFromWorld",
+					"value": 3,
+					"displayName": "Removed from World"
+				},
+				{
+					"name": "Quit",
+					"value": 4,
+					"displayName": "Quit"
+				},
+				{
+					"name": "EEndPlayReason_MAX",
+					"value": 5,
+					"displayName": "EEnd Play Reason MAX"
+				}
+			]
+		},
+		{
 			"path": "/Script/Engine.ELocalExposureMethod",
 			"name": "ELocalExposureMethod",
 			"nativeName": "ELocalExposureMethod",
@@ -40658,6 +40714,87 @@
 					"name": "EMappingQueryResult_MAX",
 					"value": 5,
 					"displayName": "EMapping Query Result MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/InputCore.ETouchIndex",
+			"name": "ETouchIndex",
+			"nativeName": "ETouchIndex",
+			"module": "InputCore",
+			"headerPath": "InputCoreTypes.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "ETouch Index",
+				"tooltip": "ETouchIndex中的条目数量必须匹配上方EKeys和NUM_TOUCH_KEYS中定义的触摸键数量",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Touch1",
+					"value": 0,
+					"displayName": "Touch 1"
+				},
+				{
+					"name": "Touch2",
+					"value": 1,
+					"displayName": "Touch 2"
+				},
+				{
+					"name": "Touch3",
+					"value": 2,
+					"displayName": "Touch 3"
+				},
+				{
+					"name": "Touch4",
+					"value": 3,
+					"displayName": "Touch 4"
+				},
+				{
+					"name": "Touch5",
+					"value": 4,
+					"displayName": "Touch 5"
+				},
+				{
+					"name": "Touch6",
+					"value": 5,
+					"displayName": "Touch 6"
+				},
+				{
+					"name": "Touch7",
+					"value": 6,
+					"displayName": "Touch 7"
+				},
+				{
+					"name": "Touch8",
+					"value": 7,
+					"displayName": "Touch 8"
+				},
+				{
+					"name": "Touch9",
+					"value": 8,
+					"displayName": "Touch 9"
+				},
+				{
+					"name": "Touch10",
+					"value": 9,
+					"displayName": "Touch 10"
+				},
+				{
+					"name": "ETouchIndex_MAX",
+					"value": 12,
+					"displayName": "ETouch Index MAX"
 				}
 			]
 		},

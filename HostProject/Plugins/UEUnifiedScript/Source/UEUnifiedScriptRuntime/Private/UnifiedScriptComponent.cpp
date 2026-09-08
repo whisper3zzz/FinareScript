@@ -70,6 +70,58 @@ bool ShouldPreferCompiledChunks()
         TEXT("UnifiedScriptDisableCompiledChunks"));
 }
 
+bool HasDirectActorComponentLifecycleOverride(
+    const UUnifiedScriptAsset* ScriptAsset,
+    const UObject* Receiver,
+    FName FunctionName)
+{
+    if (ScriptAsset == nullptr || Receiver == nullptr ||
+        ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::ActorComponent ||
+        !ScriptAsset->GeneratedClassPath.IsValid())
+    {
+        return false;
+    }
+
+    UClass* ExpectedClass =
+        ScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(ExpectedClass);
+    if (GeneratedClass == nullptr || !Receiver->IsA(ExpectedClass))
+    {
+        return false;
+    }
+
+    const FUnifiedScriptManagedFunctionBinding* Binding =
+        GeneratedClass->ManagedFunctionBindings.Find(FunctionName);
+    if (Binding == nullptr || Binding->AbiVersion != 3 ||
+        !Binding->bBlueprintEvent || Binding->bStatic ||
+        Binding->RpcTarget != EUnifiedScriptRpcTarget::None ||
+        Binding->bInterfaceFunction || !Binding->RepNotifyProperty.IsNone() ||
+        Binding->BlueprintEventSuperMode !=
+            EUnifiedScriptBlueprintEventSuperMode::Explicit ||
+        Binding->BlueprintOverrideDeclaringTypePath.IsEmpty() ||
+        Binding->BlueprintOverrideFunctionName.IsEmpty() ||
+        FName(*Binding->BlueprintOverrideFunctionName) != FunctionName)
+    {
+        return false;
+    }
+
+    UClass* DeclaringClass = FSoftClassPath(
+        Binding->BlueprintOverrideDeclaringTypePath).TryLoadClass<UObject>();
+    if (DeclaringClass != UActorComponent::StaticClass())
+    {
+        return false;
+    }
+
+    const UFunction* LocalFunction = GeneratedClass->FindFunctionByName(
+        FunctionName,
+        EIncludeSuperFlag::ExcludeSuper);
+    return LocalFunction != nullptr &&
+        LocalFunction->GetOuter() == GeneratedClass &&
+        LocalFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) &&
+        !LocalFunction->HasAnyFunctionFlags(FUNC_Static | FUNC_Net);
+}
+
 FString GetAbsoluteProjectDir()
 {
     FString ProjectDir = FPlatformProperties::RequiresCookedData()
@@ -400,8 +452,21 @@ UUnifiedScriptComponent::UUnifiedScriptComponent()
 
 void UUnifiedScriptComponent::BeginPlay()
 {
+    const bool bStartManagedBeginPlayBeforeSuper =
+        bStartAutomatically &&
+        HasConfiguredManagedLifecycleOverride(
+            FName(TEXT("ReceiveBeginPlay")));
+    if (bStartManagedBeginPlayBeforeSuper)
+    {
+        // The managed ReceiveBeginPlay body must be active before the native
+        // ActorComponent lifecycle invokes its Blueprint event. StartScript
+        // failure is intentionally ignored here so Super still completes the
+        // native lifecycle and preserves the existing failure diagnostic.
+        StartScript();
+    }
+
     Super::BeginPlay();
-    if (bStartAutomatically)
+    if (bStartAutomatically && !bStartManagedBeginPlayBeforeSuper)
     {
         StartScript();
     }
@@ -409,6 +474,18 @@ void UUnifiedScriptComponent::BeginPlay()
 
 void UUnifiedScriptComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    const bool bStopManagedEndPlayAfterSuper =
+        bScriptRunning &&
+        HasActiveManagedLifecycleOverride(FName(TEXT("ReceiveEndPlay")));
+    if (bStopManagedEndPlayAfterSuper)
+    {
+        // Native ActorComponent::EndPlay invokes the Blueprint event from
+        // Super, so retain the managed owner until that event has dispatched.
+        Super::EndPlay(EndPlayReason);
+        StopScript();
+        return;
+    }
+
     StopScript();
     Super::EndPlay(EndPlayReason);
 }
@@ -3271,6 +3348,36 @@ bool UUnifiedScriptComponent::ResolveScriptConfiguration(
     OutAssemblyPath = ResolveConfiguredPath(ConfiguredAssemblyPath);
     OutError.Reset();
     return true;
+}
+
+bool UUnifiedScriptComponent::HasConfiguredManagedLifecycleOverride(
+    FName FunctionName) const
+{
+    FString ResolvedAssemblyPath;
+    FString ResolvedTypeName;
+    UUnifiedScriptAsset* ResolvedAsset = nullptr;
+    FString Error;
+    if (!ResolveScriptConfiguration(
+            ResolvedAssemblyPath,
+            ResolvedTypeName,
+            ResolvedAsset,
+            Error))
+    {
+        return false;
+    }
+    return UE::UnifiedScript::Component::Private::HasDirectActorComponentLifecycleOverride(
+        ResolvedAsset,
+        this,
+        FunctionName);
+}
+
+bool UUnifiedScriptComponent::HasActiveManagedLifecycleOverride(
+    FName FunctionName) const
+{
+    return UE::UnifiedScript::Component::Private::HasDirectActorComponentLifecycleOverride(
+        ActiveScriptAsset,
+        this,
+        FunctionName);
 }
 
 bool UUnifiedScriptComponent::BuildScriptState(

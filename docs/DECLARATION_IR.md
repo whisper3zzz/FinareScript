@@ -42,7 +42,10 @@ class across Worlds before planning any changes, including validation-only
 requests. A changed override set is rejected while any such owner remains
 active. Stopped instances and other generated classes do not block it.
 Managed names and raw route strings are case-sensitive; native parameter and
-field names retain FName semantics. Lifecycle integration remains part of the active
+field names retain FName semantics. ActorComponent lifecycle overrides now keep
+the managed generation active through native ReceiveBeginPlay/ReceiveEndPlay.
+Manual startup after native BeginPlay does not replay the missed event. Broader
+runtime/cooked proof remains in the active
 [event-extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Container and Soft Reference function declarations

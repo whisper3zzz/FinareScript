@@ -124,7 +124,7 @@ parent chain and must not silently reparent an asset.
   weaken the older property lane's type checks. Parent results can become owned
   call-frame values before entering the existing retry cache.
 
-## Lifecycle integration still to resolve
+## Lifecycle integration
 
 The native component owns the managed host handle even for ActorComponent
 scripts whose `TargetHandle` is their Actor. Parent resolution must select the
@@ -133,17 +133,16 @@ ordinary Blueprint subclasses, rather than equating TargetHandle with the
 event receiver. Generation retirement remains the managed bridge boundary.
 
 Engine Actor BeginPlay starts components before emitting ReceiveBeginPlay.
-The current script component, however, calls Super::BeginPlay before starting
-managed code and stops managed code before Super::EndPlay. Consequently its
-own inherited ReceiveBeginPlay/ReceiveEndPlay cannot simply be dispatched with
-the existing order. For component classes with these managed override bindings,
-automatic activation must precede Super::BeginPlay and retirement must follow
-Super::EndPlay, including an ordinary Blueprint child that calls its parent.
-Keep the existing order for unaffected classes and preserve the explicit
-start/stop policy; do not lazily start from generic function dispatch. A failed
-start must still finish the native lifecycle path and roll back its candidate.
-Test this in runtime integration; materialization alone does not establish
-lifecycle-event support.
+The original script component called Super::BeginPlay before starting managed
+code and stopped managed code before Super::EndPlay, leaving its own inherited
+lifecycle events without an active generation. Component classes with a managed
+ReceiveBeginPlay override now activate automatically before Super::BeginPlay;
+an active ReceiveEndPlay override retires after Super::EndPlay, including an
+ordinary Blueprint child that calls its parent. Unaffected classes retain their
+existing order and explicit start/stop policy. Generic function dispatch does
+not lazily activate a script. Failed startup still finishes the native lifecycle
+path and rolls back its candidate. Runtime integration below establishes the
+ordering through actual native BeginPlay/EndPlay.
 
 Before activation, select the configured Script Asset (including the
 `ScriptAssetPath` configuration route) and verify that its exact generated class
@@ -154,10 +153,22 @@ Exercise actual native BeginPlay/EndPlay and ordinary Blueprint children; the
 existing manual ReceiveTick fixture is not evidence for lifecycle ordering.
 
 The typed EndPlay argument must come from generated Unreal reflection bindings.
-The current selected binding surface has no `EEndPlayReason` declaration. Resolve
-that dependency through the exporter and API contract before adding the managed
-lifecycle fixture; do not hand-author an engine enum or silently substitute an
-integer signature.
+The preceding checkpoint's binding surface has no `EEndPlayReason` declaration.
+Include this enum explicitly with an empty API Contract member list, accepted
+only when the reflected kind is Enum. Non-enum empty selectors remain errors;
+automatic Contract proposals retain their explicit-review behavior. The native
+reflection exporter must collect struct/enum dependencies of exported delegates
+as well as Blueprint-visible properties. Actor's exported OnEndPlay delegate
+already references this enum, so resolving its omitted dependency supplies the
+real engine declaration without introducing an unrelated callable facade.
+
+The managed component fixture records initialization, native ReceiveBeginPlay,
+typed ReceiveEndPlay and destruction through the existing generated ManagedState
+property. Exercise Actor's native DispatchBeginPlay/RouteEndPlay, ordinary
+Blueprint children with and without explicit parent calls, ScriptAssetPath
+startup, configuration changes after activation, manual startup and a missing
+assembly. A disabled or failed startup must not trigger lazy activation; preserve
+the existing exact-owner diagnostics and verify normal native lifecycle cleanup.
 
 Parent helpers are for an activated generation. Reject use during managed
 initialization/destruction with an actionable error: native active-instance
@@ -465,5 +476,33 @@ transport, declaration materializer and invocation bridge. Those distribution
 build failures remain unresolved and are not covered by the successful
 HostEditor/CMD evidence.
 
-Component lifecycle-event ordering and the broader runtime/cooked extension
-proof remain open; M13.3C-2 is still in progress.
+ActorComponent lifecycle integration is implemented and verified on 2026-09-08.
+The fixture exercises native DispatchBeginPlay/RouteEndPlay with ScriptAssetPath
+startup and configuration changes after activation. Ordinary Blueprint children
+with and without explicit parent calls retain their own event bodies. Manual
+startup does not replay ReceiveBeginPlay; missing-assembly activation completes
+native lifecycle cleanup without leaking managed instances, handles or gameplay
+ownership. Typed ReceiveEndPlay observes Quit as 4 before lifetime cancellation,
+and managed destruction observes the cancelled lifetime.
+
+The selected API Contract explicitly includes the reflected EEndPlayReason enum.
+The exporter now follows dependencies of exported single and multicast delegates,
+so Actor.OnEndPlay supplies the engine definition. API Contract tests passed 7/7
+(`managed-api-contract-release-2.log`), followed by fresh Release Demo emission
+(`emit-demo-lifecycle-final.log`). The configured class-filter reflection export
+and binding generation passed (`reflection-export-config.log` and
+`binding-generation-lifecycle.log`).
+
+The HostEditor build passed (`editor-build-lifecycle-final-3.log`). Seven CMD
+Automation tests passed with normal queue exits: lifecycle
+(`cmd-component-lifecycle-final.log`), Actor/Component/exact-owner parent calls
+(`cmd-parent-basic-final.log`, three tests), ordinary Blueprint intermediate
+parent calls (`cmd-parent-intermediate-final.log`), Live Sync
+(`cmd-live-sync-final.log`) and delegate enum export
+(`cmd-reflection-exporter-delegate.log`). Evidence is under
+`artifacts/m13-3c-2-lifecycle/`. The exporter run predates only native lifecycle
+test expansion; its implementation was unchanged. These fixtures execute in
+HostEditor and do not establish cooked support.
+
+The broader runtime/cooked extension proof and the distribution header failures
+above remain open; M13.3C-2 is still in progress.

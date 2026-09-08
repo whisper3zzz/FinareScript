@@ -11,6 +11,10 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptProjectSetup.h"
@@ -547,6 +551,105 @@ bool FUnifiedScriptBlueprintReflectionDiscoveryTest::RunTest(const FString& Para
     TestTrue(TEXT("Carries Blueprint-defined member"), Json.Contains(TEXT("\"name\": \"Open\"")));
 
     IFileManager::Get().Delete(*OutputPath, false, true);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptReflectionExporterDelegateEnumTest,
+    "UnifiedScript.Unreal.ProjectSetup.ReflectionExporterDelegateEnum",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptReflectionExporterDelegateEnumTest::RunTest(const FString& Parameters)
+{
+    const FString OutputPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("Automation/UnifiedScriptReflectionDelegateEnum"),
+        FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".json")));
+    ON_SCOPE_EXIT
+    {
+        IFileManager::Get().Delete(*OutputPath, false, true);
+    };
+
+    FUnifiedScriptReflectionExportOptions Options;
+    Options.OutputPath = OutputPath;
+    Options.Modules.Add(TEXT("Engine"));
+    Options.ClassPaths.Add(TEXT("/Script/Engine.Actor"));
+    FUnifiedScriptReflectionExportResult Result;
+    FText Error;
+    if (!TestTrue(
+            TEXT("Exports the Actor delegate dependency manifest"),
+            FUnifiedScriptReflectionExporter::Export(Options, Result, Error)))
+    {
+        AddError(FString::Printf(TEXT("Actor delegate reflection export: %s"), *Error.ToString()));
+        return false;
+    }
+
+    FString Json;
+    if (!TestTrue(
+            TEXT("Reads the Actor delegate dependency manifest"),
+            FFileHelper::LoadFileToString(Json, *OutputPath)))
+    {
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!TestTrue(
+            TEXT("Parses the Actor delegate dependency manifest"),
+            FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid()))
+    {
+        return false;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* Types = nullptr;
+    if (!TestTrue(
+            TEXT("Reflection manifest contains types"),
+            Root->TryGetArrayField(TEXT("types"), Types) && Types != nullptr))
+    {
+        return false;
+    }
+
+    bool bFoundEndPlayReason = false;
+    for (const TSharedPtr<FJsonValue>& Value : *Types)
+    {
+        const TSharedPtr<FJsonObject> Type = Value.IsValid() ? Value->AsObject() : nullptr;
+        if (!Type.IsValid())
+        {
+            continue;
+        }
+
+        FString Path;
+        if (!Type->TryGetStringField(TEXT("path"), Path) ||
+            !Path.Equals(TEXT("/Script/Engine.EEndPlayReason"), ESearchCase::CaseSensitive))
+        {
+            continue;
+        }
+
+        bFoundEndPlayReason = true;
+        FString Kind;
+        TestTrue(TEXT("EEndPlayReason is exported as a reflected enum"),
+            Type->TryGetStringField(TEXT("kind"), Kind));
+        TestEqual(TEXT("EEndPlayReason reflected kind"), Kind, FString(TEXT("enum")));
+        const TArray<TSharedPtr<FJsonValue>>* EnumValues = nullptr;
+        TestTrue(TEXT("EEndPlayReason carries enum values"),
+            Type->TryGetArrayField(TEXT("enumValues"), EnumValues) && EnumValues != nullptr);
+        if (EnumValues != nullptr)
+        {
+            TestTrue(TEXT("EEndPlayReason includes Quit"), EnumValues->ContainsByPredicate(
+                [](const TSharedPtr<FJsonValue>& EnumValue)
+                {
+                    const TSharedPtr<FJsonObject> EnumObject =
+                        EnumValue.IsValid() ? EnumValue->AsObject() : nullptr;
+                    FString Name;
+                    return EnumObject.IsValid() &&
+                        EnumObject->TryGetStringField(TEXT("name"), Name) &&
+                        Name.Equals(TEXT("Quit"), ESearchCase::CaseSensitive);
+                }));
+        }
+        break;
+    }
+
+    TestTrue(TEXT("Actor.OnEndPlay exports its EEndPlayReason dependency"), bFoundEndPlayReason);
     return true;
 }
 
