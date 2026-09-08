@@ -3,15 +3,21 @@
 #include "UnifiedScriptClassFactory.h"
 
 #include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "InputAction.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
+#include "PackageTools.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptClassBases.h"
@@ -532,6 +538,531 @@ UUnifiedScriptComponent* GetActorScriptComponent(UBlueprint* Blueprint)
         : nullptr;
     return Defaults != nullptr ? Defaults->ScriptComponent : nullptr;
 }
+
+FString DescribeActorComponent(const UClass* OwnerClass, const UUnifiedScriptComponent* Component)
+{
+    return FString::Printf(
+        TEXT("owner=%s classFlags=0x%08x component=%s componentName=%s archetype=%s scriptAsset=%s"),
+        OwnerClass != nullptr ? *OwnerClass->GetPathName() : TEXT("<null>"),
+        OwnerClass != nullptr ? static_cast<uint32>(OwnerClass->ClassFlags) : 0u,
+        Component != nullptr ? *Component->GetPathName() : TEXT("<null>"),
+        Component != nullptr ? *Component->GetName() : TEXT("<null>"),
+        Component != nullptr && Component->GetArchetype() != nullptr
+            ? *Component->GetArchetype()->GetPathName()
+            : TEXT("<null>"),
+        Component != nullptr && Component->ScriptAsset != nullptr
+            ? *Component->ScriptAsset->GetPathName()
+            : TEXT("<null>"));
+}
+
+bool VerifyActorComponentDefaults(
+    FAutomationTestBase& Test,
+    const TCHAR* Label,
+    UClass* OwnerClass,
+    UUnifiedScriptComponent* Component,
+    UUnifiedScriptAsset* ExpectedScriptAsset,
+    bool ExpectedStartAutomatically,
+    bool ExpectedTickAutomatically,
+    UUnifiedScriptComponent* ExpectedArchetype)
+{
+    const FString Prefix = FString::Printf(TEXT("%s: "), Label);
+    if (!Test.TestNotNull(
+            Prefix + TEXT("has an Actor ScriptComponent"),
+            Component))
+    {
+        Test.AddError(DescribeActorComponent(OwnerClass, Component));
+        return false;
+    }
+
+    bool bValid = true;
+    bValid &= Test.TestTrue(
+        Prefix + TEXT("generated class is compiled from a Blueprint"),
+        OwnerClass != nullptr &&
+            EnumHasAnyFlags(OwnerClass->ClassFlags, CLASS_CompiledFromBlueprint));
+    bValid &= Test.TestEqual(
+        Prefix + TEXT("uses the stable native component subobject name"),
+        Component->GetFName(),
+        FName(TEXT("UnifiedScript")));
+    bValid &= Test.TestEqual(
+        Prefix + TEXT("inherits the exact factory ScriptAsset"),
+        Component->ScriptAsset.Get(),
+        ExpectedScriptAsset);
+    bValid &= Test.TestEqual(
+        Prefix + TEXT("inherits bStartAutomatically"),
+        Component->bStartAutomatically,
+        ExpectedStartAutomatically);
+    bValid &= Test.TestEqual(
+        Prefix + TEXT("inherits bTickAutomatically"),
+        Component->bTickAutomatically,
+        ExpectedTickAutomatically);
+    if (ExpectedArchetype != nullptr)
+    {
+        bValid &= Test.TestEqual(
+            Prefix + TEXT("uses the expected parent component archetype"),
+            static_cast<UObject*>(Component->GetArchetype()),
+            static_cast<UObject*>(ExpectedArchetype));
+    }
+    if (!bValid)
+    {
+        Test.AddError(DescribeActorComponent(OwnerClass, Component));
+    }
+    return bValid;
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptInheritedActorComponentDefaultsTest,
+    "UnifiedScript.Unreal.ScriptClass.InheritedActorComponentDefaults",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptInheritedActorComponentDefaultsTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::ClassFactory::Tests;
+
+    FScopedCreatedClassCleanup Cleanup;
+    Cleanup.DeploymentPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectDir(),
+        TEXT("../samples/Unreal/UnifiedScript.Unreal.Demo.deployment.json")));
+    if (!FFileHelper::LoadFileToArray(Cleanup.OriginalDeployment, *Cleanup.DeploymentPath))
+    {
+        AddError(TEXT("Cannot snapshot the deployment manifest before the inherited defaults test."));
+        return false;
+    }
+    Cleanup.FirstPlayRequestPath = FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(
+        FPaths::ProjectDir());
+    Cleanup.bHadFirstPlayRequest = FFileHelper::LoadFileToArray(
+        Cleanup.OriginalFirstPlayRequest,
+        *Cleanup.FirstPlayRequestPath);
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12);
+    const FString BaseName = TEXT("M13C3InheritedActor_") + Suffix;
+    const FString ChildName = BaseName + TEXT("_Child");
+    const FString GrandchildName = BaseName + TEXT("_Grandchild");
+    const FString BasePackageName = PersistentPackageName(*BaseName);
+    const FString ChildPackageName = PersistentPackageName(*ChildName);
+    const FString GrandchildPackageName = PersistentPackageName(*GrandchildName);
+    const FString SidecarPackageName = FString::Printf(
+        TEXT("%s/SA_%s"),
+        PersistentPackageRoot,
+        *BaseName);
+
+    auto AddPackagePath = [&Cleanup](const FString& PackageName)
+    {
+        FString Filename = FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension());
+        Filename = FPaths::ConvertRelativePathToFull(Filename);
+        FPaths::NormalizeFilename(Filename);
+        Cleanup.PackagePaths.AddUnique(Filename);
+    };
+    // Register every owned package before any factory/Blueprint operation so a
+    // partial creation still cleans only this test's GUID-named files.
+    AddPackagePath(BasePackageName);
+    AddPackagePath(ChildPackageName);
+    AddPackagePath(GrandchildPackageName);
+    AddPackagePath(SidecarPackageName);
+    const TArray<FString> OwnedPackageNames = {
+        BasePackageName,
+        ChildPackageName,
+        GrandchildPackageName,
+        SidecarPackageName};
+    ON_SCOPE_EXIT
+    {
+        TArray<UPackage*> PackagesToUnloadAtScopeExit;
+        for (const FString& PackageName : OwnedPackageNames)
+        {
+            if (UPackage* Package = FindPackage(nullptr, *PackageName))
+            {
+                Package->SetDirtyFlag(false);
+                PackagesToUnloadAtScopeExit.Add(Package);
+            }
+        }
+        if (PackagesToUnloadAtScopeExit.Num() > 0)
+        {
+            UPackageTools::UnloadPackages(PackagesToUnloadAtScopeExit);
+        }
+    };
+
+    UPackage* BasePackage = CreatePackage(*BasePackageName);
+    UUnifiedScriptActorClassFactory* Factory = NewObject<UUnifiedScriptActorClassFactory>();
+    UBlueprint* BaseBlueprint = BasePackage != nullptr && Factory != nullptr
+        ? Cast<UBlueprint>(Factory->FactoryCreateNew(
+            UBlueprint::StaticClass(),
+            BasePackage,
+            FName(*BaseName),
+            RF_Public | RF_Standalone | RF_Transactional,
+            nullptr,
+            GWarn,
+            TEXT("UnifiedScriptInheritedActorComponentDefaults")))
+        : nullptr;
+    if (!TestNotNull(TEXT("Factory creates the inherited-defaults Actor Blueprint"), BaseBlueprint) ||
+        !TestNotNull(
+            TEXT("Factory-created Actor Blueprint has a generated class"),
+            BaseBlueprint != nullptr ? BaseBlueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+
+    UUnifiedScriptBlueprint* UnifiedBaseBlueprint = Cast<UUnifiedScriptBlueprint>(BaseBlueprint);
+    UUnifiedScriptAsset* ScriptAsset = UnifiedBaseBlueprint != nullptr
+        ? UnifiedBaseBlueprint->ScriptAsset.Get()
+        : nullptr;
+    if (!TestNotNull(TEXT("Factory-created Actor retains its ScriptAsset"), ScriptAsset))
+    {
+        return false;
+    }
+    Cleanup.SourcePaths.AddUnique(ResolveConfiguredPath(ScriptAsset->SourcePath));
+    AddPackagePath(ScriptAsset->GetOutermost()->GetName());
+
+    AUnifiedScriptActor* BaseCDO = Cast<AUnifiedScriptActor>(
+        BaseBlueprint->GeneratedClass->GetDefaultObject());
+    UUnifiedScriptComponent* BaseComponent = BaseCDO != nullptr
+        ? BaseCDO->ScriptComponent
+        : nullptr;
+    if (!TestNotNull(TEXT("Factory-created Actor has a native ScriptComponent CDO"), BaseComponent))
+    {
+        AddError(DescribeActorComponent(BaseBlueprint->GeneratedClass, BaseComponent));
+        return false;
+    }
+    const bool InitialStartAutomatically = BaseComponent->bStartAutomatically;
+    const bool InitialTickAutomatically = BaseComponent->bTickAutomatically;
+    VerifyActorComponentDefaults(
+        *this,
+        TEXT("Base CDO"),
+        BaseBlueprint->GeneratedClass,
+        BaseComponent,
+        ScriptAsset,
+        InitialStartAutomatically,
+        InitialTickAutomatically,
+        nullptr);
+
+    auto EditBoolDefault = [this](
+        UUnifiedScriptComponent& Component,
+        UBlueprint& Blueprint,
+        const TCHAR* PropertyName,
+        bool& Value) -> bool
+    {
+        FBoolProperty* Property = FindFProperty<FBoolProperty>(Component.GetClass(), PropertyName);
+        if (!this->TestNotNull(
+                *FString::Printf(TEXT("Finds editable %s property"), PropertyName),
+                Property))
+        {
+            return false;
+        }
+        const bool NewValue = !Property->GetPropertyValue_InContainer(&Component);
+        Component.Modify();
+        Component.PreEditChange(Property);
+        Property->SetPropertyValue_InContainer(&Component, NewValue);
+        FPropertyChangedEvent PropertyChanged(Property);
+        Component.PostEditChangeProperty(PropertyChanged);
+        FBlueprintEditorUtils::MarkBlueprintAsModified(&Blueprint);
+        Blueprint.MarkPackageDirty();
+        Value = NewValue;
+        return this->TestTrue(
+            *FString::Printf(TEXT("Property notification writes %s to the base CDO"), PropertyName),
+            Property->GetPropertyValue_InContainer(&Component) == NewValue);
+    };
+    bool ExpectedStartAutomatically = InitialStartAutomatically;
+    bool ExpectedTickAutomatically = InitialTickAutomatically;
+    bool bEditedStart = EditBoolDefault(
+        *BaseComponent,
+        *BaseBlueprint,
+        TEXT("bStartAutomatically"),
+        ExpectedStartAutomatically);
+    BaseComponent = GetActorScriptComponent(BaseBlueprint);
+    bEditedStart &= BaseComponent != nullptr;
+    bool bEditedTick = BaseComponent != nullptr && EditBoolDefault(
+        *BaseComponent,
+        *BaseBlueprint,
+        TEXT("bTickAutomatically"),
+        ExpectedTickAutomatically);
+    BaseComponent = GetActorScriptComponent(BaseBlueprint);
+    TestTrue(TEXT("Edits the base Actor component defaults through property notifications"), bEditedStart && bEditedTick);
+    if (!bEditedStart || !bEditedTick ||
+        !TestNotNull(TEXT("Re-reads the base CDO after property notifications"), BaseComponent))
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("Base CDO bStartAutomatically changes before Compile"),
+        BaseComponent->bStartAutomatically,
+        ExpectedStartAutomatically);
+    TestEqual(
+        TEXT("Base CDO bTickAutomatically changes before Compile"),
+        BaseComponent->bTickAutomatically,
+        ExpectedTickAutomatically);
+    FKismetEditorUtilities::CompileBlueprint(BaseBlueprint);
+    TestEqual(
+        TEXT("Compiles the factory-created base Blueprint after default edits"),
+        BaseBlueprint->Status,
+        BS_UpToDate);
+    BaseComponent = GetActorScriptComponent(BaseBlueprint);
+    if (!TestNotNull(TEXT("Re-reads the factory base CDO after compiling edited defaults"), BaseComponent))
+    {
+        AddError(DescribeActorComponent(BaseBlueprint->GeneratedClass, BaseComponent));
+        return false;
+    }
+    TestNotEqual(TEXT("bStartAutomatically is a non-default inherited value"), ExpectedStartAutomatically, InitialStartAutomatically);
+    TestNotEqual(TEXT("bTickAutomatically is a non-default inherited value"), ExpectedTickAutomatically, InitialTickAutomatically);
+    VerifyActorComponentDefaults(
+        *this,
+        TEXT("Edited base CDO"),
+        BaseBlueprint->GeneratedClass,
+        BaseComponent,
+        ScriptAsset,
+        ExpectedStartAutomatically,
+        ExpectedTickAutomatically,
+        nullptr);
+
+    auto CreateOrdinaryChild = [this](
+        UClass* ParentClass,
+        const FString& PackageName,
+        const FString& AssetName,
+        UPackage*& OutPackage) -> UBlueprint*
+    {
+        OutPackage = CreatePackage(*PackageName);
+        UBlueprint* Blueprint = OutPackage != nullptr
+            ? FKismetEditorUtilities::CreateBlueprint(
+                ParentClass,
+                OutPackage,
+                FName(*AssetName),
+                BPTYPE_Normal,
+                UBlueprint::StaticClass(),
+                UBlueprintGeneratedClass::StaticClass(),
+                FName(TEXT("UnifiedScriptInheritedActorComponentDefaults")))
+            : nullptr;
+        if (!TestNotNull(*FString::Printf(TEXT("Creates ordinary Blueprint %s"), *AssetName), Blueprint))
+        {
+            return nullptr;
+        }
+        FKismetEditorUtilities::CompileBlueprint(Blueprint);
+        this->TestEqual(
+            *FString::Printf(TEXT("Compiles ordinary Blueprint %s"), *AssetName),
+            Blueprint->Status,
+            BS_UpToDate);
+        return Blueprint;
+    };
+
+    UPackage* ChildPackage = nullptr;
+    UBlueprint* ChildBlueprint = CreateOrdinaryChild(
+        BaseBlueprint->GeneratedClass,
+        ChildPackageName,
+        ChildName,
+        ChildPackage);
+    UPackage* GrandchildPackage = nullptr;
+    UBlueprint* GrandchildBlueprint = ChildBlueprint != nullptr
+        ? CreateOrdinaryChild(
+            ChildBlueprint->GeneratedClass,
+            GrandchildPackageName,
+            GrandchildName,
+            GrandchildPackage)
+        : nullptr;
+    if (!TestNotNull(TEXT("Creates the ordinary Blueprint child"), ChildBlueprint) ||
+        !TestNotNull(TEXT("Creates the ordinary Blueprint grandchild"), GrandchildBlueprint))
+    {
+        return false;
+    }
+
+    AUnifiedScriptActor* ChildCDO = Cast<AUnifiedScriptActor>(
+        ChildBlueprint->GeneratedClass->GetDefaultObject());
+    AUnifiedScriptActor* GrandchildCDO = Cast<AUnifiedScriptActor>(
+        GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    UUnifiedScriptComponent* ChildComponent = ChildCDO != nullptr
+        ? ChildCDO->ScriptComponent
+        : nullptr;
+    UUnifiedScriptComponent* GrandchildComponent = GrandchildCDO != nullptr
+        ? GrandchildCDO->ScriptComponent
+        : nullptr;
+    bool bValid = VerifyActorComponentDefaults(
+        *this,
+        TEXT("Child CDO"),
+        ChildBlueprint->GeneratedClass,
+        ChildComponent,
+        ScriptAsset,
+        ExpectedStartAutomatically,
+        ExpectedTickAutomatically,
+        BaseComponent);
+    bValid &= VerifyActorComponentDefaults(
+        *this,
+        TEXT("Grandchild CDO"),
+        GrandchildBlueprint->GeneratedClass,
+        GrandchildComponent,
+        ScriptAsset,
+        ExpectedStartAutomatically,
+        ExpectedTickAutomatically,
+        ChildComponent);
+    bValid &= this->TestTrue(
+        TEXT("Base, child, and grandchild CDO components are distinct objects"),
+        BaseComponent != ChildComponent &&
+            BaseComponent != GrandchildComponent &&
+            ChildComponent != GrandchildComponent);
+
+    const FString BaseObjectPath = BaseBlueprint->GetPathName();
+    const FString ChildObjectPath = ChildBlueprint->GetPathName();
+    const FString GrandchildObjectPath = GrandchildBlueprint->GetPathName();
+    const FString ScriptAssetObjectPath = ScriptAsset->GetPathName();
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Creates a transient world for an inherited Actor instance"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    FWorldContext* WorldContext = nullptr;
+    if (GEngine != nullptr)
+    {
+        WorldContext = &GEngine->CreateNewWorldContext(EWorldType::Game);
+        WorldContext->SetCurrentWorld(World);
+    }
+    AUnifiedScriptActor* Instance = Cast<AUnifiedScriptActor>(
+        World->SpawnActor(ChildBlueprint->GeneratedClass));
+    UUnifiedScriptComponent* InstanceComponent = Instance != nullptr
+        ? Instance->ScriptComponent
+        : nullptr;
+    bValid &= this->TestNotNull(TEXT("Spawns an ordinary child Actor instance"), Instance);
+    bValid &= VerifyActorComponentDefaults(
+        *this,
+        TEXT("Child Actor instance"),
+        ChildBlueprint->GeneratedClass,
+        InstanceComponent,
+        ScriptAsset,
+        ExpectedStartAutomatically,
+        ExpectedTickAutomatically,
+        ChildComponent);
+    bValid &= this->TestTrue(
+        TEXT("Actor instance component is distinct from CDO components"),
+        InstanceComponent != nullptr &&
+            InstanceComponent != BaseComponent &&
+            InstanceComponent != ChildComponent &&
+            InstanceComponent != GrandchildComponent);
+    if (Instance != nullptr)
+    {
+        Instance->Destroy();
+    }
+    if (WorldContext != nullptr && GEngine != nullptr)
+    {
+        GEngine->DestroyWorldContext(World);
+        WorldContext = nullptr;
+    }
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+
+    auto SaveAssetPackage = [this](
+        UPackage* Package,
+        UObject* Asset,
+        const FString& PackageName,
+        const TCHAR* Label) -> bool
+    {
+        if (Package == nullptr || Asset == nullptr)
+        {
+            return false;
+        }
+        const FString Filename = FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension());
+        FSavePackageArgs SaveArguments;
+        SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+        SaveArguments.SaveFlags = SAVE_None;
+        const bool bSaved = UPackage::SavePackage(
+            Package,
+            Asset,
+            *Filename,
+            SaveArguments);
+        this->TestTrue(*FString::Printf(TEXT("Saves %s"), Label), bSaved);
+        return bSaved;
+    };
+    bValid &= SaveAssetPackage(BasePackage, BaseBlueprint, BasePackageName, TEXT("base Blueprint package"));
+    bValid &= SaveAssetPackage(ChildPackage, ChildBlueprint, ChildPackageName, TEXT("child Blueprint package"));
+    bValid &= SaveAssetPackage(
+        GrandchildPackage,
+        GrandchildBlueprint,
+        GrandchildPackageName,
+        TEXT("grandchild Blueprint package"));
+    bValid &= SaveAssetPackage(
+        ScriptAsset->GetOutermost(),
+        ScriptAsset,
+        ScriptAsset->GetOutermost()->GetName(),
+        TEXT("factory ScriptAsset package"));
+
+    TArray<UPackage*> PackagesToUnload;
+    PackagesToUnload.AddUnique(GrandchildPackage);
+    PackagesToUnload.AddUnique(ChildPackage);
+    PackagesToUnload.AddUnique(BasePackage);
+    PackagesToUnload.AddUnique(ScriptAsset->GetOutermost());
+    for (UPackage* Package : PackagesToUnload)
+    {
+        if (Package != nullptr)
+        {
+            Package->SetDirtyFlag(false);
+        }
+    }
+    const TWeakObjectPtr<UBlueprint> WeakBaseBlueprint = BaseBlueprint;
+    const TWeakObjectPtr<UBlueprint> WeakChildBlueprint = ChildBlueprint;
+    const TWeakObjectPtr<UBlueprint> WeakGrandchildBlueprint = GrandchildBlueprint;
+    const TWeakObjectPtr<UUnifiedScriptAsset> WeakScriptAsset = ScriptAsset;
+    bValid &= this->TestTrue(
+        TEXT("Unloads saved factory and inherited Blueprint packages"),
+        UPackageTools::UnloadPackages(PackagesToUnload));
+    bValid &= this->TestTrue(
+        TEXT("Unloading invalidates the four saved factory-owned assets"),
+        !WeakBaseBlueprint.IsValid() &&
+            !WeakChildBlueprint.IsValid() &&
+            !WeakGrandchildBlueprint.IsValid() &&
+            !WeakScriptAsset.IsValid());
+
+    UBlueprint* ReloadedBaseBlueprint = LoadObject<UBlueprint>(nullptr, *BaseObjectPath);
+    UBlueprint* ReloadedChildBlueprint = LoadObject<UBlueprint>(nullptr, *ChildObjectPath);
+    UBlueprint* ReloadedGrandchildBlueprint = LoadObject<UBlueprint>(nullptr, *GrandchildObjectPath);
+    UUnifiedScriptAsset* ReloadedScriptAsset = LoadObject<UUnifiedScriptAsset>(
+        nullptr,
+        *ScriptAssetObjectPath);
+    bValid &= this->TestNotNull(TEXT("Loads the saved factory Blueprint"), ReloadedBaseBlueprint);
+    bValid &= this->TestNotNull(TEXT("Loads the saved ordinary child Blueprint"), ReloadedChildBlueprint);
+    bValid &= this->TestNotNull(
+        TEXT("Loads the saved ordinary grandchild Blueprint"),
+        ReloadedGrandchildBlueprint);
+    bValid &= this->TestNotNull(TEXT("Loads the saved factory ScriptAsset"), ReloadedScriptAsset);
+    if (ReloadedBaseBlueprint != nullptr && ReloadedChildBlueprint != nullptr &&
+        ReloadedGrandchildBlueprint != nullptr && ReloadedScriptAsset != nullptr)
+    {
+        UUnifiedScriptComponent* ReloadedBaseComponent = GetActorScriptComponent(ReloadedBaseBlueprint);
+        UUnifiedScriptComponent* ReloadedChildComponent = GetActorScriptComponent(ReloadedChildBlueprint);
+        UUnifiedScriptComponent* ReloadedGrandchildComponent =
+            GetActorScriptComponent(ReloadedGrandchildBlueprint);
+        bValid &= VerifyActorComponentDefaults(
+            *this,
+            TEXT("Reloaded base CDO"),
+            ReloadedBaseBlueprint->GeneratedClass,
+            ReloadedBaseComponent,
+            ReloadedScriptAsset,
+            ExpectedStartAutomatically,
+            ExpectedTickAutomatically,
+            nullptr);
+        bValid &= VerifyActorComponentDefaults(
+            *this,
+            TEXT("Reloaded child CDO"),
+            ReloadedChildBlueprint->GeneratedClass,
+            ReloadedChildComponent,
+            ReloadedScriptAsset,
+            ExpectedStartAutomatically,
+            ExpectedTickAutomatically,
+            ReloadedBaseComponent);
+        bValid &= VerifyActorComponentDefaults(
+            *this,
+            TEXT("Reloaded grandchild CDO"),
+            ReloadedGrandchildBlueprint->GeneratedClass,
+            ReloadedGrandchildComponent,
+            ReloadedScriptAsset,
+            ExpectedStartAutomatically,
+            ExpectedTickAutomatically,
+            ReloadedChildComponent);
+        bValid &= this->TestTrue(
+            TEXT("Reloaded CDO components remain distinct"),
+            ReloadedBaseComponent != ReloadedChildComponent &&
+                ReloadedBaseComponent != ReloadedGrandchildComponent &&
+                ReloadedChildComponent != ReloadedGrandchildComponent);
+    }
+    return bValid && !HasAnyErrors();
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
