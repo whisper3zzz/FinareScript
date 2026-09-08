@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs",
+  "sourceDigest": "sha256:632435b22461439416d358bb4fa48b6961b03e9ba70d080f92c2af5dcc33d866",
+  "generation": 2,
+  "entries": [
+    {
+      "id": "us_10a75683ee2e261cd481b30879993d86",
+      "kind": "state",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture",
+      "role": "state",
+      "fingerprint": "sha256:8e72d1a1ebfd5d611f0f6efb1c89fbe0f28261e67cd03bced8bc0e160d26678f",
+      "shapeFingerprint": "sha256:8e72d1a1ebfd5d611f0f6efb1c89fbe0f28261e67cd03bced8bc0e160d26678f",
+      "parentFingerprint": "sha256:4483f16b1a0a847846e41842752e3733c9b73a930f2ca547197720efa5c5108b",
+      "anchor": {
+        "start": 946,
+        "length": 223
+      },
+      "contextBefore": "sha256:91d7372bec4d7d3a42f9cd59bd940db02379026c770b575ebed45851be9bc072",
+      "contextAfter": "sha256:a110a1d7ecb87e29842aa7dc9d9354e0f6142d1f9910aad55dbf25ce97fe65cf",
+      "generation": 1
+    },
+    {
+      "id": "us_1cb3b69ec477320f38e16f32ddde9525",
+      "kind": "state",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture",
+      "role": "state",
+      "fingerprint": "sha256:a3b35833a7ad51b5fc25fc59fcb53f1023e093c7dc8f52fa3e1d291bc2b40757",
+      "shapeFingerprint": "sha256:a3b35833a7ad51b5fc25fc59fcb53f1023e093c7dc8f52fa3e1d291bc2b40757",
+      "parentFingerprint": "sha256:4483f16b1a0a847846e41842752e3733c9b73a930f2ca547197720efa5c5108b",
+      "anchor": {
+        "start": 1175,
+        "length": 126
+      },
+      "contextBefore": "sha256:6dcdbb935c7a983a96d5c8d0845f3de80731a7d701a01312935908353728780c",
+      "contextAfter": "sha256:b88eab138d9f219def77ccb454cda380d3de2563cd452d150d301871ba9319df",
+      "generation": 1
+    },
+    {
+      "id": "us_39f019ea709ae161426abe32aa8601bf",
+      "kind": "state",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture",
+      "role": "state",
+      "fingerprint": "sha256:a3b35833a7ad51b5fc25fc59fcb53f1023e093c7dc8f52fa3e1d291bc2b40757",
+      "shapeFingerprint": "sha256:a3b35833a7ad51b5fc25fc59fcb53f1023e093c7dc8f52fa3e1d291bc2b40757",
+      "parentFingerprint": "sha256:4483f16b1a0a847846e41842752e3733c9b73a930f2ca547197720efa5c5108b",
+      "anchor": {
+        "start": 508,
+        "length": 119
+      },
+      "contextBefore": "sha256:584e64c0b328fc959be20ac7fdb0d485341c88393f66248fe0eabec30a74465d",
+      "contextAfter": "sha256:a110a1d7ecb87e29842aa7dc9d9354e0f6142d1f9910aad55dbf25ce97fe65cf",
+      "generation": 1
+    },
+    {
+      "id": "us_7d046f65a08ab3e8f034203311f89b8f",
+      "kind": "state",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture",
+      "role": "state",
+      "fingerprint": "sha256:04ec7e047764b53ff997ea1e51317902c2afd20634e84091e72535d3a78e5cb8",
+      "shapeFingerprint": "sha256:04ec7e047764b53ff997ea1e51317902c2afd20634e84091e72535d3a78e5cb8",
+      "parentFingerprint": "sha256:4483f16b1a0a847846e41842752e3733c9b73a930f2ca547197720efa5c5108b",
+      "anchor": {
+        "start": 780,
+        "length": 160
+      },
+      "contextBefore": "sha256:333ad229dba55c110e3b0f6d324e82ea5be9b83b8085fcc9242dbffeacfa1f03",
+      "contextAfter": "sha256:a110a1d7ecb87e29842aa7dc9d9354e0f6142d1f9910aad55dbf25ce97fe65cf",
+      "generation": 1
+    },
+    {
+      "id": "us_a5b69004e8c6192ca37d0dd45e9a6800",
+      "kind": "state",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture",
+      "role": "state",
+      "fingerprint": "sha256:f9f69fa42139c7871c9138a62b7303583be594b8a09b6fa978a254bf0bf0c66c",
+      "shapeFingerprint": "sha256:f9f69fa42139c7871c9138a62b7303583be594b8a09b6fa978a254bf0bf0c66c",
+      "parentFingerprint": "sha256:4483f16b1a0a847846e41842752e3733c9b73a930f2ca547197720efa5c5108b",
+      "anchor": {
+        "start": 633,
+        "length": 141
+      },
+      "contextBefore": "sha256:009b17144cfab2ce36fd0b14983348697c9a14a589833eb6a2f6e7ed776ec647",
+      "contextAfter": "sha256:a110a1d7ecb87e29842aa7dc9d9354e0f6142d1f9910aad55dbf25ce97fe65cf",
+      "generation": 1
+    }
+  ],
+  "tombstones": []
+}

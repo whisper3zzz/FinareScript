@@ -1042,6 +1042,23 @@ instances before BeginPlay and restores the active DLL afterward. Actor native
 subobject default inheritance remains C-3 work. Detailed evidence is in the
 [extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
+Prepare the separate inherited Actor state fixture with
+`tools/build-blueprint-inherited-state-fixture.ps1`, then run CMD Automation
+selector `UnifiedScript.Unreal.ScriptClass.InheritedActorStateRuntime`. Use
+Editor mode with `-NullRHI`; `-game` omits the Editor module that owns this test.
+The default config is
+`artifacts/m13-3c-3-inherited-runtime/fixture/BlueprintInheritedStateFixture.config.json`;
+`-UnifiedScriptInheritedStateFixture=<config>` selects another generated config.
+The builder's `-OutputRoot` stays below `artifacts` and is shared by build and
+emit. It references the already deployed managed host DLLs, so rebuilding the
+fixture after a local commit does not silently select a differently stamped
+host dependency. Its generated C# constant makes the compiled `GeneratedClassPath` match
+the GUID Blueprint fixture directory. It does not replace the staged managed
+host or fixed Demo assets. This fixture isolates inherited scalar/collection
+state, native component ownership and per-World lifecycle/reload checks; see the
+[inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md) for the
+current runtime and cook evidence.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

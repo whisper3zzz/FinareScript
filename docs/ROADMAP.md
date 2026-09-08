@@ -33,8 +33,11 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   and incompatible-type rejection. New scalar/collection fields reach existing
   descendants and instances; complete collection overrides survive base-default
   updates and package reload. New fields that collide with loaded descendants'
-  user variables are rejected before mutation. Continue with inherited managed
-  multi-World startup/reload and the affected cooked path. The bounded
+  user variables are rejected before mutation. Saved/reloaded Actor descendants
+  now start verified managed chunks, consume complete scalar/collection state,
+  retain component identity and reload independently in two Worlds; teardown
+  restores script, lifecycle-claim and World counts. Continue with the affected
+  cooked path, then the remaining class/asset-operation identity cases. The bounded
   entrypoint is `docs/plans/2026-09-08-blueprint-inherited-defaults.md`.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and

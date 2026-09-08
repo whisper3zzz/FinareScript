@@ -76,7 +76,8 @@ The production change rejects a newly declared state whose name collides with
 a loaded descendant's own user Blueprint variable, before either validation
 or apply can compile the original Blueprint. The rejection preserves generated
 class identities, hierarchy, variable GUID/name/value and package dirty flags.
-Inherited managed startup/reload and cooked execution remain outstanding.
+The native regression alone does not establish managed startup/reload or cooked
+execution; the separate runtime checkpoint below now covers the former.
 
 The factory uses public saved assets and calls `MarkBlueprintAsModified`, which
 refreshes Unreal's cached post-construction property list. The regression uses
@@ -125,7 +126,7 @@ saving, collects garbage after unload, and asserts all old weak references are
 invalid before reading the saved packages. The no-guard run is collision-defect
 evidence, not passing persistence evidence.
 
-The additional `CommonStateMaterialization` run fails during managed activation:
+An earlier `CommonStateMaterialization` run failed during managed activation:
 `CreateScriptWithBlueprintContract` cannot load `UnifiedScript.Unreal, Version=1.0.0.0`.
 See `common-state-cmd-final.log`. A read-only decode of the staged Demo chunk's
 DependencyManifest confirms that all six shared managed dependency SHA256 values
@@ -134,10 +135,75 @@ differ from the DLLs in `Binaries/Managed`. The Unreal DLL exists; its digest is
 chunk requires `1325cd60de53b2e814fb1962de86f2dad472e5e65c9069b3f83bed62600b992e`.
 The chunk load context verifies shared assemblies through
 `UnifiedScriptManagedDependencyCache.Verify`, which rejects differing digests.
-Rebuild and emit matching deployment artifacts before rerunning this test; do
-not change the manifest to bypass verification. The subsequent managed behavior
-assertions are not passing evidence. The native checkpoint changes no managed
-assembly or deployment and does not claim managed startup/reload coverage.
+At the recovery point, all six staged DLLs matched the Release host output. Running
+`tools/emit-unreal-demo-chunk.ps1 -EngineRoot D:/UE_5.8 -Configuration Release -SkipManagedBuild`
+restores the matching chunk and declaration without rebuilding or restaging the
+host. `CommonStateMaterialization` now passes with actual managed startup/reload;
+see `artifacts/m13-3c-3-inherited-runtime/emit-demo-release.log` and
+`common-state-cmd-release-chunk.log`. This confirms the deployment-identity cause
+of the earlier failure. It does not itself add inherited runtime coverage.
+
+For inherited runtime and cook coverage, use a separate managed test fixture
+with scalar and complete Array/Set/Map state. A generated C# constant binds its
+`GeneratedClassPath` attribute to the same GUID directory used by the native
+Blueprint fixture. Build and emit must consume that exact constant, keeping
+the compiled state-member path and the native class identity consistent. This
+avoids borrowing or overwriting fixed user Demo packages. Configure ownership
+only on the managed base's native ScriptComponent through the factory's normal
+CDO/Blueprint notification path; ordinary descendants and instances must inherit
+it. BeginPlay, native side effects, state flush, per-World reload and teardown
+must then run from the saved and reloaded Blueprint hierarchy.
+
+Compile this isolated fixture against the deployed managed host DLLs. A source
+`ProjectReference` rebuild changed all six dependency digests after the local
+commit: the staged Unreal DLL records informational version `1.0.0+16f51e2...`,
+while the rebuilt Release DLL records `1.0.0+2ce634b...`. The resulting fixture
+chunk correctly requires the rebuilt files and is rejected by the unchanged
+staged host (`inherited-state-cmd-2.log`). Referencing the deployed binaries
+keeps this fixture's compiler and runtime on the same dependency identities,
+without restaging the host, altering informational versions or weakening digest
+verification. Generated bindings remain the normal native call surface.
+
+Inherited Actor runtime checkpoint: `InheritedActorStateRuntime` passes with
+the isolated managed fixture built against those staged binaries. It saves,
+unloads and reloads three public Blueprint packages plus a separate Script Asset
+package before spawning the ordinary child and grandchild in two Game Worlds.
+The reloaded CDOs retain complete scalar/Array/Set/Map values and exact immediate
+component archetypes. Ownership is assigned only to the base; native Actor
+BeginPlay starts each inherited component from the verified fixture chunk.
+Managed code consumes the configured state through generated bindings, drives
+native Actor rotation, and flushes tick state back to reflected properties.
+Each World reloads independently with retained state and runtime identity;
+tearing down the first leaves the second active. Final teardown restores script,
+lifecycle-claim and managed World counts, and the test unloads and deletes its
+four owned assets. This reload uses the same chunk and tests state/configuration
+retention; changed managed bodies were verified separately in C-2.
+
+Evidence is under `artifacts/m13-3c-3-inherited-runtime`:
+
+- `fixture-build-8.log` — managed build, official declaration/chunk emission and
+  isolated publish succeed; the emitted stable identity sidecar is retained.
+- `editor-build-inherited-state-7.log` — the final native test compiles and links.
+- `inherited-state-cmd-5-ue.log` — `InheritedActorStateRuntime` reports Success
+  and `Automation Test Queue Empty 1 tests performed`, with actual chunk startup
+  in both Worlds and no test-event errors. Existing startup self-check messages
+  precede the selected test and are not counted as its failures.
+
+Only the builder's GUID/package case checks and generated identity sidecar were
+updated after that run; the tested C#/native runtime behavior is unchanged.
+Cooked execution and broader managed-class/asset-operation identity coverage
+remain open, so C-3 is not complete.
+
+The next cooked slice should retain the same four GUID-named packages only
+after the Editor runtime fixture succeeds. Put the fixture chunk, assembly and
+declaration in its own `Binaries/Managed/InheritedState/<fixtureId>` directory,
+and save `{PluginDir}` paths on the Script Asset. The existing Runtime module
+already stages `Binaries/Managed/...`; do not overwrite shared host DLLs or Demo
+programs. A receipt should identify the exact four packages and generated class
+paths. The packaged verifier must load cooked classes, consume the archived
+chunk and bundled hostfxr, exercise inherited state and component ownership in
+two Worlds, and check independent reload and teardown. Clean up only those
+owned source packages and fixture program files after archiving and execution.
 
 ## Relevant verification
 
