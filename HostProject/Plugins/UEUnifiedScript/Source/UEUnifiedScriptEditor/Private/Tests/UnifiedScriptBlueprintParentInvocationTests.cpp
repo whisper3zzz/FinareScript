@@ -7,6 +7,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IPluginManager.h"
@@ -1473,6 +1474,1057 @@ bool FUnifiedScriptBlueprintParentInvocationOwnershipTest::RunTest(const FString
         TEXT("Original owner resumes after ambiguity is removed"),
         Actor->ParentInvocationCount,
         CounterBeforeAmbiguous + 1);
+    return true;
+}
+
+namespace UE::UnifiedScript::BlueprintClass::LiveSyncTests
+{
+struct FLiveWorld
+{
+    UWorld* World = nullptr;
+    FWorldContext* WorldContext = nullptr;
+    AUnifiedScriptEventExtensionFixture* Actor = nullptr;
+    UUnifiedScriptComponent* Component = nullptr;
+    UUnifiedScriptWorldSubsystem* Host = nullptr;
+};
+
+bool RewriteEvaluateOverride(
+    const FString& Source,
+    const FString& DemoTypeName,
+    bool bRemoveOverride,
+    bool bLowercaseFunctionName,
+    const FString& ReplacementFunctionName,
+    FString& OutJson,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Source);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("Live Sync declaration is not valid JSON.");
+        return false;
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+    {
+        OutError = TEXT("Live Sync declaration has no assets array.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString QualifiedName;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+            !QualifiedName.Equals(DemoTypeName, ESearchCase::CaseSensitive))
+        {
+            continue;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+        if (!Asset->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
+        {
+            OutError = TEXT("Live Sync fixture asset has no functions array.");
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+        {
+            const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                ? FunctionValue->AsObject()
+                : nullptr;
+            FString Name;
+            if (!Function.IsValid() ||
+                !Function->TryGetStringField(TEXT("name"), Name) ||
+                !Name.Equals(TEXT("EvaluateInherited"), ESearchCase::CaseSensitive))
+            {
+                continue;
+            }
+            if (bRemoveOverride)
+            {
+                Function->RemoveField(TEXT("blueprintEvent"));
+            }
+            else if (bLowercaseFunctionName || !ReplacementFunctionName.IsEmpty())
+            {
+                const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+                const TSharedPtr<FJsonObject>* Override = nullptr;
+                if (!Function->TryGetObjectField(TEXT("blueprintEvent"), BlueprintEvent) ||
+                    BlueprintEvent == nullptr ||
+                    !(*BlueprintEvent)->TryGetObjectField(TEXT("override"), Override) ||
+                    Override == nullptr ||
+                    !Override->IsValid())
+                {
+                    OutError = TEXT("Live Sync fixture EvaluateInherited has no override object.");
+                    return false;
+                }
+                (*Override)->SetStringField(
+                    TEXT("functionName"),
+                    ReplacementFunctionName.IsEmpty()
+                        ? TEXT("evaluateInherited")
+                        : *ReplacementFunctionName);
+            }
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+            if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer))
+            {
+                OutError = TEXT("Could not serialize the live Sync declaration mutation.");
+                return false;
+            }
+            return true;
+        }
+    }
+    OutError = TEXT("Live Sync fixture asset does not contain EvaluateInherited.");
+    return false;
+}
+
+bool RewriteEvaluateParameter(
+    const FString& Source,
+    const FString& DemoTypeName,
+    int32 ParameterIndex,
+    const TCHAR* FieldName,
+    const FString& FieldValue,
+    FString& OutJson,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Source);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("Live Sync parameter declaration is not valid JSON.");
+        return false;
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+    {
+        OutError = TEXT("Live Sync parameter declaration has no assets array.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString QualifiedName;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+            !QualifiedName.Equals(DemoTypeName, ESearchCase::CaseSensitive))
+        {
+            continue;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+        if (!Asset->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
+        {
+            break;
+        }
+        for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+        {
+            const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                ? FunctionValue->AsObject()
+                : nullptr;
+            FString Name;
+            if (!Function.IsValid() ||
+                !Function->TryGetStringField(TEXT("name"), Name) ||
+                !Name.Equals(TEXT("EvaluateInherited"), ESearchCase::CaseSensitive))
+            {
+                continue;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+            if (!Function->TryGetArrayField(TEXT("parameters"), Parameters) ||
+                Parameters == nullptr || !Parameters->IsValidIndex(ParameterIndex))
+            {
+                OutError = TEXT("Live Sync EvaluateInherited parameter index is invalid.");
+                return false;
+            }
+            const TSharedPtr<FJsonObject> Parameter = (*Parameters)[ParameterIndex].IsValid()
+                ? (*Parameters)[ParameterIndex]->AsObject()
+                : nullptr;
+            if (!Parameter.IsValid())
+            {
+                OutError = TEXT("Live Sync EvaluateInherited parameter is not an object.");
+                return false;
+            }
+            Parameter->SetStringField(FieldName, FieldValue);
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+            return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+        }
+    }
+    OutError = TEXT("Live Sync fixture asset does not contain EvaluateInherited parameters.");
+    return false;
+}
+
+bool AppendEvaluateAlternateOverride(
+    const FString& Source,
+    const FString& DemoTypeName,
+    FString& OutJson,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Source);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("Live Sync addition declaration is not valid JSON.");
+        return false;
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+    {
+        OutError = TEXT("Live Sync addition declaration has no assets array.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString QualifiedName;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+            !QualifiedName.Equals(DemoTypeName, ESearchCase::CaseSensitive))
+        {
+            continue;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+        if (!Asset->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
+        {
+            OutError = TEXT("Live Sync addition fixture has no functions array.");
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+        {
+            const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                ? FunctionValue->AsObject()
+                : nullptr;
+            FString Name;
+            if (!Function.IsValid() ||
+                !Function->TryGetStringField(TEXT("name"), Name) ||
+                !Name.Equals(TEXT("EvaluateInherited"), ESearchCase::CaseSensitive))
+            {
+                continue;
+            }
+            TSharedPtr<FJsonObject> Added = MakeShared<FJsonObject>(*Function);
+            Added->SetStringField(TEXT("id"), TEXT("us_11111111111111111111111111111111"));
+            Added->SetStringField(TEXT("name"), TEXT("EvaluateAlternate"));
+            Added->SetStringField(
+                TEXT("qualifiedName"),
+                TEXT("UnifiedScript.Unreal.Demo.BlueprintParentInvocationDemoScript.EvaluateAlternate(System.Int32,ref System.Int32,out System.Int32)"));
+            const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+            if (!Function->TryGetArrayField(TEXT("parameters"), Parameters) ||
+                Parameters == nullptr || Parameters->Num() != 3)
+            {
+                OutError = TEXT("Live Sync addition source has an unexpected parameter list.");
+                return false;
+            }
+            TArray<TSharedPtr<FJsonValue>> NewParameters;
+            NewParameters.Reserve(Parameters->Num());
+            const TCHAR* ParameterIds[] = {
+                TEXT("us_22222222222222222222222222222222"),
+                TEXT("us_33333333333333333333333333333333"),
+                TEXT("us_44444444444444444444444444444444")};
+            for (int32 Index = 0; Index < Parameters->Num(); ++Index)
+            {
+                const TSharedPtr<FJsonObject> SourceParameter = (*Parameters)[Index].IsValid()
+                    ? (*Parameters)[Index]->AsObject()
+                    : nullptr;
+                if (!SourceParameter.IsValid())
+                {
+                    OutError = TEXT("Live Sync addition parameter is not an object.");
+                    return false;
+                }
+                TSharedPtr<FJsonObject> Parameter = MakeShared<FJsonObject>(*SourceParameter);
+                Parameter->SetStringField(TEXT("id"), ParameterIds[Index]);
+                NewParameters.Add(MakeShared<FJsonValueObject>(Parameter));
+            }
+            Added->SetArrayField(TEXT("parameters"), MoveTemp(NewParameters));
+
+            const TSharedPtr<FJsonObject>* BlueprintEvent = nullptr;
+            const TSharedPtr<FJsonObject>* Override = nullptr;
+            if (!Function->TryGetObjectField(TEXT("blueprintEvent"), BlueprintEvent) ||
+                BlueprintEvent == nullptr ||
+                !(*BlueprintEvent)->TryGetObjectField(TEXT("override"), Override) ||
+                Override == nullptr || !Override->IsValid())
+            {
+                OutError = TEXT("Live Sync addition source has no override metadata.");
+                return false;
+            }
+            TSharedPtr<FJsonObject> NewBlueprintEvent =
+                MakeShared<FJsonObject>(**BlueprintEvent);
+            TSharedPtr<FJsonObject> NewOverride = MakeShared<FJsonObject>(**Override);
+            NewOverride->SetStringField(TEXT("functionName"), TEXT("EvaluateInheritedAlternate"));
+            NewBlueprintEvent->SetObjectField(TEXT("override"), NewOverride);
+            Added->SetObjectField(TEXT("blueprintEvent"), NewBlueprintEvent);
+
+            TArray<TSharedPtr<FJsonValue>> NewFunctions = *Functions;
+            NewFunctions.Add(MakeShared<FJsonValueObject>(Added));
+            Asset->SetArrayField(TEXT("functions"), MoveTemp(NewFunctions));
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+            return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+        }
+    }
+    OutError = TEXT("Live Sync addition fixture asset does not contain EvaluateInherited.");
+    return false;
+}
+
+bool RewriteEvaluateManagedName(
+    const FString& Source,
+    const FString& DemoTypeName,
+    FString& OutJson,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Source);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("Live Sync managed-name declaration is not valid JSON.");
+        return false;
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+    {
+        OutError = TEXT("Live Sync managed-name declaration has no assets array.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString QualifiedName;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetStringField(TEXT("qualifiedName"), QualifiedName) ||
+            !QualifiedName.Equals(DemoTypeName, ESearchCase::CaseSensitive))
+        {
+            continue;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+        if (!Asset->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
+        {
+            break;
+        }
+        for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+        {
+            const TSharedPtr<FJsonObject> Function = FunctionValue.IsValid()
+                ? FunctionValue->AsObject()
+                : nullptr;
+            FString Name;
+            if (!Function.IsValid() ||
+                !Function->TryGetStringField(TEXT("name"), Name) ||
+                !Name.Equals(TEXT("EvaluateInherited"), ESearchCase::CaseSensitive))
+            {
+                continue;
+            }
+            Function->SetStringField(TEXT("name"), TEXT("evaluateInherited"));
+            Function->SetStringField(
+                TEXT("qualifiedName"),
+                TEXT("UnifiedScript.Unreal.Demo.BlueprintParentInvocationDemoScript.evaluateInherited(System.Int32,ref System.Int32,out System.Int32)"));
+            const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+            return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer);
+        }
+    }
+    OutError = TEXT("Live Sync fixture asset does not contain EvaluateInherited.");
+    return false;
+}
+
+bool StartLiveWorld(
+    UUnifiedScriptBlueprintGeneratedClass& GeneratedClass,
+    UUnifiedScriptAsset& ScriptAsset,
+    FLiveWorld& OutWorld,
+    FString& OutError)
+{
+    OutWorld.World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (OutWorld.World == nullptr)
+    {
+        OutError = TEXT("Could not create a live Sync test World.");
+        return false;
+    }
+    OutWorld.World->AddToRoot();
+    if (GEngine != nullptr)
+    {
+        OutWorld.WorldContext = &GEngine->CreateNewWorldContext(EWorldType::Game);
+        OutWorld.WorldContext->SetCurrentWorld(OutWorld.World);
+    }
+    OutWorld.World->InitializeActorsForPlay(FURL());
+    OutWorld.Actor = OutWorld.World->SpawnActor<AUnifiedScriptEventExtensionFixture>(
+        &GeneratedClass);
+    OutWorld.Component = OutWorld.Actor != nullptr
+        ? OutWorld.Actor->GetUnifiedScriptComponent()
+        : nullptr;
+    OutWorld.Host = OutWorld.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (OutWorld.Actor == nullptr || OutWorld.Component == nullptr || OutWorld.Host == nullptr)
+    {
+        OutError = TEXT("Live Sync test World could not create its Actor, Component, or host.");
+        return false;
+    }
+    OutWorld.Component->ScriptAsset = &ScriptAsset;
+    OutWorld.Component->bStartAutomatically = false;
+    OutWorld.Component->BeginPlay();
+    if (!OutWorld.Component->StartScript())
+    {
+        OutError = OutWorld.Component->LastScriptError;
+        return false;
+    }
+    return true;
+}
+
+void StopLiveWorld(FLiveWorld& LiveWorld)
+{
+    if (LiveWorld.Component != nullptr)
+    {
+        LiveWorld.Component->StopScript();
+    }
+}
+
+void DestroyLiveWorld(FLiveWorld& LiveWorld)
+{
+    if (LiveWorld.Component != nullptr)
+    {
+        if (LiveWorld.Component->HasBegunPlay())
+        {
+            LiveWorld.Component->EndPlay(EEndPlayReason::Destroyed);
+        }
+        LiveWorld.Component = nullptr;
+    }
+    if (LiveWorld.Actor != nullptr && !LiveWorld.Actor->IsActorBeingDestroyed())
+    {
+        LiveWorld.Actor->Destroy();
+        LiveWorld.Actor = nullptr;
+    }
+    if (LiveWorld.WorldContext != nullptr && GEngine != nullptr)
+    {
+        GEngine->DestroyWorldContext(LiveWorld.World);
+        LiveWorld.WorldContext = nullptr;
+    }
+    if (LiveWorld.World != nullptr)
+    {
+        LiveWorld.World->RemoveFromRoot();
+        LiveWorld.World->DestroyWorld(false);
+        LiveWorld.World = nullptr;
+    }
+    LiveWorld.Host = nullptr;
+}
+
+void RefreshLiveWorldAfterBlueprintReinstance(FLiveWorld& LiveWorld)
+{
+    if (LiveWorld.World == nullptr)
+    {
+        return;
+    }
+    LiveWorld.Actor = nullptr;
+    for (TActorIterator<AUnifiedScriptEventExtensionFixture> It(LiveWorld.World); It; ++It)
+    {
+        LiveWorld.Actor = *It;
+        break;
+    }
+    LiveWorld.Component = LiveWorld.Actor != nullptr
+        ? LiveWorld.Actor->GetUnifiedScriptComponent()
+        : nullptr;
+    LiveWorld.Host = LiveWorld.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+}
+
+bool InvokeEvaluate(
+    FLiveWorld& LiveWorld,
+    UFunction& Evaluate,
+    int32 Input,
+    int32 Accumulator,
+    int32& OutReturn)
+{
+    const FProperty* NativeInput = FindFProperty<FProperty>(&Evaluate, TEXT("NativeInput"));
+    const FProperty* NativeAccumulator = FindFProperty<FProperty>(
+        &Evaluate,
+        TEXT("NativeAccumulator"));
+    const FProperty* ReturnValue = Evaluate.GetReturnProperty();
+    if (NativeInput == nullptr || NativeAccumulator == nullptr || ReturnValue == nullptr ||
+        CastField<FIntProperty>(NativeInput) == nullptr ||
+        CastField<FIntProperty>(NativeAccumulator) == nullptr ||
+        CastField<FIntProperty>(ReturnValue) == nullptr)
+    {
+        return false;
+    }
+    FStructOnScope Call(&Evaluate);
+    UE::UnifiedScript::BlueprintClass::ParentInvocationTests::SetInt(
+        *NativeInput,
+        Call.GetStructMemory(),
+        Input);
+    UE::UnifiedScript::BlueprintClass::ParentInvocationTests::SetInt(
+        *NativeAccumulator,
+        Call.GetStructMemory(),
+        Accumulator);
+    LiveWorld.Actor->ProcessEvent(&Evaluate, Call.GetStructMemory());
+    OutReturn = UE::UnifiedScript::BlueprintClass::ParentInvocationTests::GetInt(
+        *ReturnValue,
+        Call.GetStructMemory());
+    return true;
+}
+} // namespace UE::UnifiedScript::BlueprintClass::LiveSyncTests
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintOverrideLiveSyncTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintOverrideLiveSync",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintOverrideLiveSyncTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::ParentInvocationTests;
+    using namespace UE::UnifiedScript::BlueprintClass::LiveSyncTests;
+
+    const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    if (!TestNotNull(TEXT("UEUnifiedScript plugin is installed"), Plugin.Get()))
+    {
+        return false;
+    }
+    const FString DemoDirectory = FPaths::Combine(
+        Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"));
+    const FString DeclarationPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.asset.json"));
+    const FString ChunkPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.uschunk"));
+    const FString AssemblyPath = FPaths::Combine(
+        DemoDirectory, TEXT("UnifiedScript.Unreal.Demo.dll"));
+    FString Declaration;
+    if (!TestTrue(TEXT("Live Sync declaration is staged"),
+            FFileHelper::LoadFileToString(Declaration, *DeclarationPath)) ||
+        !TestTrue(TEXT("Live Sync chunk is staged"), IFileManager::Get().FileExists(*ChunkPath)) ||
+        !TestTrue(TEXT("Live Sync assembly is staged"), IFileManager::Get().FileExists(*AssemblyPath)))
+    {
+        return false;
+    }
+
+    const FString DemoTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.BlueprintParentInvocationDemoScript");
+    FDemoAsset DemoAsset;
+    FString Error;
+    if (!TestTrue(TEXT("Live Sync fixture identity is present"),
+            ReadDemoAsset(Declaration, DemoTypeName, DemoAsset, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    FString RemovedRouteDeclaration;
+    FString LowercaseRouteDeclaration;
+    FString RetargetedRouteDeclaration;
+    FString LowercaseManagedNameDeclaration;
+    FString PrimitiveMismatchDeclaration;
+    FString DirectionMismatchDeclaration;
+    FString AdditionDeclaration;
+    if (!TestTrue(TEXT("Live Sync removal declaration is generated"),
+            RewriteEvaluateOverride(
+                Declaration,
+                DemoTypeName,
+                true,
+                false,
+                FString(),
+                RemovedRouteDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync case-only route declaration is generated"),
+            RewriteEvaluateOverride(
+                Declaration,
+                DemoTypeName,
+                false,
+                true,
+                FString(),
+                LowercaseRouteDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync retarget declaration is generated"),
+            RewriteEvaluateOverride(
+                Declaration,
+                DemoTypeName,
+                false,
+                false,
+                TEXT("EvaluateInheritedAlternate"),
+                RetargetedRouteDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync managed-name declaration is generated"),
+            RewriteEvaluateManagedName(
+                Declaration,
+                DemoTypeName,
+                LowercaseManagedNameDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync primitive mismatch declaration is generated"),
+            RewriteEvaluateParameter(
+                Declaration,
+                DemoTypeName,
+                0,
+                TEXT("typeMetadataName"),
+                TEXT("System.String"),
+                PrimitiveMismatchDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync direction mismatch declaration is generated"),
+            RewriteEvaluateParameter(
+                Declaration,
+                DemoTypeName,
+                1,
+                TEXT("direction"),
+                TEXT("output"),
+                DirectionMismatchDeclaration,
+                Error)) ||
+        !TestTrue(TEXT("Live Sync addition declaration is generated"),
+            AppendEvaluateAlternateOverride(
+                Declaration,
+                DemoTypeName,
+                AdditionDeclaration,
+                Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString PackageName = TEXT("/Game/UnifiedScriptOverrideLiveSync_") + Suffix;
+    const FString AssetName = TEXT("BP_UnifiedScriptOverrideLiveSync_") + Suffix;
+    const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+        PackageName,
+        FPackageName::GetAssetPackageExtension());
+    UPackage* Package = nullptr;
+    UUnifiedScriptBlueprint* Blueprint = CreateBlueprint(PackageName, AssetName, Package);
+    UUnifiedScriptAsset* ScriptAsset = Blueprint != nullptr
+        ? AttachScriptAsset(*Blueprint, DemoAsset, ChunkPath, AssemblyPath, DeclarationPath)
+        : nullptr;
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClass = nullptr;
+    FLiveWorld First;
+    FLiveWorld Second;
+    UPackage* OtherPackage = nullptr;
+    FString OtherPackageFilename;
+    UUnifiedScriptBlueprint* OtherBlueprint = nullptr;
+    UUnifiedScriptAsset* OtherScriptAsset = nullptr;
+    FLiveWorld Other;
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+
+    ON_SCOPE_EXIT
+    {
+        DestroyLiveWorld(Other);
+        DestroyLiveWorld(Second);
+        DestroyLiveWorld(First);
+        OtherBlueprint = nullptr;
+        Blueprint = nullptr;
+        if (OtherPackage != nullptr || Package != nullptr)
+        {
+            TArray<UPackage*> Packages;
+            if (OtherPackage != nullptr)
+            {
+                OtherPackage->SetDirtyFlag(false);
+                Packages.Add(OtherPackage);
+            }
+            if (Package != nullptr)
+            {
+                Package->SetDirtyFlag(false);
+                Packages.Add(Package);
+            }
+            UPackageTools::UnloadPackages(Packages);
+            OtherPackage = nullptr;
+            Package = nullptr;
+        }
+        IFileManager::Get().Delete(*PackageFilename, false, true, true);
+        if (!OtherPackageFilename.IsEmpty())
+        {
+            IFileManager::Get().Delete(*OtherPackageFilename, false, true, true);
+        }
+        TestEqual(
+            TEXT("Live Sync cleanup releases managed Worlds"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialManagedWorldCount);
+    };
+
+    if (!TestNotNull(TEXT("Live Sync Blueprint is created"), Blueprint) ||
+        !TestNotNull(TEXT("Live Sync Script Asset is attached"), ScriptAsset))
+    {
+        return false;
+    }
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!TestTrue(TEXT("Live Sync initial declaration materializes"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset, *Blueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    UFunction* Evaluate = GeneratedClass != nullptr
+        ? GeneratedClass->FindFunctionByName(
+            TEXT("EvaluateInherited"), EIncludeSuperFlag::ExcludeSuper)
+        : nullptr;
+    if (!TestNotNull(TEXT("Live Sync generated class exists"), GeneratedClass) ||
+        !TestNotNull(TEXT("Live Sync EvaluateInherited exists"), Evaluate) ||
+        !TestTrue(TEXT("Live Sync generated class has the initial route"),
+            GeneratedClass->IsManagedFunctionBound(TEXT("EvaluateInherited"))))
+    {
+        return false;
+    }
+
+    Error.Reset();
+    if (!TestTrue(TEXT("First live World starts"),
+            StartLiveWorld(*GeneratedClass, *ScriptAsset, First, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    Error.Reset();
+    if (!TestTrue(TEXT("Second live World starts"),
+            StartLiveWorld(*GeneratedClass, *ScriptAsset, Second, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    // A byte-for-byte same contract is an idempotent no-change operation even
+    // while both Worlds own the exact generated class.
+    Error.Reset();
+    TestTrue(TEXT("Same override contract is idempotent with active Worlds"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset, *Blueprint, Declaration, false, SyncResult, Error));
+    TestTrue(TEXT("Idempotent live Sync has no diagnostic"), Error.IsEmpty());
+
+    FString ActiveContractBefore;
+    FString ActiveContractError;
+    TestTrue(TEXT("Active owner has a readable persisted override contract before rejection"),
+        GeneratedClass->BuildBlueprintOverrideActivationContract(
+            ActiveContractBefore,
+            ActiveContractError));
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClassBeforeRejected = GeneratedClass;
+    const TArray<UEdGraph*> FunctionGraphsBeforeRejected = Blueprint->FunctionGraphs;
+    const FString FirstGenerationBeforeRejected = First.Component->ActiveGeneration;
+    const FString SecondGenerationBeforeRejected = Second.Component->ActiveGeneration;
+    const int32 FirstManagedScriptsBeforeRejected = First.Host->GetManagedScriptCount();
+    const int32 SecondManagedScriptsBeforeRejected = Second.Host->GetManagedScriptCount();
+    const int32 FirstRegisteredObjectsBeforeRejected = First.Host->NumRegisteredObjects();
+    const int32 SecondRegisteredObjectsBeforeRejected = Second.Host->NumRegisteredObjects();
+    const int32 FirstLifecycleClaimsBeforeRejected = First.Host->GetGameplayLifecycleClaimCount();
+    const int32 SecondLifecycleClaimsBeforeRejected = Second.Host->GetGameplayLifecycleClaimCount();
+    auto VerifyRejectedState = [this, &Blueprint, &First, &Second, GeneratedClassBeforeRejected,
+        &FunctionGraphsBeforeRejected, &ActiveContractBefore, &ActiveContractError,
+        FirstGenerationBeforeRejected, SecondGenerationBeforeRejected,
+        FirstManagedScriptsBeforeRejected, SecondManagedScriptsBeforeRejected,
+        FirstRegisteredObjectsBeforeRejected, SecondRegisteredObjectsBeforeRejected,
+        FirstLifecycleClaimsBeforeRejected, SecondLifecycleClaimsBeforeRejected](
+        const TCHAR* Label)
+    {
+        TestTrue(
+            *FString::Printf(TEXT("%s keeps the generated class"), Label),
+            Blueprint->GeneratedClass == GeneratedClassBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps the function graph count"), Label),
+            Blueprint->FunctionGraphs.Num(),
+            FunctionGraphsBeforeRejected.Num());
+        const int32 GraphCount = FMath::Min(
+            Blueprint->FunctionGraphs.Num(),
+            FunctionGraphsBeforeRejected.Num());
+        for (int32 Index = 0; Index < GraphCount; ++Index)
+        {
+            TestTrue(
+                *FString::Printf(TEXT("%s keeps function graph %d"), Label, Index),
+                Blueprint->FunctionGraphs[Index] == FunctionGraphsBeforeRejected[Index]);
+        }
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps First ActiveGeneration"), Label),
+            First.Component->ActiveGeneration,
+            FirstGenerationBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps Second ActiveGeneration"), Label),
+            Second.Component->ActiveGeneration,
+            SecondGenerationBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps First managed script count"), Label),
+            First.Host->GetManagedScriptCount(),
+            FirstManagedScriptsBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps Second managed script count"), Label),
+            Second.Host->GetManagedScriptCount(),
+            SecondManagedScriptsBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps First registered object count"), Label),
+            First.Host->NumRegisteredObjects(),
+            FirstRegisteredObjectsBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps Second registered object count"), Label),
+            Second.Host->NumRegisteredObjects(),
+            SecondRegisteredObjectsBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps First lifecycle claim count"), Label),
+            First.Host->GetGameplayLifecycleClaimCount(),
+            FirstLifecycleClaimsBeforeRejected);
+        TestEqual(
+            *FString::Printf(TEXT("%s keeps Second lifecycle claim count"), Label),
+            Second.Host->GetGameplayLifecycleClaimCount(),
+            SecondLifecycleClaimsBeforeRejected);
+        FString ContractAfter;
+        FString ContractError;
+        TestTrue(
+            *FString::Printf(TEXT("%s keeps the activation contract"), Label),
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass)
+                    ->BuildBlueprintOverrideActivationContract(ContractAfter, ContractError) &&
+                ContractAfter.Equals(ActiveContractBefore, ESearchCase::CaseSensitive));
+    };
+
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects a valid same-signature retarget while active"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            RetargetedRouteDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Retarget rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Retarget diagnostic names both routes and recovery"),
+        Error.Contains(TEXT("EvaluateInheritedAlternate")) &&
+            Error.Contains(TEXT("EvaluateInherited")) &&
+            Error.Contains(TEXT("Stop the affected instance")));
+
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects override removal in validate-only mode"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            RemovedRouteDeclaration,
+            true,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Removal rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Removal diagnostic names the class, route, and recovery"),
+        Error.Contains(Blueprint->GetPathName()) &&
+            Error.Contains(TEXT("EvaluateInherited")) &&
+            Error.Contains(TEXT("Stop the affected instance")) &&
+            Error.Contains(TEXT("synchronize the Script Class")) &&
+            Error.Contains(TEXT("restart")));
+
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects case-only route change while active"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            LowercaseRouteDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Case-only route rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Case-only route rejection remains actionable"),
+        Error.Contains(TEXT("evaluateInherited")) &&
+            Error.Contains(TEXT("Stop the affected instance")));
+    FString OriginalRoute;
+    if (const FUnifiedScriptManagedFunctionBinding* Binding =
+            GeneratedClass->ManagedFunctionBindings.Find(TEXT("EvaluateInherited")))
+    {
+        OriginalRoute = Binding->BlueprintOverrideFunctionName;
+        TestTrue(TEXT("Active rejection preserves the raw route spelling"),
+            OriginalRoute.Equals(TEXT("EvaluateInherited"), ESearchCase::CaseSensitive));
+    }
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects managed-name case changes"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            LowercaseManagedNameDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Managed-name rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Managed-name case diagnostic is actionable"),
+        Error.Contains(TEXT("EvaluateInherited")) &&
+            Error.Contains(TEXT("managed method identity")));
+    VerifyRejectedState(TEXT("Managed-name rejection"));
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects an added override route"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            AdditionDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Addition rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Added-route diagnostic is actionable"),
+        Error.Contains(TEXT("EvaluateInheritedAlternate")) &&
+            Error.Contains(TEXT("was added")));
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects a primitive override shape change"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            PrimitiveMismatchDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Primitive mismatch rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Primitive mismatch is rejected before the live guard"),
+        Error.Contains(TEXT("NativeInput")) || Error.Contains(TEXT("parameter")));
+    Error.Reset();
+    SyncResult = FUnifiedScriptBlueprintClassSyncResult{};
+    TestFalse(TEXT("Live Sync rejects an override direction change"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            DirectionMismatchDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestFalse(TEXT("Direction mismatch rejection reports no change"), SyncResult.bChanged);
+    TestTrue(TEXT("Direction mismatch is rejected before the live guard"),
+        Error.Contains(TEXT("NativeAccumulator")) || Error.Contains(TEXT("parameter")));
+    VerifyRejectedState(TEXT("Final live rejection"));
+
+    int32 FirstActiveReturn = 0;
+    int32 SecondActiveReturn = 0;
+    TestTrue(TEXT("First active instance remains callable before rejected Sync"),
+        InvokeEvaluate(First, *Evaluate, 3, 4, FirstActiveReturn));
+    TestTrue(TEXT("Second active instance remains callable before rejected Sync"),
+        InvokeEvaluate(Second, *Evaluate, 4, 5, SecondActiveReturn));
+    TestEqual(TEXT("First active instance keeps its parent result before rejection"), FirstActiveReturn, 7);
+    TestEqual(TEXT("Second active instance keeps its parent result before rejection"), SecondActiveReturn, 9);
+
+    StopLiveWorld(First);
+    Error.Reset();
+    TestFalse(TEXT("One remaining World still blocks route change"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            LowercaseRouteDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestTrue(TEXT("Remaining World route diagnostic is actionable"),
+        Error.Contains(TEXT("evaluateInherited")) &&
+            Error.Contains(TEXT("restart")));
+    int32 SecondAfterRejection = 0;
+    TestTrue(TEXT("Remaining active instance stays callable after rejected Sync"),
+        InvokeEvaluate(Second, *Evaluate, 4, 5, SecondAfterRejection));
+    TestEqual(TEXT("Remaining active instance keeps its parent result"), SecondAfterRejection, 9);
+    FString ActiveContractAfter;
+    TestTrue(TEXT("Rejected live Sync leaves the activation contract unchanged"),
+        GeneratedClass->BuildBlueprintOverrideActivationContract(
+            ActiveContractAfter,
+            ActiveContractError) &&
+            ActiveContractAfter.Equals(ActiveContractBefore, ESearchCase::CaseSensitive));
+
+    StopLiveWorld(Second);
+    // SynchronizeJson may reinstance the generated class while applying the
+    // stopped-only change.  Tear down the stopped actors before that compile;
+    // a fresh World below will exercise the restored declaration through the
+    // new exact generated class rather than retaining a stale component class.
+    DestroyLiveWorld(First);
+    DestroyLiveWorld(Second);
+    Error.Reset();
+    TestTrue(TEXT("Stopped exact owners permit route spelling update"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            LowercaseRouteDeclaration,
+            false,
+            SyncResult,
+            Error));
+    GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    const FUnifiedScriptManagedFunctionBinding* LowercaseBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(TEXT("EvaluateInherited"));
+    TestTrue(TEXT("Stopped update persists raw route spelling case-sensitively"),
+        LowercaseBinding != nullptr &&
+            LowercaseBinding->BlueprintOverrideFunctionName.Equals(
+                TEXT("evaluateInherited"), ESearchCase::CaseSensitive));
+
+    Error.Reset();
+    TestTrue(TEXT("Original route can be restored before restart"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            Declaration,
+            false,
+            SyncResult,
+            Error));
+    GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    Evaluate = GeneratedClass != nullptr
+        ? GeneratedClass->FindFunctionByName(
+            TEXT("EvaluateInherited"), EIncludeSuperFlag::ExcludeSuper)
+        : nullptr;
+    const FUnifiedScriptManagedFunctionBinding* RestoredBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(TEXT("EvaluateInherited"));
+    TestTrue(TEXT("Restored route uses exact original spelling"),
+        RestoredBinding != nullptr &&
+            RestoredBinding->BlueprintOverrideFunctionName.Equals(
+                TEXT("EvaluateInherited"), ESearchCase::CaseSensitive));
+
+    Error.Reset();
+    TestTrue(TEXT("Stopped first World restarts after contract restore"),
+        StartLiveWorld(*GeneratedClass, *ScriptAsset, First, Error));
+    int32 ReturnValue = 0;
+    TestTrue(TEXT("Restarted managed instance still executes its parent route"),
+        Evaluate != nullptr && InvokeEvaluate(First, *Evaluate, 3, 4, ReturnValue));
+    TestEqual(TEXT("Restored route keeps parent result"), ReturnValue, 7);
+
+    // A different generated class may stay active while this exact class is
+    // stopped; it must not participate in the live owner barrier.
+    const FString OtherPackageName = TEXT("/Game/UnifiedScriptOverrideLiveSyncOther_") + Suffix;
+    OtherBlueprint = CreateBlueprint(
+        OtherPackageName,
+        TEXT("BP_UnifiedScriptOverrideLiveSyncOther_") + Suffix,
+        OtherPackage);
+    OtherPackageFilename = FPackageName::LongPackageNameToFilename(
+        OtherPackageName,
+        FPackageName::GetAssetPackageExtension());
+    OtherScriptAsset = OtherBlueprint != nullptr
+        ? AttachScriptAsset(
+            *OtherBlueprint,
+            DemoAsset,
+            ChunkPath,
+            AssemblyPath,
+            DeclarationPath)
+        : nullptr;
+    if (!TestNotNull(TEXT("Different exact-class Blueprint is created"), OtherBlueprint) ||
+        !TestNotNull(TEXT("Different exact-class Script Asset is attached"), OtherScriptAsset))
+    {
+        return false;
+    }
+    Error.Reset();
+    if (!TestTrue(TEXT("Different exact-class declaration materializes"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *OtherScriptAsset,
+                *OtherBlueprint,
+                Declaration,
+                false,
+                SyncResult,
+                Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    UUnifiedScriptBlueprintGeneratedClass* OtherGeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(OtherBlueprint->GeneratedClass);
+    if (!TestNotNull(TEXT("Different exact-class generated class exists"), OtherGeneratedClass))
+    {
+        return false;
+    }
+    Error.Reset();
+    if (!TestTrue(TEXT("Different exact-class World starts"),
+            StartLiveWorld(*OtherGeneratedClass, *OtherScriptAsset, Other, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    StopLiveWorld(First);
+    Error.Reset();
+    TestTrue(TEXT("Other exact-class active World does not block target Sync"),
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *Blueprint,
+            LowercaseRouteDeclaration,
+            false,
+            SyncResult,
+            Error));
+    TestTrue(TEXT("Other exact-class Sync has no live-owner diagnostic"), Error.IsEmpty());
+    RefreshLiveWorldAfterBlueprintReinstance(First);
+    GeneratedClass = Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    TestNotNull(TEXT("Stopped target Actor survives unrelated-class Sync"), First.Actor);
+    TestNotNull(TEXT("Stopped target component is refreshed after reinstance"), First.Component);
+    FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *Blueprint,
+        Declaration,
+        false,
+        SyncResult,
+        Error);
+    RefreshLiveWorldAfterBlueprintReinstance(First);
     return true;
 }
 

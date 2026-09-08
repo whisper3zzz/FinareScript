@@ -37,8 +37,12 @@ synchronizing its Script Class and restarting it. Startup compares the loaded
 DLL with the exact generated class's persisted routes and reflected value
 shapes before executing the managed constructor. An empty saved override set
 also rejects unexpected new overrides. The same immutable expectation applies
-to reload candidates. Live synchronization protection and lifecycle integration
-remain part of the active
+to reload candidates. Synchronization checks active owners of the exact generated
+class across Worlds before planning any changes, including validation-only
+requests. A changed override set is rejected while any such owner remains
+active. Stopped instances and other generated classes do not block it.
+Managed names and raw route strings are case-sensitive; native parameter and
+field names retain FName semantics. Lifecycle integration remains part of the active
 [event-extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Container and Soft Reference function declarations

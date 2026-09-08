@@ -1,6 +1,6 @@
 # UnifiedScript product roadmap
 
-Last reviewed: **2026-09-07**
+Last reviewed: **2026-09-08**
 
 This document owns current priorities, capability boundaries, and delivery
 order. Detailed implementation logs and earlier acceptance results live in
@@ -39,9 +39,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   ownership and rejection before parent execution. Startup now compares the
   saved generated-class contract with the loaded DLL before constructor or
   lifecycle execution; reload candidates retain the same immutable expectation.
-  Live Sync protection, UE lifecycle ordering and broader runtime/cooked
-  extension proof remain open. These checkpoints do not complete
-  extension behavior.
+  Live Sync now rejects override contract changes before mutation while any
+  exact-class owner remains active across Worlds, including validation-only
+  requests. Focused execution covers rejection without disturbing the active
+  instances, stopped synchronization and restart, and other-class isolation.
+  UE lifecycle ordering and broader runtime/cooked extension proof remain open.
+  These checkpoints do not complete extension behavior.
   The active cross-module design and handoff are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary

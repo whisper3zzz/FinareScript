@@ -145,6 +145,20 @@ start must still finish the native lifecycle path and roll back its candidate.
 Test this in runtime integration; materialization alone does not establish
 lifecycle-event support.
 
+Before activation, select the configured Script Asset (including the
+`ScriptAssetPath` configuration route) and verify that its exact generated class
+owns the component receiver. Do not use the active-owner helper before an
+instance is published. At EndPlay, use the active Script Asset's exact owner so
+an edited configuration does not change the running instance's shutdown order.
+Exercise actual native BeginPlay/EndPlay and ordinary Blueprint children; the
+existing manual ReceiveTick fixture is not evidence for lifecycle ordering.
+
+The typed EndPlay argument must come from generated Unreal reflection bindings.
+The current selected binding surface has no `EEndPlayReason` declaration. Resolve
+that dependency through the exporter and API contract before adding the managed
+lifecycle fixture; do not hand-author an engine enum or silently substitute an
+integer signature.
+
 Parent helpers are for an activated generation. Reject use during managed
 initialization/destruction with an actionable error: native active-instance
 fields are published only after OnStart completes, and calling ordinary
@@ -247,6 +261,32 @@ codec shape; this retains native object-class restrictions. Consume every
 persisted struct/container field path exactly once, including reserved
 container markers. Runtime class identity comes from the resolved class object
 and strict superclass ancestry, not display casing in `GetPathName()`.
+
+### Live synchronization boundary
+
+Run the live-instance guard after successful Declaration parsing and before
+building or applying a synchronization plan, including ValidateOnly and
+no-change returns. Match active Script Components across Worlds by their exact
+generated-class ownership. Stopped instances and other generated classes do
+not block a synchronization request.
+
+For an active class, validate the current persisted contract against its local
+and inherited native properties, then compare the complete override set with
+the parsed declarations. Reuse the runtime-binding contract comparison without
+making Semantic IDs or source parameter names part of the activation ABI.
+This comparison relies on `ParseDeclaration` having already validated every
+desired override signature against its directly declared native owner. With
+an unchanged raw route and the current local/native property check, primitive
+and container element types cannot silently change despite the persistent
+value binding storing only enum/struct paths and ordered field paths.
+
+Managed names and raw declaring/function strings use explicit case-sensitive
+comparison: FString's equality operators ignore case. The materializer's
+idempotency checks must use the same rule so a stopped class can persist a
+case-only route change. Native parameter and field FNames retain their existing
+case-insensitive semantics. Reject a changed live contract before any graph,
+class, binding or saved-package mutation, with a stop/synchronize/restart
+diagnostic. Same-contract synchronization keeps its existing behavior.
 
 ## Implementation sequence and evidence
 
@@ -394,6 +434,36 @@ and non-override dispatch behavior. All logs are in the activation artifact
 directory above. The final build differs from the shape/materializer/intermediate/
 dispatch runs only by additional parent-test rollback assertions.
 
-Cold activation agreement is now closed. Live Sync contract-change protection,
-component lifecycle-event ordering and the broader runtime/cooked extension
+Cold activation agreement is now closed.
+
+Live Sync contract-change protection is implemented and verified on 2026-09-08.
+The HostEditor build passed (`host-editor-build-final-4.log`), and
+`blueprint-override-live-sync-final-5.log` passed with a normal Automation queue
+exit. The real managed fixture runs the same generated class in two Worlds.
+It rejects additions, removals, retargeting, managed-name and raw-route case
+changes, and native signature mismatches before changing the class. Tests check
+the complete activation contract, function graphs, active generations, managed
+instances, registered handles and lifecycle claims, then execute both original
+instances successfully. One remaining World still blocks a changed route.
+After stopping, synchronization persists a case-only route change and restoring
+the contract permits restart. Another generated class may remain active while a
+stopped target Actor survives synchronization and component reinstancing.
+
+The inherited-event materialization regression passed in
+`blueprint-inherited-event-materialization-final.log`; Actor, Component and exact
+ownership parent-call regressions passed in `blueprint-parent-invocation-final.log`.
+These logs are under `artifacts/m13-3c-2-live-sync/`. Earlier failing runs are retained: test cleanup
+used stale/reinstanced objects or called EndPlay before BeginPlay, and the added
+route fixture initially omitted its copied parameters. The final passing run
+uses current objects and a complete candidate Declaration; it does not mutate
+the live bindings to manufacture a source change.
+
+An unintended `BuildPlugin -Rocket` run is recorded separately in
+`editor-build-live-sync-final-3.log`. Its UnrealGame compilation failed on missing
+`FScriptDelegate`, `FTextProperty` and `UWorld` declarations in the callback
+transport, declaration materializer and invocation bridge. Those distribution
+build failures remain unresolved and are not covered by the successful
+HostEditor/CMD evidence.
+
+Component lifecycle-event ordering and the broader runtime/cooked extension
 proof remain open; M13.3C-2 is still in progress.

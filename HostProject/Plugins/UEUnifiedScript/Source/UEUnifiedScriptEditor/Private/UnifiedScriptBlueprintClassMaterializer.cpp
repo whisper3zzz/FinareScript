@@ -24,6 +24,7 @@
 #include "Serialization/StructuredArchive.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptComponent.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -33,6 +34,7 @@
 #include "UObject/StrongObjectPtr.h"
 #include "UObject/UObjectArray.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::UnifiedScript::BlueprintClass::Private
@@ -165,6 +167,7 @@ struct FFunctionDeclaration
     FGuid Id;
     FString SemanticId;
     FName ManagedName;
+    FString ManagedNameText;
     FName InternalName;
     FString ReturnTypeMetadataName;
     FEdGraphPinType ReturnPinType;
@@ -1295,22 +1298,26 @@ bool RuntimeValueTypeBindingMatches(
     return true;
 }
 
-bool RuntimeFunctionBindingMatches(
+bool RuntimeFunctionBindingContractMatches(
     const FUnifiedScriptManagedFunctionBinding& Binding,
     const FFunctionDeclaration& Declaration)
 {
-    if (Binding.ManagedName != Declaration.ManagedName.ToString() ||
-        Binding.FunctionId != Declaration.Id || Binding.AbiVersion != 3 ||
+    if (!Binding.ManagedName.Equals(
+            Declaration.ManagedNameText,
+            ESearchCase::CaseSensitive) ||
+        Binding.AbiVersion != 3 ||
         Binding.bStatic != Declaration.bIsStatic ||
         Binding.RpcTarget != Declaration.RpcTarget || Binding.bReliable != Declaration.bReliable ||
         Binding.RepNotifyProperty != Declaration.RepNotifyProperty ||
         Binding.bBlueprintEvent != Declaration.bBlueprintEvent ||
         Binding.bInterfaceFunction != Declaration.bInterfaceFunction ||
         Binding.BlueprintEventSuperMode != Declaration.BlueprintEventSuperMode ||
-        Binding.BlueprintOverrideDeclaringTypePath !=
-            Declaration.BlueprintOverrideDeclaringTypePath ||
-        Binding.BlueprintOverrideFunctionName !=
-            Declaration.BlueprintOverrideFunctionNameText ||
+        !Binding.BlueprintOverrideDeclaringTypePath.Equals(
+            Declaration.BlueprintOverrideDeclaringTypePath,
+            ESearchCase::CaseSensitive) ||
+        !Binding.BlueprintOverrideFunctionName.Equals(
+            Declaration.BlueprintOverrideFunctionNameText,
+            ESearchCase::CaseSensitive) ||
         Binding.ParameterTypes.Num() != Declaration.Parameters.Num() ||
         Binding.ParameterNames.Num() != Declaration.Parameters.Num() ||
         Binding.ParameterDirections.Num() != Declaration.Parameters.Num() ||
@@ -1336,6 +1343,167 @@ bool RuntimeFunctionBindingMatches(
     return true;
 }
 
+bool RuntimeFunctionBindingMatches(
+    const FUnifiedScriptManagedFunctionBinding& Binding,
+    const FFunctionDeclaration& Declaration)
+{
+    return Binding.FunctionId == Declaration.Id &&
+        RuntimeFunctionBindingContractMatches(Binding, Declaration);
+}
+
+FString BlueprintOverrideRouteForDiagnostics(
+    const FString& DeclaringTypePath,
+    const FString& FunctionName)
+{
+    return DeclaringTypePath + TEXT(":") + FunctionName;
+}
+
+FString LiveBlueprintOverrideContractError(
+    const UBlueprint& Blueprint,
+    const FString& Route,
+    const FString& Reason)
+{
+    return FString::Printf(
+        TEXT("Cannot synchronize live Blueprint '%s': override route '%s' %s. "
+             "Stop the affected instance, synchronize the Script Class, and restart it "
+             "to apply an override contract change."),
+        *Blueprint.GetPathName(),
+        *Route,
+        *Reason);
+}
+
+bool ValidateLiveBlueprintOverrideContract(
+    const UBlueprint& Blueprint,
+    const UUnifiedScriptBlueprintGeneratedClass& GeneratedClass,
+    const TArray<FFunctionDeclaration>& FunctionDeclarations,
+    FString& OutError)
+{
+    TArray<const FUnifiedScriptManagedFunctionBinding*> PersistedOverrides;
+    for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+         GeneratedClass.ManagedFunctionBindings)
+    {
+        const FUnifiedScriptManagedFunctionBinding& Binding = Pair.Value;
+        const bool bHasDeclaringType = !Binding.BlueprintOverrideDeclaringTypePath.IsEmpty();
+        const bool bHasFunctionName = !Binding.BlueprintOverrideFunctionName.IsEmpty();
+        if (bHasDeclaringType != bHasFunctionName)
+        {
+            OutError = LiveBlueprintOverrideContractError(
+                Blueprint,
+                BlueprintOverrideRouteForDiagnostics(
+                    Binding.BlueprintOverrideDeclaringTypePath,
+                    Binding.BlueprintOverrideFunctionName),
+                TEXT("has an incomplete persisted route"));
+            return false;
+        }
+        if (bHasDeclaringType)
+        {
+            PersistedOverrides.Add(&Binding);
+        }
+    }
+
+    TArray<const FFunctionDeclaration*> IncomingOverrides;
+    for (const FFunctionDeclaration& Declaration : FunctionDeclarations)
+    {
+        if (Declaration.bBlueprintOverride)
+        {
+            IncomingOverrides.Add(&Declaration);
+        }
+    }
+
+    TSet<const FFunctionDeclaration*> MatchedIncoming;
+    for (const FUnifiedScriptManagedFunctionBinding* Binding : PersistedOverrides)
+    {
+        const FFunctionDeclaration* ByManagedName = nullptr;
+        for (const FFunctionDeclaration* Declaration : IncomingOverrides)
+        {
+            if (Binding->ManagedName.Equals(
+                    Declaration->ManagedNameText,
+                    ESearchCase::CaseSensitive))
+            {
+                ByManagedName = Declaration;
+                break;
+            }
+        }
+
+        const FString PersistedRoute = BlueprintOverrideRouteForDiagnostics(
+            Binding->BlueprintOverrideDeclaringTypePath,
+            Binding->BlueprintOverrideFunctionName);
+        if (ByManagedName == nullptr)
+        {
+            const FFunctionDeclaration* SameRoute = nullptr;
+            for (const FFunctionDeclaration* Declaration : IncomingOverrides)
+            {
+                if (Binding->BlueprintOverrideDeclaringTypePath.Equals(
+                        Declaration->BlueprintOverrideDeclaringTypePath,
+                        ESearchCase::CaseSensitive) &&
+                    Binding->BlueprintOverrideFunctionName.Equals(
+                        Declaration->BlueprintOverrideFunctionNameText,
+                        ESearchCase::CaseSensitive))
+                {
+                    SameRoute = Declaration;
+                    break;
+                }
+            }
+            OutError = LiveBlueprintOverrideContractError(
+                Blueprint,
+                SameRoute != nullptr
+                    ? BlueprintOverrideRouteForDiagnostics(
+                          SameRoute->BlueprintOverrideDeclaringTypePath,
+                          SameRoute->BlueprintOverrideFunctionNameText)
+                    : PersistedRoute,
+                SameRoute != nullptr
+                    ? TEXT("changed its managed method identity")
+                    : TEXT("was removed from the declaration"));
+            return false;
+        }
+
+        const FString IncomingRoute = BlueprintOverrideRouteForDiagnostics(
+            ByManagedName->BlueprintOverrideDeclaringTypePath,
+            ByManagedName->BlueprintOverrideFunctionNameText);
+        if (!Binding->BlueprintOverrideDeclaringTypePath.Equals(
+                ByManagedName->BlueprintOverrideDeclaringTypePath,
+                ESearchCase::CaseSensitive) ||
+            !Binding->BlueprintOverrideFunctionName.Equals(
+                ByManagedName->BlueprintOverrideFunctionNameText,
+                ESearchCase::CaseSensitive))
+        {
+            OutError = LiveBlueprintOverrideContractError(
+                Blueprint,
+                IncomingRoute,
+                FString::Printf(
+                    TEXT("retargeted the managed method from '%s'"),
+                    *PersistedRoute));
+            return false;
+        }
+        if (!RuntimeFunctionBindingContractMatches(*Binding, *ByManagedName))
+        {
+            OutError = LiveBlueprintOverrideContractError(
+                Blueprint,
+                IncomingRoute,
+                TEXT("changed its managed method, super policy, parameter mapping, direction, "
+                     "or return/nested type contract"));
+            return false;
+        }
+        MatchedIncoming.Add(ByManagedName);
+    }
+
+    for (const FFunctionDeclaration* Declaration : IncomingOverrides)
+    {
+        if (!MatchedIncoming.Contains(Declaration))
+        {
+            const FString Route = BlueprintOverrideRouteForDiagnostics(
+                Declaration->BlueprintOverrideDeclaringTypePath,
+                Declaration->BlueprintOverrideFunctionNameText);
+            OutError = LiveBlueprintOverrideContractError(
+                Blueprint,
+                Route,
+                TEXT("was added to the declaration"));
+            return false;
+        }
+    }
+    return true;
+}
+
 bool FunctionGraphMatches(
     const UBlueprint& Blueprint,
     const UEdGraph& Graph,
@@ -1354,35 +1522,41 @@ bool FunctionGraphMatches(
         GetFunctionEntryMetadata(Graph);
     const bool bMetadataMatches =
         Metadata != nullptr && Metadata->HasMetaData(ManagedFunctionKey) &&
-        Metadata->GetMetaData(ManagedFunctionKey) == TEXT("true") &&
+        Metadata->GetMetaData(ManagedFunctionKey).Equals(
+            TEXT("true"), ESearchCase::CaseSensitive) &&
         Metadata->HasMetaData(FunctionIdKey) &&
-        Metadata->GetMetaData(FunctionIdKey) == Declaration.SemanticId &&
+        Metadata->GetMetaData(FunctionIdKey).Equals(
+            Declaration.SemanticId, ESearchCase::CaseSensitive) &&
         Metadata->HasMetaData(ManagedFunctionNameKey) &&
-        Metadata->GetMetaData(ManagedFunctionNameKey) ==
-            Declaration.ManagedName.ToString() &&
+        Metadata->GetMetaData(ManagedFunctionNameKey).Equals(
+            Declaration.ManagedNameText, ESearchCase::CaseSensitive) &&
         Metadata->HasMetaData(TEXT("DisplayName")) &&
-        Metadata->GetMetaData(TEXT("DisplayName")) ==
-            Declaration.ManagedName.ToString() &&
+        Metadata->GetMetaData(TEXT("DisplayName")).Equals(
+            Declaration.ManagedNameText, ESearchCase::CaseSensitive) &&
         Metadata->HasMetaData(BlueprintEventKey) &&
-        Metadata->GetMetaData(BlueprintEventKey) ==
-            (Declaration.bBlueprintEvent ? TEXT("true") : TEXT("false")) &&
+        Metadata->GetMetaData(BlueprintEventKey).Equals(
+            Declaration.bBlueprintEvent ? TEXT("true") : TEXT("false"),
+            ESearchCase::CaseSensitive) &&
         Metadata->HasMetaData(BlueprintEventSuperModeKey) &&
-        Metadata->GetMetaData(BlueprintEventSuperModeKey) ==
-            (Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none")) &&
+        Metadata->GetMetaData(BlueprintEventSuperModeKey).Equals(
+            Declaration.bBlueprintEvent ? TEXT("explicit") : TEXT("none"),
+            ESearchCase::CaseSensitive) &&
         (!Declaration.bBlueprintOverride ||
             (Metadata->HasMetaData(BlueprintOverrideDeclaringTypePathKey) &&
-             Metadata->GetMetaData(BlueprintOverrideDeclaringTypePathKey) ==
-                 Declaration.BlueprintOverrideDeclaringTypePath &&
+             Metadata->GetMetaData(BlueprintOverrideDeclaringTypePathKey).Equals(
+                 Declaration.BlueprintOverrideDeclaringTypePath,
+                 ESearchCase::CaseSensitive) &&
              Metadata->HasMetaData(BlueprintOverrideFunctionNameKey) &&
-             Metadata->GetMetaData(BlueprintOverrideFunctionNameKey) ==
-                 Declaration.BlueprintOverrideFunctionNameText)) &&
+             Metadata->GetMetaData(BlueprintOverrideFunctionNameKey).Equals(
+                 Declaration.BlueprintOverrideFunctionNameText,
+                 ESearchCase::CaseSensitive))) &&
         (Declaration.bBlueprintOverride ||
             (!Metadata->HasMetaData(BlueprintOverrideDeclaringTypePathKey) &&
              !Metadata->HasMetaData(BlueprintOverrideFunctionNameKey))) &&
         (!Declaration.bIsStatic ||
          (Metadata->HasMetaData(TEXT("WorldContext")) &&
-          Metadata->GetMetaData(TEXT("WorldContext")) ==
-              WorldContextObjectName.ToString()));
+          Metadata->GetMetaData(TEXT("WorldContext")).Equals(
+              WorldContextObjectName.ToString(), ESearchCase::CaseSensitive)));
     if (bMetadataMatches)
     {
         return true;
@@ -2849,6 +3023,7 @@ bool ParseDeclaration(
         FFunctionDeclaration Declaration;
         Declaration.SemanticId = SemanticId;
         Declaration.ManagedName = FName(*Name);
+        Declaration.ManagedNameText = Name;
         Declaration.ReturnTypeMetadataName = ReturnType;
         Declaration.bIsStatic = bIsStatic;
         Declaration.bBlueprintEvent = BlueprintEvent != nullptr;
@@ -4164,10 +4339,10 @@ bool ConfigureFunctionGraph(
         Entry->MetaData.SetMetaData(FunctionIdKey, FString(Declaration.SemanticId));
         Entry->MetaData.SetMetaData(
             ManagedFunctionNameKey,
-            FString(Declaration.ManagedName.ToString()));
+            FString(Declaration.ManagedNameText));
         Entry->MetaData.SetMetaData(
             TEXT("DisplayName"),
-            FString(Declaration.ManagedName.ToString()));
+            FString(Declaration.ManagedNameText));
         Entry->MetaData.SetMetaData(BlueprintEventKey, FString(TEXT("true")));
         Entry->MetaData.SetMetaData(BlueprintEventSuperModeKey, FString(TEXT("explicit")));
         Entry->MetaData.SetMetaData(
@@ -4220,10 +4395,10 @@ bool ConfigureFunctionGraph(
     Entry->MetaData.SetMetaData(FunctionIdKey, FString(Declaration.SemanticId));
     Entry->MetaData.SetMetaData(
         ManagedFunctionNameKey,
-        FString(Declaration.ManagedName.ToString()));
+        FString(Declaration.ManagedNameText));
     Entry->MetaData.SetMetaData(
         TEXT("DisplayName"),
-        FString(Declaration.ManagedName.ToString()));
+        FString(Declaration.ManagedNameText));
     Entry->MetaData.SetMetaData(
         BlueprintEventKey,
         FString(Declaration.bBlueprintEvent ? TEXT("true") : TEXT("false")));
@@ -5181,6 +5356,57 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             OutError))
     {
         return false;
+    }
+
+    // A live managed override may still be executing the persisted parent
+    // route.  Validate the exact generated class and its active owners before
+    // planning any graph, binding, or asset mutation.  ParseDeclaration has
+    // already performed the native owner/signature validation, so this guard
+    // compares the existing runtime contract without introducing a second
+    // value-shape model.
+    const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+    bool bHasActiveManagedOverrideOwner = false;
+    if (GeneratedClass != nullptr)
+    {
+        for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
+        {
+            UUnifiedScriptComponent* Component = *It;
+            if (!IsValid(Component) || Component->IsTemplate() ||
+                Component->GetWorld() == nullptr ||
+                !Component->OwnsActiveManagedOverride(GeneratedClass))
+            {
+                continue;
+            }
+            bHasActiveManagedOverrideOwner = true;
+            break;
+        }
+    }
+    if (bHasActiveManagedOverrideOwner)
+    {
+        FString CurrentContractJson;
+        FString CurrentContractError;
+        if (GeneratedClass == nullptr ||
+            !GeneratedClass->BuildBlueprintOverrideActivationContract(
+                CurrentContractJson,
+                CurrentContractError))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot synchronize live Blueprint '%s': its persisted override "
+                     "contract is invalid (%s). Stop the affected instance, synchronize "
+                     "the Script Class, and restart it to apply an override contract change."),
+                *Blueprint.GetPathName(),
+                *CurrentContractError);
+            return false;
+        }
+        if (!ValidateLiveBlueprintOverrideContract(
+                Blueprint,
+                *GeneratedClass,
+                FunctionDeclarations,
+                OutError))
+        {
+            return false;
+        }
     }
 
     FSyncPlan Plan;

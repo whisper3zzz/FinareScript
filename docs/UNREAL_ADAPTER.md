@@ -994,8 +994,15 @@ activate new override methods. The legacy creation export remains available for
 non-override types. If the validated export is absent, stage the updated managed
 runtime before starting a Script Component.
 
-Live synchronization protection, component lifecycle-event ordering and
-the cooked extension fixture remain open in the
+Synchronization validates the complete persisted override contract and compares
+it with the incoming Declaration before building a change plan. Active owners
+are matched across Worlds by the Script Asset's exact generated class. A changed
+route, managed name or signature requires stopping every affected instance;
+same-contract synchronization remains allowed. The guard also applies to
+validation-only requests. Case-only changes in managed names or raw route strings
+are contract changes and are persisted after stopping the affected instances.
+
+Component lifecycle-event ordering and the cooked extension fixture remain open in the
 [active checkpoint](plans/2026-09-07-blueprint-event-extension.md). The existing
 container/Soft Reference cooked result above predates this extension.
 
