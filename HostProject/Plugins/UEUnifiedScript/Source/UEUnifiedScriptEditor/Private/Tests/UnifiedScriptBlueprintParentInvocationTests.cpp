@@ -13,6 +13,7 @@
 #include "Interfaces/IPluginManager.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
+#include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_Event.h"
 #include "K2Node_VariableSet.h"
@@ -3811,6 +3812,534 @@ bool FUnifiedScriptBlueprintEventExtensionCookFixtureTest::RunTest(const FString
     }
     bFixtureSucceeded = true;
     return true;
+}
+
+namespace UE::UnifiedScript::BlueprintClass::ParentInvocationTests
+{
+bool CreateEvaluateWrapperBody(
+    UBlueprint& Blueprint,
+    UFunction& NativeEvaluate,
+    FString& OutError)
+{
+    FEdGraphPinType IntType;
+    IntType.PinCategory = UEdGraphSchema_K2::PC_Int;
+    if (!FBlueprintEditorUtils::AddMemberVariable(
+            &Blueprint,
+            TEXT("ObservedResult"),
+            IntType))
+    {
+        OutError = TEXT("Could not add the ordinary Blueprint ObservedResult property.");
+        return false;
+    }
+
+    UEdGraph* Graph = FBlueprintEditorUtils::CreateNewGraph(
+        &Blueprint,
+        TEXT("CallEvaluate"),
+        UEdGraph::StaticClass(),
+        UEdGraphSchema_K2::StaticClass());
+    if (Graph == nullptr)
+    {
+        OutError = TEXT("Could not create the ordinary Blueprint CallEvaluate graph.");
+        return false;
+    }
+    FBlueprintEditorUtils::AddFunctionGraph<UFunction>(
+        &Blueprint,
+        Graph,
+        true,
+        &NativeEvaluate);
+
+    TArray<UK2Node_FunctionEntry*> Entries;
+    Graph->GetNodesOfClass(Entries);
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Results);
+    if (Entries.Num() != 1 || Results.Num() != 1)
+    {
+        OutError = TEXT("The ordinary Blueprint CallEvaluate graph has no unique entry/result pair.");
+        return false;
+    }
+
+    UK2Node_CallFunction* Call = NewObject<UK2Node_CallFunction>(Graph);
+    Graph->AddNode(Call, true, false);
+    Call->CreateNewGuid();
+    Call->SetFromFunction(&NativeEvaluate);
+    Call->AllocateDefaultPins();
+
+    UK2Node_VariableSet* Observe = NewObject<UK2Node_VariableSet>(Graph);
+    Observe->VariableReference.SetSelfMember(TEXT("ObservedResult"));
+    Graph->AddNode(Observe, true, false);
+    Observe->CreateNewGuid();
+    Observe->AllocateDefaultPins();
+
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    UEdGraphPin* EntryThen = Entries[0]->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* CallExecute = Call->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    UEdGraphPin* CallThen = Call->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* ObserveExecute = Observe->GetExecPin();
+    UEdGraphPin* ObserveThen = Observe->GetThenPin();
+    UEdGraphPin* ResultExecute = Results[0]->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    UEdGraphPin* CallReturn = Call->GetReturnValuePin();
+    UEdGraphPin* ObserveValue = Observe->FindPin(TEXT("ObservedResult"), EGPD_Input);
+    UEdGraphPin* ResultReturn = Results[0]->FindPin(TEXT("ReturnValue"), EGPD_Input);
+    UEdGraphPin* EntryInput = Entries[0]->FindPin(TEXT("NativeInput"), EGPD_Output);
+    UEdGraphPin* CallInput = Call->FindPin(TEXT("NativeInput"), EGPD_Input);
+    UEdGraphPin* EntryAccumulator = Entries[0]->FindPin(TEXT("NativeAccumulator"), EGPD_Output);
+    UEdGraphPin* CallAccumulatorInput = Call->FindPin(TEXT("NativeAccumulator"), EGPD_Input);
+    UEdGraphPin* CallOutput = Call->FindPin(TEXT("NativeOutput"), EGPD_Output);
+    UEdGraphPin* ResultOutput = Results[0]->FindPin(TEXT("NativeOutput"), EGPD_Input);
+    const bool bConnected =
+        EntryThen != nullptr && CallExecute != nullptr && CallThen != nullptr &&
+        ObserveExecute != nullptr && ObserveThen != nullptr && ResultExecute != nullptr &&
+        CallReturn != nullptr && ObserveValue != nullptr && ResultReturn != nullptr &&
+        EntryInput != nullptr && CallInput != nullptr && EntryAccumulator != nullptr &&
+        CallAccumulatorInput != nullptr && CallOutput != nullptr && ResultOutput != nullptr &&
+        Schema->TryCreateConnection(EntryThen, CallExecute) &&
+        Schema->TryCreateConnection(CallThen, ObserveExecute) &&
+        Schema->TryCreateConnection(ObserveThen, ResultExecute) &&
+        Schema->TryCreateConnection(EntryInput, CallInput) &&
+        Schema->TryCreateConnection(EntryAccumulator, CallAccumulatorInput) &&
+        Schema->TryCreateConnection(CallOutput, ResultOutput) &&
+        Schema->TryCreateConnection(CallReturn, ObserveValue) &&
+        Schema->TryCreateConnection(CallReturn, ResultReturn);
+    if (!bConnected)
+    {
+        OutError = TEXT("The ordinary Blueprint CallEvaluate graph could not connect typed input/ref/out/return pins.");
+        return false;
+    }
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
+    return true;
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintEventOverrideReloadTest,
+    "UnifiedScript.Unreal.ScriptClass.BlueprintEventOverrideReload",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintEventOverrideReloadTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::BlueprintClass::ParentInvocationTests;
+
+    FString FixtureRoot;
+    if (!ReadCommandLineValue(TEXT("BlueprintEventReloadFixtureRoot="), FixtureRoot))
+    {
+        FixtureRoot = FPaths::Combine(
+            FPaths::ProjectDir(),
+            TEXT("../artifacts/m13-3c-2-event-reload/fixture"));
+    }
+    FixtureRoot = FPaths::ConvertRelativePathToFull(FixtureRoot);
+    const FString DeclarationPath = FPaths::Combine(
+        FixtureRoot,
+        TEXT("declaration/BlueprintEventReloadFixture.asset.json"));
+    const FString ActiveAssembly = FPaths::Combine(
+        FixtureRoot,
+        TEXT("active/BlueprintEventReloadFixture.dll"));
+    const FString V1Assembly = FPaths::Combine(
+        FixtureRoot,
+        TEXT("v1/BlueprintEventReloadFixture.dll"));
+    const FString V2Assembly = FPaths::Combine(
+        FixtureRoot,
+        TEXT("v2/BlueprintEventReloadFixture.dll"));
+    const FString IncompatibleAssembly = FPaths::Combine(
+        FixtureRoot,
+        TEXT("incompatible/BlueprintEventReloadFixture.dll"));
+    FString Declaration;
+    FString Error;
+    UPackage* ManagedPackage = nullptr;
+    UUnifiedScriptBlueprint* ManagedBlueprint = nullptr;
+    UPackage* CallerPackage = nullptr;
+    UBlueprint* CallerBlueprint = nullptr;
+    FString ManagedPackageName;
+    FString CallerPackageName;
+    ON_SCOPE_EXIT
+    {
+        if (CallerBlueprint != nullptr)
+        {
+            CallerBlueprint = nullptr;
+        }
+        if (ManagedBlueprint != nullptr)
+        {
+            ManagedBlueprint = nullptr;
+        }
+        TArray<UPackage*> Packages;
+        if (!CallerPackageName.IsEmpty())
+        {
+            if (UPackage* Package = FindPackage(nullptr, *CallerPackageName))
+            {
+                Package->SetDirtyFlag(false);
+                Packages.Add(Package);
+            }
+        }
+        if (!ManagedPackageName.IsEmpty())
+        {
+            if (UPackage* Package = FindPackage(nullptr, *ManagedPackageName))
+            {
+                Package->SetDirtyFlag(false);
+                Packages.Add(Package);
+            }
+        }
+        if (Packages.Num() > 0)
+        {
+            UPackageTools::UnloadPackages(Packages);
+        }
+        IFileManager::Get().Copy(*ActiveAssembly, *V1Assembly, true, true);
+    };
+    if (!TestTrue(TEXT("Blueprint event reload declaration exists"),
+            FFileHelper::LoadFileToString(Declaration, *DeclarationPath)) ||
+        !TestTrue(TEXT("Blueprint event reload active v1 assembly exists"),
+            IFileManager::Get().FileExists(*ActiveAssembly)) ||
+        !TestTrue(TEXT("Blueprint event reload v2 assembly exists"),
+            IFileManager::Get().FileExists(*V2Assembly)) ||
+        !TestTrue(TEXT("Blueprint event reload incompatible assembly exists"),
+            IFileManager::Get().FileExists(*IncompatibleAssembly)))
+    {
+        return false;
+    }
+    if (!TestTrue(TEXT("Blueprint event reload resets active assembly to v1"),
+            IFileManager::Get().Copy(*ActiveAssembly, *V1Assembly, true, true) == COPY_OK))
+    {
+        return false;
+    }
+
+    FDemoAsset FixtureAsset;
+    const FString FixtureTypeName =
+        TEXT("UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture");
+    if (!TestTrue(TEXT("Blueprint event reload fixture identity is present"),
+            ReadDemoAsset(Declaration, FixtureTypeName, FixtureAsset, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString PackageName = TEXT("/Engine/Transient/UnifiedScriptBlueprintEventReload_") + Suffix;
+    ManagedPackageName = PackageName;
+    ManagedBlueprint = CreateBlueprint(
+        PackageName,
+        TEXT("BP_BlueprintEventReload_") + Suffix,
+        ManagedPackage);
+    UUnifiedScriptAsset* ScriptAsset = ManagedBlueprint != nullptr
+        ? AttachScriptAsset(
+            *ManagedBlueprint,
+            FixtureAsset,
+            FString(),
+            ActiveAssembly,
+            DeclarationPath,
+            EUnifiedScriptClassKind::Actor)
+        : nullptr;
+    if (!TestNotNull(TEXT("Blueprint event reload managed Blueprint is created"), ManagedBlueprint) ||
+        !TestNotNull(TEXT("Blueprint event reload ScriptAsset is attached"), ScriptAsset))
+    {
+        return false;
+    }
+    ScriptAsset->CompiledChunkPath.Reset();
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!TestTrue(TEXT("Blueprint event reload override materializes from the real declaration"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset,
+                *ManagedBlueprint,
+                Declaration,
+                false,
+                SyncResult,
+                Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    UUnifiedScriptBlueprintGeneratedClass* ManagedClass =
+        Cast<UUnifiedScriptBlueprintGeneratedClass>(ManagedBlueprint->GeneratedClass);
+    UFunction* NativeEvaluate = AUnifiedScriptEventExtensionFixture::StaticClass()->FindFunctionByName(
+        TEXT("EvaluateInherited"),
+        EIncludeSuperFlag::ExcludeSuper);
+    if (!TestNotNull(TEXT("Blueprint event reload managed class exists"), ManagedClass) ||
+        !TestTrue(TEXT("Blueprint event reload managed function is bound"),
+            ManagedClass != nullptr && ManagedClass->IsManagedFunctionBound(TEXT("EvaluateInherited"))) ||
+        !TestNotNull(TEXT("Blueprint event reload native Evaluate signature exists"), NativeEvaluate))
+    {
+        return false;
+    }
+
+    CallerPackageName = TEXT("/Engine/Transient/UnifiedScriptBlueprintEventReloadCaller_") + Suffix;
+    CallerBlueprint = CreateNormalBlueprint(
+        ManagedClass,
+        CallerPackageName,
+        TEXT("BP_BlueprintEventReloadCaller_") + Suffix,
+        CallerPackage);
+    if (!TestNotNull(TEXT("Blueprint event reload ordinary child Blueprint is created"), CallerBlueprint) ||
+        !TestTrue(TEXT("Blueprint event reload ordinary child has CallEvaluate VM body"),
+            CallerBlueprint != nullptr &&
+                CreateEvaluateWrapperBody(*CallerBlueprint, *NativeEvaluate, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(CallerBlueprint);
+    UBlueprintGeneratedClass* CallerClass = CallerBlueprint != nullptr
+        ? Cast<UBlueprintGeneratedClass>(CallerBlueprint->GeneratedClass)
+        : nullptr;
+    UFunction* CallEvaluate = CallerClass != nullptr
+        ? CallerClass->FindFunctionByName(TEXT("CallEvaluate"), EIncludeSuperFlag::ExcludeSuper)
+        : nullptr;
+    if (!TestEqual(TEXT("Blueprint event reload ordinary child compiles"),
+            CallerBlueprint->Status,
+            BS_UpToDate) ||
+        !TestNotNull(TEXT("Blueprint event reload CallEvaluate function exists"), CallEvaluate) ||
+        !TestTrue(TEXT("Blueprint event reload CallEvaluate retains Blueprint bytecode"),
+            CallEvaluate != nullptr && CallEvaluate->Script.Num() > 0 &&
+                !CallEvaluate->HasAnyFunctionFlags(FUNC_Native)))
+    {
+        return false;
+    }
+    const FIntProperty* ObservedResult = CallerClass != nullptr
+        ? FindFProperty<FIntProperty>(CallerClass, TEXT("ObservedResult"))
+        : nullptr;
+    if (!TestNotNull(TEXT("Blueprint event reload child has ObservedResult"), ObservedResult))
+    {
+        return false;
+    }
+    struct FReloadWorld
+    {
+        UWorld* World = nullptr;
+        FWorldContext* Context = nullptr;
+        UUnifiedScriptWorldSubsystem* Host = nullptr;
+        AUnifiedScriptEventExtensionFixture* Actor = nullptr;
+        UUnifiedScriptComponent* Component = nullptr;
+        int32 ManagedScriptsBefore = 0;
+        int32 RegisteredObjectsBefore = 0;
+        int32 LifecycleClaimsBefore = 0;
+    } First, Second;
+    auto CreateReloadWorld = [&](FReloadWorld& Out, const TCHAR* Label)
+    {
+        Out.World = UWorld::CreateWorld(EWorldType::Game, false);
+        if (!TestNotNull(*FString::Printf(TEXT("%s reload World is created"), Label), Out.World))
+        {
+            return;
+        }
+        Out.World->AddToRoot();
+        if (GEngine != nullptr)
+        {
+            Out.Context = &GEngine->CreateNewWorldContext(EWorldType::Game);
+            Out.Context->SetCurrentWorld(Out.World);
+        }
+        Out.World->InitializeActorsForPlay(FURL());
+        Out.Host = Out.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+        Out.ManagedScriptsBefore = Out.Host != nullptr ? Out.Host->GetManagedScriptCount() : 0;
+        Out.RegisteredObjectsBefore = Out.Host != nullptr ? Out.Host->NumRegisteredObjects() : 0;
+        Out.LifecycleClaimsBefore = Out.Host != nullptr ? Out.Host->GetGameplayLifecycleClaimCount() : 0;
+        Out.Actor = CallerClass != nullptr
+            ? Out.World->SpawnActor<AUnifiedScriptEventExtensionFixture>(CallerClass)
+            : nullptr;
+        Out.Component = Out.Actor != nullptr ? Out.Actor->GetUnifiedScriptComponent() : nullptr;
+        if (Out.Component != nullptr)
+        {
+            Out.Component->ScriptAsset = ScriptAsset;
+            Out.Component->bStartAutomatically = true;
+            Out.Component->bTickAutomatically = false;
+        }
+        TestNotNull(*FString::Printf(TEXT("%s reload World host exists"), Label), Out.Host);
+        TestNotNull(*FString::Printf(TEXT("%s ordinary Blueprint child spawns"), Label), Out.Actor);
+        TestNotNull(*FString::Printf(TEXT("%s child ScriptComponent exists"), Label), Out.Component);
+        if (Out.Actor != nullptr)
+        {
+            Out.Actor->DispatchBeginPlay();
+        }
+        TestTrue(*FString::Printf(TEXT("%s child begins native play"), Label),
+            Out.Actor != nullptr && Out.Actor->HasActorBegunPlay());
+        TestTrue(*FString::Printf(TEXT("%s child managed script starts"), Label),
+            Out.Component != nullptr && Out.Component->bScriptRunning);
+    };
+    auto DestroyReloadWorld = [&](FReloadWorld& Fixture, const TCHAR* Label)
+    {
+        if (Fixture.Actor != nullptr && Fixture.Actor->HasActorBegunPlay())
+        {
+            Fixture.Actor->RouteEndPlay(EEndPlayReason::Quit);
+        }
+        if (Fixture.Actor != nullptr && !Fixture.Actor->IsActorBeingDestroyed())
+        {
+            Fixture.Actor->Destroy();
+        }
+        TestTrue(*FString::Printf(TEXT("%s managed component stops before garbage collection"), Label),
+            Fixture.Component == nullptr || !Fixture.Component->bScriptRunning);
+        Fixture.Actor = nullptr;
+        Fixture.Component = nullptr;
+        CollectGarbage(RF_NoFlags);
+        if (Fixture.Host != nullptr)
+        {
+            TestEqual(*FString::Printf(TEXT("%s managed script count returns to baseline"), Label),
+                Fixture.Host->GetManagedScriptCount(), Fixture.ManagedScriptsBefore);
+            TestEqual(*FString::Printf(TEXT("%s registered object count returns to baseline"), Label),
+                Fixture.Host->NumRegisteredObjects(), Fixture.RegisteredObjectsBefore);
+            TestEqual(*FString::Printf(TEXT("%s lifecycle claims return to baseline"), Label),
+                Fixture.Host->GetGameplayLifecycleClaimCount(), Fixture.LifecycleClaimsBefore);
+        }
+        if (Fixture.Context != nullptr && GEngine != nullptr)
+        {
+            GEngine->DestroyWorldContext(Fixture.World);
+            Fixture.Context = nullptr;
+        }
+        if (Fixture.World != nullptr)
+        {
+            Fixture.World->RemoveFromRoot();
+            Fixture.World->DestroyWorld(false);
+            Fixture.World = nullptr;
+        }
+    };
+    ON_SCOPE_EXIT
+    {
+        DestroyReloadWorld(First, TEXT("First"));
+        DestroyReloadWorld(Second, TEXT("Second"));
+        TestEqual(
+            TEXT("Blueprint event reload restores managed World count"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialManagedWorldCount);
+    };
+
+    CreateReloadWorld(First, TEXT("First"));
+    CreateReloadWorld(Second, TEXT("Second"));
+    if (First.Actor == nullptr || Second.Actor == nullptr ||
+        First.Component == nullptr || Second.Component == nullptr ||
+        First.Host == nullptr || Second.Host == nullptr)
+    {
+        return false;
+    }
+
+    auto InvokeNative = [&](FReloadWorld& Fixture, int32 ExpectedReturn, const TCHAR* Label)
+    {
+        const uint64 BeforeFastCalls = Fixture.Host->GetFastInvocationCount();
+        const int32 BeforeParentCalls = Fixture.Actor->ParentInvocationCount;
+        int32 Accumulator = 5;
+        int32 Output = 0;
+        const int32 ReturnValue = Fixture.Actor->EvaluateInherited(7, Accumulator, Output);
+        TestEqual(*FString::Printf(TEXT("%s native typed return"), Label), ReturnValue, ExpectedReturn);
+        TestEqual(*FString::Printf(TEXT("%s native typed ref"), Label), Accumulator, 12);
+        TestEqual(*FString::Printf(TEXT("%s native typed out"), Label), Output, 12);
+        TestEqual(*FString::Printf(TEXT("%s native typed managed fast call"), Label),
+            Fixture.Host->GetFastInvocationCount(), BeforeFastCalls + 1);
+        TestEqual(*FString::Printf(TEXT("%s native parent executes once"), Label),
+            Fixture.Actor->ParentInvocationCount, BeforeParentCalls + 1);
+    };
+    auto InvokeWrapper = [&](FReloadWorld& Fixture, int32 ExpectedReturn, const TCHAR* Label)
+    {
+        const FIntProperty* Input = FindFProperty<FIntProperty>(CallEvaluate, TEXT("NativeInput"));
+        const FIntProperty* Accumulator = FindFProperty<FIntProperty>(CallEvaluate, TEXT("NativeAccumulator"));
+        const FIntProperty* Output = FindFProperty<FIntProperty>(CallEvaluate, TEXT("NativeOutput"));
+        const FIntProperty* Return = CastField<FIntProperty>(CallEvaluate->GetReturnProperty());
+        if (!TestTrue(*FString::Printf(TEXT("%s wrapper signature exists"), Label),
+                Input != nullptr && Accumulator != nullptr && Output != nullptr && Return != nullptr))
+        {
+            return;
+        }
+        FStructOnScope Call(CallEvaluate);
+        SetInt(*Input, Call.GetStructMemory(), 7);
+        SetInt(*Accumulator, Call.GetStructMemory(), 5);
+        const uint64 BeforeFastCalls = Fixture.Host->GetFastInvocationCount();
+        const int32 BeforeParentCalls = Fixture.Actor->ParentInvocationCount;
+        Fixture.Actor->ProcessEvent(CallEvaluate, Call.GetStructMemory());
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper return"), Label),
+            GetInt(*Return, Call.GetStructMemory()), ExpectedReturn);
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper ref"), Label),
+            GetInt(*Accumulator, Call.GetStructMemory()), 12);
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper out"), Label),
+            GetInt(*Output, Call.GetStructMemory()), 12);
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper downstream observation"), Label),
+            GetInt(*ObservedResult, Fixture.Actor), ExpectedReturn);
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper managed fast call"), Label),
+            Fixture.Host->GetFastInvocationCount(), BeforeFastCalls + 1);
+        TestEqual(*FString::Printf(TEXT("%s ordinary Blueprint wrapper native parent executes once"), Label),
+            Fixture.Actor->ParentInvocationCount, BeforeParentCalls + 1);
+    };
+
+    InvokeNative(First, 12, TEXT("First v1"));
+    InvokeNative(Second, 12, TEXT("Second v1"));
+    InvokeWrapper(First, 12, TEXT("First v1 wrapper"));
+    InvokeWrapper(Second, 12, TEXT("Second v1 wrapper"));
+
+    TestTrue(TEXT("Copies v2 into the same active DLL path"),
+        IFileManager::Get().Copy(*ActiveAssembly, *V2Assembly, true, true) == COPY_OK);
+    InvokeNative(First, 12, TEXT("First remains v1 before reload"));
+    InvokeNative(Second, 12, TEXT("Second remains v1 before reload"));
+    const FString FirstGenerationBeforeFirstReload = First.Component->ActiveGeneration;
+    const FString SecondGenerationBeforeFirstReload = Second.Component->ActiveGeneration;
+    TestTrue(TEXT("First component reloads the v2 body"), First.Component->ReloadScript());
+    TestTrue(TEXT("First generation changes after v2 reload"),
+        !First.Component->ActiveGeneration.Equals(FirstGenerationBeforeFirstReload, ESearchCase::CaseSensitive));
+    TestEqual(TEXT("Second generation remains v1 until its own reload"),
+        Second.Component->ActiveGeneration, SecondGenerationBeforeFirstReload);
+    InvokeNative(First, 112, TEXT("First v2 after reload"));
+    InvokeWrapper(First, 112, TEXT("First v2 wrapper after reload"));
+    InvokeNative(Second, 12, TEXT("Second remains v1 after First reload"));
+    InvokeWrapper(Second, 12, TEXT("Second v1 wrapper after First reload"));
+
+    TestTrue(TEXT("Copies incompatible route variant into the active DLL path"),
+        IFileManager::Get().Copy(*ActiveAssembly, *IncompatibleAssembly, true, true) == COPY_OK);
+    FString ActivationContractBeforeReject;
+    FString ActivationContractError;
+    TestTrue(TEXT("Activation contract is readable before incompatible reload"),
+        ManagedClass->BuildBlueprintOverrideActivationContract(
+            ActivationContractBeforeReject,
+            ActivationContractError));
+    UUnifiedScriptBlueprintGeneratedClass* GeneratedClassBeforeReject = ManagedClass;
+    const FString FirstGenerationBeforeReject = First.Component->ActiveGeneration;
+    const FString SecondGenerationBeforeReject = Second.Component->ActiveGeneration;
+    const int32 FirstScriptsBeforeReject = First.Host->GetManagedScriptCount();
+    const int32 SecondScriptsBeforeReject = Second.Host->GetManagedScriptCount();
+    const int32 FirstObjectsBeforeReject = First.Host->NumRegisteredObjects();
+    const int32 SecondObjectsBeforeReject = Second.Host->NumRegisteredObjects();
+    const int32 FirstClaimsBeforeReject = First.Host->GetGameplayLifecycleClaimCount();
+    const int32 SecondClaimsBeforeReject = Second.Host->GetGameplayLifecycleClaimCount();
+    AddExpectedError(
+        TEXT("Blueprint override route '/Script/UEUnifiedScriptRuntime.UnifiedScriptEventExtensionFixture:EvaluateInherited' route is missing"),
+        EAutomationExpectedErrorFlags::Contains,
+        2);
+    TestFalse(TEXT("First rejects incompatible route while retaining v2"), First.Component->ReloadScript());
+    TestFalse(TEXT("Second rejects incompatible route while retaining v1"), Second.Component->ReloadScript());
+    auto HasIncompatibleRouteDiagnostic = [](const UUnifiedScriptComponent& Component)
+    {
+        return Component.LastReloadTransaction.Contains(TEXT("activationContractValidation")) &&
+            Component.LastReloadTransaction.Contains(TEXT("failed")) &&
+            (Component.LastReloadTransaction.Contains(TEXT("EvaluateInheritedAlternate")) ||
+             Component.LastScriptError.Contains(TEXT(":EvaluateInherited' route is missing")));
+    };
+    TestTrue(TEXT("First rejection reports activation/override contract and route"),
+        HasIncompatibleRouteDiagnostic(*First.Component));
+    TestTrue(TEXT("Second rejection reports activation/override contract and route"),
+        HasIncompatibleRouteDiagnostic(*Second.Component));
+    FString ActivationContractAfterReject;
+    FString ActivationContractAfterRejectError;
+    TestTrue(TEXT("Rejected reload keeps the persisted activation contract"),
+        ManagedClass == GeneratedClassBeforeReject &&
+        ManagedClass->BuildBlueprintOverrideActivationContract(
+            ActivationContractAfterReject,
+            ActivationContractAfterRejectError) &&
+        ActivationContractAfterReject.Equals(
+            ActivationContractBeforeReject,
+            ESearchCase::CaseSensitive));
+    TestEqual(TEXT("First rejected reload keeps generation"), First.Component->ActiveGeneration, FirstGenerationBeforeReject);
+    TestEqual(TEXT("Second rejected reload keeps generation"), Second.Component->ActiveGeneration, SecondGenerationBeforeReject);
+    TestTrue(TEXT("Rejected reload keeps both scripts running"),
+        First.Component->bScriptRunning && Second.Component->bScriptRunning);
+    TestEqual(TEXT("First rejection keeps managed script count"), First.Host->GetManagedScriptCount(), FirstScriptsBeforeReject);
+    TestEqual(TEXT("Second rejection keeps managed script count"), Second.Host->GetManagedScriptCount(), SecondScriptsBeforeReject);
+    TestEqual(TEXT("First rejection keeps registered object count"), First.Host->NumRegisteredObjects(), FirstObjectsBeforeReject);
+    TestEqual(TEXT("Second rejection keeps registered object count"), Second.Host->NumRegisteredObjects(), SecondObjectsBeforeReject);
+    TestEqual(TEXT("First rejection keeps lifecycle claims"), First.Host->GetGameplayLifecycleClaimCount(), FirstClaimsBeforeReject);
+    TestEqual(TEXT("Second rejection keeps lifecycle claims"), Second.Host->GetGameplayLifecycleClaimCount(), SecondClaimsBeforeReject);
+    InvokeNative(First, 112, TEXT("First v2 survives incompatible rejection"));
+    InvokeNative(Second, 12, TEXT("Second v1 survives incompatible rejection"));
+    InvokeWrapper(First, 112, TEXT("First v2 wrapper survives incompatible rejection"));
+    InvokeWrapper(Second, 12, TEXT("Second v1 wrapper survives incompatible rejection"));
+
+    TestTrue(TEXT("Copies v2 back into the active DLL path"),
+        IFileManager::Get().Copy(*ActiveAssembly, *V2Assembly, true, true) == COPY_OK);
+    TestTrue(TEXT("Second component accepts compatible v2 reload"), Second.Component->ReloadScript());
+    InvokeNative(First, 112, TEXT("First v2 remains after Second compatible reload"));
+    InvokeWrapper(First, 112, TEXT("First v2 wrapper remains after Second compatible reload"));
+    InvokeNative(Second, 112, TEXT("Second v2 after compatible reload"));
+    InvokeWrapper(Second, 112, TEXT("Second v2 wrapper after compatible reload"));
+    TestTrue(TEXT("First remains callable after Second compatible reload"), First.Component->bScriptRunning);
+
+    return !HasAnyErrors();
 }
 
 #endif

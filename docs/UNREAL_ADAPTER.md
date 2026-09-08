@@ -1027,8 +1027,20 @@ Run `tools/run-unreal-event-extension.ps1 -CookAndRun` after staging the Release
 Demo and building HostEditor. The tool generates its dedicated fixture, verifies
 the packaged result and removes only its six temporary assets. Logs and the
 receipt are under `artifacts/m13-3c-2-runtime/`. Real-UE DLL body replacement
-remains open in the
-[active checkpoint](plans/2026-09-07-blueprint-event-extension.md).
+also passes native and ordinary Blueprint callers in two existing Worlds.
+Reloading one component changes its return value while the other retains its
+loaded body. An incompatible route fails activation validation and preserves
+the active instances, native bindings, generations and ownership. After restoring
+the compatible DLL, the second component can reload independently.
+
+Build the isolated variants with `tools/build-blueprint-event-reload-fixture.ps1`,
+then run CMD Automation selector
+`UnifiedScript.Unreal.ScriptClass.BlueprintEventOverrideReload`. Its default
+fixture directory is `artifacts/m13-3c-2-event-reload/fixture`; an optional
+`-BlueprintEventReloadFixtureRoot` overrides it. The test configures the real
+instances before BeginPlay and restores the active DLL afterward. Actor native
+subobject default inheritance remains C-3 work. Detailed evidence is in the
+[extension checkpoint](plans/2026-09-07-blueprint-event-extension.md).
 
 ## Commands
 

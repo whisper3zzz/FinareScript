@@ -1,0 +1,521 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "tests/UnifiedScript.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.cs",
+  "sourceDigest": "sha256:7f5d1eaede88f8f74790300c85cab71db63c524256bbdbc93933d98420001037",
+  "generation": 1,
+  "entries": [
+    {
+      "id": "us_0114e060bbfa7ff341f797f04cd8c5ce",
+      "kind": "literal",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:c7ae46b699b01e32cd1f3786eb5d3b3ae3a4db464ca0a7148d72bed5f933bf59",
+      "shapeFingerprint": "sha256:c7ae46b699b01e32cd1f3786eb5d3b3ae3a4db464ca0a7148d72bed5f933bf59",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 816,
+        "length": 1
+      },
+      "contextBefore": "sha256:68995fbb6b73f388bddd49257534656fd83c1d424ac53cac7b11917fa5af7c1c",
+      "contextAfter": "sha256:bf31f1a2da8eb37c41a09e8bfa2a33529dc85f5bbcb19c70f84ef391b6b468cc",
+      "generation": 1
+    },
+    {
+      "id": "us_03e4f3e266c7926443ac79d0a5e3b778",
+      "kind": "invocation",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "initializer",
+      "fingerprint": "sha256:3cf57187bd9c72e5cbf929d52ec4d1a68687d1bfae3308487f72e9c4f78af57f",
+      "shapeFingerprint": "sha256:c9058cecd0e9da821fed7bbd2e007c8188ba2e6fe3bb7e7546e1f98aef9b2ea2",
+      "parentFingerprint": "sha256:a502371cfc631a4655b598dd29c9f55a0b3e0b9a6ff5fdc7c1be18817033d743",
+      "anchor": {
+        "start": 647,
+        "length": 117
+      },
+      "contextBefore": "sha256:13d3fa2c9720bd06a5fccc623a28c043f58db2bc8a4e78abbc2700bda19238a6",
+      "contextAfter": "sha256:60a5fd8a922dc0e37e74f63aa4b40c761a422acd3cc9d36b44da6cc1dbdfcd42",
+      "generation": 1
+    },
+    {
+      "id": "us_0b14863758df0174de1edbc2649aa00d",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:58de9ee0cac6fc827af75365c146352627661a1f7de901d3aa394cd5e28f0928",
+      "shapeFingerprint": "sha256:58de9ee0cac6fc827af75365c146352627661a1f7de901d3aa394cd5e28f0928",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 682,
+        "length": 6
+      },
+      "contextBefore": "sha256:6622369875881811baa7b3407a65f088f08f8f7e86eab6aef1102ca618f39c38",
+      "contextAfter": "sha256:8ee53df70709214ba93bb09163f10d49b70d9c6b294e3a72cdf9fbb5269a2cb2",
+      "generation": 1
+    },
+    {
+      "id": "us_0ce8a62edd7d90dcf63052c5acf2222a",
+      "kind": "block",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "body",
+      "fingerprint": "sha256:8229ed1232906c71c874539b8bbe33238f7d481c28793a964b29b3e053a8da0e",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:41b860995dc943f475647e533cb0a2a65d220edf09da7a85a8f0ce81d3383e7a",
+      "anchor": {
+        "start": 599,
+        "length": 381
+      },
+      "contextBefore": "sha256:543b7f80763958cc56c4934094d8839148e7940258b70ae3ce0ace12129e6841",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 1
+    },
+    {
+      "id": "us_0d073b830a85d3f478f1c100ccd69a3d",
+      "kind": "variableDeclaration",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "statement",
+      "fingerprint": "sha256:1671b4f55d94b308a6c3a76a1160469460bf7445e820f6166e79422786b0958b",
+      "shapeFingerprint": "sha256:a502371cfc631a4655b598dd29c9f55a0b3e0b9a6ff5fdc7c1be18817033d743",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 609,
+        "length": 156
+      },
+      "contextBefore": "sha256:a5dd34d378375dfa11c1375e8c68f77d9daa757129dc4dcfb6ed890d5362a9a8",
+      "contextAfter": "sha256:f5457951511925b9691699dbab5baf2fb62fa68e7fa5d47ddb549cdeac44d88d",
+      "generation": 1
+    },
+    {
+      "id": "us_1226d72e43d7abe94abf5bde66594bc8",
+      "kind": "memberAccess",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "operand",
+      "fingerprint": "sha256:03d977a5615bcee028739a5532b1658bdb701f9be87f6643fc1f3e392e7e3c0f",
+      "shapeFingerprint": "sha256:51d7d0a21990eeb96e4068174d87f36a930773f624a1c0bee74113ff1949ff69",
+      "parentFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "anchor": {
+        "start": 948,
+        "length": 18
+      },
+      "contextBefore": "sha256:67ee18f89cb7c30b44172f1e9e5266a177b8358ac29906530d4bfdb9bb6f3aa5",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    },
+    {
+      "id": "us_1a70d64596d90feb20f533b86d5020c9",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "parameter",
+      "fingerprint": "sha256:9fa6dc2170f70d31fbeeee59dd88e180dad024b446d11ccdd82cdad790ab94b7",
+      "shapeFingerprint": "sha256:9fa6dc2170f70d31fbeeee59dd88e180dad024b446d11ccdd82cdad790ab94b7",
+      "parentFingerprint": "sha256:41b860995dc943f475647e533cb0a2a65d220edf09da7a85a8f0ce81d3383e7a",
+      "anchor": {
+        "start": 513,
+        "length": 15
+      },
+      "contextBefore": "sha256:ebb6ed48d3f8330b7738fd1b0c1eb8ad9d806ae948753bcf26971f600b89d3fc",
+      "contextAfter": "sha256:d1194c16b18462310038ce9b434c0bb2e7641da9e2c33afd7ac016ba3ca1d953",
+      "generation": 1
+    },
+    {
+      "id": "us_25c0a7db5785800599ac8f41d5eb4b4c",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:8d5665ba45e0636baf0fa1709662e79a38290dd1c0175ebca5bba78a89fc2b86",
+      "shapeFingerprint": "sha256:8d5665ba45e0636baf0fa1709662e79a38290dd1c0175ebca5bba78a89fc2b86",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 689,
+        "length": 17
+      },
+      "contextBefore": "sha256:6d29a056dd53750ed16c7df716e2cfc1f38d6791feac5ca8cca173665bd0bb45",
+      "contextAfter": "sha256:2a077c7b057aca3556dacecc7741e73d8dea139a7f92bc8ba54c76477a3e9bcf",
+      "generation": 1
+    },
+    {
+      "id": "us_2820222f2468ee02e37578e727b70211",
+      "kind": "memberAccess",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:8f824f92453f5a7047c2a0c73a37313ddd36dd9c68d3b60461242f37612f8122",
+      "shapeFingerprint": "sha256:08f94fdcf9e1a3e69914641a0029c6b367a4b75f788cf455af430704c02f38aa",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 799,
+        "length": 16
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:fb7d1101a9731e9341b510af540c587dcb4fbe89fb907e7a927a221bd1b34408",
+      "generation": 1
+    },
+    {
+      "id": "us_291d68d62653fb69f763c04a129ca53c",
+      "kind": "expressionStatement",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "statement",
+      "fingerprint": "sha256:15619c4caddf70b32b0cd7b887eff8620bf8d6877220be57cbeae6bc86a7ee8e",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 774,
+        "length": 45
+      },
+      "contextBefore": "sha256:0870745afd44d435d4edb851699fe9b9dbec75d5153e4ed6467f42bd79dc46b6",
+      "contextAfter": "sha256:5874a0855a331f9775df631c5e639f1e786136711102f4f2d2edf58e0c0def13",
+      "generation": 1
+    },
+    {
+      "id": "us_2cceab0f622988f0bb349e8ea3fc2b1b",
+      "kind": "assignment",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "expression",
+      "fingerprint": "sha256:0e8d66e6ebc0b2bbbef802cd0a947bde7b57b9216e4d0a43a7af8daede10c44f",
+      "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 828,
+        "length": 39
+      },
+      "contextBefore": "sha256:fb7d1101a9731e9341b510af540c587dcb4fbe89fb907e7a927a221bd1b34408",
+      "contextAfter": "sha256:5ea78d156020eb7a9a7756a3783d2012ff7535579ce3854a327761b9797adfe6",
+      "generation": 1
+    },
+    {
+      "id": "us_4144f92744b21e6b68292e86bfc28839",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "parameter",
+      "fingerprint": "sha256:281855e671341d5015ad7abe7fa43cb8009ba20cadb7ffc6a10de9cfa498fbf6",
+      "shapeFingerprint": "sha256:281855e671341d5015ad7abe7fa43cb8009ba20cadb7ffc6a10de9cfa498fbf6",
+      "parentFingerprint": "sha256:41b860995dc943f475647e533cb0a2a65d220edf09da7a85a8f0ce81d3383e7a",
+      "anchor": {
+        "start": 538,
+        "length": 25
+      },
+      "contextBefore": "sha256:c6e956580c56c29c651bd8048aaf8a354de08f48a142f454d0e5c310de745c5d",
+      "contextAfter": "sha256:32f6c5ee9aff78cce214c0b46c6509bce133d99443a48437f6d3e9a8e068b859",
+      "generation": 1
+    },
+    {
+      "id": "us_47bfdb9b83590c49ea81aa3544a35051",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:47efe31e04ea45d480b4cece2954c394ead077851106b73462140004ad91fdb3",
+      "shapeFingerprint": "sha256:47efe31e04ea45d480b4cece2954c394ead077851106b73462140004ad91fdb3",
+      "parentFingerprint": "sha256:c9058cecd0e9da821fed7bbd2e007c8188ba2e6fe3bb7e7546e1f98aef9b2ea2",
+      "anchor": {
+        "start": 746,
+        "length": 17
+      },
+      "contextBefore": "sha256:2a077c7b057aca3556dacecc7741e73d8dea139a7f92bc8ba54c76477a3e9bcf",
+      "contextAfter": "sha256:f63e29fef12a6b98f2adec97be8f032e015fc89dba0869d8f99528b1398529f3",
+      "generation": 1
+    },
+    {
+      "id": "us_61da0b9337206c4096ee9f1f46729a29",
+      "kind": "return",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "statement",
+      "fingerprint": "sha256:e99f4e6dcc0d32f028587a2ef63180f9010823fd4ff67ca6a6c8c2f2344ace9a",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 936,
+        "length": 31
+      },
+      "contextBefore": "sha256:51d9aaa9dbed1bad319caaadc750a324ddeb6bbd33c174e945d89877c7e49862",
+      "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
+      "generation": 1
+    },
+    {
+      "id": "us_64d64612d9975a55171f1d0552861443",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:0f5beec1a3aca3d3c874781ab5498001fd28d55b3acec6d1b309a777aa778556",
+      "shapeFingerprint": "sha256:0f5beec1a3aca3d3c874781ab5498001fd28d55b3acec6d1b309a777aa778556",
+      "parentFingerprint": "sha256:c9058cecd0e9da821fed7bbd2e007c8188ba2e6fe3bb7e7546e1f98aef9b2ea2",
+      "anchor": {
+        "start": 721,
+        "length": 11
+      },
+      "contextBefore": "sha256:8ee53df70709214ba93bb09163f10d49b70d9c6b294e3a72cdf9fbb5269a2cb2",
+      "contextAfter": "sha256:0870745afd44d435d4edb851699fe9b9dbec75d5153e4ed6467f42bd79dc46b6",
+      "generation": 1
+    },
+    {
+      "id": "us_6736e179692c58307becc1c91c69d998",
+      "kind": "cast",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "returnValue",
+      "fingerprint": "sha256:aed3a7bb2eec9d336b5362ecb5265bcdc7848e6d40149a2706a0d080d117ab11",
+      "shapeFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 943,
+        "length": 23
+      },
+      "contextBefore": "sha256:0001630e76988b15fdd490ce801d68bf6b06af513fb84dba1f0413cfc1a0bcaf",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    },
+    {
+      "id": "us_85a349325f85fc4f3c4c341b66913983",
+      "kind": "memberAccess",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:8f824f92453f5a7047c2a0c73a37313ddd36dd9c68d3b60461242f37612f8122",
+      "shapeFingerprint": "sha256:08f94fdcf9e1a3e69914641a0029c6b367a4b75f788cf455af430704c02f38aa",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 848,
+        "length": 16
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:51d9aaa9dbed1bad319caaadc750a324ddeb6bbd33c174e945d89877c7e49862",
+      "generation": 1
+    },
+    {
+      "id": "us_8e711e19dd72384f5ad35ec1b8d10cb1",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "shapeFingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "parentFingerprint": "sha256:08f94fdcf9e1a3e69914641a0029c6b367a4b75f788cf455af430704c02f38aa",
+      "anchor": {
+        "start": 799,
+        "length": 6
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:38e39e7af661f443ebdd48a7026eca3017588528783218c3e450a38263cd289d",
+      "generation": 1
+    },
+    {
+      "id": "us_93c38ba222318ca5f8f85a4d875d641c",
+      "kind": "expressionStatement",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "statement",
+      "fingerprint": "sha256:e0e4ece71dae9c79e89f0fd9110b0165ce996ef5c6e9f05e228a0ee62b879327",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 828,
+        "length": 40
+      },
+      "contextBefore": "sha256:fb7d1101a9731e9341b510af540c587dcb4fbe89fb907e7a927a221bd1b34408",
+      "contextAfter": "sha256:67ee18f89cb7c30b44172f1e9e5266a177b8358ac29906530d4bfdb9bb6f3aa5",
+      "generation": 1
+    },
+    {
+      "id": "us_a9731c933f90fc9719464ff4254dfada",
+      "kind": "cast",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:9d859249319b2b69bb768957cc3050c61f3ce7c9a7f7c9193b6369c12b9aafed",
+      "shapeFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 794,
+        "length": 24
+      },
+      "contextBefore": "sha256:f63e29fef12a6b98f2adec97be8f032e015fc89dba0869d8f99528b1398529f3",
+      "contextAfter": "sha256:75bb4f888b4030505d335276515eadc65403df93db6d01756489c82864981e2f",
+      "generation": 1
+    },
+    {
+      "id": "us_b262417246ca50b88a497272e38a08e6",
+      "kind": "cast",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:72c35a098f2bfa6882f577925fd82502edb51bb006c90912ce69ac2b6037fa2e",
+      "shapeFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 843,
+        "length": 24
+      },
+      "contextBefore": "sha256:bf31f1a2da8eb37c41a09e8bfa2a33529dc85f5bbcb19c70f84ef391b6b468cc",
+      "contextAfter": "sha256:5ea78d156020eb7a9a7756a3783d2012ff7535579ce3854a327761b9797adfe6",
+      "generation": 1
+    },
+    {
+      "id": "us_b3c95603f032ece51ff4a515e53977e1",
+      "kind": "parameter",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "parameter",
+      "fingerprint": "sha256:025590321744bc2d5e05efc12cd440e5dadac0f3f420b84d1498d6250fdd62bc",
+      "shapeFingerprint": "sha256:025590321744bc2d5e05efc12cd440e5dadac0f3f420b84d1498d6250fdd62bc",
+      "parentFingerprint": "sha256:41b860995dc943f475647e533cb0a2a65d220edf09da7a85a8f0ce81d3383e7a",
+      "anchor": {
+        "start": 573,
+        "length": 20
+      },
+      "contextBefore": "sha256:3ea1cd390af51c8b6d1922651fbda6d8827d8765a1955014f1723d4a41640c68",
+      "contextAfter": "sha256:775fd362cac47a937695ee1c731285f821e419c3df517e8df8a9d41eabde15bb",
+      "generation": 1
+    },
+    {
+      "id": "us_ba7ac2c64068a4b43835c78ecfd680f5",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "shapeFingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "parentFingerprint": "sha256:51d7d0a21990eeb96e4068174d87f36a930773f624a1c0bee74113ff1949ff69",
+      "anchor": {
+        "start": 948,
+        "length": 6
+      },
+      "contextBefore": "sha256:67ee18f89cb7c30b44172f1e9e5266a177b8358ac29906530d4bfdb9bb6f3aa5",
+      "contextAfter": "sha256:4fd871db5ba22c9c8bbb25991c218f2f1e68bf0be2d97dc316b0c28f23f492a7",
+      "generation": 1
+    },
+    {
+      "id": "us_c1cd6f72f7fd0b0801b6cb382e99ac75",
+      "kind": "literal",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:d4d49cb4d943a64e760bac5dd592de88e050926e09a3ac91203ea9580124e1ba",
+      "shapeFingerprint": "sha256:d4d49cb4d943a64e760bac5dd592de88e050926e09a3ac91203ea9580124e1ba",
+      "parentFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "anchor": {
+        "start": 865,
+        "length": 1
+      },
+      "contextBefore": "sha256:68995fbb6b73f388bddd49257534656fd83c1d424ac53cac7b11917fa5af7c1c",
+      "contextAfter": "sha256:bfb87399059a033f8f4c5984f20472d73c31b1b376bd692fbafcee1c2ffffec0",
+      "generation": 1
+    },
+    {
+      "id": "us_c488e8bbb1b60d66deb6700c1f85bc68",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:53a624823858650470f33bb84be97116a30eb0db7f6c9be0f492daae6b9ea56d",
+      "shapeFingerprint": "sha256:53a624823858650470f33bb84be97116a30eb0db7f6c9be0f492daae6b9ea56d",
+      "parentFingerprint": "sha256:c9058cecd0e9da821fed7bbd2e007c8188ba2e6fe3bb7e7546e1f98aef9b2ea2",
+      "anchor": {
+        "start": 647,
+        "length": 21
+      },
+      "contextBefore": "sha256:13d3fa2c9720bd06a5fccc623a28c043f58db2bc8a4e78abbc2700bda19238a6",
+      "contextAfter": "sha256:023928daa4093166dde9eb7e2afec74b11842ac76cc76d6b05ef498950a94e76",
+      "generation": 1
+    },
+    {
+      "id": "us_c9c1d838e6054e1750896d90c0d66bce",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "shapeFingerprint": "sha256:39bc43d2f67576938836d354143a7fe155bb7e0874367e41d2a831a6ed553ab6",
+      "parentFingerprint": "sha256:08f94fdcf9e1a3e69914641a0029c6b367a4b75f788cf455af430704c02f38aa",
+      "anchor": {
+        "start": 848,
+        "length": 6
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:e4d65a98adb5404ef4c61e13cb7174b5a0b497842f3efee6a185666dd7d81cae",
+      "generation": 1
+    },
+    {
+      "id": "us_d0114e897b0e8b24b4fee9db67d2e37f",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:49f1001689061ecd558d2ae173f1e7519f609540cee8550760e3668c5560040e",
+      "shapeFingerprint": "sha256:49f1001689061ecd558d2ae173f1e7519f609540cee8550760e3668c5560040e",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 828,
+        "length": 12
+      },
+      "contextBefore": "sha256:fb7d1101a9731e9341b510af540c587dcb4fbe89fb907e7a927a221bd1b34408",
+      "contextAfter": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "generation": 1
+    },
+    {
+      "id": "us_ed8a47c1f9fda5e3422dfcae26c1043f",
+      "kind": "invocation",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "operand",
+      "fingerprint": "sha256:3f2d7dc75d88780a09af429a3cf8300039e416fec31be6c190a57593b595381d",
+      "shapeFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "parentFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "anchor": {
+        "start": 799,
+        "length": 19
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:75bb4f888b4030505d335276515eadc65403df93db6d01756489c82864981e2f",
+      "generation": 1
+    },
+    {
+      "id": "us_f7835d48ff4e8626ebdadc6d69be679b",
+      "kind": "invocation",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "operand",
+      "fingerprint": "sha256:e310cc3227abb13a6dd09d14ead3881dc58e4996006267f64efcd714329ec170",
+      "shapeFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "parentFingerprint": "sha256:cce94a3243d33f222b259d8c7dcc53b367096637d38e38e3cbb3affa2bca3fce",
+      "anchor": {
+        "start": 848,
+        "length": 19
+      },
+      "contextBefore": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "contextAfter": "sha256:5ea78d156020eb7a9a7756a3783d2012ff7535579ce3854a327761b9797adfe6",
+      "generation": 1
+    },
+    {
+      "id": "us_fa23b51f8638c260fc0b5be16b5922ad",
+      "kind": "invocation",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "argument",
+      "fingerprint": "sha256:4f12cb41dc609e532b1b486d4133b25d744b507be1703a2d0e43dbec5f29beee",
+      "shapeFingerprint": "sha256:f5e58d7e7f0d667160c01885d789d9742deb61912e28af90ca136390a573cdff",
+      "parentFingerprint": "sha256:c9058cecd0e9da821fed7bbd2e007c8188ba2e6fe3bb7e7546e1f98aef9b2ea2",
+      "anchor": {
+        "start": 682,
+        "length": 25
+      },
+      "contextBefore": "sha256:6622369875881811baa7b3407a65f088f08f8f7e86eab6aef1102ca618f39c38",
+      "contextAfter": "sha256:55bcda6c4b2a0b27291983f62302428004763ab1006d40a11454ecc277155bdf",
+      "generation": 1
+    },
+    {
+      "id": "us_ff42c0d98ef460e8cd901f7fc03384dd",
+      "kind": "assignment",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "expression",
+      "fingerprint": "sha256:90509ca2e2c6b6d1a13dd22e89245a637ca8e2b93db96a60bb67107fef4be211",
+      "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 774,
+        "length": 44
+      },
+      "contextBefore": "sha256:0870745afd44d435d4edb851699fe9b9dbec75d5153e4ed6467f42bd79dc46b6",
+      "contextAfter": "sha256:75bb4f888b4030505d335276515eadc65403df93db6d01756489c82864981e2f",
+      "generation": 1
+    },
+    {
+      "id": "us_ffb966b4220779fd9cfd861766521464",
+      "kind": "identifier",
+      "owner": "UnifiedScript.Tests.Fixtures.BlueprintEventReload.BlueprintEventReloadFixture.EvaluateInherited(int,int,int)",
+      "role": "target",
+      "fingerprint": "sha256:47efe31e04ea45d480b4cece2954c394ead077851106b73462140004ad91fdb3",
+      "shapeFingerprint": "sha256:47efe31e04ea45d480b4cece2954c394ead077851106b73462140004ad91fdb3",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 774,
+        "length": 17
+      },
+      "contextBefore": "sha256:0870745afd44d435d4edb851699fe9b9dbec75d5153e4ed6467f42bd79dc46b6",
+      "contextAfter": "sha256:ea51777acf98b3de3d31a6488be9bcb8416c93cbd6214507d1aa733a85442a8b",
+      "generation": 1
+    }
+  ],
+  "tombstones": []
+}

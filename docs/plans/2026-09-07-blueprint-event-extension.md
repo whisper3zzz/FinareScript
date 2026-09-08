@@ -1,6 +1,6 @@
 # 2026-09-07 — Existing Blueprint event extension
 
-Status: in-progress
+Status: complete
 
 ## Outcome and scope
 
@@ -506,8 +506,8 @@ parent calls (`cmd-parent-intermediate-final.log`), Live Sync
 test expansion; its implementation was unchanged. These fixtures execute in
 HostEditor and do not establish cooked support.
 
-The cooked extension checkpoint below is now verified. Real-UE DLL body
-replacement remains open; M13.3C-2 is still in progress.
+The cooked extension checkpoint below is verified. Real-UE DLL body replacement
+was the remaining C-2 requirement; its completed result follows that checkpoint.
 
 ## Cooked extension checkpoint
 
@@ -566,10 +566,13 @@ destroying the World. The final PASS includes that cleanup and the managed
 World-count assertion. This changes the fixture's verification timing, not the
 runtime registry contract.
 
-This checkpoint does not replace the remaining real-UE DLL body replacement
-proof. The existing override reload tests use the real managed instance and
-transaction machinery with a fixture native transport. A changed body still
-needs to be exercised through a live UE generated class before C-2 closes.
+The cooked checkpoint did not replace the real-UE DLL body replacement proof.
+The earlier override reload tests use the real managed instance and transaction
+machinery with a fixture native transport. The live UE checkpoint below closes
+the remaining body replacement requirement.
+
+## Live UE body replacement
+
 Use an isolated test DLL with v1, compatible v2 and incompatible-route variants,
 leaving the staged Demo untouched. Materialize the baseline emitted Declaration
 and keep its generated class fixed while replacing the DLL at one active path.
@@ -578,3 +581,44 @@ change its managed return value while its explicit native parent executes once
 and the other World retains v1. Rejecting the incompatible variant must leave
 generation, callable behavior and ownership unchanged. Restoring compatible v2
 must permit the other instance to reload through the production component API.
+The fixture's baseline Declaration comes from the normal CLI emitter, with a
+generated persistent identity sidecar; candidate variants replace only the
+isolated DLL. A normal Blueprint child also calls EvaluateInherited through a
+real CallFunction node and records its returned value downstream. Exercise that
+caller before and after reload alongside the native typed entrypoint. This
+distinguishes an ordinary Blueprint caller from the already-covered ordinary
+Blueprint parent implementation.
+
+This checkpoint passed on 2026-09-08. The checked-in
+`BlueprintEventReloadFixture` and `tools/build-blueprint-event-reload-fixture.ps1`
+build all three variants and emit the baseline Declaration with a persistent
+generated identity sidecar. They leave the staged Demo unchanged. Evidence is
+under `artifacts/m13-3c-2-event-reload/`: `fixture-build-final.log` records the
+managed build/emission, and `editor-build-final-5.log` explicitly compiles the
+current native test and links HostEditor. `blueprint-event-reload-final-5.log`
+records `BlueprintEventOverrideReload` Success and normal Automation queue exit.
+The no-argument fixture-directory route also passes in
+`blueprint-event-reload-default-root.log`; the active DLL is restored to v1.
+
+Both live Actors are ordinary Blueprint children with real CallEvaluate
+bytecode. The test configures each real ScriptComponent before native BeginPlay.
+Native calls and Blueprint calls retain return/ref/out values 12/12/12; after
+the first compatible reload only its return changes to 112. Replacing the DLL
+alone does not change either active instance. Incompatible routes fail the
+persisted activation contract, retain the original generated binding contract,
+generations, script/registry/lifecycle counts, and leave both native and Blueprint
+callers usable. The second compatible reload then produces 112 in both Worlds.
+Every call executes the managed override and native parent once. Teardown
+restores all host counts and the managed World count, and restores the active
+DLL to v1.
+
+The initial fixture attempts exposed two verification issues. Directly writing
+an Actor CDO's native component configuration did not populate the ordinary
+child's component; this test now uses explicit instance configuration and leaves
+the inherited-default investigation to C-3. A cleanup attempt also dereferenced
+a package pointer after World cleanup/GC. Cleanup now resolves its exact package
+names again before unloading. The failing logs remain alongside the final
+result; they are not passing evidence for inherited native-subobject defaults.
+
+M13.3C-2 is complete for the explicit extension contract above. Continue with
+[Blueprint inherited defaults](2026-09-08-blueprint-inherited-defaults.md).
