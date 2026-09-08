@@ -439,8 +439,11 @@ partial source or sidecar. Runtime bindings use the concrete generated class
 path for every inherited property, with Actor state on the Target and component
 state on the Host; CoreCLR receiver overrides can also reach eligible private
 base properties. This contract does not infer a native Blueprint parent from
-the C# base type. Managed-inheritance UE runtime/cooked validation and native
-authoring owner selection remain tracked in the
+the C# base type. Three-level managed inheritance passes Actor startup, state
+hydration/flush, reload and teardown in two Worlds and in Win64 Development
+cooked execution, with complete scalar/Array/Set/Map values and no native field
+for the unexposed helper. Native authoring owner selection and inherited
+function projections remain tracked in the
 [inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md).
 
 The compiled declaration payload uses v1.4 for collection state,

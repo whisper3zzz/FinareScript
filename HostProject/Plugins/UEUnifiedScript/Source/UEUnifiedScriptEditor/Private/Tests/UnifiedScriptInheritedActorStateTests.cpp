@@ -374,6 +374,9 @@ bool ConfigureAndCheckCdo(
     bValid &= Test.TestTrue(
         *FString::Printf(TEXT("%s component has its immediate archetype"), Label),
         bImmediateArchetype);
+    bValid &= Test.TestNull(
+        *FString::Printf(TEXT("%s excludes the unexposed helper property"), Label),
+        FindFProperty<FProperty>(&Class, TEXT("UnexposedHelper")));
     bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ScriptAsset is inherited"), Label), Component->ScriptAsset == &ScriptAsset);
     bValid &= Test.TestTrue(*FString::Printf(TEXT("%s starts automatically"), Label), Component->bStartAutomatically);
     bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ticks automatically"), Label), Component->bTickAutomatically);

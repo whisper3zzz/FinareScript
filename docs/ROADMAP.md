@@ -43,8 +43,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   identity through rollback and package reload, with native Actor instances
   from the original and duplicated branches. Managed-base state now has matching
   source/runtime ownership, persistent identities, constructor defaults and
-  source-owner declaration editing with focused managed validation. Continue
-  with its two-World/cooked fixture and native authoring owner selection; the
+  source-owner declaration editing with focused managed validation. Three-level
+  managed inheritance now passes the two-World and cooked Actor state fixture,
+  including complete collections and exclusion of unexposed helper properties.
+  Continue with native authoring owner selection and shared function projections; the
   asset-operation lane does not verify active managed rename.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit

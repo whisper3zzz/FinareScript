@@ -332,7 +332,7 @@ bool CheckCdo(UClass& Class, UUnifiedScriptAsset& Asset, UObject* ExpectedArchet
     AUnifiedScriptActor* Cdo = Cast<AUnifiedScriptActor>(Class.GetDefaultObject());
     UUnifiedScriptComponent* Component = Cdo != nullptr ? Cdo->GetUnifiedScriptComponent() : nullptr;
     FState Actual;
-    if (Cdo == nullptr || Component == nullptr || Component->GetFName() != FName(TEXT("UnifiedScript")) || Component->GetOuter() != Cdo || Component->GetArchetype() != ExpectedArchetype || Component->ScriptAsset != &Asset || !Component->bStartAutomatically || !Component->bTickAutomatically || !ReadState(*Cdo, Actual) || !SameState(Actual, Expected))
+    if (Cdo == nullptr || Component == nullptr || FindFProperty<FProperty>(&Class, TEXT("UnexposedHelper")) != nullptr || Component->GetFName() != FName(TEXT("UnifiedScript")) || Component->GetOuter() != Cdo || Component->GetArchetype() != ExpectedArchetype || Component->ScriptAsset != &Asset || !Component->bStartAutomatically || !Component->bTickAutomatically || !ReadState(*Cdo, Actual) || !SameState(Actual, Expected))
     {
         OutError = FString::Printf(TEXT("Cooked CDO contract failed for %s (component=%s archetype=%s expectedArchetype=%s)."), *Class.GetPathName(), Component != nullptr ? *Component->GetPathName() : TEXT("<null>"), Component != nullptr && Component->GetArchetype() != nullptr ? *Component->GetArchetype()->GetPathName() : TEXT("<null>"), ExpectedArchetype != nullptr ? *ExpectedArchetype->GetPathName() : TEXT("<null>"));
         return false;

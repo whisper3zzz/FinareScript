@@ -751,7 +751,8 @@ remains responsible for existing collection overrides and their followers.
 
 Reviewed public non-event `[Visual]` instance methods also project onto that
 exact Blueprint as stable `USF_<semantic-id>` UFunctions. Their managed name is
-display/binding metadata, so source rename preserves graph identity while stale
+display/binding metadata. Declaration-patch renames preserve the sidecar's
+function identity through HIR, binding, Graph and execution, while stale
 generated graphs can be removed independently of user graphs. A product-owned
 Blueprint GeneratedClass stores the binding table; a dedicated Kismet compiler
 keeps that carrier across initial compile and recompile for every proxy parent

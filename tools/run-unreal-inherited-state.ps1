@@ -191,7 +191,7 @@ try {
     & $runUat BuildCookRun `
         "-project=$projectFile" '-noP4' '-platform=Win64' '-clientconfig=Development' '-build' '-cook' '-stage' '-pak' '-archive' `
         '-map=/Engine/Maps/Entry' "-CookDir=$fixtureDirectory" "-archivedirectory=$archiveRoot" '-AdditionalCookerOptions=-SkipZenStore' `
-        '-unattended' '-utf8output' '-NoCodeSign' '-NoXGE' *>&1 | Tee-Object -FilePath (Join-Path $fixtureRoot 'packaged-build-cook.log')
+        '-unattended' '-utf8output' '-NoCodeSign' '-NoXGE' '-UbtArgs=-NoUBTMakefiles' *>&1 | Tee-Object -FilePath (Join-Path $fixtureRoot 'packaged-build-cook.log')
     if ($LASTEXITCODE -ne 0) { throw "BuildCookRun failed with exit code $LASTEXITCODE." }
     $packageRoot = Join-Path $archiveRoot 'Windows/UEUnifiedScriptHost'
     $executables = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'UEUnifiedScriptHost.exe' -File)

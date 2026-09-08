@@ -7,33 +7,63 @@ using UnifiedScript.Unreal.Generated;
 
 namespace UnifiedScript.Tests.Fixtures.BlueprintInheritedState;
 
-[ScriptAsset("UnifiedScript/Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture")]
-[UnrealScriptClass(
-    UnrealScriptClassKind.Actor,
-    GeneratedClassPath = BlueprintInheritedStatePaths.ActorClassPath)]
-public sealed class BlueprintInheritedStateFixture : UnrealActorScript
+public abstract class BlueprintInheritedStateBase : UnrealActorScript
 {
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Inherited State")]
-    public int Seed { get; set; } = 3;
+    public int Seed { get; set; } = 1;
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Inherited State")]
-    public IReadOnlyList<int> Values { get; set; } = [2, 4];
+    public IReadOnlyList<int> Values { get; set; } = new List<int> { 0, 1 };
 
+    public int UnexposedHelper { get; set; } = 77;
+
+    protected BlueprintInheritedStateBase()
+    {
+        Seed = 8;
+        Values = new List<int> { 9, 10 };
+    }
+}
+
+public abstract class BlueprintInheritedStateMiddle : BlueprintInheritedStateBase
+{
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Inherited State")]
-    public IReadOnlySet<int> Enabled { get; set; } = new HashSet<int> { 5, 7 };
+    public IReadOnlySet<int> Enabled { get; set; } = new HashSet<int> { 1, 2 };
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Inherited State")]
     public IReadOnlyDictionary<int, int> Weights { get; set; } = new Dictionary<int, int>
     {
-        { 11, 13 },
-        { 17, 19 },
+        { 1, 1 },
     };
 
     [Expose(InstanceEditable = false, SaveGame = false, Category = "Inherited State")]
-    public int TickCount { get; set; } = 0;
+    public int TickCount { get; set; } = 5;
 
+    protected BlueprintInheritedStateMiddle()
+    {
+        Enabled = new HashSet<int> { 5, 7 };
+        Weights = new Dictionary<int, int>
+        {
+            { 11, 13 },
+            { 17, 19 },
+        };
+        TickCount = 0;
+    }
+}
+
+[ScriptAsset("UnifiedScript/Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture")]
+[UnrealScriptClass(
+    UnrealScriptClassKind.Actor,
+    GeneratedClassPath = BlueprintInheritedStatePaths.ActorClassPath)]
+public sealed class BlueprintInheritedStateFixture : BlueprintInheritedStateMiddle
+{
     private Actor _actor;
     private UnifiedScriptComponent _host;
+
+    public BlueprintInheritedStateFixture()
+    {
+        base.Seed = 3;
+        base.Values = new List<int> { 2, 4 };
+    }
 
     protected override void OnBeginPlay()
     {

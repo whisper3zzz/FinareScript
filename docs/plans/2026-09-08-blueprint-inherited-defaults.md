@@ -312,8 +312,7 @@ FullyQualifiedName filter for those classes. This result is recorded in tool
 stdout; no log/TRX was saved. Coverage includes shared-ID JSON/binary roundtrip,
 cross-file source-owner edits, derived defaults, full collection lifecycle on
 Actor/Component hosts, runtime hiding rejection and private/nullable CoreCLR
-state overrides. UE runtime and cooked proof for this changed managed code are
-still pending below.
+state overrides. The subsequent UE runtime and cooked proof is recorded below.
 
 Review found two integration defects in the initial implementation. Multiple
 constructor default edits could invalidate later absolute syntax spans; the
@@ -345,19 +344,60 @@ upgrade and renamed caller-binding assertions; both pass in
 `managed-function-identities-final.log`. No product code changed after the
 194-test regression.
 
-For the native proof, distribute the existing isolated inherited-state fixture
-across source-defined base, middle and concrete classes. Preserve its final
+The native proof distributes the existing isolated inherited-state fixture
+across source-defined base, middle and concrete classes. It preserves final
 scalar and complete Array/Set/Map defaults through deterministic constructor
-assignments, and explicitly check that an unexposed helper property does not
-become a native field. Its ordinary Blueprint child/grandchild, two-World
-startup/reload and cooked verifier then exercise the projected managed state.
-Build the changed managed host and CLI coherently before fixture emission;
-routine managed checks keep host staging disabled until that deliberate
-deployment step. This source change needs new runtime evidence, unlike the
-earlier native-only asset-operation checkpoint.
-The three-layer fixture source and unexposed-helper CDO assertions are prepared.
+assignments, including leaf overrides of different base defaults. It explicitly
+checks that an unexposed helper property does not become a native field. Its
+ordinary Blueprint child/grandchild, two-World startup/reload and cooked verifier
+exercise the projected managed state. The changed managed host and CLI are
+built coherently before fixture emission; routine managed checks keep host
+staging disabled until that deliberate deployment step. This source change
+requires new runtime evidence, unlike the earlier native-only asset-operation
+checkpoint.
 `artifacts/m13-3c-3-managed-base-state/editor-build.log` records successful
-HostEditor compilation; this is not yet runtime or cooked evidence.
+HostEditor compilation; the runtime and cooked results follow below.
+
+The managed checkpoint is committed as `9310b22`. The official Release
+CLI/host/Demo build and emit completed with coherent staged dependencies;
+`managed-release-deploy.log` records it. Generated Demo sidecars add 24 function
+entries while retaining every existing entry ID. The fixture's five state
+declarations now belong to its source base/middle types, so its regenerated
+sidecar replaces the old leaf-owned fixture IDs through the normal emitter.
+
+The first `InheritedActorStateRuntime` run with this source hierarchy passed
+Success and Queue Empty with one test in `fixture/editor-fixture-generation.log`.
+Its subsequent Cook reached staging but failed because the cached Game target
+receipt still named the already-cleaned earlier fixture
+`D73C2073901A47EC9E165784FDAA0979`. The driver cleaned its new four packages and
+three staged program files as designed. This was a stale UBT runtime-dependency
+list, not a failure of the new two-World state behavior. The first-attempt cook
+and driver logs are retained under the fixture artifact directory.
+The driver now passes `-UbtArgs=-NoUBTMakefiles` to BuildCookRun so each dynamic
+fixture's current staged dependencies are gathered. It does not fabricate old
+files or edit build receipts. The retry regenerates the cleaned source fixture
+before repeating the affected packaging path.
+
+The retry passed with fixture `5240D159D0484FA8BB34D15938E42465`, using the
+managed source/deployment from `9310b22`. Evidence is under
+`artifacts/m13-3c-3-managed-base-state`:
+
+- `fixture/editor-fixture-generation.log`: `InheritedActorStateRuntime` Success
+  and Queue Empty with one test. Saved/reloaded ordinary Blueprint descendants
+  start the projected managed state in two Worlds, retain full values and
+  identity through independent reloads, and restore lifecycle/World counts.
+- `fixture/packaged-build-cook.log`: UAT BuildCookRun succeeds with exit 0 after
+  collecting current runtime dependencies.
+- `fixture/packaged-inherited-state.log` and
+  `fixture/inherited-state-cook-result.txt`: the archived verifier passes the
+  same complete state, immediate component archetypes, reload and teardown
+  contract. It records the actual archive-local chunk and bundled hostfxr.
+- `fixture/build-cook-run.log`: PASS and exact cleanup of this fixture's four
+  source packages and three staged program files. The archive remains at
+  `package/Windows/UEUnifiedScriptHost`.
+
+The remaining native authoring selection and active managed rename boundaries
+below still prevent closing C-3 as a whole.
 
 Native authoring needs a subsequent owner-aware selection check as well.
 `SUnifiedScriptAuthoringSurface::FindState` returns the first asset containing

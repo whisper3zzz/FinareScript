@@ -101,6 +101,38 @@
       "generation": 1
     },
     {
+      "id": "us_54596f746e682942c83dcf140e2ee8d3",
+      "kind": "function",
+      "owner": "UnifiedScript.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:b6ccfff0783ce76141d4d915906c28bd644ba35879c6831c861d0b973be928c5",
+      "anchor": {
+        "start": 1648,
+        "length": 73
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 2
+    },
+    {
+      "id": "us_679f32dba7aa531ec07eec48c5eab16a",
+      "kind": "function",
+      "owner": "UnifiedScript.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:78aa35832c64a3c50864bd2ba330333ca9b39b307f35e9354ffe3bed45c5918f",
+      "anchor": {
+        "start": 1891,
+        "length": 76
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:c855e587efa90ab037ccada587ad9e089284fb20cfba8ff5a1519e9573257fa5",
+      "generation": 2
+    },
+    {
       "id": "us_782876a00b7dbdfa352bc7e8cbdf7f26",
       "kind": "block",
       "owner": "UnifiedScript.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
@@ -163,6 +195,22 @@
       "contextBefore": "sha256:e099900be77a2b3af0561887b07f0b01a80ec241b9e25a32961be9cba8a57b60",
       "contextAfter": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
       "generation": 1
+    },
+    {
+      "id": "us_bf204e4c56d3b24c0b96dbc600fc7dee",
+      "kind": "function",
+      "owner": "UnifiedScript.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:1257236bedfaff22a1d3fbb62a1e50202bc1a27886266190589af1dec32901c7",
+      "anchor": {
+        "start": 1727,
+        "length": 80
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 2
     },
     {
       "id": "us_d2f29b18379893bcbde71d238931ccf0",
