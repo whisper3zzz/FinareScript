@@ -22,6 +22,7 @@
 #include "UnifiedScriptEventExtensionVerification.h"
 #include "UnifiedScriptFunctionClosureVerification.h"
 #include "UnifiedScriptInheritedStateVerification.h"
+#include "UnifiedScriptActiveClassOpsVerification.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -666,6 +667,14 @@ public:
         }
         if (FParse::Param(
                 FCommandLine::Get(),
+                TEXT("UnifiedScriptActiveClassOpsVerify")))
+        {
+            ActiveClassOpsVerifierInitHandle =
+                FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
+                    &UE::UnifiedScript::ActiveClassOpsVerification::Run);
+        }
+        if (FParse::Param(
+                FCommandLine::Get(),
                 TEXT("UnifiedScriptFrameWorkload")))
         {
             FrameBenchmarkInitHandle =
@@ -707,6 +716,12 @@ public:
             FCoreDelegates::OnFEngineLoopInitComplete.Remove(
                 InheritedStateVerifierInitHandle);
             InheritedStateVerifierInitHandle.Reset();
+        }
+        if (ActiveClassOpsVerifierInitHandle.IsValid())
+        {
+            FCoreDelegates::OnFEngineLoopInitComplete.Remove(
+                ActiveClassOpsVerifierInitHandle);
+            ActiveClassOpsVerifierInitHandle.Reset();
         }
         if (FrameBenchmarkInitHandle.IsValid())
         {
@@ -1070,6 +1085,7 @@ private:
     FDelegateHandle FunctionClosureVerifierInitHandle;
     FDelegateHandle EventExtensionVerifierInitHandle;
     FDelegateHandle InheritedStateVerifierInitHandle;
+    FDelegateHandle ActiveClassOpsVerifierInitHandle;
     FDelegateHandle FrameBenchmarkInitHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkStartTickerHandle;
     FTSTicker::FDelegateHandle FrameBenchmarkTickerHandle;

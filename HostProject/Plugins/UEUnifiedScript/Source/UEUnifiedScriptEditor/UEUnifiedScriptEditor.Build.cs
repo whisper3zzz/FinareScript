@@ -29,6 +29,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "Slate",
             "SlateCore",
             "ToolMenus",
+            "TypedElementFramework",
             "UnrealEd",
             "UMG",
             "WorkspaceMenuStructure",

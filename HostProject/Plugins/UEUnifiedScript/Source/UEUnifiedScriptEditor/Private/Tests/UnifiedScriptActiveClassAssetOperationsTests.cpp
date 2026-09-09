@@ -5,10 +5,13 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Elements/Framework/EngineElementsLibrary.h"
+#include "Elements/Framework/TypedElementRegistry.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Editor.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
@@ -29,6 +32,7 @@
 #include "UnifiedScriptProjectSetup.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 #include "UObject/StructOnScope.h"
 
 namespace UE::UnifiedScript::ActiveClassAssetOperations::Tests
@@ -68,6 +72,70 @@ bool WriteJson(const FString& Path, const TSharedPtr<FJsonObject>& Root, FString
         return false;
     }
     return true;
+}
+
+bool SaveActiveCookPackage(UObject& TopLevelObject, const FString& Filename, FString& OutError)
+{
+    FSavePackageArgs Args;
+    Args.TopLevelFlags = RF_Public | RF_Standalone;
+    Args.SaveFlags = SAVE_NoError;
+    if (!UPackage::SavePackage(TopLevelObject.GetOutermost(), &TopLevelObject, *Filename, Args))
+    {
+        OutError = FString::Printf(TEXT("Could not save active cook package '%s'."), *Filename);
+        return false;
+    }
+    return true;
+}
+
+bool UnloadActiveCookPackages(const TArray<FString>& PackageNames)
+{
+    TArray<UPackage*> Packages;
+    for (const FString& Name : PackageNames)
+    {
+        if (UPackage* Package = FindPackage(nullptr, *Name))
+        {
+            Package->SetDirtyFlag(false);
+            Packages.AddUnique(Package);
+        }
+    }
+    return Packages.Num() == 0 || UPackageTools::UnloadPackages(Packages);
+}
+
+void ReleaseEditorObjectElementsForPackages(const TArray<FString>& PackageNames)
+{
+    // PackageTools clears this selection set during its unload path. Do it
+    // while the registered element types and their UObject owners are still
+    // valid, before explicitly draining editor-object elements below.
+    if (GEditor)
+    {
+        GEditor->ResetAllSelectionSets();
+    }
+
+    TArray<UObject*> Objects;
+    for (const FString& Name : PackageNames)
+    {
+        UPackage* Package = FindPackage(nullptr, *Name);
+        if (!Package)
+        {
+            continue;
+        }
+
+        Objects.Reset();
+        GetObjectsWithOuter(Package, Objects, EGetObjectsFlags::IncludeNestedObjects);
+        for (UObject* Object : Objects)
+        {
+            if (Object)
+            {
+                UEngineElementsLibrary::DestroyEditorObjectElement(Object);
+            }
+        }
+        UEngineElementsLibrary::DestroyEditorObjectElement(Package);
+    }
+
+    if (UTypedElementRegistry* Registry = UTypedElementRegistry::GetInstance())
+    {
+        Registry->ProcessDeferredElementsToDestroy();
+    }
 }
 
 bool ResolveDeployment(const TSharedPtr<FJsonObject>& Config, FString& OutPath, FString& Error)
@@ -756,6 +824,187 @@ bool RunBuilder(FAutomationTestBase& Test, const FString& ProjectPath, const FSt
     return Test.TestTrue(TEXT("Builds and emits the active managed fixture"), true);
 }
 
+bool WriteActiveCookReceipt(
+    FAutomationTestBase& Test,
+    const FString& ReceiptPath,
+    const FString& FixtureId,
+    const FString& PackageDirectory,
+    const TArray<FString>& ExpectedPackageNames,
+    const FString& OutputRoot,
+    UBlueprint* RenamedBlueprint,
+    UUnifiedScriptAsset* RenamedAsset,
+    UBlueprint* RenamedChild,
+    UBlueprint* RenamedGrandchild,
+    UBlueprint* DuplicateBlueprint,
+    UUnifiedScriptAsset* DuplicateAsset,
+    UBlueprint* DuplicateChild,
+    UBlueprint* DuplicateGrandchild,
+    FString& OutError)
+{
+    if (ExpectedPackageNames.Num() != 8 || !RenamedBlueprint || !RenamedAsset || !RenamedChild || !RenamedGrandchild ||
+        !DuplicateBlueprint || !DuplicateAsset || !DuplicateChild || !DuplicateGrandchild)
+    {
+        OutError = TEXT("Active cook receipt requires both complete renamed and duplicate branches.");
+        return false;
+    }
+    FGuid FixtureGuid;
+    if (FixtureId.Len() != 32 ||
+        !FixtureId.Equals(FixtureId.ToUpper(), ESearchCase::CaseSensitive) ||
+        !FGuid::ParseExact(FixtureId, EGuidFormats::Digits, FixtureGuid) ||
+        !FixtureGuid.IsValid())
+    {
+        OutError = TEXT("Active cook receipt has an invalid fixture GUID.");
+        return false;
+    }
+    const FString StageDirectory = Normalize(FPaths::Combine(
+        FPaths::ProjectDir(), TEXT("Plugins/UEUnifiedScript/Binaries/Managed/ActiveClassOps"), FixtureId));
+    const FString StagePrefix = FString::Printf(TEXT("{PluginDir}/Binaries/Managed/ActiveClassOps/%s"), *FixtureId);
+    const FString ChunkSource = Normalize(FPaths::Combine(OutputRoot, TEXT("declaration/ActiveClassAssetOperationsFixture.uschunk")));
+    const FString AssemblySource = Normalize(FPaths::Combine(OutputRoot, TEXT("publish/ActiveClassAssetOperationsFixture.dll")));
+    const FString DeclarationSource = Normalize(FPaths::Combine(OutputRoot, TEXT("declaration/ActiveClassAssetOperationsFixture.asset.json")));
+    const FString ChunkTarget = FPaths::Combine(StageDirectory, TEXT("ActiveClassAssetOperationsFixture.uschunk"));
+    const FString AssemblyTarget = FPaths::Combine(StageDirectory, TEXT("ActiveClassAssetOperationsFixture.dll"));
+    const FString DeclarationTarget = FPaths::Combine(StageDirectory, TEXT("ActiveClassAssetOperationsFixture.asset.json"));
+    if (!IFileManager::Get().MakeDirectory(*StageDirectory, true))
+    {
+        OutError = FString::Printf(TEXT("Could not create active cook stage directory '%s'."), *StageDirectory);
+        return false;
+    }
+    if (!RenamedAsset->ScriptClassId.IsValid() || !DuplicateAsset->ScriptClassId.IsValid() ||
+        RenamedAsset->ScriptClassId == DuplicateAsset->ScriptClassId ||
+        RenamedAsset->ScriptTypeName.IsEmpty() || DuplicateAsset->ScriptTypeName.IsEmpty() ||
+        RenamedAsset->DeclarationAssetPath.IsEmpty() || DuplicateAsset->DeclarationAssetPath.IsEmpty() ||
+        RenamedAsset->GeneratedClassPath.ToString().IsEmpty() || DuplicateAsset->GeneratedClassPath.ToString().IsEmpty())
+    {
+        OutError = TEXT("Active cook branches must have distinct valid ClassIds, types, generated classes, and declaration selectors.");
+        return false;
+    }
+    auto PackageLeaf = [&PackageDirectory](const FString& PackageName)
+    {
+        return PackageName.StartsWith(PackageDirectory + TEXT("/"), ESearchCase::CaseSensitive)
+            ? PackageName.Mid(PackageDirectory.Len() + 1)
+            : FString();
+    };
+    const FString RenamedBaseLeaf = PackageLeaf(ExpectedPackageNames[0]);
+    const FString RenamedChildLeaf = PackageLeaf(ExpectedPackageNames[1]);
+    const FString RenamedGrandchildLeaf = PackageLeaf(ExpectedPackageNames[2]);
+    const FString RenamedAssetLeaf = PackageLeaf(ExpectedPackageNames[3]);
+    const FString DuplicateBaseLeaf = PackageLeaf(ExpectedPackageNames[4]);
+    const FString DuplicateChildLeaf = PackageLeaf(ExpectedPackageNames[5]);
+    const FString DuplicateGrandchildLeaf = PackageLeaf(ExpectedPackageNames[6]);
+    const FString DuplicateAssetLeaf = PackageLeaf(ExpectedPackageNames[7]);
+    const FString TypeNamespace = TEXT("UnifiedScript.Tests.Fixtures.ActiveClassAssetOperations.");
+    const bool bBranchLayoutValid =
+        RenamedBaseLeaf.EndsWith(TEXT("_Renamed"), ESearchCase::CaseSensitive) &&
+        DuplicateBaseLeaf.EndsWith(TEXT("_Duplicate"), ESearchCase::CaseSensitive) &&
+        RenamedChildLeaf == TEXT("ActiveChild_") + FixtureId &&
+        RenamedGrandchildLeaf == TEXT("ActiveGrandchild_") + FixtureId &&
+        DuplicateChildLeaf == DuplicateBaseLeaf + TEXT("_Child") &&
+        DuplicateGrandchildLeaf == DuplicateBaseLeaf + TEXT("_Grandchild") &&
+        RenamedAssetLeaf == TEXT("SA_") + RenamedBaseLeaf &&
+        DuplicateAssetLeaf == TEXT("SA_") + DuplicateBaseLeaf &&
+        RenamedAsset->ScriptTypeName == TypeNamespace + RenamedBaseLeaf &&
+        DuplicateAsset->ScriptTypeName == TypeNamespace + DuplicateBaseLeaf &&
+        RenamedAsset->DeclarationAssetPath == TEXT("UEUnifiedScriptHost/") + RenamedBaseLeaf &&
+        DuplicateAsset->DeclarationAssetPath == TEXT("UEUnifiedScriptHost/") + DuplicateBaseLeaf &&
+        RenamedBlueprint->GetPathName().StartsWith(PackageDirectory + TEXT("/"), ESearchCase::CaseSensitive) &&
+        DuplicateBlueprint->GetPathName().StartsWith(PackageDirectory + TEXT("/"), ESearchCase::CaseSensitive) &&
+        FSoftClassPath(RenamedBlueprint->GeneratedClass).ToString() == PackageDirectory + TEXT("/") + RenamedBaseLeaf + TEXT(".") + RenamedBaseLeaf + TEXT("_C") &&
+        FSoftClassPath(DuplicateBlueprint->GeneratedClass).ToString() == PackageDirectory + TEXT("/") + DuplicateBaseLeaf + TEXT(".") + DuplicateBaseLeaf + TEXT("_C") &&
+        RenamedAsset->GetPathName() == PackageDirectory + TEXT("/") + RenamedAssetLeaf + TEXT(".") + RenamedAssetLeaf &&
+        DuplicateAsset->GetPathName() == PackageDirectory + TEXT("/") + DuplicateAssetLeaf + TEXT(".") + DuplicateAssetLeaf;
+    if (!Test.TestTrue(TEXT("Active cook branch layout and declaration selectors are exact"), bBranchLayoutValid))
+    {
+        OutError = TEXT("Active cook branch class/type/selector identity is not the expected GUID layout.");
+        return false;
+    }
+    const TArray<TPair<FString, FString>> Copies = {
+        TPair<FString, FString>(ChunkSource, ChunkTarget),
+        TPair<FString, FString>(AssemblySource, AssemblyTarget),
+        TPair<FString, FString>(DeclarationSource, DeclarationTarget)};
+    for (const TPair<FString, FString>& Copy : Copies)
+    {
+        if (!Test.TestTrue(TEXT("Active cook program source exists"), IFileManager::Get().FileExists(*Copy.Key)) ||
+            !Test.TestTrue(TEXT("Stages the active cook program"),
+                IFileManager::Get().Copy(*Copy.Value, *Copy.Key, true, true) == COPY_OK))
+        {
+            OutError = FString::Printf(TEXT("Could not stage active cook program '%s'."), *Copy.Key);
+            return false;
+        }
+    }
+    RenamedAsset->CompiledChunkPath = FString::Printf(TEXT("%s/ActiveClassAssetOperationsFixture.uschunk"), *StagePrefix);
+    RenamedAsset->ScriptAssemblyPath = FString::Printf(TEXT("%s/ActiveClassAssetOperationsFixture.dll"), *StagePrefix);
+    RenamedAsset->DeclarationPath = FString::Printf(TEXT("%s/ActiveClassAssetOperationsFixture.asset.json"), *StagePrefix);
+    DuplicateAsset->CompiledChunkPath = RenamedAsset->CompiledChunkPath;
+    DuplicateAsset->ScriptAssemblyPath = RenamedAsset->ScriptAssemblyPath;
+    DuplicateAsset->DeclarationPath = RenamedAsset->DeclarationPath;
+    RenamedAsset->MarkPackageDirty();
+    DuplicateAsset->MarkPackageDirty();
+
+    const TArray<UObject*> Objects = {
+        RenamedBlueprint, RenamedChild, RenamedGrandchild, RenamedAsset,
+        DuplicateBlueprint, DuplicateChild, DuplicateGrandchild, DuplicateAsset};
+    TArray<TSharedPtr<FJsonValue>> PackageValues;
+    for (int32 Index = 0; Index < Objects.Num(); ++Index)
+    {
+        UObject* Object = Objects[Index];
+        const FString PackageName = ExpectedPackageNames[Index];
+        if (!Object || !Object->GetOutermost() || Object->GetOutermost()->GetName() != PackageName)
+        {
+            OutError = FString::Printf(TEXT("Active cook object package mismatch: expected '%s', got '%s'."),
+                *PackageName,
+                Object && Object->GetOutermost() ? *Object->GetOutermost()->GetName() : TEXT("<null>"));
+            return false;
+        }
+        const FString Filename = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+        FString SaveError;
+        if (!SaveActiveCookPackage(*Object, Filename, SaveError))
+        {
+            OutError = SaveError;
+            return false;
+        }
+        TSharedRef<FJsonObject> Package = MakeShared<FJsonObject>();
+        Package->SetStringField(TEXT("packageName"), PackageName);
+        Package->SetStringField(TEXT("packageFilename"), FPaths::ConvertRelativePathToFull(Filename));
+        PackageValues.Add(MakeShared<FJsonValueObject>(Package));
+    }
+    auto AddBranch = [](TArray<TSharedPtr<FJsonValue>>& Branches, const TCHAR* Role, UUnifiedScriptAsset& Asset, UBlueprint& Base, UBlueprint& Child, UBlueprint& Grandchild)
+    {
+        TSharedRef<FJsonObject> Branch = MakeShared<FJsonObject>();
+        Branch->SetStringField(TEXT("role"), Role);
+        Branch->SetStringField(TEXT("classId"), TEXT("us_") + Asset.ScriptClassId.ToString(EGuidFormats::Digits).ToLower());
+        Branch->SetStringField(TEXT("typeName"), Asset.ScriptTypeName);
+        Branch->SetStringField(TEXT("baseClassPath"), FSoftClassPath(Base.GeneratedClass).ToString());
+        Branch->SetStringField(TEXT("childClassPath"), FSoftClassPath(Child.GeneratedClass).ToString());
+        Branch->SetStringField(TEXT("grandchildClassPath"), FSoftClassPath(Grandchild.GeneratedClass).ToString());
+        Branch->SetStringField(TEXT("scriptAssetPath"), Asset.GetPathName());
+        Branch->SetStringField(TEXT("declarationAssetPath"), Asset.DeclarationAssetPath);
+        Branches.Add(MakeShared<FJsonValueObject>(Branch));
+    };
+    TArray<TSharedPtr<FJsonValue>> Branches;
+    AddBranch(Branches, TEXT("renamed"), *RenamedAsset, *RenamedBlueprint, *RenamedChild, *RenamedGrandchild);
+    AddBranch(Branches, TEXT("duplicate"), *DuplicateAsset, *DuplicateBlueprint, *DuplicateChild, *DuplicateGrandchild);
+    TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.active-class-ops-cook-fixture/v0.1"));
+    Root->SetStringField(TEXT("fixtureId"), FixtureId);
+    Root->SetStringField(TEXT("packageDirectory"), PackageDirectory);
+    Root->SetStringField(TEXT("stageDirectory"), StagePrefix);
+    Root->SetArrayField(TEXT("branches"), Branches);
+    Root->SetArrayField(TEXT("packages"), PackageValues);
+    Root->SetStringField(TEXT("chunkPath"), ChunkSource);
+    Root->SetStringField(TEXT("assemblyPath"), AssemblySource);
+    Root->SetStringField(TEXT("declarationPath"), DeclarationSource);
+    FString Json;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+    if (!FJsonSerializer::Serialize(Root, Writer) ||
+        !FFileHelper::SaveStringToFile(Json + TEXT("\n"), *ReceiptPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+    {
+        OutError = FString::Printf(TEXT("Could not write active cook receipt '%s'."), *ReceiptPath);
+        return false;
+    }
+    return true;
+}
+
 bool LoadIdentityEntryIds(
     FAutomationTestBase& Test,
     const FString& SidecarPath,
@@ -934,6 +1183,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::ActiveClassAssetOperations::Tests;
+    FString CookReceiptPath;
+    const bool bCookFixture = FParse::Value(
+        FCommandLine::Get(),
+        TEXT("-UnifiedScriptActiveClassOpsCookReceipt="),
+        CookReceiptPath);
+    CookReceiptPath.TrimQuotesInline();
+    if (bCookFixture)
+    {
+        CookReceiptPath = Normalize(CookReceiptPath);
+        IFileManager::Get().Delete(*CookReceiptPath, false, true);
+        IFileManager::Get().Delete(*(CookReceiptPath + TEXT(".pending")), false, true);
+    }
+    bool bKeepCookFixture = false;
     const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits).ToUpper();
     const FString OutputRootRelative = TEXT("artifacts/m13-3c-3-active-asset-operations/") + Suffix;
     const FString OutputRoot = Normalize(FPaths::Combine(FPaths::ProjectDir(), TEXT("../"), OutputRootRelative));
@@ -1027,11 +1289,26 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         Root / FailedDuplicateName, Root / (TEXT("SA_") + FailedDuplicateName),
         Root / (TEXT("SA_") + DuplicateName),
         Root / (DuplicateName + TEXT("_Child")), Root / (DuplicateName + TEXT("_Grandchild"))};
+    const TArray<FString> RetainedPackageNames = {
+        Root / RenamedName,
+        Root / ChildName,
+        Root / GrandchildName,
+        Root / (TEXT("SA_") + RenamedName),
+        Root / DuplicateName,
+        Root / (DuplicateName + TEXT("_Child")),
+        Root / (DuplicateName + TEXT("_Grandchild")),
+        Root / (TEXT("SA_") + DuplicateName)};
+    TSet<FString> UnloadedPackageNames;
     ON_SCOPE_EXIT
     {
+        ReleaseEditorObjectElementsForPackages(PackageNames);
         TArray<UPackage*> Packages;
         for (const FString& Name : PackageNames)
         {
+            if (UnloadedPackageNames.Contains(Name))
+            {
+                continue;
+            }
             if (UPackage* Package = FindPackage(nullptr, *Name))
             {
                 Package->SetDirtyFlag(false);
@@ -1042,14 +1319,27 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         {
             UPackageTools::UnloadPackages(Packages);
         }
-        CollectGarbage(RF_NoFlags);
         for (const FString& Name : PackageNames)
         {
+            if (bKeepCookFixture && RetainedPackageNames.Contains(Name))
+            {
+                continue;
+            }
             const FString Filename = FPackageName::LongPackageNameToFilename(Name, FPackageName::GetAssetPackageExtension());
             if (IFileManager::Get().FileExists(*Filename))
             {
                 IFileManager::Get().Delete(*Filename, false, true);
             }
+        }
+        if (bCookFixture && !bKeepCookFixture)
+        {
+            const FString StageDirectory = Normalize(FPaths::Combine(
+                FPaths::ProjectDir(), TEXT("Plugins/UEUnifiedScript/Binaries/Managed/ActiveClassOps"), Suffix));
+            for (const TCHAR* Leaf : {TEXT("ActiveClassAssetOperationsFixture.uschunk"), TEXT("ActiveClassAssetOperationsFixture.dll"), TEXT("ActiveClassAssetOperationsFixture.asset.json")})
+            {
+                IFileManager::Get().Delete(*FPaths::Combine(StageDirectory, Leaf), false, true);
+            }
+            IFileManager::Get().Delete(*(CookReceiptPath + TEXT(".pending")), false, true);
         }
     };
 
@@ -1867,6 +2157,81 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestEqual(TEXT("Active fixture restores the managed World baseline"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
+    if (bCookFixture && !HasAnyErrors())
+    {
+        const FString PendingReceiptPath = CookReceiptPath + TEXT(".pending");
+        FString ReceiptError;
+        if (!WriteActiveCookReceipt(
+                *this,
+                PendingReceiptPath,
+                Suffix,
+                Root,
+                RetainedPackageNames,
+                OutputRoot,
+                RenameResult.Blueprint,
+                RenameResult.ScriptAsset,
+                ChildBlueprint,
+                GrandchildBlueprint,
+                DuplicateResult.Blueprint,
+                DuplicateResult.ScriptAsset,
+                DuplicateChild,
+                DuplicateGrandchild,
+                ReceiptError))
+        {
+            AddError(ReceiptError);
+        }
+        if (!HasAnyErrors())
+        {
+            // No package or class pointer may keep the retained packages loaded
+            // while the receipt is made visible to the cook driver.
+            BaseBlueprint = nullptr;
+            ChildBlueprint = nullptr;
+            GrandchildBlueprint = nullptr;
+            ScriptAsset = nullptr;
+            RenameResult.Blueprint = nullptr;
+            RenameResult.ScriptAsset = nullptr;
+            DuplicateResult.Blueprint = nullptr;
+            DuplicateResult.ScriptAsset = nullptr;
+            DuplicateChild = nullptr;
+            DuplicateGrandchild = nullptr;
+            MaterializedDefaults = nullptr;
+            ReleaseEditorObjectElementsForPackages(RetainedPackageNames);
+            const bool bUnloadedRetainedPackages = UnloadActiveCookPackages(RetainedPackageNames);
+            if (!TestTrue(TEXT("Unloads active cook packages before publishing receipt"), bUnloadedRetainedPackages))
+            {
+                AddError(TEXT("Could not unload the active cook package set."));
+            }
+            else
+            {
+                for (const FString& PackageName : RetainedPackageNames)
+                {
+                    UnloadedPackageNames.Add(PackageName);
+                }
+            }
+        }
+        if (!HasAnyErrors())
+        {
+            for (const FString& PackageName : RetainedPackageNames)
+            {
+                const FString Filename = FPackageName::LongPackageNameToFilename(
+                    PackageName, FPackageName::GetAssetPackageExtension());
+                if (!TestTrue(TEXT("Active cook package remains on disk"), IFileManager::Get().FileExists(*Filename)))
+                {
+                    AddError(FString::Printf(TEXT("Missing retained active cook package '%s'."), *Filename));
+                }
+            }
+        }
+        if (!HasAnyErrors() &&
+            !TestTrue(TEXT("Publishes active cook receipt after package unload"),
+                IFileManager::Get().Move(*CookReceiptPath, *PendingReceiptPath, true, true)))
+        {
+            AddError(FString::Printf(TEXT("Could not publish active cook receipt '%s'."), *CookReceiptPath));
+        }
+        if (!HasAnyErrors())
+        {
+            bKeepCookFixture = true;
+        }
+    }
     return !HasAnyErrors();
 }
 

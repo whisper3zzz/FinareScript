@@ -1,19 +1,19 @@
 # 2026-09-08 — Blueprint inherited defaults and component identity
 
-Status: in-progress
+Status: complete (M13.3C-3)
 
 ## Outcome and scope
 
-Begin M13.3C-3 with ordinary Blueprint children of a managed Script Class.
+M13.3C-3 began with ordinary Blueprint children of a managed Script Class.
 The configured Script Asset on an Actor's native ScriptComponent must have a
 defined inheritance path, and intentional class/instance defaults must survive
 base-class synchronization and Blueprint recompilation. Preserve the exact
 managed owner, state semantic IDs and World lifetimes.
 
-This first batch uses the existing UE parent chain. General managed-to-managed
-parent bodies and authoring changes to the base class remain separate C-3/C-4
-work. Do not use a guessed Script Asset or the first available component to
-repair missing ownership.
+The work extends the existing UE parent chain through managed inheritance,
+active asset transactions and cooked execution. Authoring changes to the base
+class and component composition remain C-4 work. Do not use a guessed Script
+Asset or the first available component to repair missing ownership.
 
 ## Decisions and remaining work
 
@@ -752,26 +752,60 @@ original IDs. The active fixture's owned content directory
 is restored. This result proves native ProcessEvent dispatch and ordinary
 Blueprint inheritance, not a new Blueprint VM caller test.
 
-C-3 remains open until the affected cooked path uses the current runtime and
-the actual renamed/duplicated assets. Partial-source Delete was not added.
+The existing two-World `BlueprintEventOverrideReload` regression also passes
+with the repaired native build in `override-duplicate-live-regression.log`
+(Success and Queue Empty). Native and Blueprint callers retain their previous
+bodies, bindings, generations and ownership after incompatible route rejection.
 
-The next cooked fixture will retain the final renamed and duplicated branches
-from `ActiveClassAssetOperations` after its runtime and teardown assertions pass.
-An optional receipt mode will save the two managed bases, their ordinary
-children/grandchildren, and their ScriptAssets (eight packages total), then
-stage the final shared chunk, assembly and declaration under a GUID-specific
-`{PluginDir}/Binaries/Managed/ActiveClassOps` directory. Each asset will retain
-its own ClassId, managed type and declaration selector while using those
-archive-relative program paths.
+C-3 now closes with the actual renamed and duplicated assets running in the
+current Win64 Development archive. Partial-source Delete was not added;
+base-class changes and component composition are the next C-4 scope.
 
-The Host verifier will load both cooked hierarchies and check the exact class,
-ScriptAsset and immediate component archetype relationships. It will execute
-the rebuilt Visual function and explicit Actor event in separate Worlds,
-preserve state through independent reload, and verify lifecycle/World cleanup.
-The actual loaded program and hostfxr must belong to the executing archive.
-The driver will follow the existing inherited-state cook workflow, refresh UBT
-runtime dependency discovery for the current staged GUID, and remove only the
-receipt's exact owned packages and three staged program files after execution.
+The optional `ActiveClassAssetOperations` receipt mode saves both managed bases,
+their ordinary children/grandchildren and their ScriptAssets (eight packages)
+after runtime and teardown assertions pass. The final shared chunk, assembly
+and declaration use a GUID-specific `{PluginDir}/Binaries/Managed/ActiveClassOps`
+directory. Each asset retains its own ClassId, managed type and declaration
+selector. Cleanup resets editor selections before destroying and draining the
+owned Typed Elements, then unloads retained packages once. This avoids deferred
+element destruction accessing a freed Blueprint; it does not suppress UE checks.
+
+The cooked verifier loads both hierarchies and checks class/ScriptAsset identity,
+component name/Outer, immediate CDO/instance archetypes and automatic lifecycle
+flags. The rebuilt Visual function returns 113 for input 12; Actor `ReceiveTick`
+executes the +100 override through ProcessEvent. Independent World reload keeps
+instance and handle identity, advances only the selected generation, and
+preserves accumulated state (30 to 131/141 and 50 to 151/161). Override counts
+advance from 100 to 200 independently. Actor teardown releases native/CoreCLR
+script counts and lifecycle claims before World destruction, and the final
+managed World count returns to baseline. This is not a new Blueprint VM caller
+test or a new managed DLL body swap inside the packaged process.
+
+The driver directly builds the Game target with global `-NoUBTMakefiles`,
+validates the current GUID's exact three runtime dependencies in its target
+receipt, and invokes UAT Cook/Stage/Archive without rebuilding that receipt.
+UAT's nested `-UbtArgs=-NoUBTMakefiles` alone left the previous GUID cached and
+caused staging retries for files already cleaned up. Runtime starts Entry and
+requires the executing archive's exact chunk and bundled hostfxr. The driver
+removes only the receipt's eight packages and three staged files afterward.
+
+Final evidence is under `artifacts/m13-3c-3-active-class-ops-cook`:
+
+- `editor-active-cook-build-4.log` builds the final native verifier.
+- `fixture-6/editor-active-class-ops.log` reports named Success and Queue Empty
+  for fixture `3AAA44514C1C67852512E8A89E1F4589`, without the Typed Element
+  external-reference warnings from the failed attempts.
+- `fixture-6/host-build-no-ubt-makefiles.log` refreshes the Game receipt and
+  `fixture-6/packaged-build-cook.log` reports successful Cook/Stage/Archive.
+- `fixture-6/active-class-ops-cook-result.txt` and
+  `fixture-6/packaged-active-class-ops.log` report PASS with the actual chunk and
+  hostfxr paths under `package-4/Windows/UEUnifiedScriptHost`.
+- `cook-driver-4.log` records successful end-to-end execution and exact cleanup;
+  onboarding configuration is restored and no owned source package remains.
+
+Earlier fixture cleanup, verifier path/compile and cached-stage failures remain
+in `fixture` through `fixture-5` and `cook-driver-1.log` through
+`cook-driver-3.log`; those attempts are not passing acceptance evidence.
 
 ## Relevant verification
 

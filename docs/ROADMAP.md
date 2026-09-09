@@ -25,7 +25,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 ## Current execution cursor
 
 - Active milestone: **M13.3 resumed after the M13.5 common capability breadth checkpoint**.
-- Current tranche: **M13.3C-3 — inheritance, defaults and subobject identity**.
+- Current tranche: **M13.3C-4 — class composition in normal authoring**.
+  Start with the source, declaration and native-parent contract for explicit
+  base-class changes through normal authoring. Preserve intentional defaults,
+  references, persistent identities and active-generation rejection semantics;
+  then extend component composition through the existing asset workflow.
+- Latest inheritance checkpoint: **M13.3C-3 complete**.
   The real Actor factory preserves the exact Script Asset, native component
   identity and edited bool defaults through ordinary child/grandchild inheritance,
   compile and package reload. Existing collection fields now preserve derived
@@ -72,9 +77,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   preservation and independent World reload. Duplicate replaces only proven
   stale managed override graphs with its new function IDs; its ordinary
   Blueprint grandchild executes the rebuilt event, while user-owned graphs and
-  mismatched persisted bindings remain protected. The affected cooked path
-  remains open before closing C-3.
-  See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
+  mismatched persisted bindings remain protected. Both actual renamed and
+  duplicated hierarchies now pass Win64 Development cooked execution, including
+  rebuilt functions and Actor overrides, independent two-World reload, exact
+  component archetypes and cleanup. The executing archive supplies both the
+  chunk and bundled hostfxr. Evidence and boundaries are in
+  `docs/plans/2026-09-08-blueprint-inherited-defaults.md`.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and
   ImplementableEvent signatures with exact ownership, persisted activation
@@ -90,7 +98,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   The final compatible reload changes the second World to 112, and teardown
   restores host and managed World counts. Evidence and boundaries are in
   `docs/plans/2026-09-07-blueprint-event-extension.md`. General managed class
-  inheritance and Actor native-subobject defaults remain C-3 work.
+  inheritance and Actor native-subobject defaults are covered by C-3 above.
 - Latest function checkpoint: **M13.3C-1c-b complete**. All five DemoLibrary
   exchange families pass ordinary Blueprint caller bytecode, downstream output
   use, package reload and Win64 Development cooked execution. Static-library
@@ -107,8 +115,8 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   ordinary native object text values (`4f68d09`),
   typed reference containers (`7c250c5`), reflected interface references
   (`bffb2d8`) and callbacks (`2827216`).
-- Last completed M13.3 slice: **M13.3C-2**, following the Blueprint function
-  closure in C-1c-b.
+- Last completed M13.3 slice: **M13.3C-3**, following explicit extension
+  behavior in C-2 and Blueprint function closure in C-1c-b.
 - Current delivery strategy: **M13.5 comparison and capability breadth first ->
   M13.3 deeper Script Class integration -> M13.4 external validation ->
   M13.6 delivery expansion**.
@@ -596,7 +604,7 @@ lifecycle/input/event/delegate/interface routes, and common-value plus
   extends existing BlueprintNativeEvent and BlueprintImplementableEvent paths,
   with one owner, explicit parent-call semantics and predictable reload. Build
   on the existing event/super-call support; do not introduce prototype mutation.
-- [ ] **M13.3C-3 — inheritance, defaults and subobject identity:** close the
+- [x] **M13.3C-3 — inheritance, defaults and subobject identity:** close the
   remaining class/CDO/subobject cases across compile, reload, cook/package,
   Blueprint inheritance and multi-World use. Extend the existing asset-operation
   transactions when those identities participate in rename, duplicate or redirect.
