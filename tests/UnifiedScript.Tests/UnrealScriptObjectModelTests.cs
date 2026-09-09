@@ -190,6 +190,75 @@ public sealed class UnrealScriptObjectModelTests
     }
 
     [Fact]
+    public void InheritedStateUsesSelectedLeafClassIdentity()
+    {
+        var script = new StableInheritedLeafStateScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(34, 54);
+        var bridge = new StateBridge();
+        bridge.Set(target, StableInheritedLeafMemberPrefix + ":BaseCount", 40);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(35, 55),
+            target,
+            83,
+            1));
+
+        Assert.Equal(41, script.BaseCount);
+        Assert.Equal(41, bridge.Get<int>(target, StableInheritedLeafMemberPrefix + ":BaseCount"));
+        Assert.Contains(
+            bridge.Writes,
+            write => write.Path == StableInheritedLeafMemberPrefix + ":BaseCount");
+        lifecycle.OnStop();
+
+        var renamedScript = new StableRenamedInheritedLeafStateScript();
+        IUnrealManagedScript renamedLifecycle = renamedScript;
+        UnrealObjectHandle renamedTarget = UnrealObjectHandle.Create(38, 58);
+        var renamedBridge = new StateBridge();
+        renamedBridge.Set(renamedTarget, StableInheritedLeafMemberPrefix + ":BaseCount", 12);
+        renamedLifecycle.OnStart(new UnrealScriptContext(
+            renamedBridge,
+            UnrealObjectHandle.Create(39, 59),
+            renamedTarget,
+            85,
+            1));
+        Assert.Equal(13, renamedScript.BaseCount);
+        Assert.Equal(13, renamedBridge.Get<int>(
+            renamedTarget,
+            StableInheritedLeafMemberPrefix + ":BaseCount"));
+        renamedLifecycle.OnTick(0.1f);
+        Assert.Equal(14, renamedScript.BaseCount);
+        Assert.Contains(
+            renamedBridge.Writes,
+            write => write.Path == StableInheritedLeafMemberPrefix + ":BaseCount");
+        renamedLifecycle.OnStop();
+    }
+
+    [Fact]
+    public void RpcUsesSelectedLeafClassIdentity()
+    {
+        var script = new StableRpcScript();
+        IUnrealManagedScript lifecycle = script;
+        var bridge = new StateBridge();
+        UnrealObjectHandle target = UnrealObjectHandle.Create(37, 57);
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(36, 56),
+            target,
+            84,
+            1));
+
+        script.TriggerRpc(7);
+
+        var invoke = Assert.Single(bridge.Invokes);
+        Assert.Equal(target, invoke.Handle);
+        Assert.Equal(StableRpcMemberPrefix + ":ServerAdd", invoke.Path);
+        Assert.Equal(7, Assert.Single(invoke.Arguments));
+        lifecycle.OnStop();
+    }
+
+    [Fact]
     public void ActorScriptSynchronizesInheritedCollectionsAcrossStartTickAndStop()
     {
         var script = new InheritedCollectionLeafScript();
@@ -328,6 +397,10 @@ public sealed class UnrealScriptObjectModelTests
     private const string InheritedLeafStatePath = "/Game/Tests/BP_InheritedLeaf.BP_InheritedLeaf_C";
     private const string InheritedCollectionPath = "/Game/Tests/BP_InheritedCollections.BP_InheritedCollections_C";
     private const string AmbiguousStatePath = "/Game/Tests/BP_AmbiguousState.BP_AmbiguousState_C";
+    private const string StableInheritedLeafPath = "/Game/Tests/BP_StableInherited.BP_StableInherited_C";
+    private const string StableRpcPath = "/Game/Tests/BP_StableRpc.BP_StableRpc_C";
+    private const string StableInheritedLeafMemberPrefix = "unifiedscript-class/us_abcdefabcdefabcdefabcdefabcdefab";
+    private const string StableRpcMemberPrefix = "unifiedscript-class/us_1234567890abcdef1234567890abcdef";
 
     private sealed class ProbeActorScript : UnrealActorScript
     {
@@ -500,6 +573,47 @@ public sealed class UnrealScriptObjectModelTests
         }
     }
 
+    [ScriptAsset("Tests/StableInheritedBase", ClassId = "us_11111111111111111111111111111111")]
+    private class StableInheritedBaseStateScript : UnrealActorScript
+    {
+        [Expose]
+        public int BaseCount { get; set; }
+    }
+
+    [ScriptAsset("Tests/StableInheritedLeaf", ClassId = "us_abcdefabcdefabcdefabcdefabcdefab")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = StableInheritedLeafPath)]
+    private sealed class StableInheritedLeafStateScript : StableInheritedBaseStateScript
+    {
+        protected override void OnBeginPlay() => ++BaseCount;
+
+        protected override void OnTick(float deltaSeconds) => ++BaseCount;
+    }
+
+    [ScriptAsset("Tests/StableInheritedRenamedLeaf", ClassId = "us_abcdefabcdefabcdefabcdefabcdefab")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = "/Game/Tests/BP_StableInheritedRenamed.BP_StableInheritedRenamed_C")]
+    private sealed class StableRenamedInheritedLeafStateScript : StableInheritedBaseStateScript
+    {
+        protected override void OnBeginPlay() => ++BaseCount;
+
+        protected override void OnTick(float deltaSeconds) => ++BaseCount;
+    }
+
+    [ScriptAsset("Tests/StableRpc", ClassId = "us_1234567890abcdef1234567890abcdef")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = StableRpcPath)]
+    private sealed class StableRpcScript : UnrealActorScript
+    {
+        public void TriggerRpc(int value) => SendRpc(nameof(ServerAdd), value);
+
+        [UnrealRpc(UnrealRpcTarget.Server)]
+        public void ServerAdd(int value) { }
+    }
+
     [ScriptAsset("Tests/InheritedCollectionBase")]
     private class InheritedCollectionBaseScript : UnrealActorScript
     {
@@ -653,6 +767,8 @@ public sealed class UnrealScriptObjectModelTests
 
         public List<(UnrealObjectHandle Handle, string Path, object Value)> Writes { get; } = [];
 
+        public List<(UnrealObjectHandle Handle, string Path, IReadOnlyList<object?> Arguments)> Invokes { get; } = [];
+
         public int ReadCount { get; private set; }
 
         public void Set<T>(UnrealObjectHandle handle, string path, T value)
@@ -682,6 +798,6 @@ public sealed class UnrealScriptObjectModelTests
         public void Invoke(
             UnrealObjectHandle target,
             string functionPath,
-            IReadOnlyList<object?> arguments) => throw new NotSupportedException();
+            IReadOnlyList<object?> arguments) => Invokes.Add((target, functionPath, arguments));
     }
 }

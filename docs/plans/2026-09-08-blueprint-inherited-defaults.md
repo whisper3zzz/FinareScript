@@ -501,6 +501,77 @@ schema check. That full validator is not reported as passing. No unrelated API
 generation, host staging or protected-file replacement was performed for this
 authoring checkpoint.
 
+## Active managed asset operations (in progress)
+
+The first running factory fixture reaches declaration synchronization, managed
+startup in two Worlds, and the real Rename transaction. Its second CMD run
+exposes a runtime defect: old generations hydrate `DisplayText` during teardown
+using the original generated class path, which no longer resolves after Rename.
+Both Worlds report `TargetTypeNotFound` in
+`artifacts/m13-3c-3-active-asset-operations/active-cmd-2.log`.
+This is not a passing asset-operation checkpoint. The fixture also needs to
+resolve generated function names through their binding metadata and carry the
+source-adjacent identity sidecars through Rename before rebuilt execution can
+be evaluated.
+
+The repair uses an internal `unifiedscript-class/us_<id>:<member>` locator when
+the selected managed Script Class declares a valid, nonzero persistent ClassId.
+Native resolution must match that ID against the exact target's generated-class
+ancestor chain and its retained Script Asset. It must not introduce global old
+path aliases or infer ownership from names or arbitrary components. State
+projection and RPC dispatch use the selected leaf identity; legacy declarations
+without an explicit ClassId retain their existing class-path route. Invalid
+explicit IDs fail rather than silently choosing a different identity. Tests
+must cover old-generation state access after Rename, rejected candidates,
+successful rebuilt bodies, duplicate isolation and lifecycle cleanup before
+this work is considered complete.
+
+The stable-locator implementation passes 22 focused managed tests in
+`managed-stable-identity-3.log`, including real lifecycle state synchronization
+for different selected managed types/paths sharing one ClassId and the RPC
+target/argument contract. `editor-stable-locator-build-2.log` builds the native
+consumer and its rejection test; `native-stable-locator-negative.log` reports
+Success and Queue Empty for `StableMemberLocatorValidation`. These checks do
+not yet establish successful active Rename/Duplicate rebuilding and reload.
+
+`active-cmd-4.log` now starts the real factory chunk in two Worlds and reaches
+the renamed rebuild. The initial state Tick, native AddOne call, injected
+Rename rollback and Rename-before-rebuild Tick/call assertions report no
+failures. Both Worlds tear down without the old generated-class-path bridge
+error. The whole selector still fails: the renamed C# DLL compiles, then the
+builder rejects the missing adjacent sidecar rather than reinitializing its
+IDs (`A9D167A749170E318A991CBDBFEBA113/fixture-build-renamed.log`). No renamed
+reload or Duplicate runs in this check. The initial fixture builder now uses
+official `identity-init` before `emit`; `emit` alone does not create a sidecar
+for a source that has none. The final native fixture builds in
+`editor-active-fixture-build-3.log`, and its configuration restore data comes
+only from the initial successful snapshot.
+
+Explicit Blueprint override reload remains a separate check within this slice:
+generation compatibility currently compares the full managed method identity,
+including its declaring type name. A class rename must retain the same explicit
+declaring-owner ClassId and method contract; it must not relax method-renaming
+or owner-change rejection merely because the native route still matches.
+
+Source identity migration is also required: asset operations currently snapshot
+and publish C# sources, deployment and first-play metadata, but omit adjacent
+`.cs.usids` files. Moving only the sidecar and changing `sourcePath` would still
+lose IDs because reconciliation matches qualified declaration owners. The
+managed transition planner must analyze the current source with its existing
+sidecar, map unchanged syntax structure onto the complete final source, pin
+each live identity to its new span, and let the semantic pipeline regenerate
+owners, fingerprints, anchors and source digests. Rename preserves IDs;
+Duplicate initializes independent IDs for its own declarations while retaining
+external inherited declaration ownership. Missing legacy sidecars remain
+missing; ambiguous mappings and structural changes fail before publication.
+The native consumer must include old/new sidecar paths in collision checks,
+snapshots, concurrent-change checks, journal recovery and rollback. This
+producer/consumer work remains unfinished.
+Duplicate must also apply Roslyn edits to the copied declaration's constructor
+and self references: the current native text transform changes only the class
+declaration, while the factory now emits an explicit constructor. Original
+source and external consumers must retain their original target.
+
 ## Relevant verification
 
 Use focused CMD tests with a managed Actor base, an ordinary Blueprint child

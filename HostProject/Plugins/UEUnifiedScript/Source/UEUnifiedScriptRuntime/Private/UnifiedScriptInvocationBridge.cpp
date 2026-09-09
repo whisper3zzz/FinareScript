@@ -8,6 +8,7 @@
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptBlueprintPrivate.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptAsset.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -88,7 +89,65 @@ bool ResolveMemberIdentity(
 
     const FString ClassPath = MemberPath.Left(SeparatorIndex);
     const FString MemberName = MemberPath.Mid(SeparatorIndex + 1);
-    UClass* TargetClass = FindObject<UClass>(nullptr, *ClassPath);
+    UClass* TargetClass = nullptr;
+    constexpr TCHAR StablePrefix[] = TEXT("unifiedscript-class/");
+    if (ClassPath.StartsWith(StablePrefix, ESearchCase::CaseSensitive))
+    {
+        const FString ClassIdText = ClassPath.Mid(UE_ARRAY_COUNT(StablePrefix) - 1);
+        FGuid RequestedClassId;
+        const FString RequestedDigits = ClassIdText.Mid(3);
+        if (ClassIdText.Len() != 35 ||
+            !ClassIdText.StartsWith(TEXT("us_"), ESearchCase::CaseSensitive) ||
+            !RequestedDigits.Equals(RequestedDigits.ToLower(), ESearchCase::CaseSensitive) ||
+            !FGuid::ParseExact(RequestedDigits, EGuidFormats::Digits, RequestedClassId) ||
+            !RequestedClassId.IsValid())
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::InvalidMemberPath,
+                FString::Printf(
+                    TEXT("Stable UnifiedScript class locator '%s' has an invalid non-zero class identity."),
+                    *ClassPath));
+            return false;
+        }
+
+        int32 MatchingClassCount = 0;
+        for (UClass* Candidate = Target->GetClass(); Candidate != nullptr; Candidate = Candidate->GetSuperClass())
+        {
+            const UUnifiedScriptBlueprintGeneratedClass* Generated =
+                Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+            if (Generated != nullptr && Generated->ManagedScriptAsset != nullptr &&
+                Generated->ManagedScriptAsset->ScriptClassId == RequestedClassId)
+            {
+                TargetClass = Candidate;
+                ++MatchingClassCount;
+            }
+        }
+        if (MatchingClassCount > 1)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeMismatch,
+                FString::Printf(
+                    TEXT("Stable UnifiedScript class locator '%s' is ambiguous in the target class hierarchy."),
+                    *ClassPath));
+            return false;
+        }
+        if (TargetClass == nullptr)
+        {
+            Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::TargetTypeNotFound,
+                FString::Printf(
+                    TEXT("Stable UnifiedScript class locator '%s' is not owned by the target class hierarchy."),
+                    *ClassPath));
+            return false;
+        }
+    }
+    else
+    {
+        TargetClass = FindObject<UClass>(nullptr, *ClassPath);
+    }
     if (TargetClass == nullptr)
     {
         Fail(

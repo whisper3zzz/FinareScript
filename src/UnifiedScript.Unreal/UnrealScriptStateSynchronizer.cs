@@ -163,7 +163,10 @@ internal static class UnrealScriptStateSynchronizer
                         $"Script state '{scriptType.FullName}.{property.Name}' must be a readable, writable instance property.");
                 }
 
-                string memberPath = $"{generatedClassPath}:{property.Name}";
+                string memberPath = UnrealScriptClassIdentity.MemberPath(
+                    scriptType,
+                    generatedClassPath,
+                    property.Name);
                 StateBinding binding = StateBinding.Create(property, memberPath);
                 binding.Replicated = exposure?.Replicated == true;
                 bindings.Add(binding);

@@ -52,6 +52,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   overrides and stable declaration IDs. Continue with active managed
   Rename/Duplicate and subsequent rebuild/reload; the existing asset-operation
   lane verifies native instances without starting its managed source.
+  Persistent ClassId member lookup now retains old-generation state access
+  after an active Rename. The active fixture reaches the renamed rebuild and
+  then rejects missing source-adjacent identity sidecars; sidecar transaction
+  support, rebuilt reload and Duplicate execution remain open.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and

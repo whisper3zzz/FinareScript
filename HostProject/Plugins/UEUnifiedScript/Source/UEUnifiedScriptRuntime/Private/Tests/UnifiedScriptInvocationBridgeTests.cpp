@@ -50,6 +50,55 @@ bool FUnifiedScriptSoftObjectPathValidationTest::RunTest(const FString& Paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptStableMemberLocatorValidationTest,
+    "UnifiedScript.Unreal.InvocationBridge.StableMemberLocatorValidation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptStableMemberLocatorValidationTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Stable locator fixture world exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+
+    {
+        FUnifiedScriptObjectRegistry Registry(World);
+        FUnifiedScriptInvocationBridge Bridge(Registry);
+        UUnifiedScriptComponent* Component = NewObject<UUnifiedScriptComponent>(World);
+        FUnifiedScriptObjectHandleResult HandleResult;
+        const FUnifiedScriptObjectHandle Handle = Registry.RegisterObject(Component, HandleResult);
+        TestTrue(TEXT("Stable locator fixture registration succeeds"), HandleResult.IsSuccess());
+
+        FUnifiedScriptValue Value;
+        FUnifiedScriptInvocationResult Result;
+        const FString UppercasePath =
+            TEXT("unifiedscript-class/us_0123456789ABCDEF0123456789abcdef:bStartAutomatically");
+        TestFalse(
+            TEXT("Stable locator rejects uppercase hexadecimal class IDs"),
+            Bridge.ReadProperty(Handle, UppercasePath, Value, Result));
+        TestTrue(
+            TEXT("Uppercase stable locator failure is a member-path error"),
+            Result.Error == EUnifiedScriptInvocationError::InvalidMemberPath);
+
+        const FString ForeignPath =
+            TEXT("unifiedscript-class/us_0123456789abcdef0123456789abcdef:bStartAutomatically");
+        TestFalse(
+            TEXT("Stable locator rejects a class ID absent from the target hierarchy"),
+            Bridge.ReadProperty(Handle, ForeignPath, Value, Result));
+        TestTrue(
+            TEXT("Foreign stable locator failure identifies the target hierarchy"),
+            Result.Error == EUnifiedScriptInvocationError::TargetTypeNotFound);
+    }
+
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptInvocationBridgePrimitivesTest,
     "UnifiedScript.Unreal.InvocationBridge.Primitives",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

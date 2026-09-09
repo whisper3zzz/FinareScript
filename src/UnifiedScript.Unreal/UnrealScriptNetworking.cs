@@ -51,7 +51,13 @@ public abstract partial class UnrealObjectScript
         // A listen-server/local call can synchronously enter the receive body.
         // Publish outer edits before it hydrates; then retain its resulting state.
         _stateSession?.Flush();
-        Bridge.Invoke(receiver, $"{scriptClass.GeneratedClassPath}:{method.Name}", arguments);
+        Bridge.Invoke(
+            receiver,
+            UnrealScriptClassIdentity.MemberPath(
+                GetType(),
+                scriptClass.GeneratedClassPath,
+                method.Name),
+            arguments);
         _stateSession?.Hydrate();
     }
 }
