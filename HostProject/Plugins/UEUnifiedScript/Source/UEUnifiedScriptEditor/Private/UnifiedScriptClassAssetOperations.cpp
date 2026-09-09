@@ -110,6 +110,7 @@ struct FManagedReferenceDocument
 {
     FString LogicalPath;
     FString Path;
+    FString TargetPath;
     FString SourceDigest;
     TArray<FManagedReferenceEdit> Edits;
 };
@@ -119,6 +120,33 @@ struct FManagedReferencePlan
     FString ManagedTypeName;
     FString ReplacementTypeName;
     TArray<FManagedReferenceDocument> Documents;
+};
+
+struct FManagedIdentityDocument
+{
+    FString SourcePath;
+    FString TargetPath;
+    FString SourceDigest;
+    FString SourceSidecarDigest;
+    bool bHasSourceSidecarDigest = false;
+    bool bPreserveIdentity = false;
+    FString TargetSidecarPath;
+    FString IdentitySidecarJson;
+    bool bHasIdentitySidecarJson = false;
+};
+
+struct FManagedIdentityPlan
+{
+    FString ProjectPath;
+    FString SemanticConfigurationId;
+    TArray<FManagedIdentityDocument> Documents;
+};
+
+struct FManagedIdentityTransition
+{
+    FString SourcePath;
+    FString TargetPath;
+    bool bPreserveIdentity = false;
 };
 
 bool IsManagedIdentifier(const FString& Value)
@@ -466,6 +494,423 @@ bool RunManagedReferencePlanner(
     }
     IFileManager::Get().Delete(*PlanPath, false, true);
     return true;
+}
+
+bool ParseNullableStringField(
+    const TSharedPtr<FJsonObject>& Object,
+    const TCHAR* FieldName,
+    bool& bOutPresent,
+    FString& OutValue,
+    FString& OutError)
+{
+    bOutPresent = false;
+    OutValue.Reset();
+    const TSharedPtr<FJsonValue>* Value = Object->Values.Find(FieldName);
+    if (Value == nullptr || !Value->IsValid())
+    {
+        OutError = FString::Printf(TEXT("Identity plan is missing '%s'."), FieldName);
+        return false;
+    }
+    if ((*Value)->IsNull())
+    {
+        return true;
+    }
+    bOutPresent = true;
+    if (!(*Value)->TryGetString(OutValue))
+    {
+        OutError = FString::Printf(TEXT("Identity plan field '%s' must be a string or null."), FieldName);
+        return false;
+    }
+    return true;
+}
+
+bool ValidateManagedSidecarJson(
+    const FString& SidecarJson,
+    const FString& ExpectedSourcePath,
+    const FString& TargetSource,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Sidecar;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(SidecarJson);
+    if (!FJsonSerializer::Deserialize(Reader, Sidecar) || !Sidecar.IsValid())
+    {
+        OutError = TEXT("Identity plan returned malformed identitySidecarJson.");
+        return false;
+    }
+    FString SchemaVersion;
+    FString SourcePath;
+    FString SourceDigest;
+    if (!Sidecar->TryGetStringField(TEXT("schemaVersion"), SchemaVersion) ||
+        SchemaVersion != TEXT("unifiedscript.identity/v0.1") ||
+        !Sidecar->TryGetStringField(TEXT("sourcePath"), SourcePath) ||
+        !FPaths::IsSamePath(SourcePath, ExpectedSourcePath) ||
+        !Sidecar->TryGetStringField(TEXT("sourceDigest"), SourceDigest))
+    {
+        OutError = TEXT("Identity plan returned an invalid identity sidecar identity.");
+        return false;
+    }
+    FTCHARToUTF8 Utf8(*TargetSource);
+    TArray<uint8> TextBytes;
+    TextBytes.Append(
+        reinterpret_cast<const uint8*>(Utf8.Get()),
+        Utf8.Length());
+    FString ExpectedDigest;
+    if (!ComputeSourceDigest(TextBytes, ExpectedDigest) || SourceDigest != ExpectedDigest)
+    {
+        OutError = TEXT("Identity plan sidecar sourceDigest does not match the final source text.");
+        return false;
+    }
+    return true;
+}
+
+const TArray<uint8>* FindOutputBytes(
+    const TMap<FString, TArray<uint8>>& Outputs,
+    const FString& Path)
+{
+    for (const TPair<FString, TArray<uint8>>& Pair : Outputs)
+    {
+        if (FPaths::IsSamePath(Pair.Key, Path))
+        {
+            return &Pair.Value;
+        }
+    }
+    return nullptr;
+}
+
+const FFileSnapshot* FindSnapshot(
+    const TArray<FFileSnapshot>& Snapshots,
+    const FString& Path);
+
+FString GetManagedTransitionTargetPath(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const FManagedReferenceDocument& Reference)
+{
+    if (!Reference.TargetPath.IsEmpty())
+    {
+        return Reference.TargetPath;
+    }
+    return FPaths::IsSamePath(Reference.Path, Context.SourcePath)
+        ? Target.SourcePath
+        : Reference.Path;
+}
+
+bool ParseManagedIdentityPlan(
+    const FString& PlanPath,
+    const TArray<FManagedIdentityTransition>& Transitions,
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const TMap<FString, TArray<uint8>>& SourceOutputs,
+    const TArray<FFileSnapshot>& Snapshots,
+    FManagedIdentityPlan& OutPlan,
+    TMap<FString, TArray<uint8>>& OutSidecarOutputs,
+    TArray<FString>& OutSidecarDeletes,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    if (!ReadJsonFile(PlanPath, Root, OutError))
+    {
+        return false;
+    }
+    FString SchemaVersion;
+    FString ProjectPath;
+    FString SemanticConfigurationId;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), SchemaVersion) ||
+        SchemaVersion != TEXT("unifiedscript.csharp-source-identity-plan/v0.1") ||
+        !Root->TryGetStringField(TEXT("projectPath"), ProjectPath) ||
+        !FPaths::IsSamePath(ProjectPath, Context.ManagedProjectPath) ||
+        !Root->TryGetStringField(TEXT("semanticConfigurationId"), SemanticConfigurationId) ||
+        SemanticConfigurationId.IsEmpty())
+    {
+        OutError = TEXT("Managed identity plan identity does not match the Script Class transaction.");
+        return false;
+    }
+    const TArray<TSharedPtr<FJsonValue>>* DocumentValues = nullptr;
+    if (!Root->TryGetArrayField(TEXT("documents"), DocumentValues) ||
+        DocumentValues == nullptr || DocumentValues->Num() != Transitions.Num())
+    {
+        OutError = TEXT("Managed identity plan document set does not match the reference plan.");
+        return false;
+    }
+
+    TArray<bool> SeenTransitions;
+    SeenTransitions.Init(false, Transitions.Num());
+    FManagedIdentityPlan Parsed;
+    Parsed.ProjectPath = ProjectPath;
+    Parsed.SemanticConfigurationId = SemanticConfigurationId;
+    for (const TSharedPtr<FJsonValue>& Value : *DocumentValues)
+    {
+        const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+        FManagedIdentityDocument Document;
+        FString SourcePath;
+        FString TargetPath;
+        FString SourceDigest;
+        bool bPreserveIdentity = false;
+        if (!Object.IsValid() ||
+            !Object->TryGetStringField(TEXT("sourcePath"), SourcePath) ||
+            !Object->TryGetStringField(TEXT("targetPath"), TargetPath) ||
+            !Object->TryGetStringField(TEXT("sourceDigest"), SourceDigest) ||
+            !Object->TryGetBoolField(TEXT("preserveIdentity"), bPreserveIdentity))
+        {
+            OutError = TEXT("Managed identity plan contains an invalid document.");
+            return false;
+        }
+        FString NormalizedSourcePath = FPaths::ConvertRelativePathToFull(SourcePath);
+        FString NormalizedTargetPath = FPaths::ConvertRelativePathToFull(TargetPath);
+        FPaths::NormalizeFilename(NormalizedSourcePath);
+        FPaths::NormalizeFilename(NormalizedTargetPath);
+        int32 TransitionIndex = INDEX_NONE;
+        for (int32 Index = 0; Index < Transitions.Num(); ++Index)
+        {
+            if (!SeenTransitions[Index] &&
+                FPaths::IsSamePath(Transitions[Index].SourcePath, NormalizedSourcePath) &&
+                FPaths::IsSamePath(Transitions[Index].TargetPath, NormalizedTargetPath) &&
+                Transitions[Index].bPreserveIdentity == bPreserveIdentity)
+            {
+                TransitionIndex = Index;
+                break;
+            }
+        }
+        if (TransitionIndex == INDEX_NONE)
+        {
+            OutError = TEXT("Managed identity plan contains an unexpected, duplicate, or mismatched transition.");
+            return false;
+        }
+        SeenTransitions[TransitionIndex] = true;
+        Document.SourcePath = MoveTemp(NormalizedSourcePath);
+        Document.TargetPath = MoveTemp(NormalizedTargetPath);
+        Document.SourceDigest = SourceDigest;
+        Document.bPreserveIdentity = bPreserveIdentity;
+        if (!ParseNullableStringField(
+                Object,
+                TEXT("sourceSidecarDigest"),
+                Document.bHasSourceSidecarDigest,
+                Document.SourceSidecarDigest,
+                OutError))
+        {
+            return false;
+        }
+        if (!Object->TryGetStringField(TEXT("targetSidecarPath"), Document.TargetSidecarPath) ||
+            !FPaths::IsSamePath(
+                Document.TargetSidecarPath,
+                Document.TargetPath + TEXT(".usids")))
+        {
+            OutError = TEXT("Managed identity plan target sidecar path is invalid.");
+            return false;
+        }
+        Document.TargetSidecarPath = FPaths::ConvertRelativePathToFull(Document.TargetSidecarPath);
+        FString TargetSource;
+        const TArray<uint8>* SourceBytes = FindOutputBytes(SourceOutputs, Document.TargetPath);
+        if (SourceBytes == nullptr)
+        {
+            OutError = FString::Printf(TEXT("Managed identity plan source output is missing '%s'."), *Document.TargetPath);
+            return false;
+        }
+        FFileHelper::BufferToString(
+            TargetSource,
+            SourceBytes->GetData(),
+            SourceBytes->Num());
+        if (!ParseNullableStringField(
+                Object,
+                TEXT("identitySidecarJson"),
+                Document.bHasIdentitySidecarJson,
+                Document.IdentitySidecarJson,
+                OutError))
+        {
+            return false;
+        }
+        const FFileSnapshot* SourceSnapshot = FindSnapshot(Snapshots, Document.SourcePath);
+        FString ExpectedSourceDigest;
+        if (SourceSnapshot == nullptr || !ComputeSourceDigest(SourceSnapshot->Bytes, ExpectedSourceDigest) ||
+            Document.SourceDigest != ExpectedSourceDigest)
+        {
+            OutError = FString::Printf(TEXT("Managed identity plan source digest is stale for '%s'."), *Document.SourcePath);
+            return false;
+        }
+        const FString SourceSidecarPath = Document.SourcePath + TEXT(".usids");
+        const FFileSnapshot* SourceSidecarSnapshot = FindSnapshot(Snapshots, SourceSidecarPath);
+        const bool bSourceSidecarExisted = SourceSidecarSnapshot != nullptr && SourceSidecarSnapshot->bExisted;
+        if (bSourceSidecarExisted != Document.bHasSourceSidecarDigest ||
+            (bSourceSidecarExisted &&
+                (!ComputeSourceDigest(SourceSidecarSnapshot->Bytes, ExpectedSourceDigest) ||
+                    Document.SourceSidecarDigest != ExpectedSourceDigest)))
+        {
+            OutError = FString::Printf(TEXT("Managed identity plan sidecar digest is stale for '%s'."), *SourceSidecarPath);
+            return false;
+        }
+        if (bSourceSidecarExisted != Document.bHasIdentitySidecarJson)
+        {
+            OutError = TEXT("Managed identity plan did not preserve the source sidecar presence contract.");
+            return false;
+        }
+        if (Document.bHasIdentitySidecarJson &&
+            !ValidateManagedSidecarJson(
+                Document.IdentitySidecarJson,
+                Document.TargetPath,
+                TargetSource,
+                OutError))
+        {
+            return false;
+        }
+        if (Document.bHasIdentitySidecarJson)
+        {
+            FTCHARToUTF8 Utf8(*Document.IdentitySidecarJson);
+            TArray<uint8> SidecarBytes;
+            SidecarBytes.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+            OutSidecarOutputs.Add(Document.TargetSidecarPath, MoveTemp(SidecarBytes));
+        }
+        if (Document.bPreserveIdentity &&
+            !FPaths::IsSamePath(Document.SourcePath, Document.TargetPath) &&
+            bSourceSidecarExisted)
+        {
+            OutSidecarDeletes.AddUnique(SourceSidecarPath);
+        }
+        Parsed.Documents.Add(MoveTemp(Document));
+    }
+    for (const bool bSeen : SeenTransitions)
+    {
+        if (!bSeen)
+        {
+            OutError = TEXT("Managed identity plan is missing one or more expected transitions.");
+            return false;
+        }
+    }
+    OutPlan = MoveTemp(Parsed);
+    return true;
+}
+
+bool RunManagedIdentityPlanner(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    const FManagedReferencePlan& ReferencePlan,
+    const TMap<FString, TArray<uint8>>& SourceOutputs,
+    const TArray<FFileSnapshot>& Snapshots,
+    const FString& TransactionId,
+    const bool bPreserveIdentity,
+    FManagedIdentityPlan& OutPlan,
+    TMap<FString, TArray<uint8>>& OutSidecarOutputs,
+    TArray<FString>& OutSidecarDeletes,
+    FString& OutError)
+{
+    TArray<FManagedIdentityTransition> Transitions;
+    for (const FManagedReferenceDocument& Reference : ReferencePlan.Documents)
+    {
+        FManagedIdentityTransition Transition;
+        Transition.SourcePath = Reference.Path;
+        Transition.TargetPath = GetManagedTransitionTargetPath(Context, Target, Reference);
+        Transition.bPreserveIdentity = bPreserveIdentity;
+        Transitions.Add(MoveTemp(Transition));
+    }
+    OutSidecarOutputs.Reset();
+    OutSidecarDeletes.Reset();
+    const FString PlanDirectory = FPaths::Combine(
+        Context.ProjectRoot,
+        TEXT("Saved/UnifiedScript/ClassOperations"));
+    IFileManager::Get().MakeDirectory(*PlanDirectory, true);
+    const FString RequestPath = FPaths::Combine(PlanDirectory, TransactionId + TEXT(".identity-request.json"));
+    const FString PlanPath = FPaths::Combine(PlanDirectory, TransactionId + TEXT(".identity-plan.json"));
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.csharp-source-identity-request/v0.1"));
+    TArray<TSharedPtr<FJsonValue>> Documents;
+    for (const FManagedReferenceDocument& Reference : ReferencePlan.Documents)
+    {
+        const FString TargetPath = GetManagedTransitionTargetPath(Context, Target, Reference);
+        const TArray<uint8>* SourceBytes = FindOutputBytes(SourceOutputs, TargetPath);
+        const FFileSnapshot* SourceSnapshot = FindSnapshot(Snapshots, Reference.Path);
+        if (SourceBytes == nullptr || SourceSnapshot == nullptr || !SourceSnapshot->bExisted)
+        {
+            OutError = FString::Printf(TEXT("Cannot build identity request for '%s'."), *Reference.Path);
+            IFileManager::Get().Delete(*RequestPath, false, true);
+            return false;
+        }
+        FString TargetSource;
+        FFileHelper::BufferToString(TargetSource, SourceBytes->GetData(), SourceBytes->Num());
+        FString SourceDigest;
+        if (!ComputeSourceDigest(SourceSnapshot->Bytes, SourceDigest))
+        {
+            OutError = TEXT("Cannot hash managed identity request source.");
+            IFileManager::Get().Delete(*RequestPath, false, true);
+            return false;
+        }
+        const FString SourceSidecarPath = Reference.Path + TEXT(".usids");
+        const FFileSnapshot* SidecarSnapshot = FindSnapshot(Snapshots, SourceSidecarPath);
+        TSharedRef<FJsonObject> Document = MakeShared<FJsonObject>();
+        Document->SetStringField(TEXT("sourcePath"), Reference.Path);
+        Document->SetStringField(TEXT("targetPath"), TargetPath);
+        Document->SetStringField(TEXT("sourceDigest"), SourceDigest);
+        if (SidecarSnapshot != nullptr && SidecarSnapshot->bExisted)
+        {
+            FString SidecarDigest;
+            if (!ComputeSourceDigest(SidecarSnapshot->Bytes, SidecarDigest))
+            {
+                OutError = TEXT("Cannot hash managed source sidecar.");
+                IFileManager::Get().Delete(*RequestPath, false, true);
+                return false;
+            }
+            Document->SetStringField(TEXT("sourceSidecarDigest"), SidecarDigest);
+        }
+        else
+        {
+            Document->SetField(TEXT("sourceSidecarDigest"), MakeShared<FJsonValueNull>());
+        }
+        Document->SetStringField(TEXT("targetSource"), TargetSource);
+        Document->SetBoolField(TEXT("preserveIdentity"), bPreserveIdentity);
+        Documents.Add(MakeShared<FJsonValueObject>(Document));
+    }
+    Root->SetArrayField(TEXT("documents"), Documents);
+    FString RequestJson;
+    if (!SerializeJson(Root, RequestJson, OutError) ||
+        !WriteTextAtomically(RequestPath, RequestJson, OutError))
+    {
+        IFileManager::Get().Delete(*RequestPath, false, true);
+        return false;
+    }
+    FString Arguments = FString::Printf(
+        TEXT("script-class-identity-plan %s --request %s --out %s --configuration Debug"),
+        *QuoteProcessArgument(Context.ManagedProjectPath),
+        *QuoteProcessArgument(RequestPath),
+        *QuoteProcessArgument(PlanPath));
+    FString DotNetExecutable = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::EngineDir(), TEXT("Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe")));
+    FPaths::NormalizeFilename(DotNetExecutable);
+    if (IFileManager::Get().FileExists(*DotNetExecutable))
+    {
+        Arguments += TEXT(" --dotnet ") + QuoteProcessArgument(DotNetExecutable);
+    }
+    int32 ReturnCode = INDEX_NONE;
+    FString StandardOutput;
+    FString StandardError;
+    const bool bExecuted = FPlatformProcess::ExecProcess(
+        *Context.CliExecutable,
+        *Arguments,
+        &ReturnCode,
+        &StandardOutput,
+        &StandardError);
+    IFileManager::Get().Delete(*RequestPath, false, true);
+    if (!bExecuted || ReturnCode != 0)
+    {
+        StandardError.TrimStartAndEndInline();
+        StandardOutput.TrimStartAndEndInline();
+        IFileManager::Get().Delete(*PlanPath, false, true);
+        OutError = FString::Printf(
+            TEXT("Managed identity planning failed with exit code %d: %s"),
+            ReturnCode,
+            *(StandardError.IsEmpty() ? StandardOutput : StandardError));
+        return false;
+    }
+    const bool bParsed = ParseManagedIdentityPlan(
+        PlanPath,
+        Transitions,
+        Context,
+        Target,
+        SourceOutputs,
+        Snapshots,
+        OutPlan,
+        OutSidecarOutputs,
+        OutSidecarDeletes,
+        OutError);
+    IFileManager::Get().Delete(*PlanPath, false, true);
+    return bParsed;
 }
 
 UUnifiedScriptAsset* GetBlueprintScriptAsset(UBlueprint* Blueprint)
@@ -1657,6 +2102,127 @@ bool BuildManagedRenameOutputs(
     return true;
 }
 
+bool BuildManagedDuplicateOutputs(
+    const FClassOperationContext& Context,
+    const FTargetIdentity& Target,
+    FManagedReferencePlan& InOutPlan,
+    const TArray<FFileSnapshot>& Snapshots,
+    TMap<FString, TArray<uint8>>& OutOutputs,
+    FString& OutError)
+{
+    TArray<FManagedReferenceDocument> DeclarationDocuments;
+    for (const FManagedReferenceDocument& Document : InOutPlan.Documents)
+    {
+        if (Document.Edits.ContainsByPredicate(
+                [](const FManagedReferenceEdit& Edit)
+                {
+                    return Edit.Kind == TEXT("typeDeclaration");
+                }))
+        {
+            DeclarationDocuments.Add(Document);
+        }
+    }
+    if (DeclarationDocuments.IsEmpty())
+    {
+        OutError = TEXT("Managed duplicate plan contains no selected TypeDeclaration source.");
+        return false;
+    }
+    DeclarationDocuments.Sort(
+        [](const FManagedReferenceDocument& Left, const FManagedReferenceDocument& Right)
+        {
+            return Left.Path < Right.Path;
+        });
+
+    TMap<FString, TArray<uint8>> Outputs;
+    int32 PartIndex = 1;
+    bool bFoundPrimary = false;
+    TArray<FManagedReferenceDocument> FilteredPlan;
+    for (FManagedReferenceDocument Document : DeclarationDocuments)
+    {
+        const FFileSnapshot* Snapshot = FindSnapshot(Snapshots, Document.Path);
+        if (Snapshot == nullptr || !Snapshot->bExisted)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed duplicate source '%s' was not snapshotted."),
+                *Document.Path);
+            return false;
+        }
+        FString Source;
+        FFileHelper::BufferToString(
+            Source,
+            Snapshot->Bytes.GetData(),
+            Snapshot->Bytes.Num());
+        for (int32 EditIndex = Document.Edits.Num() - 1; EditIndex >= 0; --EditIndex)
+        {
+            const FManagedReferenceEdit& Edit = Document.Edits[EditIndex];
+            if (Edit.Start < 0 || Edit.Length <= 0 ||
+                Edit.Start + Edit.Length > Source.Len() ||
+                Source.Mid(Edit.Start, Edit.Length) != Edit.OriginalText ||
+                Edit.Replacement != Target.TypeName)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed duplicate edit is stale at %s(%d,%d)."),
+                    *Document.Path,
+                    Edit.Line,
+                    Edit.Column);
+                return false;
+            }
+            Source = Source.Left(Edit.Start) +
+                Edit.Replacement +
+                Source.Mid(Edit.Start + Edit.Length);
+        }
+
+        FString OutputPath;
+        if (FPaths::IsSamePath(Document.Path, Context.SourcePath))
+        {
+            OutputPath = Target.SourcePath;
+            FString TransformedSource;
+            if (!TransformSourceText(
+                    Context,
+                    Target,
+                    MoveTemp(Source),
+                    false,
+                    TransformedSource,
+                    OutError))
+            {
+                return false;
+            }
+            Source = MoveTemp(TransformedSource);
+            bFoundPrimary = true;
+        }
+        else
+        {
+            OutputPath = FPaths::Combine(
+                FPaths::GetPath(Target.SourcePath),
+                FString::Printf(TEXT("%s.part%d.cs"), *Target.TypeName, PartIndex++));
+        }
+        FPaths::NormalizeFilename(OutputPath);
+        if (Outputs.Contains(OutputPath))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed duplicate plan writes '%s' more than once."),
+                *OutputPath);
+            return false;
+        }
+        TArray<uint8> Bytes;
+        if (!EncodeTextLikeSnapshot(Source, *Snapshot, Bytes, OutError))
+        {
+            return false;
+        }
+        Outputs.Add(OutputPath, MoveTemp(Bytes));
+        Document.TargetPath = OutputPath;
+        FilteredPlan.Add(MoveTemp(Document));
+    }
+    if (!bFoundPrimary)
+    {
+        OutError = TEXT("Managed duplicate plan did not include the selected source declaration.");
+        return false;
+    }
+    InOutPlan.Documents = MoveTemp(FilteredPlan);
+    OutOutputs = MoveTemp(Outputs);
+    return true;
+}
+
 bool ValidateDeleteManagedReferencePlan(
     const FClassOperationContext& Context,
     const FManagedReferencePlan& Plan,
@@ -1697,6 +2263,7 @@ bool CaptureDeleteExternalSnapshots(
 {
     TArray<FString> Paths = {
         Context.SourcePath,
+        Context.SourcePath + TEXT(".usids"),
         Context.DeploymentPath,
         Context.FirstPlayRequestPath,
     };
@@ -1726,14 +2293,40 @@ bool CaptureDeleteExternalSnapshots(
 bool PublishExternalFiles(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
-    const FString& Source,
+    const TMap<FString, TArray<uint8>>& SourceOutputs,
+    const TMap<FString, TArray<uint8>>& SidecarOutputs,
     const FString& Deployment,
     const FString& FirstPlayRequest,
     bool bRename,
     FString& OutError)
 {
-    if (!WriteTextAtomically(Target.SourcePath, Source, OutError) ||
-        !WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
+    TArray<FString> SourcePaths;
+    SourceOutputs.GetKeys(SourcePaths);
+    SourcePaths.Sort();
+    for (const FString& SourcePath : SourcePaths)
+    {
+        if (!WriteBytesAtomically(
+                SourcePath,
+                SourceOutputs.FindChecked(SourcePath),
+                OutError))
+        {
+            return false;
+        }
+    }
+    TArray<FString> SidecarPaths;
+    SidecarOutputs.GetKeys(SidecarPaths);
+    SidecarPaths.Sort();
+    for (const FString& SidecarPath : SidecarPaths)
+    {
+        if (!WriteBytesAtomically(
+                SidecarPath,
+                SidecarOutputs.FindChecked(SidecarPath),
+                OutError))
+        {
+            return false;
+        }
+    }
+    if (!WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
         (!FirstPlayRequest.IsEmpty() && !WriteTextAtomically(
             Context.FirstPlayRequestPath,
             FirstPlayRequest,
@@ -1756,6 +2349,8 @@ bool PublishManagedRenameExternalFiles(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
     const TMap<FString, TArray<uint8>>& SourceOutputs,
+    const TMap<FString, TArray<uint8>>& SidecarOutputs,
+    const TArray<FString>& SidecarDeletes,
     const FString& Deployment,
     const FString& FirstPlayRequest,
     FString& OutError)
@@ -1773,6 +2368,19 @@ bool PublishManagedRenameExternalFiles(
             return false;
         }
     }
+    TArray<FString> SidecarOutputPaths;
+    SidecarOutputs.GetKeys(SidecarOutputPaths);
+    SidecarOutputPaths.Sort();
+    for (const FString& OutputPath : SidecarOutputPaths)
+    {
+        if (!WriteBytesAtomically(
+                OutputPath,
+                SidecarOutputs.FindChecked(OutputPath),
+                OutError))
+        {
+            return false;
+        }
+    }
     if (!WriteTextAtomically(Context.DeploymentPath, Deployment, OutError) ||
         (!FirstPlayRequest.IsEmpty() && !WriteTextAtomically(
             Context.FirstPlayRequestPath,
@@ -1780,6 +2388,17 @@ bool PublishManagedRenameExternalFiles(
             OutError)))
     {
         return false;
+    }
+    for (const FString& SidecarPath : SidecarDeletes)
+    {
+        if (IFileManager::Get().FileExists(*SidecarPath) &&
+            !IFileManager::Get().Delete(*SidecarPath, false, true))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot remove renamed identity sidecar '%s'."),
+                *SidecarPath);
+            return false;
+        }
     }
     if (Context.SourcePath != Target.SourcePath &&
         IFileManager::Get().FileExists(*Context.SourcePath) &&
@@ -1809,6 +2428,15 @@ bool PublishDeleteExternalFiles(
         OutError = FString::Printf(
             TEXT("Cannot remove deleted Script Class source '%s'."),
             *Context.SourcePath);
+        return false;
+    }
+    const FString SidecarPath = Context.SourcePath + TEXT(".usids");
+    if (IFileManager::Get().FileExists(*SidecarPath) &&
+        !IFileManager::Get().Delete(*SidecarPath, false, true))
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot remove deleted Script Class identity sidecar '%s'."),
+            *SidecarPath);
         return false;
     }
     if (bDeleteFirstPlayRequest &&
@@ -1947,6 +2575,7 @@ bool RollbackRename(
     const FTargetIdentity& Target,
     const TArray<FFileSnapshot>& FileSnapshots,
     const TArray<FName>& UEReferencerPackages,
+    bool bRestoreExternalFiles,
     FString& OutError)
 {
     TArray<FString> Failures;
@@ -2009,7 +2638,7 @@ bool RollbackRename(
         }
     }
     FString RestoreError;
-    if (!RestoreFiles(FileSnapshots, RestoreError))
+    if (bRestoreExternalFiles && !RestoreFiles(FileSnapshots, RestoreError))
     {
         Failures.Add(RestoreError);
     }
@@ -2026,6 +2655,7 @@ bool RollbackDuplicate(
     UBlueprint* Blueprint,
     UUnifiedScriptAsset* ScriptAsset,
     const TArray<FFileSnapshot>& FileSnapshots,
+    bool bRestoreExternalFiles,
     FString& OutError)
 {
     TArray<FString> Failures;
@@ -2047,7 +2677,7 @@ bool RollbackDuplicate(
         }
     }
     FString RestoreError;
-    if (!RestoreFiles(FileSnapshots, RestoreError))
+    if (bRestoreExternalFiles && !RestoreFiles(FileSnapshots, RestoreError))
     {
         Failures.Add(RestoreError);
     }
@@ -2091,6 +2721,9 @@ bool FUnifiedScriptClassAssetOperations::Rename(
 
     FManagedReferencePlan ReferencePlan;
     TMap<FString, TArray<uint8>> ManagedSourceOutputs;
+    TMap<FString, TArray<uint8>> ManagedSidecarOutputs;
+    TArray<FString> ManagedSidecarDeletes;
+    FManagedIdentityPlan ManagedIdentityPlan;
     FString Deployment;
     FString FirstPlayRequest;
     TArray<FFileSnapshot> FileSnapshots;
@@ -2111,6 +2744,16 @@ bool FUnifiedScriptClassAssetOperations::Rename(
     for (const FManagedReferenceDocument& Document : ReferencePlan.Documents)
     {
         ReferencePaths.Add(Document.Path);
+        ReferencePaths.AddUnique(Document.Path + TEXT(".usids"));
+    }
+    ReferencePaths.AddUnique(Context.SourcePath + TEXT(".usids"));
+    ReferencePaths.AddUnique(Target.SourcePath + TEXT(".usids"));
+    if (IFileManager::Get().FileExists(*(Target.SourcePath + TEXT(".usids"))))
+    {
+        OutResult.Error = FString::Printf(
+            TEXT("Target managed identity sidecar already exists: '%s'."),
+            *(Target.SourcePath + TEXT(".usids")));
+        return false;
     }
     if (!CollectExternalAssetReferencers(
             Context,
@@ -2135,6 +2778,19 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             FileSnapshots,
             ManagedSourceOutputs,
             Error) ||
+        !RunManagedIdentityPlanner(
+            Context,
+            Target,
+            ReferencePlan,
+            ManagedSourceOutputs,
+            FileSnapshots,
+            OutResult.TransactionId,
+            true,
+            ManagedIdentityPlan,
+            ManagedSidecarOutputs,
+            ManagedSidecarDeletes,
+            Error) ||
+        !VerifyFilesUnchanged(FileSnapshots, Error) ||
         !BuildRecoverySnapshots(
             Context,
             Target,
@@ -2178,6 +2834,20 @@ bool FUnifiedScriptClassAssetOperations::Rename(
         Target,
         ScriptAsset->ScriptClassId);
     FBlueprintEditorUtils::MarkBlueprintAsModified(Context.Blueprint);
+    bool bExternalPublicationStarted = false;
+    const auto PublishManagedExternalFiles = [&]()
+    {
+        bExternalPublicationStarted = true;
+        return PublishManagedRenameExternalFiles(
+            Context,
+            Target,
+            ManagedSourceOutputs,
+            ManagedSidecarOutputs,
+            ManagedSidecarDeletes,
+            Deployment,
+            FirstPlayRequest,
+            Error);
+    };
     if (!UE::UnifiedScript::ClassOperationJournal::Advance(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::AssetsMutated,
@@ -2187,13 +2857,7 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             FailurePoint,
             Error) ||
         !VerifyFilesUnchanged(FileSnapshots, Error) ||
-        !PublishManagedRenameExternalFiles(
-            Context,
-            Target,
-            ManagedSourceOutputs,
-            Deployment,
-            FirstPlayRequest,
-            Error) ||
+        !PublishManagedExternalFiles() ||
         !UE::UnifiedScript::ClassOperationJournal::Advance(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
@@ -2220,6 +2884,7 @@ bool FUnifiedScriptClassAssetOperations::Rename(
             Target,
             FileSnapshots,
             UEReferencerPackages,
+            bExternalPublicationStarted,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2272,20 +2937,93 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
         nullptr,
         OutResult);
 
-    FString TargetSource;
     FString Deployment;
     FString FirstPlayRequest;
+    FManagedReferencePlan IdentityReferencePlan;
+    FManagedIdentityPlan ManagedIdentityPlan;
+    TMap<FString, TArray<uint8>> ManagedSourceOutputs;
+    TMap<FString, TArray<uint8>> ManagedSidecarOutputs;
+    TArray<FString> ManagedSidecarDeletes;
     TArray<FFileSnapshot> FileSnapshots;
     TArray<FFileSnapshot> RecoverySnapshots;
     UE::UnifiedScript::ClassOperationJournal::FReceipt Receipt;
-    if (!TransformSource(Context, Target, TargetSource, Error) ||
-        !BuildDeployment(Context, Target, true, Deployment, Error) ||
+    if (!RunManagedReferencePlanner(
+            Context,
+            Target.TypeName,
+            OutResult.TransactionId,
+            IdentityReferencePlan,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    TArray<FString> DuplicateReferencePaths;
+    for (const FManagedReferenceDocument& Document : IdentityReferencePlan.Documents)
+    {
+        DuplicateReferencePaths.AddUnique(Document.Path);
+        DuplicateReferencePaths.AddUnique(Document.Path + TEXT(".usids"));
+    }
+    DuplicateReferencePaths.AddUnique(Context.SourcePath + TEXT(".usids"));
+    DuplicateReferencePaths.AddUnique(Target.SourcePath + TEXT(".usids"));
+    if (!BuildDeployment(Context, Target, true, Deployment, Error) ||
         !BuildFirstPlayRequest(Context, Target, FirstPlayRequest, Error) ||
         !CaptureExternalSnapshots(
             Context,
             Target,
-            TArray<FString>(),
+            DuplicateReferencePaths,
             FileSnapshots,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    if (!ValidateManagedReferencePlanSnapshots(
+            IdentityReferencePlan,
+            FileSnapshots,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    if (!BuildManagedDuplicateOutputs(
+            Context,
+            Target,
+            IdentityReferencePlan,
+            FileSnapshots,
+            ManagedSourceOutputs,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+    for (const TPair<FString, TArray<uint8>>& Pair : ManagedSourceOutputs)
+    {
+        if (IFileManager::Get().FileExists(*Pair.Key) ||
+            !CaptureSnapshotIfMissing(Pair.Key, FileSnapshots, Error) ||
+            IFileManager::Get().FileExists(*(Pair.Key + TEXT(".usids"))) ||
+            !CaptureSnapshotIfMissing(Pair.Key + TEXT(".usids"), FileSnapshots, Error))
+        {
+            if (Error.IsEmpty())
+            {
+                Error = FString::Printf(
+                    TEXT("Managed duplicate target '%s' already exists."),
+                    *Pair.Key);
+            }
+            OutResult.Error = Error;
+            return false;
+        }
+    }
+    if (!RunManagedIdentityPlanner(
+            Context,
+            Target,
+            IdentityReferencePlan,
+            ManagedSourceOutputs,
+            FileSnapshots,
+            OutResult.TransactionId,
+            false,
+            ManagedIdentityPlan,
+            ManagedSidecarOutputs,
+            ManagedSidecarDeletes,
             Error) ||
         !BuildRecoverySnapshots(
             Context,
@@ -2294,6 +3032,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             TArray<FName>(),
             RecoverySnapshots,
             Error) ||
+        !VerifyFilesUnchanged(FileSnapshots, Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Begin(
             TEXT("duplicate"),
             TransactionId,
@@ -2332,6 +3071,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            false,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2357,6 +3097,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            false,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2378,6 +3119,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            false,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2391,6 +3133,20 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
         return false;
     }
 
+    bool bExternalPublicationStarted = false;
+    const auto PublishDuplicateExternalFiles = [&]()
+    {
+        bExternalPublicationStarted = true;
+        return PublishExternalFiles(
+            Context,
+            Target,
+            ManagedSourceOutputs,
+            ManagedSidecarOutputs,
+            Deployment,
+            FirstPlayRequest,
+            false,
+            Error);
+    };
     if (!UE::UnifiedScript::ClassOperationJournal::Advance(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::AssetsMutated,
@@ -2400,14 +3156,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             FailurePoint,
             Error) ||
         !VerifyFilesUnchanged(FileSnapshots, Error) ||
-        !PublishExternalFiles(
-            Context,
-            Target,
-            TargetSource,
-            Deployment,
-            FirstPlayRequest,
-            false,
-            Error) ||
+        !PublishDuplicateExternalFiles() ||
         !UE::UnifiedScript::ClassOperationJournal::Advance(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,
@@ -2424,6 +3173,7 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
             NewBlueprint,
             NewScriptAsset,
             FileSnapshots,
+            bExternalPublicationStarted,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2526,6 +3276,7 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             TArray<FName>(),
             RecoverySnapshots,
             Error) ||
+        !VerifyFilesUnchanged(FileSnapshots, Error) ||
         !UE::UnifiedScript::ClassOperationJournal::Begin(
             TEXT("delete"),
             TransactionId,
@@ -2557,6 +3308,16 @@ bool FUnifiedScriptClassAssetOperations::Delete(
         }
     }
 
+    bool bExternalPublicationStarted = false;
+    const auto PublishDeleteExternal = [&]()
+    {
+        bExternalPublicationStarted = true;
+        return PublishDeleteExternalFiles(
+            Context,
+            Deployment,
+            bDeleteFirstPlayRequest,
+            Error);
+    };
     const auto Rollback = [&]()
     {
         FString RollbackError;
@@ -2565,6 +3326,7 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             Tombstone,
             FileSnapshots,
             TArray<FName>(),
+            bExternalPublicationStarted,
             RollbackError);
         CloseReceiptAfterRollback(
             Receipt,
@@ -2586,11 +3348,7 @@ bool FUnifiedScriptClassAssetOperations::Delete(
             FailurePoint,
             Error) ||
         !VerifyFilesUnchanged(FileSnapshots, Error) ||
-        !PublishDeleteExternalFiles(
-            Context,
-            Deployment,
-            bDeleteFirstPlayRequest,
-            Error) ||
+        !PublishDeleteExternal() ||
         !UE::UnifiedScript::ClassOperationJournal::Advance(
             Receipt,
             UE::UnifiedScript::ClassOperationJournal::EPhase::ExternalPublished,

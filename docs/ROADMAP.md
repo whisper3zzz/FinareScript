@@ -53,9 +53,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Rename/Duplicate and subsequent rebuild/reload; the existing asset-operation
   lane verifies native instances without starting its managed source.
   Persistent ClassId member lookup now retains old-generation state access
-  after an active Rename. The active fixture reaches the renamed rebuild and
-  then rejects missing source-adjacent identity sidecars; sidecar transaction
-  support, rebuilt reload and Duplicate execution remain open.
+  after an active Rename. Source and identity sidecars now migrate in the same
+  asset transaction. The active factory fixture passes Rename, rebuilt reload
+  in two existing Worlds, Duplicate startup and state/function identity checks;
+  the original asset-operation regression also passes. Continue with rejected
+  reload candidates, accumulated state and lifecycle cleanup assertions,
+  active duplicated descendants, partial-source integration and explicit
+  Blueprint override owner compatibility before closing C-3.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and

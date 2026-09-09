@@ -553,8 +553,8 @@ including its declaring type name. A class rename must retain the same explicit
 declaring-owner ClassId and method contract; it must not relax method-renaming
 or owner-change rejection merely because the native route still matches.
 
-Source identity migration is also required: asset operations currently snapshot
-and publish C# sources, deployment and first-play metadata, but omit adjacent
+Source identity migration was also required: asset operations originally
+snapshotted and published C# sources, deployment and first-play metadata, but omitted adjacent
 `.cs.usids` files. Moving only the sidecar and changing `sourcePath` would still
 lose IDs because reconciliation matches qualified declaration owners. The
 managed transition planner must analyze the current source with its existing
@@ -566,7 +566,7 @@ external inherited declaration ownership. Missing legacy sidecars remain
 missing; ambiguous mappings and structural changes fail before publication.
 The native consumer must include old/new sidecar paths in collision checks,
 snapshots, concurrent-change checks, journal recovery and rollback. This
-producer/consumer work remains unfinished.
+producer/consumer work is implemented in the checkpoint below.
 Duplicate must also apply Roslyn edits to the copied declaration's constructor
 and self references: the current native text transform changes only the class
 declaration, while the factory now emits an explicit constructor. Original
@@ -583,8 +583,8 @@ They cover stale sidecars, repeated graph nodes, a real multi-file partial-type
 rename with in-place reference edits, and independent duplicate declarations
 that retain an external base's shared state identity. Unchanged duplicate type
 names, colliding destinations and syntax topology changes are rejected. This
-evidence covers the managed transformation only; the native transaction is
-still being connected.
+evidence covers the managed transformation separately from the native
+transaction evidence below.
 
 The `script-class-identity-plan` CLI bridge now validates explicit request
 fields and raw source/sidecar digest preconditions, handles UTF-8 and UTF-16
@@ -599,6 +599,42 @@ and `actual-factory-duplicate.identity-plan.json`): Rename retains all 20 live
 IDs, Duplicate shares none of those IDs, and both outputs match the final text
 digest and destination path without modifying source or sidecar bytes. These
 are CLI producer checks, not native publication or active reload acceptance.
+
+The native consumer now snapshots and checks source-adjacent sidecars, validates
+the exact source/target/preserve transition set returned by the CLI, and publishes
+official sidecar bytes in the existing recovery transaction. Rename removes the
+old sidecar; Duplicate creates independent identities without writing the
+original sidecar; Delete includes the adjacent sidecar in its removal and
+recovery set. Duplicate applies Roslyn constructor/self-reference edits and
+copies every selected partial declaration source to a distinct destination.
+All destinations are checked and snapshotted before planning. Failures before
+external publication roll back UE assets without restoring old external input
+bytes over concurrent edits; partial publication failures retain full recovery.
+
+`active-cmd-6.log` reports Success and Queue Empty for the real factory fixture.
+It covers sidecar-only destination collisions, malformed input sidecars,
+injected post-publication Rename rollback, retained state/function IDs through
+Rename, rebuilt DLL execution after Rename, independent reload in two existing
+Worlds and actual Duplicate startup/calls. The retained renamed and duplicate
+sidecars each contain six state and two function IDs, with disjoint duplicate
+ownership. The original `AssetOperations` selector also reports Success and
+Queue Empty in `legacy-asset-operations.log`, covering its existing no-sidecar
+and Delete/recovery paths. `editor-sidecar-transaction-build.log` builds the
+native changes and added assertions.
+
+The preceding `active-cmd-5.log` got past sidecar migration but failed in the
+fixture builder: Windows PowerShell 5 could not read the 286-character emitted
+identity artifact path. The builder now uses .NET file I/O with Windows extended
+paths for sidecar reads, copies and nonrecursive cleanup. The retained renamed
+project rebuild passes in `builder-long-path-check-2.log`; the subsequent active
+CMD result includes this fix.
+
+C-3 remains open. This fixture still resets its state input before each Tick,
+starts the duplicate base rather than its ordinary Blueprint descendants, and
+does not yet assert teardown counts or a rejected reload candidate. The native
+partial-copy implementation needs a real multi-source integration fixture, and
+the explicit Blueprint override declaring-owner compatibility work above is
+still pending. None of those boundaries is claimed by the passing selector.
 
 ## Relevant verification
 
