@@ -202,6 +202,102 @@ bool FindManagedSource(
     return true;
 }
 
+bool SplitActiveManagedSource(
+    FAutomationTestBase& Test,
+    const FString& ClassesDirectory,
+    const FString& BaseName,
+    const FString& PrimaryPath,
+    FString& InOutPrimarySource,
+    FString& OutMethodsPath,
+    FString& OutConsumerPath)
+{
+    // Keep the generated factory file as the authoritative source for the
+    // declarations.  Only move the constructor and Visual method into a
+    // second partial file; this makes duplicate exercise bound self/type
+    // references without manufacturing a second declaration.
+    FString Source = InOutPrimarySource.Replace(TEXT("\r\n"), TEXT("\n"));
+    const FString ClassDeclaration = TEXT("public sealed class ") + BaseName;
+    if (!Test.TestTrue(TEXT("Active factory source is a sealed class"), Source.Contains(ClassDeclaration)))
+    {
+        return false;
+    }
+    Source = Source.Replace(*ClassDeclaration, *(TEXT("public sealed partial class ") + BaseName), ESearchCase::CaseSensitive);
+
+    const FString ConstructorMarker = TEXT("    public ") + BaseName + TEXT("()\n");
+    const FString VisualMarker = TEXT("    [Visual]\n");
+    const int32 ConstructorStart = Source.Find(ConstructorMarker, ESearchCase::CaseSensitive);
+    const int32 VisualStart = Source.Find(VisualMarker, ESearchCase::CaseSensitive, ESearchDir::FromStart, ConstructorStart);
+    if (!Test.TestTrue(TEXT("Active factory source contains constructor and Visual method"),
+            ConstructorStart != INDEX_NONE && VisualStart != INDEX_NONE && VisualStart > ConstructorStart))
+    {
+        return false;
+    }
+
+    const int32 ConstructorEnd = VisualStart;
+    const FString ConstructorAndGap = Source.Mid(ConstructorStart, ConstructorEnd - ConstructorStart);
+    Source.RemoveAt(ConstructorStart, ConstructorEnd - ConstructorStart);
+
+    const int32 VisualBegin = Source.Find(VisualMarker, ESearchCase::CaseSensitive);
+    const int32 MethodEnd = Source.Find(TEXT("\n    [UnrealBlueprintEvent]"), ESearchCase::CaseSensitive, ESearchDir::FromStart, VisualBegin);
+    if (!Test.TestTrue(TEXT("Active factory source contains the complete Visual method"),
+            VisualBegin != INDEX_NONE && MethodEnd != INDEX_NONE && MethodEnd > VisualBegin))
+    {
+        return false;
+    }
+    const FString VisualMethod = Source.Mid(VisualBegin, MethodEnd - VisualBegin);
+    Source.RemoveAt(VisualBegin, MethodEnd - VisualBegin);
+
+    const FString NamespaceMarker = TEXT("namespace ");
+    const int32 NamespaceStart = Source.Find(NamespaceMarker, ESearchCase::CaseSensitive);
+    const int32 NamespaceEnd = Source.Find(TEXT(";"), ESearchCase::CaseSensitive, ESearchDir::FromStart, NamespaceStart);
+    if (!Test.TestTrue(TEXT("Active factory source has a file-scoped namespace"),
+            NamespaceStart != INDEX_NONE && NamespaceEnd != INDEX_NONE))
+    {
+        return false;
+    }
+    const FString NamespaceLine = Source.Mid(NamespaceStart, NamespaceEnd - NamespaceStart + 1);
+    const FString Header = Source.Left(NamespaceStart);
+
+    OutMethodsPath = FPaths::Combine(ClassesDirectory, BaseName + TEXT(".Methods.cs"));
+    OutConsumerPath = FPaths::Combine(ClassesDirectory, BaseName + TEXT(".Consumer.cs"));
+    const FString MethodsSource = Header + NamespaceLine + TEXT("\n\npublic sealed partial class ") + BaseName + TEXT("\n{\n")
+        + ConstructorAndGap
+        + TEXT("    private ") + BaseName + TEXT(" Self()\n    {\n        return this;\n    }\n\n")
+        + VisualMethod + TEXT("\n}\n");
+    const FString ConsumerSource = Header + NamespaceLine + TEXT("\n\npublic static class ") + BaseName + TEXT("Consumer\n{\n")
+        TEXT("    public static int Read(") + BaseName + TEXT(" owner, int value)\n    {\n        return owner.AddOne(value);\n    }\n}\n");
+
+    if (!Test.TestTrue(TEXT("Writes the active partial methods source"), FFileHelper::SaveStringToFile(MethodsSource, *OutMethodsPath)) ||
+        !Test.TestTrue(TEXT("Writes the active external consumer source"), FFileHelper::SaveStringToFile(ConsumerSource, *OutConsumerPath)) ||
+        !Test.TestTrue(TEXT("Writes the active partial primary source"), FFileHelper::SaveStringToFile(Source, *PrimaryPath)))
+    {
+        return false;
+    }
+    Test.TestTrue(TEXT("Active partial methods owns the constructor"), MethodsSource.Contains(TEXT("public ") + BaseName + TEXT("()")));
+    Test.TestTrue(TEXT("Active partial methods owns the Visual AddOne"), MethodsSource.Contains(TEXT("[Visual]")) && MethodsSource.Contains(TEXT("AddOne")));
+    Test.TestTrue(TEXT("Active partial methods exercises a self type reference"), MethodsSource.Contains(TEXT("private ") + BaseName + TEXT(" Self()")));
+    Test.TestTrue(TEXT("Active external consumer calls AddOne through the owner type"),
+        ConsumerSource.Contains(TEXT("Read(") + BaseName + TEXT(" owner")) && ConsumerSource.Contains(TEXT("owner.AddOne(value)")));
+    InOutPrimarySource = Source;
+    return true;
+}
+
+bool LoadSourceBytes(FAutomationTestBase& Test, const FString& Path, TArray<uint8>& OutBytes, const TCHAR* Label)
+{
+    return Test.TestTrue(FString::Printf(TEXT("Reads %s"), Label), FFileHelper::LoadFileToArray(OutBytes, *Path));
+}
+
+bool SourceBytesEqual(
+    FAutomationTestBase& Test,
+    const FString& Path,
+    const TArray<uint8>& Expected,
+    const TCHAR* Label)
+{
+    TArray<uint8> Actual;
+    return Test.TestTrue(FString::Printf(TEXT("%s remains byte-identical"), Label),
+        FFileHelper::LoadFileToArray(Actual, *Path) && Actual == Expected);
+}
+
 bool ReplaceSourceText(
     FAutomationTestBase& Test,
     const FString& Path,
@@ -518,7 +614,7 @@ bool RunBuilder(FAutomationTestBase& Test, const FString& ProjectPath, const FSt
     {
         ReturnCode = -1;
     }
-    StdOut = FPlatformProcess::ReadPipe(ReadPipe);
+    StdOut += FPlatformProcess::ReadPipe(ReadPipe);
     FPlatformProcess::ClosePipe(ReadPipe, nullptr);
     ReadPipe = nullptr;
     FPlatformProcess::CloseProc(Process);
@@ -589,8 +685,31 @@ bool LoadIdentityEntryIds(
             OutFunctionIds.Add(Id);
         }
     }
+    return true;
+}
+
+bool LoadIdentityEntryIdsFromSources(
+    FAutomationTestBase& Test,
+    const TArray<FString>& SidecarPaths,
+    TSet<FString>& OutStateIds,
+    TSet<FString>& OutFunctionIds,
+    const TCHAR* Label)
+{
+    OutStateIds.Reset();
+    OutFunctionIds.Reset();
+    for (const FString& SidecarPath : SidecarPaths)
+    {
+        TSet<FString> StateIds;
+        TSet<FString> FunctionIds;
+        if (!LoadIdentityEntryIds(Test, SidecarPath, StateIds, FunctionIds, Label))
+        {
+            return false;
+        }
+        OutStateIds.Append(StateIds);
+        OutFunctionIds.Append(FunctionIds);
+    }
     return Test.TestTrue(
-        *FString::Printf(TEXT("%s identity sidecar has state/function IDs"), Label),
+        *FString::Printf(TEXT("%s identity sidecars jointly have state/function IDs"), Label),
         OutStateIds.Num() > 0 && OutFunctionIds.Num() > 0);
 }
 
@@ -775,10 +894,12 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     const FString RenamedName = BaseName + TEXT("_Renamed");
     const FString DuplicateName = BaseName + TEXT("_Duplicate");
     const FString FailedRenameName = BaseName + TEXT("_Failed");
+    const FString FailedDuplicateName = BaseName + TEXT("_FailedDuplicate");
     TArray<FString> PackageNames = {
         Root / BaseName, Root / ChildName, Root / GrandchildName,
-        Root / (TEXT("SA_") + BaseName), Root / FailedRenameName, Root / RenamedName,
+        Root / (TEXT("SA_") + BaseName), Root / FailedRenameName, Root / (TEXT("SA_") + FailedRenameName), Root / RenamedName,
         Root / (TEXT("SA_") + RenamedName), Root / DuplicateName,
+        Root / FailedDuplicateName, Root / (TEXT("SA_") + FailedDuplicateName),
         Root / (TEXT("SA_") + DuplicateName),
         Root / (DuplicateName + TEXT("_Child")), Root / (DuplicateName + TEXT("_Grandchild"))};
     ON_SCOPE_EXIT
@@ -828,25 +949,49 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     {
         return false;
     }
+    FString InitialMethodsPath;
+    FString InitialConsumerPath;
+    if (!SplitActiveManagedSource(
+            *this,
+            ClassesDirectory,
+            BaseName,
+            InitialSourcePath,
+            InitialSource,
+            InitialMethodsPath,
+            InitialConsumerPath))
+    {
+        return false;
+    }
     if (!RunBuilder(*this, FixtureProject, OutputRootRelative, BuilderLog))
     {
         return false;
     }
     const FString InitialSidecarPath = InitialSourcePath + TEXT(".usids");
+    const FString InitialMethodsSidecarPath = InitialMethodsPath + TEXT(".usids");
+    const FString InitialConsumerSidecarPath = InitialConsumerPath + TEXT(".usids");
     TArray<uint8> InitialSourceBytes;
+    TArray<uint8> InitialMethodsBytes;
+    TArray<uint8> InitialConsumerBytes;
     TArray<uint8> InitialSidecarBytes;
+    TArray<uint8> InitialMethodsSidecarBytes;
+    TArray<uint8> InitialConsumerSidecarBytes;
     if (!TestTrue(TEXT("Snapshots the active source bytes"),
             FFileHelper::LoadFileToArray(InitialSourceBytes, *InitialSourcePath)) ||
+        !LoadSourceBytes(*this, InitialMethodsPath, InitialMethodsBytes, TEXT("active partial methods bytes")) ||
+        !LoadSourceBytes(*this, InitialConsumerPath, InitialConsumerBytes, TEXT("active external consumer bytes")) ||
         !TestTrue(TEXT("Snapshots the active source identity sidecar"),
-            FFileHelper::LoadFileToArray(InitialSidecarBytes, *InitialSidecarPath)))
+            FFileHelper::LoadFileToArray(InitialSidecarBytes, *InitialSidecarPath)) ||
+        !LoadSourceBytes(*this, InitialMethodsSidecarPath, InitialMethodsSidecarBytes, TEXT("active partial methods identity sidecar")) ||
+        !LoadSourceBytes(*this, InitialConsumerSidecarPath, InitialConsumerSidecarBytes, TEXT("active consumer identity sidecar")))
     {
         return false;
     }
     TSet<FString> InitialStateIds;
     TSet<FString> InitialFunctionIds;
-    if (!LoadIdentityEntryIds(
+    const TArray<FString> InitialIdentitySidecars = {InitialSidecarPath, InitialMethodsSidecarPath};
+    if (!LoadIdentityEntryIdsFromSources(
             *this,
-            InitialSidecarPath,
+            InitialIdentitySidecars,
             InitialStateIds,
             InitialFunctionIds,
             TEXT("Initial active")))
@@ -1032,6 +1177,10 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Malformed sidecar rejection keeps source bytes"),
         FFileHelper::LoadFileToArray(CurrentBytes, *InitialSourcePath) &&
         CurrentBytes == InitialSourceBytes);
+    TestTrue(TEXT("Malformed sidecar rejection keeps partial methods bytes"),
+        SourceBytesEqual(*this, InitialMethodsPath, InitialMethodsBytes, TEXT("Malformed sidecar partial methods")));
+    TestTrue(TEXT("Malformed sidecar rejection keeps external consumer bytes"),
+        SourceBytesEqual(*this, InitialConsumerPath, InitialConsumerBytes, TEXT("Malformed sidecar external consumer")));
     TestTrue(TEXT("Malformed sidecar rejection keeps malformed bytes"),
         FFileHelper::LoadFileToArray(CurrentBytes, *InitialSidecarPath) &&
         CurrentBytes == MalformedSidecarBytes);
@@ -1049,6 +1198,14 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Injected rename restores original identity sidecar bytes"),
         FFileHelper::LoadFileToArray(CurrentBytes, *InitialSidecarPath) &&
         CurrentBytes == InitialSidecarBytes);
+    TestTrue(TEXT("Injected rename restores partial methods source bytes"),
+        SourceBytesEqual(*this, InitialMethodsPath, InitialMethodsBytes, TEXT("Injected rename partial methods")));
+    TestTrue(TEXT("Injected rename restores external consumer source bytes"),
+        SourceBytesEqual(*this, InitialConsumerPath, InitialConsumerBytes, TEXT("Injected rename external consumer")));
+    TestTrue(TEXT("Injected rename restores partial methods sidecar bytes"),
+        SourceBytesEqual(*this, InitialMethodsSidecarPath, InitialMethodsSidecarBytes, TEXT("Injected rename partial methods sidecar")));
+    TestTrue(TEXT("Injected rename restores external consumer sidecar bytes"),
+        SourceBytesEqual(*this, InitialConsumerSidecarPath, InitialConsumerSidecarBytes, TEXT("Injected rename external consumer sidecar")));
     TestFalse(TEXT("Injected rename removes the new identity sidecar"),
         IFileManager::Get().FileExists(*FailedRenameSidecarPath));
     TestTrue(TEXT("Rollback keeps original child managed OnTick body"), TickExistingStartValue(*this, First, 40, TEXT("After failed rename")));
@@ -1066,14 +1223,20 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     }
     TestTrue(TEXT("Rename preserves ClassId"), RenameResult.ScriptAsset->ScriptClassId == OriginalClassId);
     TestTrue(TEXT("Rename changes managed type name"), RenameResult.ScriptAsset->ScriptTypeName != OriginalTypeName);
-    const FString RenamedSidecarPath = FPaths::Combine(
-        ClassesDirectory,
-        RenamedName + TEXT(".cs.usids"));
+    const FString RenamedSourcePath = Normalize(RenameResult.SourcePath);
+    const FString RenamedSidecarPath = RenamedSourcePath + TEXT(".usids");
+    const FString RenamedMethodsPath = InitialMethodsPath;
+    const FString RenamedMethodsSidecarPath = RenamedMethodsPath + TEXT(".usids");
+    const FString RenamedConsumerPath = InitialConsumerPath;
+    const FString RenamedConsumerSidecarPath = RenamedConsumerPath + TEXT(".usids");
     TSet<FString> RenamedStateIds;
     TSet<FString> RenamedFunctionIds;
-    if (!LoadIdentityEntryIds(
+    const TArray<FString> RenamedIdentitySidecars = {RenamedSidecarPath, RenamedMethodsSidecarPath};
+    if (!TestTrue(TEXT("Rename reports the authoritative primary source path"),
+            !RenamedSourcePath.IsEmpty() && IFileManager::Get().FileExists(*RenamedSourcePath)) ||
+        !LoadIdentityEntryIdsFromSources(
             *this,
-            RenamedSidecarPath,
+            RenamedIdentitySidecars,
             RenamedStateIds,
             RenamedFunctionIds,
             TEXT("Renamed active")))
@@ -1088,12 +1251,33 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         IdentityIdSetsEqual(InitialStateIds, RenamedStateIds));
     TestTrue(TEXT("Successful rename preserves function entry IDs"),
         IdentityIdSetsEqual(InitialFunctionIds, RenamedFunctionIds));
+    FString RenamedSource;
+    FString RenamedMethodsSource;
+    FString RenamedConsumerSource;
+    if (!TestTrue(TEXT("Reads the renamed primary source"), FFileHelper::LoadFileToString(RenamedSource, *RenamedSourcePath)) ||
+        !TestTrue(TEXT("Reads the renamed partial methods source"), FFileHelper::LoadFileToString(RenamedMethodsSource, *RenamedMethodsPath)) ||
+        !TestTrue(TEXT("Reads the renamed external consumer source"), FFileHelper::LoadFileToString(RenamedConsumerSource, *RenamedConsumerPath)))
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    TestTrue(TEXT("Successful rename updates the primary declaration type"), RenamedSource.Contains(TEXT("class ") + RenamedName));
+    TestTrue(TEXT("Successful rename updates the partial constructor type"),
+        RenamedMethodsSource.Contains(TEXT("public ") + RenamedName + TEXT("()")));
+    TestTrue(TEXT("Successful rename updates the partial Self return type"),
+        RenamedMethodsSource.Contains(TEXT("private ") + RenamedName + TEXT(" Self()")));
+    TestTrue(TEXT("Successful rename updates the external consumer parameter type"),
+        RenamedConsumerSource.Contains(TEXT("Read(") + RenamedName + TEXT(" owner")));
+    TestTrue(TEXT("Successful rename updates the external consumer call target"),
+        RenamedConsumerSource.Contains(TEXT("return owner.AddOne(value);")));
+    TestTrue(TEXT("Successful rename keeps the partial methods sidecar"),
+        IFileManager::Get().FileExists(*RenamedMethodsSidecarPath));
+    TestTrue(TEXT("Successful rename keeps the external consumer sidecar"),
+        IFileManager::Get().FileExists(*RenamedConsumerSidecarPath));
     TestTrue(TEXT("Old active instance remains callable before rebuild"), InvokeAddOne(*this, First.Actor, 10, 11, TEXT("Before renamed rebuild")));
     TestTrue(TEXT("Rename-before-build keeps the original managed OnTick body"), TickExistingStartValue(*this, First, 50, TEXT("Before renamed rebuild")));
-    FString RenamedSourcePath;
-    FString RenamedSource;
-    if (!FindManagedSource(*this, ClassesDirectory, RenamedName, RenamedSourcePath, RenamedSource) ||
-        !PatchAddOneBody(*this, RenamedSourcePath, RenamedSource))
+    if (!PatchAddOneBody(*this, RenamedMethodsPath, RenamedMethodsSource))
     {
         DestroyWorld(First);
         DestroyWorld(Second);
@@ -1237,15 +1421,102 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
 
     TArray<uint8> RenamedSidecarBytes;
     TArray<uint8> RenamedSourceBytes;
+    TArray<uint8> RenamedMethodsBytes;
+    TArray<uint8> RenamedMethodsSidecarBytes;
+    TArray<uint8> RenamedConsumerBytes;
+    TArray<uint8> RenamedConsumerSidecarBytes;
     if (!TestTrue(TEXT("Snapshots the renamed source before duplicate"),
             FFileHelper::LoadFileToArray(RenamedSourceBytes, *RenamedSourcePath)) ||
         !TestTrue(TEXT("Snapshots the renamed identity sidecar before duplicate"),
-            FFileHelper::LoadFileToArray(RenamedSidecarBytes, *RenamedSidecarPath)))
+            FFileHelper::LoadFileToArray(RenamedSidecarBytes, *RenamedSidecarPath)) ||
+        !LoadSourceBytes(*this, RenamedMethodsPath, RenamedMethodsBytes, TEXT("renamed partial methods before duplicate")) ||
+        !LoadSourceBytes(*this, RenamedMethodsSidecarPath, RenamedMethodsSidecarBytes, TEXT("renamed partial methods sidecar before duplicate")) ||
+        !LoadSourceBytes(*this, RenamedConsumerPath, RenamedConsumerBytes, TEXT("renamed external consumer before duplicate")) ||
+        !LoadSourceBytes(*this, RenamedConsumerSidecarPath, RenamedConsumerSidecarBytes, TEXT("renamed external consumer sidecar before duplicate")))
     {
         DestroyWorld(First);
         DestroyWorld(Second);
         return false;
     }
+
+    const FString DuplicatePart1SourcePath = FPaths::Combine(ClassesDirectory, DuplicateName + TEXT(".part1.cs"));
+    const FString DuplicatePart1SidecarPath = DuplicatePart1SourcePath + TEXT(".usids");
+    if (!TestTrue(TEXT("Creates the duplicate partial sidecar-only collision"),
+            FFileHelper::SaveArrayToFile(RenamedMethodsSidecarBytes, *DuplicatePart1SidecarPath)))
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    FUnifiedScriptClassAssetOperationResult DuplicateCollisionResult;
+    TestFalse(TEXT("Rejects a duplicate partial sidecar collision before publication"),
+        FUnifiedScriptClassAssetOperations::Duplicate(
+            RenameResult.ScriptAsset,
+            Root / DuplicateName,
+            DuplicateCollisionResult));
+    TestTrue(TEXT("Duplicate partial collision reports the exact target sidecar"),
+        DuplicateCollisionResult.Error.Contains(DuplicateName + TEXT(".part1.cs.usids")) &&
+        DuplicateCollisionResult.Error.Contains(TEXT("already exists")));
+    TestFalse(TEXT("Duplicate partial collision is not reported as a rollback"), DuplicateCollisionResult.bRolledBack);
+    TestTrue(TEXT("Duplicate partial collision creates no recovery receipt"), DuplicateCollisionResult.RecoveryReceiptPath.IsEmpty());
+    TestTrue(TEXT("Duplicate partial collision leaves the original source intact"),
+        SourceBytesEqual(*this, RenamedSourcePath, RenamedSourceBytes, TEXT("Duplicate partial collision primary")));
+    TestTrue(TEXT("Duplicate partial collision leaves the original methods intact"),
+        SourceBytesEqual(*this, RenamedMethodsPath, RenamedMethodsBytes, TEXT("Duplicate partial collision methods")));
+    TestTrue(TEXT("Duplicate partial collision leaves the original consumer intact"),
+        SourceBytesEqual(*this, RenamedConsumerPath, RenamedConsumerBytes, TEXT("Duplicate partial collision consumer")));
+    TestFalse(TEXT("Duplicate partial collision creates no primary output"),
+        IFileManager::Get().FileExists(*FPaths::Combine(ClassesDirectory, DuplicateName + TEXT(".cs"))));
+    TestFalse(TEXT("Duplicate partial collision creates no partial output"),
+        IFileManager::Get().FileExists(*DuplicatePart1SourcePath));
+    TestTrue(TEXT("Duplicate partial collision preserves its sentinel sidecar"),
+        SourceBytesEqual(*this, DuplicatePart1SidecarPath, RenamedMethodsSidecarBytes, TEXT("Duplicate partial collision sentinel")));
+    TestTrue(TEXT("Duplicate partial collision preserves the original primary sidecar"),
+        SourceBytesEqual(*this, RenamedSidecarPath, RenamedSidecarBytes, TEXT("Duplicate partial collision primary sidecar")));
+    TestTrue(TEXT("Duplicate partial collision preserves the original methods sidecar"),
+        SourceBytesEqual(*this, RenamedMethodsSidecarPath, RenamedMethodsSidecarBytes, TEXT("Duplicate partial collision methods sidecar")));
+    TestTrue(TEXT("Duplicate partial collision preserves the original consumer sidecar"),
+        SourceBytesEqual(*this, RenamedConsumerSidecarPath, RenamedConsumerSidecarBytes, TEXT("Duplicate partial collision consumer sidecar")));
+    TestFalse(TEXT("Duplicate partial collision creates no primary sidecar"),
+        IFileManager::Get().FileExists(*FPaths::Combine(ClassesDirectory, DuplicateName + TEXT(".cs.usids"))));
+    TestTrue(TEXT("Removes the duplicate partial collision fixture"),
+        IFileManager::Get().Delete(*DuplicatePart1SidecarPath, false, true));
+
+    FUnifiedScriptClassAssetOperationResult FailedDuplicate;
+    if (!TestFalse(TEXT("Injected duplicate publication failure rolls back"),
+            FUnifiedScriptClassAssetOperations::Duplicate(
+                RenameResult.ScriptAsset,
+                Root / FailedDuplicateName,
+                FailedDuplicate,
+                EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication)) ||
+        !TestTrue(TEXT("Injected duplicate failure reaches rollback"), FailedDuplicate.bRolledBack) ||
+        !TestTrue(TEXT("Injected duplicate failure reports the publication injection"),
+            FailedDuplicate.Error.Contains(TEXT("Injected Script Class transaction failure"))))
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    for (const FString& FailedDuplicatePath : {
+            FPaths::Combine(ClassesDirectory, FailedDuplicateName + TEXT(".cs")),
+            FPaths::Combine(ClassesDirectory, FailedDuplicateName + TEXT(".cs.usids")),
+            FPaths::Combine(ClassesDirectory, FailedDuplicateName + TEXT(".part1.cs")),
+            FPaths::Combine(ClassesDirectory, FailedDuplicateName + TEXT(".part1.cs.usids"))})
+    {
+        TestFalse(TEXT("Failed duplicate leaves no managed output"), IFileManager::Get().FileExists(*FailedDuplicatePath));
+    }
+    TestTrue(TEXT("Failed duplicate restores the renamed primary source"),
+        SourceBytesEqual(*this, RenamedSourcePath, RenamedSourceBytes, TEXT("Failed duplicate primary")));
+    TestTrue(TEXT("Failed duplicate restores the renamed partial methods source"),
+        SourceBytesEqual(*this, RenamedMethodsPath, RenamedMethodsBytes, TEXT("Failed duplicate methods")));
+    TestTrue(TEXT("Failed duplicate restores the renamed consumer source"),
+        SourceBytesEqual(*this, RenamedConsumerPath, RenamedConsumerBytes, TEXT("Failed duplicate consumer")));
+    TestTrue(TEXT("Failed duplicate restores the renamed primary sidecar"),
+        SourceBytesEqual(*this, RenamedSidecarPath, RenamedSidecarBytes, TEXT("Failed duplicate primary sidecar")));
+    TestTrue(TEXT("Failed duplicate restores the renamed partial methods sidecar"),
+        SourceBytesEqual(*this, RenamedMethodsSidecarPath, RenamedMethodsSidecarBytes, TEXT("Failed duplicate methods sidecar")));
+    TestTrue(TEXT("Failed duplicate restores the renamed consumer sidecar"),
+        SourceBytesEqual(*this, RenamedConsumerSidecarPath, RenamedConsumerSidecarBytes, TEXT("Failed duplicate consumer sidecar")));
     FUnifiedScriptClassAssetOperationResult DuplicateResult;
     const FString DuplicatePackage = Root / DuplicateName;
     if (!TestTrue(TEXT("Duplicates active Script Class"), FUnifiedScriptClassAssetOperations::Duplicate(
@@ -1259,14 +1530,20 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     }
     TestTrue(TEXT("Duplicate receives a new ClassId"), DuplicateResult.ScriptAsset->ScriptClassId != OriginalClassId);
     TestTrue(TEXT("Duplicate receives a distinct generated class"), DuplicateResult.ScriptAsset->GeneratedClassPath != RenameResult.ScriptAsset->GeneratedClassPath);
-    const FString DuplicateSidecarPath = FPaths::Combine(
-        ClassesDirectory,
-        DuplicateName + TEXT(".cs.usids"));
+    const FString DuplicateSourcePath = Normalize(DuplicateResult.SourcePath);
+    const FString DuplicateSidecarPath = DuplicateSourcePath + TEXT(".usids");
+    const FString DuplicateMethodsPath = FPaths::Combine(ClassesDirectory, DuplicateName + TEXT(".part1.cs"));
+    const FString DuplicateMethodsSidecarPath = DuplicateMethodsPath + TEXT(".usids");
+    TestTrue(TEXT("Duplicate reports the authoritative primary source path"),
+        !DuplicateSourcePath.IsEmpty() && IFileManager::Get().FileExists(*DuplicateSourcePath));
+    TestTrue(TEXT("Duplicate writes the complete partial source"),
+        IFileManager::Get().FileExists(*DuplicateMethodsPath));
     TSet<FString> DuplicateStateIds;
     TSet<FString> DuplicateFunctionIds;
-    if (!LoadIdentityEntryIds(
+    const TArray<FString> DuplicateIdentitySidecars = {DuplicateSidecarPath, DuplicateMethodsSidecarPath};
+    if (!LoadIdentityEntryIdsFromSources(
             *this,
-            DuplicateSidecarPath,
+            DuplicateIdentitySidecars,
             DuplicateStateIds,
             DuplicateFunctionIds,
             TEXT("Duplicate active")))
@@ -1281,6 +1558,29 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Duplicate does not rewrite the original managed source"),
         FFileHelper::LoadFileToArray(CurrentBytes, *RenamedSourcePath) &&
         CurrentBytes == RenamedSourceBytes);
+    TestTrue(TEXT("Duplicate does not rewrite the original partial methods source"),
+        SourceBytesEqual(*this, RenamedMethodsPath, RenamedMethodsBytes, TEXT("Duplicate original methods")));
+    TestTrue(TEXT("Duplicate does not rewrite the original partial methods sidecar"),
+        SourceBytesEqual(*this, RenamedMethodsSidecarPath, RenamedMethodsSidecarBytes, TEXT("Duplicate original methods sidecar")));
+    TestTrue(TEXT("Duplicate does not rewrite the original external consumer"),
+        SourceBytesEqual(*this, RenamedConsumerPath, RenamedConsumerBytes, TEXT("Duplicate original consumer")));
+    TestTrue(TEXT("Duplicate does not rewrite the original external consumer sidecar"),
+        SourceBytesEqual(*this, RenamedConsumerSidecarPath, RenamedConsumerSidecarBytes, TEXT("Duplicate original consumer sidecar")));
+    FString DuplicatePrimarySource;
+    FString DuplicateMethodsSource;
+    if (!TestTrue(TEXT("Reads the duplicate primary source"), FFileHelper::LoadFileToString(DuplicatePrimarySource, *DuplicateSourcePath)) ||
+        !TestTrue(TEXT("Reads the duplicate partial methods source"), FFileHelper::LoadFileToString(DuplicateMethodsSource, *DuplicateMethodsPath)))
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    TestTrue(TEXT("Duplicate primary uses the duplicate type"), DuplicatePrimarySource.Contains(TEXT("class ") + DuplicateName));
+    TestTrue(TEXT("Duplicate constructor uses the duplicate type"), DuplicateMethodsSource.Contains(TEXT("public ") + DuplicateName + TEXT("()")));
+    TestTrue(TEXT("Duplicate Self uses the duplicate type"), DuplicateMethodsSource.Contains(TEXT("private ") + DuplicateName + TEXT(" Self()")));
+    TestTrue(TEXT("Original external consumer still targets renamed original"),
+        RenamedConsumerSource.Contains(TEXT("Read(") + RenamedName + TEXT(" owner")) &&
+        !RenamedConsumerSource.Contains(DuplicateName));
     bool bDisjointStateIds = true;
     for (const FString& Id : RenamedStateIds)
     {

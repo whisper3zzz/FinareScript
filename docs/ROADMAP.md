@@ -59,8 +59,12 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   before stopping the old generation, runs the duplicate's ordinary Blueprint
   grandchild and restores script, lifecycle-claim and World counts on teardown.
   Project-mode identity initialization now consumes the actual project sources,
-  defines and references while preserving other files' identities; focused CLI
-  tests pass. Continue with native partial-source integration. Explicit
+  defines and references while preserving other files' identities. Partial
+  classes with callable methods in multiple files now retain every method and
+  its source ownership. The real native fixture passes cross-file Rename,
+  Duplicate, secondary sidecar collision rejection and publication rollback,
+  including constructors, self-type references and an external consumer; 79
+  relevant managed tests also pass. Explicit
   Blueprint override compatibility now retains the actual declaring owner's
   ClassId through managed type rename, with dynamic reload tests and the
   existing native event-reload regression passing; its same-ClassId native

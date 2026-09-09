@@ -62,7 +62,16 @@ internal sealed class CSharpScriptAssetLowerer
         ArgumentNullException.ThrowIfNull(semantics);
 
         var diagnostics = new List<UnifiedDiagnostic>();
-        var hirTypes = hir.Types.ToDictionary(static type => type.QualifiedName, StringComparer.Ordinal);
+        // A partial type is lowered once per syntax tree, so one qualified
+        // name can legitimately have several HIR shards. Keep every shard;
+        // collapsing them with ToDictionary either throws or loses methods
+        // from whichever file happened to be discarded.
+        var hirTypes = hir.Types
+            .GroupBy(static type => type.QualifiedName, StringComparer.Ordinal)
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<HirTypeDeclaration>)group.ToArray(),
+                StringComparer.Ordinal);
         var semanticTypes = semantics.Types.ToDictionary(static type => type.Id);
         var semanticMethods = semantics.Methods.ToDictionary(static method => method.Id);
         var declarations = new List<ScriptAssetDeclaration>();
@@ -87,8 +96,9 @@ internal sealed class CSharpScriptAssetLowerer
                 AttributeData? assetAttribute = FindAttribute(typeSymbol, ScriptAssetAttributeName);
                 bool hasExposedMember = typeSymbol.GetMembers()
                     .Any(static member => FindAttribute(member, ExposeAttributeName) is not null);
-                hirTypes.TryGetValue(qualifiedName, out HirTypeDeclaration? hirType);
-                if (assetAttribute is null && hirType is null && !hasExposedMember)
+                hirTypes.TryGetValue(qualifiedName, out IReadOnlyList<HirTypeDeclaration>? hirTypeShards);
+                HirTypeDeclaration? firstHirType = hirTypeShards?.FirstOrDefault();
+                if (assetAttribute is null && hirTypeShards is null && !hasExposedMember)
                 {
                     continue;
                 }
@@ -118,7 +128,7 @@ internal sealed class CSharpScriptAssetLowerer
                     compilation,
                     typeSymbol,
                     qualifiedName,
-                    hirType?.Methods.Count ?? 0,
+                    hirTypeShards?.Sum(static shard => shard.Methods.Count) ?? 0,
                     hirTypes,
                     semanticTypes,
                     semanticMethods,
@@ -126,7 +136,7 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics);
                 IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
                     LowerLifecycleHooks(typeSymbol);
-                SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
+                SemanticId assetId = firstHirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
                 if (assetAttribute is not null &&
                     TryReadNamedString(
                         assetAttribute,
@@ -452,7 +462,7 @@ internal sealed class CSharpScriptAssetLowerer
         INamedTypeSymbol typeSymbol,
         string projectionQualifiedName,
         int initialCapacity,
-        IReadOnlyDictionary<string, HirTypeDeclaration> hirTypes,
+        IReadOnlyDictionary<string, IReadOnlyList<HirTypeDeclaration>> hirTypes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IDictionary<SemanticId, string> declarationOwnerNames,
@@ -466,9 +476,9 @@ internal sealed class CSharpScriptAssetLowerer
         while (currentSymbol is not null)
         {
             string currentName = GetMetadataName(currentSymbol);
-            if (hirTypes.TryGetValue(currentName, out HirTypeDeclaration? currentType))
+            if (hirTypes.TryGetValue(currentName, out IReadOnlyList<HirTypeDeclaration>? currentTypeShards))
             {
-                foreach (HirMethodDeclaration method in currentType.Methods)
+                foreach (HirMethodDeclaration method in currentTypeShards.SelectMany(static shard => shard.Methods))
                 {
                     if (!inherited ||
                         (method.IsPublic && !method.IsStatic && !shadowedNames.Contains(method.Name)))

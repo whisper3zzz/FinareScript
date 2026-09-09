@@ -1,7 +1,9 @@
 using UnifiedScript.CSharp;
+using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
 using UnifiedScript.Graph;
 using UnifiedScript.Semantics;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
@@ -51,6 +53,137 @@ public sealed class MultiDocumentSemanticPipelineTests
         Assert.Equal("Game.GameplayApi.Clamp(System.Single)", descriptor.MetadataName);
         Assert.Equal(MethodEffects.ReadsState | MethodEffects.WritesState, descriptor.Effects);
         Assert.Equal("Game/Controller.cs", method.Span.FilePath);
+    }
+
+    [Fact]
+    public void Analyze_LowersAllVisualMethodsFromPartialTypeShardsAndPreservesOwnersAndSpans()
+    {
+        const string primarySource = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            [ScriptAsset("Game/SplitController", ClassId = "us_00000000000000000000000000000021")]
+            [UnrealScriptClass(UnrealScriptClassKind.Object)]
+            public sealed partial class SplitController
+            {
+                [Expose]
+                public int Seed { get; set; } = 3;
+
+                [Visual]
+                public int ReadSeed()
+                {
+                    return Seed;
+                }
+            }
+            """;
+        const string methodsSource = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            public sealed partial class SplitController
+            {
+                [Visual]
+                public int Forward()
+                {
+                    return ReadSeed();
+                }
+            }
+            """;
+        CSharpSourceDocument[] sources =
+        [
+            new(
+                "Game/SplitController.cs",
+                primarySource,
+                IdentitySidecarDocument.CreateEmpty("Game/SplitController.cs")),
+            new(
+                "Game/SplitController.Methods.cs",
+                methodsSource,
+                IdentitySidecarDocument.CreateEmpty("Game/SplitController.Methods.cs")),
+        ];
+        CSharpCompilationRequest request = new(
+            "UnifiedScript.MultiDocument.Partial",
+            sources,
+            [typeof(UnrealObjectScript).Assembly.Location]);
+
+        CSharpSemanticPipeline pipeline = new();
+        CSharpAnalysisResult first = pipeline.Analyze(request);
+
+        Assert.True(first.Succeeded, string.Join(Environment.NewLine, first.Diagnostics));
+        ScriptAssetDeclaration asset = Assert.Single(first.ScriptAssets!.Assets);
+        Assert.Equal("Game.SplitController", asset.QualifiedName);
+        Assert.Equal(["Forward", "ReadSeed"], asset.Functions.Select(static function => function.Name).Order());
+        Assert.Equal(3, first.DeclarationOwners.Count);
+        Assert.All(asset.Functions, function => Assert.Equal(asset.Id, first.DeclarationOwners[function.Id]));
+
+        IReadOnlyList<HirMethodDeclaration> hirMethods = first.Hir!.Types
+            .SelectMany(static type => type.Methods)
+            .OrderBy(static method => method.Name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(["Forward", "ReadSeed"], hirMethods.Select(static method => method.Name));
+        Assert.Equal("Game/SplitController.Methods.cs", hirMethods[0].Span.FilePath);
+        Assert.Equal("Game/SplitController.cs", hirMethods[1].Span.FilePath);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            first.Hir,
+            first.Semantics,
+            first.DeclarationReferences);
+        Assert.Equal(
+            hirMethods.Select(static method => method.Id.Value).Order(StringComparer.Ordinal),
+            graph.Functions.Select(static function => function.Id.Value).Order(StringComparer.Ordinal));
+        Assert.Contains(
+            graph.Functions.SelectMany(static function => function.Nodes),
+            node => node.Span.FilePath == "Game/SplitController.Methods.cs");
+        Assert.Contains(
+            graph.Functions.SelectMany(static function => function.Nodes),
+            node => node.Span.FilePath == "Game/SplitController.cs");
+        GraphDocument graphRoundTrip = GraphJson.Deserialize(GraphJson.Serialize(graph, writeIndented: false));
+        Assert.Equal(
+            graph.Functions.Select(static function => function.Id),
+            graphRoundTrip.Functions.Select(static function => function.Id));
+        Assert.Equal(
+            graph.Functions.SelectMany(static function => function.Nodes)
+                .Select(static node => node.Span.FilePath)
+                .Order(StringComparer.Ordinal),
+            graphRoundTrip.Functions.SelectMany(static function => function.Nodes)
+                .Select(static node => node.Span.FilePath)
+                .Order(StringComparer.Ordinal));
+
+        IReadOnlyDictionary<string, IdentitySidecarDocument> sidecars = first.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
+        Assert.Equal(2, sidecars.Count);
+        CSharpSourceDocument[] withSidecars = sources
+            .Select(source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                sidecars[source.LogicalPath]))
+            .Reverse()
+            .ToArray();
+        CSharpAnalysisResult reapplied = pipeline.Analyze(new CSharpCompilationRequest(
+            request.AssemblyName,
+            withSidecars,
+            request.ReferencePaths));
+
+        Assert.True(reapplied.Succeeded, string.Join(Environment.NewLine, reapplied.Diagnostics));
+        ScriptAssetDeclaration reappliedAsset = Assert.Single(reapplied.ScriptAssets!.Assets);
+        Assert.Equal(
+            asset.Functions.ToDictionary(static function => function.Name, static function => function.Id),
+            reappliedAsset.Functions.ToDictionary(static function => function.Name, static function => function.Id));
+        Assert.Equal(
+            hirMethods.Select(static method => (method.Name, method.Id, method.Span.FilePath)),
+            reapplied.Hir!.Types
+                .SelectMany(static type => type.Methods)
+                .OrderBy(static method => method.Name, StringComparer.Ordinal)
+                .Select(static method => (method.Name, method.Id, method.Span.FilePath)));
+        Assert.Equal(
+            first.IdentitySidecars
+                .OrderBy(static sidecar => sidecar.SourcePath, StringComparer.Ordinal)
+                .Select(static sidecar => IdentitySidecarJson.Serialize(sidecar)),
+            reapplied.IdentitySidecars
+                .OrderBy(static sidecar => sidecar.SourcePath, StringComparer.Ordinal)
+                .Select(static sidecar => IdentitySidecarJson.Serialize(sidecar)));
     }
 
     [Fact]

@@ -2998,19 +2998,22 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
     }
     for (const TPair<FString, TArray<uint8>>& Pair : ManagedSourceOutputs)
     {
-        if (IFileManager::Get().FileExists(*Pair.Key) ||
-            !CaptureSnapshotIfMissing(Pair.Key, FileSnapshots, Error) ||
-            IFileManager::Get().FileExists(*(Pair.Key + TEXT(".usids"))) ||
-            !CaptureSnapshotIfMissing(Pair.Key + TEXT(".usids"), FileSnapshots, Error))
+        const FString OutputPaths[] = {Pair.Key, Pair.Key + TEXT(".usids")};
+        for (const FString& OutputPath : OutputPaths)
         {
-            if (Error.IsEmpty())
+            if (IFileManager::Get().FileExists(*OutputPath))
             {
                 Error = FString::Printf(
                     TEXT("Managed duplicate target '%s' already exists."),
-                    *Pair.Key);
+                    *OutputPath);
+                OutResult.Error = Error;
+                return false;
             }
-            OutResult.Error = Error;
-            return false;
+            if (!CaptureSnapshotIfMissing(OutputPath, FileSnapshots, Error))
+            {
+                OutResult.Error = Error;
+                return false;
+            }
         }
     }
     if (!RunManagedIdentityPlanner(

@@ -682,11 +682,47 @@ used. `source-identity-init-cli-build-final.log` reports a Release CLI build wit
 zero warnings and errors. Native partial integration is the next validation;
 these CLI results do not establish its runtime behavior.
 
-C-3 remains open. The native partial-copy implementation needs a real multi-source
-integration fixture, explicit Blueprint override same-ClassId Rename still needs
+The first native partial-source run (`active-partial-cmd-1.log`) exposed a
+producer defect: C# compilation succeeded, but identity initialization threw on
+a duplicate qualified type name when both partial files contained callable
+methods. Earlier tests had callable methods in only one partial file. The asset
+lowerer now indexes all HIR declarations for a type and collects their methods,
+preserving each file's source spans, method IDs and declaring owner. HIR source
+boundaries and serialized contracts are unchanged. The native fixture builder
+also retains its accumulated pipe output instead of replacing it with the last
+read when the child process exits.
+
+All 79 relevant managed tests pass in
+`partial-lowering-final-3/partial-lowering-focused-3.trx`, including asset
+lowering, inherited ownership, source identity transitions, and project-mode
+initialization with Visual methods in both files. The new multi-document test
+checks actual Graph serialization and stable sidecars when source order changes.
+The Release CLI build passes, and `partial-lowering-managed-deploy.log` deploys
+the updated Release host and Demo through the official chunk workflow.
+
+The real multi-source fixture passes in `active-partial-cmd-3.log` (Success,
+one completed test and Queue Empty), after `editor-partial-active-build-3.log`.
+The factory class now has a primary file with state and its Blueprint event,
+a partial file containing the constructor and Visual function, and a separate
+external consumer. Rename preserves both files' combined state/function IDs and
+updates the constructor, self-type reference and consumer. Duplicate copies
+both declarations with independent owned IDs, leaves every original source and
+sidecar byte-identical, and starts the duplicate's ordinary Blueprint grandchild.
+The two partial sidecars jointly retain six state and two function IDs per class.
+
+The same run rejects a secondary sidecar-only destination collision before a
+recovery journal is created, and verifies all source/sidecar bytes after injected
+Rename and Duplicate publication failures. Duplicate diagnostics now identify
+the actual colliding source or sidecar path. Existing accumulated state,
+invalid-ClassId preflight rejection, independent two-World reload, exact
+component archetypes and teardown checks remain in this test. The owned content
+directory for `12D7EB5E4D117F66D8CAE8A71EBA10B2` is empty after execution;
+onboarding configuration is restored. AssetRegistry deletion warnings remain
+the same as the preceding fixture; no owned package files remain on disk.
+
+C-3 remains open. Explicit Blueprint override same-ClassId Rename still needs
 native acceptance, and the affected cooked path must use the current runtime
-before closing this slice. None of those boundaries is claimed by the active
-selector above.
+before closing this slice. Partial-source Delete was not added by this batch.
 
 ## Relevant verification
 

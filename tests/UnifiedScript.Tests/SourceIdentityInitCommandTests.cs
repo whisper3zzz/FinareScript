@@ -43,7 +43,35 @@ public sealed class SourceIdentityInitCommandTests
             File.ReadAllText(fixture.SelectedSidecarPath));
         Assert.Equal("Classes/ProjectIdentityBase.cs", selected.SourcePath);
         Assert.NotEmpty(selected.Entries);
+        IdentityEntry forward = Assert.Single(
+            selected.Entries,
+            static entry => entry.Kind == "function" && entry.Owner.Contains("Forward", StringComparison.Ordinal));
+        Assert.True(forward.Anchor.Length > 0);
+        IdentitySidecarDocument other = IdentitySidecarJson.Deserialize(
+            File.ReadAllText(fixture.OtherSidecarPath));
+        IdentityEntry readSeed = Assert.Single(
+            other.Entries,
+            static entry => entry.Kind == "function" && entry.Owner.Contains("ReadSeed", StringComparison.Ordinal));
+        Assert.True(readSeed.Anchor.Length > 0);
         Assert.Equal(otherSidecar, File.ReadAllBytes(fixture.OtherSidecarPath));
+
+        string reanalyzedSelectedPath = Path.Combine(fixture.Root, "ProjectIdentityBase.reanalyzed.cs.usids");
+        Assert.Equal(0, Program.Main([
+            "identity-init",
+            fixture.SelectedSourcePath,
+            "--project", fixture.ProjectPath,
+            "--out", reanalyzedSelectedPath,
+            "--configuration", "Debug",
+            "--no-restore",
+            "--no-build",
+            "--dotnet", Fixture.DotNetPath,
+            "--reference", fixture.FriendAssemblyPath,
+        ]));
+        IdentitySidecarDocument reanalyzedSelected = IdentitySidecarJson.Deserialize(
+            File.ReadAllText(reanalyzedSelectedPath));
+        Assert.Equal(
+            selected.Entries.Select(static entry => entry.Id.Value).Order(StringComparer.Ordinal),
+            reanalyzedSelected.Entries.Select(static entry => entry.Id.Value).Order(StringComparer.Ordinal));
 
         Assert.NotEqual(0, Program.Main([
             "identity-init",
@@ -197,6 +225,12 @@ public sealed class SourceIdentityInitCommandTests
                     public int ReadOther()
                     {
                         return OtherValue + FriendSupport.FriendValues.Value;
+                    }
+
+                    [Visual]
+                    public int Forward()
+                    {
+                        return ReadSeed();
                     }
                 }
                 """);
