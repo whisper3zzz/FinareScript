@@ -602,6 +602,207 @@ bool FUnifiedScriptBlueprintOverrideMaterializerTest::RunTest(const FString& Par
         CollisionPackage != nullptr && CollisionPackage->IsDirty(),
         bDirtyBefore);
 
+    // A same-named ordinary function graph is user-owned even when it has no
+    // override event node.  It must not be replaced by an incoming managed
+    // override merely because the native route has the same name.
+    UPackage* GraphCollisionPackage = nullptr;
+    const FString GraphCollisionAssetName = TEXT("BP_UnifiedScriptOverrideGraphCollision_") + Suffix;
+    const FString GraphCollisionPackageName =
+        TEXT("/Game/UnifiedScriptOverrideGraphCollision_") + Suffix;
+    OwnedPackageFilenames.Add(FPackageName::LongPackageNameToFilename(
+        GraphCollisionPackageName,
+        FPackageName::GetAssetPackageExtension()));
+    UUnifiedScriptBlueprint* GraphCollisionBlueprint = CreateBlueprint(
+        GraphCollisionPackageName,
+        GraphCollisionAssetName,
+        GraphCollisionPackage);
+    UUnifiedScriptAsset* GraphCollisionAsset = GraphCollisionBlueprint != nullptr
+        ? AttachScriptAsset(*GraphCollisionBlueprint, ScriptClassId)
+        : nullptr;
+    UEdGraph* UserOwnedGraph = GraphCollisionBlueprint != nullptr
+        ? FBlueprintEditorUtils::CreateNewGraph(
+            GraphCollisionBlueprint,
+            TEXT("ReceiveInherited"),
+            UEdGraph::StaticClass(),
+            UEdGraphSchema_K2::StaticClass())
+        : nullptr;
+    if (UserOwnedGraph != nullptr && GraphCollisionBlueprint != nullptr)
+    {
+        FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+            GraphCollisionBlueprint,
+            UserOwnedGraph,
+            true,
+            nullptr);
+    }
+    UUnifiedScriptBlueprintGeneratedClass* GraphCollisionClass = GraphCollisionBlueprint != nullptr
+        ? Cast<UUnifiedScriptBlueprintGeneratedClass>(GraphCollisionBlueprint->GeneratedClass)
+        : nullptr;
+    const int32 GraphCollisionGraphCount = GraphCollisionBlueprint != nullptr
+        ? GraphCollisionBlueprint->FunctionGraphs.Num()
+        : 0;
+    const int32 GraphCollisionBindingCount = GraphCollisionClass != nullptr
+        ? GraphCollisionClass->ManagedFunctionBindings.Num()
+        : 0;
+    UClass* GraphCollisionGeneratedClassBefore = GraphCollisionBlueprint != nullptr
+        ? GraphCollisionBlueprint->GeneratedClass
+        : nullptr;
+    if (GraphCollisionPackage != nullptr)
+    {
+        GraphCollisionPackage->SetDirtyFlag(false);
+    }
+    FUnifiedScriptBlueprintClassSyncResult GraphCollisionResult;
+    FString GraphCollisionError;
+    const bool bGraphCollision = GraphCollisionAsset != nullptr &&
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *GraphCollisionAsset,
+            *GraphCollisionBlueprint,
+            Document(
+                OverrideFunction(
+                    TEXT("12121212121212121212121212121212"),
+                    TEXT("ManagedReceiveGraph"),
+                    TEXT("System.Void"),
+                    ReceiveParameters,
+                    DeclaringClassPath,
+                    TEXT("ReceiveInherited")),
+                DeclaringClassPath),
+            false,
+            GraphCollisionResult,
+            GraphCollisionError);
+    TestFalse(*FString::Printf(
+        TEXT("Same-named user-owned function graph is rejected: %s"),
+        *GraphCollisionError), bGraphCollision);
+    TestTrue(TEXT("Same-named graph rejection identifies user ownership"),
+        GraphCollisionError.Contains(TEXT("user-owned Blueprint graph")));
+    TestNotNull(TEXT("Same-named user-owned graph remains present"), UserOwnedGraph);
+    TestTrue(TEXT("Same-named user-owned graph remains in the Blueprint"),
+        GraphCollisionBlueprint != nullptr &&
+        GraphCollisionBlueprint->FunctionGraphs.Contains(UserOwnedGraph));
+    TestEqual(TEXT("Same-named graph rejection leaves function graphs unchanged"),
+        GraphCollisionBlueprint != nullptr ? GraphCollisionBlueprint->FunctionGraphs.Num() : 0,
+        GraphCollisionGraphCount);
+    TestEqual(TEXT("Same-named graph rejection leaves managed bindings unchanged"),
+        GraphCollisionClass != nullptr ? GraphCollisionClass->ManagedFunctionBindings.Num() : 0,
+        GraphCollisionBindingCount);
+    TestTrue(TEXT("Same-named graph rejection leaves generated class unchanged"),
+        GraphCollisionBlueprint != nullptr &&
+        GraphCollisionBlueprint->GeneratedClass == GraphCollisionGeneratedClassBefore);
+    TestFalse(TEXT("Same-named graph rejection leaves the package clean"),
+        GraphCollisionPackage != nullptr && GraphCollisionPackage->IsDirty());
+
+    // A persisted binding cannot claim a same-named graph when its GraphGuid
+    // does not match the binding ID.  This stale-binding case must remain a
+    // user graph collision and leave the binding untouched.
+    UPackage* StaleBindingPackage = nullptr;
+    const FString StaleBindingAssetName = TEXT("BP_UnifiedScriptOverrideStaleBinding_") + Suffix;
+    const FString StaleBindingPackageName =
+        TEXT("/Game/UnifiedScriptOverrideStaleBinding_") + Suffix;
+    OwnedPackageFilenames.Add(FPackageName::LongPackageNameToFilename(
+        StaleBindingPackageName,
+        FPackageName::GetAssetPackageExtension()));
+    UUnifiedScriptBlueprint* StaleBindingBlueprint = CreateBlueprint(
+        StaleBindingPackageName,
+        StaleBindingAssetName,
+        StaleBindingPackage);
+    UUnifiedScriptAsset* StaleBindingAsset = StaleBindingBlueprint != nullptr
+        ? AttachScriptAsset(*StaleBindingBlueprint, ScriptClassId)
+        : nullptr;
+    UEdGraph* StaleBindingGraph = StaleBindingBlueprint != nullptr
+        ? FBlueprintEditorUtils::CreateNewGraph(
+            StaleBindingBlueprint,
+            TEXT("ReceiveInherited"),
+            UEdGraph::StaticClass(),
+            UEdGraphSchema_K2::StaticClass())
+        : nullptr;
+    if (StaleBindingGraph != nullptr && StaleBindingBlueprint != nullptr)
+    {
+        FBlueprintEditorUtils::AddFunctionGraph<UClass>(
+            StaleBindingBlueprint,
+            StaleBindingGraph,
+            true,
+            nullptr);
+    }
+    const FGuid StaleBindingId(0x34343434, 0x34343434, 0x34343434, 0x34343434);
+    const FGuid MismatchedGraphId(0x56565656, 0x56565656, 0x56565656, 0x56565656);
+    if (StaleBindingGraph != nullptr)
+    {
+        StaleBindingGraph->GraphGuid = MismatchedGraphId;
+    }
+    UUnifiedScriptBlueprintGeneratedClass* StaleBindingClass = StaleBindingBlueprint != nullptr
+        ? Cast<UUnifiedScriptBlueprintGeneratedClass>(StaleBindingBlueprint->GeneratedClass)
+        : nullptr;
+    FUnifiedScriptManagedFunctionBinding StaleBinding;
+    StaleBinding.ManagedName = TEXT("StaleReceive");
+    StaleBinding.FunctionId = StaleBindingId;
+    if (StaleBindingClass != nullptr)
+    {
+        StaleBindingClass->ManagedFunctionBindings.Add(
+            FName(TEXT("ReceiveInherited")),
+            StaleBinding);
+    }
+    const int32 StaleBindingGraphCount = StaleBindingBlueprint != nullptr
+        ? StaleBindingBlueprint->FunctionGraphs.Num()
+        : 0;
+    const int32 StaleBindingBindingCount = StaleBindingClass != nullptr
+        ? StaleBindingClass->ManagedFunctionBindings.Num()
+        : 0;
+    UClass* StaleBindingGeneratedClassBefore = StaleBindingBlueprint != nullptr
+        ? StaleBindingBlueprint->GeneratedClass
+        : nullptr;
+    if (StaleBindingPackage != nullptr)
+    {
+        StaleBindingPackage->SetDirtyFlag(false);
+    }
+    FUnifiedScriptBlueprintClassSyncResult StaleBindingResult;
+    FString StaleBindingError;
+    const bool bStaleBindingAccepted = StaleBindingAsset != nullptr &&
+        FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+            *StaleBindingAsset,
+            *StaleBindingBlueprint,
+            Document(
+                OverrideFunction(
+                    TEXT("78787878787878787878787878787878"),
+                    TEXT("ManagedReceiveStale"),
+                    TEXT("System.Void"),
+                    ReceiveParameters,
+                    DeclaringClassPath,
+                    TEXT("ReceiveInherited")),
+                DeclaringClassPath),
+            false,
+            StaleBindingResult,
+            StaleBindingError);
+    TestFalse(*FString::Printf(
+        TEXT("Mismatched persisted binding is rejected: %s"),
+        *StaleBindingError), bStaleBindingAccepted);
+    TestNotNull(TEXT("Mismatched binding setup has a generated class"), StaleBindingClass);
+    TestTrue(TEXT("Mismatched persisted binding identifies user ownership"),
+        StaleBindingError.Contains(TEXT("user-owned Blueprint graph")));
+    TestTrue(TEXT("Mismatched binding graph remains in the Blueprint"),
+        StaleBindingBlueprint != nullptr &&
+        StaleBindingBlueprint->FunctionGraphs.Contains(StaleBindingGraph));
+    TestTrue(TEXT("Mismatched binding graph keeps its mismatched GraphGuid"),
+        StaleBindingGraph != nullptr &&
+        StaleBindingGraph->GraphGuid == MismatchedGraphId);
+    TestEqual(TEXT("Mismatched binding rejection leaves function graphs unchanged"),
+        StaleBindingBlueprint != nullptr ? StaleBindingBlueprint->FunctionGraphs.Num() : 0,
+        StaleBindingGraphCount);
+    TestEqual(TEXT("Mismatched binding rejection leaves generated bindings unchanged"),
+        StaleBindingClass != nullptr ? StaleBindingClass->ManagedFunctionBindings.Num() : 0,
+        StaleBindingBindingCount);
+    TestTrue(TEXT("Mismatched binding rejection leaves generated class unchanged"),
+        StaleBindingBlueprint != nullptr &&
+        StaleBindingBlueprint->GeneratedClass == StaleBindingGeneratedClassBefore);
+    const FUnifiedScriptManagedFunctionBinding* BindingAfterMismatch = StaleBindingClass != nullptr
+        ? StaleBindingClass->ManagedFunctionBindings.Find(TEXT("ReceiveInherited"))
+        : nullptr;
+    TestNotNull(TEXT("Mismatched binding remains persisted"), BindingAfterMismatch);
+    if (BindingAfterMismatch != nullptr)
+    {
+        TestEqual(TEXT("Mismatched binding preserves its stable ID"), BindingAfterMismatch->FunctionId, StaleBindingId);
+        TestEqual(TEXT("Mismatched binding preserves its managed name"), BindingAfterMismatch->ManagedName, FString(TEXT("StaleReceive")));
+    }
+    TestFalse(TEXT("Mismatched binding rejection leaves the package clean"),
+        StaleBindingPackage != nullptr && StaleBindingPackage->IsDirty());
+
     // A normal Engine.Actor event is a second parent-chain surface. This
     // proves the declaring class need not be the fixture's immediate parent,
     // while the native function itself is still declared directly by Actor.

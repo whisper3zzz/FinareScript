@@ -29,6 +29,7 @@
 #include "UnifiedScriptProjectSetup.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/StructOnScope.h"
 
 namespace UE::UnifiedScript::ActiveClassAssetOperations::Tests
 {
@@ -247,6 +248,22 @@ bool SplitActiveManagedSource(
     const FString VisualMethod = Source.Mid(VisualBegin, MethodEnd - VisualBegin);
     Source.RemoveAt(VisualBegin, MethodEnd - VisualBegin);
 
+    const int32 BlueprintEventStart = Source.Find(TEXT("    [UnrealBlueprintEvent]"), ESearchCase::CaseSensitive);
+    if (!Test.TestTrue(TEXT("Active factory source contains a Blueprint event insertion point"), BlueprintEventStart != INDEX_NONE))
+    {
+        return false;
+    }
+    const FString OverrideProperty =
+        TEXT("    [Expose(InstanceEditable = true, Category = \"UnifiedScript|State\")]\n")
+        TEXT("    public int OverrideCount { get; set; } = 0;\n\n");
+    const FString OverrideMethod =
+        TEXT("    [UnrealBlueprintOverride(\"/Script/Engine.Actor\", \"ReceiveTick\")]\n")
+        TEXT("    public void ReceiveTick(float deltaSeconds)\n")
+        TEXT("    {\n")
+        TEXT("        OverrideCount = OverrideCount + 1;\n")
+        TEXT("    }\n\n");
+    Source.InsertAt(BlueprintEventStart, OverrideProperty + OverrideMethod);
+
     const FString NamespaceMarker = TEXT("namespace ");
     const int32 NamespaceStart = Source.Find(NamespaceMarker, ESearchCase::CaseSensitive);
     const int32 NamespaceEnd = Source.Find(TEXT(";"), ESearchCase::CaseSensitive, ESearchDir::FromStart, NamespaceStart);
@@ -276,6 +293,11 @@ bool SplitActiveManagedSource(
     Test.TestTrue(TEXT("Active partial methods owns the constructor"), MethodsSource.Contains(TEXT("public ") + BaseName + TEXT("()")));
     Test.TestTrue(TEXT("Active partial methods owns the Visual AddOne"), MethodsSource.Contains(TEXT("[Visual]")) && MethodsSource.Contains(TEXT("AddOne")));
     Test.TestTrue(TEXT("Active partial methods exercises a self type reference"), MethodsSource.Contains(TEXT("private ") + BaseName + TEXT(" Self()")));
+    Test.TestTrue(TEXT("Active primary source owns the reflected override state"),
+        Source.Contains(TEXT("public int OverrideCount { get; set; } = 0;")));
+    Test.TestTrue(TEXT("Active primary source owns the ReceiveTick override"),
+        Source.Contains(TEXT("UnrealBlueprintOverride(\"/Script/Engine.Actor\", \"ReceiveTick\")")) &&
+        Source.Contains(TEXT("OverrideCount = OverrideCount + 1;")));
     Test.TestTrue(TEXT("Active external consumer calls AddOne through the owner type"),
         ConsumerSource.Contains(TEXT("Read(") + BaseName + TEXT(" owner")) && ConsumerSource.Contains(TEXT("owner.AddOne(value)")));
     InOutPrimarySource = Source;
@@ -364,6 +386,20 @@ bool PatchAddOneBody(
         TEXT("return value + 1;"),
         TEXT("return value + 101;"),
         TEXT("renamed AddOne body"));
+}
+
+bool PatchOverrideBody(
+    FAutomationTestBase& Test,
+    const FString& Path,
+    FString& InOutSource)
+{
+    return ReplaceSourceText(
+        Test,
+        Path,
+        InOutSource,
+        TEXT("OverrideCount = OverrideCount + 1;"),
+        TEXT("OverrideCount = OverrideCount + 100;"),
+        TEXT("renamed ReceiveTick body"));
 }
 
 bool PatchExplicitClassId(
@@ -544,6 +580,95 @@ bool InvokeAddOne(FAutomationTestBase& Test, AUnifiedScriptActor* Actor, int32 I
     Params.Value = Input;
     Actor->ProcessEvent(Function, &Params);
     return Test.TestEqual(*FString::Printf(TEXT("%s managed AddOne result"), Label), Params.ReturnValue, Expected);
+}
+
+bool ReadOverrideCount(
+    FAutomationTestBase& Test,
+    AUnifiedScriptActor* Actor,
+    int32& OutValue,
+    const TCHAR* Label)
+{
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s actor for OverrideCount"), Label), Actor))
+    {
+        return false;
+    }
+    FIntProperty* OverrideCount = FindFProperty<FIntProperty>(Actor->GetClass(), TEXT("OverrideCount"));
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s reflected OverrideCount property"), Label), OverrideCount))
+    {
+        return false;
+    }
+    OutValue = OverrideCount->GetPropertyValue_InContainer(Actor);
+    return true;
+}
+
+bool InvokeReceiveTick(
+    FAutomationTestBase& Test,
+    AUnifiedScriptActor* Actor,
+    float DeltaSeconds,
+    int32 Expected,
+    const TCHAR* Label)
+{
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s actor for ReceiveTick"), Label), Actor))
+    {
+        return false;
+    }
+
+    const FUnifiedScriptManagedFunctionBinding* RouteBinding = nullptr;
+    for (UClass* Candidate = Actor->GetClass(); Candidate != nullptr && RouteBinding == nullptr;
+         Candidate = Candidate->GetSuperClass())
+    {
+        const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate);
+        if (GeneratedClass == nullptr)
+        {
+            continue;
+        }
+        for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+             GeneratedClass->ManagedFunctionBindings)
+        {
+            if (Pair.Value.BlueprintOverrideDeclaringTypePath.Equals(
+                    TEXT("/Script/Engine.Actor"),
+                    ESearchCase::CaseSensitive) &&
+                Pair.Value.BlueprintOverrideFunctionName.Equals(
+                    TEXT("ReceiveTick"),
+                    ESearchCase::CaseSensitive))
+            {
+                RouteBinding = &Pair.Value;
+                break;
+            }
+        }
+    }
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s managed ReceiveTick route"), Label), RouteBinding))
+    {
+        return false;
+    }
+    Test.TestEqual(
+        *FString::Printf(TEXT("%s ReceiveTick route declaring type"), Label),
+        RouteBinding->BlueprintOverrideDeclaringTypePath,
+        FString(TEXT("/Script/Engine.Actor")));
+    Test.TestEqual(
+        *FString::Printf(TEXT("%s ReceiveTick route function name"), Label),
+        RouteBinding->BlueprintOverrideFunctionName,
+        FString(TEXT("ReceiveTick")));
+
+    UFunction* ReceiveTick = Actor->FindFunction(TEXT("ReceiveTick"));
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s reflected ReceiveTick function"), Label), ReceiveTick))
+    {
+        return false;
+    }
+    FProperty* DeltaSecondsProperty = FindFProperty<FProperty>(ReceiveTick, TEXT("DeltaSeconds"));
+    FFloatProperty* DeltaSecondsFloat = CastField<FFloatProperty>(DeltaSecondsProperty);
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s ReceiveTick DeltaSeconds parameter"), Label), DeltaSecondsFloat))
+    {
+        return false;
+    }
+    FStructOnScope Parameters(ReceiveTick);
+    DeltaSecondsFloat->SetPropertyValue_InContainer(Parameters.GetStructMemory(), DeltaSeconds);
+    Actor->ProcessEvent(ReceiveTick, Parameters.GetStructMemory());
+
+    int32 Actual = 0;
+    return ReadOverrideCount(Test, Actor, Actual, Label) &&
+        Test.TestEqual(*FString::Printf(TEXT("%s managed ReceiveTick result"), Label), Actual, Expected);
 }
 
 bool RunBuilder(FAutomationTestBase& Test, const FString& ProjectPath, const FString& OutputRoot, const FString& BuildLogPath)
@@ -1092,6 +1217,10 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Original grandchild applies the real managed OnTick body"), SetStartValueAndTick(*this, Second, 20, 30, TEXT("Original grandchild")));
     TestEqual(TEXT("Original child AddOne is callable"), InvokeAddOne(*this, First.Actor, 7, 8, TEXT("Original child")), true);
     TestEqual(TEXT("Original grandchild AddOne is callable"), InvokeAddOne(*this, Second.Actor, 8, 9, TEXT("Original grandchild")), true);
+    TestTrue(TEXT("Original child invokes the managed ReceiveTick override"),
+        InvokeReceiveTick(*this, First.Actor, 0.1f, 1, TEXT("Original child")));
+    TestTrue(TEXT("Original grandchild invokes the inherited managed ReceiveTick override"),
+        InvokeReceiveTick(*this, Second.Actor, 0.1f, 1, TEXT("Original grandchild")));
 
     const FString FailedRenameSourcePath = FPaths::Combine(
         ClassesDirectory,
@@ -1210,6 +1339,8 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         IFileManager::Get().FileExists(*FailedRenameSidecarPath));
     TestTrue(TEXT("Rollback keeps original child managed OnTick body"), TickExistingStartValue(*this, First, 40, TEXT("After failed rename")));
     TestTrue(TEXT("Failed rename keeps old managed instance callable"), InvokeAddOne(*this, First.Actor, 9, 10, TEXT("After failed rename")));
+    TestTrue(TEXT("Failed rename keeps the old ReceiveTick override callable"),
+        InvokeReceiveTick(*this, First.Actor, 0.1f, 2, TEXT("After failed rename")));
 
     FUnifiedScriptClassAssetOperationResult RenameResult;
     const FString RenamedPackage = Root / RenamedName;
@@ -1277,7 +1408,10 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         IFileManager::Get().FileExists(*RenamedConsumerSidecarPath));
     TestTrue(TEXT("Old active instance remains callable before rebuild"), InvokeAddOne(*this, First.Actor, 10, 11, TEXT("Before renamed rebuild")));
     TestTrue(TEXT("Rename-before-build keeps the original managed OnTick body"), TickExistingStartValue(*this, First, 50, TEXT("Before renamed rebuild")));
-    if (!PatchAddOneBody(*this, RenamedMethodsPath, RenamedMethodsSource))
+    TestTrue(TEXT("Rename-before-build keeps the old ReceiveTick override callable"),
+        InvokeReceiveTick(*this, First.Actor, 0.1f, 3, TEXT("Before renamed rebuild")));
+    if (!PatchAddOneBody(*this, RenamedMethodsPath, RenamedMethodsSource) ||
+        !PatchOverrideBody(*this, RenamedSourcePath, RenamedSource))
     {
         DestroyWorld(First);
         DestroyWorld(Second);
@@ -1286,9 +1420,11 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     const FString ValidRenamedSource = RenamedSource;
     FUnifiedScriptRuntimeDebugContext FirstBeforeInvalidReloadContext;
     int32 FirstStartValueBeforeInvalidReload = 0;
+    int32 FirstOverrideCountBeforeInvalidReload = 0;
     if (!TestTrue(TEXT("Captures the renamed instance before invalid candidate"),
             FirstComponent->GetRuntimeDebugContext(FirstBeforeInvalidReloadContext)) ||
-        !ReadStartValue(*this, First.Actor, FirstStartValueBeforeInvalidReload, TEXT("Before invalid candidate")))
+        !ReadStartValue(*this, First.Actor, FirstStartValueBeforeInvalidReload, TEXT("Before invalid candidate")) ||
+        !ReadOverrideCount(*this, First.Actor, FirstOverrideCountBeforeInvalidReload, TEXT("Before invalid candidate")))
     {
         DestroyWorld(First);
         DestroyWorld(Second);
@@ -1387,10 +1523,16 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Invalid ClassId reload retains native StartValue"),
         ReadStartValue(*this, First.Actor, FirstStartValueAfterInvalidReload, TEXT("After invalid candidate")) &&
         FirstStartValueAfterInvalidReload == FirstStartValueBeforeInvalidReload);
+    int32 FirstOverrideCountAfterInvalidReload = 0;
+    TestTrue(TEXT("Invalid ClassId reload retains native OverrideCount"),
+        ReadOverrideCount(*this, First.Actor, FirstOverrideCountAfterInvalidReload, TEXT("After invalid candidate")) &&
+        FirstOverrideCountAfterInvalidReload == FirstOverrideCountBeforeInvalidReload);
     TestTrue(TEXT("Invalid ClassId reload retains component object"), First.Actor->ScriptComponent.Get() == FirstComponent);
     TestTrue(TEXT("Invalid ClassId reload retains ScriptAsset ownership"), FirstComponent->ScriptAsset.Get() == FirstAssetBeforeInvalidReload);
     TestEqual(TEXT("Invalid ClassId reload retains active program"), FirstComponent->GetActiveProgramPath(), FirstProgramBeforeInvalidReload);
     TestTrue(TEXT("Invalid ClassId reload leaves the old body running"), InvokeAddOne(*this, First.Actor, 10, 11, TEXT("After invalid ClassId reload")));
+    TestTrue(TEXT("Invalid ClassId reload leaves the old ReceiveTick override running"),
+        InvokeReceiveTick(*this, First.Actor, 0.1f, 4, TEXT("After invalid ClassId reload")));
     TestEqual(TEXT("Invalid ClassId reload retains managed script count"), First.Host->GetManagedScriptCount(), FirstManagedScriptsBeforeInvalidReload);
     TestEqual(TEXT("Invalid ClassId reload retains lifecycle claim count"), First.Host->GetGameplayLifecycleClaimCount(), FirstLifecycleClaimsBeforeInvalidReload);
     if (!TestTrue(TEXT("Restores valid renamed source after invalid candidate"),
@@ -1408,8 +1550,12 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Reloads renamed active instance"), First.Actor->ScriptComponent->ReloadScript());
     TestTrue(TEXT("Renamed active instance uses the new AddOne body"), InvokeAddOne(*this, First.Actor, 11, 112, TEXT("After renamed reload")));
     TestTrue(TEXT("Renamed reload keeps the managed OnTick body"), TickExistingStartValue(*this, First, 161, TEXT("After renamed reload")));
+    TestTrue(TEXT("Renamed reload uses the new ReceiveTick body"),
+        InvokeReceiveTick(*this, First.Actor, 0.1f, 104, TEXT("After renamed reload")));
     TestTrue(TEXT("Second world keeps the old AddOne body until its own reload"), InvokeAddOne(*this, Second.Actor, 10, 11, TEXT("Second before own reload")));
     TestTrue(TEXT("Second world retains accumulated old OnTick state before own reload"), TickExistingStartValue(*this, Second, 40, TEXT("Second before own reload")));
+    TestTrue(TEXT("Second world keeps the old ReceiveTick body until its own reload"),
+        InvokeReceiveTick(*this, Second.Actor, 0.1f, 2, TEXT("Second before own reload")));
     FUnifiedScriptRuntimeDebugContext FirstAfterRenameContext;
     TestTrue(TEXT("Renamed active instance keeps a runtime identity"), First.Actor->ScriptComponent->GetRuntimeDebugContext(FirstAfterRenameContext));
     TestTrue(TEXT("Renamed reload preserves the original component object"), First.Actor->ScriptComponent == FirstComponent);
@@ -1650,6 +1796,12 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
             DuplicateWorld.Actor->ScriptComponent->GetArchetype() == GetComponent(DuplicateGrandchild));
         TestTrue(TEXT("Duplicate active AddOne uses the duplicate body"), InvokeAddOne(*this, DuplicateWorld.Actor, 12, 113, TEXT("Duplicate")));
         TestTrue(TEXT("Duplicate active OnTick remains independent"), SetStartValueAndTick(*this, DuplicateWorld, 20, 30, TEXT("Duplicate")));
+        int32 DuplicateOverrideCountBeforeEvent = 0;
+        TestTrue(TEXT("Duplicate grandchild starts with an independent ReceiveTick state"),
+            ReadOverrideCount(*this, DuplicateWorld.Actor, DuplicateOverrideCountBeforeEvent, TEXT("Duplicate before ReceiveTick")) &&
+            DuplicateOverrideCountBeforeEvent == 0);
+        TestTrue(TEXT("Duplicate grandchild invokes its independent ReceiveTick body"),
+            InvokeReceiveTick(*this, DuplicateWorld.Actor, 0.1f, 100, TEXT("Duplicate")));
         TestTrue(TEXT("Duplicate grandchild exposes a managed runtime identity"), DuplicateWorld.Actor->ScriptComponent->GetRuntimeDebugContext(DuplicateContext));
         TestTrue(TEXT("Duplicate grandchild owns an independent managed instance"),
             DuplicateContext.InstanceId != FirstInitialContext.InstanceId &&
@@ -1667,6 +1819,16 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         TestTrue(TEXT("Second world reloads independently onto the renamed body"), Second.Actor->ScriptComponent->ReloadScript());
         TestTrue(TEXT("Second world uses the renamed AddOne after its own reload"), InvokeAddOne(*this, Second.Actor, 10, 111, TEXT("Second after own reload")));
         TestTrue(TEXT("Second world keeps the synchronized OnTick body"), TickExistingStartValue(*this, Second, 151, TEXT("Second after own reload")));
+        int32 SecondOverrideCountAfterReload = 0;
+        TestTrue(TEXT("Second world reload preserves its old ReceiveTick state"),
+            ReadOverrideCount(*this, Second.Actor, SecondOverrideCountAfterReload, TEXT("Second after own reload")) &&
+            SecondOverrideCountAfterReload == 2);
+        TestTrue(TEXT("Second world uses the renamed ReceiveTick body after its own reload"),
+            InvokeReceiveTick(*this, Second.Actor, 0.1f, 102, TEXT("Second after own reload")));
+        int32 FirstOverrideCountAfterSecondReload = 0;
+        TestTrue(TEXT("Second world reload does not rewrite the first world ReceiveTick state"),
+            ReadOverrideCount(*this, First.Actor, FirstOverrideCountAfterSecondReload, TEXT("First after second reload")) &&
+            FirstOverrideCountAfterSecondReload == 104);
     }
     DestroyActor(DuplicateWorld);
     TestEqual(TEXT("Duplicate World releases managed scripts before teardown"), DuplicateWorld.Host->GetManagedScriptCount(), 0);

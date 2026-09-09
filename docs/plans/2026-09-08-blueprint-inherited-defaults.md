@@ -720,9 +720,58 @@ directory for `12D7EB5E4D117F66D8CAE8A71EBA10B2` is empty after execution;
 onboarding configuration is restored. AssetRegistry deletion warnings remain
 the same as the preceding fixture; no owned package files remain on disk.
 
-C-3 remains open. Explicit Blueprint override same-ClassId Rename still needs
-native acceptance, and the affected cooked path must use the current runtime
-before closing this slice. Partial-source Delete was not added by this batch.
+The added native `ReceiveTick` override fixture exposes a Duplicate integration
+failure in `active-override-cmd-1.log`. Same-ClassId Rename, the rejected candidate
+and the first World's compatible reload reach their assertions, but synchronizing
+the duplicate rejects its copied generated override graph as a user-owned graph.
+The copied graph retains the old function ID while the duplicate declaration owns
+a new ID. The repair replaces only a proven stale generated graph, whose old ID
+is scheduled for removal and whose new ID has no existing graph. The ordinary
+stale-graph removal and creation path then installs the new function identity.
+User-owned graphs and incompatible active override contracts remain protected.
+`editor-active-override-build-2.log` is a successful build, not a passing CMD run.
+
+The repaired native target builds in `editor-active-override-build-4.log`.
+`active-override-cmd-2.log` reports Success for `ActiveClassAssetOperations` and
+`BlueprintInheritedEventMaterialization`, with two completed tests and Queue
+Empty. The active fixture invokes `ReceiveTick` through the Actor's reflected
+function on its ordinary Blueprint descendants. Old generations increment by
+one through Rename and rejected-candidate preservation; the first compatible
+reload preserves four and executes the new +100 body to reach 104. The second
+World keeps its old body until its own reload, preserves two and reaches 102,
+without changing the first World's 104. The duplicate grandchild starts at zero
+and reaches 100 with its independent function IDs. Existing accumulated state,
+source/sidecar rollback, archetype and teardown assertions also pass.
+
+The focused materializer regression rejects both a same-named user function
+graph and a persisted binding whose ID does not match its graph GUID. It checks
+that the graph remains in the Blueprint, generated class/bindings and package
+dirty state remain unchanged, and the mismatched binding/graph retain their
+original IDs. The active fixture's owned content directory
+`065B38CE4A781133CF8FBE9E8EBC24F5` is empty afterward and onboarding configuration
+is restored. This result proves native ProcessEvent dispatch and ordinary
+Blueprint inheritance, not a new Blueprint VM caller test.
+
+C-3 remains open until the affected cooked path uses the current runtime and
+the actual renamed/duplicated assets. Partial-source Delete was not added.
+
+The next cooked fixture will retain the final renamed and duplicated branches
+from `ActiveClassAssetOperations` after its runtime and teardown assertions pass.
+An optional receipt mode will save the two managed bases, their ordinary
+children/grandchildren, and their ScriptAssets (eight packages total), then
+stage the final shared chunk, assembly and declaration under a GUID-specific
+`{PluginDir}/Binaries/Managed/ActiveClassOps` directory. Each asset will retain
+its own ClassId, managed type and declaration selector while using those
+archive-relative program paths.
+
+The Host verifier will load both cooked hierarchies and check the exact class,
+ScriptAsset and immediate component archetype relationships. It will execute
+the rebuilt Visual function and explicit Actor event in separate Worlds,
+preserve state through independent reload, and verify lifecycle/World cleanup.
+The actual loaded program and hostfxr must belong to the executing archive.
+The driver will follow the existing inherited-state cook workflow, refresh UBT
+runtime dependency discovery for the current staged GUID, and remove only the
+receipt's exact owned packages and three staged program files after execution.
 
 ## Relevant verification
 

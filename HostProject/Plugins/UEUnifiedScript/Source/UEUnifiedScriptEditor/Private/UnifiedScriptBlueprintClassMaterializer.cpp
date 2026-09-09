@@ -3893,8 +3893,23 @@ bool BuildFunctionPlan(
         if (NameOwner != nullptr &&
             (Existing == nullptr || NameOwner != *Existing))
         {
-            if (!IsManagedFunctionGraph(Blueprint, *NameOwner) ||
-                Declaration.bBlueprintOverride)
+            const bool bManagedNameOwner = IsManagedFunctionGraph(Blueprint, *NameOwner);
+            FGuid NameOwnerId;
+            const bool bStaleManagedNameOwner =
+                bManagedNameOwner &&
+                TryReadManagedFunctionGraphId(Blueprint, *NameOwner, NameOwnerId) &&
+                OutPlan.StaleGeneratedFunctionIds.Contains(NameOwnerId);
+            const bool bReplacingStaleManagedOverride =
+                Declaration.bBlueprintOverride &&
+                Existing == nullptr &&
+                bStaleManagedNameOwner;
+            // Duplicate projections carry the old managed graph until the
+            // stale-ID removal below runs.  Replace it only when the graph is
+            // still provably managed and its persisted ID is actually stale;
+            // a same-named user graph or an untrusted binding remains a
+            // collision.
+            if (!bManagedNameOwner ||
+                (Declaration.bBlueprintOverride && !bReplacingStaleManagedOverride))
             {
                 OutError = FString::Printf(
                     TEXT("Managed function '%s' collides with user-owned Blueprint graph '%s'."),

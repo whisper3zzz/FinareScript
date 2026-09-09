@@ -67,8 +67,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   relevant managed tests also pass. Explicit
   Blueprint override compatibility now retains the actual declaring owner's
   ClassId through managed type rename, with dynamic reload tests and the
-  existing native event-reload regression passing; its same-ClassId native
-  Rename and cooked acceptance remain open before closing C-3.
+  existing native event-reload regression passing. The same-ClassId native
+  Rename now passes with a changed Actor override body, rejected-candidate
+  preservation and independent World reload. Duplicate replaces only proven
+  stale managed override graphs with its new function IDs; its ordinary
+  Blueprint grandchild executes the rebuilt event, while user-owned graphs and
+  mismatched persisted bindings remain protected. The affected cooked path
+  remains open before closing C-3.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and
