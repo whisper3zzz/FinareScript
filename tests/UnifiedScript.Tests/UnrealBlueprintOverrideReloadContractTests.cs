@@ -75,6 +75,221 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
     }
 
     [Fact]
+    public unsafe void StableOwnerIdentityAllowsManagedTypeRenameAndBodyReplacement()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string initialTypeName = "StableOwnerReloadFixture.ReloadScript";
+        const string renamedTypeName = "StableOwnerReloadFixture.RenamedScript";
+        const string classId = "us_0123456789abcdef0123456789abcdef";
+        EmitStableOwnerScript(assemblyPath, "ReloadScript", classId, bodyDelta: 1);
+        var transport = new OverrideReloadTransport();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 430);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 430,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: 430),
+            host,
+            host,
+            assemblyPath,
+            initialTypeName);
+        try
+        {
+            instance.Start();
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+
+            EmitStableOwnerScript(assemblyPath, "RenamedScript", classId, bodyDelta: 5);
+            int candidate = instance.PrepareReload(assemblyPath, renamedTypeName);
+            Assert.Equal(candidate, instance.CommitPreparedReload(candidate));
+            instance.FinalizePreparedReload(candidate);
+
+            Assert.Equal(6, InvokeEvaluate(instance, 1));
+            Assert.Equal(2, instance.GetDiagnosticContext().Generation);
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
+    [Fact]
+    public unsafe void ChangingStableOwnerClassIdRejectsReloadAndRetainsOldGeneration()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string typeName = "StableOwnerReloadFixture.ReloadScript";
+        const string initialClassId = "us_0123456789abcdef0123456789abcdef";
+        const string changedClassId = "us_fedcba9876543210fedcba9876543210";
+        EmitStableOwnerScript(assemblyPath, "ReloadScript", initialClassId, bodyDelta: 1);
+        var transport = new OverrideReloadTransport();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 431);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 431,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: 431),
+            host,
+            host,
+            assemblyPath,
+            typeName);
+        try
+        {
+            instance.Start();
+            EmitStableOwnerScript(assemblyPath, "ReloadScript", changedClassId, bodyDelta: 5);
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+                instance.PrepareReload(assemblyPath, typeName));
+
+            Assert.Contains("managed method changed", failure.Message, StringComparison.Ordinal);
+            Assert.Contains(initialClassId, failure.Message, StringComparison.Ordinal);
+            Assert.Contains(changedClassId, failure.Message, StringComparison.Ordinal);
+            Assert.Equal(1, instance.GetDiagnosticContext().Generation);
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
+    [Fact]
+    public unsafe void RenamingOverrideMethodStillRejectsWithStableOwnerIdentity()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string typeName = "StableOwnerReloadFixture.ReloadScript";
+        const string classId = "us_0123456789abcdef0123456789abcdef";
+        EmitStableOwnerScript(assemblyPath, "ReloadScript", classId, bodyDelta: 1);
+        var transport = new OverrideReloadTransport();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 432);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 432,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: 432),
+            host,
+            host,
+            assemblyPath,
+            typeName);
+        try
+        {
+            instance.Start();
+            EmitStableOwnerScript(
+                assemblyPath,
+                "ReloadScript",
+                classId,
+                bodyDelta: 5,
+                methodName: "Renamed");
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+                instance.PrepareReload(assemblyPath, typeName));
+
+            Assert.Contains("managed method changed", failure.Message, StringComparison.Ordinal);
+            Assert.Equal(1, instance.GetDiagnosticContext().Generation);
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
+    [Fact]
+    public unsafe void StableDeclaringOwnerIdentityAllowsInheritedOwnerRename()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string leafTypeName = "StableOwnerReloadFixture.LeafScript";
+        const string baseClassId = "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        EmitInheritedStableOwnerScript(
+            assemblyPath,
+            baseTypeName: "BaseScript",
+            baseClassId,
+            leafClassId: "us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            bodyDelta: 1);
+        var transport = new OverrideReloadTransport();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 433);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 433,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: 433),
+            host,
+            host,
+            assemblyPath,
+            leafTypeName);
+        try
+        {
+            instance.Start();
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+            EmitInheritedStableOwnerScript(
+                assemblyPath,
+                baseTypeName: "RenamedBaseScript",
+                baseClassId,
+                leafClassId: "us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                bodyDelta: 7);
+            int candidate = instance.PrepareReload(assemblyPath, leafTypeName);
+            Assert.Equal(candidate, instance.CommitPreparedReload(candidate));
+            instance.FinalizePreparedReload(candidate);
+            Assert.Equal(8, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
+    [Fact]
+    public unsafe void MovingOverrideToLeafOwnerRejectsEvenWhenSelectedLeafIdIsUnchanged()
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string leafTypeName = "StableOwnerReloadFixture.LeafScript";
+        const string baseClassId = "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string leafClassId = "us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        EmitInheritedStableOwnerScript(
+            assemblyPath,
+            baseTypeName: "BaseScript",
+            baseClassId,
+            leafClassId,
+            bodyDelta: 1,
+            moveOverrideToLeaf: false);
+        var transport = new OverrideReloadTransport();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, 434);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId: 434,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: 434),
+            host,
+            host,
+            assemblyPath,
+            leafTypeName);
+        try
+        {
+            instance.Start();
+            EmitInheritedStableOwnerScript(
+                assemblyPath,
+                baseTypeName: "BaseScript",
+                baseClassId,
+                leafClassId,
+                bodyDelta: 5,
+                moveOverrideToLeaf: true);
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+                instance.PrepareReload(assemblyPath, leafTypeName));
+
+            Assert.Contains("stable identity", failure.Message, StringComparison.Ordinal);
+            Assert.Contains(baseClassId, failure.Message, StringComparison.Ordinal);
+            Assert.Contains(leafClassId, failure.Message, StringComparison.Ordinal);
+            Assert.Equal(1, instance.GetDiagnosticContext().Generation);
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
+    }
+
+    [Fact]
     public void PersistedActivationContractRejectsCandidateBeforeOldStopThenAllowsCompatibleBody()
     {
         string directory = CreateTempDirectory();
@@ -205,6 +420,65 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
         AssertInvalidDispatcher<MultipleEventConflictOverrideReloadScript>("UnrealEventAttribute");
         AssertInvalidDispatcher<DuplicateOverrideReloadScript>("Duplicate Blueprint override route");
         AssertInvalidDispatcher<HiddenOverrideReloadScript>("hidden from the active managed instance dispatch surface");
+        AssertInvalidDispatcher<HiddenVirtualOverrideReloadScript>("hidden from the active managed instance dispatch surface");
+        AssertInvalidDispatcher<InvalidClassIdOverrideReloadScript>("invalid ClassId");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            UnrealBlueprintOverrideContract.ResolveInvocation(
+                typeof(HiddenVirtualOverrideReloadScript),
+                "Evaluate"));
+        UnrealBlueprintOverrideInvocationContract invocation =
+            UnrealBlueprintOverrideContract.ResolveInvocation(
+                typeof(GenericArityHelperReloadScript),
+                "Evaluate");
+        Assert.Equal(typeof(GenericArityBaseReloadScript), invocation.Method.DeclaringType);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public unsafe void StableOwnerIdentityPresenceChangesRejectReload(bool initialHasStableIdentity)
+    {
+        string directory = CreateTempDirectory();
+        string assemblyPath = Path.Combine(directory, "StableOwnerReloadFixture.dll");
+        const string typeName = "StableOwnerReloadFixture.ReloadScript";
+        const string classId = "us_0123456789abcdef0123456789abcdef";
+        EmitStableOwnerScript(
+            assemblyPath,
+            "ReloadScript",
+            initialHasStableIdentity ? classId : null,
+            bodyDelta: 1);
+        var transport = new OverrideReloadTransport();
+        uint worldId = initialHasStableIdentity ? 435U : 436U;
+        UnrealObjectHandle host = UnrealObjectHandle.Create(1, worldId);
+        using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+            worldId,
+            instanceId: 1,
+            new NativeUnrealInvocationBridge(transport, worldHostId: worldId),
+            host,
+            host,
+            assemblyPath,
+            typeName);
+        try
+        {
+            instance.Start();
+            EmitStableOwnerScript(
+                assemblyPath,
+                "ReloadScript",
+                initialHasStableIdentity ? null : classId,
+                bodyDelta: 5);
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+                instance.PrepareReload(assemblyPath, typeName));
+
+            Assert.Contains("managed method changed", failure.Message, StringComparison.Ordinal);
+            Assert.Equal(1, instance.GetDiagnosticContext().Generation);
+            Assert.Equal(2, InvokeEvaluate(instance, 1));
+        }
+        finally
+        {
+            instance.Dispose();
+            TryDelete(directory);
+        }
     }
 
     [Fact]
@@ -223,6 +497,9 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
         Assert.Equal("ReceiveBeginPlay", route.FunctionName);
         Assert.Equal(UnrealBlueprintEventSuperMode.Explicit, route.SuperMode);
         Assert.Contains("Evaluate", route.AbiSignature, StringComparison.Ordinal);
+        Assert.Equal(
+            "unifiedscript-class/us_0123456789abcdef0123456789abcdef:Evaluate",
+            route.StableManagedMethodIdentity);
     }
 
     private static void AssertInvalidDispatcher<T>(string reason)
@@ -347,6 +624,105 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
             string.Join(Environment.NewLine, result.Diagnostics));
     }
 
+    private static void EmitStableOwnerScript(
+        string assemblyPath,
+        string className,
+        string? classId,
+        int bodyDelta,
+        string methodName = "Evaluate")
+    {
+        string scriptAsset = classId is null
+            ? string.Empty
+            : $$"""
+                [ScriptAsset("/Game/StableOwner", ClassId = "{{classId}}")]
+                """;
+        string source = $$"""
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace StableOwnerReloadFixture;
+
+            {{scriptAsset}}
+            public sealed class {{className}} : IUnrealManagedScript
+            {
+                private UnrealScriptContext _context;
+
+                public void OnStart(UnrealScriptContext context) => _context = context;
+                public void OnTick(float deltaSeconds) { }
+                public void OnStop() { }
+
+                [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+                public int {{methodName}}(int value) => value + {{bodyDelta}};
+            }
+            """;
+        EmitDynamicAssembly(assemblyPath, source, "StableOwnerReloadFixture.cs");
+    }
+
+    private static void EmitInheritedStableOwnerScript(
+        string assemblyPath,
+        string baseTypeName,
+        string baseClassId,
+        string leafClassId,
+        int bodyDelta,
+        bool moveOverrideToLeaf = false)
+    {
+        string baseMethod = moveOverrideToLeaf
+            ? string.Empty
+            : $$"""
+                [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+                public int Evaluate(int value) => value + {{bodyDelta}};
+                """;
+        string leafMethod = moveOverrideToLeaf
+            ? $$"""
+                [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+                public int Evaluate(int value) => value + {{bodyDelta}};
+                """
+            : string.Empty;
+        string source = $$"""
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace StableOwnerReloadFixture;
+
+            [ScriptAsset("/Game/StableBase", ClassId = "{{baseClassId}}")]
+            public class {{baseTypeName}}
+            {
+                {{baseMethod}}
+            }
+
+            [ScriptAsset("/Game/StableLeaf", ClassId = "{{leafClassId}}")]
+            public sealed class LeafScript : {{baseTypeName}}, IUnrealManagedScript
+            {
+                private UnrealScriptContext _context;
+
+                public void OnStart(UnrealScriptContext context) => _context = context;
+                public void OnTick(float deltaSeconds) { }
+                public void OnStop() { }
+                {{leafMethod}}
+            }
+            """;
+        EmitDynamicAssembly(assemblyPath, source, "StableOwnerReloadFixture.cs");
+    }
+
+    private static void EmitDynamicAssembly(
+        string assemblyPath,
+        string source,
+        string sourcePath)
+    {
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            CSharpSyntaxTree.ParseText(source, path: sourcePath),
+            [MetadataReference.CreateFromFile(typeof(UnrealScriptClassAttribute).Assembly.Location)]);
+        using FileStream stream = new(
+            assemblyPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.Read);
+        EmitResult result = compilation.Emit(stream);
+        Assert.True(
+            result.Success,
+            string.Join(Environment.NewLine, result.Diagnostics));
+    }
+
     private static UnrealBlueprintOverrideActivationContract CreateExpectedActivationContract() =>
         UnrealBlueprintOverrideActivationContract.Parse(
             """
@@ -413,6 +789,20 @@ public sealed class UnrealBlueprintOverrideReloadContractTests
     }
 }
 
+[UnifiedScript.ScriptAsset("/Game/InvalidClassId", ClassId = "")]
+public sealed class InvalidClassIdOverrideReloadScript : IUnrealManagedScript
+{
+    public void OnStart(UnrealScriptContext context) { }
+    public void OnTick(float deltaSeconds) { }
+    public void OnStop() { }
+
+    [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+    public int Evaluate(int value) => value;
+}
+
+[UnifiedScript.ScriptAsset(
+    "/Game/OverrideStableReload",
+    ClassId = "us_0123456789abcdef0123456789abcdef")]
 public class OverrideStableReloadScript : IUnrealManagedScript
 {
     private UnrealScriptContext _context;
@@ -595,6 +985,52 @@ public class HiddenOverrideBaseReloadScript
 public sealed class HiddenOverrideReloadScript : HiddenOverrideBaseReloadScript, IUnrealManagedScript
 {
     public new int Evaluate(int value) => value + 1;
+
+    public void OnStart(UnrealScriptContext context)
+    {
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+    }
+
+    public void OnStop()
+    {
+    }
+}
+
+public class HiddenVirtualOverrideBaseReloadScript
+{
+    [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+    public virtual int Evaluate(int value) => value;
+}
+
+public class HiddenVirtualOverrideReloadScript : HiddenVirtualOverrideBaseReloadScript, IUnrealManagedScript
+{
+    public new virtual int Evaluate(int value) => value + 1;
+
+    public void OnStart(UnrealScriptContext context)
+    {
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+    }
+
+    public void OnStop()
+    {
+    }
+}
+
+public class GenericArityBaseReloadScript
+{
+    [UnrealBlueprintOverride("/Script/Engine.Actor", "ReceiveBeginPlay")]
+    public int Evaluate(int value) => value;
+}
+
+public sealed class GenericArityHelperReloadScript : GenericArityBaseReloadScript, IUnrealManagedScript
+{
+    public int Evaluate<T>(int value) => value + 1;
 
     public void OnStart(UnrealScriptContext context)
     {

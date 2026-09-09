@@ -547,11 +547,13 @@ for a source that has none. The final native fixture builds in
 `editor-active-fixture-build-3.log`, and its configuration restore data comes
 only from the initial successful snapshot.
 
-Explicit Blueprint override reload remains a separate check within this slice:
-generation compatibility currently compares the full managed method identity,
-including its declaring type name. A class rename must retain the same explicit
-declaring-owner ClassId and method contract; it must not relax method-renaming
-or owner-change rejection merely because the native route still matches.
+Explicit Blueprint override reload is a separate check within this slice.
+Generation compatibility now uses the actual declaring owner's explicit ClassId
+and method name when both generations have a stable identity. Both legacy
+generations retain exact full-name comparison; adding or removing a stable
+identity is incompatible. Invalid explicit IDs, method renames and owner
+changes are rejected even when the native route still matches. Native route,
+SuperMode and ABI compatibility checks remain in force.
 
 Source identity migration was also required: asset operations originally
 snapshotted and published C# sources, deployment and first-play metadata, but omitted adjacent
@@ -629,12 +631,23 @@ paths for sidecar reads, copies and nonrecursive cleanup. The retained renamed
 project rebuild passes in `builder-long-path-check-2.log`; the subsequent active
 CMD result includes this fix.
 
+The override contract passes 20 focused managed tests in
+`blueprint-override-stable-identity-final-3.trx`. Dynamic assembly reload tests
+execute the changed body after a same-ClassId type rename and inherited owner
+rename, and retain the old generation after incompatible owner changes. Method
+declarations are compared by module, metadata token and declaring type so an
+inherited reflection view is accepted, while same-signature public instance
+shadows (including `new virtual`) remain rejected. A different generic-arity
+helper does not hide the base route. This is managed contract evidence: the
+shared host has not yet been deployed with this override change, and real UE
+override Rename and cooked acceptance remain outstanding.
+
 C-3 remains open. This fixture still resets its state input before each Tick,
 starts the duplicate base rather than its ordinary Blueprint descendants, and
 does not yet assert teardown counts or a rejected reload candidate. The native
 partial-copy implementation needs a real multi-source integration fixture, and
-the explicit Blueprint override declaring-owner compatibility work above is
-still pending. None of those boundaries is claimed by the passing selector.
+the explicit Blueprint override declaring-owner compatibility work above still
+needs native acceptance. None of those boundaries is claimed by the passing selector.
 
 ## Relevant verification
 

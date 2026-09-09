@@ -12,6 +12,7 @@ namespace UnifiedScript.Unreal;
 /// </summary>
 internal sealed record UnrealBlueprintOverrideRoute(
     string ManagedMethodIdentity,
+    string? StableManagedMethodIdentity,
     string DeclaringClassPath,
     string FunctionName,
     UnrealBlueprintEventSuperMode SuperMode,
@@ -55,7 +56,7 @@ internal static class UnrealBlueprintOverrideContract
             }
 
             ValidateMethod(method, attribute, scriptType);
-            if (!activeInstanceMethods.Contains(method))
+            if (!IsActiveMethod(scriptType, activeInstanceMethods, method))
             {
                 throw new InvalidOperationException(
                     $"Blueprint override method '{GetMethodIdentity(method, scriptType)}' is hidden " +
@@ -74,6 +75,7 @@ internal static class UnrealBlueprintOverrideContract
 
             var route = new UnrealBlueprintOverrideRoute(
                 GetMethodIdentity(method, scriptType),
+                GetStableManagedMethodIdentity(method),
                 attribute.DeclaringClassPath,
                 attribute.FunctionName,
                 attribute.SuperMode,
@@ -113,7 +115,7 @@ internal static class UnrealBlueprintOverrideContract
                 continue;
             }
             ValidateMethod(method, attribute, scriptType);
-            if (!activeInstanceMethods.Contains(method))
+            if (!IsActiveMethod(scriptType, activeInstanceMethods, method))
             {
                 throw new InvalidOperationException(
                     $"Blueprint override method '{GetMethodIdentity(method, scriptType)}' is hidden " +
@@ -156,6 +158,51 @@ internal static class UnrealBlueprintOverrideContract
                 yield return method;
             }
         }
+    }
+
+    private static bool IsActiveMethod(
+        Type scriptType,
+        IEnumerable<MethodInfo> activeMethods,
+        MethodInfo candidate)
+    {
+        bool declarationIsActive = activeMethods.Any(active =>
+            active.Module == candidate.Module &&
+            active.MetadataToken == candidate.MetadataToken &&
+            active.DeclaringType == candidate.DeclaringType);
+        if (!declarationIsActive)
+        {
+            return false;
+        }
+
+        // GetMethods also exposes a hidden base declaration alongside a same-signature
+        // `new` method declared by the selected type.  The base route must not be
+        // accepted in that shape even though its metadata token is still visible.
+        for (Type? current = scriptType;
+             current is not null && current != candidate.DeclaringType;
+             current = current.BaseType)
+        {
+            if (current.GetMethods(DeclaredMethodFlags).Any(derived =>
+                    derived.IsPublic &&
+                    !derived.IsStatic &&
+                    derived.Name == candidate.Name &&
+                    derived.GetGenericArguments().Length == candidate.GetGenericArguments().Length &&
+                    HasSameParameterTypes(derived, candidate) &&
+                    derived.DeclaringType != candidate.DeclaringType))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasSameParameterTypes(MethodInfo left, MethodInfo right)
+    {
+        ParameterInfo[] leftParameters = left.GetParameters();
+        ParameterInfo[] rightParameters = right.GetParameters();
+        return leftParameters.Length == rightParameters.Length &&
+            leftParameters.Zip(rightParameters).All(static pair =>
+                pair.First.ParameterType == pair.Second.ParameterType);
     }
 
     private static void ValidateMethod(
@@ -231,5 +278,30 @@ internal static class UnrealBlueprintOverrideContract
         string declaringType = method.DeclaringType?.FullName ??
             scriptType.FullName ?? scriptType.Name;
         return $"{declaringType}.{method.Name}";
+    }
+
+    private static string? GetStableManagedMethodIdentity(MethodInfo method)
+    {
+        Type? declaringType = method.DeclaringType;
+        if (declaringType is null)
+        {
+            return null;
+        }
+
+        ScriptAssetAttribute? asset = declaringType.GetCustomAttribute<ScriptAssetAttribute>(
+            inherit: false);
+        if (asset is null || asset.ClassId is null)
+        {
+            return null;
+        }
+
+        if (!UnrealScriptClassIdentity.TryParseClassId(asset.ClassId, out string digits))
+        {
+            throw new InvalidOperationException(
+                $"Script Class '{declaringType.FullName}' has invalid ClassId '{asset.ClassId}' " +
+                "for Blueprint override method identity. Expected a non-zero us_<32 lowercase hexadecimal digits> identity.");
+        }
+
+        return $"{UnrealScriptClassIdentity.StablePrefix}us_{digits}:{method.Name}";
     }
 }

@@ -2526,14 +2526,26 @@ public static class UnrealWorldManagedEntryPoint
                 }
 
                 var differences = new List<string>();
-                if (!string.Equals(
-                        previousRoute.ManagedMethodIdentity,
-                        candidateRoute.ManagedMethodIdentity,
-                        StringComparison.Ordinal))
+                bool managedMethodIdentityMatches = previousRoute.StableManagedMethodIdentity is not null &&
+                    candidateRoute.StableManagedMethodIdentity is not null
+                    ? string.Equals(
+                        previousRoute.StableManagedMethodIdentity,
+                        candidateRoute.StableManagedMethodIdentity,
+                        StringComparison.Ordinal)
+                    : previousRoute.StableManagedMethodIdentity is null &&
+                        candidateRoute.StableManagedMethodIdentity is null &&
+                        string.Equals(
+                            previousRoute.ManagedMethodIdentity,
+                            candidateRoute.ManagedMethodIdentity,
+                            StringComparison.Ordinal);
+                if (!managedMethodIdentityMatches)
                 {
+                    string previousStableIdentity = previousRoute.StableManagedMethodIdentity ?? "<legacy full identity>";
+                    string candidateStableIdentity = candidateRoute.StableManagedMethodIdentity ?? "<legacy full identity>";
                     differences.Add(
                         $"managed method changed from '{previousRoute.ManagedMethodIdentity}' " +
-                        $"to '{candidateRoute.ManagedMethodIdentity}'");
+                        $"to '{candidateRoute.ManagedMethodIdentity}' " +
+                        $"(stable identity '{previousStableIdentity}' to '{candidateStableIdentity}')");
                 }
                 if (!string.Equals(
                         previousRoute.DeclaringClassPath,
