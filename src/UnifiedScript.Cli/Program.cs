@@ -48,6 +48,11 @@ internal static class Program
             return RunScriptClassReferencePlan(args);
         }
 
+        if (args.Count > 0 && args[0] == "script-class-identity-plan")
+        {
+            return ScriptClassIdentityPlanCommand.Run(args);
+        }
+
         if (args.Count > 0 && args[0] == "layout-init")
         {
             return RunLayout(args, synchronize: false);
@@ -6264,7 +6269,7 @@ internal static class Program
         return candidate;
     }
 
-    private static void WriteAtomically(string outputPath, string content)
+    internal static void WriteAtomically(string outputPath, string content)
         => WriteTransactionally([new OutputFile(outputPath, content)]);
 
     private static void WriteTransactionally(IReadOnlyList<OutputFile> outputs)
@@ -6352,6 +6357,7 @@ internal static class Program
     private static void PrintUsage() => Console.Error.WriteLine(
         "Usage:\n" +
         "  unifiedscript script-class-reference-plan <project.csproj> --type <Namespace.Type> [--new-name <Type>] --out <plan.json> [--configuration <name>] [--framework <tfm>] [--dotnet <path>] [--restore] [--build]\n" +
+        "  unifiedscript script-class-identity-plan <project.csproj> --request <request.json> --out <plan.json> [--configuration <name>] [--framework <tfm>] [--dotnet <path>]\n" +
         "  unifiedscript analyze <input.cs|project.csproj> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
         "  unifiedscript emit <input.cs|project.csproj> --out <directory> [options]\n" +

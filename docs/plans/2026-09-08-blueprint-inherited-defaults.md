@@ -583,8 +583,22 @@ They cover stale sidecars, repeated graph nodes, a real multi-file partial-type
 rename with in-place reference edits, and independent duplicate declarations
 that retain an external base's shared state identity. Unchanged duplicate type
 names, colliding destinations and syntax topology changes are rejected. This
-evidence covers the managed transformation only; the CLI boundary and native
-transaction are still being connected.
+evidence covers the managed transformation only; the native transaction is
+still being connected.
+
+The `script-class-identity-plan` CLI bridge now validates explicit request
+fields and raw source/sidecar digest preconditions, handles UTF-8 and UTF-16
+BOM sources, and atomically writes only its plan. Missing legacy sidecars are
+explicit null outputs. Output paths cannot overlap existing inputs or planned
+source/sidecar destinations. Six focused tests pass in
+`identity-plan-command-final-2.trx`, including malformed/null request documents,
+stale sidecar bytes and target-path collisions. The Release CLI build passes in
+`cli-release-build-review-2.log`. Retained real factory source also produces
+successful Rename and Duplicate plans (`actual-factory-rename.identity-plan.json`
+and `actual-factory-duplicate.identity-plan.json`): Rename retains all 20 live
+IDs, Duplicate shares none of those IDs, and both outputs match the final text
+digest and destination path without modifying source or sidecar bytes. These
+are CLI producer checks, not native publication or active reload acceptance.
 
 ## Relevant verification
 
