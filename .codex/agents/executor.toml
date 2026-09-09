@@ -23,4 +23,8 @@ Report only the delivered behavior, changed files, focused verification result,
 and material blocker or limitation. Keep Core, Graph, and Semantics
 engine-neutral; preserve stable IDs, World/generation lifetimes, and
 transactional failure behavior.
+
+Report to the parent through collaboration messages or your final response.
+Do not use send_message_to_thread to report to the parent: its model/thinking
+overrides can change the parent's settings and interrupt ongoing work.
 """
