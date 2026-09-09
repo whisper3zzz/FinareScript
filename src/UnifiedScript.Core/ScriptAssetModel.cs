@@ -178,6 +178,16 @@ public sealed record ScriptFunctionDeclaration(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? RepNotifyProperty = null);
 
+/// <summary>
+/// Engine-neutral declaration of the native class shape selected by a Script
+/// Asset.  The paths are intentionally opaque here; Unreal consumers validate
+/// and resolve them in their own layer.
+/// </summary>
+public sealed record ScriptClassBindingDeclaration(
+    string Kind,
+    string? BaseClassPath = null,
+    string? GeneratedClassPath = null);
+
 public sealed record ScriptAssetDeclaration(
     SemanticId Id,
     string QualifiedName,
@@ -185,7 +195,8 @@ public sealed record ScriptAssetDeclaration(
     SourceSpan Span,
     IReadOnlyList<ScriptStateDeclaration> States,
     IReadOnlyList<ScriptFunctionDeclaration> Functions,
-    IReadOnlyList<ScriptLifecycleHookDeclaration>? LifecycleHooks = null);
+    IReadOnlyList<ScriptLifecycleHookDeclaration>? LifecycleHooks = null,
+    ScriptClassBindingDeclaration? ClassBinding = null);
 
 public sealed record ScriptAssetDocument(
     string SchemaVersion,
@@ -197,13 +208,17 @@ public sealed record ScriptAssetDocument(
 
     public const string OverrideSchemaVersion = "unifiedscript.script-asset/v0.2";
 
+    public const string ClassBindingSchemaVersion = "unifiedscript.script-asset/v0.3";
+
     public static ScriptAssetDocument Create(
         SemanticId sourceCompilationId,
         SemanticId semanticConfigurationId,
         IReadOnlyList<ScriptAssetDeclaration> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
-        string schemaVersion = assets.Any(static asset =>
+        string schemaVersion = assets.Any(static asset => asset?.ClassBinding is not null)
+            ? ClassBindingSchemaVersion
+            : assets.Any(static asset =>
             asset?.Functions?.Any(static function => function?.BlueprintEvent?.Override is not null) == true)
             ? OverrideSchemaVersion
             : CurrentSchemaVersion;

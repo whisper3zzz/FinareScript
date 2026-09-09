@@ -136,6 +136,18 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics);
                 IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
                     LowerLifecycleHooks(typeSymbol);
+                ScriptClassBindingDeclaration? classBinding = null;
+                AttributeData? scriptClassAttribute = FindAttribute(typeSymbol, UnrealScriptClassAttributeName);
+                if (scriptClassAttribute is not null &&
+                    !TryLowerClassBinding(
+                        scriptClassAttribute,
+                        qualifiedName,
+                        typeSpan,
+                        diagnostics,
+                        out classBinding))
+                {
+                    continue;
+                }
                 SemanticId assetId = firstHirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
                 if (assetAttribute is not null &&
                     TryReadNamedString(
@@ -160,7 +172,8 @@ internal sealed class CSharpScriptAssetLowerer
                     typeSpan,
                     states,
                     functions,
-                    lifecycleHooks));
+                    lifecycleHooks,
+                    classBinding));
             }
         }
 
@@ -264,6 +277,146 @@ internal sealed class CSharpScriptAssetLowerer
         value = null;
         return false;
     }
+
+    private static bool TryLowerClassBinding(
+        AttributeData attribute,
+        string qualifiedName,
+        SourceSpan span,
+        ICollection<UnifiedDiagnostic> diagnostics,
+        out ScriptClassBindingDeclaration? binding)
+    {
+        binding = null;
+        int? kindValue = attribute.ConstructorArguments.FirstOrDefault().Value switch
+        {
+            int value => value,
+            byte value => value,
+            short value => value,
+            long value when value is >= int.MinValue and <= int.MaxValue => (int)value,
+            _ => null,
+        };
+        string? kind = kindValue switch
+        {
+            1 => "Actor",
+            2 => "ActorComponent",
+            3 => "Object",
+            4 => "BlueprintFunctionLibrary",
+            _ => null,
+        };
+        if (kind is null)
+        {
+            AddClassBindingDiagnostic(
+                diagnostics,
+                qualifiedName,
+                span,
+                $"has unsupported UnrealScriptClassKind value '{kindValue?.ToString() ?? "<missing>"}'.");
+            return false;
+        }
+
+        if (!TryReadClassBindingPath(attribute, "BaseClassPath",
+                qualifiedName, span, diagnostics, out string? baseClassPath) ||
+            !TryReadClassBindingPath(attribute, "GeneratedClassPath",
+                qualifiedName, span, diagnostics, out string? generatedClassPath))
+        {
+            return false;
+        }
+
+        binding = new ScriptClassBindingDeclaration(kind, baseClassPath, generatedClassPath);
+        return true;
+    }
+
+    private static bool TryReadClassBindingPath(
+        AttributeData attribute,
+        string name,
+        string qualifiedName,
+        SourceSpan span,
+        ICollection<UnifiedDiagnostic> diagnostics,
+        out string? value)
+    {
+        value = null;
+        TypedConstant? constant = attribute.NamedArguments
+            .Where(argument => string.Equals(argument.Key, name, StringComparison.Ordinal))
+            .Select(static argument => (TypedConstant?)argument.Value)
+            .SingleOrDefault();
+        if (constant is null || constant.Value.Value is null)
+        {
+            return true;
+        }
+
+        if (constant.Value.Kind != TypedConstantKind.Primitive || constant.Value.Value is not string text)
+        {
+            AddClassBindingDiagnostic(
+                diagnostics,
+                qualifiedName,
+                span,
+                $"has a non-string {name}.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(text) || !IsValidUnrealClassBindingPath(text))
+        {
+            AddClassBindingDiagnostic(
+                diagnostics,
+                qualifiedName,
+                span,
+                $"has an invalid {name} '{text}'.");
+            return false;
+        }
+
+        value = text;
+        return true;
+    }
+
+    private static void AddClassBindingDiagnostic(
+        ICollection<UnifiedDiagnostic> diagnostics,
+        string qualifiedName,
+        SourceSpan span,
+        string detail) => diagnostics.Add(new UnifiedDiagnostic(
+            DeclarationDiagnosticCodes.InvalidScriptClassBinding,
+            UnifiedDiagnosticSeverity.Error,
+            $"Script asset '{qualifiedName}' {detail}",
+            span));
+
+    private static bool IsValidUnrealClassBindingPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal) ||
+            path.Contains('\\') || path.Contains(':') || path.Any(char.IsWhiteSpace) ||
+            path.Any(static character => character is '<' or '>' or '|' or '*' or '?' or '#') ||
+            path.Contains("//", StringComparison.Ordinal) || path.EndsWith("/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (path.StartsWith("/Script/", StringComparison.Ordinal))
+        {
+            string nativePath = path["/Script/".Length..];
+            int separator = nativePath.IndexOf('.');
+            return separator > 0 && separator == nativePath.LastIndexOf('.') &&
+                separator + 1 < nativePath.Length &&
+                !nativePath[..separator].Contains('/') &&
+                IsIdentifier(nativePath[..separator]) &&
+                IsIdentifier(nativePath[(separator + 1)..]);
+        }
+
+        string[] segments = path[1..].Split('/');
+        if (segments.Length < 2 || segments[..^1].Any(static segment =>
+                string.IsNullOrEmpty(segment) || segment is "." or ".." || segment.Contains('.')))
+        {
+            return false;
+        }
+
+        string objectName = segments[^1];
+        int separatorIndex = objectName.IndexOf('.');
+        return separatorIndex > 0 && separatorIndex == objectName.LastIndexOf('.') &&
+            separatorIndex + 1 < objectName.Length &&
+            objectName[(separatorIndex + 1)..].EndsWith("_C", StringComparison.Ordinal) &&
+            IsIdentifier(objectName[..separatorIndex]) &&
+            IsIdentifier(objectName[(separatorIndex + 1)..]);
+    }
+
+    private static bool IsIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        (char.IsLetter(value[0]) || value[0] == '_') &&
+        value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
 
     private static void RecordDeclarationOwner(
         IDictionary<SemanticId, string> ownerNames,

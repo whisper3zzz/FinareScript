@@ -30,12 +30,14 @@ public static class ScriptAssetJson
     {
         ArgumentNullException.ThrowIfNull(document);
         if (document.SchemaVersion is not ScriptAssetDocument.CurrentSchemaVersion and
-            not ScriptAssetDocument.OverrideSchemaVersion)
+            not ScriptAssetDocument.OverrideSchemaVersion and
+            not ScriptAssetDocument.ClassBindingSchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported script-asset schema '{document.SchemaVersion}'. " +
                 $"Expected '{ScriptAssetDocument.CurrentSchemaVersion}' or " +
-                $"'{ScriptAssetDocument.OverrideSchemaVersion}'.");
+                $"'{ScriptAssetDocument.OverrideSchemaVersion}' or " +
+                $"'{ScriptAssetDocument.ClassBindingSchemaVersion}'.");
         }
 
         if (document.SourceCompilationId.IsEmpty ||
@@ -52,6 +54,14 @@ public static class ScriptAssetJson
             throw new JsonException(
                 $"Script-asset schema '{ScriptAssetDocument.CurrentSchemaVersion}' cannot carry Blueprint override metadata; " +
                 $"use '{ScriptAssetDocument.OverrideSchemaVersion}'.");
+        }
+
+        bool hasClassBinding = document.Assets.Any(static asset => asset?.ClassBinding is not null);
+        if (document.SchemaVersion is not ScriptAssetDocument.ClassBindingSchemaVersion && hasClassBinding)
+        {
+            throw new JsonException(
+                $"Script-asset schema '{document.SchemaVersion}' cannot carry class binding metadata; " +
+                $"use '{ScriptAssetDocument.ClassBindingSchemaVersion}'.");
         }
 
         var assetIds = new HashSet<SemanticId>();
@@ -95,6 +105,11 @@ public static class ScriptAssetJson
             throw new JsonException($"Duplicate script-asset path '{asset.AssetPath}'.");
         }
 
+        if (asset.ClassBinding is not null)
+        {
+            ValidateClassBinding(asset.ClassBinding, asset.AssetPath);
+        }
+
         var stateIds = new HashSet<SemanticId>();
         var stateNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (ScriptStateDeclaration? state in asset.States)
@@ -126,6 +141,44 @@ public static class ScriptAssetJson
             ValidateLifecycleHook(asset, hook, lifecycleIds, lifecycleKinds);
         }
     }
+
+    /// <summary>Validates the engine-neutral class binding contract.</summary>
+    public static void ValidateClassBinding(
+        ScriptClassBindingDeclaration binding,
+        string? assetPath = null)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+        if (!IsValidOpaqueBindingText(binding.Kind))
+        {
+            throw new JsonException(
+                $"Script asset '{assetPath ?? "<unknown>"}' has an invalid class binding kind '{binding.Kind}'.");
+        }
+
+        ValidateClassBindingPath(binding.BaseClassPath, nameof(binding.BaseClassPath), assetPath);
+        ValidateClassBindingPath(binding.GeneratedClassPath, nameof(binding.GeneratedClassPath), assetPath);
+    }
+
+    private static void ValidateClassBindingPath(
+        string? path,
+        string fieldName,
+        string? assetPath)
+    {
+        if (path is null)
+        {
+            return;
+        }
+
+        if (!IsValidOpaqueBindingText(path))
+        {
+            throw new JsonException(
+                $"Script asset '{assetPath ?? "<unknown>"}' has an invalid {fieldName} '{path}'.");
+        }
+    }
+
+    private static bool IsValidOpaqueBindingText(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+        value.All(static character => !char.IsControl(character));
 
     private static void ValidateState(
         ScriptAssetDeclaration asset,

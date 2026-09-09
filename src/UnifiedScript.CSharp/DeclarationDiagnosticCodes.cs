@@ -14,4 +14,5 @@ public static class DeclarationDiagnosticCodes
     public const string UnsupportedFunctionSignature = "UAD1010";
     public const string InvalidNetworkingContract = "UAD1011";
     public const string InvalidBlueprintOverride = "UAD1012";
+    public const string InvalidScriptClassBinding = "UAD1013";
 }

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "UnifiedScriptClassBinding.h"
 #include "UnifiedScriptAsset.generated.h"
 
 UENUM(BlueprintType)
@@ -104,6 +105,11 @@ public:
     bool ValidateDeclarationIdentity(
         const FGuid& DeclarationId,
         const FString& DeclarationQualifiedName,
+        FString& OutError) const;
+
+    /** Validates declaration class-composition metadata against this selected asset owner. */
+    bool ValidateDeclarationClassBinding(
+        const TOptional<FUnifiedScriptClassBindingDeclaration>& Binding,
         FString& OutError) const;
 
     /** Rejects a host/target that is not an instance of the exact generated proxy class. */

@@ -106,7 +106,8 @@ public sealed record UnifiedScriptRuntimeAssetDeclaration(
     SemanticId Id,
     string QualifiedName,
     string AssetPath,
-    IReadOnlyList<UnifiedScriptRuntimeStateDeclaration> States);
+    IReadOnlyList<UnifiedScriptRuntimeStateDeclaration> States,
+    ScriptClassBindingDeclaration? ClassBinding = null);
 
 public sealed record UnifiedScriptRuntimeDeclarationDocument(
     SemanticId SourceCompilationId,
@@ -332,7 +333,9 @@ public static class UnifiedScriptRuntimeDeclarationBinary
         UnifiedScriptRuntimeStateDeclaration[] allStates = normalized.Assets
             .SelectMany(static asset => asset.States)
             .ToArray();
-        ushort minorVersion = allStates.Any(static state =>
+        ushort minorVersion = normalized.Assets.Any(static asset => asset.ClassBinding is not null)
+            ? (ushort)5
+            : allStates.Any(static state =>
                 state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map ||
                 state.DefaultValue.Kind is UnifiedScriptRuntimeStateValueKind.Array or
                     UnifiedScriptRuntimeStateValueKind.Set or UnifiedScriptRuntimeStateValueKind.Map)
@@ -357,6 +360,16 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             writer.WriteSemanticId(asset.Id);
             writer.WriteString(asset.QualifiedName);
             writer.WriteString(asset.AssetPath);
+            if (minorVersion >= 5)
+            {
+                writer.WriteBoolean(asset.ClassBinding is not null);
+                if (asset.ClassBinding is not null)
+                {
+                    writer.WriteString(asset.ClassBinding.Kind);
+                    writer.WriteNullableString(asset.ClassBinding.BaseClassPath);
+                    writer.WriteNullableString(asset.ClassBinding.GeneratedClassPath);
+                }
+            }
             writer.WriteCount(asset.States.Count);
             foreach (UnifiedScriptRuntimeStateDeclaration state in asset.States)
             {
@@ -380,7 +393,7 @@ public static class UnifiedScriptRuntimeDeclarationBinary
 
     public static UnifiedScriptRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 4);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 5);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -390,6 +403,14 @@ public static class UnifiedScriptRuntimeDeclarationBinary
             SemanticId assetId = reader.ReadSemanticId();
             string qualifiedName = reader.ReadString();
             string assetPath = reader.ReadString();
+            ScriptClassBindingDeclaration? classBinding = null;
+            if (reader.MinorVersion >= 5 && reader.ReadBoolean())
+            {
+                classBinding = new ScriptClassBindingDeclaration(
+                    reader.ReadString(),
+                    reader.ReadNullableString(),
+                    reader.ReadNullableString());
+            }
             int stateCount = reader.ReadCount();
             var states = new UnifiedScriptRuntimeStateDeclaration[stateCount];
             for (int stateIndex = 0; stateIndex < states.Length; stateIndex++)
@@ -446,7 +467,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                 assetId,
                 qualifiedName,
                 assetPath,
-                states);
+                states,
+                classBinding);
         }
         reader.RequireEnd();
         return Normalize(new UnifiedScriptRuntimeDeclarationDocument(
@@ -476,7 +498,8 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                             state.TypeKind,
                             ConvertDefault(state),
                             state.Exposure,
-                            state.UnrealType)).ToArray())).ToArray()));
+                            state.UnrealType)).ToArray(),
+                    asset.ClassBinding)).ToArray()));
     }
 
     private static UnifiedScriptRuntimeStateValue ConvertDefault(ScriptStateDeclaration state) =>
@@ -915,6 +938,19 @@ public static class UnifiedScriptRuntimeDeclarationBinary
                         $"Runtime asset '{asset.AssetPath}' has an invalid or duplicate state.");
                 }
                 ValidateDefault(state);
+            }
+            if (asset.ClassBinding is not null)
+            {
+                try
+                {
+                    ScriptAssetJson.ValidateClassBinding(asset.ClassBinding, asset.AssetPath);
+                }
+                catch (JsonException exception)
+                {
+                    throw new InvalidDataException(
+                        $"Runtime asset '{asset.AssetPath}' has an invalid class binding.",
+                        exception);
+                }
             }
             assets[index] = asset with { States = states };
         }

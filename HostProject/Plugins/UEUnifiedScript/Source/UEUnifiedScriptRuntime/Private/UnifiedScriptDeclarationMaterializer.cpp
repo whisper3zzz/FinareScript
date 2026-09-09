@@ -8,6 +8,7 @@
  * @Description:
  */
 #include "UnifiedScriptDeclarationMaterializer.h"
+#include "UnifiedScriptClassBinding.h"
 #include "UnifiedScriptSoftObjectPath.h"
 
 #include "Containers/StringConv.h"
@@ -29,6 +30,7 @@ namespace UE::UnifiedScript::Declaration::Private
 {
 constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
 constexpr TCHAR OverrideSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.2");
+constexpr TCHAR ClassBindingSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.3");
 
 struct FStateUnrealType
 {
@@ -1358,7 +1360,7 @@ public:
         uint16 Minor = 0;
         uint32 Reserved = 0;
         if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-            Major != 1 || Minor > 4 || Reserved != 0)
+            Major != 1 || Minor > 5 || Reserved != 0)
         {
             OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
             return false;
@@ -2242,6 +2244,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
     FGuid SelectedAssetId;
     FString SelectedQualifiedName;
     FString SelectedAssetPath;
+    TOptional<FUnifiedScriptClassBindingDeclaration> SelectedClassBinding;
     bool bSelected = false;
     for (uint32 AssetIndex = 0; AssetIndex < AssetCount; ++AssetIndex)
     {
@@ -2253,14 +2256,64 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
         if (!Reader.ReadString(AssetIdText) || !ParseSemanticId(AssetIdText, AssetId) ||
             !Reader.ReadString(QualifiedName) || QualifiedName.IsEmpty() ||
             !Reader.ReadString(AssetPath) || AssetPath.IsEmpty() ||
-            SeenAssetIds.Contains(AssetId) || SeenAssetPaths.Contains(AssetPath) ||
-            !Reader.ReadCount(StateCount))
+            SeenAssetIds.Contains(AssetId) || SeenAssetPaths.Contains(AssetPath))
         {
             OutError = TEXT("Compiled declaration contains an invalid or duplicate asset.");
             return false;
         }
         SeenAssetIds.Add(AssetId);
         SeenAssetPaths.Add(AssetPath);
+
+        TOptional<FUnifiedScriptClassBindingDeclaration> AssetClassBinding;
+        if (Reader.GetMinorVersion() >= 5)
+        {
+            uint8 HasBinding = 0;
+            if (!Reader.ReadByte(HasBinding) || HasBinding > 1)
+            {
+                OutError = FString::Printf(
+                    TEXT("Compiled declaration asset '%s' contains an invalid class binding presence flag."),
+                    *AssetPath);
+                return false;
+            }
+            if (HasBinding != 0)
+            {
+                FUnifiedScriptClassBindingDeclaration Binding;
+                FString BaseClassPath;
+                FString GeneratedClassPath;
+                bool bHasBaseClassPath = false;
+                bool bHasGeneratedClassPath = false;
+                if (!Reader.ReadString(Binding.Kind) ||
+                    !Reader.ReadNullableString(BaseClassPath, bHasBaseClassPath) ||
+                    !Reader.ReadNullableString(GeneratedClassPath, bHasGeneratedClassPath))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Compiled declaration asset '%s' contains a truncated class binding."),
+                        *AssetPath);
+                    return false;
+                }
+                if (bHasBaseClassPath)
+                {
+                    Binding.BaseClassPath = MoveTemp(BaseClassPath);
+                }
+                if (bHasGeneratedClassPath)
+                {
+                    Binding.GeneratedClassPath = MoveTemp(GeneratedClassPath);
+                }
+                if (!Binding.Validate(OutError))
+                {
+                    return false;
+                }
+                AssetClassBinding = MoveTemp(Binding);
+            }
+        }
+
+        if (!Reader.ReadCount(StateCount))
+        {
+            OutError = FString::Printf(
+                TEXT("Compiled declaration asset '%s' has an invalid state count."),
+                *AssetPath);
+            return false;
+        }
 
         const bool bUseAsset =
             (RequestedAssetPath.IsEmpty() && AssetCount == 1) ||
@@ -2276,6 +2329,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             SelectedAssetId = AssetId;
             SelectedQualifiedName = QualifiedName;
             SelectedAssetPath = AssetPath;
+            SelectedClassBinding = MoveTemp(AssetClassBinding);
             Descs.Reserve(static_cast<int32>(StateCount));
             Defaults.Reserve(static_cast<int32>(StateCount));
             UnrealTypes.Reserve(static_cast<int32>(StateCount));
@@ -2524,6 +2578,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
     Migration.DefaultedStateCount = Descs.Num() - CompatibleOverrideIds.Num();
     Migration.DroppedOverrideCount = RequestedOverrideIds.Num() -
         CompatibleOverrideIds.Num();
+    Migration.ClassBinding = MoveTemp(SelectedClassBinding);
     OutState = MoveTemp(Candidate);
     OutOverrideIds = MoveTemp(CompatibleOverrideIds);
     OutMigration = Migration;
@@ -2583,7 +2638,9 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
 
     FString ParsedSchema;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), ParsedSchema) ||
-        (ParsedSchema != LegacySchemaVersion && ParsedSchema != OverrideSchemaVersion))
+        (!ParsedSchema.Equals(LegacySchemaVersion, ESearchCase::CaseSensitive) &&
+            !ParsedSchema.Equals(OverrideSchemaVersion, ESearchCase::CaseSensitive) &&
+            !ParsedSchema.Equals(ClassBindingSchemaVersion, ESearchCase::CaseSensitive)))
     {
         OutError = FString::Printf(
             TEXT("Unsupported Script Asset declaration schema '%s'."),
@@ -2597,7 +2654,12 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
         OutError = TEXT("Script Asset declaration must contain at least one asset.");
         return false;
     }
-    if (ParsedSchema == LegacySchemaVersion && HasBlueprintOverrideMetadata(*Assets))
+    if (!ValidateUnifiedScriptClassBindingsJson(*Assets, ParsedSchema, OutError))
+    {
+        return false;
+    }
+    if (ParsedSchema.Equals(LegacySchemaVersion, ESearchCase::CaseSensitive) &&
+        HasBlueprintOverrideMetadata(*Assets))
     {
         OutError = FString::Printf(
             TEXT("Script Asset declaration schema '%s' cannot contain Blueprint override metadata; use '%s'."),
@@ -2616,6 +2678,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
     FString AssetIdText;
     FString AssetQualifiedName;
     FGuid AssetId;
+    TOptional<FUnifiedScriptClassBindingDeclaration> SelectedClassBinding;
     if (!Asset->TryGetStringField(TEXT("id"), AssetIdText) ||
         !ParseSemanticId(AssetIdText, AssetId) ||
         !Asset->TryGetStringField(TEXT("qualifiedName"), AssetQualifiedName) ||
@@ -2624,6 +2687,11 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
         OutError = FString::Printf(
             TEXT("Declaration asset '%s' has an invalid class identity."),
             *SelectedAssetPath);
+        return false;
+    }
+    if (!FUnifiedScriptClassBindingDeclaration::ReadJson(
+            Asset, SelectedClassBinding, OutError))
+    {
         return false;
     }
 
@@ -2857,6 +2925,7 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
     Migration.DefaultedStateCount = Descs.Num() - CompatibleOverrideIds.Num();
     Migration.DroppedOverrideCount = RequestedOverrideIds.Num() -
         CompatibleOverrideIds.Num();
+    Migration.ClassBinding = MoveTemp(SelectedClassBinding);
 
     OutState = MoveTemp(Candidate);
     OutOverrideIds = MoveTemp(CompatibleOverrideIds);

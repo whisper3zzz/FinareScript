@@ -23,6 +23,7 @@
 #include "Serialization/ArchiveReplaceObjectRef.h"
 #include "Serialization/StructuredArchive.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptClassBinding.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
@@ -41,6 +42,7 @@ namespace UE::UnifiedScript::BlueprintClass::Private
 {
 constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
 constexpr TCHAR OverrideSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.2");
+constexpr TCHAR ClassBindingSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.3");
 constexpr TCHAR DefaultCategory[] = TEXT("UnifiedScript");
 
 const FName ManagedStateKey(TEXT("UnifiedScript.ManagedState"));
@@ -2527,18 +2529,26 @@ bool ParseDeclaration(
     FString ParsedSchema;
     const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), ParsedSchema) ||
-        (ParsedSchema != LegacySchemaVersion && ParsedSchema != OverrideSchemaVersion) ||
+        (!ParsedSchema.Equals(LegacySchemaVersion, ESearchCase::CaseSensitive) &&
+            !ParsedSchema.Equals(OverrideSchemaVersion, ESearchCase::CaseSensitive) &&
+            !ParsedSchema.Equals(ClassBindingSchemaVersion, ESearchCase::CaseSensitive)) ||
         !Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr ||
         Assets->IsEmpty())
     {
         OutError = FString::Printf(
-            TEXT("Script Class declaration requires schema '%s' or '%s' and a non-empty assets array."),
+            TEXT("Script Class declaration requires schema '%s', '%s', or '%s' and a non-empty assets array."),
             LegacySchemaVersion,
-            OverrideSchemaVersion);
+            OverrideSchemaVersion,
+            ClassBindingSchemaVersion);
         return false;
     }
 
-    if (ParsedSchema == LegacySchemaVersion)
+    if (!ValidateUnifiedScriptClassBindingsJson(*Assets, ParsedSchema, OutError))
+    {
+        return false;
+    }
+
+    if (ParsedSchema.Equals(LegacySchemaVersion, ESearchCase::CaseSensitive))
     {
         for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
         {
@@ -2621,6 +2631,13 @@ bool ParseDeclaration(
         return false;
     }
     if (!ScriptAsset.ValidateDeclarationIdentity(AssetId, QualifiedName, OutError))
+    {
+        return false;
+    }
+    TOptional<FUnifiedScriptClassBindingDeclaration> ClassBinding;
+    if (!FUnifiedScriptClassBindingDeclaration::ReadJson(
+            SelectedAsset, ClassBinding, OutError) ||
+        !ScriptAsset.ValidateDeclarationClassBinding(ClassBinding, OutError))
     {
         return false;
     }
@@ -3025,7 +3042,8 @@ bool ParseDeclaration(
             }
             if ((*BlueprintEvent)->HasField(TEXT("override")))
             {
-                if (ParsedSchema != OverrideSchemaVersion ||
+                if ((!ParsedSchema.Equals(OverrideSchemaVersion, ESearchCase::CaseSensitive) &&
+                    !ParsedSchema.Equals(ClassBindingSchemaVersion, ESearchCase::CaseSensitive)) ||
                     !(*BlueprintEvent)->TryGetObjectField(
                         TEXT("override"),
                         BlueprintOverride) ||
@@ -3038,9 +3056,10 @@ bool ParseDeclaration(
                         OutError))
                 {
                     OutError = FString::Printf(
-                        TEXT("Blueprint override '%s' requires schema '%s' and declaringTypePath/functionName metadata."),
+                        TEXT("Blueprint override '%s' requires schema '%s' or '%s' and declaringTypePath/functionName metadata."),
                         *Name,
-                        OverrideSchemaVersion);
+                        OverrideSchemaVersion,
+                        ClassBindingSchemaVersion);
                     return false;
                 }
                 if (!ReadRequiredString(

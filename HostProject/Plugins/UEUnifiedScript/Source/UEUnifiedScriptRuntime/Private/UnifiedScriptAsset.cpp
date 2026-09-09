@@ -4,6 +4,9 @@
 #include "HAL/PlatformProperties.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
+#include "Components/ActorComponent.h"
+#include "GameFramework/Actor.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
 
 namespace UE::UnifiedScript::Asset::Private
 {
@@ -171,6 +174,159 @@ bool UUnifiedScriptAsset::ValidateDeclarationIdentity(
         return false;
     }
 
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptAsset::ValidateDeclarationClassBinding(
+    const TOptional<FUnifiedScriptClassBindingDeclaration>& Binding,
+    FString& OutError) const
+{
+    if (!Binding.IsSet())
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    const FUnifiedScriptClassBindingDeclaration& Declaration = Binding.GetValue();
+    if (!Declaration.Validate(OutError))
+    {
+        return false;
+    }
+
+    if (ScriptClassKind == EUnifiedScriptClassKind::None)
+    {
+        if (Declaration.BaseClassPath.IsSet() || Declaration.GeneratedClassPath.IsSet())
+        {
+            OutError = FString::Printf(
+                TEXT("UnifiedScript Asset '%s' has class binding paths but no persistent class kind."),
+                *GetPathName());
+            return false;
+        }
+        OutError.Reset();
+        return true;
+    }
+
+    if (!ScriptClassId.IsValid() || !GeneratedClassPath.IsValid())
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' has no loadable persistent generated owner for class binding validation."),
+            *GetPathName());
+        return false;
+    }
+
+    const TCHAR* ExpectedKind = nullptr;
+    switch (ScriptClassKind)
+    {
+    case EUnifiedScriptClassKind::Actor:
+        ExpectedKind = TEXT("Actor");
+        break;
+    case EUnifiedScriptClassKind::ActorComponent:
+        ExpectedKind = TEXT("ActorComponent");
+        break;
+    case EUnifiedScriptClassKind::Object:
+        ExpectedKind = TEXT("Object");
+        break;
+    case EUnifiedScriptClassKind::BlueprintFunctionLibrary:
+        ExpectedKind = TEXT("BlueprintFunctionLibrary");
+        break;
+    default:
+        break;
+    }
+    if (ExpectedKind == nullptr ||
+        !Declaration.Kind.Equals(ExpectedKind, ESearchCase::CaseSensitive))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' class binding kind '%s' does not match persistent kind '%s'."),
+            *GetPathName(),
+            *Declaration.Kind,
+            ExpectedKind != nullptr ? ExpectedKind : TEXT("<unknown>"));
+        return false;
+    }
+
+    UClass* OwnerClass = GeneratedClassPath.TryLoadClass<UObject>();
+    if (OwnerClass == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' cannot load generated class owner '%s' for class binding validation."),
+            *GetPathName(),
+            *GeneratedClassPath.ToString());
+        return false;
+    }
+    const FString ActualOwnerPath = OwnerClass->GetPathName();
+    if (!ActualOwnerPath.Equals(GeneratedClassPath.ToString(), ESearchCase::CaseSensitive))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' configured generated owner '%s' resolves to '%s'."),
+            *GetPathName(),
+            *GeneratedClassPath.ToString(),
+            *ActualOwnerPath);
+        return false;
+    }
+
+    if (Declaration.GeneratedClassPath.IsSet())
+    {
+        const FString& ExpectedPath = Declaration.GeneratedClassPath.GetValue();
+        if (!ActualOwnerPath.Equals(ExpectedPath, ESearchCase::CaseSensitive))
+        {
+            OutError = FString::Printf(
+                TEXT("UnifiedScript Asset '%s' class binding generated class '%s' does not match selected owner '%s'."),
+                *GetPathName(),
+                *ExpectedPath,
+                *GeneratedClassPath.ToString());
+            return false;
+        }
+    }
+
+    if (OwnerClass != nullptr)
+    {
+        bool bFamilyMatches = false;
+        if (Declaration.Kind.Equals(TEXT("Actor"), ESearchCase::CaseSensitive))
+        {
+            bFamilyMatches = OwnerClass->IsChildOf(AActor::StaticClass());
+        }
+        else if (Declaration.Kind.Equals(TEXT("ActorComponent"), ESearchCase::CaseSensitive))
+        {
+            bFamilyMatches = OwnerClass->IsChildOf(UActorComponent::StaticClass());
+        }
+        else if (Declaration.Kind.Equals(TEXT("Object"), ESearchCase::CaseSensitive))
+        {
+            bFamilyMatches = OwnerClass->IsChildOf(UObject::StaticClass()) &&
+                !OwnerClass->IsChildOf(AActor::StaticClass()) &&
+                !OwnerClass->IsChildOf(UActorComponent::StaticClass()) &&
+                !OwnerClass->IsChildOf(UBlueprintFunctionLibrary::StaticClass());
+        }
+        else if (Declaration.Kind.Equals(TEXT("BlueprintFunctionLibrary"), ESearchCase::CaseSensitive))
+        {
+            bFamilyMatches = OwnerClass->IsChildOf(UBlueprintFunctionLibrary::StaticClass());
+        }
+        if (!bFamilyMatches)
+        {
+            OutError = FString::Printf(
+                TEXT("UnifiedScript Asset '%s' generated owner '%s' is not in class-binding family '%s'."),
+                *GetPathName(),
+                *OwnerClass->GetPathName(),
+                *Declaration.Kind);
+            return false;
+        }
+
+        if (Declaration.BaseClassPath.IsSet())
+        {
+            const FString ActualBasePath = OwnerClass->GetSuperClass() != nullptr
+                ? OwnerClass->GetSuperClass()->GetPathName()
+                : FString();
+            if (!ActualBasePath.Equals(
+                    Declaration.BaseClassPath.GetValue(), ESearchCase::CaseSensitive))
+            {
+                OutError = FString::Printf(
+                    TEXT("UnifiedScript Asset '%s' class binding base '%s' does not match owner base '%s'."),
+                    *GetPathName(),
+                    *Declaration.BaseClassPath.GetValue(),
+                    *ActualBasePath);
+                return false;
+            }
+        }
+    }
     OutError.Reset();
     return true;
 }

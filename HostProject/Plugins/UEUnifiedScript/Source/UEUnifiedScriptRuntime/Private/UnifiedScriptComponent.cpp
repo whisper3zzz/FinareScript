@@ -3420,9 +3420,15 @@ bool UUnifiedScriptComponent::BuildScriptState(
             OutMigration,
             OutDeclarationAssetPath,
             OutError);
-        return bMaterialized && ResolvedAsset->ValidateDeclarationIdentity(
-            OutMigration.AssetId,
-            OutMigration.AssetQualifiedName,
+        if (!bMaterialized || !ResolvedAsset->ValidateDeclarationIdentity(
+                OutMigration.AssetId,
+                OutMigration.AssetQualifiedName,
+                OutError))
+        {
+            return false;
+        }
+        return ResolvedAsset->ValidateDeclarationClassBinding(
+            OutMigration.ClassBinding,
             OutError);
     }
     if (DeclarationPath.IsEmpty())
@@ -3448,9 +3454,15 @@ bool UUnifiedScriptComponent::BuildScriptState(
         OutMigration,
         OutDeclarationAssetPath,
         OutError);
-    return bMaterialized && ResolvedAsset->ValidateDeclarationIdentity(
-        OutMigration.AssetId,
-        OutMigration.AssetQualifiedName,
+    if (!bMaterialized || !ResolvedAsset->ValidateDeclarationIdentity(
+            OutMigration.AssetId,
+            OutMigration.AssetQualifiedName,
+            OutError))
+    {
+        return false;
+    }
+    return ResolvedAsset->ValidateDeclarationClassBinding(
+        OutMigration.ClassBinding,
         OutError);
 }
 

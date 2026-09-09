@@ -11,6 +11,7 @@
 
 #include "CoreMinimal.h"
 #include "StructUtils/PropertyBag.h"
+#include "UnifiedScriptClassBinding.h"
 
 /** Observable result of reconciling one instance state bag with a new declaration. */
 struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptStateMigrationReport
@@ -25,6 +26,9 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptStateMigrationReport
     int32 PreservedOverrideCount = 0;
     int32 DefaultedStateCount = 0;
     int32 DroppedOverrideCount = 0;
+
+    /** Optional class-composition metadata selected from the same declaration asset. */
+    TOptional<FUnifiedScriptClassBindingDeclaration> ClassBinding;
 };
 
 /** Converts C# Script Asset Declaration IR into an Unreal editable state bag. */
