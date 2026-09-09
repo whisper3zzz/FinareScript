@@ -638,16 +638,38 @@ rename, and retain the old generation after incompatible owner changes. Method
 declarations are compared by module, metadata token and declaring type so an
 inherited reflection view is accepted, while same-signature public instance
 shadows (including `new virtual`) remain rejected. A different generic-arity
-helper does not hide the base route. This is managed contract evidence: the
-shared host has not yet been deployed with this override change, and real UE
-override Rename and cooked acceptance remain outstanding.
+helper does not hide the base route. The shared Release host and Demo are now
+deployed together (`managed-override-owner-deploy.log`). The existing native
+two-World `BlueprintEventOverrideReload` selector passes with that host in
+`override-owner-native-regression.log`, including native/Blueprint callers and
+rejected route changes. That selector exercises legacy method identities;
+same-ClassId override Rename and cooked acceptance remain outstanding.
 
-C-3 remains open. This fixture still resets its state input before each Tick,
-starts the duplicate base rather than its ordinary Blueprint descendants, and
-does not yet assert teardown counts or a rejected reload candidate. The native
-partial-copy implementation needs a real multi-source integration fixture, and
-the explicit Blueprint override declaring-owner compatibility work above still
-needs native acceptance. None of those boundaries is claimed by the passing selector.
+The strengthened active fixture passes in `active-cmd-8.log` (Success and Queue
+Empty) after the native build in `editor-active-state-build-2.log`. State is
+initialized once: the first World accumulates 30, 40 and 50 through the original
+body and Rename, then reaches 161 after the renamed OnBeginPlay (+101) and Tick
+(+10). The second World keeps its old body and accumulates to 40 before its own
+reload, then reaches 151. An officially rebuilt candidate with another ClassId
+is rejected in native `stateMigration`; transaction phases show no old-generation
+stop or candidate start, and state, body, generation, handles and lifecycle
+ownership remain intact. Restoring the valid source and rebuilding allows the
+subsequent compatible reload.
+
+Duplicate now runs its ordinary Blueprint grandchild, with the exact inherited
+component archetype, distinct ScriptAsset, managed instance and World identity.
+The test snapshots original source and sidecar bytes before Duplicate and
+verifies both are unchanged afterward; state and function identity sets must
+each be nonempty. Each actor teardown releases subsystem and CoreCLR script
+counts and lifecycle claims before World destruction. The remaining World stays
+active while its peer is destroyed, and the final managed World count returns
+to its initial value.
+
+C-3 remains open. The native partial-copy implementation needs a real multi-source
+integration fixture, explicit Blueprint override same-ClassId Rename still needs
+native acceptance, and the affected cooked path must use the current runtime
+before closing this slice. None of those boundaries is claimed by the active
+selector above.
 
 ## Relevant verification
 

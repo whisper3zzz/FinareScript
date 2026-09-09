@@ -96,7 +96,7 @@ struct FWorldFixture
     UUnifiedScriptWorldSubsystem* Host = nullptr;
 };
 
-void DestroyWorld(FWorldFixture& Fixture)
+void DestroyActor(FWorldFixture& Fixture)
 {
     if (Fixture.Actor != nullptr && !Fixture.Actor->IsActorBeingDestroyed())
     {
@@ -107,6 +107,11 @@ void DestroyWorld(FWorldFixture& Fixture)
         Fixture.Actor->Destroy();
     }
     Fixture.Actor = nullptr;
+}
+
+void DestroyWorld(FWorldFixture& Fixture)
+{
+    DestroyActor(Fixture);
     Fixture.Host = nullptr;
     if (Fixture.Context != nullptr && GEngine != nullptr)
     {
@@ -265,7 +270,24 @@ bool PatchAddOneBody(
         TEXT("renamed AddOne body"));
 }
 
-bool TickStartValue(
+bool PatchExplicitClassId(
+    FAutomationTestBase& Test,
+    const FString& Path,
+    FString& InOutSource,
+    const FGuid& CurrentClassId,
+    const FString& ReplacementClassId)
+{
+    const FString CurrentText = TEXT("us_") + CurrentClassId.ToString(EGuidFormats::Digits).ToLower();
+    return ReplaceSourceText(
+        Test,
+        Path,
+        InOutSource,
+        CurrentText,
+        ReplacementClassId,
+        TEXT("explicit ClassId"));
+}
+
+bool SetStartValueAndTick(
     FAutomationTestBase& Test,
     FWorldFixture& Fixture,
     int32 Input,
@@ -291,6 +313,51 @@ bool TickStartValue(
         FString::Printf(TEXT("%s Tick applies managed +10 body"), Label),
         StartValue->GetPropertyValue_InContainer(Fixture.Actor),
         Expected);
+}
+
+bool TickExistingStartValue(
+    FAutomationTestBase& Test,
+    FWorldFixture& Fixture,
+    int32 Expected,
+    const TCHAR* Label)
+{
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s Actor"), Label), Fixture.Actor) ||
+        !Test.TestNotNull(*FString::Printf(TEXT("%s ScriptComponent"), Label), Fixture.Actor->ScriptComponent.Get()) ||
+        !Test.TestNotNull(*FString::Printf(TEXT("%s managed host"), Label), Fixture.Host))
+    {
+        return false;
+    }
+    FIntProperty* StartValue = FindFProperty<FIntProperty>(Fixture.Actor->GetClass(), TEXT("StartValue"));
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s StartValue property"), Label), StartValue))
+    {
+        return false;
+    }
+    Fixture.Host->BeginManagedFrame();
+    Fixture.Actor->ScriptComponent->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    Fixture.Host->EndManagedFrame();
+    return Test.TestEqual(
+        FString::Printf(TEXT("%s Tick applies managed +10 body without resetting state"), Label),
+        StartValue->GetPropertyValue_InContainer(Fixture.Actor),
+        Expected);
+}
+
+bool ReadStartValue(
+    FAutomationTestBase& Test,
+    AUnifiedScriptActor* Actor,
+    int32& OutValue,
+    const TCHAR* Label)
+{
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s Actor"), Label), Actor))
+    {
+        return false;
+    }
+    FIntProperty* StartValue = FindFProperty<FIntProperty>(Actor->GetClass(), TEXT("StartValue"));
+    if (!Test.TestNotNull(*FString::Printf(TEXT("%s StartValue property"), Label), StartValue))
+    {
+        return false;
+    }
+    OutValue = StartValue->GetPropertyValue_InContainer(Actor);
+    return true;
 }
 
 bool SynchronizeAssetFromConfiguredDeclaration(
@@ -524,7 +591,7 @@ bool LoadIdentityEntryIds(
     }
     return Test.TestTrue(
         *FString::Printf(TEXT("%s identity sidecar has state/function IDs"), Label),
-        OutStateIds.Num() > 0 || OutFunctionIds.Num() > 0);
+        OutStateIds.Num() > 0 && OutFunctionIds.Num() > 0);
 }
 
 bool IdentityIdSetsEqual(const TSet<FString>& Left, const TSet<FString>& Right)
@@ -832,6 +899,7 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Active child has an independent component archetype"), GetComponent(ChildBlueprint) != GetComponent(BaseBlueprint));
     TestTrue(TEXT("Active grandchild follows child component archetype"), GetComponent(GrandchildBlueprint) != nullptr && GetComponent(GrandchildBlueprint)->GetArchetype() == GetComponent(ChildBlueprint));
 
+    const int32 InitialManagedWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
     FWorldFixture First;
     FWorldFixture Second;
     FString WorldError;
@@ -869,11 +937,14 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     FUnifiedScriptRuntimeDebugContext SecondInitialContext;
     TestTrue(TEXT("Original child exposes a managed runtime identity"), First.Actor->ScriptComponent->GetRuntimeDebugContext(FirstInitialContext));
     TestTrue(TEXT("Original grandchild exposes a managed runtime identity"), Second.Actor->ScriptComponent->GetRuntimeDebugContext(SecondInitialContext));
+    TestEqual(TEXT("Two active Worlds are registered with CoreClr"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount + 2);
     TestTrue(TEXT("Original worlds use distinct managed instances"), FirstInitialContext.InstanceId != SecondInitialContext.InstanceId);
     TestTrue(TEXT("Original child component uses the configured managed source"), First.Actor->ScriptComponent->GetActiveProgramPath().Contains(TEXT("ActiveClassAssetOperationsFixture")));
     TestTrue(TEXT("Original grandchild component uses the configured managed source"), Second.Actor->ScriptComponent->GetActiveProgramPath().Contains(TEXT("ActiveClassAssetOperationsFixture")));
-    TestTrue(TEXT("Original child applies the real managed OnTick body"), TickStartValue(*this, First, 20, 30, TEXT("Original child")));
-    TestTrue(TEXT("Original grandchild applies the real managed OnTick body"), TickStartValue(*this, Second, 20, 30, TEXT("Original grandchild")));
+    TestTrue(TEXT("Original child applies the real managed OnTick body"), SetStartValueAndTick(*this, First, 20, 30, TEXT("Original child")));
+    TestTrue(TEXT("Original grandchild applies the real managed OnTick body"), SetStartValueAndTick(*this, Second, 20, 30, TEXT("Original grandchild")));
     TestEqual(TEXT("Original child AddOne is callable"), InvokeAddOne(*this, First.Actor, 7, 8, TEXT("Original child")), true);
     TestEqual(TEXT("Original grandchild AddOne is callable"), InvokeAddOne(*this, Second.Actor, 8, 9, TEXT("Original grandchild")), true);
 
@@ -980,7 +1051,7 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         CurrentBytes == InitialSidecarBytes);
     TestFalse(TEXT("Injected rename removes the new identity sidecar"),
         IFileManager::Get().FileExists(*FailedRenameSidecarPath));
-    TestTrue(TEXT("Rollback keeps original child managed OnTick body"), TickStartValue(*this, First, 20, 30, TEXT("After failed rename")));
+    TestTrue(TEXT("Rollback keeps original child managed OnTick body"), TickExistingStartValue(*this, First, 40, TEXT("After failed rename")));
     TestTrue(TEXT("Failed rename keeps old managed instance callable"), InvokeAddOne(*this, First.Actor, 9, 10, TEXT("After failed rename")));
 
     FUnifiedScriptClassAssetOperationResult RenameResult;
@@ -1018,7 +1089,7 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Successful rename preserves function entry IDs"),
         IdentityIdSetsEqual(InitialFunctionIds, RenamedFunctionIds));
     TestTrue(TEXT("Old active instance remains callable before rebuild"), InvokeAddOne(*this, First.Actor, 10, 11, TEXT("Before renamed rebuild")));
-    TestTrue(TEXT("Rename-before-build keeps the original managed OnTick body"), TickStartValue(*this, First, 20, 30, TEXT("Before renamed rebuild")));
+    TestTrue(TEXT("Rename-before-build keeps the original managed OnTick body"), TickExistingStartValue(*this, First, 50, TEXT("Before renamed rebuild")));
     FString RenamedSourcePath;
     FString RenamedSource;
     if (!FindManagedSource(*this, ClassesDirectory, RenamedName, RenamedSourcePath, RenamedSource) ||
@@ -1028,7 +1099,123 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         DestroyWorld(Second);
         return false;
     }
-    if (!RunBuilder(*this, FixtureProject, OutputRootRelative, FPaths::Combine(OutputRoot, TEXT("fixture-build-renamed.log"))))
+    const FString ValidRenamedSource = RenamedSource;
+    FUnifiedScriptRuntimeDebugContext FirstBeforeInvalidReloadContext;
+    int32 FirstStartValueBeforeInvalidReload = 0;
+    if (!TestTrue(TEXT("Captures the renamed instance before invalid candidate"),
+            FirstComponent->GetRuntimeDebugContext(FirstBeforeInvalidReloadContext)) ||
+        !ReadStartValue(*this, First.Actor, FirstStartValueBeforeInvalidReload, TEXT("Before invalid candidate")))
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    const int32 FirstManagedScriptsBeforeInvalidReload = First.Host->GetManagedScriptCount();
+    const int32 FirstLifecycleClaimsBeforeInvalidReload = First.Host->GetGameplayLifecycleClaimCount();
+    const FString FirstProgramBeforeInvalidReload = FirstComponent->GetActiveProgramPath();
+    UUnifiedScriptAsset* FirstAssetBeforeInvalidReload = FirstComponent->ScriptAsset.Get();
+    const FString InvalidClassIdDigits = TEXT("11111111111111111111111111111111");
+    FString InvalidClassIdSource = RenamedSource;
+    if (!PatchExplicitClassId(
+            *this,
+            RenamedSourcePath,
+            InvalidClassIdSource,
+            OriginalClassId,
+            TEXT("us_") + InvalidClassIdDigits) ||
+        !RunBuilder(
+            *this,
+            FixtureProject,
+            OutputRootRelative,
+            FPaths::Combine(OutputRoot, TEXT("fixture-build-invalid-class-id.log"))))
+    {
+        FFileHelper::SaveStringToFile(ValidRenamedSource, *RenamedSourcePath);
+        RunBuilder(*this, FixtureProject, OutputRootRelative, FPaths::Combine(OutputRoot, TEXT("fixture-build-invalid-class-id-restore.log")));
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        return false;
+    }
+    const FString ExpectedInvalidClassIdError = FString::Printf(
+        TEXT("UnifiedScript Class '%s' expects semantic ID '%s', but the selected declaration has '%s'. Rebuild or recreate the stale class proxy instead of binding by name."),
+        *RenameResult.ScriptAsset->GetPathName(),
+        *OriginalClassId.ToString(EGuidFormats::Digits),
+        *InvalidClassIdDigits);
+    AddExpectedError(
+        *ExpectedInvalidClassIdError,
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    TestFalse(TEXT("Rejects active reload with a changed explicit ClassId"), FirstComponent->ReloadScript());
+    TestEqual(
+        TEXT("Invalid ClassId reload reports the exact declaration identity failure"),
+        FirstComponent->LastScriptError,
+        ExpectedInvalidClassIdError);
+    TSharedPtr<FJsonObject> InvalidReloadTransaction;
+    const TSharedRef<TJsonReader<>> InvalidReloadReader =
+        TJsonReaderFactory<>::Create(FirstComponent->LastReloadTransaction);
+    const TArray<TSharedPtr<FJsonValue>>* InvalidReloadPhases = nullptr;
+    const bool bInvalidReloadTransactionParsed =
+        FJsonSerializer::Deserialize(InvalidReloadReader, InvalidReloadTransaction) &&
+        InvalidReloadTransaction.IsValid() &&
+        InvalidReloadTransaction->TryGetArrayField(TEXT("phases"), InvalidReloadPhases) &&
+        InvalidReloadPhases != nullptr;
+    bool bStateMigrationFailed = false;
+    bool bOldGenerationStopped = false;
+    bool bCandidateStarted = false;
+    if (bInvalidReloadTransactionParsed)
+    {
+        for (const TSharedPtr<FJsonValue>& PhaseValue : *InvalidReloadPhases)
+        {
+            const TSharedPtr<FJsonObject>* PhaseObject = nullptr;
+            if (!PhaseValue.IsValid() ||
+                !PhaseValue->TryGetObject(PhaseObject) ||
+                PhaseObject == nullptr ||
+                !PhaseObject->IsValid())
+            {
+                continue;
+            }
+            FString PhaseName;
+            FString PhaseState;
+            (*PhaseObject)->TryGetStringField(TEXT("name"), PhaseName);
+            (*PhaseObject)->TryGetStringField(TEXT("state"), PhaseState);
+            bStateMigrationFailed |=
+                PhaseName == TEXT("stateMigration") && PhaseState == TEXT("failed");
+            bOldGenerationStopped |= PhaseName == TEXT("oldGenerationStop");
+            bCandidateStarted |= PhaseName == TEXT("candidateStart");
+        }
+    }
+    TestTrue(TEXT("Invalid ClassId reload records a valid transaction JSON"), bInvalidReloadTransactionParsed);
+    TestTrue(
+        TEXT("Invalid ClassId reload fails during state migration"),
+        bStateMigrationFailed);
+    TestFalse(
+        TEXT("Invalid ClassId reload does not stop the old generation"),
+        bOldGenerationStopped);
+    TestFalse(
+        TEXT("Invalid ClassId reload does not start a candidate generation"),
+        bCandidateStarted);
+    FUnifiedScriptRuntimeDebugContext FirstAfterInvalidReloadContext;
+    TestTrue(TEXT("Invalid ClassId reload retains runtime identity"), FirstComponent->GetRuntimeDebugContext(FirstAfterInvalidReloadContext));
+    TestEqual(TEXT("Invalid ClassId reload retains generation"), FirstAfterInvalidReloadContext.Generation, FirstBeforeInvalidReloadContext.Generation);
+    TestEqual(TEXT("Invalid ClassId reload retains instance identity"), FirstAfterInvalidReloadContext.InstanceId, FirstBeforeInvalidReloadContext.InstanceId);
+    TestEqual(TEXT("Invalid ClassId reload retains World host identity"), FirstAfterInvalidReloadContext.WorldHostId, FirstBeforeInvalidReloadContext.WorldHostId);
+    TestEqual(TEXT("Invalid ClassId reload retains native host handle"), FirstAfterInvalidReloadContext.HostHandle, FirstBeforeInvalidReloadContext.HostHandle);
+    TestEqual(TEXT("Invalid ClassId reload retains native target handle"), FirstAfterInvalidReloadContext.TargetHandle, FirstBeforeInvalidReloadContext.TargetHandle);
+    int32 FirstStartValueAfterInvalidReload = 0;
+    TestTrue(TEXT("Invalid ClassId reload retains native StartValue"),
+        ReadStartValue(*this, First.Actor, FirstStartValueAfterInvalidReload, TEXT("After invalid candidate")) &&
+        FirstStartValueAfterInvalidReload == FirstStartValueBeforeInvalidReload);
+    TestTrue(TEXT("Invalid ClassId reload retains component object"), First.Actor->ScriptComponent.Get() == FirstComponent);
+    TestTrue(TEXT("Invalid ClassId reload retains ScriptAsset ownership"), FirstComponent->ScriptAsset.Get() == FirstAssetBeforeInvalidReload);
+    TestEqual(TEXT("Invalid ClassId reload retains active program"), FirstComponent->GetActiveProgramPath(), FirstProgramBeforeInvalidReload);
+    TestTrue(TEXT("Invalid ClassId reload leaves the old body running"), InvokeAddOne(*this, First.Actor, 10, 11, TEXT("After invalid ClassId reload")));
+    TestEqual(TEXT("Invalid ClassId reload retains managed script count"), First.Host->GetManagedScriptCount(), FirstManagedScriptsBeforeInvalidReload);
+    TestEqual(TEXT("Invalid ClassId reload retains lifecycle claim count"), First.Host->GetGameplayLifecycleClaimCount(), FirstLifecycleClaimsBeforeInvalidReload);
+    if (!TestTrue(TEXT("Restores valid renamed source after invalid candidate"),
+            FFileHelper::SaveStringToFile(ValidRenamedSource, *RenamedSourcePath)) ||
+        !RunBuilder(
+            *this,
+            FixtureProject,
+            OutputRootRelative,
+            FPaths::Combine(OutputRoot, TEXT("fixture-build-renamed-valid.log"))))
     {
         DestroyWorld(First);
         DestroyWorld(Second);
@@ -1036,8 +1223,9 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     }
     TestTrue(TEXT("Reloads renamed active instance"), First.Actor->ScriptComponent->ReloadScript());
     TestTrue(TEXT("Renamed active instance uses the new AddOne body"), InvokeAddOne(*this, First.Actor, 11, 112, TEXT("After renamed reload")));
-    TestTrue(TEXT("Renamed reload keeps the managed OnTick body"), TickStartValue(*this, First, 20, 30, TEXT("After renamed reload")));
+    TestTrue(TEXT("Renamed reload keeps the managed OnTick body"), TickExistingStartValue(*this, First, 161, TEXT("After renamed reload")));
     TestTrue(TEXT("Second world keeps the old AddOne body until its own reload"), InvokeAddOne(*this, Second.Actor, 10, 11, TEXT("Second before own reload")));
+    TestTrue(TEXT("Second world retains accumulated old OnTick state before own reload"), TickExistingStartValue(*this, Second, 40, TEXT("Second before own reload")));
     FUnifiedScriptRuntimeDebugContext FirstAfterRenameContext;
     TestTrue(TEXT("Renamed active instance keeps a runtime identity"), First.Actor->ScriptComponent->GetRuntimeDebugContext(FirstAfterRenameContext));
     TestTrue(TEXT("Renamed reload preserves the original component object"), First.Actor->ScriptComponent == FirstComponent);
@@ -1048,7 +1236,10 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestEqual(TEXT("Renamed reload leaves the second lifecycle claim isolated"), Second.Host->GetGameplayLifecycleClaimCount(), 1);
 
     TArray<uint8> RenamedSidecarBytes;
-    if (!TestTrue(TEXT("Snapshots the renamed identity sidecar before duplicate"),
+    TArray<uint8> RenamedSourceBytes;
+    if (!TestTrue(TEXT("Snapshots the renamed source before duplicate"),
+            FFileHelper::LoadFileToArray(RenamedSourceBytes, *RenamedSourcePath)) ||
+        !TestTrue(TEXT("Snapshots the renamed identity sidecar before duplicate"),
             FFileHelper::LoadFileToArray(RenamedSidecarBytes, *RenamedSidecarPath)))
     {
         DestroyWorld(First);
@@ -1087,6 +1278,9 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
     TestTrue(TEXT("Duplicate does not rewrite the original identity sidecar"),
         FFileHelper::LoadFileToArray(CurrentBytes, *RenamedSidecarPath) &&
         CurrentBytes == RenamedSidecarBytes);
+    TestTrue(TEXT("Duplicate does not rewrite the original managed source"),
+        FFileHelper::LoadFileToArray(CurrentBytes, *RenamedSourcePath) &&
+        CurrentBytes == RenamedSourceBytes);
     bool bDisjointStateIds = true;
     for (const FString& Id : RenamedStateIds)
     {
@@ -1141,24 +1335,76 @@ bool FUnifiedScriptActiveClassAssetOperationsTest::RunTest(const FString& Parame
         DestroyWorld(Second);
         return false;
     }
-    DuplicateWorld.Actor = DuplicateWorld.World->SpawnActor<AUnifiedScriptActor>(DuplicateResult.Blueprint->GeneratedClass, FTransform::Identity);
+    FUnifiedScriptRuntimeDebugContext DuplicateContext;
+    DuplicateWorld.Actor = DuplicateGrandchild != nullptr
+        ? DuplicateWorld.World->SpawnActor<AUnifiedScriptActor>(DuplicateGrandchild->GeneratedClass, FTransform::Identity)
+        : nullptr;
     if (TestNotNull(TEXT("Spawns duplicate active actor"), DuplicateWorld.Actor) &&
         TestNotNull(TEXT("Duplicate active actor has a ScriptComponent"), DuplicateWorld.Actor->ScriptComponent.Get()))
     {
         DuplicateWorld.Actor->DispatchBeginPlay();
         TestTrue(TEXT("Duplicate active script starts independently"), DuplicateWorld.Actor->ScriptComponent->bScriptRunning);
+        TestTrue(TEXT("Duplicate grandchild actor uses the duplicate ScriptAsset"), DuplicateWorld.Actor->ScriptComponent->ScriptAsset.Get() == DuplicateResult.ScriptAsset);
+        TestTrue(TEXT("Duplicate grandchild actor has the duplicate component archetype"),
+            DuplicateGrandchild != nullptr &&
+            DuplicateWorld.Actor->ScriptComponent->GetArchetype() == GetComponent(DuplicateGrandchild));
         TestTrue(TEXT("Duplicate active AddOne uses the duplicate body"), InvokeAddOne(*this, DuplicateWorld.Actor, 12, 113, TEXT("Duplicate")));
-        TestTrue(TEXT("Duplicate active OnTick remains independent"), TickStartValue(*this, DuplicateWorld, 20, 30, TEXT("Duplicate")));
+        TestTrue(TEXT("Duplicate active OnTick remains independent"), SetStartValueAndTick(*this, DuplicateWorld, 20, 30, TEXT("Duplicate")));
+        TestTrue(TEXT("Duplicate grandchild exposes a managed runtime identity"), DuplicateWorld.Actor->ScriptComponent->GetRuntimeDebugContext(DuplicateContext));
+        TestTrue(TEXT("Duplicate grandchild owns an independent managed instance"),
+            DuplicateContext.InstanceId != FirstInitialContext.InstanceId &&
+            DuplicateContext.InstanceId != SecondInitialContext.InstanceId);
+        TestTrue(TEXT("Duplicate grandchild owns an independent managed World"),
+            DuplicateContext.WorldHostId != FirstInitialContext.WorldHostId &&
+            DuplicateContext.WorldHostId != SecondInitialContext.WorldHostId);
+        TestEqual(TEXT("Duplicate World owns one lifecycle claim"), DuplicateWorld.Host->GetGameplayLifecycleClaimCount(), 1);
     }
+    TestEqual(TEXT("Duplicate World is added to the managed World count"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount + 3);
     if (TestNotNull(TEXT("Second world retains its ScriptComponent before own reload"), Second.Actor->ScriptComponent.Get()))
     {
         TestTrue(TEXT("Second world reloads independently onto the renamed body"), Second.Actor->ScriptComponent->ReloadScript());
         TestTrue(TEXT("Second world uses the renamed AddOne after its own reload"), InvokeAddOne(*this, Second.Actor, 10, 111, TEXT("Second after own reload")));
-        TestTrue(TEXT("Second world keeps the synchronized OnTick body"), TickStartValue(*this, Second, 20, 30, TEXT("Second after own reload")));
+        TestTrue(TEXT("Second world keeps the synchronized OnTick body"), TickExistingStartValue(*this, Second, 151, TEXT("Second after own reload")));
+    }
+    DestroyActor(DuplicateWorld);
+    TestEqual(TEXT("Duplicate World releases managed scripts before teardown"), DuplicateWorld.Host->GetManagedScriptCount(), 0);
+    TestEqual(TEXT("Duplicate World releases lifecycle claims before teardown"), DuplicateWorld.Host->GetGameplayLifecycleClaimCount(), 0);
+    if (DuplicateContext.WorldHostId != 0)
+    {
+        TestEqual(TEXT("Duplicate World releases its CoreClr script before teardown"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedScriptCount(DuplicateContext.WorldHostId),
+            0);
     }
     DestroyWorld(DuplicateWorld);
+    TestEqual(TEXT("Duplicate World teardown leaves the two original Worlds"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount + 2);
+
+    DestroyActor(First);
+    TestEqual(TEXT("First World releases managed scripts before teardown"), First.Host->GetManagedScriptCount(), 0);
+    TestEqual(TEXT("First World releases lifecycle claims before teardown"), First.Host->GetGameplayLifecycleClaimCount(), 0);
+    TestEqual(TEXT("First World releases its CoreClr script before teardown"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedScriptCount(FirstInitialContext.WorldHostId),
+        0);
     DestroyWorld(First);
+    TestEqual(TEXT("First World teardown leaves the second World"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount + 1);
+    TestEqual(TEXT("Second World remains managed after First teardown"), Second.Host->GetManagedScriptCount(), 1);
+    TestEqual(TEXT("Second World retains its lifecycle claim after First teardown"), Second.Host->GetGameplayLifecycleClaimCount(), 1);
+
+    DestroyActor(Second);
+    TestEqual(TEXT("Second World releases managed scripts before teardown"), Second.Host->GetManagedScriptCount(), 0);
+    TestEqual(TEXT("Second World releases lifecycle claims before teardown"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+    TestEqual(TEXT("Second World releases its CoreClr script before teardown"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedScriptCount(SecondInitialContext.WorldHostId),
+        0);
     DestroyWorld(Second);
+    TestEqual(TEXT("Active fixture restores the managed World baseline"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount);
     return !HasAnyErrors();
 }
 

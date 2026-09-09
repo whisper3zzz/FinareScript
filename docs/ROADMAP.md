@@ -1,6 +1,6 @@
 # UnifiedScript product roadmap
 
-Last reviewed: **2026-09-08**
+Last reviewed: **2026-09-09**
 
 This document owns current priorities, capability boundaries, and delivery
 order. Detailed implementation logs and earlier acceptance results live in
@@ -49,17 +49,20 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Surface v0.5 now carries source-owner identity through CLI, native Slate and
   browser editing, including shared Visual functions and selected derived
   CoreCLR receivers. Editing the owner default preserves explicit derived
-  overrides and stable declaration IDs. Continue with active managed
-  Rename/Duplicate and subsequent rebuild/reload; the existing asset-operation
-  lane verifies native instances without starting its managed source.
+  overrides and stable declaration IDs.
   Persistent ClassId member lookup now retains old-generation state access
   after an active Rename. Source and identity sidecars now migrate in the same
   asset transaction. The active factory fixture passes Rename, rebuilt reload
   in two existing Worlds, Duplicate startup and state/function identity checks;
-  the original asset-operation regression also passes. Continue with rejected
-  reload candidates, accumulated state and lifecycle cleanup assertions,
-  active duplicated descendants, partial-source integration and explicit
-  Blueprint override owner compatibility before closing C-3.
+  the original asset-operation regression also passes. The active fixture now
+  retains accumulated state across rename/reload, rejects a changed ClassId
+  before stopping the old generation, runs the duplicate's ordinary Blueprint
+  grandchild and restores script, lifecycle-claim and World counts on teardown.
+  Continue with partial-source integration. Explicit
+  Blueprint override compatibility now retains the actual declaring owner's
+  ClassId through managed type rename, with dynamic reload tests and the
+  existing native event-reload regression passing; its same-ClassId native
+  Rename and cooked acceptance remain open before closing C-3.
   See `docs/plans/2026-09-08-blueprint-inherited-defaults.md` for the next slice.
 - Latest extension checkpoint: **M13.3C-2 complete**. Explicit
   `[UnrealBlueprintOverride]` declarations materialize inherited NativeEvent and
