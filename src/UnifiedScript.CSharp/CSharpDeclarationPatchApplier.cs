@@ -13,6 +13,7 @@ public sealed class CSharpDeclarationPatchApplier
     private const string AssetAnnotationKind = "UnifiedScript.DeclarationPatch.Asset";
     private const string StateAnnotationKind = "UnifiedScript.DeclarationPatch.State";
     private const string FunctionAnnotationKind = "UnifiedScript.DeclarationPatch.Function";
+    private const string ClassBaseAnnotationKind = "UnifiedScript.DeclarationPatch.ClassBase";
     private const string ConstructorAssignmentAnnotationKind =
         "UnifiedScript.DeclarationPatch.ConstructorAssignment";
     private readonly CSharpSemanticPipeline pipeline = new();
@@ -89,6 +90,7 @@ public sealed class CSharpDeclarationPatchApplier
         }
         var assetAdds = new List<AssetAddPlan>();
         var assetUpdates = new List<AssetUpdatePlan>();
+        var classBaseUpdates = new List<ClassBaseUpdatePlan>();
         var assetRemoves = new List<AssetRemovePlan>();
         var adds = new List<AddPlan>();
         var eventAdds = new List<EventAddPlan>();
@@ -137,6 +139,41 @@ public sealed class CSharpDeclarationPatchApplier
                     assetUpdates.Add(new AssetUpdatePlan(
                         updatedAsset,
                         updateAsset.ReplacementAssetPath));
+                    break;
+                case UpdateScriptClassBasePatchOperation updateClassBase:
+                    if (!assets.TryGetValue(
+                            updateClassBase.TargetAssetId,
+                            out ScriptAssetDeclaration? classBaseAsset))
+                    {
+                        return TargetNotFound(updateClassBase.TargetAssetId, "script asset");
+                    }
+                    if (!Matches(classBaseAsset, updateClassBase.Expected))
+                    {
+                        return PreconditionFailed(classBaseAsset);
+                    }
+                    if (classBaseAsset.ClassBinding is null ||
+                        classBaseAsset.ClassBinding != updateClassBase.ExpectedClassBinding)
+                    {
+                        return Failure(new UnifiedDiagnostic(
+                            DeclarationPatchDiagnosticCodes.DeclarationPreconditionFailed,
+                            UnifiedDiagnosticSeverity.Error,
+                            $"Script Asset '{classBaseAsset.QualifiedName}' no longer matches the " +
+                            "expected class binding.",
+                            classBaseAsset.Span,
+                            classBaseAsset.Id));
+                    }
+                    if (!TryResolveClassBaseLocation(
+                            classBaseAsset,
+                            contexts,
+                            out ClassBaseUpdatePlan? classBasePlan,
+                            out UnifiedDiagnostic? classBaseFailure))
+                    {
+                        return Failure(classBaseFailure!);
+                    }
+                    classBaseUpdates.Add(classBasePlan! with
+                    {
+                        ReplacementBaseClassPath = updateClassBase.ReplacementBaseClassPath,
+                    });
                     break;
                 case RemoveScriptAssetPatchOperation removeAsset:
                     if (!assets.TryGetValue(
@@ -324,6 +361,7 @@ public sealed class CSharpDeclarationPatchApplier
             original.ScriptAssets,
             assetAdds,
             assetUpdates,
+            classBaseUpdates,
             assetRemoves,
             adds,
             eventAdds,
@@ -341,6 +379,7 @@ public sealed class CSharpDeclarationPatchApplier
         if (!TryAnnotateTargets(
                 contexts,
                 assetUpdates,
+                classBaseUpdates,
                 assetRemoves,
                 adds,
                 eventAdds,
@@ -360,6 +399,7 @@ public sealed class CSharpDeclarationPatchApplier
             PrepareConstructorDefaultChanges(contexts, updates);
         RenameReferences(contexts, updates, functionUpdates);
         ApplyConstructorDefaultChanges(constructorDefaultLocations, constructorDefaultUpdates);
+        ApplyClassBaseChanges(classBaseUpdates);
         ApplyPropertyChanges(contexts, updates, constructorDefaultUpdates, removes);
         ApplyAssetChanges(contexts, assetUpdates, assetRemoves);
         ApplyFunctionChanges(contexts, functionUpdates, functionRemoves);
@@ -438,9 +478,80 @@ public sealed class CSharpDeclarationPatchApplier
         return new CSharpPatchResult(persistedRequest, patchedAnalysis, patchedAnalysis.Diagnostics);
     }
 
+    private static bool TryResolveClassBaseLocation(
+        ScriptAssetDeclaration asset,
+        IReadOnlyDictionary<string, RewriteContext> contexts,
+        out ClassBaseUpdatePlan? plan,
+        out UnifiedDiagnostic? failure)
+    {
+        plan = null;
+        failure = null;
+        if (!contexts.TryGetValue(asset.Span.FilePath, out RewriteContext? assetContext))
+        {
+            failure = InvalidReplacement(
+                $"The Script Asset '{asset.QualifiedName}' is not backed by a source in the " +
+                "current workspace.",
+                asset.Span);
+            return false;
+        }
+
+        TypeDeclarationSyntax[] typeMatches = assetContext.Tree.GetRoot()
+            .DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(type => RoslynSourceSpan.FromNode(type, asset.Span.FilePath) == asset.Span)
+            .ToArray();
+        if (typeMatches.Length != 1)
+        {
+            failure = MissingSyntax(asset.Id, asset.Span, "Script Asset type");
+            return false;
+        }
+
+        INamedTypeSymbol? typeSymbol = assetContext.SemanticModel.GetDeclaredSymbol(typeMatches[0]);
+        if (typeSymbol is null)
+        {
+            failure = InvalidReplacement(
+                $"Roslyn could not resolve the Script Asset type '{asset.QualifiedName}'.",
+                asset.Span);
+            return false;
+        }
+
+        AttributeData[] attributes = typeSymbol.GetAttributes()
+            .Where(IsUnrealScriptClassAttribute)
+            .ToArray();
+        if (attributes.Length != 1 ||
+            attributes[0].ApplicationSyntaxReference?.GetSyntax() is not AttributeSyntax attribute)
+        {
+            failure = InvalidReplacement(
+                $"Script Asset '{asset.QualifiedName}' must declare its own " +
+                "UnrealScriptClassAttribute in the current source workspace.",
+                asset.Span);
+            return false;
+        }
+
+        string attributePath = attribute.SyntaxTree.FilePath;
+        if (!contexts.TryGetValue(attributePath, out RewriteContext? attributeContext))
+        {
+            failure = InvalidReplacement(
+                $"The class binding attribute for '{asset.QualifiedName}' is outside the " +
+                "current source workspace.",
+                SourceSpan.Unknown(attributePath));
+            return false;
+        }
+
+        plan = new ClassBaseUpdatePlan(asset, null, attributeContext, attribute);
+        return true;
+    }
+
+    private static bool IsUnrealScriptClassAttribute(AttributeData attribute) =>
+        string.Equals(
+            attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
+            "UnifiedScript.Unreal.UnrealScriptClassAttribute",
+            StringComparison.Ordinal);
+
     private static bool TryAnnotateTargets(
         IReadOnlyDictionary<string, RewriteContext> contexts,
         IReadOnlyList<AssetUpdatePlan> assetUpdates,
+        IReadOnlyList<ClassBaseUpdatePlan> classBaseUpdates,
         IReadOnlyList<AssetRemovePlan> assetRemoves,
         IReadOnlyList<AddPlan> adds,
         IReadOnlyList<EventAddPlan> eventAdds,
@@ -482,6 +593,20 @@ public sealed class CSharpDeclarationPatchApplier
                     matches[0],
                     matches[0].WithAdditionalAnnotations(AssetAnnotation(asset.Id)));
             }
+        }
+
+        foreach (ClassBaseUpdatePlan update in classBaseUpdates)
+        {
+            RewriteContext context = update.Context;
+            AttributeSyntax attribute = context.Root.DescendantNodes()
+                .OfType<AttributeSyntax>()
+                .SingleOrDefault(candidate => candidate.Span == update.Attribute.Span)
+                ?? throw new InvalidOperationException(
+                    $"The source syntax for the class binding of '{update.Asset.QualifiedName}' " +
+                    "was not found.");
+            context.Root = context.Root.ReplaceNode(
+                attribute,
+                attribute.WithAdditionalAnnotations(ClassBaseAnnotation(update.Asset.Id)));
         }
 
         foreach (StateMutationPlan mutation in updates.Cast<StateMutationPlan>().Concat(removes))
@@ -794,6 +919,139 @@ public sealed class CSharpDeclarationPatchApplier
             context.Root = context.Root.RemoveNode(type, SyntaxRemoveOptions.KeepExteriorTrivia) ??
                 throw new InvalidOperationException("Removing a Script Asset removed the source root.");
         }
+    }
+
+    private static void ApplyClassBaseChanges(IReadOnlyList<ClassBaseUpdatePlan> updates)
+    {
+        foreach (ClassBaseUpdatePlan update in updates)
+        {
+            AttributeSyntax attribute = GetAnnotatedNode<AttributeSyntax>(
+                update.Context.Root,
+                ClassBaseAnnotationKind,
+                update.Asset.Id);
+            AttributeArgumentListSyntax arguments = attribute.ArgumentList ??
+                SyntaxFactory.AttributeArgumentList();
+            int baseIndex = -1;
+            for (int index = 0; index < arguments.Arguments.Count; index++)
+            {
+                AttributeArgumentSyntax argument = arguments.Arguments[index];
+                if (argument.NameEquals?.Name.Identifier.ValueText == "BaseClassPath")
+                {
+                    baseIndex = index;
+                    break;
+                }
+            }
+
+            if (update.ReplacementBaseClassPath is null)
+            {
+                if (baseIndex >= 0)
+                {
+                    AttributeArgumentSyntax removed = arguments.Arguments[baseIndex];
+                    bool removesTrailingSeparator = baseIndex == arguments.Arguments.Count - 1;
+                    bool hasSeparator = arguments.Arguments.Count > 1;
+                    SyntaxTriviaList preservedTrivia = CollectRemovedArgumentTrivia(
+                        removed,
+                        hasSeparator
+                            ? removesTrailingSeparator
+                                ? arguments.Arguments.GetSeparator(baseIndex - 1)
+                                : arguments.Arguments.GetSeparator(baseIndex)
+                            : default,
+                        removesTrailingSeparator,
+                        hasSeparator);
+                    SeparatedSyntaxList<AttributeArgumentSyntax> remaining =
+                        arguments.Arguments.RemoveAt(baseIndex);
+                    if (remaining.Count > 0)
+                    {
+                        int neighborIndex = baseIndex < remaining.Count
+                            ? baseIndex
+                            : remaining.Count - 1;
+                        AttributeArgumentSyntax neighbor = remaining[neighborIndex];
+                        neighbor = neighborIndex == baseIndex
+                            ? neighbor.WithLeadingTrivia(
+                                preservedTrivia.AddRange(neighbor.GetLeadingTrivia()))
+                            : neighbor.WithTrailingTrivia(
+                                neighbor.GetTrailingTrivia().AddRange(preservedTrivia));
+                        remaining = remaining.Replace(remaining[neighborIndex], neighbor);
+                    }
+                    else
+                    {
+                        arguments = arguments.WithOpenParenToken(
+                            arguments.OpenParenToken.WithTrailingTrivia(
+                                arguments.OpenParenToken.TrailingTrivia.AddRange(preservedTrivia)));
+                    }
+                    arguments = arguments.WithArguments(remaining);
+                }
+            }
+            else
+            {
+                if (baseIndex >= 0)
+                {
+                    AttributeArgumentSyntax original = arguments.Arguments[baseIndex];
+                    ExpressionSyntax replacementExpression = SyntaxFactory.LiteralExpression(
+                            SyntaxKind.StringLiteralExpression,
+                            SyntaxFactory.Literal(update.ReplacementBaseClassPath))
+                        .WithTriviaFrom(original.Expression);
+                    SyntaxTrivia[] outerTrivia = original.Expression.GetLeadingTrivia()
+                        .Concat(original.Expression.GetTrailingTrivia())
+                        .ToArray();
+                    SyntaxTrivia[] innerTrivia = original.Expression.DescendantTokens()
+                        .SelectMany(static token => token.LeadingTrivia.Concat(token.TrailingTrivia))
+                        .Where(trivia => !outerTrivia.Any(outer => outer.Span == trivia.Span))
+                        .ToArray();
+                    if (innerTrivia.Length > 0)
+                    {
+                        replacementExpression = replacementExpression.WithTrailingTrivia(
+                            SyntaxFactory.TriviaList(innerTrivia).AddRange(
+                                original.Expression.GetTrailingTrivia()));
+                    }
+                    AttributeArgumentSyntax replacement = original.WithExpression(replacementExpression);
+                    arguments = arguments.WithArguments(
+                        arguments.Arguments.Replace(original, replacement));
+                }
+                else
+                {
+                    AttributeArgumentSyntax replacement = SyntaxFactory.AttributeArgument(
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                SyntaxFactory.Literal(update.ReplacementBaseClassPath)))
+                        .WithNameEquals(SyntaxFactory.NameEquals(
+                            SyntaxFactory.IdentifierName("BaseClassPath")));
+                    arguments = arguments.WithArguments(arguments.Arguments.Add(replacement));
+                }
+            }
+
+            AttributeSyntax rewritten = attribute.WithArgumentList(arguments)
+                .WithAdditionalAnnotations(ClassBaseAnnotation(update.Asset.Id));
+            update.Context.Root = update.Context.Root.ReplaceNode(attribute, rewritten);
+        }
+    }
+
+    private static SyntaxTriviaList CollectRemovedArgumentTrivia(
+        AttributeArgumentSyntax argument,
+        SyntaxToken separator,
+        bool separatorPrecedesArgument,
+        bool hasSeparator)
+    {
+        var trivia = new List<SyntaxTrivia>();
+        void AddTokenTrivia(SyntaxToken token)
+        {
+            trivia.AddRange(token.LeadingTrivia);
+            trivia.AddRange(token.TrailingTrivia);
+        }
+
+        if (hasSeparator && separatorPrecedesArgument)
+        {
+            AddTokenTrivia(separator);
+        }
+        foreach (SyntaxToken token in argument.DescendantTokens())
+        {
+            AddTokenTrivia(token);
+        }
+        if (hasSeparator && !separatorPrecedesArgument)
+        {
+            AddTokenTrivia(separator);
+        }
+        return SyntaxFactory.TriviaList(trivia);
     }
 
     private static void ApplyFunctionChanges(
@@ -1749,6 +2007,22 @@ public sealed class CSharpDeclarationPatchApplier
                             "updated Script Asset path and identity");
                     }
                     break;
+                case UpdateScriptClassBasePatchOperation updateClassBase:
+                    if (!afterAssets.TryGetValue(
+                            updateClassBase.TargetAssetId,
+                            out ScriptAssetDeclaration? updatedClassBaseAsset) ||
+                        updatedClassBaseAsset.ClassBinding is null ||
+                        updatedClassBaseAsset.ClassBinding !=
+                        (updateClassBase.ExpectedClassBinding with
+                        {
+                            BaseClassPath = updateClassBase.ReplacementBaseClassPath,
+                        }))
+                    {
+                        return PostconditionFailed(
+                            updateClassBase.TargetAssetId,
+                            "updated Script Class BaseClassPath and identity");
+                    }
+                    break;
                 case RemoveScriptAssetPatchOperation removeAsset:
                     if (afterAssets.ContainsKey(removeAsset.TargetAssetId) ||
                         !beforeAssets.ContainsKey(removeAsset.TargetAssetId))
@@ -2209,6 +2483,7 @@ public sealed class CSharpDeclarationPatchApplier
         ScriptAssetDocument document,
         IReadOnlyList<AssetAddPlan> assetAdds,
         IReadOnlyList<AssetUpdatePlan> assetUpdates,
+        IReadOnlyList<ClassBaseUpdatePlan> classBaseUpdates,
         IReadOnlyList<AssetRemovePlan> assetRemoves,
         IReadOnlyList<AddPlan> adds,
         IReadOnlyList<EventAddPlan> eventAdds,
@@ -2224,6 +2499,7 @@ public sealed class CSharpDeclarationPatchApplier
             .ToHashSet();
         SemanticId? conflictingRemovedAsset = adds.Select(static add => add.Asset.Id)
             .Concat(updates.Select(static update => update.Asset.Id))
+            .Concat(classBaseUpdates.Select(static update => update.Asset.Id))
             .Concat(removes.Select(static remove => remove.Asset.Id))
             .Concat(eventAdds.Select(static add => add.Asset.Id))
             .Concat(functionAdds.Select(static add => add.Asset.Id))
@@ -2530,6 +2806,9 @@ public sealed class CSharpDeclarationPatchApplier
     private static SyntaxAnnotation FunctionAnnotation(SemanticId id) =>
         new(FunctionAnnotationKind, id.Value);
 
+    private static SyntaxAnnotation ClassBaseAnnotation(SemanticId id) =>
+        new(ClassBaseAnnotationKind, id.Value);
+
     private static TNode GetAnnotatedNode<TNode>(
         SyntaxNode root,
         string annotationKind,
@@ -2632,6 +2911,12 @@ public sealed class CSharpDeclarationPatchApplier
     private sealed record AssetUpdatePlan(
         ScriptAssetDeclaration Asset,
         string ReplacementAssetPath);
+
+    private sealed record ClassBaseUpdatePlan(
+        ScriptAssetDeclaration Asset,
+        string? ReplacementBaseClassPath,
+        RewriteContext Context,
+        AttributeSyntax Attribute);
 
     private sealed record AssetRemovePlan(ScriptAssetDeclaration Asset);
 

@@ -26,10 +26,10 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 
 - Active milestone: **M13.3 resumed after the M13.5 common capability breadth checkpoint**.
 - Current tranche: **M13.3C-4 — class composition in normal authoring**.
-  Declaration transport and native owner/base preflight are implemented and
-  validated. Next add source patching and transactional parent changes through
-  normal authoring, preserving intentional defaults, references, persistent
-  identities and active-generation rejection semantics; then extend component
+  Declaration transport, native owner/base preflight and transactional C#
+  base-binding source edits are implemented and validated. Next add native
+  parent changes through normal authoring, preserving intentional defaults,
+  references, persistent identities and active-generation rejection semantics; then extend component
   composition through the existing asset workflow.
   Implementation decisions are in `docs/plans/2026-09-09-class-composition.md`.
 - Latest inheritance checkpoint: **M13.3C-3 complete**.

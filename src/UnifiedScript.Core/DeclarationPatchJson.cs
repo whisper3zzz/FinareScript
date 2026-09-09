@@ -33,11 +33,13 @@ public static class DeclarationPatchJson
         ArgumentNullException.ThrowIfNull(document);
         if (document.SchemaVersion != DeclarationPatchDocument.CurrentSchemaVersion &&
             document.SchemaVersion != DeclarationPatchDocument.EventSchemaVersion &&
-            document.SchemaVersion != DeclarationPatchDocument.LegacySchemaVersion)
+            document.SchemaVersion != DeclarationPatchDocument.LegacySchemaVersion &&
+            document.SchemaVersion != DeclarationPatchDocument.ClassBindingSchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported declaration patch schema '{document.SchemaVersion}'. " +
-                $"Expected '{DeclarationPatchDocument.CurrentSchemaVersion}'.");
+                $"Expected '{DeclarationPatchDocument.CurrentSchemaVersion}' or " +
+                $"'{DeclarationPatchDocument.ClassBindingSchemaVersion}'.");
         }
 
         if (document.SourceCompilationId.IsEmpty || document.SemanticConfigurationId.IsEmpty ||
@@ -51,6 +53,7 @@ public static class DeclarationPatchJson
         var stateTargets = new HashSet<SemanticId>();
         var functionTargets = new HashSet<SemanticId>();
         var normalized = new List<DeclarationPatchOperation>(document.Operations.Count);
+        bool hasClassBaseOperation = false;
         foreach (DeclarationPatchOperation? operation in document.Operations)
         {
             switch (operation)
@@ -89,6 +92,36 @@ public static class DeclarationPatchJson
                         Expected = expectedAsset,
                         ReplacementAssetPath = replacementAssetPath,
                     });
+                    break;
+                case UpdateScriptClassBasePatchOperation updateClassBase:
+                    ValidateUniqueTarget(
+                        updateClassBase.TargetAssetId,
+                        assetTargets,
+                        "update-class-base",
+                        "asset");
+                    ScriptAssetPatchPrecondition expectedClassBaseAsset = NormalizeAssetExpected(
+                        updateClassBase.Expected,
+                        "class-base asset precondition");
+                    ScriptClassBindingDeclaration expectedClassBinding = NormalizeClassBinding(
+                        updateClassBase.ExpectedClassBinding,
+                        "class-base expected binding");
+                    ValidateClassBindingBasePath(
+                        updateClassBase.ReplacementBaseClassPath,
+                        "class-base replacement");
+                    if (string.Equals(
+                            expectedClassBinding.BaseClassPath,
+                            updateClassBase.ReplacementBaseClassPath,
+                            StringComparison.Ordinal))
+                    {
+                        throw new JsonException(
+                            "An update-class-base operation must change the explicit BaseClassPath.");
+                    }
+                    normalized.Add(updateClassBase with
+                    {
+                        Expected = expectedClassBaseAsset,
+                        ExpectedClassBinding = expectedClassBinding,
+                    });
+                    hasClassBaseOperation = true;
                     break;
                 case RemoveScriptAssetPatchOperation removeAsset:
                     ValidateUniqueTarget(
@@ -213,11 +246,58 @@ public static class DeclarationPatchJson
             }
         }
 
+        if (hasClassBaseOperation && document.SchemaVersion != DeclarationPatchDocument.ClassBindingSchemaVersion)
+        {
+            throw new JsonException(
+                $"The update-class-base operation requires '{DeclarationPatchDocument.ClassBindingSchemaVersion}'.");
+        }
+
         return document with
         {
-            SchemaVersion = DeclarationPatchDocument.CurrentSchemaVersion,
+            SchemaVersion = hasClassBaseOperation
+                ? DeclarationPatchDocument.ClassBindingSchemaVersion
+                : DeclarationPatchDocument.CurrentSchemaVersion,
             Operations = normalized,
         };
+    }
+
+    private static ScriptClassBindingDeclaration NormalizeClassBinding(
+        ScriptClassBindingDeclaration? binding,
+        string role)
+    {
+        if (binding is null)
+        {
+            throw new JsonException($"The {role} is required.");
+        }
+
+        try
+        {
+            ScriptAssetJson.ValidateClassBinding(binding);
+        }
+        catch (JsonException exception)
+        {
+            throw new JsonException($"The {role} is invalid: {exception.Message}", exception);
+        }
+
+        return binding;
+    }
+
+    private static void ValidateClassBindingBasePath(string? path, string role)
+    {
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ScriptAssetJson.ValidateClassBinding(
+                new ScriptClassBindingDeclaration("Patch", path));
+        }
+        catch (JsonException exception)
+        {
+            throw new JsonException($"The {role} is invalid: {exception.Message}", exception);
+        }
     }
 
     private static ScriptAssetPatchPrecondition NormalizeAssetExpected(

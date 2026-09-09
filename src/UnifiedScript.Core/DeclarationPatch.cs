@@ -54,6 +54,7 @@ public sealed record ScriptFunctionPatchSpec(
 [JsonDerivedType(typeof(RemoveScriptStatePatchOperation), "removeState")]
 [JsonDerivedType(typeof(AddScriptAssetPatchOperation), "addAsset")]
 [JsonDerivedType(typeof(UpdateScriptAssetPatchOperation), "updateAsset")]
+[JsonDerivedType(typeof(UpdateScriptClassBasePatchOperation), "updateClassBase")]
 [JsonDerivedType(typeof(RemoveScriptAssetPatchOperation), "removeAsset")]
 [JsonDerivedType(typeof(AddScriptFunctionPatchOperation), "addFunction")]
 [JsonDerivedType(typeof(UpdateScriptFunctionPatchOperation), "updateFunction")]
@@ -70,6 +71,12 @@ public sealed record UpdateScriptAssetPatchOperation(
     SemanticId TargetAssetId,
     ScriptAssetPatchPrecondition Expected,
     string ReplacementAssetPath) : DeclarationPatchOperation;
+
+public sealed record UpdateScriptClassBasePatchOperation(
+    SemanticId TargetAssetId,
+    ScriptAssetPatchPrecondition Expected,
+    ScriptClassBindingDeclaration ExpectedClassBinding,
+    string? ReplacementBaseClassPath) : DeclarationPatchOperation;
 
 public sealed record RemoveScriptAssetPatchOperation(
     SemanticId TargetAssetId,
@@ -133,6 +140,7 @@ public sealed record DeclarationPatchDocument(
     IReadOnlyList<DeclarationPatchOperation> Operations)
 {
     public const string CurrentSchemaVersion = "unifiedscript.declaration-patch/v0.3";
+    public const string ClassBindingSchemaVersion = "unifiedscript.declaration-patch/v0.4";
     public const string EventSchemaVersion = "unifiedscript.declaration-patch/v0.2";
     public const string LegacySchemaVersion = "unifiedscript.declaration-patch/v0.1";
 
@@ -142,10 +150,13 @@ public sealed record DeclarationPatchDocument(
         IEnumerable<DeclarationPatchOperation> operations)
     {
         ArgumentNullException.ThrowIfNull(operations);
+        DeclarationPatchOperation[] operationArray = operations.ToArray();
         return DeclarationPatchJson.NormalizeAndValidate(new DeclarationPatchDocument(
-            CurrentSchemaVersion,
+            operationArray.Any(static operation => operation is UpdateScriptClassBasePatchOperation)
+                ? ClassBindingSchemaVersion
+                : CurrentSchemaVersion,
             sourceCompilationId,
             semanticConfigurationId,
-            operations.ToArray()));
+            operationArray));
     }
 }

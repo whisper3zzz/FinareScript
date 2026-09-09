@@ -18,8 +18,8 @@ remain outside the implementation scope.
 ## Decisions and remaining work
 
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
-native consumers. The existing declaration patch still only updates an asset
-path; adding a UI control alone would leave the UE parent unchanged.
+native consumers. The `updateClassBase` declaration patch edits that explicit
+attribute argument, while changing the saved UE parent remains separate work.
 
 The first contract carries optional `ClassBinding` data through Declaration IR
 and the compiled runtime declaration: opaque `Kind`, `BaseClassPath` and
@@ -33,6 +33,17 @@ remain readable. New semantics must not be accepted under a downgraded version.
 The binary asset prefix adds presence/kind/nullable paths before its states.
 Null means no explicit path directive; it must not become a guessed parent or
 generated class identity. Selecting a default UE parent can use its exact path.
+
+Declaration patches containing `updateClassBase` use
+`unifiedscript.declaration-patch/v0.4`; existing operations retain v0.3 when the
+new operation is absent. Old schemas reject the new operation. A base edit
+requires the current asset identity/path, compilation/configuration IDs and
+complete class binding as preconditions. Roslyn resolves the type's own
+attribute syntax across partial files; only `BaseClassPath` changes. CLR base
+types, generated owner path, class/member IDs and source ownership stay intact.
+Removing the argument clears the explicit directive and keeps the current UE
+parent; it does not request a default parent. Candidate source is reanalyzed
+before publication, and the existing Authoring workspace owns commit/undo/redo.
 
 Native JSON/binary materialization now carries the selected binding into the
 state migration report. The component's existing startup/reload preflight and
@@ -50,14 +61,47 @@ already permits compatible Rename with a stable ClassId. The factory's
 RequiredTargetClass and native behavior component also need reconciliation
 when a parent change leaves the original UnifiedScript native root family.
 
-Then add declaration editing and the native authoring control, using source
-preconditions and the existing publication/recovery workflow. Parent changes
+Next connect the native authoring control using the source patch preconditions
+and the existing publication/recovery workflow. Parent changes
 must preserve intentional inherited defaults and references, reject cycles and
 incompatible ownership, and handle dependent Blueprint classes transactionally.
 Parents requiring component composition remain part of C-4; the initial
 declaration transport is not completion of the base-class feature or milestone.
 
+The current Workbench transaction publishes managed source/artifacts/history
+before Slate queues the separate daily Build & Reload. Its successful response
+is therefore not a transaction across source and UE parent changes. The parent
+operation must cover both publication and UE mutation through the existing
+class-operation recovery journal; a later failed daily build cannot be presented
+as an atomic rollback. The native materializer currently restores only its
+variable declarations on apply failure, so reparent rollback also needs the old
+parent, graphs, component templates and deliberate descendant/instance defaults.
+The standalone CLI `apply-declaration-patch` entrypoint still constructs a
+single-source request. Native integration must retain the project sources,
+references and identity sidecars already used by the Workbench and C-3 class
+operations; it cannot reduce a partial class to that single-file entrypoint.
+
+Actor composition must reconcile the factory's `RequiredTargetClass` and its
+native `UnifiedScript` component when leaving `AUnifiedScriptActor`. Ordinary
+managed function dispatch currently finds the first Script Component on an
+Actor, while Blueprint overrides already select an exact active owner. Multiple
+composed behaviors need exact function-owner routing before a second carrier is
+introduced; preserve one owner per behavior rather than relying on component
+enumeration order.
+
 ## Relevant verification
+
+The source-patch checkpoint passed 50 focused managed regressions, including
+nine `ScriptClassBasePatchTests` cases plus the existing declaration patch JSON,
+C# declaration applier and Authoring workspace suites. These cover cross-file
+partial ownership, add/change/remove, constant-expression and separator comments,
+stable member IDs, mixed state/base edits, old-schema rejection, v0.4 old-only
+normalization, conflicting asset targets and workspace commit/undo/redo.
+The final log/TRX are
+`artifacts/m13-3c-4-class-composition/base-patch/base-patch-regression-final-2.*`.
+Builds used `UnifiedScriptSkipManagedHostStaging=true`. This managed-only edit
+did not require a new native build, deployment or CMD run; the prior native
+evidence below remains evidence for declaration transport and existing behavior.
 
 The managed declaration transport passed 98 focused lowering, JSON and
 compiled-chunk checks. Three additional selected cases cover v0.1/v0.2 downgrade
