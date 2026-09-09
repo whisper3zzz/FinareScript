@@ -570,7 +570,21 @@ producer/consumer work remains unfinished.
 Duplicate must also apply Roslyn edits to the copied declaration's constructor
 and self references: the current native text transform changes only the class
 declaration, while the factory now emits an explicit constructor. Original
-source and external consumers must retain their original target.
+source and external consumers must retain their original target. For partial
+types, copy every source containing a bound declaration of that type, with
+distinct destination paths and sidecar transitions; copying only the primary
+file can silently omit methods and state. Validate the complete candidate
+compilation before mutation, including conflicts caused by unrelated types in
+those copied files.
+
+The memory-only transition planner passes 11 focused tests in
+`artifacts/m13-3c-3-active-asset-operations/transition-planner-review-fix.trx`.
+They cover stale sidecars, repeated graph nodes, a real multi-file partial-type
+rename with in-place reference edits, and independent duplicate declarations
+that retain an external base's shared state identity. Unchanged duplicate type
+names, colliding destinations and syntax topology changes are rejected. This
+evidence covers the managed transformation only; the CLI boundary and native
+transaction are still being connected.
 
 ## Relevant verification
 
