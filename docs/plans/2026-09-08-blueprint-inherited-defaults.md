@@ -665,6 +665,23 @@ counts and lifecycle claims before World destruction. The remaining World stays
 active while its peer is destroyed, and the final managed World count returns
 to its initial value.
 
+Project-mode `identity-init <source.cs> --project <project.csproj>` now analyzes
+the actual Compile items, project defines, assembly name and references while
+writing only the selected source's sidecar. Existing sidecars on other partial
+sources are consumed without rewriting them. Unsafe output targets (the project,
+source files or another source's sidecar) and inputs excluded from Compile are
+rejected. Single-file initialization remains available. The active fixture's
+initial bootstrap uses this mode so constructors and Visual functions can live
+in separate partial sources with real cross-file references.
+
+Two focused CLI tests pass in `source-identity-init-final/source-identity-init.trx`.
+They include two partial files, nonempty existing identities preserved as raw
+bytes, project defines, and a separately built friend assembly supplied only by
+`--reference`; its internal API verifies the actual project assembly name is
+used. `source-identity-init-cli-build-final.log` reports a Release CLI build with
+zero warnings and errors. Native partial integration is the next validation;
+these CLI results do not establish its runtime behavior.
+
 C-3 remains open. The native partial-copy implementation needs a real multi-source
 integration fixture, explicit Blueprint override same-ClassId Rename still needs
 native acceptance, and the affected cooked path must use the current runtime

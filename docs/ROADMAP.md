@@ -58,7 +58,9 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   retains accumulated state across rename/reload, rejects a changed ClassId
   before stopping the old generation, runs the duplicate's ordinary Blueprint
   grandchild and restores script, lifecycle-claim and World counts on teardown.
-  Continue with partial-source integration. Explicit
+  Project-mode identity initialization now consumes the actual project sources,
+  defines and references while preserving other files' identities; focused CLI
+  tests pass. Continue with native partial-source integration. Explicit
   Blueprint override compatibility now retains the actual declaring owner's
   ClassId through managed type rename, with dynamic reload tests and the
   existing native event-reload regression passing; its same-ClassId native

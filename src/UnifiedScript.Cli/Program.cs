@@ -3264,10 +3264,15 @@ internal static class Program
         }
 
         string fullInputPath = Path.GetFullPath(options.InputPath);
+        if (options.ProjectPath is not null)
+        {
+            return RunProjectIdentityInit(options, fullInputPath);
+        }
+
         string logicalPath = GetLogicalInputPath(fullInputPath);
         MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
         var request = new CSharpCompilationRequest(
-            options.AssemblyName,
+            options.AssemblyName ?? "UnifiedScript.Analysis",
             [new CSharpSourceDocument(
                 logicalPath,
                 File.ReadAllText(fullInputPath),
@@ -3293,6 +3298,167 @@ internal static class Program
             IdentitySidecarJson.Serialize(result.IdentitySidecars[0]) + "\n");
         Console.WriteLine(fullOutputPath);
         return 0;
+    }
+
+    private static int RunProjectIdentityInit(IdentityOptions options, string fullInputPath)
+    {
+        string projectPath = Path.GetFullPath(options.ProjectPath!);
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        CSharpProjectLoadResult project = new CSharpProjectLoader().Load(
+            projectPath,
+            effectCatalog,
+            new CSharpProjectLoadOptions(
+                options.Configuration,
+                options.TargetFramework,
+                options.Restore,
+                options.Build,
+                DotNetPath: options.DotNetPath));
+
+        CSharpProjectSource[] matches = project.Sources
+            .Where(source => string.Equals(
+                Path.GetFullPath(source.Path),
+                fullInputPath,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            throw new ArgumentException(
+                $"Identity input '{fullInputPath}' must match exactly one Compile source in '{projectPath}' " +
+                $"(found {matches.Length}).");
+        }
+
+        CSharpProjectSource selectedSource = matches[0];
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        ValidateProjectIdentityOutputPath(fullOutputPath, projectPath, project.Sources, selectedSource);
+        CSharpSourceDocument[] sources = AttachIdentitySidecarsForInit(project, selectedSource);
+        string[] explicitReferences = options.ReferencePaths
+            .Select(Path.GetFullPath)
+            .ToArray();
+        string[] compileReferences = project.Request.ReferencePaths
+            .Concat(explicitReferences)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string[] runtimeReferences = project.Request.RuntimeReferencePaths
+            .Concat(explicitReferences)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName ?? project.Request.AssemblyName,
+            sources,
+            compileReferences,
+            effectCatalog,
+            project.Request.Settings,
+            runtimeReferences,
+            project.Request.IncludeDefaultReferences);
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        IdentitySidecarDocument? selectedIdentity = result.IdentitySidecars
+            .SingleOrDefault(sidecar => string.Equals(
+                sidecar.SourcePath,
+                selectedSource.LogicalPath,
+                StringComparison.Ordinal));
+        if (!result.Succeeded || selectedIdentity is null)
+        {
+            Console.Error.WriteLine("Identity initialization failed; no sidecar was written.");
+            return 2;
+        }
+
+        WriteAtomically(
+            fullOutputPath,
+            IdentitySidecarJson.Serialize(selectedIdentity) + "\n");
+        Console.WriteLine(fullOutputPath);
+        return 0;
+    }
+
+    private static void ValidateProjectIdentityOutputPath(
+        string outputPath,
+        string projectPath,
+        IReadOnlyList<CSharpProjectSource> projectSources,
+        CSharpProjectSource selectedSource)
+    {
+        if (string.Equals(outputPath, projectPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Identity output cannot overwrite the project file.");
+        }
+
+        string selectedSidecarPath = Path.GetFullPath(selectedSource.Path + ".usids");
+        foreach (CSharpProjectSource source in projectSources)
+        {
+            string sourcePath = Path.GetFullPath(source.Path);
+            string sidecarPath = Path.GetFullPath(sourcePath + ".usids");
+            if (string.Equals(outputPath, sourcePath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    $"Identity output cannot overwrite project source '{sourcePath}'.");
+            }
+            if (string.Equals(outputPath, sidecarPath, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(outputPath, selectedSidecarPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    $"Identity output cannot overwrite another project source sidecar '{sidecarPath}'.");
+            }
+        }
+    }
+
+    private static CSharpSourceDocument[] AttachIdentitySidecarsForInit(
+        CSharpProjectLoadResult project,
+        CSharpProjectSource selectedSource)
+    {
+        Dictionary<string, CSharpProjectSource> sourcesByLogicalPath = project.Sources
+            .ToDictionary(source => source.LogicalPath, StringComparer.Ordinal);
+        var attached = new List<CSharpSourceDocument>(project.Request.Sources.Count);
+        foreach (CSharpSourceDocument source in project.Request.Sources)
+        {
+            if (!sourcesByLogicalPath.TryGetValue(source.LogicalPath, out CSharpProjectSource? projectSource))
+            {
+                throw new ArgumentException(
+                    $"Project source '{source.LogicalPath}' was not present in the physical source map.");
+            }
+
+            if (string.Equals(
+                    Path.GetFullPath(projectSource.Path),
+                    Path.GetFullPath(selectedSource.Path),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                attached.Add(new CSharpSourceDocument(
+                    source.LogicalPath,
+                    source.Source,
+                    IdentitySidecarDocument.CreateEmpty(source.LogicalPath),
+                    source.IdentityPins));
+                continue;
+            }
+
+            string adjacentPath = projectSource.Path + ".usids";
+            if (!File.Exists(adjacentPath))
+            {
+                attached.Add(new CSharpSourceDocument(
+                    source.LogicalPath,
+                    source.Source,
+                    identityPins: source.IdentityPins));
+                continue;
+            }
+
+            IdentitySidecarDocument sidecar = LoadIdentitySidecar(adjacentPath);
+            if (!IdentityBelongsToProjectSource(
+                    new ProjectIdentityInput(Path.GetFullPath(adjacentPath), sidecar),
+                    projectSource.Path))
+            {
+                throw new ArgumentException(
+                    $"Identity sidecar '{adjacentPath}' does not belong to project source '{projectSource.Path}'.");
+            }
+
+            attached.Add(new CSharpSourceDocument(
+                sidecar.SourcePath,
+                source.Source,
+                sidecar,
+                source.IdentityPins));
+        }
+
+        return attached.ToArray();
     }
 
     private static int RunApply(IReadOnlyList<string> args, bool isPlan)
@@ -5638,13 +5804,32 @@ internal static class Program
 
         string inputPath = args[1];
         string? outputPath = null;
+        string? projectPath = null;
         string? effectCatalogPath = null;
         string? assemblyName = null;
+        string configuration = "Debug";
+        bool configurationSpecified = false;
+        string? targetFramework = null;
+        string? dotNetPath = null;
         var referencePaths = new List<string>();
+        bool restore = true;
+        bool build = true;
         int index = 2;
         while (index < args.Count)
         {
             string option = args[index++];
+            if (option is "--no-restore" or "--no-build")
+            {
+                if (option == "--no-restore")
+                {
+                    restore = false;
+                }
+                else
+                {
+                    build = false;
+                }
+                continue;
+            }
             if (index >= args.Count)
             {
                 return false;
@@ -5656,11 +5841,24 @@ internal static class Program
                 case "--out" when outputPath is null:
                     outputPath = value;
                     break;
+                case "--project" when projectPath is null:
+                    projectPath = value;
+                    break;
                 case "--effects" when effectCatalogPath is null:
                     effectCatalogPath = value;
                     break;
                 case "--assembly" when assemblyName is null:
                     assemblyName = value;
+                    break;
+                case "--configuration" when !configurationSpecified:
+                    configuration = value;
+                    configurationSpecified = true;
+                    break;
+                case "--framework" when targetFramework is null:
+                    targetFramework = value;
+                    break;
+                case "--dotnet" when dotNetPath is null:
+                    dotNetPath = value;
                     break;
                 case "--reference":
                     referencePaths.Add(value);
@@ -5675,12 +5873,28 @@ internal static class Program
             return false;
         }
 
+        if (projectPath is null &&
+            (targetFramework is not null ||
+             dotNetPath is not null ||
+             configurationSpecified ||
+             !restore ||
+             !build))
+        {
+            return false;
+        }
+
         options = new IdentityOptions(
             inputPath,
             outputPath,
+            projectPath,
             effectCatalogPath,
-            assemblyName ?? "UnifiedScript.Analysis",
-            referencePaths);
+            assemblyName,
+            referencePaths,
+            configuration,
+            targetFramework,
+            dotNetPath,
+            restore,
+            build);
         return true;
     }
 
@@ -6373,7 +6587,7 @@ internal static class Program
         "  unifiedscript adopt <Game.uproject> --rollback [--transaction <id>]\n" +
         "  unifiedscript doctor <Game.uproject> [--engine-root <directory>] [--report <doctor.json>]\n" +
         "  unifiedscript guide <index|first-project|recipes> [--sdk-root <directory>] [--json]\n" +
-        "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
+        "  unifiedscript identity-init <input.cs> --out <identity.usids> [--project <project.csproj> --configuration <Debug|Release> --framework <tfm> --no-restore --no-build --dotnet <path>] [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript semantic-diff <baseline.graph.json> <target.graph.json> --out <diff.json> [--fail-on-change]\n" +
@@ -6725,9 +6939,15 @@ internal static class Program
     private sealed record IdentityOptions(
         string InputPath,
         string OutputPath,
+        string? ProjectPath,
         string? EffectCatalogPath,
-        string AssemblyName,
-        IReadOnlyList<string> ReferencePaths);
+        string? AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        string Configuration,
+        string? TargetFramework,
+        string? DotNetPath,
+        bool Restore,
+        bool Build);
 
     private sealed record RoundTripOptions(
         string VisualSourcePath,

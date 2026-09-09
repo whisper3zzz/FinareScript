@@ -119,19 +119,10 @@ try {
         }
         Get-ChildItem -LiteralPath $declarationOutput -Filter '*.usids' -File -ErrorAction SilentlyContinue | ForEach-Object { [IO.File]::Delete((ConvertTo-ExtendedPath $_.FullName)) }
         if ($existingSidecars.Count -eq 0) {
-            $hostReferences = @(
-                'UnifiedScript.Core.dll',
-                'UnifiedScript.CSharp.dll',
-                'UnifiedScript.Graph.dll',
-                'UnifiedScript.Runtime.dll',
-                'UnifiedScript.Semantics.dll',
-                'UnifiedScript.Unreal.dll'
-            ) | ForEach-Object { Join-Path $HostDirectory $_ }
             foreach ($source in $sourceCandidates) {
                 $sourceIdentityPath = "$($source.FullName).usids"
-                & $DotNet $CliAssembly identity-init $source.FullName --out $sourceIdentityPath `
-                    --assembly 'ActiveClassAssetOperationsFixture' `
-                    ($hostReferences | ForEach-Object { '--reference'; $_ })
+                & $DotNet $CliAssembly identity-init $source.FullName --project $projectPath `
+                    --out $sourceIdentityPath --configuration Release --no-restore --no-build --dotnet $DotNet
                 if ($LASTEXITCODE -ne 0) {
                     throw "Initial active class identity initialization failed for '$($source.FullName)' with exit code $LASTEXITCODE."
                 }
