@@ -34,9 +34,13 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   stop/reparent/restart, including after-save rollback, without automatic
   reactivation during reinstancing. Authoring-only undo records and final
   reinstancing notifications preserve the live instances through recovery.
-  Next complete persistent value/reference validation, connect
-  normal authoring publication, then extend component composition through the
-  existing asset workflow.
+  A persistent two-parent Actor hierarchy now preserves scalar, object and
+  collection follow/override values through reparenting, actual package unload
+  and reload. External object keys remain searchable in Set/Map, incompatible
+  reference-type changes reject before mutation, and reloaded descendants run
+  the saved managed state in two Worlds. Next cover combined parent/declaration
+  edits and connect normal authoring publication, then extend component
+  composition through the existing asset workflow.
   Implementation decisions are in `docs/plans/2026-09-09-class-composition.md`.
 - Latest inheritance checkpoint: **M13.3C-3 complete**.
   The real Actor factory preserves the exact Script Asset, native component

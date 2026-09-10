@@ -100,9 +100,9 @@ committed. Failed receipt writes must preserve the prior in-memory phase as well
 as the pending disk receipt; cleanup errors must not be cleared by a later
 successful transaction-finalization call.
 
-Complete parent-value acceptance still needs a persistent two-parent hierarchy
-with scalar, collection and external-reference overrides on the owner,
-descendants and stopped instances. The primitive currently covers inherited
+The persistent two-parent Actor fixture now checks scalar, collection and
+external-reference follow/override values across owner and descendant CDOs,
+stopped instances and actual package reload. The primitive also covers inherited
 string/bitfield values, owner-local state rename rollback and component defaults
 on an Actor CDO hierarchy. Typed property-bag snapshots supplement UE reinstancing
 and compare exact reflected types before original mutation. Owned components
@@ -179,6 +179,17 @@ publication must join that transaction boundary rather than treating a later
 build failure as a successful source edit. Do not leave the private
 `GEditor->Trans`/`GUndo` swap installed while awaiting an asynchronous Workbench
 HTTP response; the current native isolation scope is synchronous.
+
+The native parent preview must use the analyzed candidate declaration bound to
+the Workbench preview token. The current authoring-preview v0.3 response exposes
+source/graph-layout differences, but not that candidate declaration; reading the
+existing declaration file would instead validate the old published program.
+Keep the selected asset identity, baseline revision and transaction identity
+bound to the candidate across native preflight and publication. The ordinary
+`HandlePreviewResponse` path currently dispatches the source commit immediately
+after diff confirmation, so parent edits need an explicit native participant
+before reusing that dispatch path. No parent control exists in the native
+authoring surface yet.
 
 Actor composition must reconcile the factory's `RequiredTargetClass` and its
 native `UnifiedScript` component when leaving `AUnifiedScriptActor`. Ordinary
@@ -260,11 +271,38 @@ script, lifecycle-claim and World counts return to baseline on teardown.
 
 Only the managed owner package is saved by the primitive test; its ordinary
 parents and descendants are transient. The ActiveWorlds fixture saves the
-hierarchy but does not unload/reload it after reparenting. Persistent hierarchy
-reload, complete parent-change external-reference cases, normal-authoring
-publication and cooked acceptance remain unfinished. Component-family parent
-changes are not established by the Actor-only parent tests. This checkpoint
-does not close C-4.
+hierarchy but does not unload/reload it after reparenting. The new
+`ParentChange.PersistentValues` fixture closes that specific Actor persistence
+gap with two saved ordinary parents and three independent external asset
+packages. Owner, child and grandchild have literal expected follower/override
+combinations for an integer, an object reference, object array/set and
+object-keyed integer map. Set/Map checks use the actual hash lookup APIs with
+property-initialized key storage. Stopped live instances preserve their distinct
+managed values and current inherited values, component Outer/archetype and
+ScriptAsset. A candidate changing only `ParentAsset` from object to string
+rejects in both validate-only and apply, naming the explicit reference override;
+the current CDO identities, values and saved hierarchy bytes remain unchanged.
+
+After saving the hierarchy, ScriptAsset and external assets, the fixture destroys
+the original Worlds, releases replacement roots, unloads the packages and runs
+GC. Weak references prove the old parents, owner, descendants, ScriptAsset and
+external assets are gone. Exact-path reload reconstructs the B-parent hierarchy
+and resolves every reference to the reloaded asset. Two new Worlds execute the
+persisted managed scalar/collection values, checked by complete state, signature
+markers and native actor yaw; script, lifecycle-claim and World counts return to
+baseline. These are saved class/asset packages, not saved World maps or savegames.
+
+Editor build 28 and `editor-parent-change-persistent-values-2.log` passed this
+test with one-test queue completion. The first CMD run is retained: its abstract
+`UDataAsset` instances could not be saved. The fixture now constructs concrete
+Engine `UMeshDeformerCollection` assets while retaining `UDataAsset` property
+types. This checkpoint adds tests only; production preservation code has not
+changed since the preceding ActiveWorlds verification.
+
+Combined parent/declaration-default edits, reference preservation through mixed
+edit rollback, normal-authoring publication and cooked acceptance remain
+unfinished. Component-family parent changes are not established by the
+Actor-only parent tests. This checkpoint does not close C-4.
 
 Shared journal changes are committed locally as `4e3b45e`. The earlier
 `editor-parent-change-transactions-1.log` records successful `OperationJournal`

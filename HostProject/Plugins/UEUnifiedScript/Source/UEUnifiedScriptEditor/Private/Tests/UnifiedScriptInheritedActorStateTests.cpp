@@ -3,13 +3,16 @@
 #include "UnifiedScriptBlueprintClassMaterializer.h"
 
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/DataAsset.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "Animation/MeshDeformerCollection.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "EdGraphSchema_K2.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -228,6 +231,182 @@ void SetMap(const FMapProperty& Property, UObject& Object, std::initializer_list
         Value->SetPropertyValue(Helper.GetValuePtr(Index), Pair.Value);
     }
     Helper.Rehash();
+}
+
+bool AddObjectParentVariables(UBlueprint& Blueprint, const bool bIncompatibleAsset)
+{
+    FEdGraphPinType Scalar;
+    Scalar.PinCategory = UEdGraphSchema_K2::PC_Int;
+
+    FEdGraphPinType Object;
+    Object.PinCategory = UEdGraphSchema_K2::PC_Object;
+    Object.PinSubCategoryObject = UDataAsset::StaticClass();
+
+    FEdGraphPinType Array = Object;
+    Array.ContainerType = EPinContainerType::Array;
+    FEdGraphPinType Set = Object;
+    Set.ContainerType = EPinContainerType::Set;
+    FEdGraphPinType Map = Object;
+    Map.PinValueType.TerminalCategory = UEdGraphSchema_K2::PC_Int;
+    Map.ContainerType = EPinContainerType::Map;
+
+    FEdGraphPinType IncompatibleObject = Object;
+    IncompatibleObject.PinCategory = bIncompatibleAsset
+        ? UEdGraphSchema_K2::PC_String
+        : UEdGraphSchema_K2::PC_Object;
+    if (bIncompatibleAsset)
+    {
+        IncompatibleObject.PinSubCategoryObject = nullptr;
+    }
+
+    if (!FBlueprintEditorUtils::AddMemberVariable(&Blueprint, TEXT("ParentCount"), Scalar, TEXT("0")) ||
+        !FBlueprintEditorUtils::AddMemberVariable(&Blueprint, TEXT("ParentAsset"), IncompatibleObject))
+    {
+        return false;
+    }
+    return
+        FBlueprintEditorUtils::AddMemberVariable(&Blueprint, TEXT("ParentAssets"), Array) &&
+        FBlueprintEditorUtils::AddMemberVariable(&Blueprint, TEXT("ParentAssetSet"), Set) &&
+        FBlueprintEditorUtils::AddMemberVariable(&Blueprint, TEXT("ParentAssetMap"), Map);
+}
+
+void SetObjectArray(const FArrayProperty& Property, UObject& Object, TConstArrayView<UObject*> Values)
+{
+    FScriptArrayHelper Helper(&Property, Property.ContainerPtrToValuePtr<void>(&Object));
+    Helper.EmptyValues();
+    const FObjectPropertyBase* Inner = CastFieldChecked<FObjectPropertyBase>(Property.Inner);
+    for (UObject* Value : Values)
+    {
+        const int32 Index = Helper.AddValue();
+        Inner->SetObjectPropertyValue(Helper.GetRawPtr(Index), Value);
+    }
+}
+
+void SetObjectSetValues(const FSetProperty& Property, UObject& Object, TConstArrayView<UObject*> Values);
+
+void SetObjectSet(const FSetProperty& Property, UObject& Object, std::initializer_list<UObject*> Values)
+{
+    TArray<UObject*> Materialized;
+    for (UObject* Value : Values)
+    {
+        Materialized.Add(Value);
+    }
+    SetObjectSetValues(Property, Object, Materialized);
+}
+
+void SetObjectSetValues(const FSetProperty& Property, UObject& Object, TConstArrayView<UObject*> Values)
+{
+    FScriptSetHelper Helper(&Property, Property.ContainerPtrToValuePtr<void>(&Object));
+    Helper.EmptyElements();
+    const FObjectPropertyBase* Element = CastFieldChecked<FObjectPropertyBase>(Property.ElementProp);
+    for (UObject* Value : Values)
+    {
+        const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        Element->SetObjectPropertyValue(Helper.GetElementPtr(Index), Value);
+    }
+    Helper.Rehash();
+}
+
+void SetObjectIntMapValues(
+    const FMapProperty& Property,
+    UObject& Object,
+    TConstArrayView<TPair<UObject*, int32>> Values)
+{
+    FScriptMapHelper Helper(&Property, Property.ContainerPtrToValuePtr<void>(&Object));
+    Helper.EmptyValues();
+    const FObjectPropertyBase* Key = CastFieldChecked<FObjectPropertyBase>(Property.KeyProp);
+    const FIntProperty* Value = CastFieldChecked<FIntProperty>(Property.ValueProp);
+    for (const TPair<UObject*, int32>& Pair : Values)
+    {
+        const int32 Index = Helper.AddDefaultValue_Invalid_NeedsRehash();
+        Key->SetObjectPropertyValue(Helper.GetKeyPtr(Index), Pair.Key);
+        Value->SetPropertyValue(Helper.GetValuePtr(Index), Pair.Value);
+    }
+    Helper.Rehash();
+}
+
+void SetObjectIntMap(
+    const FMapProperty& Property,
+    UObject& Object,
+    std::initializer_list<TPair<UObject*, int32>> Values)
+{
+    TArray<TPair<UObject*, int32>> Materialized;
+    for (const TPair<UObject*, int32>& Pair : Values)
+    {
+        Materialized.Add(Pair);
+    }
+    SetObjectIntMapValues(Property, Object, Materialized);
+}
+
+bool SameObjectArray(const FArrayProperty& Property, const UObject& Object, TConstArrayView<UObject*> Expected)
+{
+    FScriptArrayHelper Helper(
+        &Property,
+        Property.ContainerPtrToValuePtr<void>(const_cast<UObject*>(&Object)));
+    const FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Property.Inner);
+    if (Inner == nullptr || Helper.Num() != Expected.Num())
+    {
+        return false;
+    }
+    for (int32 Index = 0; Index < Helper.Num(); ++Index)
+    {
+        if (Inner->GetObjectPropertyValue(Helper.GetRawPtr(Index)) != Expected[Index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SameObjectSet(const FSetProperty& Property, const UObject& Object, TConstArrayView<UObject*> Expected)
+{
+    const FScriptSetHelper Helper(
+        &Property,
+        Property.ContainerPtrToValuePtr<void>(const_cast<UObject*>(&Object)));
+    const FObjectPropertyBase* Element = CastField<FObjectPropertyBase>(Property.ElementProp);
+    if (Element == nullptr || Helper.Num() != Expected.Num())
+    {
+        return false;
+    }
+    for (UObject* Value : Expected)
+    {
+        FDefaultConstructedPropertyElement KeyStorage(Element);
+        Element->SetObjectPropertyValue(KeyStorage.GetObjAddress(), Value);
+        const int32 FoundIndex = Helper.FindElementIndexFromHash(KeyStorage.GetObjAddress());
+        if (FoundIndex == INDEX_NONE)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SameObjectIntMap(
+    const FMapProperty& Property,
+    const UObject& Object,
+    TConstArrayView<TPair<UObject*, int32>> Expected)
+{
+    FScriptMapHelper Helper(
+        &Property,
+        Property.ContainerPtrToValuePtr<void>(const_cast<UObject*>(&Object)));
+    const FObjectPropertyBase* Key = CastField<FObjectPropertyBase>(Property.KeyProp);
+    const FIntProperty* Value = CastField<FIntProperty>(Property.ValueProp);
+    if (Key == nullptr || Value == nullptr || Helper.Num() != Expected.Num())
+    {
+        return false;
+    }
+    for (const TPair<UObject*, int32>& Pair : Expected)
+    {
+        FDefaultConstructedPropertyElement KeyStorage(Key);
+        Key->SetObjectPropertyValue(KeyStorage.GetObjAddress(), Pair.Key);
+        const int32 Index = Helper.FindMapPairIndexFromHash(KeyStorage.GetObjAddress());
+        if (Index == INDEX_NONE ||
+            Value->GetPropertyValue(Helper.GetValuePtr(Index)) != Pair.Value)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 TMap<int32, int32> GetMap(const FMapProperty& Property, const UObject& Object)
@@ -2230,6 +2409,989 @@ bool FUnifiedScriptInheritedActorStateParentChangeActiveWorldsTest::RunTest(cons
     Test.TestEqual(TEXT("ActiveWorlds second host releases managed script after actor teardown"), Second.Host->GetManagedScriptCount(), 0);
     Test.TestEqual(TEXT("ActiveWorlds first host releases claims after actor teardown"), First.Host->GetGameplayLifecycleClaimCount(), 0);
     Test.TestEqual(TEXT("ActiveWorlds second host releases claims after actor teardown"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+    DestroyWorld(First);
+    DestroyWorld(Second);
+    return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptInheritedActorStateParentChangePersistentValuesTest,
+    "UnifiedScript.Unreal.ScriptClass.ParentChange.PersistentValues",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptInheritedActorStateParentChangePersistentValuesTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::InheritedActorStateTests;
+    FAutomationTestBase& Test = *this;
+
+    FString ConfigPath;
+    if (!FParse::Value(FCommandLine::Get(), TEXT("-UnifiedScriptParentChangeFixture="), ConfigPath))
+    {
+        ConfigPath = FPaths::Combine(
+            FPaths::ProjectDir(),
+            TEXT("../artifacts/m13-3c-4-class-composition/parent-change/runtime-fixture/BlueprintInheritedStateFixture.config.json"));
+    }
+    ConfigPath = FPaths::ConvertRelativePathToFull(ConfigPath);
+
+    FFixtureConfig Config;
+    FString Error;
+    if (!Test.TestTrue(TEXT("Persistent parent-values fixture config is valid"), ReadConfig(ConfigPath, Config, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    FString Declaration;
+    if (!Test.TestTrue(TEXT("Persistent parent-values declaration is readable"),
+            FFileHelper::LoadFileToString(Declaration, *Config.DeclarationPath)))
+    {
+        return false;
+    }
+    FGuid ClassId;
+    if (!Test.TestTrue(TEXT("Persistent parent-values ScriptClassId is valid"),
+            ParseScriptClassId(Config.ScriptClassId, ClassId)))
+    {
+        return false;
+    }
+
+    const FString Prefix = Config.PackageDirectory;
+    const FString ParentAPackageName = Prefix + TEXT("/ParentValuesA");
+    const FString ParentBPackageName = Prefix + TEXT("/ParentValuesB");
+    const FString BasePackageName = Prefix + TEXT("/InheritedStateBase");
+    const FString ChildPackageName = Prefix + TEXT("/InheritedStateChild");
+    const FString GrandchildPackageName = Prefix + TEXT("/InheritedStateGrandchild");
+    const FString ScriptAssetPackageName = Prefix + TEXT("/InheritedStateScriptAsset");
+    const FString RefAPackageName = Prefix + TEXT("/ParentValuesRefA");
+    const FString RefBPackageName = Prefix + TEXT("/ParentValuesRefB");
+    const FString RefCPackageName = Prefix + TEXT("/ParentValuesRefC");
+    const FString BadParentPackageName = Prefix + TEXT("/ParentValuesBad");
+    const TArray<FString> PackageNames{
+        ParentAPackageName,
+        ParentBPackageName,
+        BasePackageName,
+        ChildPackageName,
+        GrandchildPackageName,
+        ScriptAssetPackageName,
+        RefAPackageName,
+        RefBPackageName,
+        RefCPackageName,
+        BadParentPackageName};
+    TArray<FString> PackageFilenames;
+    for (const FString& PackageName : PackageNames)
+    {
+        PackageFilenames.Add(FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension()));
+    }
+    for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+    {
+        if (FindPackage(nullptr, *PackageNames[Index]) != nullptr ||
+            IFileManager::Get().FileExists(*PackageFilenames[Index]))
+        {
+            AddError(FString::Printf(
+                TEXT("Persistent parent-values path is already occupied: %s."), *PackageNames[Index]));
+            return false;
+        }
+    }
+
+    UPackage* ParentAPackage = nullptr;
+    UPackage* ParentBPackage = nullptr;
+    UPackage* BasePackage = nullptr;
+    UPackage* ChildPackage = nullptr;
+    UPackage* GrandchildPackage = nullptr;
+    UPackage* ScriptAssetPackage = nullptr;
+    UPackage* RefAPackage = nullptr;
+    UPackage* RefBPackage = nullptr;
+    UPackage* RefCPackage = nullptr;
+    UPackage* BadParentPackage = nullptr;
+    UBlueprint* ParentABlueprint = nullptr;
+    UBlueprint* ParentBBlueprint = nullptr;
+    UUnifiedScriptBlueprint* BaseBlueprint = nullptr;
+    UBlueprint* ChildBlueprint = nullptr;
+    UBlueprint* GrandchildBlueprint = nullptr;
+    UBlueprint* BadParentBlueprint = nullptr;
+    UUnifiedScriptAsset* ScriptAsset = nullptr;
+    UDataAsset* RefA = nullptr;
+    UDataAsset* RefB = nullptr;
+    UDataAsset* RefC = nullptr;
+    FWorldFixture First;
+    FWorldFixture Second;
+    TMap<FObjectKey, FObjectKey> ReinstancedKeys;
+    TMap<FObjectKey, TStrongObjectPtr<UObject>> ReinstancedTargets;
+    const int32 InitialWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+
+    ON_SCOPE_EXIT
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        ParentABlueprint = nullptr;
+        ParentBBlueprint = nullptr;
+        BaseBlueprint = nullptr;
+        ChildBlueprint = nullptr;
+        GrandchildBlueprint = nullptr;
+        BadParentBlueprint = nullptr;
+        ScriptAsset = nullptr;
+        RefA = nullptr;
+        RefB = nullptr;
+        RefC = nullptr;
+        ReinstancedTargets.Empty();
+        ReinstancedKeys.Empty();
+        CollectGarbage(RF_NoFlags);
+        Test.TestTrue(TEXT("Persistent parent-values packages unload during cleanup"), UnloadByName(PackageNames));
+        CollectGarbage(RF_NoFlags);
+        for (const FString& Filename : PackageFilenames)
+        {
+            if (IFileManager::Get().FileExists(*Filename))
+            {
+                Test.TestTrue(
+                    *FString::Printf(TEXT("Deletes persistent parent-values package %s"), *Filename),
+                    IFileManager::Get().Delete(*Filename, false, true, true));
+            }
+        }
+        Test.TestEqual(
+            TEXT("Persistent parent-values cleanup restores managed World count"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialWorldCount);
+    };
+
+    RefAPackage = CreatePackage(*RefAPackageName);
+    RefBPackage = CreatePackage(*RefBPackageName);
+    RefCPackage = CreatePackage(*RefCPackageName);
+    RefA = NewObject<UMeshDeformerCollection>(RefAPackage, TEXT("ParentValuesRefA"), RF_Public | RF_Standalone);
+    RefB = NewObject<UMeshDeformerCollection>(RefBPackage, TEXT("ParentValuesRefB"), RF_Public | RF_Standalone);
+    RefC = NewObject<UMeshDeformerCollection>(RefCPackage, TEXT("ParentValuesRefC"), RF_Public | RF_Standalone);
+    if (!Test.TestNotNull(TEXT("Creates persistent reference asset A"), RefA) ||
+        !Test.TestNotNull(TEXT("Creates persistent reference asset B"), RefB) ||
+        !Test.TestNotNull(TEXT("Creates persistent reference asset C"), RefC))
+    {
+        return false;
+    }
+
+    ParentABlueprint = CreateOrdinaryBlueprint(
+        AUnifiedScriptActor::StaticClass(), ParentAPackageName, TEXT("ParentValuesA"), ParentAPackage);
+    ParentBBlueprint = CreateOrdinaryBlueprint(
+        AUnifiedScriptActor::StaticClass(), ParentBPackageName, TEXT("ParentValuesB"), ParentBPackage);
+    if (!Test.TestNotNull(TEXT("Creates persistent ordinary parent A"), ParentABlueprint) ||
+        !Test.TestNotNull(TEXT("Creates persistent ordinary parent B"), ParentBBlueprint) ||
+        !Test.TestTrue(TEXT("Adds persistent parent A object variables"), AddObjectParentVariables(*ParentABlueprint, false)) ||
+        !Test.TestTrue(TEXT("Adds persistent parent B object variables"), AddObjectParentVariables(*ParentBBlueprint, false)))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ParentABlueprint);
+    FKismetEditorUtilities::CompileBlueprint(ParentBBlueprint);
+    if (!Test.TestEqual(TEXT("Persistent ordinary parent A compiles"), ParentABlueprint->Status, BS_UpToDate) ||
+        !Test.TestEqual(TEXT("Persistent ordinary parent B compiles"), ParentBBlueprint->Status, BS_UpToDate) ||
+        !Test.TestNotNull(TEXT("Persistent ordinary parent A GeneratedClass exists"), ParentABlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Persistent ordinary parent B GeneratedClass exists"), ParentBBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+
+    struct FParentValues
+    {
+        int32 Count = 0;
+        UObject* Asset = nullptr;
+        TArray<UObject*> Assets;
+        TArray<UObject*> AssetSet;
+        TArray<TPair<UObject*, int32>> AssetMap;
+    };
+    const FParentValues ValuesA{10, RefA, {RefA, RefB}, {RefA, RefC}, {{RefA, 101}, {RefB, 102}}};
+    const FParentValues ValuesB{20, RefB, {RefB, RefC}, {RefB, RefA}, {{RefB, 201}, {RefC, 202}}};
+    const auto SetParentValues = [&](UClass& Class, const FParentValues& Values) -> bool
+    {
+        UObject* Cdo = Class.GetDefaultObject();
+        const FIntProperty* Count = FindFProperty<FIntProperty>(&Class, TEXT("ParentCount"));
+        const FObjectPropertyBase* Asset = FindFProperty<FObjectPropertyBase>(&Class, TEXT("ParentAsset"));
+        const FArrayProperty* Assets = FindFProperty<FArrayProperty>(&Class, TEXT("ParentAssets"));
+        const FSetProperty* AssetSet = FindFProperty<FSetProperty>(&Class, TEXT("ParentAssetSet"));
+        const FMapProperty* AssetMap = FindFProperty<FMapProperty>(&Class, TEXT("ParentAssetMap"));
+        if (Cdo == nullptr || Count == nullptr || Asset == nullptr || Assets == nullptr ||
+            AssetSet == nullptr || AssetMap == nullptr)
+        {
+            return false;
+        }
+        Count->SetPropertyValue_InContainer(Cdo, Values.Count);
+        Asset->SetObjectPropertyValue_InContainer(Cdo, Values.Asset);
+        SetObjectArray(*Assets, *Cdo, Values.Assets);
+        SetObjectSetValues(*AssetSet, *Cdo, Values.AssetSet);
+        SetObjectIntMapValues(*AssetMap, *Cdo, Values.AssetMap);
+        return true;
+    };
+    const auto CheckParentValues = [&](UClass& Class, UObject& Cdo, const FParentValues& Expected, const TCHAR* Label) -> bool
+    {
+        const FIntProperty* Count = FindFProperty<FIntProperty>(&Class, TEXT("ParentCount"));
+        const FObjectPropertyBase* Asset = FindFProperty<FObjectPropertyBase>(&Class, TEXT("ParentAsset"));
+        const FArrayProperty* Assets = FindFProperty<FArrayProperty>(&Class, TEXT("ParentAssets"));
+        const FSetProperty* AssetSet = FindFProperty<FSetProperty>(&Class, TEXT("ParentAssetSet"));
+        const FMapProperty* AssetMap = FindFProperty<FMapProperty>(&Class, TEXT("ParentAssetMap"));
+        if (!Test.TestNotNull(*FString::Printf(TEXT("%s ParentCount property"), Label), Count) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s ParentAsset property"), Label), Asset) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s ParentAssets property"), Label), Assets) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s ParentAssetSet property"), Label), AssetSet) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s ParentAssetMap property"), Label), AssetMap))
+        {
+            return false;
+        }
+        bool bValid = Test.TestEqual(*FString::Printf(TEXT("%s ParentCount"), Label), Count->GetPropertyValue_InContainer(&Cdo), Expected.Count);
+        bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ParentAsset"), Label), Asset->GetObjectPropertyValue_InContainer(&Cdo) == Expected.Asset);
+        bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ParentAssets"), Label), SameObjectArray(*Assets, Cdo, Expected.Assets));
+        bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ParentAssetSet"), Label), SameObjectSet(*AssetSet, Cdo, Expected.AssetSet));
+        bValid &= Test.TestTrue(*FString::Printf(TEXT("%s ParentAssetMap"), Label), SameObjectIntMap(*AssetMap, Cdo, Expected.AssetMap));
+        return bValid;
+    };
+    if (!Test.TestTrue(TEXT("Configures persistent parent A defaults"), SetParentValues(*ParentABlueprint->GeneratedClass.Get(), ValuesA)) ||
+        !Test.TestTrue(TEXT("Configures persistent parent B defaults"), SetParentValues(*ParentBBlueprint->GeneratedClass.Get(), ValuesB)))
+    {
+        return false;
+    }
+
+    BaseBlueprint = CreateScriptBlueprint(
+        ParentABlueprint->GeneratedClass.Get(), BasePackageName, TEXT("InheritedStateBase"), BasePackage);
+    if (!Test.TestNotNull(TEXT("Creates persistent managed owner Blueprint"), BaseBlueprint) ||
+        !Test.TestNotNull(TEXT("Persistent owner GeneratedClass exists"), BaseBlueprint->GeneratedClass.Get()) ||
+        !Test.TestTrue(TEXT("Persistent owner keeps configured generated class path"),
+            FSoftClassPath(BaseBlueprint->GeneratedClass.Get()).ToString().Equals(Config.ActorClassPath, ESearchCase::CaseSensitive)))
+    {
+        return false;
+    }
+    ScriptAssetPackage = CreatePackage(*ScriptAssetPackageName);
+    ScriptAsset = NewObject<UUnifiedScriptAsset>(
+        ScriptAssetPackage, TEXT("InheritedStateScriptAsset"), RF_Public | RF_Standalone);
+    if (!Test.TestNotNull(TEXT("Creates persistent ScriptAsset"), ScriptAsset))
+    {
+        return false;
+    }
+    ScriptAsset->ScriptClassId = ClassId;
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass.Get());
+    ScriptAsset->CompiledChunkPath = Config.ChunkPath;
+    ScriptAsset->ScriptAssemblyPath = Config.AssemblyPath;
+    ScriptAsset->ScriptTypeName = Config.ScriptTypeName;
+    ScriptAsset->DeclarationPath = Config.DeclarationPath;
+    ScriptAsset->DeclarationAssetPath = Config.DeclarationAssetPath;
+    BaseBlueprint->ScriptAsset = ScriptAsset;
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!Test.TestTrue(TEXT("Persistent declaration materializes"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset, *BaseBlueprint, Declaration, false, SyncResult, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(BaseBlueprint);
+    if (!Test.TestEqual(TEXT("Persistent managed owner compiles"), BaseBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    AUnifiedScriptActor* BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Persistent managed owner CDO exists"), BaseCdo) ||
+        !Test.TestNotNull(TEXT("Persistent managed owner component exists"), BaseCdo->GetUnifiedScriptComponent()))
+    {
+        return false;
+    }
+    BaseCdo->GetUnifiedScriptComponent()->ScriptAsset = ScriptAsset;
+    BaseCdo->GetUnifiedScriptComponent()->bStartAutomatically = true;
+    BaseCdo->GetUnifiedScriptComponent()->bTickAutomatically = true;
+    const FIntProperty* BaseSeed = FindFProperty<FIntProperty>(BaseBlueprint->GeneratedClass, TEXT("Seed"));
+    const FArrayProperty* BaseValues = FindFProperty<FArrayProperty>(BaseBlueprint->GeneratedClass, TEXT("Values"));
+    const FSetProperty* BaseEnabled = FindFProperty<FSetProperty>(BaseBlueprint->GeneratedClass, TEXT("Enabled"));
+    const FMapProperty* BaseWeights = FindFProperty<FMapProperty>(BaseBlueprint->GeneratedClass, TEXT("Weights"));
+    const FState BaseState{41, {42, 43}, {44, 45}, {{46, 47}, {48, 49}}, 0};
+    if (!Test.TestNotNull(TEXT("Persistent owner Seed exists"), BaseSeed) ||
+        !Test.TestNotNull(TEXT("Persistent owner Values exists"), BaseValues) ||
+        !Test.TestNotNull(TEXT("Persistent owner Enabled exists"), BaseEnabled) ||
+        !Test.TestNotNull(TEXT("Persistent owner Weights exists"), BaseWeights))
+    {
+        return false;
+    }
+    BaseSeed->SetPropertyValue_InContainer(BaseCdo, BaseState.Seed);
+    SetArray(*BaseValues, *BaseCdo, BaseState.Values);
+    SetSet(*BaseEnabled, *BaseCdo, {44, 45});
+    SetMap(*BaseWeights, *BaseCdo, {{46, 47}, {48, 49}});
+    const auto SetCompleteState = [](UObject& Object, const FState& State) -> bool
+    {
+        const FIntProperty* Seed = FindFProperty<FIntProperty>(Object.GetClass(), TEXT("Seed"));
+        const FArrayProperty* Values = FindFProperty<FArrayProperty>(Object.GetClass(), TEXT("Values"));
+        const FSetProperty* Enabled = FindFProperty<FSetProperty>(Object.GetClass(), TEXT("Enabled"));
+        const FMapProperty* Weights = FindFProperty<FMapProperty>(Object.GetClass(), TEXT("Weights"));
+        if (Seed == nullptr || Values == nullptr || Enabled == nullptr || Weights == nullptr || State.Enabled.Num() != 2)
+        {
+            return false;
+        }
+        Seed->SetPropertyValue_InContainer(&Object, State.Seed);
+        SetArray(*Values, Object, State.Values);
+        SetSet(*Enabled, Object, {State.Enabled.Array()[0], State.Enabled.Array()[1]});
+        const TArray<TPair<int32, int32>> Pairs = State.Weights.Array();
+        if (Pairs.Num() != 2)
+        {
+            return false;
+        }
+        SetMap(*Weights, Object, {{Pairs[0].Key, Pairs[0].Value}, {Pairs[1].Key, Pairs[1].Value}});
+        return true;
+    };
+    const FObjectPropertyBase* BaseParentAsset = FindFProperty<FObjectPropertyBase>(BaseBlueprint->GeneratedClass, TEXT("ParentAsset"));
+    const FMapProperty* BaseParentAssetMap = FindFProperty<FMapProperty>(BaseBlueprint->GeneratedClass, TEXT("ParentAssetMap"));
+    if (!Test.TestNotNull(TEXT("Persistent owner ParentAsset property exists"), BaseParentAsset) ||
+        !Test.TestNotNull(TEXT("Persistent owner ParentAssetMap property exists"), BaseParentAssetMap))
+    {
+        return false;
+    }
+    BaseParentAsset->SetObjectPropertyValue_InContainer(BaseCdo, RefA);
+    SetObjectIntMap(*BaseParentAssetMap, *BaseCdo, {{RefA, 901}});
+    const FParentValues OwnerValuesA{ValuesA.Count, ValuesA.Asset, ValuesA.Assets, ValuesA.AssetSet, {{RefA, 901}}};
+    if (!Test.TestTrue(TEXT("Persistent owner starts with A follower and explicit values"),
+            CheckParentValues(*BaseBlueprint->GeneratedClass.Get(), *BaseCdo, OwnerValuesA, TEXT("Persistent owner before B"))))
+    {
+        return false;
+    }
+
+    ChildBlueprint = CreateOrdinaryBlueprint(
+        BaseBlueprint->GeneratedClass.Get(), ChildPackageName, TEXT("InheritedStateChild"), ChildPackage);
+    if (!Test.TestNotNull(TEXT("Creates persistent child Blueprint"), ChildBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    if (!Test.TestEqual(TEXT("Persistent child Blueprint compiles"), ChildBlueprint->Status, BS_UpToDate) ||
+        !Test.TestNotNull(TEXT("Persistent child GeneratedClass exists"), ChildBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    AUnifiedScriptActor* ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Persistent child CDO exists"), ChildCdo))
+    {
+        return false;
+    }
+    const FParentValues ChildExplicit{111, RefC, ValuesA.Assets, ValuesA.AssetSet, {{RefC, 301}}};
+    const FIntProperty* ChildParentCount = FindFProperty<FIntProperty>(ChildBlueprint->GeneratedClass, TEXT("ParentCount"));
+    const FObjectPropertyBase* ChildParentAsset = FindFProperty<FObjectPropertyBase>(ChildBlueprint->GeneratedClass, TEXT("ParentAsset"));
+    const FMapProperty* ChildParentAssetMap = FindFProperty<FMapProperty>(ChildBlueprint->GeneratedClass, TEXT("ParentAssetMap"));
+    if (!Test.TestNotNull(TEXT("Persistent child ParentCount property exists"), ChildParentCount) ||
+        !Test.TestNotNull(TEXT("Persistent child ParentAsset property exists"), ChildParentAsset) ||
+        !Test.TestNotNull(TEXT("Persistent child ParentAssetMap property exists"), ChildParentAssetMap))
+    {
+        return false;
+    }
+    ChildParentCount->SetPropertyValue_InContainer(ChildCdo, ChildExplicit.Count);
+    ChildParentAsset->SetObjectPropertyValue_InContainer(ChildCdo, ChildExplicit.Asset);
+    SetObjectIntMap(*ChildParentAssetMap, *ChildCdo, {{RefC, 301}});
+    const FState ChildManagedState{71, {72, 73}, {74, 75}, {{76, 77}, {78, 79}}, 0};
+    if (!Test.TestTrue(TEXT("Configures persistent child managed defaults"), SetCompleteState(*ChildCdo, ChildManagedState)))
+    {
+        return false;
+    }
+    if (!Test.TestTrue(TEXT("Persistent child keeps explicit scalar/ref/map and follows array/set"),
+            CheckParentValues(*ChildBlueprint->GeneratedClass.Get(), *ChildCdo, ChildExplicit, TEXT("Persistent child before B"))))
+    {
+        return false;
+    }
+    GrandchildBlueprint = CreateOrdinaryBlueprint(
+        ChildBlueprint->GeneratedClass.Get(), GrandchildPackageName, TEXT("InheritedStateGrandchild"), GrandchildPackage);
+    if (!Test.TestNotNull(TEXT("Creates persistent grandchild Blueprint"), GrandchildBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(GrandchildBlueprint);
+    if (!Test.TestEqual(TEXT("Persistent grandchild Blueprint compiles"), GrandchildBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    if (!Test.TestNotNull(TEXT("Persistent grandchild GeneratedClass exists"), GrandchildBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    AUnifiedScriptActor* GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Persistent grandchild CDO exists"), GrandchildCdo))
+    {
+        return false;
+    }
+    const FArrayProperty* GrandchildAssets = FindFProperty<FArrayProperty>(GrandchildBlueprint->GeneratedClass, TEXT("ParentAssets"));
+    const FSetProperty* GrandchildAssetSet = FindFProperty<FSetProperty>(GrandchildBlueprint->GeneratedClass, TEXT("ParentAssetSet"));
+    if (!Test.TestNotNull(TEXT("Persistent grandchild ParentAssets exists"), GrandchildAssets) ||
+        !Test.TestNotNull(TEXT("Persistent grandchild ParentAssetSet exists"), GrandchildAssetSet))
+    {
+        return false;
+    }
+    SetObjectArray(*GrandchildAssets, *GrandchildCdo, {RefC, RefA});
+    SetObjectSet(*GrandchildAssetSet, *GrandchildCdo, {RefC});
+    const FState GrandchildManagedState{81, {82, 83, 84}, {85, 86}, {{87, 88}, {89, 90}}, 0};
+    if (!Test.TestTrue(TEXT("Configures persistent grandchild managed defaults"), SetCompleteState(*GrandchildCdo, GrandchildManagedState)))
+    {
+        return false;
+    }
+    GrandchildBlueprint->MarkPackageDirty();
+    const FParentValues GrandchildExplicit{111, RefC, {RefC, RefA}, {RefC}, {{RefC, 301}}};
+    if (!Test.TestTrue(TEXT("Persistent grandchild keeps explicit array/set and follows scalar/ref/map"),
+            CheckParentValues(
+                *GrandchildBlueprint->GeneratedClass.Get(),
+                *GrandchildCdo,
+                GrandchildExplicit,
+                TEXT("Persistent grandchild before B"))))
+    {
+        return false;
+    }
+
+    const FString ParentBClassPath = FSoftClassPath(ParentBBlueprint->GeneratedClass.Get()).ToString();
+    const FString ReparentedDeclaration = WithSelectedAssetBaseClassPath(
+        Declaration, Config.DeclarationAssetPath, ParentBClassPath);
+    if (!Test.TestTrue(TEXT("Builds persistent B parent declaration"), !ReparentedDeclaration.IsEmpty()))
+    {
+        return false;
+    }
+
+    auto SetInstanceState = [&](AUnifiedScriptActor& Actor, const FState& State) -> bool
+    {
+        const FIntProperty* Seed = FindFProperty<FIntProperty>(Actor.GetClass(), TEXT("Seed"));
+        const FArrayProperty* Values = FindFProperty<FArrayProperty>(Actor.GetClass(), TEXT("Values"));
+        const FSetProperty* Enabled = FindFProperty<FSetProperty>(Actor.GetClass(), TEXT("Enabled"));
+        const FMapProperty* Weights = FindFProperty<FMapProperty>(Actor.GetClass(), TEXT("Weights"));
+        if (Seed == nullptr || Values == nullptr || Enabled == nullptr || Weights == nullptr)
+        {
+            return false;
+        }
+        Seed->SetPropertyValue_InContainer(&Actor, State.Seed);
+        SetArray(*Values, Actor, State.Values);
+        SetSet(*Enabled, Actor, {State.Enabled.Array()[0], State.Enabled.Array()[1]});
+        const TArray<TPair<int32, int32>> WeightPairs = State.Weights.Array();
+        if (WeightPairs.Num() != 2)
+        {
+            return false;
+        }
+        SetMap(*Weights, Actor, {{WeightPairs[0].Key, WeightPairs[0].Value}, {WeightPairs[1].Key, WeightPairs[1].Value}});
+        return true;
+    };
+    const auto CheckManagedConsumer = [&](const FWorldFixture& Fixture, const FState& Expected, const TCHAR* Label) -> bool
+    {
+        if (Fixture.Actor == nullptr || Fixture.Component == nullptr)
+        {
+            return false;
+        }
+        bool bValid = Test.TestEqual(
+            *FString::Printf(TEXT("%s managed state uses exact signature"), Label),
+            Fixture.Component->ManagedState,
+            FString::Printf(TEXT("InheritedState:%d:Ticks:%d"), Signature(Expected), Expected.TickCount));
+        bValid &= Test.TestTrue(
+            *FString::Printf(TEXT("%s managed consumer updates exact yaw"), Label),
+            FMath::IsNearlyEqual(
+                Fixture.Actor->GetActorRotation().Yaw,
+                FRotator::NormalizeAxis(static_cast<float>(Signature(Expected) % 360)),
+                0.01f));
+        return bValid;
+    };
+
+    FString WorldError;
+    if (!Test.TestTrue(TEXT("Creates persistent first World"), MakeWorld(First, WorldError)) ||
+        !Test.TestTrue(TEXT("Creates persistent second World"), MakeWorld(Second, WorldError)))
+    {
+        AddError(WorldError);
+        return false;
+    }
+    First.Actor = First.World->SpawnActor<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass.Get());
+    Second.Actor = Second.World->SpawnActor<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass.Get());
+    if (!Test.TestNotNull(TEXT("Spawns persistent child instance"), First.Actor) ||
+        !Test.TestNotNull(TEXT("Spawns persistent grandchild instance"), Second.Actor))
+    {
+        return false;
+    }
+    First.Component = First.Actor->GetUnifiedScriptComponent();
+    Second.Component = Second.Actor->GetUnifiedScriptComponent();
+    First.Host = First.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    Second.Host = Second.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    FState FirstState{51, {52, 53}, {54, 55}, {{56, 57}, {58, 59}}, 0};
+    FState SecondState{61, {62, 63, 64}, {65, 66}, {{67, 68}, {69, 70}}, 0};
+    if (!Test.TestNotNull(TEXT("Persistent first component exists"), First.Component) ||
+        !Test.TestNotNull(TEXT("Persistent second component exists"), Second.Component) ||
+        !Test.TestNotNull(TEXT("Persistent first host exists"), First.Host) ||
+        !Test.TestNotNull(TEXT("Persistent second host exists"), Second.Host) ||
+        !SetInstanceState(*First.Actor, FirstState) || !SetInstanceState(*Second.Actor, SecondState))
+    {
+        return false;
+    }
+    First.Actor->DispatchBeginPlay();
+    Second.Actor->DispatchBeginPlay();
+    if (!Test.TestTrue(TEXT("Persistent first instance auto-starts"), First.Component->bScriptRunning) ||
+        !Test.TestTrue(TEXT("Persistent second instance auto-starts"), Second.Component->bScriptRunning))
+    {
+        return false;
+    }
+    First.Host->BeginManagedFrame();
+    First.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    First.Host->EndManagedFrame();
+    Second.Host->BeginManagedFrame();
+    Second.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    Second.Host->EndManagedFrame();
+    FirstState.TickCount = 1;
+    SecondState.TickCount = 1;
+    CheckManagedConsumer(First, FirstState, TEXT("Persistent first before reparent"));
+    CheckManagedConsumer(Second, SecondState, TEXT("Persistent second before reparent"));
+    First.Component->StopScript();
+    Second.Component->StopScript();
+    if (!Test.TestFalse(TEXT("Persistent first instance is stopped before reparent"), First.Component->bScriptRunning) ||
+        !Test.TestFalse(TEXT("Persistent second instance is stopped before reparent"), Second.Component->bScriptRunning))
+    {
+        return false;
+    }
+    const FObjectKey FirstActorKey(First.Actor);
+    const FObjectKey SecondActorKey(Second.Actor);
+    const FDelegateHandle ReinstancedHandle = FCoreUObjectDelegates::OnObjectsReinstanced.AddLambda(
+        [&ReinstancedKeys, &ReinstancedTargets](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
+        {
+            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
+            {
+                if (Pair.Key == nullptr)
+                {
+                    continue;
+                }
+                const FObjectKey OldKey(Pair.Key);
+                if (Pair.Value == Pair.Key)
+                {
+                    continue;
+                }
+                if (Pair.Value == nullptr)
+                {
+                    ReinstancedKeys.Add(OldKey, FObjectKey());
+                    continue;
+                }
+                ReinstancedKeys.Add(OldKey, FObjectKey(Pair.Value));
+                ReinstancedTargets.Add(OldKey, TStrongObjectPtr<UObject>(Pair.Value));
+            }
+        });
+    ON_SCOPE_EXIT
+    {
+        FCoreUObjectDelegates::OnObjectsReinstanced.Remove(ReinstancedHandle);
+    };
+    auto ResolveReinstancedObject = [&](const FObjectKey& OriginalKey) -> UObject*
+    {
+        TSet<FObjectKey> Visited;
+        FObjectKey Current = OriginalKey;
+        while (Current != FObjectKey() && !Visited.Contains(Current))
+        {
+            Visited.Add(Current);
+            const FObjectKey* Next = ReinstancedKeys.Find(Current);
+            if (Next == nullptr)
+            {
+                UObject* Terminal = Current.ResolveObjectPtr();
+                return IsValid(Terminal) ? Terminal : nullptr;
+            }
+            if (*Next == FObjectKey())
+            {
+                return nullptr;
+            }
+            Current = *Next;
+        }
+        return nullptr;
+    };
+    const bool bReparented = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset, *BaseBlueprint, ReparentedDeclaration, false, SyncResult, Error);
+    First.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(FirstActorKey));
+    Second.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(SecondActorKey));
+    First.Component = First.Actor != nullptr ? First.Actor->GetUnifiedScriptComponent() : nullptr;
+    Second.Component = Second.Actor != nullptr ? Second.Actor->GetUnifiedScriptComponent() : nullptr;
+    if (!Test.TestTrue(TEXT("Persistent parent change to B succeeds"), bReparented) ||
+        !Test.TestNotNull(TEXT("Persistent first stopped actor is resolved by stable key"), First.Actor) ||
+        !Test.TestNotNull(TEXT("Persistent second stopped actor is resolved by stable key"), Second.Actor) ||
+        !Test.TestNotNull(TEXT("Persistent first replacement component exists"), First.Component) ||
+        !Test.TestNotNull(TEXT("Persistent second replacement component exists"), Second.Component))
+    {
+        AddError(Error);
+        return false;
+    }
+    BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    AUnifiedScriptActor* ParentBCdo = Cast<AUnifiedScriptActor>(ParentBBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Persistent owner CDO after B exists"), BaseCdo) ||
+        !Test.TestNotNull(TEXT("Persistent child CDO after B exists"), ChildCdo) ||
+        !Test.TestNotNull(TEXT("Persistent grandchild CDO after B exists"), GrandchildCdo) ||
+        !Test.TestNotNull(TEXT("Persistent parent B CDO after B exists"), ParentBCdo))
+    {
+        return false;
+    }
+    const FParentValues OwnerValuesB{ValuesB.Count, ValuesB.Asset, ValuesB.Assets, ValuesB.AssetSet, {{RefA, 901}}};
+    const FParentValues ChildValuesB{ChildExplicit.Count, ChildExplicit.Asset, ValuesB.Assets, ValuesB.AssetSet, ChildExplicit.AssetMap};
+    const FParentValues GrandchildValuesB{ChildExplicit.Count, ChildExplicit.Asset, GrandchildExplicit.Assets, GrandchildExplicit.AssetSet, ChildExplicit.AssetMap};
+    if (!Test.TestTrue(TEXT("Persistent owner uses parent B"), BaseBlueprint->GeneratedClass->GetSuperClass() == ParentBBlueprint->GeneratedClass) ||
+        !CheckParentValues(*BaseBlueprint->GeneratedClass.Get(), *BaseCdo, OwnerValuesB, TEXT("Persistent owner after B")) ||
+        !CheckParentValues(*ChildBlueprint->GeneratedClass.Get(), *ChildCdo, ChildValuesB, TEXT("Persistent child after B")) ||
+        !CheckParentValues(*GrandchildBlueprint->GeneratedClass.Get(), *GrandchildCdo, GrandchildValuesB, TEXT("Persistent grandchild after B")) ||
+        !CheckState(*BaseCdo, BaseState, Test, TEXT("Persistent owner managed state after B")) ||
+        !CheckState(*ChildCdo, ChildManagedState, Test, TEXT("Persistent child managed state after B")) ||
+        !CheckState(*GrandchildCdo, GrandchildManagedState, Test, TEXT("Persistent grandchild managed state after B")) ||
+        !Test.TestTrue(TEXT("Persistent owner component keeps exact B archetype"),
+            BaseCdo->GetUnifiedScriptComponent() != nullptr &&
+            BaseCdo->GetUnifiedScriptComponent()->GetOuter() == BaseCdo &&
+            BaseCdo->GetUnifiedScriptComponent()->GetArchetype() == ParentBCdo->GetUnifiedScriptComponent() &&
+            BaseCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Persistent child component keeps exact owner archetype"),
+            ChildCdo->GetUnifiedScriptComponent() != nullptr &&
+            ChildCdo->GetUnifiedScriptComponent()->GetOuter() == ChildCdo &&
+            ChildCdo->GetUnifiedScriptComponent()->GetArchetype() == BaseCdo->GetUnifiedScriptComponent() &&
+            ChildCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Persistent grandchild component keeps exact child archetype"),
+            GrandchildCdo->GetUnifiedScriptComponent() != nullptr &&
+            GrandchildCdo->GetUnifiedScriptComponent()->GetOuter() == GrandchildCdo &&
+            GrandchildCdo->GetUnifiedScriptComponent()->GetArchetype() == ChildCdo->GetUnifiedScriptComponent() &&
+            GrandchildCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset) ||
+        !CheckParentValues(*First.Actor->GetClass(), *First.Actor, ChildValuesB, TEXT("Persistent first instance after B")) ||
+        !CheckParentValues(*Second.Actor->GetClass(), *Second.Actor, GrandchildValuesB, TEXT("Persistent second instance after B")) ||
+        !Test.TestTrue(TEXT("Persistent first replacement keeps exact component identity"),
+            First.Component->GetOuter() == First.Actor &&
+            First.Component->GetArchetype() == ChildCdo->GetUnifiedScriptComponent() &&
+            First.Component->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Persistent second replacement keeps exact component identity"),
+            Second.Component->GetOuter() == Second.Actor &&
+            Second.Component->GetArchetype() == GrandchildCdo->GetUnifiedScriptComponent() &&
+            Second.Component->ScriptAsset == ScriptAsset) ||
+        !Test.TestFalse(TEXT("Persistent first replacement remains stopped"), First.Component->bScriptRunning) ||
+        !Test.TestFalse(TEXT("Persistent second replacement remains stopped"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("Persistent first host has no running scripts"), First.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestEqual(TEXT("Persistent second host has no running scripts"), Second.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestEqual(TEXT("Persistent first host has no lifecycle claims"), First.Host->GetGameplayLifecycleClaimCount(), 0) ||
+        !Test.TestEqual(TEXT("Persistent second host has no lifecycle claims"), Second.Host->GetGameplayLifecycleClaimCount(), 0) ||
+        !Test.TestTrue(TEXT("Persistent first replacement keeps state"), CheckState(*First.Actor, FirstState, Test, TEXT("Persistent first after reparent"))) ||
+        !Test.TestTrue(TEXT("Persistent second replacement keeps state"), CheckState(*Second.Actor, SecondState, Test, TEXT("Persistent second after reparent"))))
+    {
+        return false;
+    }
+
+    TArray<uint8> BaseBytesBeforeReject;
+    TArray<uint8> ChildBytesBeforeReject;
+    TArray<uint8> GrandchildBytesBeforeReject;
+    if (!Test.TestTrue(TEXT("Saves owner before incompatible parent rejection"),
+            SavePackage(*BaseBlueprint, PackageFilenames[2], Error)) ||
+        !Test.TestTrue(TEXT("Saves child before incompatible parent rejection"),
+            SavePackage(*ChildBlueprint, PackageFilenames[3], Error)) ||
+        !Test.TestTrue(TEXT("Saves grandchild before incompatible parent rejection"),
+            SavePackage(*GrandchildBlueprint, PackageFilenames[4], Error)) ||
+        !Test.TestTrue(TEXT("Reads owner bytes before incompatible parent rejection"),
+            FFileHelper::LoadFileToArray(BaseBytesBeforeReject, *PackageFilenames[2])) ||
+        !Test.TestTrue(TEXT("Reads child bytes before incompatible parent rejection"),
+            FFileHelper::LoadFileToArray(ChildBytesBeforeReject, *PackageFilenames[3])) ||
+        !Test.TestTrue(TEXT("Reads grandchild bytes before incompatible parent rejection"),
+            FFileHelper::LoadFileToArray(GrandchildBytesBeforeReject, *PackageFilenames[4])))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    FString BadDeclaration;
+    BadParentBlueprint = CreateOrdinaryBlueprint(
+        AUnifiedScriptActor::StaticClass(), BadParentPackageName, TEXT("ParentValuesBad"), BadParentPackage);
+    if (!Test.TestNotNull(TEXT("Creates incompatible ordinary parent"), BadParentBlueprint) ||
+        !Test.TestTrue(TEXT("Adds incompatible parent variable"), AddObjectParentVariables(*BadParentBlueprint, true)))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(BadParentBlueprint);
+    if (!Test.TestEqual(TEXT("Incompatible ordinary parent compiles"), BadParentBlueprint->Status, BS_UpToDate) ||
+        !Test.TestNotNull(TEXT("Incompatible parent GeneratedClass exists"), BadParentBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    BadDeclaration = WithSelectedAssetBaseClassPath(
+        Declaration, Config.DeclarationAssetPath, FSoftClassPath(BadParentBlueprint->GeneratedClass.Get()).ToString());
+    if (!Test.TestTrue(TEXT("Builds incompatible parent declaration"), !BadDeclaration.IsEmpty()))
+    {
+        return false;
+    }
+    const UClass* ParentBeforeReject = BaseBlueprint->GeneratedClass->GetSuperClass();
+    const UClass* GeneratedBeforeReject = BaseBlueprint->GeneratedClass.Get();
+    AUnifiedScriptActor* OwnerCdoBeforeValidate = BaseCdo;
+    AUnifiedScriptActor* ChildCdoBeforeValidate = ChildCdo;
+    AUnifiedScriptActor* GrandchildCdoBeforeValidate = GrandchildCdo;
+    TArray<uint8> ErrorBytes;
+    FString RejectError;
+    const bool bRejected = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset, *BaseBlueprint, BadDeclaration, true, SyncResult, RejectError);
+    const FString ValidateRejectError = RejectError;
+    Test.AddInfo(FString::Printf(TEXT("Incompatible parent validate-only error: %s"), *ValidateRejectError));
+    const auto HasExplicitParentAssetTypeError = [](const FString& Message) -> bool
+    {
+        return Message.Contains(TEXT("ParentAsset")) &&
+            (Message.Contains(TEXT("explicit"), ESearchCase::IgnoreCase) ||
+             Message.Contains(TEXT("changed"), ESearchCase::IgnoreCase) ||
+             Message.Contains(TEXT("incompatible"), ESearchCase::IgnoreCase) ||
+             Message.Contains(TEXT("removed"), ESearchCase::IgnoreCase));
+    };
+    AUnifiedScriptActor* OwnerCdoAfterValidate = BaseBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    AUnifiedScriptActor* ChildCdoAfterValidate = ChildBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    AUnifiedScriptActor* GrandchildCdoAfterValidate = GrandchildBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    const bool bValidateKeptValues = OwnerCdoAfterValidate != nullptr &&
+        ChildCdoAfterValidate != nullptr && GrandchildCdoAfterValidate != nullptr &&
+        CheckParentValues(*BaseBlueprint->GeneratedClass.Get(), *OwnerCdoAfterValidate, OwnerValuesB, TEXT("Owner after validate-only")) &&
+        CheckParentValues(*ChildBlueprint->GeneratedClass.Get(), *ChildCdoAfterValidate, ChildValuesB, TEXT("Child after validate-only")) &&
+        CheckParentValues(*GrandchildBlueprint->GeneratedClass.Get(), *GrandchildCdoAfterValidate, GrandchildValuesB, TEXT("Grandchild after validate-only"));
+    const bool bValidateKeptPackages =
+        FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[2]) && ErrorBytes == BaseBytesBeforeReject &&
+        FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[3]) && ErrorBytes == ChildBytesBeforeReject &&
+        FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[4]) && ErrorBytes == GrandchildBytesBeforeReject;
+    const bool bRejectedApply = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset, *BaseBlueprint, BadDeclaration, false, SyncResult, RejectError);
+    Test.AddInfo(FString::Printf(TEXT("Incompatible parent apply error: %s"), *RejectError));
+    BaseCdo = BaseBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    ChildCdo = ChildBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    GrandchildCdo = GrandchildBlueprint->GeneratedClass.Get() != nullptr
+        ? Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    if (!Test.TestFalse(TEXT("Incompatible parent apply is rejected"), bRejectedApply) ||
+        !Test.TestFalse(TEXT("Incompatible parent validate-only is rejected"), bRejected) ||
+        !Test.TestTrue(TEXT("Validate-only keeps owner CDO identity"), OwnerCdoAfterValidate == OwnerCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Validate-only keeps child CDO identity"), ChildCdoAfterValidate == ChildCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Validate-only keeps grandchild CDO identity"), GrandchildCdoAfterValidate == GrandchildCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Validate-only keeps all parent values"), bValidateKeptValues) ||
+        !Test.TestTrue(TEXT("Validate-only keeps package bytes"), bValidateKeptPackages) ||
+        !Test.TestTrue(TEXT("Validate-only error identifies ParentAsset type change"), HasExplicitParentAssetTypeError(ValidateRejectError)) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps generated parent identity"), BaseBlueprint->GeneratedClass.Get() != nullptr && BaseBlueprint->GeneratedClass->GetSuperClass() == ParentBeforeReject) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps generated class identity"), BaseBlueprint->GeneratedClass.Get() == GeneratedBeforeReject) ||
+        !Test.TestTrue(TEXT("Apply keeps owner CDO identity"), BaseCdo == OwnerCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Apply keeps child CDO identity"), ChildCdo == ChildCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Apply keeps grandchild CDO identity"), GrandchildCdo == GrandchildCdoBeforeValidate) ||
+        !Test.TestTrue(TEXT("Incompatible parent apply reports a concrete reason"), !RejectError.IsEmpty()) ||
+        !Test.TestTrue(TEXT("Incompatible parent error identifies the explicit type change"), HasExplicitParentAssetTypeError(RejectError)) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps owner values"), BaseCdo != nullptr && CheckParentValues(*BaseBlueprint->GeneratedClass.Get(), *BaseCdo, OwnerValuesB, TEXT("Owner after incompatible rejection"))) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps child values"), ChildCdo != nullptr && CheckParentValues(*ChildBlueprint->GeneratedClass.Get(), *ChildCdo, ChildValuesB, TEXT("Child after incompatible rejection"))) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps grandchild values"), GrandchildCdo != nullptr && CheckParentValues(*GrandchildBlueprint->GeneratedClass.Get(), *GrandchildCdo, GrandchildValuesB, TEXT("Grandchild after incompatible rejection"))) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps owner package bytes"), FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[2]) && ErrorBytes == BaseBytesBeforeReject) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps child package bytes"), FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[3]) && ErrorBytes == ChildBytesBeforeReject) ||
+        !Test.TestTrue(TEXT("Rejected parent keeps grandchild package bytes"), FFileHelper::LoadFileToArray(ErrorBytes, *PackageFilenames[4]) && ErrorBytes == GrandchildBytesBeforeReject))
+    {
+        AddError(RejectError);
+        return false;
+    }
+
+    const TArray<UObject*> ObjectsToSave{
+        ParentABlueprint,
+        ParentBBlueprint,
+        BaseBlueprint,
+        ChildBlueprint,
+        GrandchildBlueprint,
+        ScriptAsset,
+        RefA,
+        RefB,
+        RefC};
+    for (int32 Index = 0; Index < ObjectsToSave.Num(); ++Index)
+    {
+        if (!Test.TestTrue(
+                *FString::Printf(TEXT("Saves persistent package %s"), *PackageNames[Index]),
+                SavePackage(*ObjectsToSave[Index], PackageFilenames[Index], Error)))
+        {
+            AddError(Error);
+            return false;
+        }
+    }
+
+    TWeakObjectPtr<UBlueprint> WeakBase(BaseBlueprint);
+    TWeakObjectPtr<UBlueprint> WeakChild(ChildBlueprint);
+    TWeakObjectPtr<UBlueprint> WeakGrandchild(GrandchildBlueprint);
+    TWeakObjectPtr<UBlueprint> WeakParentA(ParentABlueprint);
+    TWeakObjectPtr<UBlueprint> WeakParentB(ParentBBlueprint);
+    TWeakObjectPtr<UUnifiedScriptAsset> WeakScriptAsset(ScriptAsset);
+    TWeakObjectPtr<UDataAsset> WeakRefA(RefA);
+    TWeakObjectPtr<UDataAsset> WeakRefB(RefB);
+    TWeakObjectPtr<UDataAsset> WeakRefC(RefC);
+    DestroyWorld(First);
+    DestroyWorld(Second);
+    ParentABlueprint = nullptr;
+    ParentBBlueprint = nullptr;
+    BaseBlueprint = nullptr;
+    ChildBlueprint = nullptr;
+    GrandchildBlueprint = nullptr;
+    BadParentBlueprint = nullptr;
+    ScriptAsset = nullptr;
+    RefA = nullptr;
+    RefB = nullptr;
+    RefC = nullptr;
+    ReinstancedTargets.Empty();
+    ReinstancedKeys.Empty();
+    CollectGarbage(RF_NoFlags);
+    if (!Test.TestTrue(TEXT("Unloads saved persistent parent-values packages"), UnloadByName(PackageNames)))
+    {
+        return false;
+    }
+    CollectGarbage(RF_NoFlags);
+    if (!Test.TestFalse(TEXT("Saved owner Blueprint unloads"), WeakBase.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved child Blueprint unloads"), WeakChild.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved grandchild Blueprint unloads"), WeakGrandchild.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved parent A Blueprint unloads"), WeakParentA.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved parent B Blueprint unloads"), WeakParentB.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved ScriptAsset unloads"), WeakScriptAsset.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved reference A unloads"), WeakRefA.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved reference B unloads"), WeakRefB.IsValid()) ||
+        !Test.TestFalse(TEXT("Saved reference C unloads"), WeakRefC.IsValid()))
+    {
+        return false;
+    }
+
+    BaseBlueprint = LoadObject<UUnifiedScriptBlueprint>(nullptr, *(BasePackageName + TEXT(".InheritedStateBase")));
+    ChildBlueprint = LoadObject<UBlueprint>(nullptr, *(ChildPackageName + TEXT(".InheritedStateChild")));
+    GrandchildBlueprint = LoadObject<UBlueprint>(nullptr, *(GrandchildPackageName + TEXT(".InheritedStateGrandchild")));
+    ParentBBlueprint = LoadObject<UBlueprint>(nullptr, *(ParentBPackageName + TEXT(".ParentValuesB")));
+    ScriptAsset = LoadObject<UUnifiedScriptAsset>(nullptr, *(ScriptAssetPackageName + TEXT(".InheritedStateScriptAsset")));
+    RefA = LoadObject<UDataAsset>(nullptr, *(RefAPackageName + TEXT(".ParentValuesRefA")));
+    RefB = LoadObject<UDataAsset>(nullptr, *(RefBPackageName + TEXT(".ParentValuesRefB")));
+    RefC = LoadObject<UDataAsset>(nullptr, *(RefCPackageName + TEXT(".ParentValuesRefC")));
+    if (!Test.TestNotNull(TEXT("Reloads persistent owner Blueprint"), BaseBlueprint) ||
+        !Test.TestNotNull(TEXT("Reloads persistent child Blueprint"), ChildBlueprint) ||
+        !Test.TestNotNull(TEXT("Reloads persistent grandchild Blueprint"), GrandchildBlueprint) ||
+        !Test.TestNotNull(TEXT("Reloads persistent parent B Blueprint"), ParentBBlueprint) ||
+        !Test.TestNotNull(TEXT("Reloads persistent ScriptAsset"), ScriptAsset) ||
+        !Test.TestNotNull(TEXT("Reloads persistent reference A"), RefA) ||
+        !Test.TestNotNull(TEXT("Reloads persistent reference B"), RefB) ||
+        !Test.TestNotNull(TEXT("Reloads persistent reference C"), RefC))
+    {
+        return false;
+    }
+    if (!Test.TestNotNull(TEXT("Reloaded owner GeneratedClass exists"), BaseBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Reloaded child GeneratedClass exists"), ChildBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Reloaded grandchild GeneratedClass exists"), GrandchildBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Reloaded parent B GeneratedClass exists"), ParentBBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    AUnifiedScriptActor* ReloadedParentBCdo = Cast<AUnifiedScriptActor>(ParentBBlueprint->GeneratedClass->GetDefaultObject());
+    const FParentValues ReloadedOwnerValuesB{20, RefB, {RefB, RefC}, {RefB, RefA}, {{RefA, 901}}};
+    const FParentValues ReloadedChildValuesB{111, RefC, {RefB, RefC}, {RefB, RefA}, {{RefC, 301}}};
+    const FParentValues ReloadedGrandchildValuesB{111, RefC, {RefC, RefA}, {RefC}, {{RefC, 301}}};
+    const auto CheckReloadedAssetIdentity = [&](const UDataAsset* Asset, const FString& PackageName, const TCHAR* AssetName, const TCHAR* Label) -> bool
+    {
+        return Test.TestNotNull(*FString::Printf(TEXT("%s asset exists"), Label), Asset) &&
+            Test.TestEqual(*FString::Printf(TEXT("%s exact path"), Label), Asset->GetPathName(), PackageName + TEXT(".") + AssetName) &&
+            Test.TestEqual(*FString::Printf(TEXT("%s exact package"), Label), Asset->GetOutermost()->GetName(), PackageName);
+    };
+    const FObjectPropertyBase* ReloadedAsset = FindFProperty<FObjectPropertyBase>(BaseBlueprint->GeneratedClass, TEXT("ParentAsset"));
+    const FIntProperty* ReloadedCount = FindFProperty<FIntProperty>(BaseBlueprint->GeneratedClass, TEXT("ParentCount"));
+    if (!Test.TestNotNull(TEXT("Reloaded owner CDO exists"), BaseCdo) ||
+        !Test.TestNotNull(TEXT("Reloaded child CDO exists"), ChildCdo) ||
+        !Test.TestNotNull(TEXT("Reloaded grandchild CDO exists"), GrandchildCdo) ||
+        !Test.TestNotNull(TEXT("Reloaded parent B CDO exists"), ReloadedParentBCdo) ||
+        !Test.TestEqual(TEXT("Reloaded ScriptAsset exact path"), ScriptAsset->GetPathName(), ScriptAssetPackageName + TEXT(".InheritedStateScriptAsset")) ||
+        !Test.TestEqual(TEXT("Reloaded ScriptAsset exact package"), ScriptAsset->GetOutermost()->GetName(), ScriptAssetPackageName) ||
+        !CheckReloadedAssetIdentity(RefA, RefAPackageName, TEXT("ParentValuesRefA"), TEXT("Reloaded RefA")) ||
+        !CheckReloadedAssetIdentity(RefB, RefBPackageName, TEXT("ParentValuesRefB"), TEXT("Reloaded RefB")) ||
+        !CheckReloadedAssetIdentity(RefC, RefCPackageName, TEXT("ParentValuesRefC"), TEXT("Reloaded RefC")) ||
+        !Test.TestTrue(TEXT("Reloaded owner uses parent B"), BaseBlueprint->GeneratedClass->GetSuperClass() == ParentBBlueprint->GeneratedClass) ||
+        !Test.TestTrue(TEXT("Reloaded owner has B scalar value"), ReloadedCount != nullptr && ReloadedCount->GetPropertyValue_InContainer(BaseCdo) == ValuesB.Count) ||
+        !Test.TestTrue(TEXT("Reloaded owner has exact B reference"), ReloadedAsset != nullptr && ReloadedAsset->GetObjectPropertyValue_InContainer(BaseCdo) == RefB) ||
+        !CheckParentValues(*BaseBlueprint->GeneratedClass.Get(), *BaseCdo, ReloadedOwnerValuesB, TEXT("Reloaded owner")) ||
+        !CheckParentValues(*ChildBlueprint->GeneratedClass.Get(), *ChildCdo, ReloadedChildValuesB, TEXT("Reloaded child")) ||
+        !CheckParentValues(*GrandchildBlueprint->GeneratedClass.Get(), *GrandchildCdo, ReloadedGrandchildValuesB, TEXT("Reloaded grandchild")) ||
+        !CheckState(*BaseCdo, BaseState, Test, TEXT("Reloaded owner managed state")) ||
+        !CheckState(*ChildCdo, ChildManagedState, Test, TEXT("Reloaded child managed state")) ||
+        !CheckState(*GrandchildCdo, GrandchildManagedState, Test, TEXT("Reloaded grandchild managed state")) ||
+        !Test.TestTrue(TEXT("Reloaded owner component keeps exact B archetype"),
+            BaseCdo->GetUnifiedScriptComponent() != nullptr &&
+            BaseCdo->GetUnifiedScriptComponent()->GetOuter() == BaseCdo &&
+            BaseCdo->GetUnifiedScriptComponent()->GetArchetype() == ReloadedParentBCdo->GetUnifiedScriptComponent() &&
+            BaseCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Reloaded child component keeps exact owner archetype"),
+            ChildCdo->GetUnifiedScriptComponent() != nullptr &&
+            ChildCdo->GetUnifiedScriptComponent()->GetOuter() == ChildCdo &&
+            ChildCdo->GetUnifiedScriptComponent()->GetArchetype() == BaseCdo->GetUnifiedScriptComponent() &&
+            ChildCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Reloaded grandchild component keeps exact child archetype"),
+            GrandchildCdo->GetUnifiedScriptComponent() != nullptr &&
+            GrandchildCdo->GetUnifiedScriptComponent()->GetOuter() == GrandchildCdo &&
+            GrandchildCdo->GetUnifiedScriptComponent()->GetArchetype() == ChildCdo->GetUnifiedScriptComponent() &&
+            GrandchildCdo->GetUnifiedScriptComponent()->ScriptAsset == ScriptAsset))
+    {
+        return false;
+    }
+
+    if (!Test.TestTrue(TEXT("Creates persistent reload World"), MakeWorld(First, WorldError)))
+    {
+        AddError(WorldError);
+        return false;
+    }
+    First.Actor = First.World->SpawnActor<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass.Get());
+    First.Component = First.Actor != nullptr ? First.Actor->GetUnifiedScriptComponent() : nullptr;
+    First.Host = First.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (!Test.TestNotNull(TEXT("Spawns reloaded child instance"), First.Actor) ||
+        !Test.TestNotNull(TEXT("Reloaded child component exists"), First.Component) ||
+        !Test.TestTrue(TEXT("Reloaded child keeps ScriptAsset"), First.Component != nullptr && First.Component->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Reloaded child component has exact Outer"), First.Component != nullptr && First.Component->GetOuter() == First.Actor) ||
+        !Test.TestTrue(TEXT("Reloaded child component has exact CDO archetype"), First.Component != nullptr && First.Component->GetArchetype() == ChildCdo->GetUnifiedScriptComponent()))
+    {
+        return false;
+    }
+    First.Actor->DispatchBeginPlay();
+    if (!Test.TestTrue(TEXT("Reloaded child starts its persisted script"), First.Component->bScriptRunning))
+    {
+        return false;
+    }
+    First.Host->BeginManagedFrame();
+    First.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    First.Host->EndManagedFrame();
+    FState ReloadedChildState = ChildManagedState;
+    ++ReloadedChildState.TickCount;
+    Test.TestTrue(TEXT("Reloaded child preserves complete managed state"), CheckState(*First.Actor, ReloadedChildState, Test, TEXT("Reloaded child after tick")));
+    Test.TestEqual(
+        TEXT("Reloaded child managed consumer uses persisted signature"),
+        First.Component->ManagedState,
+        FString::Printf(TEXT("InheritedState:%d:Ticks:%d"), Signature(ChildManagedState), ReloadedChildState.TickCount));
+    Test.TestTrue(
+        TEXT("Reloaded child managed consumer updates exact Actor yaw"),
+        FMath::IsNearlyEqual(
+            First.Actor->GetActorRotation().Yaw,
+            FRotator::NormalizeAxis(static_cast<float>(Signature(ChildManagedState) % 360)),
+            0.01f));
+    First.Component->StopScript();
+    Test.TestEqual(TEXT("Reloaded child host releases scripts after Stop"), First.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("Reloaded child host releases claims after Stop"), First.Host->GetGameplayLifecycleClaimCount(), 0);
+    if (!Test.TestTrue(TEXT("Creates persistent grandchild reload World"), MakeWorld(Second, WorldError)))
+    {
+        AddError(WorldError);
+        return false;
+    }
+    Second.Actor = Second.World->SpawnActor<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass.Get());
+    Second.Component = Second.Actor != nullptr ? Second.Actor->GetUnifiedScriptComponent() : nullptr;
+    Second.Host = Second.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (!Test.TestNotNull(TEXT("Spawns reloaded grandchild instance"), Second.Actor) ||
+        !Test.TestNotNull(TEXT("Reloaded grandchild component exists"), Second.Component) ||
+        !Test.TestTrue(TEXT("Reloaded grandchild keeps ScriptAsset"), Second.Component != nullptr && Second.Component->ScriptAsset == ScriptAsset) ||
+        !Test.TestTrue(TEXT("Reloaded grandchild component has exact Outer"), Second.Component != nullptr && Second.Component->GetOuter() == Second.Actor) ||
+        !Test.TestTrue(TEXT("Reloaded grandchild component has exact CDO archetype"), Second.Component != nullptr && Second.Component->GetArchetype() == GrandchildCdo->GetUnifiedScriptComponent()))
+    {
+        return false;
+    }
+    Second.Actor->DispatchBeginPlay();
+    if (!Test.TestTrue(TEXT("Reloaded grandchild starts its persisted script"), Second.Component->bScriptRunning))
+    {
+        return false;
+    }
+    Second.Host->BeginManagedFrame();
+    Second.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    Second.Host->EndManagedFrame();
+    FState ReloadedGrandchildState = GrandchildManagedState;
+    ++ReloadedGrandchildState.TickCount;
+    Test.TestTrue(TEXT("Reloaded grandchild preserves complete managed state"), CheckState(*Second.Actor, ReloadedGrandchildState, Test, TEXT("Reloaded grandchild after tick")));
+    Test.TestEqual(
+        TEXT("Reloaded grandchild managed consumer uses persisted signature"),
+        Second.Component->ManagedState,
+        FString::Printf(TEXT("InheritedState:%d:Ticks:%d"), Signature(GrandchildManagedState), ReloadedGrandchildState.TickCount));
+    Test.TestTrue(
+        TEXT("Reloaded grandchild managed consumer updates exact Actor yaw"),
+        FMath::IsNearlyEqual(
+            Second.Actor->GetActorRotation().Yaw,
+            FRotator::NormalizeAxis(static_cast<float>(Signature(GrandchildManagedState) % 360)),
+            0.01f));
+    Second.Component->StopScript();
+    Test.TestEqual(TEXT("Reloaded grandchild host releases scripts after Stop"), Second.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("Reloaded grandchild host releases claims after Stop"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+    Test.TestEqual(TEXT("Reloaded first World host remains released while second is alive"), First.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("Reloaded first World claims remain released while second is alive"), First.Host->GetGameplayLifecycleClaimCount(), 0);
     DestroyWorld(First);
     DestroyWorld(Second);
     return !HasAnyErrors();
