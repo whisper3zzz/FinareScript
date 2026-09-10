@@ -1,6 +1,6 @@
 # UnifiedScript product roadmap
 
-Last reviewed: **2026-09-09**
+Last reviewed: **2026-09-10**
 
 This document owns current priorities, capability boundaries, and delivery
 order. Detailed implementation logs and earlier acceptance results live in
@@ -30,7 +30,11 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   base-binding source edits are implemented and validated. The native parent
   transaction primitive now covers Actor CDO inheritance, component defaults,
   stable value ownership and rollback within the existing carrier family.
-  Next complete persistent value/reference and active-World validation, connect
+  Real two-World Actor tests verify active-instance rejection and explicit
+  stop/reparent/restart, including after-save rollback, without automatic
+  reactivation during reinstancing. Authoring-only undo records and final
+  reinstancing notifications preserve the live instances through recovery.
+  Next complete persistent value/reference validation, connect
   normal authoring publication, then extend component composition through the
   existing asset workflow.
   Implementation decisions are in `docs/plans/2026-09-09-class-composition.md`.

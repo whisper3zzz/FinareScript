@@ -22,12 +22,15 @@
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptAuthoringActivationScope.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
+#include "UObject/ObjectKey.h"
 #include "UObject/SavePackage.h"
+#include "UObject/StrongObjectPtr.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::UnifiedScript::InheritedActorStateTests
@@ -567,6 +570,49 @@ bool WriteCookReceipt(
         return false;
     }
     return true;
+}
+
+FString WithSelectedAssetBaseClassPath(
+    const FString& Source,
+    const FString& SelectedAssetPath,
+    const FString& ParentPath)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Source);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        return FString();
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+    {
+        return FString();
+    }
+    TSharedPtr<FJsonObject> SelectedAsset;
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid() ? AssetValue->AsObject() : nullptr;
+        FString AssetPath;
+        if (Asset.IsValid() && Asset->TryGetStringField(TEXT("assetPath"), AssetPath) &&
+            AssetPath.Equals(SelectedAssetPath, ESearchCase::CaseSensitive))
+        {
+            SelectedAsset = Asset;
+            break;
+        }
+    }
+    if (!SelectedAsset.IsValid())
+    {
+        return FString();
+    }
+    const TSharedPtr<FJsonObject> Binding = SelectedAsset->GetObjectField(TEXT("classBinding"));
+    if (!Binding.IsValid())
+    {
+        return FString();
+    }
+    Binding->SetStringField(TEXT("baseClassPath"), ParentPath);
+    FString Result;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Result);
+    return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer) ? Result : FString();
 }
 } // namespace UE::UnifiedScript::InheritedActorStateTests
 
@@ -1245,6 +1291,947 @@ bool FUnifiedScriptInheritedActorStateRuntimeTest::RunTest(const FString& Parame
             bKeepCookFixture = true;
         }
     }
+    return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptInheritedActorStateParentChangeActiveWorldsTest,
+    "UnifiedScript.Unreal.ScriptClass.ParentChange.ActiveWorlds",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptInheritedActorStateParentChangeActiveWorldsTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::InheritedActorStateTests;
+    FAutomationTestBase& Test = *this;
+
+    FString ConfigPath;
+    if (!FParse::Value(FCommandLine::Get(), TEXT("-UnifiedScriptParentChangeFixture="), ConfigPath))
+    {
+        ConfigPath = FPaths::Combine(
+            FPaths::ProjectDir(),
+            TEXT("../artifacts/m13-3c-4-class-composition/parent-change/runtime-fixture/BlueprintInheritedStateFixture.config.json"));
+    }
+    ConfigPath = FPaths::ConvertRelativePathToFull(ConfigPath);
+
+    FFixtureConfig Config;
+    FString Error;
+    if (!Test.TestTrue(TEXT("Parent-change runtime fixture config is valid"), ReadConfig(ConfigPath, Config, Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    FString Declaration;
+    if (!Test.TestTrue(TEXT("Parent-change runtime declaration is readable"),
+            FFileHelper::LoadFileToString(Declaration, *Config.DeclarationPath)))
+    {
+        return false;
+    }
+    FGuid ClassId;
+    if (!Test.TestTrue(TEXT("Parent-change runtime ScriptClassId is valid"),
+            ParseScriptClassId(Config.ScriptClassId, ClassId)))
+    {
+        return false;
+    }
+
+    const FString PackagePrefix = Config.PackageDirectory;
+    const FString BasePackageName = PackagePrefix + TEXT("/InheritedStateBase");
+    const FString ChildPackageName = PackagePrefix + TEXT("/InheritedStateChild");
+    const FString GrandchildPackageName = PackagePrefix + TEXT("/InheritedStateGrandchild");
+    const FString ScriptAssetPackageName = PackagePrefix + TEXT("/InheritedStateScriptAsset");
+    const FString ParentPackageName = PackagePrefix + TEXT("/ParentChangeOrdinaryParent");
+    const FString BaseName = TEXT("InheritedStateBase");
+    const FString ChildName = TEXT("InheritedStateChild");
+    const FString GrandchildName = TEXT("InheritedStateGrandchild");
+    const FString ScriptAssetName = TEXT("InheritedStateScriptAsset");
+    const FString ParentName = TEXT("ParentChangeOrdinaryParent");
+    const TArray<FString> PackageNames{
+        BasePackageName,
+        ChildPackageName,
+        GrandchildPackageName,
+        ScriptAssetPackageName,
+        ParentPackageName};
+    TArray<FString> PackageFilenames;
+    for (const FString& PackageName : PackageNames)
+    {
+        PackageFilenames.Add(FPackageName::LongPackageNameToFilename(
+            PackageName,
+            FPackageName::GetAssetPackageExtension()));
+    }
+
+    // This test owns these exact package paths.  Refuse to mutate if a prior
+    // run or another test already has either an object or a file at any path.
+    for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+    {
+        if (FindPackage(nullptr, *PackageNames[Index]) != nullptr ||
+            IFileManager::Get().FileExists(*PackageFilenames[Index]))
+        {
+            AddError(FString::Printf(
+                TEXT("Parent-change ActiveWorlds fixture path is already occupied: %s."),
+                *PackageNames[Index]));
+            return false;
+        }
+    }
+
+    UPackage* BasePackage = nullptr;
+    UPackage* ChildPackage = nullptr;
+    UPackage* GrandchildPackage = nullptr;
+    UPackage* ScriptAssetPackage = nullptr;
+    UPackage* ParentPackage = nullptr;
+    UUnifiedScriptBlueprint* BaseBlueprint = nullptr;
+    UBlueprint* ChildBlueprint = nullptr;
+    UBlueprint* GrandchildBlueprint = nullptr;
+    UBlueprint* ParentBlueprint = nullptr;
+    UUnifiedScriptAsset* ScriptAsset = nullptr;
+    FWorldFixture First;
+    FWorldFixture Second;
+    const int32 InitialWorldCount = FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    bool bOwnPackagePaths = true;
+
+    ON_SCOPE_EXIT
+    {
+        DestroyWorld(First);
+        DestroyWorld(Second);
+        BaseBlueprint = nullptr;
+        ChildBlueprint = nullptr;
+        GrandchildBlueprint = nullptr;
+        ParentBlueprint = nullptr;
+        ScriptAsset = nullptr;
+        CollectGarbage(RF_NoFlags);
+        Test.TestTrue(
+            TEXT("Unloads all ActiveWorlds parent-change packages during cleanup"),
+            UnloadByName(PackageNames));
+        CollectGarbage(RF_NoFlags);
+        if (bOwnPackagePaths)
+        {
+            for (const FString& Filename : PackageFilenames)
+            {
+                if (IFileManager::Get().FileExists(*Filename))
+                {
+                    Test.TestTrue(
+                        *FString::Printf(TEXT("Deletes ActiveWorlds fixture package %s"), *Filename),
+                        IFileManager::Get().Delete(*Filename, false, true, true));
+                }
+                Test.TestFalse(
+                    *FString::Printf(TEXT("ActiveWorlds fixture package is absent %s"), *Filename),
+                    IFileManager::Get().FileExists(*Filename));
+            }
+            IFileManager::Get().DeleteDirectory(
+                *FPackageName::LongPackageNameToFilename(PackagePrefix, TEXT("")),
+                false,
+                false);
+        }
+        Test.TestEqual(
+            TEXT("ActiveWorlds cleanup restores managed World count"),
+            FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+            InitialWorldCount);
+    };
+
+    BaseBlueprint = CreateScriptBlueprint(
+        AUnifiedScriptActor::StaticClass(),
+        BasePackageName,
+        BaseName,
+        BasePackage);
+    ParentBlueprint = CreateOrdinaryBlueprint(
+        AUnifiedScriptActor::StaticClass(),
+        ParentPackageName,
+        ParentName,
+        ParentPackage);
+    if (!Test.TestNotNull(TEXT("Creates parent-change managed owner Blueprint"), BaseBlueprint) ||
+        !Test.TestNotNull(TEXT("Creates parent-change ordinary parent Blueprint"), ParentBlueprint))
+    {
+        return false;
+    }
+    if (!Test.TestTrue(
+            TEXT("Parent-change owner uses the configured exact generated class path"),
+            FSoftClassPath(BaseBlueprint->GeneratedClass).ToString().Equals(
+                Config.ActorClassPath,
+                ESearchCase::CaseSensitive)))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ParentBlueprint);
+    if (!Test.TestEqual(
+            TEXT("Parent-change ordinary parent Blueprint compiles"),
+            ParentBlueprint->Status,
+            BS_UpToDate))
+    {
+        return false;
+    }
+
+    ScriptAssetPackage = CreatePackage(*ScriptAssetPackageName);
+    ScriptAsset = NewObject<UUnifiedScriptAsset>(
+        ScriptAssetPackage,
+        *ScriptAssetName,
+        RF_Public | RF_Standalone);
+    if (!Test.TestNotNull(TEXT("Creates parent-change ScriptAsset"), ScriptAsset))
+    {
+        return false;
+    }
+    ScriptAsset->ScriptClassId = ClassId;
+    ScriptAsset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    ScriptAsset->GeneratedClassPath = FSoftClassPath(BaseBlueprint->GeneratedClass);
+    ScriptAsset->CompiledChunkPath = Config.ChunkPath;
+    ScriptAsset->ScriptAssemblyPath = Config.AssemblyPath;
+    ScriptAsset->ScriptTypeName = Config.ScriptTypeName;
+    ScriptAsset->DeclarationPath = Config.DeclarationPath;
+    ScriptAsset->DeclarationAssetPath = Config.DeclarationAssetPath;
+    BaseBlueprint->ScriptAsset = ScriptAsset;
+
+    FUnifiedScriptBlueprintClassSyncResult SyncResult;
+    if (!Test.TestTrue(
+            TEXT("Parent-change runtime declaration materializes"),
+            FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+                *ScriptAsset,
+                *BaseBlueprint,
+                Declaration,
+                false,
+                SyncResult,
+                Error)))
+    {
+        AddError(Error);
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(BaseBlueprint);
+    if (!Test.TestEqual(TEXT("Parent-change managed owner Blueprint compiles"), BaseBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+
+    AUnifiedScriptActor* BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    UUnifiedScriptComponent* BaseComponent = BaseCdo != nullptr
+        ? BaseCdo->GetUnifiedScriptComponent()
+        : nullptr;
+    if (!Test.TestNotNull(TEXT("Parent-change owner CDO has its native component"), BaseComponent))
+    {
+        return false;
+    }
+    BaseComponent->ScriptAsset = ScriptAsset;
+    BaseBlueprint->ScriptAsset = ScriptAsset;
+    BaseComponent->bStartAutomatically = true;
+    BaseComponent->bTickAutomatically = true;
+    FState BaseState;
+    BaseState.Seed = 3;
+    BaseState.Values = {2, 4};
+    BaseState.Enabled = {5, 7};
+    BaseState.Weights = {{11, 13}, {17, 19}};
+    if (!Test.TestTrue(
+            TEXT("Parent-change owner CDO keeps fixture defaults"),
+            ConfigureAndCheckCdo(
+                *BaseBlueprint->GeneratedClass.Get(),
+                *ScriptAsset,
+                Cast<AUnifiedScriptActor>(AUnifiedScriptActor::StaticClass()->GetDefaultObject())
+                    ->GetUnifiedScriptComponent(),
+                BaseState,
+                *this,
+                TEXT("Parent-change owner CDO"))))
+    {
+        return false;
+    }
+
+    ChildBlueprint = CreateOrdinaryBlueprint(
+        BaseBlueprint->GeneratedClass,
+        ChildPackageName,
+        ChildName,
+        ChildPackage);
+    if (!Test.TestNotNull(TEXT("Creates parent-change ordinary child Blueprint"), ChildBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(ChildBlueprint);
+    if (!Test.TestEqual(TEXT("Parent-change ordinary child Blueprint compiles"), ChildBlueprint->Status, BS_UpToDate))
+    {
+        return false;
+    }
+    BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    BaseComponent = BaseCdo != nullptr ? BaseCdo->GetUnifiedScriptComponent() : nullptr;
+    AUnifiedScriptActor* ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Parent-change child CDO exists"), ChildCdo) ||
+        !Test.TestNotNull(TEXT("Parent-change child component exists"), ChildCdo->GetUnifiedScriptComponent()))
+    {
+        return false;
+    }
+    FState ChildState;
+    ChildState.Seed = 9;
+    ChildState.Values = {3, 8, 13};
+    ChildState.Enabled = {4, 10};
+    ChildState.Weights = {{2, 5}, {7, 11}};
+    const FIntProperty* ChildSeed = FindFProperty<FIntProperty>(ChildBlueprint->GeneratedClass, TEXT("Seed"));
+    const FArrayProperty* ChildValues = FindFProperty<FArrayProperty>(ChildBlueprint->GeneratedClass, TEXT("Values"));
+    const FSetProperty* ChildEnabled = FindFProperty<FSetProperty>(ChildBlueprint->GeneratedClass, TEXT("Enabled"));
+    const FMapProperty* ChildWeights = FindFProperty<FMapProperty>(ChildBlueprint->GeneratedClass, TEXT("Weights"));
+    if (!Test.TestNotNull(TEXT("Parent-change child Seed property exists"), ChildSeed) ||
+        !Test.TestNotNull(TEXT("Parent-change child Values property exists"), ChildValues) ||
+        !Test.TestNotNull(TEXT("Parent-change child Enabled property exists"), ChildEnabled) ||
+        !Test.TestNotNull(TEXT("Parent-change child Weights property exists"), ChildWeights))
+    {
+        return false;
+    }
+    ChildSeed->SetPropertyValue_InContainer(ChildCdo, ChildState.Seed);
+    SetArray(*ChildValues, *ChildCdo, ChildState.Values);
+    SetSet(*ChildEnabled, *ChildCdo, {4, 10});
+    SetMap(*ChildWeights, *ChildCdo, {{2, 5}, {7, 11}});
+    if (!Test.TestTrue(
+            TEXT("Parent-change child CDO keeps its complete state"),
+            CheckState(*ChildCdo, ChildState, *this, TEXT("Parent-change child CDO"))))
+    {
+        return false;
+    }
+
+    GrandchildBlueprint = CreateOrdinaryBlueprint(
+        ChildBlueprint->GeneratedClass,
+        GrandchildPackageName,
+        GrandchildName,
+        GrandchildPackage);
+    if (!Test.TestNotNull(TEXT("Creates parent-change ordinary grandchild Blueprint"), GrandchildBlueprint))
+    {
+        return false;
+    }
+    FKismetEditorUtilities::CompileBlueprint(GrandchildBlueprint);
+    if (!Test.TestEqual(
+            TEXT("Parent-change ordinary grandchild Blueprint compiles"),
+            GrandchildBlueprint->Status,
+            BS_UpToDate))
+    {
+        return false;
+    }
+    AUnifiedScriptActor* GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Parent-change grandchild CDO exists"), GrandchildCdo) ||
+        !Test.TestNotNull(TEXT("Parent-change grandchild component exists"), GrandchildCdo->GetUnifiedScriptComponent()) ||
+        !Test.TestTrue(
+            TEXT("Parent-change grandchild CDO follows its configured child"),
+            CheckState(*GrandchildCdo, ChildState, *this, TEXT("Parent-change grandchild CDO"))))
+    {
+        return false;
+    }
+
+    AUnifiedScriptActor* ParentCdo = Cast<AUnifiedScriptActor>(ParentBlueprint->GeneratedClass->GetDefaultObject());
+    if (!Test.TestNotNull(TEXT("Parent-change ordinary parent CDO exists"), ParentCdo) ||
+        !Test.TestNotNull(TEXT("Parent-change ordinary parent component exists"), ParentCdo->GetUnifiedScriptComponent()))
+    {
+        return false;
+    }
+    ParentCdo->GetUnifiedScriptComponent()->bStartAutomatically = true;
+    ParentCdo->GetUnifiedScriptComponent()->bTickAutomatically = true;
+
+    for (int32 Index = 0; Index < PackageNames.Num(); ++Index)
+    {
+        UObject* ObjectToSave = nullptr;
+        switch (Index)
+        {
+        case 0: ObjectToSave = BaseBlueprint; break;
+        case 1: ObjectToSave = ChildBlueprint; break;
+        case 2: ObjectToSave = GrandchildBlueprint; break;
+        case 3: ObjectToSave = ScriptAsset; break;
+        case 4: ObjectToSave = ParentBlueprint; break;
+        default: break;
+        }
+        if (!Test.TestNotNull(*FString::Printf(TEXT("Parent-change package %d top-level object"), Index), ObjectToSave) ||
+            !Test.TestTrue(
+                *FString::Printf(TEXT("Saves parent-change package %s"), *PackageNames[Index]),
+                SavePackage(*ObjectToSave, PackageFilenames[Index], Error)))
+        {
+            AddError(Error);
+            return false;
+        }
+    }
+
+    TArray<uint8> BaseBytesBefore;
+    TArray<uint8> ChildBytesBefore;
+    TArray<uint8> GrandchildBytesBefore;
+    if (!Test.TestTrue(TEXT("Reads owner package bytes before active parent rejection"),
+            FFileHelper::LoadFileToArray(BaseBytesBefore, *PackageFilenames[0])) ||
+        !Test.TestTrue(TEXT("Reads child package bytes before active parent rejection"),
+            FFileHelper::LoadFileToArray(ChildBytesBefore, *PackageFilenames[1])) ||
+        !Test.TestTrue(TEXT("Reads grandchild package bytes before active parent rejection"),
+            FFileHelper::LoadFileToArray(GrandchildBytesBefore, *PackageFilenames[2])))
+    {
+        return false;
+    }
+
+    const FString ParentClassPath = FSoftClassPath(ParentBlueprint->GeneratedClass).ToString();
+    const FString ReparentedDeclaration = WithSelectedAssetBaseClassPath(
+        Declaration,
+        Config.DeclarationAssetPath,
+        ParentClassPath);
+    if (!Test.TestTrue(TEXT("Builds the selected parent-change declaration"), !ReparentedDeclaration.IsEmpty()))
+    {
+        return false;
+    }
+
+    FString WorldError;
+    if (!Test.TestTrue(TEXT("Creates first ActiveWorlds World"), MakeWorld(First, WorldError)) ||
+        !Test.TestTrue(TEXT("Creates second ActiveWorlds World"), MakeWorld(Second, WorldError)))
+    {
+        AddError(WorldError);
+        return false;
+    }
+    First.Actor = First.World->SpawnActor<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass);
+    Second.Actor = Second.World->SpawnActor<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass);
+    if (!Test.TestNotNull(TEXT("Spawns child actor in first ActiveWorlds World"), First.Actor) ||
+        !Test.TestNotNull(TEXT("Spawns grandchild actor in second ActiveWorlds World"), Second.Actor))
+    {
+        return false;
+    }
+    First.Component = First.Actor->GetUnifiedScriptComponent();
+    Second.Component = Second.Actor->GetUnifiedScriptComponent();
+    First.Host = First.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    Second.Host = Second.World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (!Test.TestNotNull(TEXT("First ActiveWorlds actor component exists"), First.Component) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds actor component exists"), Second.Component) ||
+        !Test.TestNotNull(TEXT("First ActiveWorlds host exists"), First.Host) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds host exists"), Second.Host))
+    {
+        return false;
+    }
+
+    const auto CheckManagedConsumer =
+        [&](const FWorldFixture& Fixture, const FState& Expected, const TCHAR* Label) -> bool
+    {
+        if (!Test.TestNotNull(*FString::Printf(TEXT("%s actor for managed consumer check"), Label), Fixture.Actor) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s component for managed consumer check"), Label), Fixture.Component))
+        {
+            return false;
+        }
+        bool bValid = Test.TestEqual(
+            *FString::Printf(TEXT("%s ManagedState consumes the complete state"), Label),
+            Fixture.Component->ManagedState,
+            FString::Printf(TEXT("InheritedState:%d:Ticks:%d"), Signature(Expected), Expected.TickCount));
+        bValid &= Test.TestTrue(
+            *FString::Printf(TEXT("%s managed consumer updates Actor yaw"), Label),
+            FMath::IsNearlyEqual(
+                Fixture.Actor->GetActorRotation().Yaw,
+                FRotator::NormalizeAxis(static_cast<float>(Signature(Expected) % 360)),
+                0.01f));
+        return bValid;
+    };
+
+    FState FirstState;
+    FirstState.Seed = 23;
+    FirstState.Values = {101, 102};
+    FirstState.Enabled = {103, 104};
+    FirstState.Weights = {{105, 106}, {107, 108}};
+    FState SecondState;
+    SecondState.Seed = 31;
+    SecondState.Values = {201, 202, 203};
+    SecondState.Enabled = {204, 205};
+    SecondState.Weights = {{206, 207}, {208, 209}};
+    const FIntProperty* FirstSeed = FindFProperty<FIntProperty>(First.Actor->GetClass(), TEXT("Seed"));
+    const FArrayProperty* FirstValues = FindFProperty<FArrayProperty>(First.Actor->GetClass(), TEXT("Values"));
+    const FSetProperty* FirstEnabled = FindFProperty<FSetProperty>(First.Actor->GetClass(), TEXT("Enabled"));
+    const FMapProperty* FirstWeights = FindFProperty<FMapProperty>(First.Actor->GetClass(), TEXT("Weights"));
+    const FIntProperty* SecondSeed = FindFProperty<FIntProperty>(Second.Actor->GetClass(), TEXT("Seed"));
+    const FArrayProperty* SecondValues = FindFProperty<FArrayProperty>(Second.Actor->GetClass(), TEXT("Values"));
+    const FSetProperty* SecondEnabled = FindFProperty<FSetProperty>(Second.Actor->GetClass(), TEXT("Enabled"));
+    const FMapProperty* SecondWeights = FindFProperty<FMapProperty>(Second.Actor->GetClass(), TEXT("Weights"));
+    if (!Test.TestNotNull(TEXT("First ActiveWorlds Seed property exists"), FirstSeed) ||
+        !Test.TestNotNull(TEXT("First ActiveWorlds Values property exists"), FirstValues) ||
+        !Test.TestNotNull(TEXT("First ActiveWorlds Enabled property exists"), FirstEnabled) ||
+        !Test.TestNotNull(TEXT("First ActiveWorlds Weights property exists"), FirstWeights) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds Seed property exists"), SecondSeed) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds Values property exists"), SecondValues) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds Enabled property exists"), SecondEnabled) ||
+        !Test.TestNotNull(TEXT("Second ActiveWorlds Weights property exists"), SecondWeights))
+    {
+        return false;
+    }
+    FirstSeed->SetPropertyValue_InContainer(First.Actor, FirstState.Seed);
+    SetArray(*FirstValues, *First.Actor, FirstState.Values);
+    SetSet(*FirstEnabled, *First.Actor, {103, 104});
+    SetMap(*FirstWeights, *First.Actor, {{105, 106}, {107, 108}});
+    SecondSeed->SetPropertyValue_InContainer(Second.Actor, SecondState.Seed);
+    SetArray(*SecondValues, *Second.Actor, SecondState.Values);
+    SetSet(*SecondEnabled, *Second.Actor, {204, 205});
+    SetMap(*SecondWeights, *Second.Actor, {{206, 207}, {208, 209}});
+    if (!Test.TestTrue(TEXT("First ActiveWorlds actor has distinct complete state"),
+            CheckState(*First.Actor, FirstState, *this, TEXT("First ActiveWorlds before BeginPlay"))) ||
+        !Test.TestTrue(TEXT("Second ActiveWorlds actor has distinct complete state"),
+            CheckState(*Second.Actor, SecondState, *this, TEXT("Second ActiveWorlds before BeginPlay"))))
+    {
+        return false;
+    }
+
+    First.Actor->DispatchBeginPlay();
+    Second.Actor->DispatchBeginPlay();
+    if (!Test.TestTrue(TEXT("First ActiveWorlds actor starts the real managed fixture"), First.Component->bScriptRunning) ||
+        !Test.TestTrue(TEXT("Second ActiveWorlds actor starts the real managed fixture"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("First ActiveWorlds host has one managed script"), First.Host->GetManagedScriptCount(), 1) ||
+        !Test.TestEqual(TEXT("Second ActiveWorlds host has one managed script"), Second.Host->GetManagedScriptCount(), 1) ||
+        !Test.TestEqual(TEXT("First ActiveWorlds host has one lifecycle claim"), First.Host->GetGameplayLifecycleClaimCount(), 1) ||
+        !Test.TestEqual(TEXT("Second ActiveWorlds host has one lifecycle claim"), Second.Host->GetGameplayLifecycleClaimCount(), 1))
+    {
+        return false;
+    }
+    First.Host->BeginManagedFrame();
+    First.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    First.Host->EndManagedFrame();
+    ++FirstState.TickCount;
+    Second.Host->BeginManagedFrame();
+    Second.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    Second.Host->EndManagedFrame();
+    ++SecondState.TickCount;
+    if (!Test.TestTrue(TEXT("First ActiveWorlds managed tick runs"), CheckState(*First.Actor, FirstState, *this, TEXT("First ActiveWorlds after tick"))) ||
+        !Test.TestTrue(TEXT("Second ActiveWorlds managed tick runs"), CheckState(*Second.Actor, SecondState, *this, TEXT("Second ActiveWorlds after tick"))) ||
+        !CheckManagedConsumer(First, FirstState, TEXT("First ActiveWorlds after tick")) ||
+        !CheckManagedConsumer(Second, SecondState, TEXT("Second ActiveWorlds after tick")))
+    {
+        return false;
+    }
+
+    const FObjectKey OriginalFirstActorKey(First.Actor);
+    const FObjectKey OriginalSecondActorKey(Second.Actor);
+    FUnifiedScriptRuntimeDebugContext FirstContextBeforeReject;
+    FUnifiedScriptRuntimeDebugContext SecondContextBeforeReject;
+    if (!Test.TestTrue(TEXT("First ActiveWorlds actor exposes runtime context"),
+            First.Component->GetRuntimeDebugContext(FirstContextBeforeReject)) ||
+        !Test.TestTrue(TEXT("Second ActiveWorlds actor exposes runtime context"),
+            Second.Component->GetRuntimeDebugContext(SecondContextBeforeReject)))
+    {
+        return false;
+    }
+    const UClass* OriginalParentClassBeforeReject = BaseBlueprint->ParentClass.Get();
+    UClass* OriginalGeneratedClassBeforeReject = BaseBlueprint->GeneratedClass;
+    UObject* OriginalOwnerCdoBeforeReject = BaseBlueprint->GeneratedClass->GetDefaultObject();
+    const TArray<uint8> BaseBytesBeforeReject = BaseBytesBefore;
+    const TArray<uint8> ChildBytesBeforeReject = ChildBytesBefore;
+    const TArray<uint8> GrandchildBytesBeforeReject = GrandchildBytesBefore;
+
+    auto CheckRejectedParentChange =
+        [&](const TCHAR* Label, bool bChangeResult, const FString& ChangeError, bool bFirstActive) -> bool
+    {
+        if (!Test.TestFalse(*FString::Printf(TEXT("%s rejects active parent change"), Label), bChangeResult))
+        {
+            return false;
+        }
+        if (!Test.TestTrue(
+                *FString::Printf(TEXT("%s explains that a managed instance is active"), Label),
+                ChangeError.Contains(TEXT("while a managed instance is active"))))
+        {
+            return false;
+        }
+        if (!ChangeError.IsEmpty())
+        {
+            Test.AddInfo(FString::Printf(TEXT("%s complete rejection error: %s"), Label, *ChangeError));
+        }
+        UClass* CurrentGeneratedClass = BaseBlueprint->GeneratedClass;
+        AUnifiedScriptActor* CurrentOwnerCdo = CurrentGeneratedClass != nullptr
+            ? Cast<AUnifiedScriptActor>(CurrentGeneratedClass->GetDefaultObject())
+            : nullptr;
+        UUnifiedScriptComponent* CurrentOwnerComponent = CurrentOwnerCdo != nullptr
+            ? CurrentOwnerCdo->GetUnifiedScriptComponent()
+            : nullptr;
+        bool bStable =
+            BaseBlueprint->ParentClass.Get() == OriginalParentClassBeforeReject &&
+            BaseBlueprint->GeneratedClass == OriginalGeneratedClassBeforeReject &&
+            CurrentOwnerCdo == OriginalOwnerCdoBeforeReject &&
+            CurrentOwnerComponent != nullptr &&
+            CurrentOwnerComponent->ScriptAsset == ScriptAsset &&
+            BaseBlueprint->ScriptAsset == ScriptAsset;
+        TArray<uint8> CurrentBytes;
+        bStable &= FFileHelper::LoadFileToArray(CurrentBytes, *PackageFilenames[0]) && CurrentBytes == BaseBytesBeforeReject;
+        bStable &= FFileHelper::LoadFileToArray(CurrentBytes, *PackageFilenames[1]) && CurrentBytes == ChildBytesBeforeReject;
+        bStable &= FFileHelper::LoadFileToArray(CurrentBytes, *PackageFilenames[2]) && CurrentBytes == GrandchildBytesBeforeReject;
+        Test.TestTrue(*FString::Printf(TEXT("%s keeps parent, generated CDO, and package bytes"), Label), bStable);
+        if (!Test.TestNotNull(*FString::Printf(TEXT("%s keeps first actor"), Label), First.Actor) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s keeps second actor"), Label), Second.Actor) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s keeps first component"), Label), First.Component) ||
+            !Test.TestNotNull(*FString::Printf(TEXT("%s keeps second component"), Label), Second.Component))
+        {
+            return false;
+        }
+        Test.TestTrue(*FString::Printf(TEXT("%s keeps first state"), Label), CheckState(*First.Actor, FirstState, *this, TEXT("First after rejection")));
+        Test.TestTrue(*FString::Printf(TEXT("%s keeps second state"), Label), CheckState(*Second.Actor, SecondState, *this, TEXT("Second after rejection")));
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps first managed count"), Label), First.Host->GetManagedScriptCount(), bFirstActive ? 1 : 0);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second managed count"), Label), Second.Host->GetManagedScriptCount(), 1);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps first claim count"), Label), First.Host->GetGameplayLifecycleClaimCount(), bFirstActive ? 1 : 0);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second claim count"), Label), Second.Host->GetGameplayLifecycleClaimCount(), 1);
+        if (bFirstActive)
+        {
+            FUnifiedScriptRuntimeDebugContext CurrentFirst;
+            if (!Test.TestTrue(*FString::Printf(TEXT("%s keeps first runtime context"), Label),
+                    First.Component->GetRuntimeDebugContext(CurrentFirst)))
+            {
+                return false;
+            }
+            Test.TestEqual(*FString::Printf(TEXT("%s keeps first WorldHostId"), Label), CurrentFirst.WorldHostId, FirstContextBeforeReject.WorldHostId);
+            Test.TestEqual(*FString::Printf(TEXT("%s keeps first Generation"), Label), CurrentFirst.Generation, FirstContextBeforeReject.Generation);
+            Test.TestEqual(*FString::Printf(TEXT("%s keeps first InstanceId"), Label), CurrentFirst.InstanceId, FirstContextBeforeReject.InstanceId);
+            Test.TestEqual(*FString::Printf(TEXT("%s keeps first HostHandle"), Label), CurrentFirst.HostHandle, FirstContextBeforeReject.HostHandle);
+            Test.TestEqual(*FString::Printf(TEXT("%s keeps first TargetHandle"), Label), CurrentFirst.TargetHandle, FirstContextBeforeReject.TargetHandle);
+        }
+        FUnifiedScriptRuntimeDebugContext CurrentSecond;
+        if (!Test.TestTrue(*FString::Printf(TEXT("%s keeps second runtime context"), Label),
+                Second.Component->GetRuntimeDebugContext(CurrentSecond)))
+        {
+            return false;
+        }
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second WorldHostId"), Label), CurrentSecond.WorldHostId, SecondContextBeforeReject.WorldHostId);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second Generation"), Label), CurrentSecond.Generation, SecondContextBeforeReject.Generation);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second InstanceId"), Label), CurrentSecond.InstanceId, SecondContextBeforeReject.InstanceId);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second HostHandle"), Label), CurrentSecond.HostHandle, SecondContextBeforeReject.HostHandle);
+        Test.TestEqual(*FString::Printf(TEXT("%s keeps second TargetHandle"), Label), CurrentSecond.TargetHandle, SecondContextBeforeReject.TargetHandle);
+        return bStable;
+    };
+
+    FString ValidateError;
+    const bool bValidateWhileBothActive = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *BaseBlueprint,
+        ReparentedDeclaration,
+        true,
+        SyncResult,
+        ValidateError);
+    if (!CheckRejectedParentChange(TEXT("Validate-only with two active Worlds"), bValidateWhileBothActive, ValidateError, true))
+    {
+        return false;
+    }
+    FString ApplyError;
+    const bool bApplyWhileBothActive = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *BaseBlueprint,
+        ReparentedDeclaration,
+        false,
+        SyncResult,
+        ApplyError);
+    if (!CheckRejectedParentChange(TEXT("Apply with two active Worlds"), bApplyWhileBothActive, ApplyError, true))
+    {
+        return false;
+    }
+    First.Component->StopScript();
+    if (!Test.TestFalse(TEXT("Stopping first ActiveWorlds actor releases its script"), First.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("Stopping first ActiveWorlds actor releases its managed script"), First.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestEqual(TEXT("Stopping first ActiveWorlds actor releases its claim"), First.Host->GetGameplayLifecycleClaimCount(), 0))
+    {
+        return false;
+    }
+    Second.Host->BeginManagedFrame();
+    Second.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    Second.Host->EndManagedFrame();
+    ++SecondState.TickCount;
+    if (!Test.TestTrue(TEXT("Second ActiveWorlds actor continues ticking after first stops"), CheckState(*Second.Actor, SecondState, *this, TEXT("Second after first stop"))))
+    {
+        return false;
+    }
+
+    FString ApplyOneStillActiveError;
+    const bool bApplyWithSecondStillActive = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *BaseBlueprint,
+        ReparentedDeclaration,
+        false,
+        SyncResult,
+        ApplyOneStillActiveError);
+    if (!CheckRejectedParentChange(TEXT("Apply with second World still active"), bApplyWithSecondStillActive, ApplyOneStillActiveError, false))
+    {
+        return false;
+    }
+    Second.Component->StopScript();
+    if (!Test.TestFalse(TEXT("Stopping second ActiveWorlds actor releases its script"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("Stopping second ActiveWorlds actor releases its managed script"), Second.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestEqual(TEXT("Stopping second ActiveWorlds actor releases its claim"), Second.Host->GetGameplayLifecycleClaimCount(), 0))
+    {
+        return false;
+    }
+
+    {
+        FUnifiedScriptAuthoringActivationScope OuterAuthoringScope(BaseBlueprint);
+        if (!Test.TestTrue(TEXT("Authoring scope retains its owner while nested activation is suppressed"), IsValid(BaseBlueprint)) ||
+            !Test.TestTrue(TEXT("Authoring scope suppresses the first derived actor component"),
+                FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*First.Component)) ||
+            !Test.TestTrue(TEXT("Authoring scope suppresses the second derived actor component"),
+                FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*Second.Component)) ||
+            !Test.TestFalse(TEXT("Authoring scope does not suppress the ordinary parent component"),
+                FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(
+                    *ParentCdo->GetUnifiedScriptComponent())))
+        {
+            return false;
+        }
+        {
+            FUnifiedScriptAuthoringActivationScope InnerAuthoringScope(BaseBlueprint);
+            if (!Test.TestTrue(TEXT("Nested authoring scope suppresses the first component"),
+                    FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*First.Component)))
+            {
+                return false;
+            }
+        }
+        if (!Test.TestTrue(TEXT("Outer authoring scope remains after nested scope exits"),
+                FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*First.Component)) ||
+            !Test.TestFalse(TEXT("Explicit Start is rejected inside authoring scope"), First.Component->StartScript()) ||
+            !Test.TestEqual(TEXT("Authoring scope Start rejection creates no first managed script"), First.Host->GetManagedScriptCount(), 0) ||
+            !Test.TestEqual(TEXT("Authoring scope Start rejection creates no first claim"), First.Host->GetGameplayLifecycleClaimCount(), 0) ||
+            !Test.TestFalse(TEXT("Authoring scope Start rejection leaves first stopped"), First.Component->bScriptRunning) ||
+            !Test.TestFalse(TEXT("Authoring scope leaves second stopped"), Second.Component->bScriptRunning))
+        {
+            return false;
+        }
+    }
+    if (!Test.TestFalse(TEXT("First component is unsuppressed after authoring scope exits"),
+            FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*First.Component)) ||
+        !Test.TestFalse(TEXT("Second component is unsuppressed after authoring scope exits"),
+            FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*Second.Component)))
+    {
+        return false;
+    }
+
+    TMap<FObjectKey, FObjectKey> ReinstancedKeys;
+    TMap<FObjectKey, TStrongObjectPtr<UObject>> ReinstancedTargets;
+    const FDelegateHandle ReinstancedHandle = FCoreUObjectDelegates::OnObjectsReinstanced.AddLambda(
+        [&ReinstancedKeys, &ReinstancedTargets](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
+        {
+            for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
+            {
+                if (Pair.Key == nullptr)
+                {
+                    continue;
+                }
+                const FObjectKey OldKey(Pair.Key);
+                ReinstancedKeys.Add(OldKey, Pair.Value != nullptr ? FObjectKey(Pair.Value) : FObjectKey());
+                if (Pair.Value != nullptr)
+                {
+                    ReinstancedTargets.Add(OldKey, TStrongObjectPtr<UObject>(Pair.Value));
+                }
+            }
+        });
+    ON_SCOPE_EXIT
+    {
+        FCoreUObjectDelegates::OnObjectsReinstanced.Remove(ReinstancedHandle);
+    };
+
+    auto ResolveReinstancedObject =
+        [&](const FObjectKey& OriginalKey) -> UObject*
+    {
+        TSet<FObjectKey> Visited;
+        FObjectKey CurrentKey = OriginalKey;
+        while (CurrentKey != FObjectKey() && !Visited.Contains(CurrentKey))
+        {
+            Visited.Add(CurrentKey);
+            const FObjectKey* NextKey = ReinstancedKeys.Find(CurrentKey);
+            if (NextKey == nullptr)
+            {
+                UObject* TerminalObject = CurrentKey.ResolveObjectPtr();
+                return IsValid(TerminalObject) ? TerminalObject : nullptr;
+            }
+            if (*NextKey == FObjectKey())
+            {
+                return nullptr;
+            }
+            CurrentKey = *NextKey;
+        }
+        return nullptr;
+    };
+
+    FUnifiedScriptBlueprintClassMaterializerOptions RollbackOptions;
+    RollbackOptions.FailurePoint =
+        EUnifiedScriptBlueprintClassMaterializerFailurePoint::AfterPackageSave;
+    FString RollbackError;
+    const bool bRollbackSucceeded = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *BaseBlueprint,
+        ReparentedDeclaration,
+        false,
+        SyncResult,
+        RollbackError,
+        RollbackOptions);
+    First.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(OriginalFirstActorKey));
+    Second.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(OriginalSecondActorKey));
+    First.Component = First.Actor != nullptr ? First.Actor->GetUnifiedScriptComponent() : nullptr;
+    Second.Component = Second.Actor != nullptr ? Second.Actor->GetUnifiedScriptComponent() : nullptr;
+    if (!Test.TestFalse(TEXT("AfterPackageSave parent change rolls back"), bRollbackSucceeded) ||
+        !Test.TestEqual(
+            TEXT("AfterPackageSave reports the exact injected publication failure"),
+            RollbackError,
+            FString(TEXT("Injected package publication failure for UnifiedScript Blueprint transaction test."))))
+    {
+        return false;
+    }
+    if (!Test.TestNotNull(TEXT("AfterPackageSave rollback resolves the first exact actor"), First.Actor) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves the second exact actor"), Second.Actor) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves the first component"), First.Component) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves the second component"), Second.Component))
+    {
+        return false;
+    }
+    if (!Test.TestNotNull(TEXT("AfterPackageSave rollback keeps owner generated class"), BaseBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback keeps child generated class"), ChildBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback keeps grandchild generated class"), GrandchildBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    TArray<uint8> RollbackBytes;
+    if (!Test.TestTrue(
+            TEXT("AfterPackageSave rollback restores the native parent"),
+            BaseBlueprint->ParentClass.Get() == AUnifiedScriptActor::StaticClass()) ||
+        !Test.TestTrue(
+            TEXT("AfterPackageSave rollback restores the generated native super"),
+            BaseBlueprint->GeneratedClass->GetSuperClass() == AUnifiedScriptActor::StaticClass()) ||
+        !Test.TestTrue(TEXT("AfterPackageSave rollback restores owner package bytes"),
+            FFileHelper::LoadFileToArray(RollbackBytes, *PackageFilenames[0]) && RollbackBytes == BaseBytesBeforeReject) ||
+        !Test.TestTrue(TEXT("AfterPackageSave rollback restores child package bytes"),
+            FFileHelper::LoadFileToArray(RollbackBytes, *PackageFilenames[1]) && RollbackBytes == ChildBytesBeforeReject) ||
+        !Test.TestTrue(TEXT("AfterPackageSave rollback restores grandchild package bytes"),
+            FFileHelper::LoadFileToArray(RollbackBytes, *PackageFilenames[2]) && RollbackBytes == GrandchildBytesBeforeReject) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves owner CDO"), BaseCdo) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves child CDO"), ChildCdo) ||
+        !Test.TestNotNull(TEXT("AfterPackageSave rollback resolves grandchild CDO"), GrandchildCdo))
+    {
+        return false;
+    }
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves first complete state"), CheckState(*First.Actor, FirstState, *this, TEXT("First after rollback")));
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves second complete state"), CheckState(*Second.Actor, SecondState, *this, TEXT("Second after rollback")));
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves first component ScriptAsset"), First.Component->ScriptAsset == ScriptAsset);
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves second component ScriptAsset"), Second.Component->ScriptAsset == ScriptAsset);
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves first component Outer"), First.Component->GetOuter() == First.Actor);
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves second component Outer"), Second.Component->GetOuter() == Second.Actor);
+    Test.TestTrue(TEXT("AfterPackageSave rollback keeps first actor in its World"), First.Actor->GetWorld() == First.World);
+    Test.TestTrue(TEXT("AfterPackageSave rollback keeps second actor in its World"), Second.Actor->GetWorld() == Second.World);
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves first current CDO archetype"), First.Component->GetArchetype() == ChildCdo->GetUnifiedScriptComponent());
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves second current CDO archetype"), Second.Component->GetArchetype() == GrandchildCdo->GetUnifiedScriptComponent());
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves first automatic-start setting"), First.Component->bStartAutomatically);
+    Test.TestTrue(TEXT("AfterPackageSave rollback preserves second automatic-start setting"), Second.Component->bStartAutomatically);
+    Test.TestFalse(TEXT("AfterPackageSave rollback leaves first actor stopped"), First.Component->bScriptRunning);
+    Test.TestFalse(TEXT("AfterPackageSave rollback leaves second actor stopped"), Second.Component->bScriptRunning);
+    Test.TestEqual(TEXT("AfterPackageSave rollback leaves first managed scripts stopped"), First.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("AfterPackageSave rollback leaves second managed scripts stopped"), Second.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("AfterPackageSave rollback leaves first claims stopped"), First.Host->GetGameplayLifecycleClaimCount(), 0);
+    Test.TestEqual(TEXT("AfterPackageSave rollback leaves second claims stopped"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+    if (!Test.TestTrue(TEXT("First explicitly starts after rollback scope exits"), First.Component->StartScript()) ||
+        !Test.TestTrue(TEXT("First runs after rollback explicit Start"), First.Component->bScriptRunning) ||
+        !Test.TestFalse(TEXT("Second remains stopped after rollback explicit Start"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("Rollback explicit Start creates one first managed script"), First.Host->GetManagedScriptCount(), 1) ||
+        !Test.TestEqual(TEXT("Rollback explicit Start leaves second managed scripts empty"), Second.Host->GetManagedScriptCount(), 0))
+    {
+        return false;
+    }
+    First.Component->StopScript();
+    if (!Test.TestFalse(TEXT("First stops again before successful parent change"), First.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("First stop after rollback releases its script"), First.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestEqual(TEXT("First stop after rollback releases its claim"), First.Host->GetGameplayLifecycleClaimCount(), 0))
+    {
+        return false;
+    }
+
+    FString ReparentError;
+    const bool bReparented = FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *BaseBlueprint,
+        ReparentedDeclaration,
+        false,
+        SyncResult,
+        ReparentError);
+    First.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(OriginalFirstActorKey));
+    Second.Actor = Cast<AUnifiedScriptActor>(ResolveReinstancedObject(OriginalSecondActorKey));
+    First.Component = First.Actor != nullptr ? First.Actor->GetUnifiedScriptComponent() : nullptr;
+    Second.Component = Second.Actor != nullptr ? Second.Actor->GetUnifiedScriptComponent() : nullptr;
+    if (!Test.TestTrue(TEXT("Parent-change succeeds after both Worlds stop"), bReparented))
+    {
+        AddError(ReparentError);
+        return false;
+    }
+    if (!Test.TestTrue(TEXT("Parent-change captures the first exact actor reinstance"), ReinstancedKeys.Contains(OriginalFirstActorKey)) ||
+        !Test.TestTrue(TEXT("Parent-change captures the second exact actor reinstance"), ReinstancedKeys.Contains(OriginalSecondActorKey)))
+    {
+        return false;
+    }
+
+    if (!Test.TestNotNull(TEXT("Parent-change keeps owner generated class"), BaseBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Parent-change keeps child generated class"), ChildBlueprint->GeneratedClass.Get()) ||
+        !Test.TestNotNull(TEXT("Parent-change keeps grandchild generated class"), GrandchildBlueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+    BaseCdo = Cast<AUnifiedScriptActor>(BaseBlueprint->GeneratedClass->GetDefaultObject());
+    ChildCdo = Cast<AUnifiedScriptActor>(ChildBlueprint->GeneratedClass->GetDefaultObject());
+    GrandchildCdo = Cast<AUnifiedScriptActor>(GrandchildBlueprint->GeneratedClass->GetDefaultObject());
+    const bool bCurrentParent = BaseBlueprint->GeneratedClass != nullptr &&
+        BaseBlueprint->GeneratedClass->GetSuperClass() == ParentBlueprint->GeneratedClass;
+    if (!Test.TestTrue(TEXT("Parent-change generated class uses the requested ordinary parent"), bCurrentParent) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the first exact replacement actor"), First.Actor) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the second exact replacement actor"), Second.Actor) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the first replacement component"), First.Component) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the second replacement component"), Second.Component) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the current owner CDO"), BaseCdo) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the current child CDO"), ChildCdo) ||
+        !Test.TestNotNull(TEXT("Parent-change resolves the current grandchild CDO"), GrandchildCdo))
+    {
+        return false;
+    }
+    Test.TestTrue(TEXT("Parent-change preserves the exact owner ScriptAsset"), BaseBlueprint->ScriptAsset == ScriptAsset);
+    Test.TestTrue(TEXT("Parent-change preserves the exact first ScriptAsset"), First.Component->ScriptAsset == ScriptAsset);
+    Test.TestTrue(TEXT("Parent-change preserves the exact second ScriptAsset"), Second.Component->ScriptAsset == ScriptAsset);
+    Test.TestTrue(TEXT("Parent-change replacement keeps first actor in its World"), First.Actor->GetWorld() == First.World);
+    Test.TestTrue(TEXT("Parent-change replacement keeps second actor in its World"), Second.Actor->GetWorld() == Second.World);
+    Test.TestTrue(TEXT("Parent-change first component keeps exact actor Outer"), First.Component->GetOuter() == First.Actor);
+    Test.TestTrue(TEXT("Parent-change second component keeps exact actor Outer"), Second.Component->GetOuter() == Second.Actor);
+    Test.TestTrue(TEXT("Parent-change first component uses current child CDO archetype"), First.Component->GetArchetype() == ChildCdo->GetUnifiedScriptComponent());
+    Test.TestTrue(TEXT("Parent-change second component uses current grandchild CDO archetype"), Second.Component->GetArchetype() == GrandchildCdo->GetUnifiedScriptComponent());
+    Test.TestTrue(TEXT("Parent-change first replacement keeps complete state"), CheckState(*First.Actor, FirstState, *this, TEXT("First after parent change")));
+    Test.TestTrue(TEXT("Parent-change second replacement keeps complete state"), CheckState(*Second.Actor, SecondState, *this, TEXT("Second after parent change")));
+    Test.TestFalse(TEXT("Parent-change first replacement is stopped before explicit Start"), First.Component->bScriptRunning);
+    Test.TestFalse(TEXT("Parent-change second replacement is stopped before explicit Start"), Second.Component->bScriptRunning);
+    Test.TestEqual(TEXT("Parent-change first host has no script before explicit Start"), First.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("Parent-change second host has no script before explicit Start"), Second.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("Parent-change first host has no claim before explicit Start"), First.Host->GetGameplayLifecycleClaimCount(), 0);
+    Test.TestEqual(TEXT("Parent-change second host has no claim before explicit Start"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+
+    FUnifiedScriptRuntimeDebugContext FirstContextAfterStart;
+    FUnifiedScriptRuntimeDebugContext SecondContextAfterStart;
+    if (!Test.TestTrue(TEXT("Explicitly starts the first replacement actor"), First.Component->StartScript()) ||
+        !Test.TestTrue(TEXT("First replacement actor is running after explicit Start"), First.Component->bScriptRunning) ||
+        !Test.TestFalse(TEXT("Second replacement actor remains stopped"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("First host has one script after explicit Start"), First.Host->GetManagedScriptCount(), 1) ||
+        !Test.TestEqual(TEXT("Second host remains empty after first explicit Start"), Second.Host->GetManagedScriptCount(), 0) ||
+        !Test.TestTrue(TEXT("First replacement exposes a new runtime context"), First.Component->GetRuntimeDebugContext(FirstContextAfterStart)))
+    {
+        return false;
+    }
+    Test.TestEqual(TEXT("First replacement keeps its World host identity"), FirstContextAfterStart.WorldHostId, FirstContextBeforeReject.WorldHostId);
+    Test.TestNotEqual(TEXT("First replacement does not reuse the old InstanceId"), FirstContextAfterStart.InstanceId, FirstContextBeforeReject.InstanceId);
+    Test.TestNotEqual(TEXT("First replacement does not reuse the old HostHandle"), FirstContextAfterStart.HostHandle, FirstContextBeforeReject.HostHandle);
+    Test.TestNotEqual(TEXT("First replacement does not reuse the old TargetHandle"), FirstContextAfterStart.TargetHandle, FirstContextBeforeReject.TargetHandle);
+    First.Host->BeginManagedFrame();
+    First.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    First.Host->EndManagedFrame();
+    ++FirstState.TickCount;
+    Test.TestTrue(TEXT("First replacement ticks after explicit Start"), CheckState(*First.Actor, FirstState, *this, TEXT("First after explicit Start and tick")));
+    Test.TestTrue(TEXT("First replacement managed consumer uses exact state after explicit Start"),
+        CheckManagedConsumer(First, FirstState, TEXT("First replacement after explicit Start and tick")));
+
+    if (!Test.TestTrue(TEXT("Explicitly starts the second replacement actor"), Second.Component->StartScript()) ||
+        !Test.TestTrue(TEXT("Second replacement actor is running after explicit Start"), Second.Component->bScriptRunning) ||
+        !Test.TestEqual(TEXT("Second host has one script after explicit Start"), Second.Host->GetManagedScriptCount(), 1) ||
+        !Test.TestEqual(TEXT("Second host has one claim after explicit Start"), Second.Host->GetGameplayLifecycleClaimCount(), 1) ||
+        !Test.TestTrue(TEXT("Second replacement exposes a new runtime context"), Second.Component->GetRuntimeDebugContext(SecondContextAfterStart)))
+    {
+        return false;
+    }
+    Test.TestEqual(TEXT("Second replacement keeps its World host identity"), SecondContextAfterStart.WorldHostId, SecondContextBeforeReject.WorldHostId);
+    Test.TestNotEqual(TEXT("Second replacement does not reuse the old InstanceId"), SecondContextAfterStart.InstanceId, SecondContextBeforeReject.InstanceId);
+    Test.TestNotEqual(TEXT("Second replacement does not reuse the old HostHandle"), SecondContextAfterStart.HostHandle, SecondContextBeforeReject.HostHandle);
+    Test.TestNotEqual(TEXT("Second replacement does not reuse the old TargetHandle"), SecondContextAfterStart.TargetHandle, SecondContextBeforeReject.TargetHandle);
+    Test.TestTrue(TEXT("Replacement Worlds keep isolated managed identities"),
+        FirstContextAfterStart.WorldHostId != SecondContextAfterStart.WorldHostId &&
+        FirstContextAfterStart.InstanceId != SecondContextAfterStart.InstanceId &&
+        FirstContextAfterStart.HostHandle != SecondContextAfterStart.HostHandle &&
+        FirstContextAfterStart.TargetHandle != SecondContextAfterStart.TargetHandle);
+    Second.Host->BeginManagedFrame();
+    Second.Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    Second.Host->EndManagedFrame();
+    ++SecondState.TickCount;
+    Test.TestTrue(TEXT("Second replacement ticks after explicit Start"), CheckState(*Second.Actor, SecondState, *this, TEXT("Second after explicit Start and tick")));
+    Test.TestTrue(TEXT("Second replacement managed consumer uses exact state after explicit Start"),
+        CheckManagedConsumer(Second, SecondState, TEXT("Second replacement after explicit Start and tick")));
+
+    DestroyActor(First);
+    DestroyActor(Second);
+    Test.TestEqual(TEXT("ActiveWorlds first host releases managed script after actor teardown"), First.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("ActiveWorlds second host releases managed script after actor teardown"), Second.Host->GetManagedScriptCount(), 0);
+    Test.TestEqual(TEXT("ActiveWorlds first host releases claims after actor teardown"), First.Host->GetGameplayLifecycleClaimCount(), 0);
+    Test.TestEqual(TEXT("ActiveWorlds second host releases claims after actor teardown"), Second.Host->GetGameplayLifecycleClaimCount(), 0);
+    DestroyWorld(First);
+    DestroyWorld(Second);
     return !HasAnyErrors();
 }
 

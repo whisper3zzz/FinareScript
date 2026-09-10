@@ -126,6 +126,12 @@ The stopped-instance test must keep the script stopped through reinstancing,
 then explicitly restart it. `UUnifiedScriptComponent::BeginPlay` can start an
 automatically configured behavior, so rejecting already active instances does
 not by itself establish that compilation cannot activate a replacement.
+Any activation suppression must cover only the affected authoring owner and its
+derived classes, remain in effect through rollback recompilation, and release
+on every exit. Changing `bStartAutomatically` to avoid activation would alter
+user configuration and the default-inheritance baseline. UE's actor reinstancer
+can dispatch BeginPlay again for an already-begun Actor; successful native
+reinstancing alone is not evidence that the behavior remained stopped.
 Mixed parent/member edits now retain rollback values for owner-local managed
 properties: transaction deserialization cannot recover a value whose old field
 is absent until authoring has been recompiled. Restore those typed values by
@@ -207,12 +213,58 @@ preflight, success and failure. The collection regression separately verifies
 reinstanced UObject Map keys and covers the worldless replacement that required
 operation-scoped destination roots.
 
-Only the managed owner package is saved by this primitive test. Ordinary parents
-and descendants are transient; persistent hierarchy unload/reload, complete
-parent-change collection/external-reference cases, real active-World rejection,
-stopped-instance restart, normal-authoring publication and cooked acceptance
-remain unfinished. Component-family parent changes are not established by the
-Actor-only parent test. This checkpoint does not close C-4.
+The real `ParentChange.ActiveWorlds` Actor fixture saves the owner, ordinary
+parent and child/grandchild packages and runs managed chunks in two Game Worlds.
+Both validate-only and apply reject active instances without changing the
+parent, CDO, package bytes or runtime identities; stopping only one World still
+rejects the edit. Once both stop, reparenting preserves scalar/array/set/map
+values, exact component ownership and ScriptAsset binding. Reinstanced actors
+remain stopped until explicitly restarted in their respective Worlds.
+The first run, `editor-parent-change-active-worlds-1.log`, reproduced unwanted
+automatic activation from UE's reinstanced `BeginPlay`. An editor-only scope
+now suppresses activation for the exact authoring owner and its descendants,
+through both commit and rollback, without changing automatic-start defaults.
+Editor build 21 and `editor-parent-change-active-worlds-2.log` passed
+`ParentChange.ActiveWorlds` and `ParentChange.Primitive` with this fix.
+The same invocation's old inherited-state fixture failed to load
+`UnifiedScript.Unreal`; its published dependencies differ from the current
+fixture. The unchanged `InheritedActorStateRuntime` test passed separately using
+the current `runtime-fixture/BlueprintInheritedStateFixture.config.json`, in
+`editor-parent-change-inherited-regression-1.log`. The old fixture failure is
+retained rather than reported as a successful three-test run.
+
+The extended real-World after-save failure exposed two additional recovery
+requirements. Snapshot replacement tracking must receive the final
+`OnObjectsReinstanced` map as well as early `OnObjectsReplaced` notifications;
+self-pairs are observations, not replacement edges. More critically, the
+private Undo must record only explicitly captured authoring objects. UE's
+reinstancer calls `Modify` and `EditorDestroyActor` on runtime objects; recording
+their World/Level/Actor changes alongside the authoring snapshot corrupted
+live-instance recovery. The transaction now applies its captured-object scope
+to object, array, snapshot and custom-change recording, retaining standard flip
+Undo for the captured authoring tree and the UStruct layout exclusion.
+Explicit-null replacements still fail recovery rather than silently clearing
+preserved values. Failed receipts from these investigations are retained as
+`active-worlds-3-pending-receipt.json` and
+`active-worlds-4-pending-receipt.json` in the parent-change artifact directory.
+
+Editor build 25 and `editor-parent-change-active-worlds-5.log` passed
+`ParentChange.ActiveWorlds`, `ParentChange.Primitive` and
+`CollectionStateMaterialization`, with three-test queue completion. The extended
+World test checks nested activation scopes, an unaffected ordinary parent,
+side-effect-free rejected starts, after-save rollback with exact package bytes,
+complete instance values, World/component/archetype/ScriptAsset identity, and
+explicit restart after both rollback and success. Managed signature markers
+and native actor rotation verify actual collection consumption after restart;
+script, lifecycle-claim and World counts return to baseline on teardown.
+
+Only the managed owner package is saved by the primitive test; its ordinary
+parents and descendants are transient. The ActiveWorlds fixture saves the
+hierarchy but does not unload/reload it after reparenting. Persistent hierarchy
+reload, complete parent-change external-reference cases, normal-authoring
+publication and cooked acceptance remain unfinished. Component-family parent
+changes are not established by the Actor-only parent tests. This checkpoint
+does not close C-4.
 
 Shared journal changes are committed locally as `4e3b45e`. The earlier
 `editor-parent-change-transactions-1.log` records successful `OperationJournal`

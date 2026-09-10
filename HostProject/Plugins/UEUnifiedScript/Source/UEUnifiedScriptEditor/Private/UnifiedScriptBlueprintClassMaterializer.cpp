@@ -23,6 +23,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "HAL/FileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -30,6 +31,7 @@
 #include "Serialization/ArchiveUObject.h"
 #include "Serialization/StructuredArchive.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptAuthoringActivationScope.h"
 #include "UnifiedScriptClassBinding.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptActor.h"
@@ -1267,6 +1269,10 @@ public:
             OutError = TEXT("Could not begin a private Blueprint parent transaction.");
             return false;
         }
+        check(GUndo != nullptr);
+        FAuthoringBlueprintTransaction* AuthoringTransaction =
+            static_cast<FAuthoringBlueprintTransaction*>(GUndo);
+        AuthoringTransaction->BeginExplicitAuthoringCapture();
         CaptureBlueprint(Blueprint);
         const UClass* OriginalGeneratedClass = Blueprint.GeneratedClass;
         if (OriginalGeneratedClass != nullptr)
@@ -1301,6 +1307,7 @@ public:
                     return DepthFromRoot(Left) < DepthFromRoot(Right);
                 });
         }
+        AuthoringTransaction->EndExplicitAuthoringCapture();
         bActive = true;
         OutError.Reset();
         return true;
@@ -8065,6 +8072,17 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         return false;
     }
 
+#if WITH_EDITOR
+    TOptional<FUnifiedScriptAuthoringActivationScope> AuthoringActivationScope;
+    if (ParentPlan.bChanged)
+    {
+        // Hold the authoring owner through preflight, reinstance, and local
+        // transaction rollback so reinstanced BeginPlay cannot start a stale
+        // managed generation before the operation has finished.
+        AuthoringActivationScope.Emplace(&Blueprint);
+    }
+#endif
+
     FLocalBlueprintTransaction ParentTransaction(Blueprint);
     if (ParentPlan.bChanged && !ParentTransaction.Isolate(OutError))
     {
@@ -8247,7 +8265,7 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
     FScriptComponentSnapshotReferenceGuard ScriptComponentSnapshotReferenceGuard(ScriptComponentOwners);
 
     FCollectionReplacementMap ReplacedObjects;
-    const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
+    const auto CaptureReplacementMap =
         [&ReplacedObjects](const FCoreUObjectDelegates::FReplacementObjectMap& ReplacementMap)
         {
             for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
@@ -8256,16 +8274,37 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
                 {
                     continue;
                 }
+                const FObjectKey OldKey(Pair.Key);
+                const FObjectKey NewKey(Pair.Value);
+                if (Pair.Value != nullptr && OldKey == NewKey)
+                {
+                    // OnObjectsReinstanced may report an object that was
+                    // retained by the reinstancer as Old->Old.  This is a
+                    // stable terminal observation, not a replacement edge;
+                    // recording it would turn a valid chain into a cycle.
+                    continue;
+                }
                 // Raw pointers are converted immediately to serialised object
                 // identities.  The event's addresses may be recycled before
-                // the snapshot is restored, so they cannot be map keys.
+                // the snapshot is restored, so they cannot be map keys.  The
+                // late OnObjectsReinstanced event is required because the
+                // reinstancer removes its temporary OnObjectsReplaced listener
+                // before publishing the final actor/object map.
                 FCollectionReplacementTarget Target;
                 Target.Identity = FObjectKey(Pair.Value);
                 Target.DestinationRoot.Reset(Pair.Value);
                 Target.bExplicitNull = Pair.Value == nullptr;
-                ReplacedObjects.Add(FObjectKey(Pair.Key), MoveTemp(Target));
+                ReplacedObjects.Add(OldKey, MoveTemp(Target));
             }
-    });
+        };
+    const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
+        CaptureReplacementMap);
+    const FDelegateHandle ReinstancedObjectsHandle = FCoreUObjectDelegates::OnObjectsReinstanced.AddLambda(
+        CaptureReplacementMap);
+    ON_SCOPE_EXIT
+    {
+        FCoreUObjectDelegates::OnObjectsReinstanced.Remove(ReinstancedObjectsHandle);
+    };
     if (bValidateOnly)
     {
         if (!ParentPlan.bChanged)

@@ -19,6 +19,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptAuthoringActivationScope.h"
 #include "UnifiedScriptBlueprint.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
@@ -452,7 +453,14 @@ UUnifiedScriptComponent::UUnifiedScriptComponent()
 
 void UUnifiedScriptComponent::BeginPlay()
 {
+#if WITH_EDITOR
+    const bool bAuthoringActivationSuppressed =
+        FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*this);
+#else
+    constexpr bool bAuthoringActivationSuppressed = false;
+#endif
     const bool bStartManagedBeginPlayBeforeSuper =
+        !bAuthoringActivationSuppressed &&
         bStartAutomatically &&
         HasConfiguredManagedLifecycleOverride(
             FName(TEXT("ReceiveBeginPlay")));
@@ -466,7 +474,9 @@ void UUnifiedScriptComponent::BeginPlay()
     }
 
     Super::BeginPlay();
-    if (bStartAutomatically && !bStartManagedBeginPlayBeforeSuper)
+    if (!bAuthoringActivationSuppressed &&
+        bStartAutomatically &&
+        !bStartManagedBeginPlayBeforeSuper)
     {
         StartScript();
     }
@@ -628,6 +638,16 @@ void UUnifiedScriptComponent::PostEditChangeChainProperty(
 bool UUnifiedScriptComponent::StartScript()
 {
     check(IsInGameThread());
+#if WITH_EDITOR
+    // Reinstancing can dispatch BeginPlay more than once for an already
+    // initialized actor.  Authoring owns the old generation until its whole
+    // transaction exits, so reject every forwarded/explicit start before any
+    // attempt state, host claim, or managed handle is created.
+    if (FUnifiedScriptAuthoringActivationScope::IsSuppressedForComponent(*this))
+    {
+        return false;
+    }
+#endif
     if (bScriptRunning)
     {
         return true;
