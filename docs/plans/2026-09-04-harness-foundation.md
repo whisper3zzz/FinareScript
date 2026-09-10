@@ -14,7 +14,7 @@ Status: complete
   `tools/harness.py`、`tools/tests/test_harness.py`、Harness 文档和计划模板。
 - 小范围接入 README、CONTRIBUTING、CI 文档/工作流、仓库 validator 和 gitignore。
 - 本机 `harness.local.json` 保持 ignored；显式保护既有 DefaultEngine.ini、
-  DefaultInput.ini、UnifiedScriptSyncAssetsCommandlet.cpp、UnifiedScriptGeneratedThunks.h。
+  DefaultInput.ini、FinareSyncAssetsCommandlet.cpp、FinareGeneratedThunks.h。
 - 不修改 product C#/C++、不执行外部 BlockBreaker/Lyra 任务、不重新设计 runtime，
   不清理已有 `tools/__pycache__/`，不自动 commit/push。
 

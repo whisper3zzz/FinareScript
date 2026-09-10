@@ -11,11 +11,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sourceCliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$sourceCliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $sourceCliAssembly = Join-Path $repoRoot `
-    'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
+    'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
 $packagedCliAssembly = Join-Path $repoRoot `
-    'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll'
+    'Tools\Finare.Cli\Finare.Cli.dll'
 $isSourceLayout = Test-Path -LiteralPath $sourceCliProject -PathType Leaf
 $pathBase = if ($isSourceLayout) { $repoRoot } else { (Get-Location).Path }
 
@@ -59,14 +59,14 @@ $defaultSchema = if ($isSourceLayout) {
     Join-Path $repoRoot 'Schemas\unreal-data-plane-extension.v0.1.example.json'
 }
 $defaultManagedOutput = if ($isSourceLayout) {
-    'samples\Unreal\UnifiedScript.Unreal.Demo\BlockBreakerDataPlaneExtension.g.cs'
+    'samples\Unreal\Finare.Unreal.Demo\BlockBreakerDataPlaneExtension.g.cs'
 } else {
     'Generated\BlockBreakerDataPlaneExtension.g.cs'
 }
 $defaultNativeOutput = if ($isSourceLayout) {
-    'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Private\Tests\Generated\UnifiedScriptBlockBreakerDataPlaneExtension.gen.h'
+    'HostProject\Plugins\Finare\Source\FinareRuntime\Private\Tests\Generated\FinareBlockBreakerDataPlaneExtension.gen.h'
 } else {
-    'Generated\UnifiedScriptBlockBreakerDataPlaneExtension.gen.h'
+    'Generated\FinareBlockBreakerDataPlaneExtension.gen.h'
 }
 $defaultCatalogOutput = if ($isSourceLayout) {
     'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
@@ -85,18 +85,18 @@ $cliAssembly = if ($isSourceLayout) { $sourceCliAssembly } else { $packagedCliAs
 if ($isSourceLayout -and -not $SkipBuild) {
     & $dotnet build $sourceCliProject -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+        throw "Finare CLI build failed with exit code $LASTEXITCODE."
     }
 }
 if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) {
-    throw "UnifiedScript CLI assembly was not found: $cliAssembly"
+    throw "Finare CLI assembly was not found: $cliAssembly"
 }
 
 $temporaryRoot = $null
 try {
     if ($Check) {
         $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) `
-            ("UnifiedScriptDataPlaneExtension-" + [guid]::NewGuid().ToString('N'))
+            ("FinareDataPlaneExtension-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
         $generatedManaged = Join-Path $temporaryRoot 'extension.g.cs'
         $generatedNative = Join-Path $temporaryRoot 'extension.gen.h'
@@ -137,9 +137,9 @@ try {
                 throw "Generated data-plane extension artifact is stale: $($pair[0])"
             }
         }
-        Write-Host 'UnifiedScript data-plane extension: deterministic and current.'
+        Write-Host 'Finare data-plane extension: deterministic and current.'
     } else {
-        Write-Host 'UnifiedScript data-plane extension regenerated.'
+        Write-Host 'Finare data-plane extension regenerated.'
     }
 } finally {
     if ($null -ne $temporaryRoot -and

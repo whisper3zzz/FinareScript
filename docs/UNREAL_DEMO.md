@@ -11,7 +11,7 @@ powershell -ExecutionPolicy Bypass -File tools/launch-unreal-authoring-demo.ps1 
 
 The launcher builds the UE host, builds and stages the managed demo, starts the
 transactional authoring service on `127.0.0.1:4173`, and opens the
-`UnifiedScript Authoring` tab automatically. It snapshots and restores the
+`Finare Authoring` tab automatically. It snapshots and restores the
 project's local engine/input configuration. Closing Unreal Editor also stops
 the hidden authoring service.
 
@@ -24,7 +24,7 @@ the hidden authoring service.
    `signalContext: UnrealObjectHandle` payload pins while retaining the exact UE
    delegate path in Details.
 3. Right-click the graph and choose **Unreal Events >
-   UnifiedScriptComponent > Event OnManagedSignal**. The Workbench adds a new
+   FinareComponent > Event OnManagedSignal**. The Workbench adds a new
    strongly typed `[UnrealEvent]` C# handler through declaration-patch v0.2,
    recompiles, and reloads the compiler-owned Surface.
 4. Select a literal or supported operator. Its semantic identity, type, source
@@ -67,6 +67,6 @@ The status bar reports source conflicts, semantic/type rejection, compile
 failure, artifact publication failure, and reload failure separately. A failed
 transaction leaves the previously published source and running generation
 unchanged. Runtime failures are also returned through the managed/native
-diagnostic boundary: `UUnifiedScriptComponent.LastScriptError` contains the
+diagnostic boundary: `UFinareComponent.LastScriptError` contains the
 operation, managed exception type/message, and stack rather than only a numeric
 status.

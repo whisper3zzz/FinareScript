@@ -1,6 +1,6 @@
 # Semantic Graph Diff and Merge
 
-UnifiedScript reviews source-backed behavior as stable compiler semantics, not
+Finare reviews source-backed behavior as stable compiler semantics, not
 as serialized Blueprint editor state. Graph v0.13 remains a generated
 projection of canonical C#; the review layer identifies meaningful function,
 node, edge, region, value, and binding changes while excluding source spans,
@@ -31,10 +31,10 @@ policy.
 ## CLI review
 
 ```powershell
-unifiedscript semantic-diff baseline.graph.json target.graph.json `
+finare semantic-diff baseline.graph.json target.graph.json `
   --out semantic-diff.json --fail-on-change
 
-unifiedscript semantic-merge baseline.graph.json ours.graph.json theirs.graph.json `
+finare semantic-merge baseline.graph.json ours.graph.json theirs.graph.json `
   --report semantic-merge.json --out merged.graph.json
 ```
 

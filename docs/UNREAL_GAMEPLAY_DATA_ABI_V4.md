@@ -27,8 +27,8 @@ Gameplay Data is an optimized execution lane, not a replacement type system.
 
 ## World phase scheduler
 
-Each `UUnifiedScriptWorldSubsystem` owns one
-`FUnifiedScriptGameplayDataPlane` and binds only to its own `UWorld`:
+Each `UFinareWorldSubsystem` owns one
+`FFinareGameplayDataPlane` and binds only to its own `UWorld`:
 
 ```text
 OnWorldPreActorTick
@@ -56,7 +56,7 @@ while the context and World are alive.
 
 ## Command buffer
 
-`FUnifiedScriptCommandV4` is a fixed 224-byte tagged row. The active command
+`FFinareCommandV4` is a fixed 224-byte tagged row. The active command
 types are:
 
 | Command | Primary operands | Completion kind |
@@ -85,7 +85,7 @@ later rows from running; each row receives its own status event.
 
 ## Event buffer
 
-`FUnifiedScriptGameplayEventV4` is an 88-byte completion row keyed by the
+`FFinareGameplayEventV4` is an 88-byte completion row keyed by the
 command sequence ID. Events produced in `NativePostActorTick` become visible at
 the next `NativePreActorTick`. The 64-byte view includes World/frame identity,
 entry count and size, plus the cumulative dropped-event count.
@@ -211,8 +211,8 @@ layout crosses CoreCLR.
 
 ## Discovery and frozen layouts
 
-The append-only `FUnifiedScriptNativeTransportV2` suffix points to an
-independent `FUnifiedScriptGameplayDataTransportV4` table. The original 104-byte
+The append-only `FFinareNativeTransportV2` suffix points to an
+independent `FFinareGameplayDataTransportV4` table. The original 104-byte
 prefix remains readable, revision 1 telemetry/capacity extends it to 136 bytes,
 schema revision 2 appends overlap discovery at 176 bytes, and revision 4 appends
 generated event discovery at 200 bytes. The Shared Data table similarly grows
@@ -234,7 +234,7 @@ managed structure.
 | fixed-value collection snapshot | `0x5553464958434F01` | 104 / 64 |
 | buffered gameplay event | `0x5553425546455601` | 48 / 64 |
 
-The checked-in `samples/Unreal/UEUnifiedScriptRuntime.data-plane.json` is the
+The checked-in `samples/Unreal/FinareRuntime.data-plane.json` is the
 single source for these rows, views, enums, capacities, offsets, defaults,
 schema revision, compatibility ID, and fingerprint. `ue-data-plane` emits the
 C++ and C# layouts deterministically; native `static_assert`s, managed

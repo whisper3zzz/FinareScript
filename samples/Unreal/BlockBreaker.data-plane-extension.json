@@ -7,12 +7,12 @@
   "requiredAbiVersion": 4,
   "requiredLayoutCompatibilityId": "0x555344504C415901",
   "alignment": 8,
-  "nativeNamespace": "UE::UnifiedScript::Extensions::BlockBreaker",
-  "managedNamespace": "UnifiedScript.Unreal.Extensions.BlockBreaker",
+  "nativeNamespace": "UE::Finare::Extensions::BlockBreaker",
+  "managedNamespace": "Finare.Unreal.Extensions.BlockBreaker",
   "externalTypes": [
     {
       "name": "SharedObjectHandleV4",
-      "nativeType": "FUnifiedScriptSharedObjectHandleV4",
+      "nativeType": "FFinareSharedObjectHandleV4",
       "managedType": "UnrealSharedObjectHandleV4",
       "size": 16,
       "alignment": 8

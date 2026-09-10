@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)]
     [string]$Project,
 
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
 
     [string]$Config,
 
@@ -79,7 +79,7 @@ function Throw-OnboardingError {
     )
 
     $exception = [InvalidOperationException]::new($Message)
-    $exception.Data['UnifiedScriptCode'] = $Code
+    $exception.Data['FinareCode'] = $Code
     throw $exception
 }
 
@@ -88,8 +88,8 @@ function Get-OnboardingErrorCode {
 
     if ($null -ne $Exception -and
         $null -ne $Exception.Data -and
-        $Exception.Data.Contains('UnifiedScriptCode')) {
-        return [string]$Exception.Data['UnifiedScriptCode']
+        $Exception.Data.Contains('FinareCode')) {
+        return [string]$Exception.Data['FinareCode']
     }
     return 'USONB9999'
 }
@@ -143,7 +143,7 @@ function Invoke-DependencyAwareOnboardingPhase {
         return
     }
 
-    $decision = Get-UnifiedScriptBuildGraphStageDecision `
+    $decision = Get-FinareBuildGraphStageDecision `
         -Context $script:BuildGraphContext `
         -Name $Name `
         -Values $Values `
@@ -153,7 +153,7 @@ function Invoke-DependencyAwareOnboardingPhase {
     $script:CurrentPhase = $Name
     if (-not $decision.ShouldRun) {
         Write-Host "[$Name] SKIP - $($decision.Reason)"
-        Complete-UnifiedScriptBuildGraphStage `
+        Complete-FinareBuildGraphStage `
             -Context $script:BuildGraphContext `
             -Decision $decision `
             -Executed $false | Out-Null
@@ -207,7 +207,7 @@ function Invoke-DependencyAwareOnboardingPhase {
         $deferredReason =
             "deferred while the Editor is attached; prior published outputs remain active"
         Write-Host "[$Name] DEFER - $deferredReason"
-        Defer-UnifiedScriptBuildGraphStage `
+        Defer-FinareBuildGraphStage `
             -Context $script:BuildGraphContext `
             -Decision $decision `
             -Reason $deferredReason | Out-Null
@@ -229,7 +229,7 @@ function Invoke-DependencyAwareOnboardingPhase {
     try {
         & $Action
         $duration = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
-        Complete-UnifiedScriptBuildGraphStage `
+        Complete-FinareBuildGraphStage `
             -Context $script:BuildGraphContext `
             -Decision $decision `
             -Executed $true `
@@ -502,7 +502,7 @@ function Resolve-UnrealEngineRoot {
             -Code 'USONB1102' `
             -Message (
                 "Unreal Engine could not be resolved. Pass -EngineRoot, set " +
-                "UNIFIEDSCRIPT_UE_ROOT, or register EngineAssociation '$Association'.")
+                "FINARE_UE_ROOT, or register EngineAssociation '$Association'.")
     }
     $resolved = [IO.Path]::GetFullPath($resolved)
     Assert-RequiredPath `
@@ -792,7 +792,7 @@ try {
     $script:ResolvedProjectPath = [IO.Path]::GetFullPath($Project)
     $projectDirectory = Split-Path -Parent $script:ResolvedProjectPath
     $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $script:RunDirectory = Join-Path $projectDirectory "Saved\UnifiedScript\Onboarding\$runId"
+    $script:RunDirectory = Join-Path $projectDirectory "Saved\Finare\Onboarding\$runId"
     $script:ReportPath = if ([string]::IsNullOrWhiteSpace($Report)) {
         Join-Path $script:RunDirectory 'onboarding-report.json'
     } else {
@@ -800,22 +800,22 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $script:RunDirectory | Out-Null
 
-    $buildGraphModulePath = Join-Path $PSScriptRoot 'UnifiedScript.BuildGraph.psm1'
+    $buildGraphModulePath = Join-Path $PSScriptRoot 'Finare.BuildGraph.psm1'
     Assert-RequiredPath `
         -Path $buildGraphModulePath `
-        -Label 'UnifiedScript dependency-aware Build/Play graph' `
+        -Label 'Finare dependency-aware Build/Play graph' `
         -Code 'USONB1101'
     Import-Module -Name $buildGraphModulePath -Force
 
     $sdkRoot = Split-Path -Parent $PSScriptRoot
-    $repositoryCliProject = Join-Path $sdkRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+    $repositoryCliProject = Join-Path $sdkRoot 'src\Finare.Cli\Finare.Cli.csproj'
     $repositoryCliAssembly =
-        Join-Path $sdkRoot 'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
-    $packagedCliAssembly = Join-Path $sdkRoot 'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll'
+        Join-Path $sdkRoot 'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
+    $packagedCliAssembly = Join-Path $sdkRoot 'Tools\Finare.Cli\Finare.Cli.dll'
     $packagedManagedRuntime = Join-Path $sdkRoot 'Managed\Runtime'
     $packagedSdkManifest = Join-Path $sdkRoot 'sdk-manifest.json'
     $embeddedManagedRuntime = Join-Path $sdkRoot 'Binaries\Managed'
-    $embeddedPluginDescriptor = Join-Path $sdkRoot 'UEUnifiedScript.uplugin'
+    $embeddedPluginDescriptor = Join-Path $sdkRoot 'Finare.uplugin'
     if (Test-Path -LiteralPath $repositoryCliProject -PathType Leaf) {
         $sdkLayout = 'repository'
         $cliProject = $repositoryCliProject
@@ -836,7 +836,7 @@ try {
         Throw-OnboardingError `
             -Code 'USONB1101' `
             -Message (
-                "UnifiedScript SDK layout is incomplete under '$sdkRoot'. Expected " +
+                "Finare SDK layout is incomplete under '$sdkRoot'. Expected " +
                 'a repository, packaged SDK, or adopted project-local CLI/runtime payload.')
     }
 
@@ -860,13 +860,13 @@ try {
             -Association $association
 
         $script:ResolvedConfigPath = if ([string]::IsNullOrWhiteSpace($Config)) {
-            Join-Path $projectDirectory 'Config\UnifiedScript.onboarding.json'
+            Join-Path $projectDirectory 'Config\Finare.onboarding.json'
         } else {
             Resolve-FullPath -Path $Config -BaseDirectory (Get-Location).Path
         }
         Assert-RequiredPath `
             -Path $script:ResolvedConfigPath `
-            -Label 'UnifiedScript onboarding config' `
+            -Label 'Finare onboarding config' `
             -Code 'USONB1001'
         $configDirectory = Split-Path -Parent $script:ResolvedConfigPath
         $configJson = Get-Content -LiteralPath $script:ResolvedConfigPath -Raw |
@@ -944,7 +944,7 @@ try {
         } else { [string]$configJson.configuration }
         $resolved.plugin = Resolve-FullPath `
             -Path $(if ([string]::IsNullOrWhiteSpace($configJson.pluginPath)) {
-                '..\Plugins\UEUnifiedScript'
+                '..\Plugins\Finare'
             } else { [string]$configJson.pluginPath }) `
             -BaseDirectory $configDirectory
         $resolved.modules = @(
@@ -1100,7 +1100,7 @@ try {
         } else { [string]$configJson.managed.configuration }
         $resolved.managedStage = Resolve-FullPath `
             -Path $(if ([string]::IsNullOrWhiteSpace($configJson.managed.stageDirectory)) {
-                '..\Plugins\UEUnifiedScript\Binaries\Managed'
+                '..\Plugins\Finare\Binaries\Managed'
             } else { [string]$configJson.managed.stageDirectory }) `
             -BaseDirectory $configDirectory
         $resolved.managedProjects = @(
@@ -1150,23 +1150,23 @@ try {
         }
 
         Assert-RequiredPath `
-            -Path (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin') `
-            -Label 'UEUnifiedScript plugin descriptor' `
+            -Path (Join-Path $resolved.plugin 'Finare.uplugin') `
+            -Label 'Finare plugin descriptor' `
             -Code 'USONB1104'
         Assert-RequiredPath `
-            -Path (Join-Path $resolved.plugin 'Source\UEUnifiedScriptRuntime') `
-            -Label 'UEUnifiedScript runtime module' `
+            -Path (Join-Path $resolved.plugin 'Source\FinareRuntime') `
+            -Label 'Finare runtime module' `
             -Code 'USONB1104'
         Assert-RequiredPath `
-            -Path (Join-Path $resolved.plugin 'Source\UEUnifiedScriptEditor') `
-            -Label 'UEUnifiedScript editor module' `
+            -Path (Join-Path $resolved.plugin 'Source\FinareEditor') `
+            -Label 'Finare editor module' `
             -Code 'USONB1104'
         $enabledPlugin = @($projectJson.Plugins) |
-            Where-Object { $_.Name -eq 'UEUnifiedScript' -and $_.Enabled -eq $true }
+            Where-Object { $_.Name -eq 'Finare' -and $_.Enabled -eq $true }
         if ($enabledPlugin.Count -eq 0) {
             Throw-OnboardingError `
                 -Code 'USONB1105' `
-                -Message 'The .uproject must explicitly enable the UEUnifiedScript plugin.'
+                -Message 'The .uproject must explicitly enable the Finare plugin.'
         }
         $targetFile = Get-ChildItem `
             -LiteralPath (Join-Path $projectDirectory 'Source') `
@@ -1330,8 +1330,8 @@ try {
 
     if (-not $ValidateOnly) {
         $buildGraphStatePath = Join-Path $projectDirectory `
-            'Saved\UnifiedScript\BuildGraph\onboarding-state.json'
-        $script:BuildGraphContext = New-UnifiedScriptBuildGraphContext `
+            'Saved\Finare\BuildGraph\onboarding-state.json'
+        $script:BuildGraphContext = New-FinareBuildGraphContext `
             -StatePath $buildGraphStatePath `
             -Project $script:ResolvedProjectPath `
             -Config $script:ResolvedConfigPath `
@@ -1382,9 +1382,9 @@ try {
         }
         $toolchainOutputs = @(
             $cliAssembly,
-            (Join-Path $resolved.managedStage 'UnifiedScript.Core.dll'),
-            (Join-Path $resolved.managedStage 'UnifiedScript.Unreal.dll'),
-            (Join-Path $resolved.managedStage 'UnifiedScript.Unreal.deps.json'))
+            (Join-Path $resolved.managedStage 'Finare.Core.dll'),
+            (Join-Path $resolved.managedStage 'Finare.Unreal.dll'),
+            (Join-Path $resolved.managedStage 'Finare.Unreal.deps.json'))
         Invoke-DependencyAwareOnboardingPhase `
             -Name 'managed-toolchain' `
             -Values ([ordered]@{
@@ -1404,10 +1404,10 @@ try {
                         'build', $cliProject,
                         '-c', $resolved.managedConfiguration,
                         '--nologo',
-                        "-p:UnifiedScriptManagedStageDir=$($resolved.managedStage)") `
+                        "-p:FinareManagedStageDir=$($resolved.managedStage)") `
                     -LogPath $log `
                     -FailureCode 'USONB2101' `
-                    -FailureMessage 'UnifiedScript managed toolchain build failed.'
+                    -FailureMessage 'Finare managed toolchain build failed.'
             } elseif ($sdkLayout -eq 'packaged') {
                 foreach ($runtimeFile in Get-ChildItem `
                     -LiteralPath $packagedManagedRuntime -Recurse -File) {
@@ -1425,7 +1425,7 @@ try {
                 Write-Host (
                     "Using adopted project-local managed runtime in '$packagedManagedRuntime'.")
             }
-            Assert-RequiredPath -Path $cliAssembly -Label 'UnifiedScript CLI assembly' -Code 'USONB2101'
+            Assert-RequiredPath -Path $cliAssembly -Label 'Finare CLI assembly' -Code 'USONB2101'
         }
 
         $managedSourceRoots = @($resolved.managedProjects | ForEach-Object {
@@ -1455,7 +1455,7 @@ try {
         $nativeConfigurationInputs = @(
             $script:ResolvedProjectPath,
             $script:ResolvedConfigPath,
-            (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin'),
+            (Join-Path $resolved.plugin 'Finare.uplugin'),
             (Join-Path $script:ResolvedEngineRoot 'Engine\Build\Build.version'))
         $bindingOutputs = @(
             $resolved.managedOutput,
@@ -1587,7 +1587,7 @@ try {
                 (Split-Path -Parent $resolved.reflection) | Out-Null
             $arguments = @(
                 $script:ResolvedProjectPath,
-                '-run=UnifiedScriptExport',
+                '-run=FinareExport',
                 "-Output=$($resolved.reflection)",
                 "-Modules=$($resolved.modules -join ',')",
                 '-unattended',
@@ -1733,8 +1733,8 @@ try {
                         'build', $managedProject,
                         '-c', $resolved.managedConfiguration,
                         '--nologo',
-                        "-p:UnifiedScriptSkipManagedHostStaging=$($EditorAttached.IsPresent)",
-                        "-p:UnifiedScriptManagedStageDir=$($resolved.managedStage)") `
+                        "-p:FinareSkipManagedHostStaging=$($EditorAttached.IsPresent)",
+                        "-p:FinareManagedStageDir=$($resolved.managedStage)") `
                     -LogPath (Join-Path $script:RunDirectory "managed-$safeName.log") `
                     -FailureCode 'USONB2301' `
                     -FailureMessage "Managed gameplay build failed: $managedProject"
@@ -1899,7 +1899,7 @@ try {
             -Action {
             if ($resolved.gameTarget -eq 'UnrealGame') {
                 $pluginDescriptor = Get-Content `
-                    -LiteralPath (Join-Path $resolved.plugin 'UEUnifiedScript.uplugin') `
+                    -LiteralPath (Join-Path $resolved.plugin 'Finare.uplugin') `
                     -Raw | ConvertFrom-Json
                 if ($pluginDescriptor.Installed -eq $true) {
                     Throw-OnboardingError `
@@ -2017,7 +2017,7 @@ try {
         }
         $arguments = @(
             $script:ResolvedProjectPath,
-            '-run=UnifiedScriptSyncAssets',
+            '-run=FinareSyncAssets',
             "-Input=$($resolved.deployment)",
             '-unattended',
             '-nop4',
@@ -2036,9 +2036,9 @@ try {
             -FailureMessage 'Script Asset deployment failed.'
         $deploymentText = Get-Content -LiteralPath $log -Raw
         $expectedText = if ($ValidateOnly) {
-            'UnifiedScript deployment validated:'
+            'Finare deployment validated:'
         } else {
-            'UnifiedScript deployment synchronized:'
+            'Finare deployment synchronized:'
         }
         if (-not $deploymentText.Contains($expectedText)) {
             Throw-OnboardingError `
@@ -2048,7 +2048,7 @@ try {
 
         $classArguments = @(
             $script:ResolvedProjectPath,
-            '-run=UnifiedScriptSyncClasses',
+            '-run=FinareSyncClasses',
             "-Input=$($resolved.deployment)",
             '-unattended',
             '-nop4',
@@ -2067,9 +2067,9 @@ try {
             -FailureMessage 'Script Class Blueprint materialization failed.'
         $classText = Get-Content -LiteralPath $classLog -Raw
         $expectedClassText = if ($ValidateOnly) {
-            'UnifiedScript class proxies validated:'
+            'Finare class proxies validated:'
         } else {
-            'UnifiedScript class proxies synchronized:'
+            'Finare class proxies synchronized:'
         }
         if (-not $classText.Contains($expectedClassText)) {
             Throw-OnboardingError `
@@ -2213,8 +2213,8 @@ try {
     }
 
     if ($null -ne $script:BuildGraphContext) {
-        Save-UnifiedScriptBuildGraphState -Context $script:BuildGraphContext
-        $script:BuildGraphReport = Get-UnifiedScriptBuildGraphReport `
+        Save-FinareBuildGraphState -Context $script:BuildGraphContext
+        $script:BuildGraphReport = Get-FinareBuildGraphReport `
             -Context $script:BuildGraphContext
     }
 
@@ -2257,12 +2257,12 @@ try {
         }
     }
     Write-OnboardingReport -Status 'passed' -Context $outputContext
-    Write-Host "UnifiedScript project onboarding: PASS ($($script:ReportPath))"
+    Write-Host "Finare project onboarding: PASS ($($script:ReportPath))"
 } catch {
     $code = Get-OnboardingErrorCode -Exception $_.Exception
     if ($code -eq 'USONB3001') {
         if ($null -ne $script:BuildGraphContext) {
-            $script:BuildGraphReport = Get-UnifiedScriptBuildGraphReport `
+            $script:BuildGraphReport = Get-FinareBuildGraphReport `
                 -Context $script:BuildGraphContext
         }
         Write-OnboardingReport `
@@ -2277,7 +2277,7 @@ try {
                 restartReason = $script:RestartRequiredReason
             })
         Write-Warning (
-            "UnifiedScript daily Editor build requires restart during " +
+            "Finare daily Editor build requires restart during " +
             "'$($script:RestartRequiredStage)': $($script:RestartRequiredReason)")
         exit 2
     }
@@ -2286,6 +2286,6 @@ try {
         -ErrorCode $code `
         -ErrorMessage $_.Exception.Message `
         -Context ([ordered]@{ runDirectory = $script:RunDirectory })
-    Write-Error "UnifiedScript project onboarding failed [$code] during '$($script:CurrentPhase)': $($_.Exception.Message)"
+    Write-Error "Finare project onboarding failed [$code] during '$($script:CurrentPhase)': $($_.Exception.Message)"
     exit 1
 }

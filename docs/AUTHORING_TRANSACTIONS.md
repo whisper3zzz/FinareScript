@@ -30,7 +30,7 @@ at an older behavior while publishing a newer DLL. `--publish-initial` publishes
 the initial snapshot after acquiring the loopback listener. It does not rewrite
 unchanged compilation inputs.
 
-`tools/start-unifiedscript-authoring.ps1` uses the configured project and chunk
+`tools/start-finare-authoring.ps1` uses the configured project and chunk
 stage path and requires normal build outputs to exist. It does not rebuild or
 replace shared native-host dependencies during Editor use. Native World/component
 reload remains a separate consumer of the published artifacts, not an HTTP
@@ -73,15 +73,15 @@ read-only GET; neither action retries an earlier rejected source mutation.
 
 Mutation clients send these headers:
 
-- `X-UnifiedScript-Baseline-Revision`: the workspace revision rendered by the
+- `X-Finare-Baseline-Revision`: the workspace revision rendered by the
   client;
-- `X-UnifiedScript-Transaction-Id`: a unique operation ID, at most 128
+- `X-Finare-Transaction-Id`: a unique operation ID, at most 128
   characters;
-- `X-UnifiedScript-Transaction-Label`: an author-facing description, at most
+- `X-Finare-Transaction-Label`: an author-facing description, at most
   256 characters.
-- `X-UnifiedScript-Group-Id`: the active grouped draft ID for stage, commit,
+- `X-Finare-Group-Id`: the active grouped draft ID for stage, commit,
   and cancel requests.
-- `X-UnifiedScript-Preview-Token`: the SHA-256 identity of the exact prepared
+- `X-Finare-Preview-Token`: the SHA-256 identity of the exact prepared
   candidate accepted in the Diff dialog.
 
 The revision and IDs remain optional for older clients. Updated browser and
@@ -124,7 +124,7 @@ IR, and Graph. AI proposal previews additionally bind the deterministic
 `proposalId`, so a different valid proposal cannot reuse an accepted diff. The
 server keeps that immutable prepared snapshot in a bounded
 cache. An accepted native request sends its token as
-`X-UnifiedScript-Preview-Token` and commits that exact candidate; `UAW1012`
+`X-Finare-Preview-Token` and commits that exact candidate; `UAW1012`
 rejects missing/expired tokens or transaction-context drift. Older patch
 clients may omit the header, but the restricted C# source endpoint requires it
 and rejects direct commits. The native Unreal editor never bypasses its preview

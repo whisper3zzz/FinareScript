@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.performance-budgets/v0.1",
   "budgetId": "m10.3-ue58-reviewed-v1",
-  "suiteId": "unifiedscript-puerts-representative",
+  "suiteId": "finare-puerts-representative",
   "suiteVersion": "1.1.0",
   "referenceSuiteVersion": "1.0.0",
   "aggregation": "weighted-arithmetic-normalized",

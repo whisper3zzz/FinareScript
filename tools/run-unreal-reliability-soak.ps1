@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [switch]$SkipBuild,
     [ValidateRange(1, 256)]
     [int]$TravelCycles = 32,
@@ -142,7 +142,7 @@ if (-not $passed) {
     throw "One or more reliability soak lanes failed. Report: $reportPath"
 }
 
-Write-Host "UnifiedScript reliability soak: PASS ($reportPath)"
+Write-Host "Finare reliability soak: PASS ($reportPath)"
 Write-Host (
     "Travel=$($report.totals.travelCycles), PIE=$($report.totals.pieCycles), " +
     "Reloads=$($report.totals.generationRollovers), " +

@@ -1,6 +1,6 @@
 using System;
-using UnifiedScript;
-using UnifiedScript.Unreal;
+using Finare;
+using Finare.Unreal;
 using __MANAGED_NAMESPACE__.Generated;
 
 namespace __MANAGED_NAMESPACE__;
@@ -8,7 +8,7 @@ namespace __MANAGED_NAMESPACE__;
 [ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
 public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
 {
-    [Expose(InstanceEditable = true, SaveGame = true, Category = "UnifiedScript")]
+    [Expose(InstanceEditable = true, SaveGame = true, Category = "Finare")]
     public int StartValue { get; set; } = 1;
 
     [Visual]

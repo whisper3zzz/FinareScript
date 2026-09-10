@@ -23,12 +23,12 @@ visual semantic patch ┘                                      │
 
 ## Project boundary
 
-`UnifiedScript.CSharp.CSharpProgramEmitter` owns Roslyn emission. It first runs
+`Finare.CSharp.CSharpProgramEmitter` owns Roslyn emission. It first runs
 the complete semantic pipeline and Graph/CFG projection, then emits a
 deterministic in-memory DLL and portable PDB. No executable image is returned
 when profile, compiler, semantic, Graph, or CFG validation fails.
 
-`UnifiedScript.Runtime` owns the backend-neutral invocation/result records and
+`Finare.Runtime` owns the backend-neutral invocation/result records and
 the CoreCLR implementation:
 
 - `ExecutionInvocation` targets the existing stable method `SemanticId`;
@@ -95,7 +95,7 @@ collectible assembly crosses the session boundary.
 Execute an enumerable loop:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   execute samples/Execution/RuntimeRules.cs \
   --method Samples.Execution.RuntimeRules.LastNonNegative \
   --args '[[1,-2,9],4]'
@@ -105,7 +105,7 @@ The returned value is `System.Int32` with canonical JSON `9`. Execute the
 checked fault path:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   execute samples/Execution/RuntimeRules.cs \
   --method Samples.Execution.RuntimeRules.Absolute \
   --args '[-2147483648]'

@@ -52,40 +52,40 @@ if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) {
 
 $resolvedSchema = Resolve-RepositoryPath `
     -Value $Schema `
-    -DefaultRelativePath 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
+    -DefaultRelativePath 'samples\Unreal\FinareRuntime.data-plane.json'
 $resolvedManagedOutput = Resolve-RepositoryPath `
     -Value $ManagedOutput `
-    -DefaultRelativePath 'src\UnifiedScript.Unreal\UnrealDataPlaneLayouts.g.cs'
+    -DefaultRelativePath 'src\Finare.Unreal\UnrealDataPlaneLayouts.g.cs'
 $resolvedNativeOutput = Resolve-RepositoryPath `
     -Value $NativeOutput `
     -DefaultRelativePath (
-        'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
-        'Public\UnifiedScriptDataPlaneLayouts.gen.h')
+        'HostProject\Plugins\Finare\Source\FinareRuntime\' +
+        'Public\FinareDataPlaneLayouts.gen.h')
 if (-not (Test-Path -LiteralPath $resolvedSchema -PathType Leaf)) {
     throw "Data-plane layout schema was not found: $resolvedSchema"
 }
 
-$cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $cliAssembly = Join-Path $repoRoot `
-    'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
+    'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
 if (-not $SkipBuild) {
     & $dotnet build $cliProject -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+        throw "Finare CLI build failed with exit code $LASTEXITCODE."
     }
 }
 if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) {
-    throw "UnifiedScript CLI assembly was not found: $cliAssembly"
+    throw "Finare CLI assembly was not found: $cliAssembly"
 }
 
 $temporaryRoot = $null
 try {
     if ($Check) {
         $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) `
-            ("UnifiedScriptDataPlane-" + [guid]::NewGuid().ToString('N'))
+            ("FinareDataPlane-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
         $generationManagedOutput = Join-Path $temporaryRoot 'UnrealDataPlaneLayouts.g.cs'
-        $generationNativeOutput = Join-Path $temporaryRoot 'UnifiedScriptDataPlaneLayouts.gen.h'
+        $generationNativeOutput = Join-Path $temporaryRoot 'FinareDataPlaneLayouts.gen.h'
     } else {
         $generationManagedOutput = $resolvedManagedOutput
         $generationNativeOutput = $resolvedNativeOutput
@@ -111,9 +111,9 @@ try {
                 throw "Generated data-plane artifact is stale: $($pair[0])"
             }
         }
-        Write-Host 'UnifiedScript data-plane layouts: deterministic and current.'
+        Write-Host 'Finare data-plane layouts: deterministic and current.'
     } else {
-        Write-Host 'UnifiedScript data-plane layouts regenerated.'
+        Write-Host 'Finare data-plane layouts regenerated.'
     }
 } finally {
     if ($null -ne $temporaryRoot -and

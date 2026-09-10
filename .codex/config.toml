@@ -8,5 +8,5 @@ default_subagent_model = "gpt-5.6-luna"
 default_subagent_reasoning_effort = "xhigh"
 
 [agents.executor]
-description = "Implementation agent for bounded UEUnifiedScript code, generation, and focused validation work."
+description = "Implementation agent for bounded Finare code, generation, and focused validation work."
 config_file = "agents/executor.toml"

@@ -27,10 +27,10 @@ the completed M6.1 contracts and their acceptance boundary.
 ## Completed Phase A contract
 
 1. A real UE 5.7/5.8-compatible host project owns an enabled two-module plugin.
-2. UHT sees `UUnifiedScriptComponent` and the headless export commandlet.
+2. UHT sees `UFinareComponent` and the headless export commandlet.
 3. The exporter selects named native modules and emits deterministic reflected
    class, property, function, and recursive type data.
-4. `UnifiedScript.Unreal` strictly validates and normalizes schema v0.1 without
+4. `Finare.Unreal` strictly validates and normalizes schema v0.1 without
    exposing UE types to compiler projects.
 5. `ue-bindings` generates deterministic typed wrappers over an opaque handle
    and invocation bridge.
@@ -84,7 +84,7 @@ the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase B.4 contract
 
-1. `UEUnifiedScript_GetNativeTransportV1` exposes a versioned, size-checked C ABI
+1. `Finare_GetNativeTransportV1` exposes a versioned, size-checked C ABI
    table for property reads, property writes, and function invocation.
 2. The function table borrows an invocation-bridge context and never exposes a
    UObject pointer, property address, or `ProcessEvent` parameter buffer.
@@ -97,7 +97,7 @@ the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase B.5 contract
 
-1. Each supported `UWorld` owns one `UUnifiedScriptWorldSubsystem`, registry,
+1. Each supported `UWorld` owns one `UFinareWorldSubsystem`, registry,
    invocation bridge, and opaque native bridge context.
 2. Managed transports retain and release context references explicitly and
    reject calls after disposal.
@@ -122,7 +122,7 @@ the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase B.7 contract
 
-1. `UnifiedScript.Unreal.dll` and its dependency metadata are staged to the
+1. `Finare.Unreal.dll` and its dependency metadata are staged to the
    plugin's ignored managed-binary directory after every managed build.
 2. Native hostfxr code resolves managed create, destroy, and count entry points
    marked `UnmanagedCallersOnly`.
@@ -138,7 +138,7 @@ the completed M6.1 contracts and their acceptance boundary.
    ignored managed-binary directory.
 2. The matching World's collectible load context loads that assembly and shares
    only the managed bridge contract with the process context.
-3. Demo code constructs the generated `UnifiedScriptComponent` wrapper rather
+3. Demo code constructs the generated `FinareComponent` wrapper rather
    than calling a native test shim.
 4. The wrapper writes `ManagedState` and `bStartAutomatically` and returns
    `Add(20, 22) == 42` on a live UObject; the component host drives Reload.
@@ -147,7 +147,7 @@ the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase B.9 component-host contract
 
-1. `UUnifiedScriptComponent` exposes assembly/type configuration, automatic
+1. `UFinareComponent` exposes assembly/type configuration, automatic
    Start/Tick switches, running state, active generation, and last failure.
 2. `BeginPlay`, component Tick, and `EndPlay` dispatch managed `OnStart`,
    `OnTick`, and `OnStop` while the UObject handle remains valid.
@@ -166,7 +166,7 @@ the completed M6.1 contracts and their acceptance boundary.
    existing bridges and the complete ABI v1 function table remain compatible.
 3. ABI v2 preserves the v1 table prefix and appends property read/write and
    function invoke entry points keyed by Member ID.
-4. The generated `UUnifiedScriptComponent` native surface resolves its weak
+4. The generated `UFinareComponent` native surface resolves its weak
    handle, then accesses C++ fields/methods without path parsing, reflected
    lookup, parameter storage, or `ProcessEvent`.
 5. Managed tests prove v1 fallback and v2 selection; native Automation proves
@@ -174,7 +174,7 @@ the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase B.11 Script Asset contract
 
-1. `UUnifiedScriptAsset` is a schema-versioned Data Asset containing managed
+1. `UFinareAsset` is a schema-versioned Data Asset containing managed
    assembly/type identity plus an optional authoring source path.
 2. A component prefers its Content Browser asset reference, may resolve a soft
    `ScriptAssetPath`, and retains direct assembly/type fields only as fallback.
@@ -246,10 +246,10 @@ the completed M6.1 contracts and their acceptance boundary.
 1. A strict `unifiedscript.unreal-script-deployment/v0.1` document owns the
    Unreal asset path, managed identity, required host class, and optional
    authoring artifact paths for every deployed script.
-2. `UnifiedScriptSyncAssets` preflights the entire manifest before its first
+2. `FinareSyncAssets` preflights the entire manifest before its first
    write, rejects unknown fields and path/class conflicts, supports
    `-ValidateOnly`, and creates or updates deterministic Data Assets.
-3. `UUnifiedScriptAsset.RequiredTargetClass` is resolved before CoreCLR startup;
+3. `UFinareAsset.RequiredTargetClass` is resolved before CoreCLR startup;
    an incompatible target fails without creating a managed script instance.
 4. Runtime components consume synchronized Script Assets while direct
    assembly/type fields remain an advanced compatibility fallback.

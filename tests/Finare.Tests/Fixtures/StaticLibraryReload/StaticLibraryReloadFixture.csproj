@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>StaticLibraryReloadFixture</AssemblyName>
+    <RootNamespace>Finare.Tests.Fixtures.StaticLibraryReload</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);$(StaticLibraryReloadVariant)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/Finare.Unreal/Finare.Unreal.csproj" />
+  </ItemGroup>
+</Project>

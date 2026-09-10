@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'HostProject'
-$projectFile = Join-Path $projectRoot 'UEUnifiedScriptHost.uproject'
+$projectFile = Join-Path $projectRoot 'FinareHost.uproject'
 $editorCmd = Join-Path $EngineRoot 'Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
 $runUat = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $FixtureOutputRoot)).TrimEnd('\', '/')
@@ -26,7 +26,7 @@ $fixtureLog = Join-Path $fixtureRoot 'editor-fixture-generation.log'
 $driverLog = Join-Path $fixtureRoot 'build-cook-run.log'
 $cookLog = Join-Path $fixtureRoot 'packaged-build-cook.log'
 $runLog = Join-Path $fixtureRoot 'packaged-inherited-state.log'
-$stageRootBase = Join-Path $projectRoot 'Plugins/UEUnifiedScript/Binaries/Managed/InheritedState'
+$stageRootBase = Join-Path $projectRoot 'Plugins/Finare/Binaries/Managed/InheritedState'
 $cleanupPackages = @()
 $cleanupStageFiles = @()
 $cleanupContentDirectory = $null
@@ -122,10 +122,10 @@ try {
     }
     if (!$UseExistingFixture) {
         & $editorCmd $projectFile '-unattended' '-nop4' '-NullRHI' '-nosplash' '-NoConfigChanges' `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.ScriptClass.InheritedActorStateRuntime' `
+            '-ExecCmds=Automation RunTests Finare.Unreal.ScriptClass.InheritedActorStateRuntime' `
             '-TestExit=Automation Test Queue Empty' `
-            "-UnifiedScriptInheritedStateFixture=$configPath" `
-            "-UnifiedScriptInheritedStateCookReceipt=$receiptPath" `
+            "-FinareInheritedStateFixture=$configPath" `
+            "-FinareInheritedStateCookReceipt=$receiptPath" `
             "-abslog=$fixtureLog" '-log'
         if ($LASTEXITCODE -ne 0) { throw "Inherited-state fixture generation failed with exit code $LASTEXITCODE. Log=$fixtureLog" }
         if (!(Select-String -LiteralPath $fixtureLog -Pattern 'Test Completed\. Result=\{Success\} Name=\{InheritedActorStateRuntime\}' -Quiet)) {
@@ -193,14 +193,14 @@ try {
         '-map=/Engine/Maps/Entry' "-CookDir=$fixtureDirectory" "-archivedirectory=$archiveRoot" '-AdditionalCookerOptions=-SkipZenStore' `
         '-unattended' '-utf8output' '-NoCodeSign' '-NoXGE' '-UbtArgs=-NoUBTMakefiles' *>&1 | Tee-Object -FilePath (Join-Path $fixtureRoot 'packaged-build-cook.log')
     if ($LASTEXITCODE -ne 0) { throw "BuildCookRun failed with exit code $LASTEXITCODE." }
-    $packageRoot = Join-Path $archiveRoot 'Windows/UEUnifiedScriptHost'
-    $executables = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'UEUnifiedScriptHost.exe' -File)
-    if ($executables.Count -ne 1) { throw "Expected exactly one UEUnifiedScriptHost.exe below $packageRoot, found $($executables.Count)." }
+    $packageRoot = Join-Path $archiveRoot 'Windows/FinareHost'
+    $executables = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'FinareHost.exe' -File)
+    if ($executables.Count -ne 1) { throw "Expected exactly one FinareHost.exe below $packageRoot, found $($executables.Count)." }
     $executable = $executables[0]
     $runtimeArgs = @(
-        '-game', '-unattended', '-nop4', '-NullRHI', '-nosplash', '-UnifiedScriptInheritedStateVerify',
-        "-UnifiedScriptInheritedStateReceipt=`"$receiptPath`"",
-        "-UnifiedScriptInheritedStateResult=`"$resultPath`"",
+        '-game', '-unattended', '-nop4', '-NullRHI', '-nosplash', '-FinareInheritedStateVerify',
+        "-FinareInheritedStateReceipt=`"$receiptPath`"",
+        "-FinareInheritedStateResult=`"$resultPath`"",
         "-abslog=`"$runLog`"", '-log'
     )
     $process = Start-Process -FilePath $executable.FullName -ArgumentList $runtimeArgs -WorkingDirectory $packageRoot -WindowStyle Hidden -PassThru
@@ -209,8 +209,8 @@ try {
     if (!(Test-Path -LiteralPath $resultPath -PathType Leaf) -or (Get-Content -LiteralPath $resultPath -TotalCount 1).Trim() -ne 'PASS') {
         throw "Packaged verifier did not report PASS: $resultPath"
     }
-    if (!(Select-String -LiteralPath $runLog -Pattern 'UNIFIEDSCRIPT_INHERITED_STATE PASS' -Quiet) -or
-        !(Select-String -LiteralPath $runLog -Pattern 'Plugins/UEUnifiedScript/Binaries/Managed/InheritedState' -Quiet)) {
+    if (!(Select-String -LiteralPath $runLog -Pattern 'FINARE_INHERITED_STATE PASS' -Quiet) -or
+        !(Select-String -LiteralPath $runLog -Pattern 'Plugins/Finare/Binaries/Managed/InheritedState' -Quiet)) {
         throw "Packaged verifier log lacks the required PASS/path evidence: $runLog"
     }
     Write-Output "Cooked inherited-state PASS: $resultPath"

@@ -26,13 +26,13 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $dotnet = Join-Path `
     $EngineRoot `
     'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
-$sourceCliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$sourceCliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $sourceCliAssembly = Join-Path `
     $repoRoot `
-    "src\UnifiedScript.Cli\bin\$Configuration\net10.0\UnifiedScript.Cli.dll"
+    "src\Finare.Cli\bin\$Configuration\net10.0\Finare.Cli.dll"
 $packagedCliAssembly = Join-Path `
     $PSScriptRoot `
-    'UnifiedScript.Cli\UnifiedScript.Cli.dll'
+    'Finare.Cli\Finare.Cli.dll'
 $packagedLayout = -not (Test-Path -LiteralPath $sourceCliProject) -and
     (Test-Path -LiteralPath $packagedCliAssembly)
 $cliAssembly = if ($packagedLayout) {
@@ -57,7 +57,7 @@ foreach ($required in @($dotnet, $resolvedChunk)) {
     }
 }
 if (-not $packagedLayout -and -not (Test-Path -LiteralPath $sourceCliProject)) {
-    throw "UnifiedScript source CLI project does not exist: $sourceCliProject"
+    throw "Finare source CLI project does not exist: $sourceCliProject"
 }
 $resolvedReferences = @($ReferencePath | ForEach-Object {
     $resolved = [IO.Path]::GetFullPath($_)
@@ -78,10 +78,10 @@ if (Test-Path -LiteralPath $outputRoot) {
 if (-not $SkipBuild -and -not $packagedLayout) {
     & $dotnet build $sourceCliProject -c $Configuration --nologo --verbosity minimal
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+        throw "Finare CLI build failed with exit code $LASTEXITCODE."
     }
 } elseif ($packagedLayout) {
-    Write-Host '[managed] Using the packaged UnifiedScript CLI.'
+    Write-Host '[managed] Using the packaged Finare CLI.'
 }
 if (-not (Test-Path -LiteralPath $cliAssembly)) {
     throw "Compiled-chunk profiler CLI does not exist: $cliAssembly"

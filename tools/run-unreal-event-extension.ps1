@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'HostProject'
-$projectFile = Join-Path $projectRoot 'UEUnifiedScriptHost.uproject'
+$projectFile = Join-Path $projectRoot 'FinareHost.uproject'
 $editorCmd = Join-Path $EngineRoot 'Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
 $runUat = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $FixtureOutputRoot))
@@ -69,9 +69,9 @@ try {
             '-NullRHI' `
             '-nosplash' `
             '-NoConfigChanges' `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.ScriptClass.BlueprintEventExtensionCookFixture' `
+            '-ExecCmds=Automation RunTests Finare.Unreal.ScriptClass.BlueprintEventExtensionCookFixture' `
             '-TestExit=Automation Test Queue Empty' `
-            "-UnifiedScriptEventExtensionFixtureOutput=$fixtureRoot" `
+            "-FinareEventExtensionFixtureOutput=$fixtureRoot" `
             "-abslog=$fixtureLog" `
             '-log'
         if ($LASTEXITCODE -ne 0) {
@@ -170,8 +170,8 @@ try {
         throw "Event extension BuildCookRun failed with exit code $LASTEXITCODE. Log=$cookLog"
     }
 
-    $packageRoot = Join-Path $archiveRoot 'Windows/UEUnifiedScriptHost'
-    $executable = Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'UEUnifiedScriptHost*.exe' -File |
+    $packageRoot = Join-Path $archiveRoot 'Windows/FinareHost'
+    $executable = Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'FinareHost*.exe' -File |
         Select-Object -First 1
     if ($null -eq $executable) {
         throw "Packaged Host executable is missing below $packageRoot"
@@ -183,9 +183,9 @@ try {
         '-nop4',
         '-NullRHI',
         '-nosplash',
-        '-UnifiedScriptEventExtensionVerify',
-        "-UnifiedScriptEventExtensionReceipt=`"$receiptPath`"",
-        "-UnifiedScriptEventExtensionResult=`"$resultPath`"",
+        '-FinareEventExtensionVerify',
+        "-FinareEventExtensionReceipt=`"$receiptPath`"",
+        "-FinareEventExtensionResult=`"$resultPath`"",
         "-abslog=`"$runLog`"",
         '-log'
     )

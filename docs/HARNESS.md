@@ -29,7 +29,7 @@ Harness 的 AI 编排采用单架构师、单执行者：项目主会话由 GPT-
 # 不清楚状态时查询
 python -B tools/harness.py status
 # 不确定影响面时参考，推荐不是必跑清单
-python -B tools/harness.py plan --paths src/UnifiedScript.Core/ScriptAssetModel.cs
+python -B tools/harness.py plan --paths src/Finare.Core/ScriptAssetModel.cs
 python -B tools/harness.py plan --base-ref HEAD~1
 # 确实需要组合验证时选 profile
 python -B tools/harness.py run --profile quick
@@ -45,8 +45,8 @@ python -B tools/harness.py run --profile precommit --engine-root D:\UE_5.8
 - `run`：只执行显式选择的 profile（默认 `quick`），不自动执行 plan 推荐的重型
   测试。按依赖串行执行，每次分配全新目录；默认遇失败停止，剩余标记 `not-run`。
 - 各命令支持 `--json`。`plan` 不要求本机装好重型工具，真正 `run` 先检查所有依赖。
-- 引擎依次取 `--engine-root`、`UNIFIEDSCRIPT_UE_ROOT`、本地配置。
-  比较工程只能通过 `--comparison-root` 或 `UNIFIEDSCRIPT_COMPARISON_ROOT` 指定；
+- 引擎依次取 `--engine-root`、`FINARE_UE_ROOT`、本地配置。
+  比较工程只能通过 `--comparison-root` 或 `FINARE_COMPARISON_ROOT` 指定；
   performance 会操作该外部目录，执行前必须确认它在用户授权的项目边界内。
 
 `harness.local.json` 被 Git 忽略，可参考
@@ -89,13 +89,13 @@ CI 的七条 lane 保留，轻量 CI 另外运行 Harness 自测。
 
 | 领域 | 第一入口 | 契约/测试入口 |
 | --- | --- | --- |
-| 语义模型与稳定 ID | `src/UnifiedScript.Core/`、`src/UnifiedScript.Semantics/` | `docs/ARCHITECTURE.md`、`docs/IDENTITY_SIDECAR.md` |
-| C# lowering / Declaration IR | `src/UnifiedScript.CSharp/CSharpScriptAssetLowerer.cs` | `docs/DECLARATION_IR.md`、`tests/UnifiedScript.Tests/CSharpScriptAssetLowererTests.cs` |
-| Graph / 可视化与 Code 互转 | `src/UnifiedScript.Graph/`、`src/UnifiedScript.Authoring/` | `docs/AUTHORING_SURFACE.md`、`docs/AUTHORING_TRANSACTIONS.md` |
-| CoreCLR / chunk / reload | `src/UnifiedScript.Runtime/` | `docs/COMPILED_CHUNKS.md`、`docs/HOT_RELOAD_RELIABILITY.md` |
-| UE managed API / ABI | `src/UnifiedScript.Unreal/` | `docs/UNREAL_ADAPTER.md`、`tests/UnifiedScript.Tests/UnrealManagedFunctionDispatchTests.cs` |
-| 原生桥接和 Blueprint Class | `HostProject/Plugins/UEUnifiedScript/Source/` | `UnifiedScriptBlueprint.cpp`、`UnifiedScriptBlueprintClassMaterializer.cpp` 及模块内 Automation |
-| CLI / 安装 / 项目工作流 | `src/UnifiedScript.Cli/`、`templates/`、`tools/setup-unreal-project.ps1` | `docs/UNREAL_ONBOARDING.md`、`docs/UNREAL_SDK.md` |
+| 语义模型与稳定 ID | `src/Finare.Core/`、`src/Finare.Semantics/` | `docs/ARCHITECTURE.md`、`docs/IDENTITY_SIDECAR.md` |
+| C# lowering / Declaration IR | `src/Finare.CSharp/CSharpScriptAssetLowerer.cs` | `docs/DECLARATION_IR.md`、`tests/Finare.Tests/CSharpScriptAssetLowererTests.cs` |
+| Graph / 可视化与 Code 互转 | `src/Finare.Graph/`、`src/Finare.Authoring/` | `docs/AUTHORING_SURFACE.md`、`docs/AUTHORING_TRANSACTIONS.md` |
+| CoreCLR / chunk / reload | `src/Finare.Runtime/` | `docs/COMPILED_CHUNKS.md`、`docs/HOT_RELOAD_RELIABILITY.md` |
+| UE managed API / ABI | `src/Finare.Unreal/` | `docs/UNREAL_ADAPTER.md`、`tests/Finare.Tests/UnrealManagedFunctionDispatchTests.cs` |
+| 原生桥接和 Blueprint Class | `HostProject/Plugins/Finare/Source/` | `FinareBlueprint.cpp`、`FinareBlueprintClassMaterializer.cpp` 及模块内 Automation |
+| CLI / 安装 / 项目工作流 | `src/Finare.Cli/`、`templates/`、`tools/setup-unreal-project.ps1` | `docs/UNREAL_ONBOARDING.md`、`docs/UNREAL_SDK.md` |
 | CI / package / 双端性能 | `tools/run-ci-lane.ps1`、`comparison/` | `docs/CI.md`、`docs/RELEASE_READINESS.md`、`docs/PERFORMANCE_WORKLOAD_SUITE.md` |
 
 完整依赖限制见 [ARCHITECTURE.md](ARCHITECTURE.md) 和
@@ -125,7 +125,7 @@ CI 的七条 lane 保留，轻量 CI 另外运行 Harness 自测。
 报告、源码指纹和哈希由工具自动记录。无需再建一份台账、备份或手工复核同一哈希。
 日常交接以交付结果和重要限制为主，完整门禁计数与日志留在报告里。
 
-一个 checkout 同时只允许一个 Harness run。锁是 `.cache/unifiedscript-harness.lock`；
+一个 checkout 同时只允许一个 Harness run。锁是 `.cache/finare-harness.lock`；
 手动启动的构建不在锁保护范围内。强制结束工具后，确认该 PID 已结束、所有子进程
 都停止，再删除这个确切的锁文件。不要自动清理用户工作区。
 

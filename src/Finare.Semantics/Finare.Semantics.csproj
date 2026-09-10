@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Language-neutral types, symbols, effects, and bound HIR annotations.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+  </ItemGroup>
+</Project>

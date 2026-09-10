@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [string]$OutputDirectory,
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]
     [string]$SdkVersion = '1.0.0-rc.1',
@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 $projectRoot = Split-Path -Parent $projectPath
 
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
@@ -23,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         } | Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 $EngineRoot = [IO.Path]::GetFullPath($EngineRoot)
 
@@ -44,7 +44,7 @@ $dotnetExe = Join-Path $EngineRoot `
     'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
 $buildVersionPath = Join-Path $EngineRoot 'Engine\Build\Build.version'
 $releaseScript = Join-Path $PSScriptRoot 'package-unreal-release.ps1'
-$sdkPackageScript = Join-Path $PSScriptRoot 'package-unifiedscript-sdk.ps1'
+$sdkPackageScript = Join-Path $PSScriptRoot 'package-finare-sdk.ps1'
 $emitDemoScript = Join-Path $PSScriptRoot 'emit-unreal-demo-chunk.ps1'
 foreach ($requiredPath in @(
         $projectPath,
@@ -155,7 +155,7 @@ try {
 
     Invoke-MatrixPhase -Name 'editor-development-build' -Action {
         & $buildBat `
-            UEUnifiedScriptHostEditor `
+            FinareHostEditor `
             Win64 `
             Development `
             $projectPath `
@@ -185,7 +185,7 @@ try {
                 '-NullRHI',
                 '-nosplash',
                 '-NoSound',
-                '-ExecCmds=Automation RunTests UnifiedScript.Unreal',
+                '-ExecCmds=Automation RunTests Finare.Unreal',
                 '-TestExit=Automation Test Queue Empty',
                 "-abslog=$automationLog",
                 '-log')
@@ -199,10 +199,10 @@ try {
         $automationText = Get-Content -LiteralPath $automationLog -Raw
         $script:automationPassed = [regex]::Matches(
             $automationText,
-            'Test Completed\. Result=\{Success\}[^\r\n]*Path=\{UnifiedScript\.Unreal(?:\.|\})').Count
+            'Test Completed\. Result=\{Success\}[^\r\n]*Path=\{Finare\.Unreal(?:\.|\})').Count
         if ($script:automationPassed -ne $ExpectedAutomationTests) {
             throw (
-                "Expected $ExpectedAutomationTests successful UnifiedScript.Unreal " +
+                "Expected $ExpectedAutomationTests successful Finare.Unreal " +
                 "tests, found $($script:automationPassed).")
         }
         if ($automationText -notmatch 'Automation Test Queue Empty') {
@@ -242,7 +242,7 @@ try {
             -OutputDirectory $sdkOutputB `
             -EngineRoot $EngineRoot
     }
-    $sdkBaseName = "UnifiedScript-SDK-$SdkVersion-win-x64"
+    $sdkBaseName = "Finare-SDK-$SdkVersion-win-x64"
     $sdkReportAPath = Join-Path $sdkOutputA "$sdkBaseName.package-report.json"
     $sdkReportBPath = Join-Path $sdkOutputB "$sdkBaseName.package-report.json"
     $sdkReportA = Get-Content -LiteralPath $sdkReportAPath -Raw | ConvertFrom-Json
@@ -264,7 +264,7 @@ try {
     $consumerArchive = Join-Path $runDirectory 'consumer.zip'
     $consumerExport = Join-Path $compatibilityScratchRoot 'consumer'
     $consumerProject = Join-Path $consumerExport `
-        'HostProject\UEUnifiedScriptHost.uproject'
+        'HostProject\FinareHost.uproject'
     Invoke-MatrixPhase -Name 'clean-project-sdk-install' -Action {
         New-Item -ItemType Directory -Force -Path $compatibilityScratchRoot |
             Out-Null
@@ -278,7 +278,7 @@ try {
             HEAD `
             HostProject/Config `
             HostProject/Source `
-            HostProject/UEUnifiedScriptHost.uproject
+            HostProject/FinareHost.uproject
         if ($LASTEXITCODE -ne 0) {
             throw "Clean HostProject export failed with exit code $LASTEXITCODE."
         }
@@ -289,12 +289,12 @@ try {
         if (Test-Path -LiteralPath (Join-Path $consumerExport 'HostProject\Plugins')) {
             throw 'Clean HostProject export unexpectedly contains a Plugins directory.'
         }
-        & (Join-Path $sdkRoot 'Tools\install-unifiedscript-sdk.ps1') `
+        & (Join-Path $sdkRoot 'Tools\install-finare-sdk.ps1') `
             -Project $consumerProject `
             -SdkRoot $sdkRoot
     }
     $sdkInstallSourceReportPath = Get-ChildItem `
-        -LiteralPath (Join-Path $consumerExport 'HostProject\Saved\UnifiedScript\Install') `
+        -LiteralPath (Join-Path $consumerExport 'HostProject\Saved\Finare\Install') `
         -Recurse `
         -File | Where-Object Name -EQ 'install-report.json' |
         Sort-Object LastWriteTimeUtc |
@@ -311,16 +311,16 @@ try {
         -Force
 
     $installedManagedRoot = Join-Path $consumerExport `
-        'HostProject\Plugins\UEUnifiedScript\Binaries\Managed'
+        'HostProject\Plugins\Finare\Binaries\Managed'
     $consumerManagedRoot = Join-Path $consumerExport `
-        'HostProject\Managed\UnifiedScript.Unreal.Demo'
+        'HostProject\Managed\Finare.Unreal.Demo'
     $demoStage = Join-Path $installedManagedRoot 'Demo'
     $consumerCsproj = Join-Path $consumerManagedRoot `
-        'UnifiedScript.Unreal.Demo.csproj'
+        'Finare.Unreal.Demo.csproj'
     $consumerSource = Join-Path $consumerManagedRoot 'DemoScript.cs'
     $referenceItems = Get-ChildItem `
         -LiteralPath $installedManagedRoot `
-        -Filter 'UnifiedScript.*.dll' `
+        -Filter 'Finare.*.dll' `
         -File | Sort-Object Name | ForEach-Object {
             $name = [IO.Path]::GetFileNameWithoutExtension($_.Name)
             $path = [Security.SecurityElement]::Escape($_.FullName.Replace('\', '/'))
@@ -331,7 +331,7 @@ try {
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>UnifiedScript.Unreal.Demo</AssemblyName>
+    <AssemblyName>Finare.Unreal.Demo</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Deterministic>true</Deterministic>
@@ -343,10 +343,10 @@ $($referenceItems -join "`n")
 </Project>
 "@
     $consumerSourceText = @'
-using UnifiedScript;
-using UnifiedScript.Unreal;
+using Finare;
+using Finare.Unreal;
 
-namespace UnifiedScript.Unreal.Demo;
+namespace Finare.Unreal.Demo;
 
 [ScriptAsset("Unreal/Demo")]
 public sealed class DemoScript : IUnrealManagedScript
@@ -392,7 +392,7 @@ public sealed class DemoScript : IUnrealManagedScript
         {
             set => WriteProperty(
                 0x31BC2AC640227065UL,
-                "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
+                "/Script/FinareRuntime.FinareComponent:ManagedState",
                 value);
         }
     }
@@ -401,7 +401,7 @@ public sealed class DemoScript : IUnrealManagedScript
     Write-Utf8File -Path $consumerCsproj -Content $consumerProjectText
     Write-Utf8File -Path $consumerSource -Content $consumerSourceText
 
-    $sdkCli = Join-Path $sdkRoot 'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll'
+    $sdkCli = Join-Path $sdkRoot 'Tools\Finare.Cli\Finare.Cli.dll'
     Invoke-MatrixPhase -Name 'clean-project-managed-chunk' -Action {
         & $dotnetExe `
             $sdkCli `
@@ -413,7 +413,7 @@ public sealed class DemoScript : IUnrealManagedScript
             throw "Installed SDK emit failed with exit code $LASTEXITCODE."
         }
         $consumerChunk = Join-Path $demoStage `
-            'UnifiedScript.Unreal.Demo.uschunk'
+            'Finare.Unreal.Demo.uschunk'
         & $dotnetExe $sdkCli chunk-inspect $consumerChunk
         if ($LASTEXITCODE -ne 0) {
             throw "Installed SDK chunk verification failed with exit code $LASTEXITCODE."

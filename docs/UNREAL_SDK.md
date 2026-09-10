@@ -1,12 +1,20 @@
 # Unreal SDK distribution
 
-UnifiedScript 1.0 RC1 packages the product as a deterministic Windows SDK that can be used
-without a UnifiedScript source checkout. The archive contains the source
+Finare 1.0 RC1 packages the product as a deterministic Windows SDK that can be used
+without a Finare source checkout. The archive contains the source
 plugin, framework-dependent managed runtime, CLI, onboarding and installation
 tools, versioned schema examples, starter templates, and documentation. Native
 Unreal binaries and the CoreCLR runtime are deliberately not copied from the
 build machine: the target UE 5.8 engine builds the plugin and stages its own
 matching .NET 10 runtime.
+
+The native rename from UnifiedScript to Finare changes reflected UE type and
+function names. Existing Blueprint assets that refer to those old reflected
+types must be regenerated or have their references repaired in the consumer
+project; this migration does not promise automatic native reflection redirects.
+Previously built UnifiedScript managed DLLs and chunks likewise need to be
+recompiled against the Finare assemblies. Published protocol IDs, metadata keys,
+and existing `/Game/UnifiedScript*` asset paths remain stable.
 
 The packaged project-local plugin is intentionally a source plugin with
 `Installed=false`. This tells UBT/UAT to compile it as part of the consumer
@@ -15,29 +23,29 @@ ships no machine-specific Unreal binary.
 
 ## Build an SDK archive
 
-From a UnifiedScript source checkout:
+From a Finare source checkout:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File tools/package-unifiedscript-sdk.ps1 `
+  -File tools/package-finare-sdk.ps1 `
   -Version 1.0.0-rc.1 `
   -EngineRoot D:\UE_5.8
 ```
 
-`-EngineRoot` may be omitted when `UNIFIEDSCRIPT_UE_ROOT` or the registered
+`-EngineRoot` may be omitted when `FINARE_UE_ROOT` or the registered
 `5.8` engine association resolves to an engine with the bundled .NET 10 SDK.
 The result is written under `artifacts/sdk` unless `-OutputDirectory` is set.
 Writing the same version twice from the same inputs produces the same ZIP
 SHA-256: entries are sorted, timestamps are fixed, and every generated managed
 binary is deterministic.
 
-The archive has one top-level `UnifiedScript-SDK-<version>-win-x64` directory:
+The archive has one top-level `Finare-SDK-<version>-win-x64` directory:
 
-- `Plugins/UEUnifiedScript`: descriptor, `Source`, and `Resources`; no
+- `Plugins/Finare`: descriptor, `Source`, and `Resources`; no
   `Binaries` or `Intermediate` output;
-- `Managed/Runtime`: `UnifiedScript.Core`, `UnifiedScript.Unreal`, and the
+- `Managed/Runtime`: `Finare.Core`, `Finare.Unreal`, and the
   dependency manifest needed by a consumer;
-- `Tools/UnifiedScript.Cli`: the framework-dependent command-line tool and its
+- `Tools/Finare.Cli`: the framework-dependent command-line tool and its
   managed dependencies;
 - `Tools`: the SDK installer and the same project onboarding entry point used
   by the source repository;
@@ -69,7 +77,7 @@ use the exact contract shipped by that SDK. The current package publishes:
 
 The SDK also bundles the data-plane extension v0.1 schema/catalog examples and
 `generate-unreal-data-plane-extension.ps1`. A consumer can therefore generate
-matched C++/C# workload rows and an authoring catalog without a UnifiedScript
+matched C++/C# workload rows and an authoring catalog without a Finare
 source checkout; see [Generated data-plane extensions](DATA_PLANE_EXTENSIONS.md).
 
 Before replacing an SDK, run the packaged CLI's `upgrade-plan` command against
@@ -102,8 +110,8 @@ Extract the ZIP and run the packaged CLI. This is the recommended first-use
 path for both C++ and Blueprint-only projects:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
-& "$sdk\Tools\unifiedscript.cmd" guide first-project --sdk-root $sdk
+$sdk = 'D:\SDK\Finare-SDK-1.0.0-rc.1-win-x64'
+& "$sdk\Tools\finare.cmd" guide first-project --sdk-root $sdk
 ```
 
 That command resolves the hash-manifested
@@ -114,7 +122,7 @@ receipts with the [versioned usability budget gate](UNREAL_USABILITY.md); this
 CMD gate does not require an interactive Editor session.
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   adopt D:\Project\Game\Game.uproject --sdk-root $sdk
 ```
 
@@ -125,7 +133,7 @@ transaction. Use `--preview` to emit the
 deterministic plan without changing files. A repeated Apply is a no-op; an
 unowned or edited collision is reported as a conflict rather than overwritten.
 Every changed file has a retained pre-transaction backup and exact content hash
-under `Saved/UnifiedScript/Adoption`; `adopt <project> --rollback` restores the
+under `Saved/Finare/Adoption`; `adopt <project> --rollback` restores the
 latest transaction only when no post-adoption file has drifted.
 
 For a Blueprint-only project, Adopt also transactionally creates a minimal
@@ -140,8 +148,8 @@ outputs are outside the adoption transaction and may be cleaned normally.
 Run the read-only product diagnosis from the installed project-local entry point:
 
 ```powershell
-$projectTools = 'D:\Project\Game\Plugins\UEUnifiedScript\Tools'
-& "$projectTools\unifiedscript.cmd" `
+$projectTools = 'D:\Project\Game\Plugins\Finare\Tools'
+& "$projectTools\finare.cmd" `
   doctor D:\Project\Game\Game.uproject --engine-root D:\UE_5.8
 ```
 
@@ -151,14 +159,14 @@ resolution, and the generated binding-coverage baseline. Warnings distinguish a
 valid adopted project that has not run its first native onboarding build from a
 broken installation.
 
-The older `Tools/install-unifiedscript-sdk.ps1` and
-`Tools/new-unifiedscript-project.ps1` commands remain compatibility/diagnostic
+The older `Tools/install-finare-sdk.ps1` and
+`Tools/new-finare-project.ps1` commands remain compatibility/diagnostic
 entry points. They expose installation and scaffolding as separate operations
 and therefore are no longer the recommended golden path.
 
 ## Build and run project onboarding
 
-After adoption creates `Config/UnifiedScript.onboarding.json`, invoke the
+After adoption creates `Config/Finare.onboarding.json`, invoke the
 installed build/onboarding tool. The extracted SDK is no longer required:
 
 ```powershell
@@ -183,19 +191,19 @@ managed/CoreCLR runtime closure. Generated native thunk source remains managed
 output: repeat Repair preserves the generation produced by Setup instead of
 restoring the SDK's seed file.
 
-Once the plugin loads, **Tools > UnifiedScript Project Setup** provides Preview,
+Once the plugin loads, **Tools > Finare Project Setup** provides Preview,
 Repair, Doctor, and **Save, Exit & Build** through the same project-local tools.
 The build action waits until the Editor exits before touching native binaries.
 
 See the [first-script walkthrough](UNREAL_FIRST_SCRIPT.md) for the complete
 adopt/build/Play path. The companion
-`Tools/start-unifiedscript-authoring.ps1` launches the packaged transactional
+`Tools/start-finare-authoring.ps1` launches the packaged transactional
 Workbench for visual/C# edits and hot reload.
 
 ## Isolated acceptance
 
 The M6.3.2 acceptance uses a Git-exported BlockBreaker directory that contains
-no UnifiedScript plugin and has no access to repository-relative tooling. The
+no Finare plugin and has no access to repository-relative tooling. The
 SDK installer and packaged-mode onboarding must pass there before a Win64
 `BuildCookRun` archive is accepted. The runnable smoke gate requires exactly
 300 managed ticks, one shot, one hit, two gameplay command completions, nonzero
@@ -205,8 +213,8 @@ M13.1A-2 adds the complementary first-use gate: a clean Blueprint-only fixture
 is adopted from the released ZIP, then uses only its project-local Setup and CLI
 for Apply, Validate, UE Automation, Editor/Game native builds, and no-change
 Repair before ordinary Win64 BuildCookRun. Acceptance requires the executable,
-managed gameplay DLL, compiled chunk, `UnifiedScript.Core` and
-`UnifiedScript.Unreal`, `hostfxr`, and cooked Script Asset; Puerts and
+managed gameplay DLL, compiled chunk, `Finare.Core` and
+`Finare.Unreal`, `hostfxr`, and cooked Script Asset; Puerts and
 project-authored JavaScript payloads must be absent.
 
 M13.1C-1d extends that gate through actual packaged Script Class execution. The
@@ -221,7 +229,7 @@ and an independent user-owned sentinel while removing the four generated host
 source files plus the installed transactional product surface.
 
 M13.3B-1 adds post-deployment Script Class reconciliation. The installed Setup
-flow runs `UnifiedScriptSyncClasses` after `UnifiedScriptSyncAssets`, compiles
+flow runs `FinareSyncClasses` after `FinareSyncAssets`, compiles
 reviewed managed scalar state as ordinary Blueprint properties with stable
 semantic GUIDs and exposure metadata, and treats `-ValidateOnly` as a stale
 generated-class gate. Source-default updates preserve intentional Blueprint CDO

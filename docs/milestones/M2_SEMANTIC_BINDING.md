@@ -2,7 +2,7 @@
 
 ## Goal
 
-Move UnifiedScript from syntax-shaped graphs to a language-neutral semantic
+Move Finare from syntax-shaped graphs to a language-neutral semantic
 model in which every relevant expression has a resolved type, every identifier
 can point to its declaration, every call names an exact overload, and Graph
 control flow reflects call effects.
@@ -14,7 +14,7 @@ control flow reflects call effects.
   ReferencePath, and ReferenceCopyLocalPaths items
 - target-framework constants, Nullable/LangVersion/compiler settings, NuGet
   assets, and built project-reference outputs
-- runtime and `UnifiedScript.Core` metadata references
+- runtime and `Finare.Core` metadata references
 - Roslyn `SemanticModel` binding after Visual Profile validation
 - language-neutral type, method, parameter, nullability, and effect descriptors
 - HIR-node side tables for declared symbols, referenced symbols, types, and calls
@@ -58,7 +58,7 @@ The semantic test fixture proves that:
 - semantic diagnostics for banned namespaces and APIs
 - generic type substitution in the language-neutral descriptor model
 - richer evaluation regions before structured loops are introduced
-- source-generator and analyzer replay inside the UnifiedScript compilation
+- source-generator and analyzer replay inside the Finare compilation
 
 ## Deliberate exclusions
 

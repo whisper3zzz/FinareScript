@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Deterministic visual graph projection for Finare HIR.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
+  </ItemGroup>
+</Project>

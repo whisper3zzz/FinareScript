@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "unifiedscript.unreal-script-deployment/v0.1",
+  "scripts": [
+    {
+      "assetPath": "/Game/UnifiedScript/Demo/SA_UnifiedScriptDemo",
+      "assemblyPath": "{PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.dll",
+      "typeName": "Finare.Unreal.Demo.DemoScript",
+      "requiredTargetClass": "/Script/FinareRuntime.FinareActor",
+      "sourcePath": "{PluginDir}/Source/Managed/DemoScript.cs",
+      "declarationPath": "{PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.asset.json",
+      "declarationAssetPath": "Unreal/Demo",
+      "authoringSurfacePath": "{PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.surface.json",
+      "apiNodeCatalogPath": "{ProjectDir}/../samples/Unreal/FinareRuntime.api-nodes.json",
+      "authoringServerUrl": "http://127.0.0.1:4173"
+    }
+  ]
+}

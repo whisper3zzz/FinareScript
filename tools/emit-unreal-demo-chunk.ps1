@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
     [switch]$SkipManagedBuild
@@ -10,17 +10,17 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $managedProject = Join-Path `
     $repoRoot `
-    'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
-$cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+    'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
+$cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $identityPath = Join-Path `
     $repoRoot `
-    'samples\Unreal\UnifiedScript.Unreal.Demo\DemoScript.cs.usids'
+    'samples\Unreal\Finare.Unreal.Demo\DemoScript.cs.usids'
 $cliAssembly = Join-Path `
     $repoRoot `
-    'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
+    'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
 $stageDirectory = Join-Path `
     $repoRoot `
-    'HostProject\Plugins\UEUnifiedScript\Binaries\Managed\Demo'
+    'HostProject\Plugins\Finare\Binaries\Managed\Demo'
 $outputDirectory = Join-Path `
     $repoRoot `
     "artifacts\ue\compiled-chunks\$($Configuration.ToLowerInvariant())"
@@ -35,7 +35,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $dotnetExe = Join-Path `
@@ -50,7 +50,7 @@ foreach ($requiredPath in @($dotnetExe, $managedProject, $cliProject, $identityP
 if (!$SkipManagedBuild) {
     & $dotnetExe build $cliProject -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+        throw "Finare CLI build failed with exit code $LASTEXITCODE."
     }
     & $dotnetExe build $managedProject -c $Configuration --nologo
     if ($LASTEXITCODE -ne 0) {
@@ -58,10 +58,10 @@ if (!$SkipManagedBuild) {
     }
     $configuredHostAssembly = Join-Path `
         $repoRoot `
-        "src\UnifiedScript.Unreal\bin\$Configuration\net10.0\UnifiedScript.Unreal.dll"
+        "src\Finare.Unreal\bin\$Configuration\net10.0\Finare.Unreal.dll"
     $stagedHostAssembly = Join-Path `
         $repoRoot `
-        'HostProject\Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Unreal.dll'
+        'HostProject\Plugins\Finare\Binaries\Managed\Finare.Unreal.dll'
     if (!(Test-Path -LiteralPath $configuredHostAssembly) -or
         !(Test-Path -LiteralPath $stagedHostAssembly) -or
         (Get-FileHash -Algorithm SHA256 -LiteralPath $configuredHostAssembly).Hash -ne
@@ -86,7 +86,7 @@ $emissionOutput = & $dotnetExe run `
     --no-build
 $emissionOutput | Write-Output
 if ($LASTEXITCODE -ne 0) {
-    throw "UnifiedScript chunk emission failed with exit code $LASTEXITCODE."
+    throw "Finare chunk emission failed with exit code $LASTEXITCODE."
 }
 
 $reconciledIdentities = @(
@@ -113,7 +113,7 @@ foreach ($sidecarPath in $identityUpdates.Keys) {
     Copy-Item -LiteralPath $sidecarPath -Destination $identityUpdates[$sidecarPath] -Force
 }
 
-$chunkName = 'UnifiedScript.Unreal.Demo.uschunk'
+$chunkName = 'Finare.Unreal.Demo.uschunk'
 $compiledChunk = Join-Path $outputDirectory $chunkName
 $stagedChunk = Join-Path $stageDirectory $chunkName
 if (!(Test-Path -LiteralPath $compiledChunk)) {
@@ -121,7 +121,7 @@ if (!(Test-Path -LiteralPath $compiledChunk)) {
 }
 New-Item -ItemType Directory -Force -Path $stageDirectory | Out-Null
 Copy-Item -LiteralPath $compiledChunk -Destination $stagedChunk -Force
-$declarationName = 'UnifiedScript.Unreal.Demo.asset.json'
+$declarationName = 'Finare.Unreal.Demo.asset.json'
 $compiledDeclaration = Join-Path $outputDirectory $declarationName
 if (!(Test-Path -LiteralPath $compiledDeclaration)) {
     throw "Chunk compiler did not produce '$compiledDeclaration'."

@@ -160,7 +160,7 @@ facts remain transient rather than being duplicated in `.usgraph`.
 ## CLI sample
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/LoopBuildRules.cs \
   --identity samples/Patching/LoopBuildRules.cs.usids \

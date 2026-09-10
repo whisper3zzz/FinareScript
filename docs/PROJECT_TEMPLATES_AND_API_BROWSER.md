@@ -1,6 +1,6 @@
 # Project templates and generated API browser
 
-UnifiedScript ships a versioned project-template catalog and a searchable API/
+Finare ships a versioned project-template catalog and a searchable API/
 diagnostic browser. Both are project-owned surfaces: templates create ordinary
 source/configuration files, while the browser is regenerated from the exact
 Unreal API Contract, node catalog, and coverage report used by bindings and the
@@ -8,7 +8,7 @@ editor palette.
 
 ## Template catalog
 
-`Templates/UnrealProject/unifiedscript.project-templates.json` in the SDK uses
+`Templates/UnrealProject/finare.project-templates.json` in the SDK uses
 `unifiedscript.project-template-catalog/v0.1`. It currently declares three
 templates:
 
@@ -22,9 +22,9 @@ Create a project from one catalog entry:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$env:UNIFIEDSCRIPT_SDK_ROOT\Tools\new-unifiedscript-project.ps1" `
-  -Project $env:UNIFIEDSCRIPT_PROJECT `
-  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT `
+  -File "$env:FINARE_SDK_ROOT\Tools\new-finare-project.ps1" `
+  -Project $env:FINARE_PROJECT `
+  -EngineRoot $env:FINARE_UE_ROOT `
   -Template visual-gameplay `
   -ScriptName PlayerPolicy
 ```
@@ -39,8 +39,8 @@ Source acceptance runs every catalog entry through the public scaffold command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File tools/test-unifiedscript-project-templates.ps1 `
-  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT
+  -File tools/test-finare-project-templates.ps1 `
+  -EngineRoot $env:FINARE_UE_ROOT
 ```
 
 The runner creates isolated minimal UE project shells and verifies every
@@ -81,10 +81,10 @@ not invent a runtime route.
 `ue-bindings` writes it in the same all-or-nothing output transaction:
 
 ```powershell
-unifiedscript ue-bindings Generated/Game.reflection.json `
+finare ue-bindings Generated/Game.reflection.json `
   --contract Contracts/Game.unreal-api-contract.json `
-  --out Managed/Game.UnifiedScript/Generated/Unreal.bindings.generated.cs `
-  --native-out Plugins/UEUnifiedScript/Source/Game/Generated/Game.thunks.cpp `
+  --out Managed/Game.Finare/Generated/Unreal.bindings.generated.cs `
+  --native-out Plugins/Finare/Source/Game/Generated/Game.thunks.cpp `
   --nodes-out Generated/Game.api-nodes.json `
   --browser-out Generated/Game.api-browser.json `
   --report Generated/Game.binding-coverage.json `
@@ -109,7 +109,7 @@ it is not a substitute for rebuilding that baseline.
 
 ## Browse from the Workbench
 
-`start-unifiedscript-authoring.ps1` validates the generated browser and passes it
+`start-finare-authoring.ps1` validates the generated browser and passes it
 to the local authoring server. The server exposes a read-only
 `GET /api/unreal/browser` endpoint. The Workbench **API + DIAGNOSTICS** drawer
 supports:

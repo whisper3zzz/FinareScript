@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [string]$Project,
     [ValidateSet('Development', 'Shipping')]
     [string[]]$Configurations = @('Development', 'Shipping'),
@@ -14,12 +14,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = if ([string]::IsNullOrWhiteSpace($Project)) {
-    Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+    Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 } else {
     [IO.Path]::GetFullPath($Project)
 }
 $managedProjectPath = Join-Path $repoRoot `
-    'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+    'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $projectName = [IO.Path]::GetFileNameWithoutExtension($projectPath)
 $projectRoot = Split-Path -Parent $projectPath
 
@@ -29,7 +29,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $runUat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
@@ -180,18 +180,18 @@ try {
             throw "$configuration package does not contain its internal game executable."
         }
         $executable = $executableItem.FullName
-        $managedAssembly = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Unreal.dll'
-        $demoAssembly = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Demo\UnifiedScript.Unreal.Demo.dll'
-        $demoChunk = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Demo\UnifiedScript.Unreal.Demo.uschunk'
-        $runtimeConfig = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Resources\Managed\UnifiedScript.Unreal.runtimeconfig.json'
-        $managedRoot = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed'
+        $managedAssembly = Join-Path $packageRoot 'Plugins\Finare\Binaries\Managed\Finare.Unreal.dll'
+        $demoAssembly = Join-Path $packageRoot 'Plugins\Finare\Binaries\Managed\Demo\Finare.Unreal.Demo.dll'
+        $demoChunk = Join-Path $packageRoot 'Plugins\Finare\Binaries\Managed\Demo\Finare.Unreal.Demo.uschunk'
+        $runtimeConfig = Join-Path $packageRoot 'Plugins\Finare\Resources\Managed\Finare.Unreal.runtimeconfig.json'
+        $managedRoot = Join-Path $packageRoot 'Plugins\Finare\Binaries\Managed'
         $runtimeRoot = Join-Path $packageRoot `
-            'Plugins\UEUnifiedScript\Binaries\ThirdParty\DotNet\10.0\win-x64'
+            'Plugins\Finare\Binaries\ThirdParty\DotNet\10.0\win-x64'
         $requiredManagedFiles = @(
-            (Join-Path $managedRoot 'UnifiedScript.Core.dll'),
-            (Join-Path $managedRoot 'UnifiedScript.Runtime.dll'),
-            (Join-Path $managedRoot 'UnifiedScript.Unreal.dll'),
-            (Join-Path $managedRoot 'UnifiedScript.Unreal.deps.json'))
+            (Join-Path $managedRoot 'Finare.Core.dll'),
+            (Join-Path $managedRoot 'Finare.Runtime.dll'),
+            (Join-Path $managedRoot 'Finare.Unreal.dll'),
+            (Join-Path $managedRoot 'Finare.Unreal.deps.json'))
         foreach ($requiredPackageFile in @(
                 $executable,
                 $demoAssembly,
@@ -237,18 +237,18 @@ try {
         $smokeLog = Join-Path $runDirectory "$configuration-smoke.log"
         Write-Host "[$configuration] Running packaged CoreCLR/ABI v3 smoke..."
         $previousDotNetRoot = $env:DOTNET_ROOT
-        $previousUnifiedScriptDotNetRoot = $env:UNIFIEDSCRIPT_DOTNET_ROOT
+        $previousFinareDotNetRoot = $env:FINARE_DOTNET_ROOT
         try {
             $env:DOTNET_ROOT = Join-Path $runDirectory 'intentionally-missing-dotnet-root'
-            $env:UNIFIEDSCRIPT_DOTNET_ROOT = Join-Path `
+            $env:FINARE_DOTNET_ROOT = Join-Path `
                 $runDirectory `
-                'intentionally-missing-unifiedscript-dotnet-root'
+                'intentionally-missing-finare-dotnet-root'
             $process = Start-Process `
                 -FilePath $executable `
                 -WorkingDirectory (Split-Path -Parent $executable) `
                 -ArgumentList @(
-                    '-UnifiedScriptSmoke',
-                    "-UnifiedScriptSmokeResult=`"$smokeResult`"",
+                    '-FinareSmoke',
+                    "-FinareSmokeResult=`"$smokeResult`"",
                     '-unattended',
                     '-nullrhi',
                     '-nosplash',
@@ -263,7 +263,7 @@ try {
             }
         } finally {
             $env:DOTNET_ROOT = $previousDotNetRoot
-            $env:UNIFIEDSCRIPT_DOTNET_ROOT = $previousUnifiedScriptDotNetRoot
+            $env:FINARE_DOTNET_ROOT = $previousFinareDotNetRoot
         }
         if ($process.ExitCode -ne 0) {
             throw "$configuration packaged smoke exited with code $($process.ExitCode)."
@@ -282,7 +282,7 @@ try {
             throw "$configuration packaged smoke did not prove compiled-chunk startup: $smokeText"
         }
         if ($smokeText -notmatch
-            'hostfxr=.*UEUnifiedScript[/\\]Binaries[/\\]ThirdParty[/\\]DotNet[/\\]10\.0') {
+            'hostfxr=.*Finare[/\\]Binaries[/\\]ThirdParty[/\\]DotNet[/\\]10\.0') {
             throw "$configuration packaged smoke did not use the plugin-local CoreCLR runtime: $smokeText"
         }
 

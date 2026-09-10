@@ -90,7 +90,7 @@ evaluation meaning for these operators; v0.8 retains that contract.
 Generate the short-circuit sample with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/ShortCircuitRules.cs \
   --out artifacts/short-circuit
 ```

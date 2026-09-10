@@ -11,7 +11,7 @@
       "sequence": 1,
       "worldFrameNumber": "2",
       "generation": 2,
-      "scriptType": "UnifiedScript.Unreal.Diagnostics.GameplayDiagnosisFixture",
+      "scriptType": "Finare.Unreal.Diagnostics.GameplayDiagnosisFixture",
       "deltaSeconds": 0.016,
       "worldPhase": "ManagedTick",
       "worldPhases": [],
@@ -23,8 +23,8 @@
       ],
       "nodes": [
         {
-          "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-          "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+          "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+          "nodeId": "us_5e9a4743c6e707996cba30a42863a1ca",
           "hitCount": 1,
           "totalNanoseconds": 80000,
           "boundaries": [
@@ -32,8 +32,8 @@
           ]
         },
         {
-          "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-          "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+          "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+          "nodeId": "us_face5c8389d6eef73bc0b70efc27bd77",
           "hitCount": 1,
           "totalNanoseconds": 650000,
           "boundaries": [
@@ -60,8 +60,8 @@
     ],
     "nodes": [
       {
-        "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-        "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+        "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+        "nodeId": "us_5e9a4743c6e707996cba30a42863a1ca",
         "hitCount": 1,
         "totalNanoseconds": 80000,
         "boundaries": [
@@ -69,8 +69,8 @@
         ]
       },
       {
-        "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-        "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+        "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+        "nodeId": "us_face5c8389d6eef73bc0b70efc27bd77",
         "hitCount": 1,
         "totalNanoseconds": 650000,
         "boundaries": [

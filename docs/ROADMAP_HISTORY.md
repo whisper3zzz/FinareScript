@@ -1,4 +1,4 @@
-# UnifiedScript roadmap history — through 2026-09-04
+# Finare roadmap history — through 2026-09-04
 
 This is the historical implementation and acceptance record, retained when the
 live roadmap was reorganized. Status tables, proposed priorities, and "current"
@@ -12,14 +12,14 @@ execution instructions to this historical record.
 
 ---
 
-This document is the canonical execution queue for UnifiedScript. It records
+This document is the canonical execution queue for Finare. It records
 both the evidence-backed foundation and the ordered path from the current
 BlockBreaker package to a production alternative to Puerts. Milestone documents
 explain individual contracts; this file decides what is worked on next.
 
 ## Product north star
 
-UnifiedScript should provide a practical Unreal gameplay scripting product with:
+Finare should provide a practical Unreal gameplay scripting product with:
 
 - Puerts-grade first-use and daily-development ergonomics: install into an
   existing project, create a managed gameplay class, call ordinary
@@ -73,7 +73,7 @@ Last refreshed: **2026-09-01**
 - Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation; M13.1C-1a first Build; M13.1C-1b exact edit/reload loop; M13.1C-1c unified diagnostics and recovery; M13.1C-1d packaged Actor/Component execution; M13.1C-1e headless workflow-contract closure; M13.2A editor-native workflow; M13.2B dependency-aware Play; M13.2C diagnostics and IDE; M13.2D edit/reload; M13.2E one C#/Graph asset; M13.2F packaged product guidance; M13.2G versioned usability regression gate; M13.3A four-kind proxy identity; M13.3B-1 reflected state/default vertical; M13.3B-2a instance scalar Blueprint function dispatch; M13.3B-2b-1 static/common-value Blueprint function dispatch; M13.3B-2b-2 enum/UStruct persistence closure; M13.3B-3a lifecycle and Blueprint event contract; M13.3B-3b input/delegate/interface closure; M13.3C-1a constructor-backed defaults; M13.3C-1b common Blueprint property shapes; M13.3C-1c-a common-value and `ref`/`out` Blueprint functions**
 - Current tranche: **M13.3C-1c-b — container and Soft Reference Blueprint function shapes**
 - Current implementation state: **M13.3C-1c-a is closed. Ordinary public `[Visual]` methods now carry `FName`, `FText`, `UClass`, `FRotator`, and `FTransform` parameters/returns plus C# `ref` and `out` directions through HIR, Declaration IR, generated UFunction pins, persistent GeneratedClass bindings, and the World-owned managed dispatcher. ABI v3 returns one ordered result sequence (return value first, then `ref`/`out` values). Stable source parameter names compensate for Unreal's output-property reordering, while direct `ProcessEvent` and Blueprint VM execution both resolve and write the original output destinations without handwritten facade functions**
-- Current verification state: **M13.3C-1c-a passes the .NET 10 managed suite at 691/691, repository validation at 131/131 before the Roadmap closure invariant, deterministic generation at 9/9, UE 5.8.1 Editor/Game builds, the complete 29/29 `UnifiedScript.Unreal` CMD Automation suite plus the focused `BlueprintManagedStaticFunctionDispatch` rerun, and the full 345,567 ms Golden Path. The final path cooked and archived Win64, launched the packaged executable with plugin-local CoreCLR and compiled chunks, and passed Actor/Component lifecycle, events, input, delegate, interface, compatible reload, and World teardown. Evidence is under `artifacts/m13-3c1c/`, with the final report at `golden-path-final/script-class-golden-path-report.json`**
+- Current verification state: **M13.3C-1c-a passes the .NET 10 managed suite at 691/691, repository validation at 131/131 before the Roadmap closure invariant, deterministic generation at 9/9, UE 5.8.1 Editor/Game builds, the complete 29/29 `Finare.Unreal` CMD Automation suite plus the focused `BlueprintManagedStaticFunctionDispatch` rerun, and the full 345,567 ms Golden Path. The final path cooked and archived Win64, launched the packaged executable with plugin-local CoreCLR and compiled chunks, and passed Actor/Component lifecycle, events, input, delegate, interface, compatible reload, and World teardown. Evidence is under `artifacts/m13-3c1c/`, with the final report at `golden-path-final/script-class-golden-path-report.json`**
 - Current UI finding: **the exploratory interactive pass exposed temporary identity, duplicate-entry, focus, and incomplete-cleanup risks; those P0 defects are covered by headless contracts. Interactive timing remains optional discovery evidence, while the versioned CMD gate owns repeatable action/time regression enforcement**
 - Next acceptance: **reviewed array/set/map and Soft Object/Class Reference signatures project onto generated Blueprint pins with deterministic ownership and bounded codecs, survive compatible rebuild/reload and package load, and dispatch without handwritten facade functions**
 - Next user-visible slice: **author one ordinary managed gameplay function that accepts/returns a container and Soft Reference, call the generated Blueprint node, and replay the same call from the packaged CMD demo**
@@ -85,7 +85,7 @@ Last refreshed: **2026-09-01**
 ## Puerts-grade usability closure scorecard
 
 The immediate product target is workflow parity, not JavaScript compatibility:
-an Unreal gameplay developer should be able to install UnifiedScript, create a
+an Unreal gameplay developer should be able to install Finare, create a
 class, use ordinary UE APIs, edit, reload, diagnose, and package without knowing
 the generator topology. Backend breadth or benchmark wins do not close a row
 until the same capability is reachable through the shipped product workflow.
@@ -101,7 +101,7 @@ until the same capability is reachable through the shipped product workflow.
 | C# and visual authoring | The same Script Class opens as C# or Graph, preserves IDs/comments/layout, previews semantic changes, and enters the shared Build/Reload path | Keep the transactional dual projection green while M13.3 expands the class model | **M13.2 complete** |
 | IDE and debugging | Packaged adoption generates project-local references, typed navigation/documentation, Build/Validate tasks, and CoreCLR process-attach configuration without repository paths | The installed solution/workspace and documented attach path remain covered by release acceptance | **M13.2C complete** |
 | Package and ship | A fresh SDK consumer packages and executes exact Actor and Component generated classes from `.uschunk`; post-smoke ValidateOnly, Doctor, zero-change Repair, and exact user-file-preserving rollback pass | Actor and Component execute in the final packaged build; no-change rebuild, Doctor, and rollback remain clean | **M13.1C-1d complete** |
-| Migrate real gameplay | BlockBreaker has a complete UnifiedScript/Puerts evidence suite, but it is not yet a generic migration workflow | One external production-shaped slice reaches observable parity and removes its old runtime owner without project-specific facades | M13.4 |
+| Migrate real gameplay | BlockBreaker has a complete Finare/Puerts evidence suite, but it is not yet a generic migration workflow | One external production-shaped slice reaches observable parity and removes its old runtime owner without project-specific facades | M13.4 |
 
 M13.1C is closed by reproducible command-line build, Automation, managed,
 package, no-change, and rollback evidence. Interactive Editor action/time
@@ -154,7 +154,7 @@ machine-local unless an artifact explicitly says otherwise.
 | Gate | Verified result |
 | --- | --- |
 | Runtime source baseline | `5be7dde` (`fix: remove CI snapshots with long paths`) |
-| UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
+| Finare comparison source | `d2f1fec` (clean frozen BlockBreaker Finare acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 648 / 648 passed |
 | Repository validator | 115 / 115 passed |
@@ -162,14 +162,14 @@ machine-local unless an artifact explicitly says otherwise.
 | M13.1B-2 ordinary source/signature matrix | 9 / 9 focused regressions plus 637 / 637 full managed tests and 98 / 98 repository invariants passed; ordinary imports, semantic collision safety, exact overload selection, delegate projection, and the representative Blueprint-visible signature matrix use the real generators; a fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 278,254 ms; report at `artifacts/a/b3/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `eb205ca8313c068ff2e822e930a79e52e7a189feffdabc658bd33e7dbe97210f` |
 | M13.1B-2 bounded native reflection discovery | 10 / 10 focused regressions plus 638 / 638 full managed tests and 99 / 99 repository invariants passed; the clean template produced only `Actor`/`Pawn` source hints, UE uniquely added one source-discovered Engine class, and the resulting `Pawn.GetController` plus `Actor.GetActorLocation` surface passed Editor/Game build, ValidateOnly byte locks, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 250,077 ms; report at `artifacts/a/b4/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `97995eea92e45af2b37f076c1a9ba89d11128be718125358a19ac819063f2cc8` |
 | M13.1B-2b Blueprint discovery and surface lock | 12 / 12 focused regressions plus 640 / 640 full managed tests and 100 / 100 repository invariants passed; full UE 5.8.1 Automation passed 21 / 21 including exact transient Blueprint generated-class discovery; a fresh packaged consumer passed Apply, 3,000-byte exact per-type lock generation, ValidateOnly frozen verification, Editor/Game builds, two project Setup Automation tests, Win64 BuildCookRun, zero-change Repair, Doctor, and rollback in 279,057 ms; report at `artifacts/a/b5/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `01d30c2066570d90b21a6be0adaa602a8fb9d99bd219cabf043df48b651d1b71` |
-| M13.1C-0 attachable Script Class foundation | 5 new managed identity regressions plus 645 / 645 full managed tests, 102 / 102 repository invariants, UE 5.8.1 build, and 22 / 22 normal Automation tests passed; isolated creation and reload processes proved persistent Actor/ActorComponent identity, `BeginPlay`/`Tick`/`EndPlay`, World teardown, six-output deterministic ValidateOnly, and Win64 Cook of both proxies and both exact Script Asset sidecars in 210,632 ms; report at `HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json` |
+| M13.1C-0 attachable Script Class foundation | 5 new managed identity regressions plus 645 / 645 full managed tests, 102 / 102 repository invariants, UE 5.8.1 build, and 22 / 22 normal Automation tests passed; isolated creation and reload processes proved persistent Actor/ActorComponent identity, `BeginPlay`/`Tick`/`EndPlay`, World teardown, six-output deterministic ValidateOnly, and Win64 Cook of both proxies and both exact Script Asset sidecars in 210,632 ms; report at `HostProject/Saved/Finare/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json` |
 | M13.1C-1 first-Play connection | first Build, state-safe edit/reload, unified diagnostics, packaged Actor/Component execution, and the headless creation/rollback workflow contract are verified. UE 5.8.1 clean-consumer Editor/Game builds, 645/645 managed tests, and the packaged execution/no-change/rollback proof pass; evidence remains at `artifacts/m13-1c1d/acceptance-preflight-2/packaged-native-onboarding-report.json` and `artifacts/m13-1c1e/automation/unifiedscript-unreal-full-rerun.log` |
 | M13.2A-1 native Script Asset entry | UE 5.8.1 build, 24/24 `UnrealEditor-Cmd` + NullRHI Automation tests, 645/645 managed tests, and 107/107 repository invariants pass. Normal Script Asset opening reaches the shared Authoring tab; exact source/generated-class/repair actions are registered; unsafe bare rename/duplicate are rejected. Evidence is at `artifacts/m13-2a/automation/script-asset-workflow.log` and `artifacts/m13-2a/automation/unifiedscript-unreal-full.log` |
 | M13.2A-2a complete-class rename/duplicate | UE 5.8.1 build, 4/4 focused Script workflow tests, 25/25 full CMD-mode Automation tests, 645/645 managed tests, and 108/108 repository invariants pass. Rename preserves `ClassId`; duplicate creates a new one; both update the complete proxy/sidecar/source/deployment/first-Play identity and prove byte-exact rollback after injected post-publication failure. Evidence is at `artifacts/m13-2a2/automation/script-workflow-focused.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-final.log` |
 | M13.2A-2b1 guarded safe delete | UE 5.8.1 build, focused CMD-mode `ScriptClass.AssetOperations`, refreshed 25/25 full Automation, 645/645 managed tests, and 109/109 repository invariants pass. Unreferenced complete classes delete through a reversible tombstone; managed referencers are rejected; injected post-publication failure restores source/deployment/request bytes and package paths; bare generated Blueprint destructive actions are rejected. Evidence is at `artifacts/m13-2a2/automation/script-class-delete-focused-final.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-delete-final.log` |
 | M13.2A-2b2a Roslyn reference plan | UE 5.8.1 build, focused CMD-mode `ScriptClass.AssetOperations`, refreshed 25/25 full Automation, 648/648 managed tests, and 110/110 repository invariants pass. Rename rewrites only Roslyn-bound declarations and cross-file type uses while preserving non-semantic text and source encoding; delete reports exact external semantic uses; cross-file conflicts and injected failure prove byte-exact rollback. Evidence is at `artifacts/m13-2a2/automation/script-class-semantic-reference-focused-3.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-semantic-reference-final.log` |
 | M13.2A-2b2b persisted crash recovery | UE 5.8.1 build, focused CMD-mode `ScriptClass.AssetOperations`, refreshed 25/25 full Automation, 648/648 managed tests, and 111/111 repository invariants pass. Every operation writes bounded package/external preimages and explicit phases; live-owner receipts are deferred; orphan recovery archives interrupted bytes before exact restore; success and rollback close their receipts. Evidence is at `artifacts/m13-2a2/automation/script-class-journal-focused-2.log` and `artifacts/m13-2a2/automation/unifiedscript-unreal-journal-final.log` |
-| M13.2A-2b2c UE reference and duplicate closure | UE 5.8.1 build, focused UE-reference/rollback, dirty-referencer rejection, Blueprint Asset Definition, and direct-duplicate cleanup CMD tests, refreshed 25/25 full Automation, 648/648 managed tests, and 112/112 repository invariants pass. Rename snapshots and rewrites external UE referencers, deletes old redirectors, verifies dependency closure, and reverses the rewrite on failure. Script Class proxies use `UUnifiedScriptBlueprint`; Content Browser rejects bare rename/duplicate and the Asset Registry guard removes direct Blueprint-only copies. Evidence is at `artifacts/m13-2a2/automation/script-class-ue-reference-duplicate-final.log`, `artifacts/m13-2a2/automation/script-blueprint-definition-focused.log`, and `artifacts/m13-2a2/automation/unifiedscript-unreal-ue-reference-duplicate-final-3.log` |
+| M13.2A-2b2c UE reference and duplicate closure | UE 5.8.1 build, focused UE-reference/rollback, dirty-referencer rejection, Blueprint Asset Definition, and direct-duplicate cleanup CMD tests, refreshed 25/25 full Automation, 648/648 managed tests, and 112/112 repository invariants pass. Rename snapshots and rewrites external UE referencers, deletes old redirectors, verifies dependency closure, and reverses the rewrite on failure. Script Class proxies use `UFinareBlueprint`; Content Browser rejects bare rename/duplicate and the Asset Registry guard removes direct Blueprint-only copies. Evidence is at `artifacts/m13-2a2/automation/script-class-ue-reference-duplicate-final.log`, `artifacts/m13-2a2/automation/script-blueprint-definition-focused.log`, and `artifacts/m13-2a2/automation/unifiedscript-unreal-ue-reference-duplicate-final-3.log` |
 | M13.2A-2b2d packaged lifecycle replay | Factory create now writes the same bounded recovery receipt as rename/duplicate/delete, saves both UE packages before commit, and restores exact external/package preimages on failure. The source CMD runner and a fresh packaged-SDK consumer replay all four success, injected rollback, and persisted recovery paths with byte-exact baseline restoration and zero pending receipts. The clean consumer also passes first-Play create/reload, Win64 Cook/Package, Validate, Doctor, no-change Repair, and SDK rollback in 569,454 ms; refreshed 25/25 CMD Automation, 648/648 managed tests, and 113/113 repository invariants pass. Evidence is at `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/packaged-native-onboarding-report.json` and `artifacts/m13-2a2d/clean-consumer-create-recovery-fix/script-class-lifecycle-replay/packaged-script-class-lifecycle-report.json` |
 | M13.2B dependency-aware Play | One persistent graph fingerprints direct inputs, dependency outputs, and tracked outputs for 13 Build/Play stages, explains every run/skip, propagates only changed output bytes, and commits state only after complete success. A clean packaged consumer cold Apply took 166,899 ms; immediate no-change Apply took 1,506 ms with 0 executed and 13 skipped; ValidateOnly, Cook/Package, Doctor, Repair, and rollback also passed. Windows PowerShell 5.1 graph tests, 648/648 managed tests, and 114/114 repository invariants pass. Evidence is at `artifacts/m13-2b1/packaged-incremental-output-isolation-fix/packaged-native-onboarding-report.json`; SDK SHA-256 `d233f3bc6ed23856da795e0be85e301cbc9479d17f56a42300763213c21e341e` |
 | M13.2C diagnostics and IDE | Diagnostic schema v0.2 carries stage, source/member/graph, package, World host, runtime instance, generation, snapshot, and bounded recovery context into UE Message Log. Packaged adoption emits a project-local `.slnx`, C#/documentation workspace, Build/Validate tasks, CoreCLR attach configuration, and IDE manifest with no repository dependency. UE 5.8.1 build, 25/25 CMD Automation, 648/648 managed tests, 115/115 repository invariants, 3/3 template fixtures, 2/2 packaged-adoption fixtures, and the clean native consumer all pass. Evidence is at `artifacts/m13-2c/packaged-native/packaged-native-onboarding-report.json`; SDK SHA-256 `61cda211e1da53dfb8855a90d2faa29c98cd24c6a7511123e117059658e18669` |
@@ -195,15 +195,15 @@ machine-local unless an artifact explicitly says otherwise.
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 29 / 29 passed through `UnrealEditor -cmd` + NullRHI, including persisted receipt recovery/live-owner deferral/archive, semantic cross-file complete-class rename/delete, duplicate, referencer rejection, direct-operation guards and byte-exact rollback, native Script Asset actions, name-first Script Class factories, exact generated-class reflection, Actor/ActorComponent creation and save, project-local Setup, failure containment, deterministic World shutdown, Authoring Surface and reload coverage, generated data-plane extensions, instance/static typed `ProcessEvent` dispatch, persistent enum/UStruct bindings, lifecycle metadata, Blueprint-child explicit-Super managed event dispatch, Enhanced Input, exactly-once delegates, and native interface return dispatch |
+| `Finare.Unreal` Automation | 29 / 29 passed through `UnrealEditor -cmd` + NullRHI, including persisted receipt recovery/live-owner deferral/archive, semantic cross-file complete-class rename/delete, duplicate, referencer rejection, direct-operation guards and byte-exact rollback, native Script Asset actions, name-first Script Class factories, exact generated-class reflection, Actor/ActorComponent creation and save, project-local Setup, failure containment, deterministic World shutdown, Authoring Surface and reload coverage, generated data-plane extensions, instance/static typed `ProcessEvent` dispatch, persistent enum/UStruct bindings, lifecycle metadata, Blueprint-child explicit-Super managed event dispatch, Enhanced Input, exactly-once delegates, and native interface return dispatch |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
 | M10.3 weighted suite | qualified at 0.563208 versus the 0.95 maximum; all 14 regression gates passed |
-| Matched BlockBreaker frame median | UnifiedScript 0.3902 ms; Puerts 0.4160 ms; ratio 0.937981; p95/p99 ratios 0.934816 / 0.935693 |
-| Matched BlockBreaker bridge median | UnifiedScript 118.7061 ms; Puerts 285.9899 ms; ratio 0.415071; calls and logical bytes are both 20% of Puerts |
-| Matched package size | UnifiedScript 1,033,732,983 bytes; Puerts 1,009,756,057 bytes; ratio 1.023745 |
+| Matched BlockBreaker frame median | Finare 0.3902 ms; Puerts 0.4160 ms; ratio 0.937981; p95/p99 ratios 0.934816 / 0.935693 |
+| Matched BlockBreaker bridge median | Finare 118.7061 ms; Puerts 285.9899 ms; ratio 0.415071; calls and logical bytes are both 20% of Puerts |
+| Matched package size | Finare 1,033,732,983 bytes; Puerts 1,009,756,057 bytes; ratio 1.023745 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260828-152605/demo-delivery.json` |
@@ -431,7 +431,7 @@ declarations or one-node-per-expression graphs.
 Outcome: every authoring client consumes one versioned, engine-neutral Surface
 instead of interpreting Graph or embedding sample behavior.
 
-- [x] dedicated `UnifiedScript.Authoring` project boundary
+- [x] dedicated `Finare.Authoring` project boundary
 - [x] deterministic Authoring Surface v0.1 JSON and strict invariants
 - [x] Surface v0.3 complete nodes, typed ports, control/data edges, real block
   source IDs, ordered statement IDs, and available parameter type identities
@@ -467,7 +467,7 @@ Outcome: the proven language pipeline becomes usable from UE.
 - [x] hosted demo assembly loading and generated-wrapper execution on a live UObject
 - [x] component-driven auto-registration, Start/Tick/Stop, and real DLL reload
 - [x] stable generated Member IDs, ABI v2 transport, and component native fast thunks
-- [x] `UUnifiedScriptAsset`, Content Browser/soft-path resolution, and transactional type reload
+- [x] `UFinareAsset`, Content Browser/soft-path resolution, and transactional type reload
 - [x] automatic native thunk generation for arbitrary public reflected types
 - [x] script declaration materialization on the host component
 - [x] Slate integration consuming Authoring Surface v0.3, with native
@@ -510,7 +510,7 @@ Authoring Beta and native debugging are deliberately owned by M8 and M9.
 - [x] deterministic UE binding coverage gate and safe reflected-path fallback
 - [x] arbitrary reflected delegate signatures, ABI v4 event proxies, attributed
   lifecycle binding, and Graph/C# Event Entry round-trip
-- [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
+- [x] reproducible C++/Finare benchmark, Puerts comparison gate, and regression thresholds
 - [x] append-compatible generated scalar ABI lane that passes the matched Puerts latency gate
 - [x] per-World pre/managed/post phase scheduler on UE tick delegates
 - [x] fixed-row command buffer with next-frame double-buffered completion events
@@ -521,7 +521,7 @@ Authoring Beta and native debugging are deliberately owned by M8 and M9.
 
 ## M6.3 — Adoptable project alpha
 
-Outcome: a developer can add UnifiedScript to another UE 5.8 project, generate
+Outcome: a developer can add Finare to another UE 5.8 project, generate
 its contracts, run scripts, and package the project without knowing this
 repository's internal build sequence.
 
@@ -560,12 +560,12 @@ builds, 43/43 native members, two Script Assets, and deterministic outputs.
 - [x] verify hashes, required files, ABI/schema compatibility, and accidental
   absolute paths before publishing an archive
 - [x] install the archive into a clean project copy and remove any dependency
-  on the UnifiedScript repository checkout
+  on the Finare repository checkout
 
 Acceptance: the installed SDK passes M6.3.1 and packages a runnable Win64 build
 from an isolated directory.
 
-Evidence (2026-08-26): `tools/package-unifiedscript-sdk.ps1` produced the same
+Evidence (2026-08-26): `tools/package-finare-sdk.ps1` produced the same
 SHA-256 on two consecutive `0.1.0-m6.3-alpha.1` builds. Its manifest covers all
 payload files plus UE 5.8/.NET 10, ABI v2/v3/v4, and schema compatibility while
 the plugin payload contains no native `Binaries` or `Intermediate` output. A
@@ -588,8 +588,8 @@ gameplay commands, 3,627 fast/call-frame calls, and zero legacy calls.
 Acceptance: a new script type can be created, visually opened, hot reloaded,
 and packaged without copying files from either sample by hand.
 
-Evidence (2026-08-26): the SDK-installed `new-unifiedscript-project.ps1`
-created a clean `HostScaffold.UnifiedScript.FirstScript` project, project-owned
+Evidence (2026-08-26): the SDK-installed `new-finare-project.ps1`
+created a clean `HostScaffold.Finare.FirstScript` project, project-owned
 contract/deployment/onboarding files, one Script Asset, and all Graph/HIR/
 semantics/Declaration IR/Surface outputs in an isolated Git export. Packaged-
 layout onboarding reflected two project types and generated 16/16 native
@@ -618,7 +618,7 @@ asset deployment, and 10/10 Automation tests.
 Acceptance: one report proves or rejects the complete R2 claim. Completing this
 slice advances the cursor to M7.
 
-Evidence (2026-08-26): `tools/run-unifiedscript-alpha-acceptance.ps1` first
+Evidence (2026-08-26): `tools/run-finare-alpha-acceptance.ps1` first
 proved its failure contract with `USACC1001`, a persisted failed JSON/Markdown
 pair, the owning phase, and a non-destructive retry. Its final complete UE
 5.8.1 run then passed in 135,150 ms and wrote
@@ -685,7 +685,7 @@ zero rejected members. The 448/448 managed suite and 44/44 validator passed;
 UE 5.8.1 completed both native builds, deterministic regeneration, deployment,
 CoreCLR startup, and 12/12 Automation in 110,938 ms in
 `artifacts/onboarding/m7-2-lifecycle-20260827.json`. The dedicated
-`UnifiedScript.Unreal.WorldHost.LifecycleStress` gate then completed eight
+`Finare.Unreal.WorldHost.LifecycleStress` gate then completed eight
 non-seamless travel handoffs, eight PIE create/stop cycles, four simultaneous
 Worlds reusing eight request IDs each, and sixteen managed generation rollovers.
 It found and fixed generation-owned async resource handles surviving reload;
@@ -733,7 +733,7 @@ cursor advances to M7.4 full BlockBreaker runtime migration.
   lifecycle hooks, and remaining facade behavior
 - [x] migrate the complete playable logic through generated contracts or the
   generic data plane; keep sample-only gameplay outside the plugin
-- [x] remove the Puerts plugin from the UnifiedScript project and prove editor,
+- [x] remove the Puerts plugin from the Finare project and prove editor,
   packaged, functional, and asset-parity gates
 
 Acceptance: BlockBreaker is a whole-project migration proof rather than a
@@ -1070,7 +1070,7 @@ reloaded into the same running scene without a second Blueprint behavior source.
 
 ## M9 — Debugging, reload, and observability Beta
 
-Outcome: UnifiedScript failures can be diagnosed inside Unreal at the source,
+Outcome: Finare failures can be diagnosed inside Unreal at the source,
 graph, World, generation, and bridge boundaries.
 
 ### M9.1 — Native editor debug integration
@@ -1150,7 +1150,7 @@ holding state, one reflected Host delegate, timers, and the active generation;
 it finishes with zero registered-object, delegate, pending-work, native-context,
 owned-resource, stale-debug-session, and retired-AssemblyLoadContext deltas.
 Managed tests pass 526/526, repository validation passes 63/63, the UE 5.8.1
-Editor build passes, and `UnifiedScript.Unreal` Automation passes 14/14. M9.2 is
+Editor build passes, and `Finare.Unreal` Automation passes 14/14. M9.2 is
 complete; the cursor advances to M9.3.
 
 ### M9.3 — Gameplay and bridge profiler
@@ -1173,7 +1173,7 @@ schema revision 3 appends cumulative phase count/nanosecond telemetry without
 moving the revision-1/2 prefixes. The native parser rejects incompatible or
 unbounded captures; Slate shows the aggregate/latest-frame summary, focuses the
 hottest node that resolves in the active graph, and saves exact JSON under
-`Saved/UnifiedScript/Profiles`. Each semantic node also retains the bridge and
+`Saved/Finare/Profiles`. Each semantic node also retains the bridge and
 data-plane counters accumulated while it is active. One live World workload
 exercises every attribution family.
 
@@ -1192,7 +1192,7 @@ locates the wrong `damage` value at the exact Return source/graph node and
 regression at the exact `traceBudget` declaration node and `batchTrace`
 boundary. The report is `unifiedscript.gameplay-diagnosis/v0.1` and contains no
 custom gameplay logging. Managed tests pass 534/534, repository validation
-passes 65/65, the UE 5.8.1 Editor build passes, and `UnifiedScript.Unreal`
+passes 65/65, the UE 5.8.1 Editor build passes, and `Finare.Unreal`
 Automation passes 15/15. M9.3 is
 complete; the cursor advances to M10.1.
 
@@ -1201,7 +1201,7 @@ located to a source/graph node and runtime boundary without custom logging.
 
 ## M10 — Performance architecture and honest Puerts comparison
 
-Outcome: UnifiedScript is faster on representative end-to-end gameplay, not
+Outcome: Finare is faster on representative end-to-end gameplay, not
 only on a selected scalar call.
 
 ### M10.1 — Workload suite
@@ -1216,20 +1216,20 @@ only on a selected scalar call.
 
 Completed (2026-08-28): suite v1.0.0 produced all 54 scheduled captures under
 one UE 5.8.1 machine/build fingerprint and the frozen runtime identities
-`sha256:73607b...a7a76b` (UnifiedScript) and
+`sha256:73607b...a7a76b` (Finare) and
 `sha256:4e5f66...76cf0d` (Puerts). Each runtime assembled exactly 27 trials; the
 comparison verified all nine workload definitions, three-trial medians, and the
 odd/even alternating order. The checked-in schema rejects missing, duplicate,
 stale, dirty-mislabeled, mismatched-environment, or misordered evidence.
 
-The formal result is deliberately mixed. UnifiedScript wins the per-frame Actor
+The formal result is deliberately mixed. Finare wins the per-frame Actor
 (p50 ratio 0.342857), 1,000-entity (0.346390), Batch Trace (bridge ratio
 0.330878), and complete BlockBreaker workload (p50/p95/p99 ratios
 0.898835/0.955283/0.959456). In BlockBreaker, generated batching reduces bridge
 time to 33.60%, calls to 20%, and logical copied bytes to 20% of Puerts, with
 zero measured runtime GC collections in the window. It loses scalar calls
 (1.211389), struct/container transfer (6.734380), four-argument delegate
-dispatch (3.800531), and resource load/spawn/destroy (1.642611). UnifiedScript's
+dispatch (3.800531), and resource load/spawn/destroy (1.642611). Finare's
 matched package is 2.28% larger and startup is 5.13% slower in the complete
 workload. Allocation values stay ratio-free because CLR cumulative thread
 allocation and V8 used-heap growth are different collectors. Reload remains a
@@ -1261,7 +1261,7 @@ samples: direct Array+Map binding costs 25,371.973 ns/row, the generated
 snapshot costs 1.270 ns/row (ratio 0.000050), and buffered-event iteration costs
 0.586 ns/row, with zero managed allocation. Direct generated binding remains
 the fallback for low-volume or unstable shapes. The UE 5.8.1 build, 543 managed
-tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
+tests, and all 16 `Finare.Unreal` Automation tests pass.
 
 ### M10.3 — Performance budgets
 
@@ -1272,7 +1272,7 @@ tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
 - [x] require the weighted matched gameplay suite to beat Puerts by at least 5%
   before making the broad product claim; publish neutral or losing results too
 
-Acceptance: the performance report explains where UnifiedScript wins or loses,
+Acceptance: the performance report explains where Finare wins or loses,
 and the broad claim is derived from the versioned suite rather than one API.
 
 Completed (2026-08-28): suite v1.1.0 completed all 54 alternating slots on the
@@ -1284,7 +1284,7 @@ hot-reload diagnostic (4.959958) rather than hiding them. BlockBreaker medians
 are 0.4340/0.8549/1.2585 ms at p50/p95/p99 versus Puerts at
 0.4740/0.9416/1.3735 ms, and package ratio is 1.023121. Full validation is
 559/559 managed tests, 69/69 repository invariants, UE 5.8.1 native build, and
-16/16 `UnifiedScript.Unreal` Automation tests.
+16/16 `Finare.Unreal` Automation tests.
 
 ## M11 — Production hardening and release candidate
 
@@ -1609,9 +1609,9 @@ matched cold-start median is no slower than the loose compatibility path.
 Acceptance: an RC archive installs and upgrades in clean project copies, passes
 the declared matrix, and survives the soak budget with no unresolved blocker.
 
-## M12 — Migration ecosystem and UnifiedScript 1.0
+## M12 — Migration ecosystem and Finare 1.0
 
-Outcome: teams can evaluate, migrate, ship, and maintain UnifiedScript without
+Outcome: teams can evaluate, migrate, ship, and maintain Finare without
 requiring repository authors to operate their project.
 
 ### M12.1 — Puerts migration workflow
@@ -1626,7 +1626,7 @@ requiring repository authors to operate their project.
 M12.1 scanner evidence (2026-08-29): `ue-puerts-scan` publishes strict
 `unifiedscript.puerts-project-scan/v0.1` reports from automatically discovered
 or explicitly selected TypeScript/JavaScript and native roots. Authored source
-roots win over deployed JavaScript, Puerts and UnifiedScript runtime plugin code
+roots win over deployed JavaScript, Puerts and Finare runtime plugin code
 stay outside automatic gameplay ownership, and config/native evidence remains
 fingerprinted. Findings classify modules, script types, Unreal/Puerts APIs,
 lifecycle, resources, delegates, async work, native surfaces, and unsupported
@@ -1662,16 +1662,16 @@ M12.1 coexistence evidence (2026-08-29): the strict deterministic
 `unifiedscript.puerts-coexistence/v0.1` manifest defaults every discovered type
 to Puerts and promotes only explicit `SourceType=Managed.Type` routes.
 `ue-puerts-coexist` and the generated `PuertsOwnership.generated.ts` share the
-native World arbiter with `UUnifiedScriptComponent`; a host/lifecycle key can
+native World arbiter with `UFinareComponent`; a host/lifecycle key can
 have only one claimant and runtime owner, stale weak claims are pruned, World
 shutdown clears ownership, and live reload cannot switch routes. The real
 BlockBreaker manifest retains `TS_BaseGun` and `TS_Player` on Puerts while
 promoting `TS_Rifle` to
-`BlockBreaker.UnifiedScript.BlockBreakerRifleScript`. Seven focused managed
+`BlockBreaker.Finare.BlockBreakerRifleScript`. Seven focused managed
 tests, the UE 5.8.1 native build, and
-`UnifiedScript.Unreal.Coexistence.RuntimeOwnership` pass. Full regression is
+`Finare.Unreal.Coexistence.RuntimeOwnership` pass. Full regression is
 600/600 managed tests, 84/84 repository invariants, and 18/18
-`UnifiedScript.Unreal` Automation tests. The manifest deliberately does not
+`Finare.Unreal` Automation tests. The manifest deliberately does not
 rewrite spawn/asset routing or claim gameplay parity. M12.1 is complete and the
 cursor advances to M12.2's versioned SDK and documentation release surface.
 
@@ -1739,7 +1739,7 @@ Workbench exposes the validated document through read-only
 
 Full Apply onboarding rebuilt both native passes, regenerated all five Contract
 consumers, recompiled/deployed the content-identified Demo chunk, and passed
-18/18 `UnifiedScript.Unreal` Automation tests in
+18/18 `Finare.Unreal` Automation tests in
 `artifacts/onboarding/m12-2-template-browser-full.json`. Managed regression is
 602/602 and repository validation is 87/87. Two final SDK archives are
 byte-identical at 204 payloads and 8,401,594 bytes with SHA-256
@@ -1774,7 +1774,7 @@ both show the stable-ID review before resending the same payload, transaction,
 baseline/group identity, and SHA-256 preview token; cancellation remains a
 zero-write path. Focused semantic/HTTP regression passes 13/13, the full managed
 suite passes 610/610, repository validation passes 88/88, and the UE 5.8.1
-Editor build plus 18/18 `UnifiedScript.Unreal` Automation tests pass. The merge
+Editor build plus 18/18 `Finare.Unreal` Automation tests pass. The merge
 artifact is intentionally review evidence rather than a second source of truth:
 C# publication still goes through the compiler and authoring transaction gate.
 Full Apply evidence is recorded at
@@ -1830,7 +1830,7 @@ dominant Unreal boundary directly below the live World controls; selecting any
 row uses the existing semantic debugger navigation. Managed regression passes
 616/616 and repository validation passes 90/90. Full Apply onboarding rebuilt
 both UE 5.8.1 native passes, regenerated and redeployed the compiled Demo chunk,
-verified deterministic outputs, and passed 18/18 `UnifiedScript.Unreal`
+verified deterministic outputs, and passed 18/18 `Finare.Unreal`
 Automation tests in 100,980 ms; the report is
 `artifacts/onboarding/m12-3-runtime-insight-full.json`. Two final SDK archives
 are byte-identical at 206 payload entries, 27 documentation entries, and
@@ -1860,7 +1860,7 @@ and records zero managed allocation; its report is
 Managed regression passes 619/619. Nine checked-in Contract/data-plane outputs
 regenerate byte-identically, including all three extension artifacts. Full
 Apply onboarding rebuilt both UE 5.8.1 native passes, redeployed the compiled
-Demo chunk, verified generation, and passed 19/19 `UnifiedScript.Unreal`
+Demo chunk, verified generation, and passed 19/19 `Finare.Unreal`
 Automation tests in 71,265 ms; the report is
 `artifacts/onboarding/m12-3-data-plane-extension-full.json`. Two final SDK
 archives are byte-identical at 214 payload entries, 28 documentation entries,
@@ -1927,11 +1927,11 @@ become three independently configured products.
 | --- | --- | --- | --- |
 | M13.1A-0 — packaged adoption CLI | `adopt` and `doctor` can transactionally install, diagnose, rerun, and roll back a consumer project | public packaged CLI passes clean native/Blueprint-only fixtures with deterministic no-change reruns | Complete (`9fe7f70`) |
 | M13.1A-1 — Editor project setup | an adopted project carries its own CLI and exposes Preview, Repair, Doctor, and Build/Onboard in Unreal Editor | Editor actions use exactly the CLI configuration model; native replacement is deferred safely until the Editor exits | Complete |
-| M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `UnifiedScript.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | Complete |
+| M13.1A-2 — native onboarding acceptance | the same adopted project builds its plugin, generated surface, managed program, and cook closure from one action | UE 5.8 build, `Finare.Unreal` Automation, packaged no-change repair, rollback, and managed cook proof all pass | Complete |
 | M13.1B-1 — first automatic reflected API vertical | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, exact coverage, source-linked unsupported-use diagnostics, packaged UE build/cook, and no-change validation pass on a clean consumer | Complete |
 | M13.1B-2a — native reflected breadth | ordinary C# use discovers the needed native project/plugin/Engine surface and supports representative gameplay signatures without generator knowledge | type/signature matrix, semantic source discovery, deterministic generation, and zero handwritten dispatch pass on a clean consumer | Complete |
 | M13.1B-2b — Blueprint discovery and surface lock | ordinary C# use discovers loaded Blueprint/generated classes by exact asset/class identity and freezes the generated development surface for team/CI use | loaded Blueprint fixture, asset-path identity, per-type localized regeneration, no-change lock, and stale-lock rejection pass | Complete |
-| M13.1C-0 — attachable Script Class foundation | **Create UnifiedScript Class** produces one ActorComponent and one Actor proxy with stable native, asset, managed, and semantic identity | both classes are selectable/attachable, receive `BeginPlay`/`Tick`, expose one property/function, survive reopen, and require no handwritten facade | Complete |
+| M13.1C-0 — attachable Script Class foundation | **Create Finare Class** produces one ActorComponent and one Actor proxy with stable native, asset, managed, and semantic identity | both classes are selectable/attachable, receive `BeginPlay`/`Tick`, expose one property/function, survive reopen, and require no handwritten facade | Complete |
 | M13.1C-1 — first-Play golden path | the adopted clean project can create, compile, attach, Play, edit, reload, cook, and package the new Script Class through the installed product | the complete workflow replays headlessly from a packaged SDK with diagnostics, no manual generator command, and no source-checkout dependency | **Complete** |
 | M13.2 — Puerts-grade daily workflow | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable editor-native workflow | command-line contracts remain green; versioned action/time measurements expose UX regressions without replacing correctness gates | **Complete** |
 | M13.3 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | **Active** |
@@ -1952,7 +1952,7 @@ The completed M13.1A-2 slice closed in this order:
    Build/Cook/Stage/Pak/Archive, asserting the executable, managed program,
    CoreCLR closure, generated Script Assets, and zero Puerts/JavaScript payload;
 5. rerun the managed suite, repository validator, native build, focused
-   `UnifiedScript.Unreal` Automation, and packaged acceptance, then record one
+   `Finare.Unreal` Automation, and packaged acceptance, then record one
    local commit and advance the cursor to M13.1B-1.
 
 M13.1A-2 acceptance (2026-08-31): a fresh packaged SDK adopted a clean
@@ -1962,7 +1962,7 @@ functions, and 2 delegates; generated deterministic C#, native thunks, visual
 nodes, coverage, a managed assembly, and an 11,030-byte compiled chunk; built
 both native targets; synchronized the Script Asset; and passed the configured
 Automation gate. ValidateOnly then passed from the installed project, ordinary
-Win64 BuildCookRun produced the executable plus UnifiedScript/CoreCLR managed
+Win64 BuildCookRun produced the executable plus Finare/CoreCLR managed
 closure and cooked Script Asset, and found zero Puerts or project-authored
 JavaScript files. Post-cook Doctor passed, Repair reported zero changes and zero
 conflicts while preserving all four native host files, and rollback restored the
@@ -1976,9 +1976,9 @@ the accepted SDK SHA-256 is
 
 The target golden path for an existing Unreal project is:
 
-1. run `unifiedscript adopt <Game.uproject>` or the equivalent editor install
+1. run `finare adopt <Game.uproject>` or the equivalent editor install
    action;
-2. choose **Create UnifiedScript Class**, select an Actor/Component/UObject base,
+2. choose **Create Finare Class**, select an Actor/Component/UObject base,
    and attach or select the generated asset like an ordinary Blueprint class;
 3. write restricted C# against generated typed Unreal APIs, or open the same
    semantics in the visual authoring surface;
@@ -1995,7 +1995,7 @@ prerequisite.
 
 "As easy as Puerts" is a workflow gate, not a claim that C# reproduces
 JavaScript semantics. All P0 rows below must pass from a packaged SDK before the
-roadmap may describe UnifiedScript as usability-equivalent.
+roadmap may describe Finare as usability-equivalent.
 
 | P0 workflow gate | Pass condition | Current state | Owning slice |
 | --- | --- | --- | --- |
@@ -2013,7 +2013,7 @@ The golden-path regression records elapsed time and exact phase evidence for
 adopt-to-first-Play and edit-to-observed-change. Zero manual JSON/C++ edits and
 zero direct generator commands are hard gates. Human action/time budgets are an
 M13.2G usability signal and are frozen only after the first external
-Puerts/UnifiedScript paired replay.
+Puerts/Finare paired replay.
 
 Usability parity is not declared from a demo video or a repository-only fixture.
 It requires a clean external project to complete the golden path and a
@@ -2027,10 +2027,10 @@ The Puerts baseline below follows its current official Unreal documentation:
 [automatic binding](https://github.com/Tencent/puerts/blob/master/doc/unreal/en/getting_started.md),
 [mixin](https://github.com/Tencent/puerts/blob/master/doc/unreal/zhcn/mixin.md),
 and [repository support matrix](https://github.com/Tencent/puerts). Those are
-upstream claims, not locally reproduced evidence. UnifiedScript claims remain
+upstream claims, not locally reproduced evidence. Finare claims remain
 limited to the gates in this repository.
 
-| Capability | Puerts practical baseline | UnifiedScript RC1 baseline | M13 decision |
+| Capability | Puerts practical baseline | Finare RC1 baseline | M13 decision |
 | --- | --- | --- | --- |
 | Reflected Unreal API reach | Blueprint-visible `UCLASS`, `UPROPERTY`, `UFUNCTION`, `USTRUCT`, and `UENUM` APIs are reflection-callable without per-member generation | exact allowlisted Contract; current product surface is seven generated types, 103 selected members, and 101 native paths | P0: generate a complete project-owned surface on demand while retaining exact coverage policy |
 | Non-reflected C++ | template static binding covers constructors, overloads, fields, methods, inheritance, callbacks, and custom converters | generated DirectThunk/CallFrame routes plus explicit native extensions | P0: publish a supported native-extension contract and generator rather than handwritten facades |
@@ -2041,7 +2041,7 @@ limited to the gates in this repository.
 | Performance shape | mature scalar/reflection/static binding and fast incremental reload | stronger measured batch/container/event/data-plane paths; slower scalar, resource/spawn, and reload paths in the frozen suite | P1: keep broad matched workloads and optimize only reproduced losses |
 | Adoption maturity | established ecosystem and multiple UE generations/platforms | one fully migrated gameplay project plus clean SDK consumer fixtures | P0: a non-BlockBreaker production-shaped pilot is required before a general replacement claim |
 
-Until every P0 row has pilot evidence, the supported statement is: UnifiedScript
+Until every P0 row has pilot evidence, the supported statement is: Finare
 fully replaces Puerts for the validated BlockBreaker surface and can host
 Contract-selected gameplay projects. It is not yet a drop-in replacement for an
 arbitrary Puerts project.
@@ -2051,14 +2051,14 @@ arbitrary Puerts project.
 M13.1 produces the product path required before an external real-project pilot
 can begin. Its implementation cursor starts with M13.1A and M13.1B below; the
 production-shaped pilot itself is intentionally deferred to M13.4, after
-UnifiedScript can install and generate its own first usable surface.
+Finare can install and generate its own first usable surface.
 
 #### M13.1A — One-command existing-project adoption
 
-Outcome: an existing UE project can become a valid UnifiedScript consumer
+Outcome: an existing UE project can become a valid Finare consumer
 without learning the repository's internal artifact pipeline.
 
-- [x] add `unifiedscript adopt <Game.uproject>` with preview/apply modes,
+- [x] add `finare adopt <Game.uproject>` with preview/apply modes,
   transactional writes, deterministic reruns, backups, rollback, and a clear
   list of user-owned files that will not be overwritten
 - [ ] discover the compatible installed engine, project modules, plugin state,
@@ -2067,7 +2067,7 @@ without learning the repository's internal artifact pipeline.
 - [x] install/enable the plugin and SDK, create the managed workspace, generated
   directories, build/cook integration, and default diagnostics policy in one
   owned operation
-- [x] add `unifiedscript doctor <Game.uproject>` to classify missing runtime,
+- [x] add `finare doctor <Game.uproject>` to classify missing runtime,
   stale generation, engine mismatch, cook closure, and conflicting ownership,
   with safe repair actions where possible
 - [x] provide the same adopt/doctor path from the Unreal editor without creating
@@ -2094,7 +2094,7 @@ native, Blueprint-only, no-change, user-conflict, interrupted Apply, safe
 upgrade, doctor failure separation, and generation-by-generation rollback. The
 complete managed suite passes 628/628 and the repository validator passes 94/94.
 
-The SDK now ships `Tools/unifiedscript.cmd`; a fresh packaged SDK acceptance
+The SDK now ships `Tools/finare.cmd`; a fresh packaged SDK acceptance
 used only that public entry point for two clean projects, previewed 100 changes,
 applied them, built both generated managed projects with zero warnings/errors,
 reported 100/100 unchanged on rerun, and restored the original source surfaces
@@ -2108,8 +2108,8 @@ project-local tools and Editor entry; M13.1A-2 owns the native/cook acceptance.
 
 Progress (2026-08-31, M13.1A-1 Editor project setup tranche): adoption now
 installs the framework-dependent CLI, templates, setup script, and deferred
-onboarding helper below `Plugins/UEUnifiedScript/Tools`. The native Editor module
-registers **UnifiedScript Project Setup** and `UnifiedScript.OpenProjectSetup`;
+onboarding helper below `Plugins/Finare/Tools`. The native Editor module
+registers **Finare Project Setup** and `Finare.OpenProjectSetup`;
 its Slate surface exposes Preview, Repair, Doctor, and **Save, Exit & Build**.
 Attached commands stream output through a non-blocking active timer. The build
 path saves dirty packages, launches a helper bound to the current Editor PID,
@@ -2118,7 +2118,7 @@ the loaded plugin DLL. Preview and Repair retain separate reports and every
 operation is constructed from the same project-local CLI/configuration contract.
 
 The final UE 5.8.1 editor target builds, the new native command-contract test and
-the complete `UnifiedScript.Unreal` Automation suite pass 20/20, the managed
+the complete `Finare.Unreal` Automation suite pass 20/20, the managed
 suite passes 628/628, and the repository validator passes 95/95. The final SDK
 archive SHA-256 is
 `fd6e85815b5d52ca0f537455b05c1298577c07b2d14224724a2aece38465c147`.
@@ -2399,7 +2399,7 @@ M13.1C-0 — attachable class foundation:
   similarly named type
 - [x] prove the exact Blueprint -> Script Asset reference becomes the intended
   repository-host cook entry; packaged-consumer replay belongs to M13.1C-1
-- [x] add **Create UnifiedScript Class** for ActorComponent and Actor first;
+- [x] add **Create Finare Class** for ActorComponent and Actor first;
   defer the general UObject/library breadth until both gameplay bases pass
 - [x] generate minimal `BeginPlay` and optional `Tick` source that compiles
   without edits and reaches the automatic API surface
@@ -2412,7 +2412,7 @@ M13.1C-0 — attachable class foundation:
 Completed (2026-08-31, M13.1C-0 attachable class foundation):
 `[ScriptAsset]` can now pin one persistent `us_...` class ID, the C# lowerer
 uses it as the Script Asset semantic identity, and invalid or duplicate IDs
-fail before emission. `UUnifiedScriptAsset` stores the matching GUID, Actor or
+fail before emission. `UFinareAsset` stores the matching GUID, Actor or
 ActorComponent kind, and exact Blueprint generated-class path; component
 startup validates that tuple together with the declaration's full managed type
 name. The new Actor and ActorComponent Blueprint factories read the adopted
@@ -2430,7 +2430,7 @@ verified World teardown. ValidateOnly preserved all six deterministic output
 hashes; Win64 BuildCookRun contained both Blueprint proxies and both exact Script
 Asset sidecars; final cleanup restored the repository-host baseline. The full
 run passed in 210,632 ms at
-`HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json`.
+`HostProject/Saved/Finare/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json`.
 
 This closes the repository-host foundation, not the user-operated first-Play
 claim: M13.1C-1 must reproduce the workflow from a packaged SDK in a clean
@@ -2516,7 +2516,7 @@ that removes overridden state returns `restartRequired` with
 `requiredAction=restartEditor`, leaving the old generation, Script Asset, state,
 and overrides untouched.
 
-The shipping SDK now owns `start-unifiedscript-authoring.ps1` and the complete
+The shipping SDK now owns `start-finare-authoring.ps1` and the complete
 Workbench tree. Clean native and Blueprint-only consumers installed 183 and 187
 owned files respectively, passed project-local Doctor, replayed a zero-change
 project-local adoption, and rolled back every owned file. UE 5.8.1 Editor build,
@@ -2531,7 +2531,7 @@ checkpoint the remaining M13.1C work was diagnostics, packaged execution, and
 the headless workflow contract; those later closed in M13.1C-1c through 1e.
 
 Progress (2026-08-31, M13.1C-1c unified diagnostics closure): the Editor module
-registers one **UnifiedScript Diagnostics** Message Log. Authoring protocol
+registers one **Finare Diagnostics** Message Log. Authoring protocol
 failures, reload receipts, new live-World runtime sequences, and failed Project
 Setup operations normalize to one bounded record with domain, code, severity,
 message, semantic member, exact source line/column, evidence report, and one
@@ -2542,9 +2542,9 @@ only for an explicit restart-required reload receipt; compiler/stale/runtime
 failures say Retry, while generation/coverage/setup failures say Repair.
 
 The latest 128 entries persist at
-`Saved/UnifiedScript/EditorDiagnostics/latest.json` under the newly allowlisted
+`Saved/Finare/EditorDiagnostics/latest.json` under the newly allowlisted
 `unifiedscript.editor-diagnostics/v0.1` schema. Project Setup's **Export Support
-Bundle** runs the installed privacy-safe CLI over `Saved/UnifiedScript`, writes
+Bundle** runs the installed privacy-safe CLI over `Saved/Finare`, writes
 the ZIP outside the input tree, and copies its path. A repository-host export
 included 53 reports with 10,640 redactions. SDK
 `artifacts/m13-1c1c/sdk/UnifiedScript-SDK-1.0.0-rc.1-win-x64.zip` has SHA-256
@@ -2702,9 +2702,9 @@ generator commands; C# and Graph produce equivalent behavior; expected edit
 errors are diagnosable from the UE editor; a compatible change reloads without
 restarting the editor.
 
-Progress (2026-08-31, M13.2A-1): `UUnifiedScriptAsset` now owns a native Asset
+Progress (2026-08-31, M13.2A-1): `UFinareAsset` now owns a native Asset
 Definition rather than falling through to the generic Data Asset editor. Normal
-open routes the selected identity into `UnifiedScriptAuthoringSurface`; the
+open routes the selected identity into `FinareAuthoringSurface`; the
 class-specific Content Browser menu opens Authoring or the exact C# source,
 locates the exact generated Blueprint, and exposes Repair. Unsafe bare rename
 and duplicate are blocked until the whole-class transaction exists. UE 5.8.1
@@ -2715,7 +2715,7 @@ build and the focused `ScriptAsset.WorkflowContract` pass; the full CMD-only
 timing remains optional M13.2G usability evidence, not a correctness gate.
 
 Progress (2026-08-31, M13.2A-2a): the Script Asset menu now exposes **Rename
-UnifiedScript Class** and **Duplicate UnifiedScript Class** instead of delegating
+Finare Class** and **Duplicate Finare Class** instead of delegating
 to UE's one-asset operations. One native transaction validates the exact proxy
 owner and deployment entry, transforms only the pinned `[ScriptAsset]` and class
 identities, batches Blueprint/sidecar mutation through AssetTools, publishes the
@@ -2724,13 +2724,13 @@ packages. Rename retains the semantic `ClassId`; duplicate creates a fresh ID
 and rewires the new proxy CDO to the new sidecar. Preflight byte snapshots reject
 concurrent edits, while injected failures after asset mutation and after external
 publication prove rollback of package paths and exact source/deployment/request
-bytes. Four focused CMD-mode tests and all 25 `UnifiedScript.Unreal` tests pass
+bytes. Four focused CMD-mode tests and all 25 `Finare.Unreal` tests pass
 through `UnrealEditor -cmd` + NullRHI. The first full run exposed a stale mixed
 managed staging set; re-emitting the consistent Debug Demo chunk restored the
 runtime closure, and the authoritative rerun is
 `artifacts/m13-2a2/automation/unifiedscript-unreal-final.log`.
 
-Progress (2026-08-31, M13.2A-2b1): **Delete UnifiedScript Class** now treats the
+Progress (2026-08-31, M13.2A-2b1): **Delete Finare Class** now treats the
 Blueprint proxy, `SA_*` sidecar, managed source, deployment entry, and matching
 first-Play request as one identity. Preflight blocks external Asset Registry
 referencers and exact managed type/ClassId use in other project sources. The UE
@@ -2778,7 +2778,7 @@ deletes the old redirectors, and rejects the commit if any old dependency or
 redirector remains; loaded referencer packages with unsaved changes are rejected
 before mutation instead of being silently saved. Injected post-publication failure reverses the UE reference
 rewrite as well as the managed and external publication. New proxies now use
-the runtime `UUnifiedScriptBlueprint` type, whose exact Asset Definition rejects
+the runtime `UFinareBlueprint` type, whose exact Asset Definition rejects
 Content Browser rename/duplicate; an Asset Registry creation guard also detects
 and removes low-level Blueprint-only copies that bypass that UI contract. The
 UE 5.8.1 build, both focused CMD contracts, refreshed 25/25 full CMD Automation,
@@ -2827,7 +2827,7 @@ recovery context across producer and report boundaries. UE Message Log renders
 separate navigable source, member, graph, package, and recovery tokens; Retry
 opens the exact authoring identity, package inspection resolves only existing
 package files, and unsafe commands are never replayed implicitly. Adoption now
-generates a project-local `.slnx`, `.code-workspace`, `UnifiedScript.ide.json`,
+generates a project-local `.slnx`, `.code-workspace`, `Finare.ide.json`,
 typed API/documentation links, managed and full Build/Validate tasks, and a
 CoreCLR process-attach configuration. The packaged SDK copies the required
 documentation so those links work without repository knowledge. UE 5.8.1 build,
@@ -2957,7 +2957,7 @@ The cursor advances to M13.2F product guidance.
 Progress (2026-09-01, M13.2F): the release documentation catalog now ships a
 short first-project golden path and a task-oriented gameplay index covering
 Actor, Component, Blueprint event, asset load, spawn, trace/FHitResult, UI,
-async, and packaging. `unifiedscript guide index|first-project|recipes` resolves
+async, and packaging. `finare guide index|first-project|recipes` resolves
 the same hash-manifested files from an extracted SDK, an adopted project's
 local Tools directory, or a source checkout. Contract tests reject missing
 release/package wiring, broken Markdown links, repository-only commands, or a
@@ -3090,7 +3090,7 @@ passes 26/26, the managed suite passes 664/664, and repository validation passes
 `artifacts/m13-3a/automation/script-class-family-final.log`. The cursor
 advances to M13.3B reflected properties, functions, metadata, and defaults.
 
-Progress (2026-09-01, M13.3B-1): `UnifiedScriptSyncClasses` now runs after
+Progress (2026-09-01, M13.3B-1): `FinareSyncClasses` now runs after
 Script Asset deployment and reconciles each persistent Script Class against its
 selected Declaration IR. The first reviewed matrix maps `System.Boolean`,
 `Byte`, `Int32`, `Int64`, `Single`, `Double`, and non-null `String` to compiled
@@ -3104,7 +3104,7 @@ hydrates and flushes around initialize/tick/event/destroy through weak-key cache
 typed delegates instead of per-frame `PropertyInfo` access, without retaining
 collectible hot-reload generations. The managed suite passes 667/667, repository
 validation passes 126/126, UE 5.8.1 Editor build passes, focused Script Class CMD
-Automation passes 3/3, and the complete `UnifiedScript.Unreal` CMD Automation
+Automation passes 3/3, and the complete `Finare.Unreal` CMD Automation
 suite passes 27/27. The cursor remains within M13.3B and advances to B-2
 reflected functions and dispatch.
 
@@ -3114,7 +3114,7 @@ stable internal `USF_<semantic-id>` Blueprint functions. Typed entry/result
 pins cover `Boolean`, `Byte`, `Int32`, `Int64`, `Single`, and `Double`; function
 rename follows the managed display/binding name while keeping the same graph
 identity, and stale generated graphs are removed without claiming user graphs.
-`UUnifiedScriptBlueprintGeneratedClass` persists the binding table and rebinds
+`UFinareBlueprintGeneratedClass` persists the binding table and rebinds
 one generic native execution pointer after compile/load. A dedicated Kismet
 compiler preserves that class carrier even for ActorComponent/Object parents
 that do not create a construction script. Native and managed sides share one
@@ -3124,7 +3124,7 @@ boxing. CMD Automation starts the real DemoScript and proves
 `RewirePreview(21, true) == 42` through Blueprint `ProcessEvent`, CoreCLR, return
 marshalling, shutdown, and collectible World teardown. The managed suite passes
 670/670, repository validation passes 127/127, UE 5.8.1 Editor build passes, and
-the complete `UnifiedScript.Unreal` CMD suite passes 28/28. The cursor advances
+the complete `Finare.Unreal` CMD suite passes 28/28. The cursor advances
 to B-2b static FunctionLibrary ownership and richer gameplay values.
 
 Progress (2026-09-01, M13.3B-2b-1): ABI v2 reuses the existing 48-byte ABI v3
@@ -3268,11 +3268,11 @@ modification require an explicit project boundary before this slice starts.
   engine value/container types through the same coverage model
 - [ ] promote only measured high-volume routes to generated batch/shared-memory
   channels; leave cold paths on diagnosable safe reflection
-- [ ] compare exact isolated old-runtime and UnifiedScript observables before
+- [ ] compare exact isolated old-runtime and Finare observables before
   deleting the old owner; convert every defect into a consumer fixture and gate
 
 Acceptance: the pilot gameplay slice no longer requires a parallel Blueprint or
-Puerts behavior implementation, and exact isolated Puerts/UnifiedScript
+Puerts behavior implementation, and exact isolated Puerts/Finare
 observables match before the old runtime owner is removed. The same published
 adoption steps must replay on a second clean checkout.
 

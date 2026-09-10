@@ -2,7 +2,7 @@
 
 ## What this slice provides
 
-The Unreal editor's UnifiedScript tab now consumes the same versioned CoreCLR
+The Unreal editor's Finare tab now consumes the same versioned CoreCLR
 debug contract as the browser Workbench. It is a real native Slate client, not
 a visual simulation: Run starts the current Visual method in `debug-serve`, the
 execution thread suspends on cooperative probes, and every control carries the
@@ -19,10 +19,10 @@ rejects a stale Slate Surface before creating an execution.
 
 ## Workflow
 
-1. Start the authoring host with `dotnet run --project src/UnifiedScript.Cli --
+1. Start the authoring host with `dotnet run --project src/Finare.Cli --
    debug-serve ...` and use the same Surface/artifact outputs as the Unreal
    Script Asset.
-2. Open **UnifiedScript Blueprint**, load the Script Asset or Surface, and
+2. Open **Finare Blueprint**, load the Script Asset or Surface, and
    verify the Workbench URL.
 3. Toggle breakpoint dots on graph cards or use **Add Semantic Breakpoint** in
    Advanced Node Details. Bound targets are red; pending targets are amber.
@@ -42,7 +42,7 @@ gameplay methods do not become false failures.
 
 ## Live UE World target
 
-The same panel now discovers a matching `UUnifiedScriptComponent` already
+The same panel now discovers a matching `UFinareComponent` already
 hosted inside a PIE or Game World and displays the exact World host, script
 instance, collectible generation, and target UObject handle. **Attach Semantic**
 performs one guarded operation chain:

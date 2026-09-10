@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Backend-neutral execution contracts and collectible CoreCLR hosting.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
+    <InternalsVisibleTo Include="Finare.Tests" />
+    <InternalsVisibleTo Include="Finare.Unreal" />
+  </ItemGroup>
+</Project>

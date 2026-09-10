@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [ValidateRange(32, 1024)]
     [int]$TypeCount = 256,
     [ValidateRange(4, 64)]
@@ -22,18 +22,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $unrealProjectReference = Join-Path `
     $repoRoot `
-    'src\UnifiedScript.Unreal\UnifiedScript.Unreal.csproj'
+    'src\Finare.Unreal\Finare.Unreal.csproj'
 $artifactRoot = Join-Path $repoRoot 'artifacts\ue\scale'
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $runDirectory = Join-Path $artifactRoot $stamp
 $contractDirectory = Join-Path $runDirectory 'contract'
 $scriptProjectDirectory = Join-Path $runDirectory 'scripts'
 $scriptOutputDirectory = Join-Path $runDirectory 'script-output'
-$scalePackageSegment = "UnifiedScriptScale_$stamp"
+$scalePackageSegment = "FinareScale_$stamp"
 $scaleContentDirectory = Join-Path `
     $repoRoot `
     "HostProject\Content\$scalePackageSegment"
@@ -49,7 +49,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $dotnetExe = Join-Path `
@@ -186,7 +186,7 @@ function Invoke-UnrealAssetSync {
         '-nullrhi',
         '-nosplash',
         '-NoSound',
-        '-run=UnifiedScriptSyncAssets',
+        '-run=FinareSyncAssets',
         "-Input=$ManifestPath",
         "-abslog=$engineLog")
     if ($ValidateOnly) {
@@ -220,7 +220,7 @@ try {
     if (!$SkipCliBuild) {
         & $dotnetExe build $cliProject -c Release --nologo
         if ($LASTEXITCODE -ne 0) {
-            throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+            throw "Finare CLI build failed with exit code $LASTEXITCODE."
         }
     }
 
@@ -228,7 +228,7 @@ try {
     $contractTypes = @()
     for ($typeIndex = 0; $typeIndex -lt $TypeCount; ++$typeIndex) {
         $typeName = 'ScaleType{0:D4}' -f $typeIndex
-        $typePath = "/Script/UnifiedScriptScale.$typeName"
+        $typePath = "/Script/FinareScale.$typeName"
         $properties = @()
         $memberNames = @()
         for ($memberIndex = 0; $memberIndex -lt $MembersPerType; ++$memberIndex) {
@@ -249,7 +249,7 @@ try {
                 }
                 metadata = [ordered]@{
                     displayName = "$typeName $memberName"
-                    category = 'UnifiedScript|Scale'
+                    category = 'Finare|Scale'
                     tooltip = "Synthetic scale member $typeIndex/$memberIndex."
                     deprecated = $false
                 }
@@ -259,7 +259,7 @@ try {
             path = $typePath
             name = $typeName
             nativeName = "U$typeName"
-            module = 'UnifiedScriptScale'
+            module = 'FinareScale'
             headerPath = "Scale/$typeName.h"
             kind = 'class'
             baseTypePath = '/Script/CoreUObject.Object'
@@ -293,16 +293,16 @@ try {
             patch = 1
             branch = '//UE5/Release-5.8'
         }
-        modules = @('CoreUObject', 'UnifiedScriptScale')
+        modules = @('CoreUObject', 'FinareScale')
         types = $types
     }
     $expectedMemberCount = $TypeCount * $MembersPerType
     $contract = [ordered]@{
         schemaVersion = 'unifiedscript.unreal-api-contract/v0.2'
-        contractName = 'UnifiedScript.Scale.Gate'
-        managedNamespace = 'UnifiedScript.Unreal.Scale.Generated'
+        contractName = 'Finare.Scale.Gate'
+        managedNamespace = 'Finare.Unreal.Scale.Generated'
         nativeHeader = 'ScaleGeneratedThunks.h'
-        nativeNamespace = 'UE::UnifiedScript::Scale::Generated'
+        nativeNamespace = 'UE::Finare::Scale::Generated'
         types = $contractTypes
         policy = [ordered]@{
             defaultAction = 'allow'
@@ -383,14 +383,14 @@ try {
         (Get-FileDigest -Path $incrementalContractOutputs.nodes) -ne
             $baselineContractDigests.nodes
 
-    $projectFile = Join-Path $scriptProjectDirectory 'UnifiedScript.ScaleScripts.csproj'
+    $projectFile = Join-Path $scriptProjectDirectory 'Finare.ScaleScripts.csproj'
     $escapedReference = [Security.SecurityElement]::Escape(
         [IO.Path]::GetFullPath($unrealProjectReference))
     $projectXml = @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>UnifiedScript.ScaleScripts</AssemblyName>
+    <AssemblyName>Finare.ScaleScripts</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -407,10 +407,10 @@ try {
         $className = 'ScaleScript{0:D4}' -f $scriptIndex
         $scriptPath = Join-Path $scriptProjectDirectory "$className.cs"
         $scriptSource = @"
-using UnifiedScript;
-using UnifiedScript.Unreal;
+using Finare;
+using Finare.Unreal;
 
-namespace UnifiedScript.Scale;
+namespace Finare.Scale;
 
 [ScriptAsset("Scale/$className")]
 public sealed class $className : IUnrealManagedScript
@@ -456,7 +456,7 @@ public sealed class $className : IUnrealManagedScript
             '--no-restore') `
         -LogPath (Join-Path $runDirectory 'script-cold-emit.log')
 
-    $scriptBaseName = 'UnifiedScript.ScaleScripts'
+    $scriptBaseName = 'Finare.ScaleScripts'
     $scriptAssemblyPath = Join-Path $scriptOutputDirectory "$scriptBaseName.dll"
     $scriptChunkPath = Join-Path $scriptOutputDirectory "$scriptBaseName.uschunk"
     $scriptAssetPath = Join-Path $scriptOutputDirectory "$scriptBaseName.asset.json"
@@ -505,9 +505,9 @@ public sealed class $className : IUnrealManagedScript
         $deploymentEntries += [ordered]@{
             assetPath = "/Game/$scalePackageSegment/$className"
             assemblyPath = [IO.Path]::GetFullPath($scriptChunkPath)
-            typeName = "UnifiedScript.Scale.$className"
+            typeName = "Finare.Scale.$className"
             requiredTargetClass =
-                '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent'
+                '/Script/FinareRuntime.FinareComponent'
             sourcePath = [IO.Path]::GetFullPath($scriptPaths[$scriptIndex])
         }
     }
@@ -523,7 +523,7 @@ public sealed class $className : IUnrealManagedScript
         -Name 'editor-startup-validation' `
         -ValidateOnly
     $validationMarker =
-        "UnifiedScript deployment validated: Scripts=$ScriptCount"
+        "Finare deployment validated: Scripts=$ScriptCount"
     if (!(Select-String `
             -LiteralPath $editorValidation.engineLog `
             -SimpleMatch $validationMarker `
@@ -535,7 +535,7 @@ public sealed class $className : IUnrealManagedScript
         -ManifestPath $deploymentPath `
         -Name 'asset-sync-initial'
     $initialSyncMarker =
-        "UnifiedScript deployment synchronized: Scripts=$ScriptCount, Created=$ScriptCount, Updated=0"
+        "Finare deployment synchronized: Scripts=$ScriptCount, Created=$ScriptCount, Updated=0"
     if (!(Select-String `
             -LiteralPath $initialAssetSync.engineLog `
             -SimpleMatch $initialSyncMarker `
@@ -561,7 +561,7 @@ public sealed class $className : IUnrealManagedScript
         -ManifestPath $deploymentChurnPath `
         -Name 'asset-sync-single-entry-churn'
     $incrementalSyncMarker =
-        'UnifiedScript deployment synchronized: Scripts=1, Created=0, Updated=1'
+        'Finare deployment synchronized: Scripts=1, Created=0, Updated=1'
     if (!(Select-String `
             -LiteralPath $incrementalAssetSync.engineLog `
             -SimpleMatch $incrementalSyncMarker `
@@ -729,7 +729,7 @@ if (!$passed) {
     throw "One or more Unreal scale gates failed. Report: $reportPath"
 }
 
-Write-Host "UnifiedScript Unreal scale gate: PASS ($reportPath)"
+Write-Host "Finare Unreal scale gate: PASS ($reportPath)"
 Write-Host (
     "Contract=$expectedMemberCount members/$TypeCount types, " +
     "GenerationMedian=$contractGenerationMedianMilliseconds ms, " +

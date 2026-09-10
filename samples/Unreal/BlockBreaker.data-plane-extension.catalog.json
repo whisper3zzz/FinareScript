@@ -5,7 +5,7 @@
   "revision": 1,
   "requiredAbiVersion": 4,
   "requiredLayoutCompatibilityId": "0x555344504C415901",
-  "schemaFingerprint": "0xDE4BA9E28216D610",
+  "schemaFingerprint": "0xBB23EDDB69B7FD0C",
   "channels": [
     {
       "name": "ImpactEvents",

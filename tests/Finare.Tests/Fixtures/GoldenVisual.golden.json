@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "unifiedscript.golden/v0.1",
+  "sourcePath": "tests/Finare.Tests/Fixtures/GoldenVisual.cs",
+  "artifacts": {
+    "hir": {
+      "schemaVersion": "unifiedscript.hir/v0.9",
+      "sha256": "dd667d1e74954119d1473ecc768b3748b1c1c161b091249aece441baaba040ab",
+      "utf8Bytes": 5414
+    },
+    "semantics": {
+      "schemaVersion": "unifiedscript.semantics/v0.6",
+      "sha256": "f02a6eadc84061bac88067168e4fe153dbaa7eb6f8fdb6e0fc384afb750cbf55",
+      "utf8Bytes": 3921
+    },
+    "graph": {
+      "schemaVersion": "unifiedscript.graph/v0.13",
+      "sha256": "cc7d3ba0d6cfc79c23ec105f0d5ad34678f63ebf230d3185d8dd994042870a16",
+      "utf8Bytes": 8015
+    }
+  }
+}

@@ -222,7 +222,7 @@ starts with one fallback return. Its four-stage plan:
 Run it with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ConnectGeneratedValues.cs \
   --identity samples/Patching/ConnectGeneratedValues.cs.usids \

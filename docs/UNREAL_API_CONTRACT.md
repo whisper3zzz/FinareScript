@@ -1,7 +1,7 @@
 # Unreal API Contract
 
 The project API contract is the product boundary between broad Unreal
-reflection, explicit native extensions, and the API actually shipped to a UnifiedScript game module. One
+reflection, explicit native extensions, and the API actually shipped to a Finare game module. One
 strict allowlist drives all generated consumers:
 
 ```text
@@ -31,7 +31,7 @@ For example, the selected engine API can return the Actors of a class directly
 to C#. Here `context.Target` belongs to the World being queried:
 
 ```csharp
-var world = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+var world = new FinareWorldLibrary(context.Target, context.Bridge);
 var gameplay = new GameplayStatics(context.Target, context.Bridge);
 UnrealClassHandle actorClass = world.LoadClassByPath(
     context.Target, "/Script/Engine.StaticMeshActor");
@@ -66,11 +66,11 @@ containers must be regenerated with the selected bindings: their old
 declared-type container IDs are not aliases for the canonical transport IDs.
 Interface containers remain outside this capability.
 
-The [reference collection example](../samples/Unreal/UnifiedScript.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
+The [reference collection example](../samples/Unreal/Finare.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
 combines the engine Actor query with generated Actor arrays, Actor-class sets,
 named Soft Object maps and Soft Class arrays. The focused CMD tests
-`UnifiedScript.Unreal.ReferenceContainers.GeneratedRoundTrip` and
-`UnifiedScript.Unreal.ReferenceContainers.ManagedRoundTrip` exercise native
+`Finare.Unreal.ReferenceContainers.GeneratedRoundTrip` and
+`Finare.Unreal.ReferenceContainers.ManagedRoundTrip` exercise native
 exchange and the CoreCLR startup/reload/World-cleanup path. The latter observes
 a newly spawned matching Actor after reload while excluding a plain Actor.
 
@@ -88,17 +88,17 @@ For the checked-in interop fixture, `context.Target` is the fixture object and
 `target` is the implementing object's handle:
 
 ```csharp
-var fixture = new UnifiedScriptInteropFixture(context.Target, context.Bridge);
+var fixture = new FinareInteropFixture(context.Target, context.Bridge);
 fixture.InterfaceValue = fixture.EchoInterface(target);
 UnrealObjectHandle selected = fixture.InterfaceValue;
 if (!selected.IsNull)
 {
-    var targetInterface = new UnifiedScriptInteropContract(selected, context.Bridge);
+    var targetInterface = new FinareInteropContract(selected, context.Bridge);
     int result = targetInterface.TransformManagedValue(7);
 }
 ```
 
-The [interface gameplay example](../samples/Unreal/UnifiedScript.Unreal.Demo/InterfaceGameplayDemoScript.cs)
+The [interface gameplay example](../samples/Unreal/Finare.Unreal.Demo/InterfaceGameplayDemoScript.cs)
 composes these generated bindings with `ref`/`out` exchange and a Visual method.
 
 The value represents the implementing UObject, not a C++ interface address.
@@ -179,7 +179,7 @@ generation's bridge. Subsystem lifetime across travel and platform-specific
 subsystems need their own usage checks; this example does not establish those
 broader paths.
 
-The [subsystem gameplay example](../samples/Unreal/UnifiedScript.Unreal.Demo/SubsystemGameplayDemoScript.cs)
+The [subsystem gameplay example](../samples/Unreal/Finare.Unreal.Demo/SubsystemGameplayDemoScript.cs)
 uses a live PlayerController as `context.Target`, queries World Partition and
 Replay subsystems, then adds, queries and removes an Enhanced Input mapping at
 priority 37. It leaves its final registration active until `OnStop` so reload
@@ -197,11 +197,11 @@ parameter types and directions. The selected Contract drives the typed delegate,
 lease factory, C++ thunk and visual node signature together, including types
 referenced only inside the callback signature.
 
-For the checked-in `UUnifiedScriptCallbackService`, generated usage is:
+For the checked-in `UFinareCallbackService`, generated usage is:
 
 ```csharp
-// Here context.Target is an existing UUnifiedScriptCallbackService instance.
-var service = new UnifiedScriptCallbackService(context.Target, context.Bridge);
+// Here context.Target is an existing UFinareCallbackService instance.
+var service = new FinareCallbackService(context.Target, context.Bridge);
 using var callback = service.CreateStoreCallback(
     (int value, ref string text, out UnrealVector position) =>
     {
@@ -215,10 +215,10 @@ string reply = "request";
 bool accepted = service.Evaluate(7, ref reply, out UnrealVector location);
 ```
 
-The factory returns `UnrealCallback<UnifiedScriptQueryCallbackHandler>`.
+The factory returns `UnrealCallback<FinareQueryCallbackHandler>`.
 Keep it alive for as long as native code should call it; a `using` block is
 appropriate only when the registration should end with that block. The
-[public sample](../samples/Unreal/UnifiedScript.Unreal.Demo/CallbackGameplayDemoScript.cs)
+[public sample](../samples/Unreal/Finare.Unreal.Demo/CallbackGameplayDemoScript.cs)
 also demonstrates generation-owned retention without explicit disposal.
 
 Lifetime and threading rules:
@@ -301,7 +301,7 @@ generators. The normal `ue-bindings --contract` and project setup commands need
 no separate native-extension step.
 
 The checked-in
-[Demo contract](../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json)
+[Demo contract](../samples/Unreal/FinareRuntime.api-contract.json)
 contains the complete example. Each extension has a `name` and `types`. A type
 declares its `path`, `nativeName`, `headerPath`,
 `properties`, and `functions`. Properties reuse the typed property declaration;
@@ -345,11 +345,11 @@ the existing ABI v3 call-frame/ref/out routes are reused, with no JSON on the
 invocation path. Node and coverage descriptors retain `nativeExtension` origin.
 
 The
-[managed example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeExtensionDemoScript.cs)
+[managed example](../samples/Unreal/Finare.Unreal.Demo/NativeExtensionDemoScript.cs)
 calls unreflected fields, const integer/double overloads, a static method, a
 zero-argument void method, and a container/ref/out method. CMD tests
-`UnifiedScript.Unreal.NativeExtensions.GeneratedDispatch` and
-`UnifiedScript.Unreal.NativeExtensions.ManagedRoundTrip` exercise the real
+`Finare.Unreal.NativeExtensions.GeneratedDispatch` and
+`Finare.Unreal.NativeExtensions.ManagedRoundTrip` exercise the real
 generated native table, CoreCLR calls, generation replacement and World teardown.
 
 With `kind` omitted (or `class`), owners must match existing exported native
@@ -364,7 +364,7 @@ acceptance evidence.
 
 ## Binary payload interop
 
-`UnrealByteBuffer` and `FUnifiedScriptByteBuffer` provide a contiguous binary
+`UnrealByteBuffer` and `FFinareByteBuffer` provide a contiguous binary
 value for generated, non-reflected UObject members. This addresses the two-way
 payload use case in Puerts' [ArrayBuffer examples](https://puerts.github.io/docs/puerts/unreal/script_call_uclass/#arraybuffer),
 not JavaScript object compatibility or identical memory ownership. The same
@@ -372,11 +372,11 @@ contract generates the native calls, C# signatures and visual node descriptions.
 The type reference is:
 
 ```json
-{ "kind": "byteBuffer", "nativeName": "FUnifiedScriptByteBuffer", "headerPath": "UnifiedScriptByteBuffer.h" }
+{ "kind": "byteBuffer", "nativeName": "FFinareByteBuffer", "headerPath": "FinareByteBuffer.h" }
 ```
 
 See the complete contract and
-[binary example](../samples/Unreal/UnifiedScript.Unreal.Demo/BinaryPayloadDemoScript.cs):
+[binary example](../samples/Unreal/Finare.Unreal.Demo/BinaryPayloadDemoScript.cs):
 
 ```csharp
 byte[] packet = [21, 0, 31];
@@ -403,7 +403,7 @@ JSON or reflection when the native extension is missing.
   lifetime. These plain byte values contain no World or generation handle.
 - Native `CopyFrom(TConstArrayView<uint8>)` owns a copy; `TakeOwnership(TArray&&)`
   transfers storage whose existing aliases must no longer mutate it. Copies of
-  `FUnifiedScriptByteBuffer` share immutable storage. `GetView()` borrows it only
+  `FFinareByteBuffer` share immutable storage. `GetView()` borrows it only
   while at least one buffer retains that storage.
 - A wire buffer is at most **16 MiB**. A binary invocation's input/output arena
   is bounded by **64 MiB**, including input bytes and result copies; the managed
@@ -433,7 +433,7 @@ Unsupported declarations are rejected rather than emitted as usable APIs.
 interactive palette insertion and cooked execution of this sample are not yet
 established. This is **not cross-language shared memory or a zero-copy API**.
 
-`UnifiedScript.Unreal.BinaryBuffers.WireValidation` and `.ManagedRoundTrip`
+`Finare.Unreal.BinaryBuffers.WireValidation` and `.ManagedRoundTrip`
 exercise real native/CoreCLR calls, 64 KiB input, 72 KiB return plus `ref` output,
 embedded zeros, sliced/empty buffers, malformed metadata, output retry, reload
 and teardown. Managed tests additionally cover the 16 MiB limit, bounded arena
@@ -443,11 +443,11 @@ requests, old transports, direct overloads and transactional output publication.
 
 The v0.2 declarations generate ordinary C++ constructors, fields, instance/static
 methods, overloads and ownership-qualified object returns. The checked-in
-[native header](../HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptNativeCounter.h)
+[native header](../HostProject/Plugins/Finare/Source/FinareRuntime/Public/FinareNativeCounter.h)
 has no UObject or reflection macros. The same Demo contract generates its native
 dispatch/registration, typed C# classes, coverage and visual node descriptions.
 The real CoreCLR
-[example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectLifetimeDemoScript.cs)
+[example](../samples/Unreal/Finare.Unreal.Demo/NativeObjectLifetimeDemoScript.cs)
 uses those generated APIs, with no per-World test-member registration:
 
 ```csharp
@@ -512,7 +512,7 @@ Conforming native methods may use these arguments synchronously, but must not
 retain, delete or take ownership of them. Pointer replacement, ownership
 transfer and asynchronous retention need separate contracts and are unsupported.
 
-`FUnifiedScriptNativeObjectRegistry` belongs to one native World context. Its
+`FFinareNativeObjectRegistry` belongs to one native World context. Its
 opaque object and scope tokens are process-unique and non-recycled. An owned
 registration transfers a pointer and native destructor only on success. An
 address cannot acquire two deleting owners. A borrowed registration requires a
@@ -521,7 +521,7 @@ invalidates all descendant aliases first. Before native code moves/replaces chil
 storage, it must call `InvalidateBorrowed`; merely retaining an unrelated object
 does not make an arbitrary pointer safe.
 
-Generated `FUnifiedScriptNativeObjectLibrary` registration serves existing and
+Generated `FFinareNativeObjectLibrary` registration serves existing and
 future Worlds. Conflicting member IDs fail closed, including conflicts with
 explicit registrations. Library retirement removes its dispatch entries and
 retires its allocations and aliases while destructor code is still loaded.
@@ -556,7 +556,7 @@ input byte range and encoding before assigning a field or entering a method.
 Returned text is an owned snapshot; later native field changes cannot alter a
 previously returned C# string.
 
-The [text example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
+The [text example](../samples/Unreal/Finare.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
 uses the same generated `NativeCounter` type for string construction, both
 native field types and a method combining text with a native-object argument:
 
@@ -617,7 +617,7 @@ Since `FString` and `std::string` both project to C# `string`, selecting overloa
 that collapse to the same managed signature requires disambiguation and is
 rejected by this version rather than emitting duplicate C# members.
 
-`UnifiedScript.Unreal.NativeObjects.Ownership`, `.TransportValidation`,
+`Finare.Unreal.NativeObjects.Ownership`, `.TransportValidation`,
 `.GeneratedLibrary`, `.ObjectArguments` and `.ManagedLifetime` verify the native registry, ABI
 rejection, automatic dispatch, library retirement and actual generated CoreCLR
 startup/rollback/reload/teardown. Object-argument tests exercise all six passing
@@ -653,9 +653,9 @@ this extension explicitly; they do not silently omit the selected enum.
 {
   "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
   "contractName": "Game.Gameplay",
-  "managedNamespace": "Game.UnifiedScript.Generated",
+  "managedNamespace": "Game.Finare.Generated",
   "nativeHeader": "GameGeneratedThunks.h",
-  "nativeNamespace": "UE::UnifiedScript::Generated::Game",
+  "nativeNamespace": "UE::Finare::Generated::Game",
   "types": [
     {
       "path": "/Script/Game.Player",
@@ -724,7 +724,7 @@ The editor exporter supports an exact class allowlist so projects can reflect
 selected Engine classes without exporting every Engine UObject:
 
 ```powershell
-UnrealEditor-Cmd.exe Game.uproject -run=UnifiedScriptExport `
+UnrealEditor-Cmd.exe Game.uproject -run=FinareExport `
   -Output=D:\Game\Generated\Game.reflection.json `
   '-Modules="Game,Engine"' `
   '-Classes="/Script/Game.Player,/Script/Engine.Actor,/Script/Engine.Pawn"' `
@@ -738,7 +738,7 @@ surface without asking the gameplay author to edit the reviewed Contract. Source
 can use the generated namespace like an ordinary typed C# API:
 
 ```csharp
-using Game.UnifiedScript.Generated;
+using Game.Finare.Generated;
 
 _ = new Actor(context.Target, context.Bridge).GetActorLocation();
 _ = new Pawn(context.Target, context.Bridge).GetController();
@@ -772,8 +772,8 @@ use the safe reflected route and unsupported ownership/signature shapes remain
 source-linked diagnostics.
 
 ```powershell
-unifiedscript ue-reflection-hints `
-  --project Managed\Game.UnifiedScript\Game.UnifiedScript.csproj `
+finare ue-reflection-hints `
+  --project Managed\Game.Finare\Game.Finare.csproj `
   --base Contracts\Game.unreal-api-contract.json `
   --out Generated\Game.api-type-hints.json
 ```
@@ -793,8 +793,8 @@ event node, native proxy, and coverage entry from that one selector.
 the reviewed base Contract:
 
 ```powershell
-unifiedscript ue-surface-expand Generated\Game.reflection.json `
-  --project Managed\Game.UnifiedScript\Game.UnifiedScript.csproj `
+finare ue-surface-expand Generated\Game.reflection.json `
+  --project Managed\Game.Finare\Game.Finare.csproj `
   --base Contracts\Game.unreal-api-contract.json `
   --requests-out Generated\Game.api-requests.json `
   --overlay-out Generated\Game.development-api-contract.json `
@@ -831,7 +831,7 @@ decision cannot be frozen and fails as `USUE3202`.
 
 Author-facing C# and visual names may intentionally differ from the stored
 reflection selector. For example, UE exposes the Blueprint-callable function as
-`K2_GetActorLocation`; UnifiedScript generates `GetActorLocation` while the
+`K2_GetActorLocation`; Finare generates `GetActorLocation` while the
 Contract, coverage, member ID, and native thunk retain
 `/Script/Engine.Actor:K2_GetActorLocation`. The deterministic `K2_` mapping is
 part of generated naming, not a fuzzy lookup, and collisions remain explicit
@@ -855,7 +855,7 @@ Contract instead produce a separate
 `unifiedscript.unreal-api-contract-proposal/v0.1` artifact:
 
 ```powershell
-unifiedscript ue-contract-propose Generated\Game.reflection.json `
+finare ue-contract-propose Generated\Game.reflection.json `
   --requests Migration\contract-requests.json `
   --base Contracts\Game.unreal-api-contract.json `
   --out Review\Game.unreal-api-contract-proposal.json `
@@ -884,7 +884,7 @@ the native, managed, visual, browser, and coverage outputs.
 transaction. Contract metadata owns both generated namespaces.
 
 ```powershell
-unifiedscript ue-bindings Generated\Game.reflection.json `
+finare ue-bindings Generated\Game.reflection.json `
   --contract Contracts\Game.unreal-api-contract.json `
   --out Managed\Generated\Game.bindings.generated.cs `
   --native-out Source\Game\Generated\Game.native-thunks.generated.cpp `
@@ -917,7 +917,7 @@ retain the specialized fast path.
 
 The checked-in runtime Contract includes World services, a supported `FHitResult`
 projection and the interop examples. Its generated
-[coverage report](../samples/Unreal/UEUnifiedScriptRuntime.binding-coverage.json)
+[coverage report](../samples/Unreal/FinareRuntime.binding-coverage.json)
 records the current selection and disposition of each member. Operations that
 suspend across frames use Async Service ABI v5 instead of synchronous reflected
 calls.
@@ -926,7 +926,7 @@ calls.
 
 BlockBreaker selects nine native types and 40 members. Its bootstrap path uses
 generated `Actor`, `Pawn`, `SceneComponent`, `CameraComponent`,
-`StaticMeshComponent`, and `UnifiedScriptWorldLibrary` wrappers. The World
+`StaticMeshComponent`, and `FinareWorldLibrary` wrappers. The World
 service loads assets/classes, retains loaded resources for the World-host
 lifetime, and spawns Actors. The selected `FHitResult` shape remains because the
 generated SceneComponent transform call carries its native sweep result, while
@@ -940,6 +940,6 @@ The current standalone 10,000-frame data-plane run executes one complete
 midpoint shot/hit and reports 120,031 generated ABI v3 calls with zero legacy
 calls. The current matched three-trial gameplay gate prepares both runtimes
 before measurement, alternates execution order, and reports a median of
-4,927.191 ms for UnifiedScript versus 4,759.930 ms for Puerts on the local UE
-5.8.1 machine (`UnifiedScript/Puerts = 1.035139`). It is functional evidence,
+4,927.191 ms for Finare versus 4,759.930 ms for Puerts on the local UE
+5.8.1 machine (`Finare/Puerts = 1.035139`). It is functional evidence,
 not a performance claim; M10 owns the release performance threshold.

@@ -35,7 +35,7 @@ powershell -ExecutionPolicy Bypass `
 The lower-level CLI command accepts explicit destinations:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- `
+dotnet run --project src/Finare.Cli -- `
   ue-data-plane-extension samples/Unreal/BlockBreaker.data-plane-extension.json `
   --managed-out <extension.g.cs> `
   --native-out <extension.gen.h> `
@@ -54,7 +54,7 @@ Include the generated header, register its descriptor with the World host, and
 publish only through its generated channel descriptors:
 
 ```cpp
-using namespace UE::UnifiedScript::Extensions::BlockBreaker;
+using namespace UE::Finare::Extensions::BlockBreaker;
 
 FString Error;
 check(Host->RegisterGeneratedDataPlaneExtension(Descriptor, Error));

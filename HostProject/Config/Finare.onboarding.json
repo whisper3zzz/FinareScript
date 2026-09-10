@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "unifiedscript.unreal-project-onboarding/v0.1",
+  "editorTarget": "FinareHostEditor",
+  "platform": "Win64",
+  "configuration": "Development",
+  "pluginPath": "../Plugins/Finare",
+  "reflection": {
+    "modules": [
+      "CoreUObject",
+      "Engine",
+      "EnhancedInput",
+      "GameplayTags",
+      "InputCore",
+      "PhysicsCore",
+      "FinareRuntime"
+    ],
+    "classes": [
+      "/Script/Engine.Actor",
+      "/Script/Engine.GameplayStatics",
+      "/Script/Engine.ReplaySubsystem",
+      "/Script/Engine.StreamingWorldSubsystemInterface",
+      "/Script/Engine.SubsystemBlueprintLibrary",
+      "/Script/Engine.WorldPartitionSubsystem",
+      "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem",
+      "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "/Script/FinareRuntime.FinareActor",
+      "/Script/FinareRuntime.FinareAsset",
+      "/Script/FinareRuntime.FinareBlueprint",
+      "/Script/FinareRuntime.FinareBlueprintFunctionLibrary",
+      "/Script/FinareRuntime.FinareBlueprintGeneratedClass",
+      "/Script/FinareRuntime.FinareCallbackService",
+      "/Script/FinareRuntime.FinareComponent",
+      "/Script/FinareRuntime.FinareInputActionFixture",
+      "/Script/FinareRuntime.FinareInteropContract",
+      "/Script/FinareRuntime.FinareInteropFixture",
+      "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "/Script/FinareRuntime.FinareObject",
+      "/Script/FinareRuntime.FinareWorldLibrary",
+      "/Script/FinareRuntime.FinareWorldSubsystem"
+    ],
+    "output": "../../samples/Unreal/FinareRuntime.reflection.json"
+  },
+  "bindings": {
+    "contract": "../../samples/Unreal/FinareRuntime.api-contract.json",
+    "managedOutput": "../../samples/Unreal/FinareRuntime.bindings.cs",
+    "nativeOutput": "../Plugins/Finare/Source/FinareRuntime/Private/Generated/FinareRuntime.native-thunks.generated.cpp",
+    "nodeCatalogOutput": "../../samples/Unreal/FinareRuntime.api-nodes.json",
+    "browserOutput": "../../samples/Unreal/FinareRuntime.api-browser.json",
+    "coverageOutput": "../../samples/Unreal/FinareRuntime.binding-coverage.json",
+    "failOnRejected": true,
+    "requireCompleteNativeCoverage": true
+  },
+  "deployment": {
+    "manifest": "../../samples/Unreal/Finare.Unreal.Demo.deployment.json",
+    "enabled": true
+  },
+  "managed": {
+    "configuration": "Release",
+    "stageDirectory": "../Plugins/Finare/Binaries/Managed",
+    "projects": [
+      "../../samples/Unreal/Finare.Unreal.Demo/Finare.Unreal.Demo.csproj"
+    ],
+    "chunks": [
+      {
+        "project": "../../samples/Unreal/Finare.Unreal.Demo/Finare.Unreal.Demo.csproj",
+        "stagePath": "../Plugins/Finare/Binaries/Managed/Demo/Finare.Unreal.Demo.uschunk"
+      }
+    ]
+  },
+  "validation": {
+    "automationFilter": "Finare.Unreal",
+    "minimumAutomationTests": 13
+  }
+}

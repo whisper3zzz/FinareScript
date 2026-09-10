@@ -2,8 +2,8 @@
   "schemaVersion": "unifiedscript.gameplay-diagnosis-evidence/v0.1",
   "debugObservation": {
     "schemaVersion": "unifiedscript.gameplay-debug-observation/v0.1",
-    "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-    "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+    "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+    "nodeId": "us_5e9a4743c6e707996cba30a42863a1ca",
     "sourceSpan": {
       "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
       "start": { "line": 12, "column": 9 },
@@ -16,8 +16,8 @@
   },
   "nodeLocations": [
     {
-      "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-      "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+      "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+      "nodeId": "us_5e9a4743c6e707996cba30a42863a1ca",
       "sourceSpan": {
         "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
         "start": { "line": 12, "column": 9 },
@@ -25,8 +25,8 @@
       }
     },
     {
-      "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
-      "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+      "methodId": "us_ff796781d221dbecfa1e8f2ba12eced3",
+      "nodeId": "us_face5c8389d6eef73bc0b70efc27bd77",
       "sourceSpan": {
         "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
         "start": { "line": 11, "column": 9 },

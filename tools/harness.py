@@ -268,7 +268,7 @@ def preflight(root, manifest, plan, source, local, engine_root, comparison_root,
     tools = {"python": sys.executable, "pythonVersion": sys.version.split()[0]}
     if "engine" in requires:
         if not engine_root:
-            raise HarnessError("This profile requires --engine-root or UNIFIEDSCRIPT_UE_ROOT")
+            raise HarnessError("This profile requires --engine-root or FINARE_UE_ROOT")
         version = read_json(Path(engine_root) / "Engine/Build/Build.version")
         if not isinstance(version, dict) or [version.get(key) for key in ("MajorVersion", "MinorVersion", "PatchVersion")] != [5, 8, 1]:
             raise HarnessError("Current Unreal provider contract requires UE 5.8.1")
@@ -287,7 +287,7 @@ def preflight(root, manifest, plan, source, local, engine_root, comparison_root,
         tools.update(dotnet=dotnet, dotnetSdks=result.stdout.strip())
     if "comparison" in requires:
         if not comparison_root or not all((Path(comparison_root) / name).is_dir()
-                                         for name in ("BlockBreaker-Puerts", "BlockBreaker-UnifiedScript")):
+                                         for name in ("BlockBreaker-Puerts", "BlockBreaker-Finare")):
             raise HarnessError("Explicit comparison root with both BlockBreaker checkouts is required")
     protected = set(local.get("protectedPaths", []))
     dirty_paths = {entry[key] for entry in source["entries"] for key in ("path", "originalPath") if key in entry}
@@ -299,7 +299,7 @@ def preflight(root, manifest, plan, source, local, engine_root, comparison_root,
 
 @contextmanager
 def checkout_lock(root):
-    path = contained(root, ".cache/unifiedscript-harness.lock")
+    path = contained(root, ".cache/finare-harness.lock")
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         stream = path.open("x", encoding="utf-8")
@@ -562,8 +562,8 @@ def main(argv=None):
     try:
         manifest = load_manifest(ROOT)
         local = load_local(ROOT)
-        engine = args.engine_root or os.environ.get("UNIFIEDSCRIPT_UE_ROOT") or local.get("engineRoot")
-        comparison = args.comparison_root or os.environ.get("UNIFIEDSCRIPT_COMPARISON_ROOT")
+        engine = args.engine_root or os.environ.get("FINARE_UE_ROOT") or local.get("engineRoot")
+        comparison = args.comparison_root or os.environ.get("FINARE_COMPARISON_ROOT")
         engine = str(Path(engine).resolve()) if engine else None
         comparison = str(Path(comparison).resolve()) if comparison else None
         if args.timeout_seconds is not None and args.timeout_seconds <= 0:

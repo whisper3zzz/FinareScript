@@ -28,8 +28,8 @@ if ([string]::IsNullOrWhiteSpace($DotNet)) {
         $DotNet = Join-Path $engineRootFull 'Engine/Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe'
     }
 }
-if ([string]::IsNullOrWhiteSpace($HostDirectory)) { $HostDirectory = Join-Path $repoRoot 'HostProject/Plugins/UEUnifiedScript/Binaries/Managed' }
-if ([string]::IsNullOrWhiteSpace($CliAssembly)) { $CliAssembly = Join-Path $repoRoot 'src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.dll' }
+if ([string]::IsNullOrWhiteSpace($HostDirectory)) { $HostDirectory = Join-Path $repoRoot 'HostProject/Plugins/Finare/Binaries/Managed' }
+if ([string]::IsNullOrWhiteSpace($CliAssembly)) { $CliAssembly = Join-Path $repoRoot 'src/Finare.Cli/bin/Release/net10.0/Finare.Cli.dll' }
 $DotNet = [IO.Path]::GetFullPath($DotNet)
 $HostDirectory = [IO.Path]::GetFullPath($HostDirectory)
 $CliAssembly = [IO.Path]::GetFullPath($CliAssembly)
@@ -37,8 +37,8 @@ $CliAssembly = [IO.Path]::GetFullPath($CliAssembly)
 if ($outputRootPath -eq $artifactRoot -or !$outputRootPath.StartsWith($artifactRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "OutputRoot must remain below artifacts: $outputRootPath" }
 if (!(Test-Path -LiteralPath $projectPath -PathType Leaf)) { throw "Fixture project is missing: $projectPath" }
 if (!(Test-Path -LiteralPath $DotNet -PathType Leaf)) { throw "Bundled dotnet is missing: $DotNet" }
-if (!(Test-Path -LiteralPath $CliAssembly -PathType Leaf)) { throw "UnifiedScript CLI is missing: $CliAssembly" }
-foreach ($name in @('UnifiedScript.Core.dll','UnifiedScript.CSharp.dll','UnifiedScript.Graph.dll','UnifiedScript.Runtime.dll','UnifiedScript.Semantics.dll','UnifiedScript.Unreal.dll')) {
+if (!(Test-Path -LiteralPath $CliAssembly -PathType Leaf)) { throw "Finare CLI is missing: $CliAssembly" }
+foreach ($name in @('Finare.Core.dll','Finare.CSharp.dll','Finare.Graph.dll','Finare.Runtime.dll','Finare.Semantics.dll','Finare.Unreal.dll')) {
     if (!(Test-Path -LiteralPath (Join-Path $HostDirectory $name) -PathType Leaf)) { throw "Deployed managed host dependency is missing: $(Join-Path $HostDirectory $name)" }
 }
 
@@ -108,7 +108,7 @@ try {
     $oldProperty = [Environment]::GetEnvironmentVariable($propertyName, 'Process')
     try {
         [Environment]::SetEnvironmentVariable($propertyName, $HostDirectory, 'Process')
-        & $DotNet build $projectPath --configuration Release --nologo "-p:$propertyName=$HostDirectory" -p:UnifiedScriptSkipManagedHostStaging=true
+        & $DotNet build $projectPath --configuration Release --nologo "-p:$propertyName=$HostDirectory" -p:FinareSkipManagedHostStaging=true
         if ($LASTEXITCODE -ne 0) { throw "Active class asset operations fixture build failed with exit code $LASTEXITCODE." }
         $sourceCandidates = @(Get-ChildItem -LiteralPath $classesDirectory -Filter '*.cs' -File -Recurse)
         if ($sourceCandidates.Count -eq 0) { throw "No factory-generated active source files were found under '$classesDirectory'." }
@@ -140,7 +140,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Active class declaration emission failed with exit code $LASTEXITCODE." }
         $emittedSidecars = @(Get-ChildItem -LiteralPath $declarationOutput -Filter '*.usids' -File)
         Sync-EmittedSidecars $sourceCandidates $emittedSidecars
-        & $DotNet publish $projectPath --configuration Release --no-restore --output $publishOutput "-p:$propertyName=$HostDirectory" -p:UnifiedScriptSkipManagedHostStaging=true
+        & $DotNet publish $projectPath --configuration Release --no-restore --output $publishOutput "-p:$propertyName=$HostDirectory" -p:FinareSkipManagedHostStaging=true
         if ($LASTEXITCODE -ne 0) { throw "Active class asset operations fixture publish failed with exit code $LASTEXITCODE." }
     }
     finally {

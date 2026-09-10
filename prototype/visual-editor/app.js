@@ -1212,7 +1212,7 @@ function buildAiProposalDraft() {
     draft: {
       schemaVersion: 'unifiedscript.ai-semantic-patch-proposal-draft/v0.1',
       title: `Edit ${node.title}`.slice(0, 160), intent,
-      producer: { tool: 'unifiedscript-workbench', version: '0.1', model: 'deterministic-demo' },
+      producer: { tool: 'finare-workbench', version: '0.1', model: 'deterministic-demo' },
       plan: {
         schemaVersion: 'unifiedscript.patch-plan/v0.21',
         sourceCompilationId: state.sourceCompilationId,
@@ -1315,13 +1315,13 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
   const groupId = options.groupId ?? (state.authoringGroup?.id || null);
   const headers = {
     'Content-Type': 'application/json',
-    'X-UnifiedScript-Transaction-Id': transactionId,
-    'X-UnifiedScript-Transaction-Label': label,
+    'X-Finare-Transaction-Id': transactionId,
+    'X-Finare-Transaction-Label': label,
   };
-  if (groupId) headers['X-UnifiedScript-Group-Id'] = groupId;
-  if (options.previewToken) headers['X-UnifiedScript-Preview-Token'] = options.previewToken;
+  if (groupId) headers['X-Finare-Group-Id'] = groupId;
+  if (options.previewToken) headers['X-Finare-Preview-Token'] = options.previewToken;
   if (state.authoringRevision !== null) {
-    headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
+    headers['X-Finare-Baseline-Revision'] = String(state.authoringRevision);
   }
   const response = await fetch(path, {
     method: 'POST', headers, body: JSON.stringify(patch),
@@ -1363,11 +1363,11 @@ async function previewAuthoringRequest(path, patch, label, transactionId, groupI
   const previewPath = path.replace('/api/authoring/', '/api/authoring/preview/');
   const headers = {
     'Content-Type': 'application/json',
-    'X-UnifiedScript-Transaction-Id': transactionId,
-    'X-UnifiedScript-Transaction-Label': label,
+    'X-Finare-Transaction-Id': transactionId,
+    'X-Finare-Transaction-Label': label,
   };
-  if (groupId) headers['X-UnifiedScript-Group-Id'] = groupId;
-  if (state.authoringRevision !== null) headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
+  if (groupId) headers['X-Finare-Group-Id'] = groupId;
+  if (state.authoringRevision !== null) headers['X-Finare-Baseline-Revision'] = String(state.authoringRevision);
   const response = await fetch(previewPath, { method: 'POST', headers, body: JSON.stringify(patch) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

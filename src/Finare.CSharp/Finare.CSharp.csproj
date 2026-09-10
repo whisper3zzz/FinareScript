@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Roslyn-based Visual C# profile validation and HIR lowering.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
+    <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+</Project>

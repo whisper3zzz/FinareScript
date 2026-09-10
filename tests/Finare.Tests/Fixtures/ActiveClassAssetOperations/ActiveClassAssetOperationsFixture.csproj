@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>ActiveClassAssetOperationsFixture</AssemblyName>
+    <RootNamespace>Finare.Tests.Fixtures.ActiveClassAssetOperations</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ActiveClassAssetOperationsHostDirectory Condition="'$(ActiveClassAssetOperationsHostDirectory)' == ''">$(MSBuildProjectDirectory)\..\..\..\HostProject\Plugins\Finare\Binaries\Managed</ActiveClassAssetOperationsHostDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Classes\**\*.cs" />
+    <Reference Include="Finare.Core"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.Core.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Finare.CSharp"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.CSharp.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Finare.Graph"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.Graph.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Finare.Runtime"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.Runtime.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Finare.Semantics"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.Semantics.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Finare.Unreal"><HintPath>$(ActiveClassAssetOperationsHostDirectory)\Finare.Unreal.dll</HintPath><Private>true</Private></Reference>
+    <Compile Include="Generated\FinareRuntime.bindings.cs" Link="Generated/FinareRuntime.bindings.cs" />
+  </ItemGroup>
+</Project>

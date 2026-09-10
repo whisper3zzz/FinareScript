@@ -1,21 +1,21 @@
 # First project golden path
 
-This is the shortest supported path from an extracted UnifiedScript SDK to a
+This is the shortest supported path from an extracted Finare SDK to a
 running Script Class in an existing Unreal project. It uses only packaged or
 project-local entry points: no repository checkout, direct generator command,
 or hand-edited `.uproject`, Contract, deployment, or onboarding JSON is needed.
 
 For the detailed ownership and recovery model, continue with
-[First UnifiedScript in an Unreal project](UNREAL_FIRST_SCRIPT.md). After the
+[First Finare in an Unreal project](UNREAL_FIRST_SCRIPT.md). After the
 first Play succeeds, use the [gameplay task recipes](UNREAL_GAMEPLAY_RECIPES.md).
 
 ## Before you start
 
-Use Unreal Engine 5.8.1 on Win64 and an extracted UnifiedScript SDK. In
+Use Unreal Engine 5.8.1 on Win64 and an extracted Finare SDK. In
 PowerShell, set three paths for this session:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-1.0.0-rc.1'
+$sdk = 'D:\SDK\Finare-1.0.0-rc.1'
 $project = 'D:\Games\MyGame\MyGame.uproject'
 $engine = 'D:\UE_5.8'
 ```
@@ -23,7 +23,7 @@ $engine = 'D:\UE_5.8'
 The SDK can locate this page without knowing its installation layout:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" guide first-project --sdk-root $sdk
+& "$sdk\Tools\finare.cmd" guide first-project --sdk-root $sdk
 ```
 
 ## 1. Preview, adopt, and diagnose
@@ -31,7 +31,7 @@ The SDK can locate this page without knowing its installation layout:
 Preview shows the complete owned file transaction without changing the game:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" adopt $project --sdk-root $sdk --preview
+& "$sdk\Tools\finare.cmd" adopt $project --sdk-root $sdk --preview
 ```
 
 Resolve every reported `conflict`; Apply never guesses through an unowned or
@@ -39,11 +39,11 @@ post-adoption edited file. Then run the same command without `--preview` and
 diagnose the installed surface:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" adopt $project --sdk-root $sdk
+& "$sdk\Tools\finare.cmd" adopt $project --sdk-root $sdk
 
 $projectRoot = Split-Path -Parent $project
-$projectTools = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
-& "$projectTools\unifiedscript.cmd" doctor $project --engine-root $engine
+$projectTools = Join-Path $projectRoot 'Plugins\Finare\Tools'
+& "$projectTools\finare.cmd" doctor $project --engine-root $engine
 ```
 
 Success means adoption reports `applied` and Doctor has no error-severity
@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass `
 ```
 
 Do not run the internal generators separately. A successful receipt is written
-under `Saved/UnifiedScript/ProjectSetup`, and Doctor should now report the
+under `Saved/Finare/ProjectSetup`, and Doctor should now report the
 generated surface and cook baseline as ready.
 
 ## 3. Place it and Play
@@ -72,7 +72,7 @@ generated surface and cook baseline as ready.
 Open the project and perform these Editor actions:
 
 1. Open `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
-2. Place a `UnifiedScriptActor` in a map, or add a `UnifiedScriptComponent` to
+2. Place a `FinareActor` in a map, or add a `FinareComponent` to
    an existing Actor Blueprint.
 3. Assign `SA_FirstScript` to the host's **Script Asset** property.
 4. Save the map and press Play.
@@ -88,7 +88,7 @@ Start the project-local authoring service and keep its terminal open:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$projectTools\start-unifiedscript-authoring.ps1" `
+  -File "$projectTools\start-finare-authoring.ps1" `
   -Project $project `
   -EngineRoot $engine
 ```
@@ -128,7 +128,7 @@ The golden path is complete when all of these are true:
 Next, open the recipe index directly from the adopted project:
 
 ```powershell
-& "$projectTools\unifiedscript.cmd" guide recipes
+& "$projectTools\finare.cmd" guide recipes
 ```
 
 For repeatable CMD measurement of this path and the compatible edit/reload

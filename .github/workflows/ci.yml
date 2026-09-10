@@ -1,4 +1,4 @@
-name: UnifiedScript CI
+name: Finare CI
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: unifiedscript-ci-${{ github.workflow }}-${{ github.ref }}
+  group: finare-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
       - name: Validate the release-readiness provider contract
         shell: powershell
         run: >-
-          ./tools/run-unifiedscript-release-readiness.ps1
+          ./tools/run-finare-release-readiness.ps1
           -PlanOnly
           -OutputDirectory artifacts/ci/managed-tests/release-readiness-plan
       - name: Upload managed lane report

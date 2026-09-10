@@ -153,7 +153,7 @@ reanalyzed HIR loop.
 Analyze the text-authored post-test loop:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/DoWhileRules.cs \
   --out artifacts/do-while
 ```
@@ -164,7 +164,7 @@ condition. Its Graph proves the initial-body and condition-after-body order.
 Run the visual construction and produced-condition sample:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/DoWhileBuildRules.cs \
   --identity samples/Patching/DoWhileBuildRules.cs.usids \

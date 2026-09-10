@@ -42,7 +42,7 @@ Workbench remain the final correctness authority.
 
 ## Search and ranking
 
-`FUnifiedScriptNodePaletteModel` performs deterministic token search across:
+`FFinareNodePaletteModel` performs deterministic token search across:
 
 - author-facing title;
 - hierarchical category;
@@ -66,7 +66,7 @@ then the stable alphabetical catalog. Identical inputs produce identical order.
   an accepted grouped-draft stage.
 
 Favorites and Recents are stored in `GEditorPerProjectIni` under the
-`UnifiedScript.AuthoringSurface.NodePalette` section. They are user preferences,
+`Finare.AuthoringSurface.NodePalette` section. They are user preferences,
 so they do not enter C#, `.usids`, `.usgraph`, Graph, Surface, source control, or
 runtime generations.
 

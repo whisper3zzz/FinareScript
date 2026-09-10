@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>BlueprintInheritedStateFixture</AssemblyName>
+    <RootNamespace>Finare.Tests.Fixtures.BlueprintInheritedState</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <BlueprintInheritedStateHostDirectory Condition="'$(BlueprintInheritedStateHostDirectory)' == ''">$(MSBuildProjectDirectory)\..\..\..\..\HostProject\Plugins\Finare\Binaries\Managed</BlueprintInheritedStateHostDirectory>
+    <BlueprintInheritedStateGeneratedPath Condition="'$(BlueprintInheritedStateGeneratedPath)' == ''">$(MSBuildProjectDirectory)\..\..\..\..\artifacts\m13-3c-3-inherited-runtime\fixture\generated\BlueprintInheritedStatePaths.g.cs</BlueprintInheritedStateGeneratedPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Finare.Core">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Finare.CSharp">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.CSharp.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Finare.Graph">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.Graph.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Finare.Runtime">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.Runtime.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Finare.Semantics">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.Semantics.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Finare.Unreal">
+      <HintPath>$(BlueprintInheritedStateHostDirectory)\Finare.Unreal.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Compile Include="../../../../samples/Unreal/FinareRuntime.bindings.cs"
+             Link="Generated/FinareRuntime.bindings.cs" />
+    <Compile Include="$(BlueprintInheritedStateGeneratedPath)" Condition="Exists('$(BlueprintInheritedStateGeneratedPath)')" />
+  </ItemGroup>
+</Project>

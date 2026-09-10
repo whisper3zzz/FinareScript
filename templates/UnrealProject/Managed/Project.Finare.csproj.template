@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>__ASSEMBLY_NAME__</AssemblyName>
+    <RootNamespace>__MANAGED_NAMESPACE__</RootNamespace>
+    <OutputPath>../../Plugins/Finare/Binaries/Managed/Scripts/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Finare.Core">
+      <HintPath>../../Plugins/Finare/Binaries/Managed/Finare.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Finare.Unreal">
+      <HintPath>../../Plugins/Finare/Binaries/Managed/Finare.Unreal.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

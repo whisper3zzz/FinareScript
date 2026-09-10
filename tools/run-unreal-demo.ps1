@@ -1,14 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [switch]$SkipManagedBuild,
     [switch]$SkipNativeBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$managedProject = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
     $EngineRoot = @('D:\UE_5.8', 'D:\UE\_5.8') |
@@ -16,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT to an installed Unreal Engine root.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT to an installed Unreal Engine root.'
 }
 
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
@@ -46,7 +46,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if (!$SkipNativeBuild) {
     Write-Host '[3/4] Building the Unreal host...'
-    & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath -WaitMutex -NoHotReloadFromIDE
+    & $buildBat FinareHostEditor Win64 Development $projectPath -WaitMutex -NoHotReloadFromIDE
     if ($LASTEXITCODE -ne 0) {
         throw "Unreal host build failed with exit code $LASTEXITCODE."
     }
@@ -76,7 +76,7 @@ try {
         '-nop4',
         '-NullRHI',
         '-nosplash',
-        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.WorldHost.Lifecycle',
+        '-ExecCmds=Automation RunTests Finare.Unreal.WorldHost.Lifecycle',
         '-TestExit=Automation Test Queue Empty',
         "-abslog=$demoLog",
         '-log'
@@ -97,9 +97,9 @@ try {
 }
 
 $testPattern =
-    'Test Completed. Result={Success} Name={Lifecycle} Path={UnifiedScript.Unreal.WorldHost.Lifecycle}'
+    'Test Completed. Result={Success} Name={Lifecycle} Path={Finare.Unreal.WorldHost.Lifecycle}'
 $testSucceeded = Select-String -Path $demoLog -SimpleMatch $testPattern -Quiet
-$demoResult = Select-String -Path $demoLog -SimpleMatch 'UnifiedScript demo completed:' |
+$demoResult = Select-String -Path $demoLog -SimpleMatch 'Finare demo completed:' |
     Select-Object -Last 1
 if ($editorExitCode -ne 0 -or !$testSucceeded -or $null -eq $demoResult) {
     Write-Host "Demo log: $demoLog"
@@ -108,5 +108,5 @@ if ($editorExitCode -ne 0 -or !$testSucceeded -or $null -eq $demoResult) {
 
 Write-Host ''
 Write-Host 'Demo succeeded.' -ForegroundColor Green
-Write-Host ($demoResult.Line -replace '^.*UnifiedScript demo completed:', 'Result:')
+Write-Host ($demoResult.Line -replace '^.*Finare demo completed:', 'Result:')
 Write-Host "Log: $demoLog"

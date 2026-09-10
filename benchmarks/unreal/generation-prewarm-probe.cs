@@ -1,10 +1,10 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using UnifiedScript;
-using UnifiedScript.Unreal;
+using Finare;
+using Finare.Unreal;
 
-namespace UnifiedScript.Benchmarks;
+namespace Finare.Benchmarks;
 
 /// <summary>
 /// Process-isolated first-Tick probe. The no-inline chain makes cold JIT work

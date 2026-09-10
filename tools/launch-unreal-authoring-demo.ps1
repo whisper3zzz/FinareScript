@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [ValidateRange(1024, 65535)]
     [int]$Port = 4173,
     [switch]$SkipNativeBuild,
@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 $authoringScript = Join-Path $PSScriptRoot 'run-unreal-authoring.ps1'
 $artifactDirectory = Join-Path $repoRoot 'artifacts\ue\authoring'
 
@@ -19,7 +19,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
 $editor = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor.exe'
@@ -43,7 +43,7 @@ $server = $null
 try {
     if (!$SkipNativeBuild) {
         Write-Host '[1/3] Building the UE 5.8 editor host...'
-        & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+        & $buildBat FinareHostEditor Win64 Development $projectPath `
             -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
         if ($LASTEXITCODE -ne 0) {
             throw "Unreal editor build failed with exit code $LASTEXITCODE."
@@ -86,11 +86,11 @@ try {
         return
     }
 
-    Write-Host '[3/3] Opening Unreal Editor and the UnifiedScript Authoring tab...'
+    Write-Host '[3/3] Opening Unreal Editor and the Finare Authoring tab...'
     Write-Host 'Close the editor to stop the background authoring host.'
     $editorProcess = Start-Process `
         -FilePath $editor `
-        -ArgumentList @($projectPath, '-ExecCmds=UnifiedScript.OpenAuthoring') `
+        -ArgumentList @($projectPath, '-ExecCmds=Finare.OpenAuthoring') `
         -PassThru
     $editorProcess.WaitForExit()
 } finally {

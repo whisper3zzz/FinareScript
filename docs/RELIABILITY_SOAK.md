@@ -1,7 +1,7 @@
 # Reliability and capacity soak
 
 M11.1 turns the existing lifecycle regression into a configurable reliability
-gate. The same `UnifiedScript.Unreal.WorldHost.LifecycleStress` implementation
+gate. The same `Finare.Unreal.WorldHost.LifecycleStress` implementation
 runs in two independent UE 5.8.1 processes:
 
 - a normal `WindowsEditor` process;

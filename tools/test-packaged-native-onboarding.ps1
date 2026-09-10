@@ -111,7 +111,7 @@ function Assert-OnboardingReport {
             throw "Onboarding phase '$requiredPhase' did not pass in $Path"
         }
     }
-    if ($report.outputs.automation.filter -ne 'UnifiedScript.Unreal.ProjectSetup' -or
+    if ($report.outputs.automation.filter -ne 'Finare.Unreal.ProjectSetup' -or
         [int]$report.outputs.automation.required -ne 2 -or
         [int]$report.outputs.automation.passed -lt 2 -or
         [int]$report.outputs.automation.failed -ne 0) {
@@ -193,16 +193,16 @@ $sdkRoot = Get-ChildItem -LiteralPath $extractRoot -Directory |
 if ([string]::IsNullOrWhiteSpace($sdkRoot)) {
     throw 'The SDK archive has no top-level directory.'
 }
-$sdkCli = Join-Path $sdkRoot 'Tools\unifiedscript.cmd'
+$sdkCli = Join-Path $sdkRoot 'Tools\finare.cmd'
 
 $adoptionReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\adoption.json'
+    'Saved\Finare\ProjectSetup\adoption.json'
 if (-not $Resume) {
     $projectDocument = [ordered]@{
         FileVersion = 3
         EngineAssociation = '5.8'
         Category = 'Games'
-        Description = 'UnifiedScript clean Blueprint-only native onboarding fixture.'
+        Description = 'Finare clean Blueprint-only native onboarding fixture.'
     }
     Write-Utf8 -Path $project -Text (
         ($projectDocument | ConvertTo-Json -Depth 8) + "`n")
@@ -271,10 +271,10 @@ if ($Resume) {
     $originalUserSentinelSha256 = [string]$baseline.userSentinelSha256
 }
 
-$projectTools = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
+$projectTools = Join-Path $projectRoot 'Plugins\Finare\Tools'
 $localSetup = Join-Path $projectTools 'setup-unreal-project.ps1'
-$localBuildGraph = Join-Path $projectTools 'UnifiedScript.BuildGraph.psm1'
-$localCli = Join-Path $projectTools 'unifiedscript.cmd'
+$localBuildGraph = Join-Path $projectTools 'Finare.BuildGraph.psm1'
+$localCli = Join-Path $projectTools 'finare.cmd'
 foreach ($required in @($localSetup, $localBuildGraph, $localCli)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Adoption did not install its project-local entry point: $required"
@@ -282,7 +282,7 @@ foreach ($required in @($localSetup, $localBuildGraph, $localCli)) {
 }
 
 $applyReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\native-onboarding.json'
+    'Saved\Finare\ProjectSetup\native-onboarding.json'
 if (-not $Resume -or
     -not (Test-Path -LiteralPath $applyReportPath -PathType Leaf)) {
     Invoke-LoggedCommand `
@@ -331,7 +331,7 @@ $incrementalPhases = @(
     'determinism',
     'managed-startup')
 $incrementalReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\native-onboarding-no-change.json'
+    'Saved\Finare\ProjectSetup\native-onboarding-no-change.json'
 if (-not $Resume -or
     -not (Test-Path -LiteralPath $incrementalReportPath -PathType Leaf)) {
     Invoke-LoggedCommand `
@@ -350,7 +350,7 @@ $incrementalReport = Assert-IncrementalNoChangeReport `
     -Path $incrementalReportPath `
     -ExpectedSkippedPhases $incrementalPhases
 
-$assemblyName = "$projectName.UnifiedScript"
+$assemblyName = "$projectName.Finare"
 $generatedEvidence = [ordered]@{
     reflection = Assert-File `
         -Path (Join-Path $projectRoot "Generated\$projectName.reflection.json") `
@@ -361,7 +361,7 @@ $generatedEvidence = [ordered]@{
         -Label 'Managed bindings'
     nativeThunks = Assert-File `
         -Path (Join-Path $projectRoot `
-            'Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Private\Generated\UEUnifiedScriptRuntime.native-thunks.generated.cpp') `
+            'Plugins\Finare\Source\FinareRuntime\Private\Generated\FinareRuntime.native-thunks.generated.cpp') `
         -Label 'Native thunk table'
     coverage = Assert-File `
         -Path (Join-Path $projectRoot `
@@ -389,11 +389,11 @@ $generatedEvidence = [ordered]@{
         -Label 'Automatic development API surface report'
     managedAssembly = Assert-File `
         -Path (Join-Path $projectRoot `
-            "Plugins\UEUnifiedScript\Binaries\Managed\Scripts\$assemblyName.dll") `
+            "Plugins\Finare\Binaries\Managed\Scripts\$assemblyName.dll") `
         -Label 'Managed gameplay assembly'
     managedChunk = Assert-File `
         -Path (Join-Path $projectRoot `
-            "Plugins\UEUnifiedScript\Binaries\Managed\$assemblyName.uschunk") `
+            "Plugins\Finare\Binaries\Managed\$assemblyName.uschunk") `
         -Label 'Managed gameplay chunk'
     scriptAsset = Assert-File `
         -Path (Join-Path $projectRoot `
@@ -406,18 +406,18 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot "Managed\$assemblyName\$assemblyName.slnx") `
         -Label 'Project-local managed solution'
     ideWorkspace = Assert-File `
-        -Path (Join-Path $projectRoot "$projectName.UnifiedScript.code-workspace") `
+        -Path (Join-Path $projectRoot "$projectName.Finare.code-workspace") `
         -Label 'Project-local IDE workspace'
     ideManifest = Assert-File `
-        -Path (Join-Path $projectRoot 'Managed\UnifiedScript.ide.json') `
+        -Path (Join-Path $projectRoot 'Managed\Finare.ide.json') `
         -Label 'Project-local IDE manifest'
     ideDocumentation = Assert-File `
         -Path (Join-Path $projectRoot `
-            'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md') `
+            'Plugins\Finare\Tools\Documentation\DOCUMENTATION.md') `
         -Label 'Project-local IDE documentation'
     editorPlugin = Assert-File `
         -Path (Join-Path $projectRoot `
-            'Plugins\UEUnifiedScript\Binaries\Win64\UnrealEditor-UEUnifiedScriptRuntime.dll') `
+            'Plugins\Finare\Binaries\Win64\UnrealEditor-FinareRuntime.dll') `
         -Label 'Built Editor plugin'
     gameReceipt = Assert-File `
         -Path (Join-Path $projectRoot `
@@ -439,9 +439,9 @@ $ideTaskLabels = @($ideWorkspace.tasks.tasks | ForEach-Object { [string]$_.label
 if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
     $ideManifest.typedApi.generatedBindings -ne
         "Managed/$assemblyName/Generated/Unreal.bindings.generated.cs" -or
-    'UnifiedScript: Build managed gameplay' -notin $ideTaskLabels -or
-    'UnifiedScript: Build and prepare Unreal' -notin $ideTaskLabels -or
-    'UnifiedScript: Validate project' -notin $ideTaskLabels -or
+    'Finare: Build managed gameplay' -notin $ideTaskLabels -or
+    'Finare: Build and prepare Unreal' -notin $ideTaskLabels -or
+    'Finare: Validate project' -notin $ideTaskLabels -or
     @($ideWorkspace.launch.configurations | Where-Object {
         $_.type -eq 'coreclr' -and $_.request -eq 'attach'
     }).Count -ne 1) {
@@ -596,7 +596,7 @@ if ($IncludeScriptClassLifecycleReplay) {
 }
 
 $validateReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\native-validate.json'
+    'Saved\Finare\ProjectSetup\native-validate.json'
 if (-not $Resume -or
     -not (Test-Path -LiteralPath $validateReportPath -PathType Leaf)) {
     Invoke-LoggedCommand `
@@ -655,24 +655,24 @@ $packageEvidence = [ordered]@{
         -Label 'Packaged game executable'
     core = Assert-File `
         -Path (Join-Path $projectPackageRoot `
-            'Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Core.dll') `
+            'Plugins\Finare\Binaries\Managed\Finare.Core.dll') `
         -Label 'Packaged managed core'
     unreal = Assert-File `
         -Path (Join-Path $projectPackageRoot `
-            'Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Unreal.dll') `
+            'Plugins\Finare\Binaries\Managed\Finare.Unreal.dll') `
         -Label 'Packaged managed Unreal host'
     gameplay = Assert-File `
         -Path (Join-Path $projectPackageRoot `
-            "Plugins\UEUnifiedScript\Binaries\Managed\Scripts\$assemblyName.dll") `
+            "Plugins\Finare\Binaries\Managed\Scripts\$assemblyName.dll") `
         -Label 'Packaged gameplay assembly'
     chunk = Assert-File `
         -Path (Join-Path $projectPackageRoot `
-            "Plugins\UEUnifiedScript\Binaries\Managed\$assemblyName.uschunk") `
+            "Plugins\Finare\Binaries\Managed\$assemblyName.uschunk") `
         -Label 'Packaged gameplay chunk'
 }
 $hostFxr = Get-ChildItem `
     -LiteralPath (Join-Path $projectPackageRoot `
-        'Plugins\UEUnifiedScript\Binaries\ThirdParty\DotNet\10.0\win-x64\host\fxr') `
+        'Plugins\Finare\Binaries\ThirdParty\DotNet\10.0\win-x64\host\fxr') `
     -Filter hostfxr.dll -File -Recurse |
     Select-Object -First 1
 if ($null -eq $hostFxr) {
@@ -697,7 +697,7 @@ if ($forbiddenPayload.Count -ne 0) {
 }
 
 $doctorReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\native-doctor.json'
+    'Saved\Finare\ProjectSetup\native-doctor.json'
 Invoke-LoggedCommand `
     -FilePath $localCli `
     -Arguments @(
@@ -713,12 +713,12 @@ if ($doctorReport.status -ne 'passed') {
 }
 
 $repairReportPath = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\native-repair.json'
+    'Saved\Finare\ProjectSetup\native-repair.json'
 Invoke-LoggedCommand `
     -FilePath $localCli `
     -Arguments @(
         'adopt', $project,
-        '--sdk-root', (Join-Path $projectRoot 'Plugins\UEUnifiedScript'),
+        '--sdk-root', (Join-Path $projectRoot 'Plugins\Finare'),
         '--apply',
         '--report', $repairReportPath) `
     -LogPath (Join-Path $outputRoot 'native-repair.log') `
@@ -759,9 +759,9 @@ if ($restoredUserSentinelSha256 -ne $originalUserSentinelSha256) {
     $rollbackViolations += 'user-sentinel-hash'
 }
 foreach ($unexpectedPath in @(
-        'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
-        'Plugins\UEUnifiedScript\Source',
-        'Plugins\UEUnifiedScript\Tools',
+        'Plugins\Finare\Finare.uplugin',
+        'Plugins\Finare\Source',
+        'Plugins\Finare\Tools',
         "Source\$projectName.Target.cs",
         "Source\$projectName")) {
     if (Test-Path -LiteralPath (Join-Path $projectRoot $unexpectedPath)) {
@@ -830,5 +830,5 @@ $report = [ordered]@{
     durationMs = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 }
 Write-Utf8 -Path $reportPath -Text (($report | ConvertTo-Json -Depth 12) + "`n")
-Write-Host 'UnifiedScript packaged native onboarding: PASS (Apply/Validate/Cook/Repair/Rollback)'
+Write-Host 'Finare packaged native onboarding: PASS (Apply/Validate/Cook/Repair/Rollback)'
 Write-Host $reportPath

@@ -97,7 +97,7 @@ The synchronizer never invents semantic IDs.
 First analyze source with persistent identities:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Patching/DamageRules.cs \
   --identity samples/Patching/DamageRules.cs.usids \
   --out artifacts/layout
@@ -106,7 +106,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 Initialize a layout in which every current node is explicitly unplaced:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   layout-init artifacts/layout/DamageRules.graph.json \
   --out artifacts/layout/DamageRules.usgraph
 ```
@@ -115,7 +115,7 @@ After a text or graph semantic edit produces a new Graph document, merge the
 old visual state into it:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   layout-sync artifacts/updated/DamageRules.graph.json \
   --layout artifacts/layout/DamageRules.usgraph \
   --out artifacts/updated/DamageRules.usgraph

@@ -1,4 +1,4 @@
-# UnifiedScript product roadmap
+# Finare product roadmap
 
 Last reviewed: **2026-09-10**
 
@@ -10,7 +10,7 @@ not a second work queue.
 
 ## Product goal
 
-Make UnifiedScript as practical to adopt and use as Puerts, with two additional
+Make Finare as practical to adopt and use as Puerts, with two additional
 strengths: C# and Graph edit the same program, and typed generated integration
 can outperform the old runtime on measured gameplay workloads.
 
@@ -196,7 +196,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
 - Latest native-value checkpoint: **copied ordinary C++ text**. Exact `FString`
   and `std::string` fields, constructors and method inputs/results generate C#,
   C++ and node descriptions, including text mixed with qualified object inputs.
-  The [text example](../samples/Unreal/UnifiedScript.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
+  The [text example](../samples/Unreal/Finare.Unreal.Demo/NativeObjectTextGameplayDemoScript.cs)
   observes construction before writing different field values and exercises
   empty text, embedded NUL and Unicode through real CoreCLR reload and World
   teardown. The optional Begin/Read/Discard transport keeps old ABI prefixes,
@@ -209,7 +209,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   Reflection distinguishes native virtual interface functions from Blueprint
   events. Generated calls resolve the native interface address for the former
   and retain `Execute_` for the latter. The
-  [subsystem example](../samples/Unreal/UnifiedScript.Unreal.Demo/SubsystemGameplayDemoScript.cs)
+  [subsystem example](../samples/Unreal/Finare.Unreal.Demo/SubsystemGameplayDemoScript.cs)
   obtains World/GameInstance/LocalPlayer services through engine bindings and
   performs Enhanced Input add/query/remove, including output priority, reload
   and stop. CMD Automation verifies getter identity, invalid class/foreign-World
@@ -241,7 +241,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   through World-local handles; generated interface event calls use `Execute_` for both
   native and Blueprint-only implementations. Discovery, selected contracts,
   bindings and node pins retain the exact interface identity. The dedicated
-  [interface example](../samples/Unreal/UnifiedScript.Unreal.Demo/InterfaceGameplayDemoScript.cs)
+  [interface example](../samples/Unreal/Finare.Unreal.Demo/InterfaceGameplayDemoScript.cs)
   exchanges the target, invokes its Blueprint implementation, reloads and cleans
   up its World. Invalid type, stale and foreign-World arguments are rejected.
   Managed tests passed (891 total), normal UE Editor compilation and the focused
@@ -256,7 +256,7 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   share the managed/Blueprint codec's canonical transport identity while native
   storage and node pins retain their exact declared types. `TSubclassOf` inputs
   validate the required base class, including fields inside supported structs.
-  The [collection example](../samples/Unreal/UnifiedScript.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
+  The [collection example](../samples/Unreal/Finare.Unreal.Demo/ReferenceCollectionGameplayDemoScript.cs)
   calls the real `UGameplayStatics::GetAllActorsOfClass`, exchanges Actor arrays,
   Actor-class sets, named Soft Object maps and Soft Class arrays, and refreshes
   from two matching Actors to three after reload. Native and CoreCLR CMD tests
@@ -331,7 +331,7 @@ audit. Identify practical gaps against Puerts, deliver reusable capability
 batches, and keep the comparison current as those batches land. Do not wait for
 an exhaustive inventory before implementing a clearly missing common capability.
 The selection question is **what ordinary Puerts use case still cannot be
-implemented through UnifiedScript's public surface, and what reusable capability
+implemented through Finare's public surface, and what reusable capability
 would enable it?** Prioritize those blockers over rare combinations, Demo polish
 or completing M13.3/M13.4 in advance. A concrete class prerequisite can be part of
 the selected batch; it does not pull forward the rest of those milestones.
@@ -389,7 +389,7 @@ reviewed on 2026-09-04. These describe upstream capabilities and restrictions,
 not locally reproduced Puerts results. This is an initial family-level backlog,
 not an exhaustive signature audit or a claim of parity.
 
-| Capability family | Current UnifiedScript gap or next comparison | Owner |
+| Capability family | Current Finare gap or next comparison | Owner |
 | --- | --- | --- |
 | Reflected API and value types | Scalar `TScriptInterface` properties and input/return/ref/out now work with native and Blueprint-only implementations through generated bindings and exact node descriptions. Containers, interface-bearing structs/callbacks and Blueprint-defined interface types remain separate; continue auditing other common member/reference/discovery forms | M13.1B / M13.3 / M13.5 |
 | Containers and Soft References | Generated native calls exchange Actor arrays, class sets, named Soft Object maps and Soft Class arrays. Flat collection and Soft Reference class state retain editable configuration through reload and explicit async loading/spawn. Generated Blueprint functions pass real VM exchange, source-negative checks, same-World static library reload and Win64 Development cooked execution | M13.3C-1c-b and M13.5 breadth checkpoint delivered |
@@ -403,7 +403,7 @@ not an exhaustive signature audit or a claim of parity.
 The selected interface use case is grounded in Puerts
 [`FInterfacePropertyTranslator`](https://github.com/Tencent/puerts/blob/c526e858e31997a4c816fc531144b78215c989d8/unreal/Puerts/Source/JsEnv/Private/PropertyTranslator.cpp),
 reviewed on 2026-09-05. Its property conversion exposes the implementing UObject
-and reconstructs the script interface from that object. UnifiedScript now reuses
+and reconstructs the script interface from that object. Finare now reuses
 its World-local object handles and validates the required interface before native
 mutation. This comparison guided the scalar value batch; it is not a matched
 Puerts runtime result or a requirement to complete all Script Class interface
@@ -789,7 +789,7 @@ The project-backed authoring checkpoint passes 88 focused managed tests in
 `artifacts/m13-5-ui/authoring-tests/project-authoring.trx`, the UE 5.8.1 Editor
 build and four CMD tests in `artifacts/m13-5-ui/authoring-tests/native-authoring.log`.
 That native run supplies the emitted full-project surface through
-`-UnifiedScriptProjectSurface` and verifies its parser, class selection and
+`-FinareProjectSurface` and verifies its parser, class selection and
 editable height Graph, alongside the three UI tests. The same-process source
 edit, Graph apply and changed runtime height pass in
 `artifacts/ue/async-authoring/20260904-182118-640/runtime.log`; the test undoes its

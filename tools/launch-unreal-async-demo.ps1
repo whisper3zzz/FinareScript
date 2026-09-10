@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [ValidateSet('Play', 'Editor', 'Author', 'Prepare', 'Verify', 'Package')]
     [string]$Mode = 'Play',
     [switch]$SkipBuild
@@ -8,13 +8,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+$project = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
     $EngineRoot = @('D:\UE_5.8', 'D:\UE\_5.8') |
         Where-Object { Test-Path (Join-Path $_ 'Engine\Build\BatchFiles\Build.bat') } |
         Select-Object -First 1
 }
-if ([string]::IsNullOrWhiteSpace($EngineRoot)) { throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.' }
+if ([string]::IsNullOrWhiteSpace($EngineRoot)) { throw 'Pass -EngineRoot or set FINARE_UE_ROOT.' }
 $engine = [IO.Path]::GetFullPath($EngineRoot)
 $build = Join-Path $engine 'Engine\Build\BatchFiles\Build.bat'
 $editor = Join-Path $engine 'Engine\Binaries\Win64\UnrealEditor.exe'
@@ -23,20 +23,20 @@ foreach ($required in @($project, $build, $editor, $cmdEditor)) {
     if (!(Test-Path -LiteralPath $required)) { throw "Missing Demo dependency: $required" }
 }
 $running = @(Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" |
-    Where-Object { $_.CommandLine -like '*UEUnifiedScriptHost.uproject*' })
+    Where-Object { $_.CommandLine -like '*FinareHost.uproject*' })
 if ($running.Count -gt 0) {
     throw 'Close the HostProject game/editor first so preparation cannot conflict with unsaved assets or loaded managed assemblies.'
 }
 $logs = Join-Path $repoRoot ("artifacts\ue\async-demo\" + [DateTime]::Now.ToString('yyyyMMdd-HHmmss-fff'))
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if (!$SkipBuild) {
-    & $build UEUnifiedScriptHostEditor Win64 Development "-Project=$project" -WaitMutex -NoHotReloadFromIDE
+    & $build FinareHostEditor Win64 Development "-Project=$project" -WaitMutex -NoHotReloadFromIDE
     if ($LASTEXITCODE -ne 0) { throw "Demo native build failed: $LASTEXITCODE" }
     & (Join-Path $PSScriptRoot 'emit-unreal-demo-chunk.ps1') -EngineRoot $engine -Configuration Release
 }
 $prepareLog = Join-Path $logs 'prepare.log'
-& $cmdEditor $project -run=UnifiedScriptPrepareAsyncDemo -unattended -nop4 -nosplash -NullRHI "-abslog=$prepareLog"
-if ($LASTEXITCODE -ne 0 -or !(Select-String -LiteralPath $prepareLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_PREPARED' -Quiet)) {
+& $cmdEditor $project -run=FinarePrepareAsyncDemo -unattended -nop4 -nosplash -NullRHI "-abslog=$prepareLog"
+if ($LASTEXITCODE -ne 0 -or !(Select-String -LiteralPath $prepareLog -Pattern 'FINARE_ASYNC_UI_PREPARED' -Quiet)) {
     throw "Demo preparation failed. See $prepareLog"
 }
 $map = '/Game/UnifiedScriptDemo/L_AsyncUiDemo'
@@ -49,14 +49,14 @@ if ($Mode -eq 'Package') {
         -AdditionalCookerOptions=-SkipZenStore -unattended -utf8output -NoCodeSign -NoXGE
     if ($LASTEXITCODE -ne 0) { throw "Demo packaging failed: $LASTEXITCODE" }
     $packageRoot = Join-Path $archive 'Windows'
-    $game = Join-Path $packageRoot 'UEUnifiedScriptHost.exe'
+    $game = Join-Path $packageRoot 'FinareHost.exe'
     $runLog = Join-Path $logs 'packaged-runtime.log'
     if (!(Test-Path -LiteralPath $game)) { throw "Packaged executable missing: $game" }
     $verification = Start-Process -FilePath $game -ArgumentList @(
-        $map, '-UnifiedScriptAsyncUiVerify', '-unattended', '-nosplash', '-NullRHI',
+        $map, '-FinareAsyncUiVerify', '-unattended', '-nosplash', '-NullRHI',
         ('-abslog="' + $runLog + '"')) -WindowStyle Hidden -Wait -PassThru
     if ($verification.ExitCode -ne 0 -or
-        !(Select-String -LiteralPath $runLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_VERIFY PASS' -Quiet)) {
+        !(Select-String -LiteralPath $runLog -Pattern 'FINARE_ASYNC_UI_VERIFY PASS' -Quiet)) {
         throw "Packaged Demo verification failed. See $runLog"
     }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'StartAsyncDemo.cmd') -Destination $packageRoot
@@ -65,8 +65,8 @@ if ($Mode -eq 'Package') {
 }
 if ($Mode -eq 'Verify') {
     $runLog = Join-Path $logs 'runtime.log'
-    & $cmdEditor $project $map -game -UnifiedScriptAsyncUiVerify -unattended -nop4 -nosplash -NullRHI "-abslog=$runLog"
-    if ($LASTEXITCODE -ne 0 -or !(Select-String -LiteralPath $runLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_VERIFY PASS' -Quiet)) {
+    & $cmdEditor $project $map -game -FinareAsyncUiVerify -unattended -nop4 -nosplash -NullRHI "-abslog=$runLog"
+    if ($LASTEXITCODE -ne 0 -or !(Select-String -LiteralPath $runLog -Pattern 'FINARE_ASYNC_UI_VERIFY PASS' -Quiet)) {
         throw "Demo runtime verification failed. See $runLog"
     }
     Write-Output "Demo runtime verified. $runLog"
@@ -76,7 +76,7 @@ if ($Mode -eq 'Verify') {
 $arguments = @(('"' + $project + '"'), $map, '-windowed', '-ResX=1280', '-ResY=720', '-nosplash')
 if ($Mode -eq 'Play') { $arguments += '-game' }
 if ($Mode -eq 'Author') {
-    $server = & (Join-Path $PSScriptRoot 'start-unifiedscript-authoring.ps1') `
+    $server = & (Join-Path $PSScriptRoot 'start-finare-authoring.ps1') `
         -Project $project -EngineRoot $engine -Script AsyncUiDemoScript.cs `
         -ApiBrowserPath (Join-Path $repoRoot 'samples\Unreal\UMG.api-browser.json') `
         -Background -LogDirectory $logs
@@ -93,7 +93,7 @@ if ($Mode -eq 'Author') {
             if ([DateTime]::UtcNow -gt $deadline) { throw "Demo authoring did not become ready. See $logs" }
             Start-Sleep -Milliseconds 200
         } while ($true)
-        $arguments += '-ExecCmds="UnifiedScript.OpenAuthoring /Game/UnifiedScriptDemo/BP_AsyncUiDemo.AsyncUiScript"'
+        $arguments += '-ExecCmds="Finare.OpenAuthoring /Game/UnifiedScriptDemo/BP_AsyncUiDemo.AsyncUiScript"'
         $process = Start-Process -FilePath $editor -ArgumentList $arguments -PassThru
         Write-Host 'Demo authoring is running. Edit PreviewHeight in C# or Graph; keep this launcher open until the editor exits.'
         $process.WaitForExit()

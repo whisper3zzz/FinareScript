@@ -10,8 +10,8 @@ param(
         'workload-performance',
         'sdk-installation')]
     [string]$Lane,
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
-    [string]$ComparisonRoot = $env:UNIFIEDSCRIPT_COMPARISON_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
+    [string]$ComparisonRoot = $env:FINARE_COMPARISON_ROOT,
     [string]$OutputDirectory,
     [switch]$RequireCleanTree
 )
@@ -95,7 +95,7 @@ function Resolve-DotNet {
 
 function Require-UnrealEngine {
     if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-        throw "CI lane '$Lane' requires -EngineRoot or UNIFIEDSCRIPT_UE_ROOT."
+        throw "CI lane '$Lane' requires -EngineRoot or FINARE_UE_ROOT."
     }
     $script:EngineRoot = [IO.Path]::GetFullPath($EngineRoot)
     $buildVersionPath = Join-Path $script:EngineRoot 'Engine\Build\Build.version'
@@ -147,7 +147,7 @@ function New-CleanGitCheckoutSnapshot {
             -FailureMessage "Cannot inspect comparison checkout: $resolvedRoot")
     if ($entries.Count -ne 0) {
         throw (
-            'The workload-performance lane requires a clean UnifiedScript ' +
+            'The workload-performance lane requires a clean Finare ' +
             "comparison checkout before it can preserve it: $resolvedRoot")
     }
 
@@ -267,13 +267,13 @@ try {
     New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
     $powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
     $dotnet = Resolve-DotNet
-    $project = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+    $project = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 
     switch ($Lane) {
         'managed-tests' {
             $trx = Join-Path $runDirectory 'managed-tests.trx'
             Invoke-CiPhase -Name 'managed-tests' -FilePath $dotnet -Arguments @(
-                'test', (Join-Path $repoRoot 'UnifiedScript.slnx'),
+                'test', (Join-Path $repoRoot 'Finare.slnx'),
                 '-c', 'Debug', '--nologo',
                 '--logger', 'trx;LogFileName=managed-tests.trx',
                 '--results-directory', $runDirectory) -Artifacts @($trx)
@@ -295,11 +295,11 @@ try {
             $dotnet = Resolve-DotNet
             Invoke-CiPhase -Name 'managed-release-build' -FilePath $dotnet -Arguments @(
                 'build',
-                (Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'),
+                (Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'),
                 '-c', 'Release', '--nologo')
             Invoke-CiPhase -Name 'ue-editor-build' -FilePath (
                 Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat') -Arguments @(
-                'UEUnifiedScriptHostEditor', 'Win64', 'Development', $project,
+                'FinareHostEditor', 'Win64', 'Development', $project,
                 '-WaitMutex', '-NoHotReloadFromIDE', '-NoUBA', '-MaxParallelActions=4')
         }
         'unreal-automation' {
@@ -327,11 +327,11 @@ try {
         'workload-performance' {
             Require-UnrealEngine
             if ([string]::IsNullOrWhiteSpace($ComparisonRoot)) {
-                throw "CI lane '$Lane' requires -ComparisonRoot or UNIFIEDSCRIPT_COMPARISON_ROOT."
+                throw "CI lane '$Lane' requires -ComparisonRoot or FINARE_COMPARISON_ROOT."
             }
             $resolvedComparisonRoot = [IO.Path]::GetFullPath($ComparisonRoot)
             $comparisonSnapshot = New-CleanGitCheckoutSnapshot `
-                -Root (Join-Path $resolvedComparisonRoot 'BlockBreaker-UnifiedScript') `
+                -Root (Join-Path $resolvedComparisonRoot 'BlockBreaker-Finare') `
                 -SnapshotRoot (Join-Path $runDirectory 'comparison-checkout-snapshot')
             try {
                 $packageSizeDirectory = Join-Path $runDirectory 'package-size'
@@ -356,7 +356,7 @@ try {
                 New-Item -ItemType Directory -Force -Path $performanceDirectory | Out-Null
                 $performanceArtifacts = @()
                 foreach ($name in @(
-                        'unifiedscript.json',
+                        'finare.json',
                         'puerts.json',
                         'comparison.json',
                         'budget-report.json')) {
@@ -423,8 +423,8 @@ try {
 }
 
 if ($status -ne 'passed') {
-    Write-Error "UnifiedScript CI lane '$Lane' failed: $($failure.message) Report=$reportPath"
+    Write-Error "Finare CI lane '$Lane' failed: $($failure.message) Report=$reportPath"
     exit 1
 }
-Write-Host "UnifiedScript CI lane '$Lane': PASS"
+Write-Host "Finare CI lane '$Lane': PASS"
 Write-Host "Report: $reportPath"

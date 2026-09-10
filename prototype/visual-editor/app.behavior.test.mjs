@@ -9,7 +9,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(join(root, 'app.js'), 'utf8');
 const surfacePath = join(
   root,
-  '..', '..', 'tests', 'UnifiedScript.Tests', 'Fixtures', 'AuthoringInheritance',
+  '..', '..', 'tests', 'Finare.Tests', 'Fixtures', 'AuthoringInheritance',
   'InheritedAuthoring.surface.json');
 
 function extractFunction(name) {

@@ -1,8 +1,8 @@
 # Versioning and upgrades
 
-UnifiedScript publishes one machine-readable compatibility contract at
+Finare publishes one machine-readable compatibility contract at
 `Schemas/compatibility-policy.v0.1.json` in the SDK and at
-`schemas/unifiedscript.compatibility-policy.v0.1.json` in a source checkout.
+`schemas/finare.compatibility-policy.v0.1.json` in a source checkout.
 It is the release-owned answer to three separate questions:
 
 1. which schema, generated-code, chunk, and Unreal ABI revisions are current;
@@ -17,7 +17,7 @@ therefore evolves the compiled chunk without replacing the readable source
 contract or introducing a second language VM.
 
 The SDK root also carries `release-manifest.json`, copied byte-for-byte from
-`release/unifiedscript.release.json`. It binds the product version and channel
+`release/finare.release.json`. It binds the product version and channel
 to the plugin version, archive name, exact verified engine/platform, release
 notes, curated documentation catalog, and acceptance gates. SDK packaging
 rejects a caller-supplied version or source plugin descriptor that disagrees
@@ -49,7 +49,7 @@ paths and no timestamps or source content, so the same input produces the same
 report and does not leak machine paths.
 
 ```powershell
-dotnet UnifiedScript.Cli.dll upgrade-plan . `
+dotnet Finare.Cli.dll upgrade-plan . `
   --out upgrade-plan.json `
   --fail-on-blocked
 ```
@@ -70,7 +70,7 @@ guessing its persistent semantics could lose project intent.
 `upgrade-apply` writes to a separate directory and never edits inputs:
 
 ```powershell
-dotnet UnifiedScript.Cli.dll upgrade-apply ProjectContracts `
+dotnet Finare.Cli.dll upgrade-apply ProjectContracts `
   --out UpgradedContracts
 ```
 

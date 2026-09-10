@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Project = (Join-Path $PSScriptRoot '..\HostProject\UEUnifiedScriptHost.uproject'),
+    [string]$Project = (Join-Path $PSScriptRoot '..\HostProject\FinareHost.uproject'),
 
     [Parameter(Mandatory)]
     [string]$EngineRoot,
@@ -21,10 +21,10 @@ $projectName = [IO.Path]::GetFileNameWithoutExtension($projectPath)
 $enginePath = [IO.Path]::GetFullPath($EngineRoot)
 $editorCmd = Join-Path $enginePath 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $runUat = Join-Path $enginePath 'Engine\Build\BatchFiles\RunUAT.bat'
-$projectToolRoot = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
+$projectToolRoot = Join-Path $projectRoot 'Plugins\Finare\Tools'
 $projectSetupScript = Join-Path $projectToolRoot 'setup-unreal-project.ps1'
 $projectDeferredOnboardingScript = Join-Path $projectToolRoot `
-    'run-unifiedscript-onboarding-after-process.ps1'
+    'run-finare-onboarding-after-process.ps1'
 $setupScript = if (Test-Path -LiteralPath $projectSetupScript -PathType Leaf) {
     $projectSetupScript
 } else {
@@ -34,11 +34,11 @@ $deferredOnboardingScript = if (Test-Path `
         -LiteralPath $projectDeferredOnboardingScript -PathType Leaf) {
     $projectDeferredOnboardingScript
 } else {
-    Join-Path $PSScriptRoot 'run-unifiedscript-onboarding-after-process.ps1'
+    Join-Path $PSScriptRoot 'run-finare-onboarding-after-process.ps1'
 }
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    Join-Path $projectRoot "Saved\UnifiedScript\ScriptClassGoldenPath\$runId"
+    Join-Path $projectRoot "Saved\Finare\ScriptClassGoldenPath\$runId"
 } elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -207,7 +207,7 @@ if (Test-Path -LiteralPath $outputRoot) {
 }
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
-$configPath = Join-Path $projectRoot 'Config\UnifiedScript.onboarding.json'
+$configPath = Join-Path $projectRoot 'Config\Finare.onboarding.json'
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 $configDirectory = Split-Path -Parent $configPath
 $managedProject = Resolve-ConfigPath `
@@ -226,12 +226,12 @@ $contentRoot = Assert-ChildPath `
     -Root (Join-Path $projectRoot 'Content') `
     -Label 'Script Class fixture content root'
 $receiptRoot = Assert-ChildPath `
-    -Path (Join-Path $projectRoot 'Saved\UnifiedScript\ScriptClassGoldenPath') `
+    -Path (Join-Path $projectRoot 'Saved\Finare\ScriptClassGoldenPath') `
     -Root (Join-Path $projectRoot 'Saved') `
     -Label 'Script Class fixture receipt root'
 $firstPlayRequestPath = Assert-ChildPath `
     -Path (Join-Path $projectRoot `
-        'Saved\UnifiedScript\ProjectSetup\first-play-request.json') `
+        'Saved\Finare\ProjectSetup\first-play-request.json') `
     -Root (Join-Path $projectRoot 'Saved') `
     -Label 'Script Class first-Play request'
 $fixtureNames = @('M13C0PersistentActor', 'M13C0PersistentComponent')
@@ -283,7 +283,7 @@ $packagedSmoke = [ordered]@{ skipped = [bool]$SkipCook }
 try {
     Remove-FixtureFiles -Paths $receiptFiles
     Invoke-AutomationStage `
-        -Filter 'UnifiedScript.Integration.ScriptClass.CreatePersistent' `
+        -Filter 'Finare.Integration.ScriptClass.CreatePersistent' `
         -Stage 'create'
     foreach ($required in @(
             (Join-Path $sourceRoot 'M13C0PersistentActor.cs'),
@@ -341,7 +341,7 @@ try {
     $fingerprints = Get-OutputFingerprints -OnboardingReport $applyReport
 
     Invoke-AutomationStage `
-        -Filter 'UnifiedScript.Integration.ScriptClass.ReloadLifecycle' `
+        -Filter 'Finare.Integration.ScriptClass.ReloadLifecycle' `
         -Stage 'reload-lifecycle'
     $reloadProcessId = [int](Get-Content -LiteralPath (
         Join-Path $receiptRoot 'reload.pid') -Raw)
@@ -423,20 +423,20 @@ try {
         $smokeResultPath = Join-Path $outputRoot 'packaged-script-class-smoke.txt'
         $smokeLogPath = Join-Path $outputRoot 'packaged-script-class-smoke.log'
         $previousDotNetRoot = $env:DOTNET_ROOT
-        $previousUnifiedScriptDotNetRoot = $env:UNIFIEDSCRIPT_DOTNET_ROOT
+        $previousFinareDotNetRoot = $env:FINARE_DOTNET_ROOT
         try {
             $env:DOTNET_ROOT = Join-Path $outputRoot `
                 'intentionally-missing-dotnet-root'
-            $env:UNIFIEDSCRIPT_DOTNET_ROOT = Join-Path $outputRoot `
-                'intentionally-missing-unifiedscript-dotnet-root'
+            $env:FINARE_DOTNET_ROOT = Join-Path $outputRoot `
+                'intentionally-missing-finare-dotnet-root'
             $smokeProcess = Start-Process `
                 -FilePath $packagedExecutable `
                 -WorkingDirectory (Split-Path -Parent $packagedExecutable) `
                 -ArgumentList @(
-                    '-UnifiedScriptScriptClassSmoke',
-                    "-UnifiedScriptActorClass=$actorClassPath",
-                    "-UnifiedScriptComponentClass=$componentClassPath",
-                    "-UnifiedScriptScriptClassSmokeResult=`"$smokeResultPath`"",
+                    '-FinareScriptClassSmoke',
+                    "-FinareActorClass=$actorClassPath",
+                    "-FinareComponentClass=$componentClassPath",
+                    "-FinareScriptClassSmokeResult=`"$smokeResultPath`"",
                     '-unattended',
                     '-nullrhi',
                     '-nosplash',
@@ -451,7 +451,7 @@ try {
             }
         } finally {
             $env:DOTNET_ROOT = $previousDotNetRoot
-            $env:UNIFIEDSCRIPT_DOTNET_ROOT = $previousUnifiedScriptDotNetRoot
+            $env:FINARE_DOTNET_ROOT = $previousFinareDotNetRoot
         }
         if ($smokeProcess.ExitCode -ne 0) {
             throw "Packaged Script Class smoke exited with code $($smokeProcess.ExitCode). Log=$smokeLogPath"
@@ -485,7 +485,7 @@ try {
             $smokeText -notmatch 'actorProgram=[^;\r\n]+\.uschunk' -or
             $smokeText -notmatch 'componentProgram=[^;\r\n]+\.uschunk' -or
             $smokeText -notmatch
-                'hostfxr=.*UEUnifiedScript[/\\]Binaries[/\\]ThirdParty[/\\]DotNet[/\\]10\.0' -or
+                'hostfxr=.*Finare[/\\]Binaries[/\\]ThirdParty[/\\]DotNet[/\\]10\.0' -or
             -not $smokeWorlds.Success -or
             $smokeWorlds.Groups[1].Value -ne $smokeWorlds.Groups[2].Value) {
             throw "Packaged Script Class smoke result is incomplete: $smokeText"
@@ -633,5 +633,5 @@ try {
 if ($null -ne $failure) {
     throw $failure
 }
-Write-Host 'UnifiedScript Script Class golden path: PASS'
+Write-Host 'Finare Script Class golden path: PASS'
 Write-Host (Join-Path $outputRoot 'script-class-golden-path-report.json')

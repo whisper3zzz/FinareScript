@@ -1,11 +1,11 @@
 # Unreal project onboarding
 
-`unifiedscript adopt <Game.uproject>` is the M13.1A first-use entry point. It
+`finare adopt <Game.uproject>` is the M13.1A first-use entry point. It
 transactionally enables and installs the plugin/runtime and creates the first
 managed workspace plus project-owned onboarding, Contract, and deployment
 inputs. `--preview` makes no project changes, identical Apply is a no-op, and
 `--rollback` restores exact retained backups only when doing so cannot overwrite
-later user edits. `unifiedscript doctor <Game.uproject>` diagnoses the resulting
+later user edits. `finare doctor <Game.uproject>` diagnoses the resulting
 ownership, runtime, engine, generation, and cook-readiness state.
 
 New users should follow the packaged
@@ -29,13 +29,13 @@ the project-local CLI/runtime without copying the payload onto itself.
 From an extracted SDK:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   adopt D:\Project\Game\Game.uproject --sdk-root $sdk --preview
 
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   adopt D:\Project\Game\Game.uproject --sdk-root $sdk
 
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   doctor D:\Project\Game\Game.uproject --engine-root D:\UE_5.8
 ```
 
@@ -65,13 +65,13 @@ plugin, runtime closure, managed project, invalid onboarding schema, corrupt
 transaction state, or changed product-owned plugin/runtime is a failure.
 
 Adoption also installs these project-local product tools below
-`Plugins/UEUnifiedScript/Tools`:
+`Plugins/Finare/Tools`:
 
-- `unifiedscript.cmd` and `UnifiedScript.Cli` for Preview, Repair, and Doctor;
+- `finare.cmd` and `Finare.Cli` for Preview, Repair, and Doctor;
 - `setup-unreal-project.ps1` for native/managed onboarding;
-- `UnifiedScript.BuildGraph.psm1` for deterministic dependency and output
+- `Finare.BuildGraph.psm1` for deterministic dependency and output
   invalidation;
-- `run-unifiedscript-onboarding-after-process.ps1` for a build that must wait
+- `run-finare-onboarding-after-process.ps1` for a build that must wait
   until the current Editor releases the plugin DLL;
 - the versioned project templates used by deterministic Repair;
 - the release documentation used by project-local IDE links.
@@ -79,15 +79,15 @@ Adoption also installs these project-local product tools below
 The same adoption transaction creates an IDE surface without requiring paths
 back into the SDK or repository:
 
-- `<Game>.UnifiedScript.code-workspace` opens the Unreal project and installed
+- `<Game>.Finare.code-workspace` opens the Unreal project and installed
   documentation, recommends the C# tooling, and provides managed Build, full
   Build/Prepare, and Validate tasks;
-- `Managed/<Game>.UnifiedScript/<Game>.UnifiedScript.slnx` loads the managed
+- `Managed/<Game>.Finare/<Game>.Finare.slnx` loads the managed
   gameplay project directly;
-- `Managed/UnifiedScript.ide.json` is the typed machine-readable index for the
+- `Managed/Finare.ide.json` is the typed machine-readable index for the
   solution, generated C# bindings, API browser, installed docs, task labels,
   and debugger configuration;
-- **UnifiedScript: Attach managed gameplay** uses the CoreCLR process picker so
+- **Finare: Attach managed gameplay** uses the CoreCLR process picker so
   the user can attach to the running Unreal Editor or game without a
   machine-specific process ID.
 
@@ -98,7 +98,7 @@ solution, workspace, IDE manifest, or documentation closure as a failed
 `ide-workspace` check. All of these files participate in Preview, conflict
 detection, Repair, exact rollback, and embedded no-change adoption.
 
-After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
+After the plugin can load, **Tools > Finare Project Setup** exposes the
 same operations in Slate. Preview, Repair, Doctor, and support-bundle export stream their child-process
 output without blocking the game thread. **Build & Reload** runs the same
 dependency graph in `dailyEditor` mode while the Editor stays open. A compatible
@@ -108,7 +108,7 @@ the all-instance two-phase reload coordinator. A shared managed-toolchain/native
 reflection, deployment schema, or missing-baseline change returns `restartRequired` with the exact
 stage and `restartEditor` action before any live generation changes.
 
-An editor-attached gameplay build passes `UnifiedScriptSkipManagedHostStaging=true`.
+An editor-attached gameplay build passes `FinareSkipManagedHostStaging=true`.
 The shared host has already been checked by the dependency graph, so this build
 must not copy its project-reference DLLs over the assemblies loaded by UE.
 Ordinary closed-editor setup still stages the shared host. Successful Build &
@@ -118,17 +118,17 @@ inputs; see [external source refresh](AUTHORING_TRANSACTIONS.md#import-external-
 **Build, Restart & Continue** remains the explicit fallback. It saves
 dirty packages, launches the deferred helper with the current Editor process
 ID, and requests a normal Editor exit. The helper then invokes the project-local
-setup script, writes its report under `Saved/UnifiedScript/ProjectSetup`, and
+setup script, writes its report under `Saved/Finare/ProjectSetup`, and
 reopens the project.
 
 **Export Support Bundle** runs the installed CLI's allowlisted, bounded,
-privacy-redacted collector over `Saved/UnifiedScript`, writes the ZIP outside
+privacy-redacted collector over `Saved/Finare`, writes the ZIP outside
 that input tree, and copies its path. Setup, authoring, reload, and live runtime
-failures all publish to the shared **UnifiedScript Diagnostics** Message Log;
+failures all publish to the shared **Finare Diagnostics** Message Log;
 use its source/member links and Retry, Repair, or Restart Editor guidance before
 exporting the support evidence.
 
-Creating an Actor or ActorComponent through **Create UnifiedScript Class** also
+Creating an Actor or ActorComponent through **Create Finare Class** also
 opens Project Setup and records the exact managed type, Script Asset, and
 Blueprint proxy in a first-Play receipt. After the single build finishes, the
 reopened panel shows **Locate Generated Class**. Locate the Actor and drag it
@@ -136,7 +136,7 @@ into a level, or locate the Component and add it to an Actor Blueprint, then use
 the normal Play button. No reflection, binding, thunk, asset-sync, or native
 build command is exposed in this path.
 
-That build runs `UnifiedScriptSyncClasses` immediately after Script Asset
+That build runs `FinareSyncClasses` immediately after Script Asset
 deployment. Reviewed managed `bool`, `byte`, `int`, `long`, `float`, `double`,
 and non-null `string` properties then appear as ordinary fields on the generated
 Blueprint, including category, instance-editable, SaveGame, replicated, and
@@ -149,7 +149,7 @@ override stops deployment with an actionable error before class mutation.
 
 ## Apply
 
-From the UnifiedScript repository, extracted SDK, or adopted project's plugin
+From the Finare repository, extracted SDK, or adopted project's plugin
 tools directory:
 
 ```powershell
@@ -159,8 +159,8 @@ powershell -ExecutionPolicy Bypass `
   -EngineRoot D:\UE_5.8
 ```
 
-`-Config` defaults to `Config/UnifiedScript.onboarding.json` beside the selected
-project. `-EngineRoot` may be omitted when `UNIFIEDSCRIPT_UE_ROOT` is set or the
+`-Config` defaults to `Config/Finare.onboarding.json` beside the selected
+project. `-EngineRoot` may be omitted when `FINARE_UE_ROOT` is set or the
 project's `EngineAssociation` resolves through the registered Unreal builds.
 `-Modules` and `-Classes` can override the checked-in reflection selection for
 an explicit local run.
@@ -177,12 +177,12 @@ into at most one follow-up while retaining every trigger and reload intent.
 Normal Play is canceled before PIE, its exact request is retained, and it is
 replayed automatically only after the final compatible receipt. A failed or
 `restartRequired` receipt leaves Play blocked and appears on the shared **Daily
-Build & Reload** diagnostics page. `UnifiedScript.BuildAndReload` queues the
+Build & Reload** diagnostics page. `Finare.BuildAndReload` queues the
 same coordinator from the UE console or a CMD smoke run; it is not a separate
 build implementation.
 
 Apply persists one dependency graph at
-`Saved/UnifiedScript/BuildGraph/onboarding-state.json`. Each stage fingerprints
+`Saved/Finare/BuildGraph/onboarding-state.json`. Each stage fingerprints
 its configuration, source inputs, dependency outputs, and tracked outputs. A
 stage prints `RUN` with the changed input/dependency or missing-output reason,
 or `SKIP` when all four boundaries match. Downstream invalidation follows the
@@ -203,7 +203,7 @@ Apply performs these phases in order:
 
 1. preflight every input, tool, target, plugin module, output parent, contract,
    deployment manifest, and managed project before product files are changed;
-2. build the UnifiedScript CLI/runtime and stage the managed host into the
+2. build the Finare CLI/runtime and stage the managed host into the
    selected project's plugin;
 3. bootstrap native bindings from the last reflection artifact when present;
 4. build the editor target, scan source for collision-safe generated type hints,
@@ -250,7 +250,7 @@ ValidateOnly deliberately does not trust Build/Play skip decisions: it reruns
 the non-mutating development-surface, deployment, deterministic-generation,
 coverage, and configured Automation checks against the accepted baseline.
 That baseline must match the current managed assemblies and compiled chunks. If
-a shared UnifiedScript assembly changed after the last Apply run, run ordinary
+a shared Finare assembly changed after the last Apply run, run ordinary
 Apply onboarding once to rebuild, recompile, and deploy the chunks before using
 `-ValidateOnly` again; otherwise the runtime correctly rejects the stale chunk
 dependency content identity.
@@ -261,7 +261,7 @@ It validates the deployment manifest through the editor commandlet, regenerates
 the source request/development-surface artifacts and binding outputs under
 `Saved` for byte comparison, verifies configured native coverage, and runs the
 optional managed-startup Automation gate. Logs and the machine-readable report are diagnostic artifacts under
-`Saved/UnifiedScript/Onboarding` rather than project source.
+`Saved/Finare/Onboarding` rather than project source.
 
 ## Configuration contract
 
@@ -276,9 +276,9 @@ configuration file.
   "gameTarget": "Game",
   "platform": "Win64",
   "configuration": "Development",
-  "pluginPath": "../Plugins/UEUnifiedScript",
+  "pluginPath": "../Plugins/Finare",
   "reflection": {
-    "modules": ["Game", "Engine", "UEUnifiedScriptRuntime"],
+    "modules": ["Game", "Engine", "FinareRuntime"],
     "classes": ["/Script/Game.Player", "/Script/Engine.Actor"],
     "blueprintAssets": ["/Game/Gameplay/BP_Door.BP_Door"],
     "output": "../Generated/Game.reflection.json"
@@ -304,22 +304,22 @@ configuration file.
     }
   },
   "deployment": {
-    "manifest": "../Deployment/Game.unifiedscript-deployment.json",
+    "manifest": "../Deployment/Game.finare-deployment.json",
     "enabled": true
   },
   "managed": {
     "configuration": "Release",
-    "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
-    "projects": ["../Managed/Game.UnifiedScript.csproj"],
+    "stageDirectory": "../Plugins/Finare/Binaries/Managed",
+    "projects": ["../Managed/Game.Finare.csproj"],
     "chunks": [
       {
-        "project": "../Managed/Game.UnifiedScript.csproj",
-        "stagePath": "../Plugins/UEUnifiedScript/Binaries/Managed/Game.UnifiedScript.uschunk"
+        "project": "../Managed/Game.Finare.csproj",
+        "stagePath": "../Plugins/Finare/Binaries/Managed/Game.Finare.uschunk"
       }
     ]
   },
   "validation": {
-    "automationFilter": "Game.UnifiedScript",
+    "automationFilter": "Game.Finare",
     "minimumAutomationTests": 1
   }
 }
@@ -390,8 +390,8 @@ knowledge should be needed.
 
 ## Checked consumers
 
-`HostProject/Config/UnifiedScript.onboarding.json` is the minimal runtime and
-Automation fixture. The BlockBreaker UnifiedScript project carries the same
+`HostProject/Config/Finare.onboarding.json` is the minimal runtime and
+Automation fixture. The BlockBreaker Finare project carries the same
 schema for its nine-type, 40-member gameplay contract. Both configurations pass
 Apply and a following deterministic validation against UE 5.8.1.
 
@@ -399,7 +399,7 @@ The clean Blueprint-only acceptance additionally proves packaged-SDK
 Adopt, project-local Apply/Validate, Editor and Game builds, Script Asset sync,
 Automation, BuildCookRun, no-change Repair, Doctor, and exact adoption rollback.
 The archived Win64 product contains the managed gameplay assembly, compiled
-chunk, UnifiedScript runtime assemblies, UE-bundled CoreCLR host, and cooked
+chunk, Finare runtime assemblies, UE-bundled CoreCLR host, and cooked
 Script Asset with no Puerts or project-authored JavaScript payload. Adoption
 rollback restores its owned source/configuration surface; normal Unreal-derived
 `Binaries`, `Intermediate`, and `Saved` outputs remain ordinary build artifacts.

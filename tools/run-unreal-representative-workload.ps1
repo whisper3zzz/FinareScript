@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [Parameter(Mandatory)]
     [ValidateSet(
         'struct-container-transfer',
@@ -17,9 +17,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
 $managedProject = Join-Path $repoRoot `
-    'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+    'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $manifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v1.1.0.json'
 $artifactRoot = Join-Path $repoRoot 'artifacts\ue\representative'
 $logPath = Join-Path $artifactRoot "$WorkloadId.log"
@@ -36,7 +36,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
@@ -95,7 +95,7 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
         throw "Managed representative workload build failed: $LASTEXITCODE."
     }
-    & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+    & $buildBat FinareHostEditor Win64 Development $projectPath `
         -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
     if ($LASTEXITCODE -ne 0) {
         throw "Native representative workload build failed: $LASTEXITCODE."
@@ -115,15 +115,15 @@ try {
         & $editorCmd $projectPath `
             -unattended -nop4 -NullRHI -nosplash `
             -UseFixedTimeStep -FixedSeed `
-            -UnifiedScriptFrameWorkload `
-            "-UnifiedScriptRepresentativeWorkload=$WorkloadId" `
-            "-UnifiedScriptRepresentativeResult=$rawResultPath" `
+            -FinareFrameWorkload `
+            "-FinareRepresentativeWorkload=$WorkloadId" `
+            "-FinareRepresentativeResult=$rawResultPath" `
             "-abslog=$logPath" -log
     } else {
         & $editorCmd $projectPath `
             -unattended -nop4 -NullRHI -nosplash `
-            "-UnifiedScriptRepresentativeWorkload=$WorkloadId" `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.RepresentativeWorkload' `
+            "-FinareRepresentativeWorkload=$WorkloadId" `
+            '-ExecCmds=Automation RunTests Finare.Unreal.Performance.RepresentativeWorkload' `
             '-TestExit=Automation Test Queue Empty' `
             "-abslog=$logPath" -log
     }
@@ -141,26 +141,26 @@ try {
     }
 }
 if ($editorExitCode -ne 0) {
-    throw "UnifiedScript '$WorkloadId' process failed: $editorExitCode."
+    throw "Finare '$WorkloadId' process failed: $editorExitCode."
 }
 
 $result = if ($isFrameWorkload) {
     if (-not (Test-Path -LiteralPath $rawResultPath -PathType Leaf)) {
-        throw "UnifiedScript '$WorkloadId' raw result is missing. Log: $logPath"
+        throw "Finare '$WorkloadId' raw result is missing. Log: $logPath"
     }
     Get-Content -LiteralPath $rawResultPath -Raw | ConvertFrom-Json
 } else {
     $successPattern =
-        'Test Completed. Result={Success} Name={RepresentativeWorkload} Path={UnifiedScript.Unreal.Performance.RepresentativeWorkload}'
+        'Test Completed. Result={Success} Name={RepresentativeWorkload} Path={Finare.Unreal.Performance.RepresentativeWorkload}'
     if (-not (Select-String -LiteralPath $logPath `
             -SimpleMatch $successPattern -Quiet)) {
-        throw "UnifiedScript '$WorkloadId' Automation failed. Log: $logPath"
+        throw "Finare '$WorkloadId' Automation failed. Log: $logPath"
     }
-    $marker = 'UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON '
+    $marker = 'FINARE_REPRESENTATIVE_WORKLOAD_JSON '
     $line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
         Select-Object -Last 1
     if ($null -eq $line) {
-        throw "UnifiedScript '$WorkloadId' result marker is missing."
+        throw "Finare '$WorkloadId' result marker is missing."
     }
     $line.Line.Substring(
         $line.Line.IndexOf($marker) + $marker.Length) | ConvertFrom-Json
@@ -186,11 +186,11 @@ if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     ($isHotReload -and [double]$result.reloadMilliseconds -le 0) -or
     [int64]$result.checksum -ne $contract.Checksum -or
     -not $frameMetricsValid) {
-    throw "UnifiedScript '$WorkloadId' evidence violates its frozen contract."
+    throw "Finare '$WorkloadId' evidence violates its frozen contract."
 }
 if ($WorkloadId -in @('struct-container-transfer', 'delegate-storm') -and
     [int64]$result.allocatedBytes -ne 0) {
-    throw "UnifiedScript '$WorkloadId' generated channel allocated managed memory."
+    throw "Finare '$WorkloadId' generated channel allocated managed memory."
 }
 
 $report = [ordered]@{
@@ -248,6 +248,6 @@ if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
 }
 
 Write-Output (
-    "UnifiedScript '$WorkloadId': $($result.bridgeTimeMilliseconds) ms, " +
+    "Finare '$WorkloadId': $($result.bridgeTimeMilliseconds) ms, " +
     "$($result.calls) calls, $($result.bytesCopied) logical bytes")
 Write-Output "Result: $OutputPath"

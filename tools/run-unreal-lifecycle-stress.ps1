@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [switch]$SkipBuild,
     [switch]$DedicatedServer,
     [ValidatePattern('^[A-Za-z0-9._-]+$')]
@@ -29,8 +29,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$managedProject = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $artifactDirectory = Join-Path $repoRoot 'artifacts\ue'
 $logPath = Join-Path $artifactDirectory "$ReportName.log"
 $reportPath = Join-Path $artifactDirectory "$ReportName.json"
@@ -41,7 +41,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
@@ -60,7 +60,7 @@ if (!$SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
         throw "Managed lifecycle-stress build failed with exit code $LASTEXITCODE."
     }
-    & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+    & $buildBat FinareHostEditor Win64 Development $projectPath `
         -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
     if ($LASTEXITCODE -ne 0) {
         throw "Unreal lifecycle-stress build failed with exit code $LASTEXITCODE."
@@ -82,19 +82,19 @@ try {
     $editorArguments = @(
         $projectPath,
         '-unattended', '-nop4', '-NullRHI', '-nosplash', '-NoSound',
-        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.WorldHost.LifecycleStress',
+        '-ExecCmds=Automation RunTests Finare.Unreal.WorldHost.LifecycleStress',
         '-TestExit=Automation Test Queue Empty',
         "-abslog=$logPath", '-log',
-        "-UnifiedScriptSoakTravelCycles=$TravelCycles",
-        "-UnifiedScriptSoakPieCycles=$PieCycles",
-        "-UnifiedScriptSoakConcurrentWorlds=$ConcurrentWorlds",
-        "-UnifiedScriptSoakRequestsPerWorld=$RequestsPerWorld",
-        "-UnifiedScriptSoakGenerationRollovers=$GenerationRollovers",
-        "-UnifiedScriptSoakObjectChurnCycles=$ObjectChurnCycles",
-        "-UnifiedScriptSoakObjectsPerChurnCycle=$ObjectsPerChurnCycle",
-        "-UnifiedScriptSoakCommandSaturationCycles=$CommandSaturationCycles",
-        "-UnifiedScriptSoakCommandsPerSaturationCycle=$CommandsPerSaturationCycle",
-        "-UnifiedScriptSoakMemoryGrowthBudgetMB=$MemoryGrowthBudgetMB")
+        "-FinareSoakTravelCycles=$TravelCycles",
+        "-FinareSoakPieCycles=$PieCycles",
+        "-FinareSoakConcurrentWorlds=$ConcurrentWorlds",
+        "-FinareSoakRequestsPerWorld=$RequestsPerWorld",
+        "-FinareSoakGenerationRollovers=$GenerationRollovers",
+        "-FinareSoakObjectChurnCycles=$ObjectChurnCycles",
+        "-FinareSoakObjectsPerChurnCycle=$ObjectsPerChurnCycle",
+        "-FinareSoakCommandSaturationCycles=$CommandSaturationCycles",
+        "-FinareSoakCommandsPerSaturationCycle=$CommandsPerSaturationCycle",
+        "-FinareSoakMemoryGrowthBudgetMB=$MemoryGrowthBudgetMB")
     if ($DedicatedServer) {
         $editorArguments += '-server'
     }
@@ -126,12 +126,12 @@ if ($editorExitCode -ne 0) {
     throw "Unreal lifecycle-stress process failed with exit code $editorExitCode."
 }
 $successPattern =
-    'Test Completed. Result={Success} Name={LifecycleStress} Path={UnifiedScript.Unreal.WorldHost.LifecycleStress}'
+    'Test Completed. Result={Success} Name={LifecycleStress} Path={Finare.Unreal.WorldHost.LifecycleStress}'
 if (!(Select-String -LiteralPath $logPath -SimpleMatch $successPattern -Quiet)) {
     throw "LifecycleStress Automation did not succeed. Log: $logPath"
 }
 
-$marker = 'UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON '
+$marker = 'FINARE_LIFECYCLE_STRESS_JSON '
 $line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
     Select-Object -Last 1
 if ($null -eq $line) {
@@ -200,7 +200,7 @@ $report = [ordered]@{
         'passed'
     } else { 'failed' }
     engineRoot = [IO.Path]::GetFullPath($EngineRoot)
-    test = 'UnifiedScript.Unreal.WorldHost.LifecycleStress'
+    test = 'Finare.Unreal.WorldHost.LifecycleStress'
     result = $result
     gates = [ordered]@{
         completeMatrix = $matrixPass

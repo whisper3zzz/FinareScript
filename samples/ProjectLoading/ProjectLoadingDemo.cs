@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis.CSharp;
-using UnifiedScript;
+using Finare;
 
-namespace UnifiedScript.ProjectLoadingDemo;
+namespace Finare.ProjectLoadingDemo;
 
 public static class ProjectLoadingDemo
 {
@@ -10,7 +10,7 @@ public static class ProjectLoadingDemo
     [Visual]
     public static int Resolve(int value)
     {
-#if UNIFIEDSCRIPT_PROJECT_DEMO
+#if FINARE_PROJECT_DEMO
         return value + 14;
 #else
         return value - 1;

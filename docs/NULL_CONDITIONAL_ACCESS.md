@@ -173,7 +173,7 @@ binding payload before that edit becomes safe.
 Generate the sample artifacts with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/NullConditionalRules.cs \
   --out artifacts/null-conditional
 ```

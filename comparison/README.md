@@ -10,6 +10,11 @@ under `D:\\Project\\UEUnifiedScriptComparison`:
 Pinned repositories and commits are recorded in `baselines.json`. Run both
 functional gates and produce an ignored JSON report with:
 
+The external BlockBreaker checkout and its historical reports still use the old
+UnifiedScript paths and identifiers. The Finare rename does not rewrite those
+external inputs or claim that their recorded measurements were rerun; migrate
+that checkout separately before comparing new Finare measurements.
+
 ```powershell
 .\\comparison\\run-smoke-comparison.ps1
 ```

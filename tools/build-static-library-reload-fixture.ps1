@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/StaticLibraryReload/StaticLibraryReloadFixture.csproj'
+$project = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/StaticLibraryReload/StaticLibraryReloadFixture.csproj'
 $outputRootPath = Join-Path $repoRoot $OutputRoot
 if (!(Test-Path -LiteralPath $DotNet)) {
     throw "Bundled .NET SDK 10 was not found at '$DotNet'."
@@ -20,7 +20,7 @@ foreach ($variant in @(
     $output = Join-Path $outputRootPath $variant.Name
     $defines = $variant.Define
     & $DotNet publish $project --configuration Release --output $output `
-        "-p:StaticLibraryReloadVariant=$defines" -p:UnifiedScriptSkipManagedHostStaging=true
+        "-p:StaticLibraryReloadVariant=$defines" -p:FinareSkipManagedHostStaging=true
     if ($LASTEXITCODE -ne 0) {
         throw "Static library fixture '$($variant.Name)' failed with exit code $LASTEXITCODE."
     }

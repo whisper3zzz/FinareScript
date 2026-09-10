@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Versioned Unreal reflection contracts and deterministic managed binding generation.</Description>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <FinareManagedStageDir>$(MSBuildProjectDirectory)/../../HostProject/Plugins/Finare/Binaries/Managed</FinareManagedStageDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.Runtime/Finare.Runtime.csproj" />
+    <InternalsVisibleTo Include="Finare.Tests" />
+  </ItemGroup>
+  <Target Name="StageUnrealManagedHost" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(FinareSkipManagedHostStaging)' != 'true'">
+    <ItemGroup>
+      <_FinareManagedHostFile Include="$(TargetPath)" />
+      <_FinareManagedHostFile Include="$(TargetDir)Finare.Unreal.deps.json"
+                                    Condition="Exists('$(TargetDir)Finare.Unreal.deps.json')" />
+      <_FinareManagedHostFile Include="@(ReferenceCopyLocalPaths)"
+                                    Condition="'%(Extension)' == '.dll'" />
+    </ItemGroup>
+    <MakeDir Directories="$(FinareManagedStageDir)" />
+    <Copy SourceFiles="@(_FinareManagedHostFile)"
+          DestinationFolder="$(FinareManagedStageDir)" />
+  </Target>
+</Project>

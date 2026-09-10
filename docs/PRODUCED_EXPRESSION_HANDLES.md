@@ -169,7 +169,7 @@ return value + (value * 3);
 Run it with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditGeneratedExpression.cs \
   --identity samples/Patching/EditGeneratedExpression.cs.usids \

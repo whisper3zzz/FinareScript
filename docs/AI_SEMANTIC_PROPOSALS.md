@@ -1,6 +1,6 @@
 # Typed AI semantic patch proposals
 
-UnifiedScript treats an AI-authored change as a versioned, reviewable product
+Finare treats an AI-authored change as a versioned, reviewable product
 artifact rather than executable model output. An AI tool proposes a typed
 `SemanticPatchPlanDocument`; the authoring host validates its exact contract,
 previews the compiler-produced candidate, and commits only the proposal that
@@ -53,7 +53,7 @@ metadata or plan changes create a different identity.
 The same canonical envelope can be created offline:
 
 ```powershell
-unifiedscript ai-proposal-pack plan.json `
+finare ai-proposal-pack plan.json `
   --title "Raise clamp minimum" `
   --intent "Replace the selected stable-ID literal." `
   --producer gameplay-agent `

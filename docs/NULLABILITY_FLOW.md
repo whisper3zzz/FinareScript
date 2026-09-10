@@ -1,6 +1,6 @@
 # Flow-sensitive nullability
 
-M8.5 promotes Roslyn's nullable flow analysis into the versioned UnifiedScript
+M8.5 promotes Roslyn's nullable flow analysis into the versioned Finare
 semantic and Graph contracts. A type annotation and the value known at one
 control-flow location are deliberately separate facts:
 

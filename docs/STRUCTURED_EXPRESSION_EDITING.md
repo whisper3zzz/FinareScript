@@ -205,7 +205,7 @@ while (result > 0)
 Run the two-step plan:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditLoopRules.cs \
   --identity samples/Patching/EditLoopRules.cs.usids \

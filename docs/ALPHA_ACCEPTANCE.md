@@ -1,13 +1,13 @@
-# UnifiedScript alpha acceptance
+# Finare alpha acceptance
 
-`tools/run-unifiedscript-alpha-acceptance.ps1` is the single repository gate
+`tools/run-finare-alpha-acceptance.ps1` is the single repository gate
 for the M6.3 adoptable-project claim. It runs the managed suite, repository
 invariants, generated-contract onboarding, UE build and Automation, and a real
 Win64 packaged lifecycle smoke in one command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File tools/run-unifiedscript-alpha-acceptance.ps1 `
+  -File tools/run-finare-alpha-acceptance.ps1 `
   -EngineRoot D:\UE_5.8
 ```
 

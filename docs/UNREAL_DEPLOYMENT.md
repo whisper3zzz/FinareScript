@@ -1,8 +1,8 @@
 # Unreal Script Deployment
 
-UnifiedScript deployment manifests turn text-owned managed program identity
+Finare deployment manifests turn text-owned managed program identity
 into checked Unreal Data Assets. They are the reusable boundary between a
-gameplay module and `UUnifiedScriptComponent`; native gameplay classes no
+gameplay module and `UFinareComponent`; native gameplay classes no
 longer need to embed assembly paths, managed type names, or authoring paths.
 
 ## Manifest contract
@@ -19,11 +19,11 @@ array. Every entry requires:
 
 Source, Declaration IR, Authoring Surface, API node catalog, declaration asset
 key, and Workbench URL are optional authoring fields. Unknown JSON fields, duplicate asset paths,
-invalid package names, unloaded target classes, and non-UnifiedScript assets at
+invalid package names, unloaded target classes, and non-Finare assets at
 the destination are rejected during preflight.
 
 The checked-in example is
-[`samples/Unreal/UnifiedScript.Unreal.Demo.deployment.json`](../samples/Unreal/UnifiedScript.Unreal.Demo.deployment.json).
+[`samples/Unreal/Finare.Unreal.Demo.deployment.json`](../samples/Unreal/Finare.Unreal.Demo.deployment.json).
 
 ## Synchronization
 
@@ -31,20 +31,20 @@ Build the editor target, then run:
 
 ```powershell
 UnrealEditor-Cmd.exe Project.uproject `
-  -run=UnifiedScriptSyncAssets `
-  -Input=D:\Project\Game\Deployment\Game.unifiedscript-deployment.json `
+  -run=FinareSyncAssets `
+  -Input=D:\Project\Game\Deployment\Game.finare-deployment.json `
   -unattended -nop4 -nosplash
 ```
 
 Add `-ValidateOnly` for CI preflight without package writes. A normal run
 preflights the complete manifest before changing its first package, then
-creates or updates each `UUnifiedScriptAsset` deterministically. Re-running the
+creates or updates each `UFinareAsset` deterministically. Re-running the
 same manifest updates the same assets and is safe for build automation.
 
 ## Runtime target contract
 
-`UUnifiedScriptAsset.RequiredTargetClass` is checked by
-`UUnifiedScriptComponent` before assembly loading or managed instance creation.
+`UFinareAsset.RequiredTargetClass` is checked by
+`UFinareComponent` before assembly loading or managed instance creation.
 A Character script cannot silently start on an unrelated Actor, and a failed
 target check does not advance a managed generation or replace a running script.
 The component continues to accept direct assembly/type configuration only as a

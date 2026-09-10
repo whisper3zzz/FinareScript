@@ -91,7 +91,7 @@
       "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": "",
-      "nativeExtension": "UnifiedScript.UMG"
+      "nativeExtension": "Finare.UMG"
     },
     {
       "path": "/Script/UMG.Widget:GetIsEnabled",

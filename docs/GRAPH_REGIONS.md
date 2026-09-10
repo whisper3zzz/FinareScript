@@ -140,7 +140,7 @@ or change placement.
 Generate a region-aware Graph for the early-return sample:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Regions/EarlyReturn.cs \
   --out artifacts/regions
 ```

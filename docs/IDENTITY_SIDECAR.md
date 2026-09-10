@@ -10,7 +10,7 @@ and most local rewrites.
 
 Identity must not be stored as comments in C# source. Inline markers pollute user
 code, interact badly with formatters, and are easy for generators to remove.
-UnifiedScript will instead keep a source-controlled sidecar next to each visual
+Finare will instead keep a source-controlled sidecar next to each visual
 source file.
 
 ## File contract

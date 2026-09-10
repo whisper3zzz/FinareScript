@@ -1,7 +1,7 @@
 # Transactional hot-reload reliability
 
 `unifiedscript.reload-transaction/v0.1` is the observable receipt for a
-UnifiedScript authoring or live-World reload. It turns compile, publication,
+Finare authoring or live-World reload. It turns compile, publication,
 runtime migration, and cleanup into one ordered transaction instead of a set
 of unrelated log lines.
 

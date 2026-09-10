@@ -4,20 +4,20 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "${script_dir}/.." && pwd)"
-host_project="${repository_root}/HostProject/UEUnifiedScriptHost.uproject"
+host_project="${repository_root}/HostProject/FinareHost.uproject"
 artifact_directory="${repository_root}/artifacts/ue"
-reflection_manifest="${artifact_directory}/UEUnifiedScriptRuntime.reflection.json"
-generated_bindings="${artifact_directory}/UEUnifiedScriptRuntime.bindings.cs"
-generated_native_thunks="${artifact_directory}/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
+reflection_manifest="${artifact_directory}/FinareRuntime.reflection.json"
+generated_bindings="${artifact_directory}/FinareRuntime.bindings.cs"
+generated_native_thunks="${artifact_directory}/FinareRuntime.native-thunks.generated.cpp"
 
 find_engine_root() {
-    if [[ -n "${UNIFIEDSCRIPT_UE_ROOT:-}" ]]; then
-        if [[ -f "${UNIFIEDSCRIPT_UE_ROOT}/Engine/Build/Build.version" ]]; then
-            printf '%s\n' "${UNIFIEDSCRIPT_UE_ROOT}"
+    if [[ -n "${FINARE_UE_ROOT:-}" ]]; then
+        if [[ -f "${FINARE_UE_ROOT}/Engine/Build/Build.version" ]]; then
+            printf '%s\n' "${FINARE_UE_ROOT}"
             return 0
         fi
-        printf 'UNIFIEDSCRIPT_UE_ROOT is not an Unreal Engine root: %s\n' \
-            "${UNIFIEDSCRIPT_UE_ROOT}" >&2
+        printf 'FINARE_UE_ROOT is not an Unreal Engine root: %s\n' \
+            "${FINARE_UE_ROOT}" >&2
         return 66
     fi
 
@@ -33,7 +33,7 @@ find_engine_root() {
     done
 
     printf '%s\n' \
-        'Unreal Engine was not found. Set UNIFIEDSCRIPT_UE_ROOT to its root directory.' >&2
+        'Unreal Engine was not found. Set FINARE_UE_ROOT to its root directory.' >&2
     return 66
 }
 
@@ -73,7 +73,7 @@ detect() {
 build_host() {
     local engine_root="$1"
     "${engine_root}/Engine/Build/BatchFiles/Mac/Build.sh" \
-        UEUnifiedScriptHostEditor \
+        FinareHostEditor \
         Mac \
         Development \
         "${host_project}" \
@@ -81,9 +81,9 @@ build_host() {
         -NoHotReload \
         -NoUBA \
         -MaxParallelActions=4 \
-        -Module=UEUnifiedScriptHost \
-        -Module=UEUnifiedScriptRuntime \
-        -Module=UEUnifiedScriptEditor
+        -Module=FinareHost \
+        -Module=FinareRuntime \
+        -Module=FinareEditor
 }
 
 export_reflection() {
@@ -93,9 +93,9 @@ export_reflection() {
     mkdir -p "${artifact_directory}"
     "${editor}" \
         "${host_project}" \
-        -run=UnifiedScriptExport \
+        -run=FinareExport \
         "-Output=${reflection_manifest}" \
-        -Modules=UEUnifiedScriptRuntime \
+        -Modules=FinareRuntime \
         -unattended \
         -nop4 \
         -nosplash \
@@ -111,7 +111,7 @@ generate_bindings() {
         return 66
     }
     dotnet run \
-        --project "${repository_root}/src/UnifiedScript.Cli/UnifiedScript.Cli.csproj" \
+        --project "${repository_root}/src/Finare.Cli/Finare.Cli.csproj" \
         -- \
         ue-bindings \
         "${reflection_manifest}" \
@@ -122,7 +122,7 @@ generate_bindings() {
 usage() {
     printf '%s\n' \
         'Usage: tools/ue-adapter.sh detect|build|export|bindings|verify' \
-        'Set UNIFIEDSCRIPT_UE_ROOT when auto-discovery cannot locate the engine.'
+        'Set FINARE_UE_ROOT when auto-discovery cannot locate the engine.'
 }
 
 command_name="${1:-}"

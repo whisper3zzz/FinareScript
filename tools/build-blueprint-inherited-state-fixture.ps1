@@ -6,10 +6,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.csproj'
-$source = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs'
-$identityPath = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs.usids'
-$cliAssembly = Join-Path $repoRoot 'src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.dll'
+$project = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.csproj'
+$source = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs'
+$identityPath = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs.usids'
+$cliAssembly = Join-Path $repoRoot 'src/Finare.Cli/bin/Release/net10.0/Finare.Cli.dll'
 $outputRootPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputRoot))
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts')).TrimEnd('\', '/')
 $declarationOutput = Join-Path $outputRootPath 'declaration'
@@ -19,8 +19,8 @@ $generatedSource = Join-Path $generatedOutput 'BlueprintInheritedStatePaths.g.cs
 $identitySeedPath = Join-Path $generatedOutput 'BlueprintInheritedStateFixture.usids'
 $configPath = Join-Path $outputRootPath 'BlueprintInheritedStateFixture.config.json'
 $assemblyName = 'BlueprintInheritedStateFixture'
-$hostDirectory = [IO.Path]::GetFullPath((Join-Path $repoRoot 'HostProject/Plugins/UEUnifiedScript/Binaries/Managed'))
-$fixtureDll = Join-Path $repoRoot "tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/bin/Release/net10.0/$assemblyName.dll"
+$hostDirectory = [IO.Path]::GetFullPath((Join-Path $repoRoot 'HostProject/Plugins/Finare/Binaries/Managed'))
+$fixtureDll = Join-Path $repoRoot "tests/Finare.Tests/Fixtures/BlueprintInheritedState/bin/Release/net10.0/$assemblyName.dll"
 
 if (!(Test-Path -LiteralPath $DotNet)) { throw "Bundled .NET SDK 10 was not found at '$DotNet'." }
 foreach ($required in @($project, $source, $cliAssembly)) {
@@ -29,12 +29,12 @@ foreach ($required in @($project, $source, $cliAssembly)) {
     }
 }
 foreach ($hostName in @(
-        'UnifiedScript.Core.dll',
-        'UnifiedScript.CSharp.dll',
-        'UnifiedScript.Graph.dll',
-        'UnifiedScript.Runtime.dll',
-        'UnifiedScript.Semantics.dll',
-        'UnifiedScript.Unreal.dll')) {
+        'Finare.Core.dll',
+        'Finare.CSharp.dll',
+        'Finare.Graph.dll',
+        'Finare.Runtime.dll',
+        'Finare.Semantics.dll',
+        'Finare.Unreal.dll')) {
     $hostPath = Join-Path $hostDirectory $hostName
     if (!(Test-Path -LiteralPath $hostPath -PathType Leaf)) {
         throw "Deployed managed host dependency is missing: $hostPath"
@@ -65,7 +65,7 @@ if ($fixtureId -cnotmatch '^[0-9A-F]{32}$' -or
 $actorClassPath = "$packageDirectory/InheritedStateBase.InheritedStateBase_C"
 
 @"
-namespace UnifiedScript.Tests.Fixtures.BlueprintInheritedState;
+namespace Finare.Tests.Fixtures.BlueprintInheritedState;
 
 public static class BlueprintInheritedStatePaths
 {
@@ -80,7 +80,7 @@ $oldHostProperty = [Environment]::GetEnvironmentVariable($hostPropertyName, 'Pro
 try {
     [Environment]::SetEnvironmentVariable($propertyName, $generatedSource, 'Process')
     [Environment]::SetEnvironmentVariable($hostPropertyName, $hostDirectory, 'Process')
-    & $DotNet build $project --configuration Release --nologo "-p:$propertyName=$generatedSource" "-p:$hostPropertyName=$hostDirectory" -p:UnifiedScriptSkipManagedHostStaging=true
+    & $DotNet build $project --configuration Release --nologo "-p:$propertyName=$generatedSource" "-p:$hostPropertyName=$hostDirectory" -p:FinareSkipManagedHostStaging=true
     if ($LASTEXITCODE -ne 0) { throw "Inherited-state fixture build failed with exit code $LASTEXITCODE." }
 
     if (!(Test-Path -LiteralPath $identityPath -PathType Leaf)) {
@@ -90,8 +90,8 @@ try {
         if (!(Test-Path -LiteralPath $fixtureDll -PathType Leaf)) { throw "Fixture build did not produce '$fixtureDll'." }
         & $DotNet $cliAssembly identity-init $source --out $identitySeedPath `
             --assembly $assemblyName `
-            --reference (Join-Path $hostDirectory 'UnifiedScript.Unreal.dll') `
-            --reference (Join-Path $hostDirectory 'UnifiedScript.Core.dll') `
+            --reference (Join-Path $hostDirectory 'Finare.Unreal.dll') `
+            --reference (Join-Path $hostDirectory 'Finare.Core.dll') `
             --reference $fixtureDll
         if ($LASTEXITCODE -ne 0) { throw "Inherited-state identity initialization failed with exit code $LASTEXITCODE." }
         if (!(Test-Path -LiteralPath $identitySeedPath -PathType Leaf)) { throw "Identity initialization did not produce '$identitySeedPath'." }
@@ -108,7 +108,7 @@ try {
             Where-Object {
                 try {
                     $emitted = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
-                    [string]$emitted.sourcePath -eq 'tests/UnifiedScript.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs'
+                    [string]$emitted.sourcePath -eq 'tests/Finare.Tests/Fixtures/BlueprintInheritedState/BlueprintInheritedStateFixture.cs'
                 } catch {
                     $false
                 }
@@ -119,7 +119,7 @@ try {
     }
     Copy-Item -LiteralPath $emittedIdentityCandidates[0].FullName -Destination $identityPath -Force
 
-    & $DotNet publish $project --configuration Release --no-restore --output $publishOutput "-p:$propertyName=$generatedSource" "-p:$hostPropertyName=$hostDirectory" -p:UnifiedScriptSkipManagedHostStaging=true
+    & $DotNet publish $project --configuration Release --no-restore --output $publishOutput "-p:$propertyName=$generatedSource" "-p:$hostPropertyName=$hostDirectory" -p:FinareSkipManagedHostStaging=true
     if ($LASTEXITCODE -ne 0) { throw "Inherited-state fixture publish failed with exit code $LASTEXITCODE." }
 }
 finally {
@@ -136,7 +136,7 @@ foreach ($required in @($declarationPath, $chunkPath, $assemblyPath, $identityPa
     }
 }
 $document = Get-Content -LiteralPath $declarationPath -Raw | ConvertFrom-Json
-$assets = @(@($document.assets) | Where-Object { [string]$_.qualifiedName -eq 'UnifiedScript.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture' })
+$assets = @(@($document.assets) | Where-Object { [string]$_.qualifiedName -eq 'Finare.Tests.Fixtures.BlueprintInheritedState.BlueprintInheritedStateFixture' })
 if ($assets.Count -ne 1) { throw "Expected exactly one inherited-state ScriptAsset with the fixture qualified name in '$declarationPath', found $($assets.Count)." }
 $asset = $assets[0]
 

@@ -13,7 +13,7 @@ second script VM.
 Start a host with:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- `
+dotnet run --project src/Finare.Cli -- `
   debug-frame-serve samples/Execution/RuntimeRules.cs `
   --port 4174 `
   --max-connections 32

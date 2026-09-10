@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Engine-neutral authoring surfaces projected from Finare declarations and Graph IR.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
+  </ItemGroup>
+</Project>

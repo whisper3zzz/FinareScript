@@ -27,7 +27,7 @@ graph or source buffer.
    successful-candidate warnings. The browser Workbench uses the same contract.
 5. Cancel closes the preview with a zero-write status. Apply resends the same
    payload, operation identity, baseline/group identity, and returned
-   `X-UnifiedScript-Preview-Token` to the ordinary transaction endpoint.
+   `X-Finare-Preview-Token` to the ordinary transaction endpoint.
 6. The server consumes the cached immutable candidate—including its reconciled
    semantic identities and generated Graph—from that token. `UAW1012` rejects a
    missing/expired token or any baseline, group, or transaction-metadata drift.
@@ -86,7 +86,7 @@ its identity and replaying it would not be a generally safe quick fix.
 ## Unified Unreal diagnostic result
 
 The Authoring Surface also publishes every rejected transaction and failed
-reload into the **UnifiedScript Diagnostics** Message Log. This is the shared UE
+reload into the **Finare Diagnostics** Message Log. This is the shared UE
 result used by Project Setup and the live World debugger; the local failure
 panel remains a compact view of the same evidence rather than a separate error
 model.
@@ -120,7 +120,7 @@ the Graph/member/source target, package inspection opens a real retained file,
 and Repair/Restart routes through Project Setup. It never replays a write or
 silently retries a transaction. **Copy** exports the normalized entry instead
 of raw HTTP or generator output. The most recent 128 entries are also written to
-`Saved/UnifiedScript/EditorDiagnostics/latest.json` for the privacy-safe support
+`Saved/Finare/EditorDiagnostics/latest.json` for the privacy-safe support
 bundle; source paths, member names, messages, and evidence paths are redacted by
 the bundle policy before sharing.
 

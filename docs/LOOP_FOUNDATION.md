@@ -139,7 +139,7 @@ introducing editor-only control semantics.
 Analyze the checked-in loop sample with persistent identity:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/Countdown.cs \
   --identity samples/Loops/Countdown.cs.usids \
   --out artifacts/loops

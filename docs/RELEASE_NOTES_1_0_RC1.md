@@ -1,4 +1,4 @@
-# UnifiedScript 1.0 RC1 release notes
+# Finare 1.0 RC1 release notes
 
 ## Typed AI semantic proposals
 
@@ -33,14 +33,14 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
 One release-readiness command now binds every manifest-declared gate to an
 exact provider and produces a single `unifiedscript.release-readiness/v0.1`
 verdict from one clean Git revision. It includes the complete matched
-UnifiedScript/Puerts workload budget; microbenchmarks and stale child reports
+Finare/Puerts workload budget; microbenchmarks and stale child reports
 cannot substitute for the release performance gate. Dirty-source modes are
 diagnostic-only and cannot emit the strict `passed` verdict.
 
 The frozen clean-revision run at `5be7dde` passed all 15 required gates. It
 includes 619 managed tests, 92 repository invariants, 19 UE Automation tests,
 four declared compatibility/package rows, five executable sample categories,
-three project templates, and all 54 scheduled UnifiedScript/Puerts captures.
+three project templates, and all 54 scheduled Finare/Puerts captures.
 The authoritative local evidence is
 `artifacts/release-readiness/m12-final-5be7dde/release-readiness.json`.
 
@@ -57,7 +57,7 @@ The authoritative local evidence is
 - Script Assets load deterministic `.uschunk` programs through a World-scoped
   CoreCLR host with generation-safe object handles, async ownership, hot reload,
   diagnostics, and failure containment.
-- BlockBreaker is fully migrated without Puerts payload in the UnifiedScript
+- BlockBreaker is fully migrated without Puerts payload in the Finare
   target and has matched packaged gameplay and performance evidence.
 - General Puerts projects can be scanned, planned, migrated incrementally under
   a single-runtime lifecycle ownership policy, and verified with exact
@@ -102,10 +102,10 @@ is size/hash listed and installation is transactional.
 - Regenerate derived bindings/surfaces together from their authoritative
   contracts. Rebuild `.uschunk` and matched ABI outputs; do not patch either in
   place.
-- Stop a live runtime before changing a Puerts/UnifiedScript lifecycle owner.
+- Stop a live runtime before changing a Puerts/Finare lifecycle owner.
 
 See [Versioning and upgrades](VERSIONING_AND_UPGRADES.md) for the exact action
-model and [UnifiedScript documentation](DOCUMENTATION.md) for the complete
+model and [Finare documentation](DOCUMENTATION.md) for the complete
 release-owned guide set.
 
 ## Known limitations
@@ -125,7 +125,7 @@ release-owned guide set.
   resource/spawn flow was 1.239108x Puerts. The dedicated reload workload was
   9.108265x Puerts and is excluded from the broad weighted claim because the
   CoreCLR generation replacement and Puerts module-cache mechanisms differ.
-- BlockBreaker gameplay medians favored UnifiedScript (frame ratio 0.937981,
+- BlockBreaker gameplay medians favored Finare (frame ratio 0.937981,
   bridge ratio 0.415071), while its diagnostic reload field was 62.205199 ms
   versus 0.131797 ms for Puerts. Reload latency and experience remain explicit
   post-RC1 optimization work.

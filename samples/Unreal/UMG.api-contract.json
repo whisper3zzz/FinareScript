@@ -1,9 +1,9 @@
 {
   "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
-  "contractName": "UnifiedScript.UMG.Demo",
-  "managedNamespace": "UnifiedScript.Unreal.Generated.UI",
-  "nativeHeader": "UnifiedScriptUMGThunks.h",
-  "nativeNamespace": "UE::UnifiedScript::Generated::UI",
+  "contractName": "Finare.UMG.Demo",
+  "managedNamespace": "Finare.Unreal.Generated.UI",
+  "nativeHeader": "FinareUMGThunks.h",
+  "nativeNamespace": "UE::Finare::Generated::UI",
   "types": [
     { "path": "/Script/UMG.WidgetBlueprintLibrary", "members": ["Create"] },
     { "path": "/Script/UMG.UserWidget", "members": ["AddToViewport", "GetWidgetFromName"] },
@@ -15,7 +15,7 @@
   ],
   "nativeExtensions": {
     "schemaVersion": "unifiedscript.unreal-native-extensions/v0.2",
-    "name": "UnifiedScript.UMG",
+    "name": "Finare.UMG",
     "types": [
       {
         "path": "/Script/UMG.UserWidget",

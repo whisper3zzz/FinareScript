@@ -25,7 +25,7 @@ is written as `0.60f`; the Rifle local is renamed from `tunedDamage` to
 commit `e62a46e3fb80a50232c6c23c117e98b58b5ee0c5`.
 
 This is a whole-project operation rather than two isolated snippets.
-`apply-project-patch` loads the actual `BlockBreaker.UnifiedScript.csproj`, all
+`apply-project-patch` loads the actual `BlockBreaker.Finare.csproj`, all
 of its sources and references, applies both node edits atomically, and emits
 only changed sources plus reconciled identity sidecars into a contained output
 directory.

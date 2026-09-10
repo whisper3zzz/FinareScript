@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Command-line front end for Finare analysis artifacts.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
+    <ProjectReference Include="../Finare.Authoring/Finare.Authoring.csproj" />
+    <ProjectReference Include="../Finare.Runtime/Finare.Runtime.csproj" />
+    <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
+    <ProjectReference Include="../Finare.Unreal/Finare.Unreal.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Finare.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../schemas/finare.compatibility-policy.v0.1.json"
+          Link="finare.compatibility-policy.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../schemas/finare.diagnostics-policy.v0.1.json"
+          Link="finare.diagnostics-policy.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

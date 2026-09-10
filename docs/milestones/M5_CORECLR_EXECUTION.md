@@ -8,7 +8,7 @@ and debugger integration.
 
 ## M5.1 implemented vertical slice
 
-- new `UnifiedScript.Runtime` project separating invocation/result contracts
+- new `Finare.Runtime` project separating invocation/result contracts
   from Roslyn, Graph, CLI, and future UE adapters
 - deterministic in-memory PE plus portable-PDB emission after Visual Profile,
   compiler, semantic, Graph, and CFG validation

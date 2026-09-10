@@ -12,7 +12,7 @@ Every request carries a non-zero World-local script instance ID and collectible
 generation. This makes each request **generation-owned** rather than merely
 associated with an object handle.
 
-- `UUnifiedScriptWorldSubsystem` owns one native async service per `UWorld`.
+- `UFinareWorldSubsystem` owns one native async service per `UWorld`.
 - `UnrealObjectScript` owns one `UnrealAsyncScope` per managed generation.
 - reload, EndPlay, failed start, and World teardown synchronously cancel the
   scope before its collectible AssemblyLoadContext is released.
@@ -28,7 +28,7 @@ generation-checked `UnrealObjectHandle`.
 
 ## Wire contract
 
-`FUnifiedScriptAsyncTransportV5` is append-only and advertises fixed sizes for
+`FFinareAsyncTransportV5` is append-only and advertises fixed sizes for
 its request, completion, and borrowed completion-view rows. The v2 bootstrap
 table exposes it through its optional `AsyncTransport` suffix.
 
@@ -65,11 +65,11 @@ teardown cancel the task.
 The managed tests lock the 56-byte request, 40-byte completion, 40-byte view,
 and 88-byte transport layouts, then cover delay, load, timeout, caller
 cancellation, borrowed-row copying, and generation cleanup. UE Automation
-`UnifiedScript.Unreal.AsyncService.DelayLoadCancelAndLifecycle` exercises the
+`Finare.Unreal.AsyncService.DelayLoadCancelAndLifecycle` exercises the
 real World service, class load, cancellation, rollover cleanup, retained native
 context, and teardown rejection.
 
-`UnifiedScript.Unreal.WorldHost.LifecycleStress` is the M7.2 soak gate. It runs
+`Finare.Unreal.WorldHost.LifecycleStress` is the M7.2 soak gate. It runs
 eight travel-style World handoffs, eight PIE restart cycles, four concurrent
 Worlds with colliding request identities, and sixteen collectible reloads. The
 helper `tools/run-unreal-lifecycle-stress.ps1` parses its fixed JSON marker and

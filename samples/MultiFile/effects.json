@@ -3,7 +3,7 @@
   "rules": [
     {
       "id": "samples.gameplay-api.clamp-to-positive",
-      "assembly": "UnifiedScript.MultiFileSample",
+      "assembly": "Finare.MultiFileSample",
       "containingType": "Samples.MultiFile.GameplayApi",
       "method": "ClampToPositive",
       "effects": "none"

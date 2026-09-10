@@ -4,7 +4,7 @@
   "minimumWarmupIterations": 4096,
   "minimumIterations": 100000,
   "minimumSampleCount": 5,
-  "maxUnifiedScriptNsPerCall": 2500.0,
-  "maxUnifiedScriptAllocatedBytes": 0,
-  "maxUnifiedScriptToPuertsRatio": 0.95
+  "maxFinareNsPerCall": 2500.0,
+  "maxFinareAllocatedBytes": 0,
+  "maxFinareToPuertsRatio": 0.95
 }

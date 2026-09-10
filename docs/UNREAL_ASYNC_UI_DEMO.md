@@ -1,9 +1,9 @@
 # Async UMG gameplay example
 
-The checked-in [AsyncUiDemoScript](../samples/Unreal/UnifiedScript.Unreal.Demo/AsyncUiDemoScript.cs)
+The checked-in [AsyncUiDemoScript](../samples/Unreal/Finare.Unreal.Demo/AsyncUiDemoScript.cs)
 combines generated UMG bindings, zero-parameter button delegates, async class and
 mesh loading, and World-owned Actor creation. It has no gameplay-specific native
-facade. The HostProject's `UnifiedScriptAsyncDemoWidget` supplies layout only;
+facade. The HostProject's `FinareAsyncDemoWidget` supplies layout only;
 an ordinary Widget Blueprint with the same named controls can replace it.
 
 ## Behavior
@@ -101,7 +101,7 @@ The launcher starts a project-backed session at `http://127.0.0.1:4173` and open
 the native tab for `/Game/UnifiedScriptDemo/BP_AsyncUiDemo.AsyncUiScript`. Keep
 the launcher running until the editor exits. Its logs are in the printed run
 directory; an occupied port fails startup instead of taking over another server.
-The equivalent console entry is `UnifiedScript.OpenAuthoring <ScriptAssetObjectPath>`.
+The equivalent console entry is `Finare.OpenAuthoring <ScriptAssetObjectPath>`.
 
 Select `PreviewHeight` to edit its return literal in Graph, or use the tab's C#
 view to edit the same source. Both use the normal preview/commit protocol and
@@ -166,16 +166,16 @@ Managed project/transaction/semantic/debug tests are in
 `artifacts/m13-5-ui/authoring-tests/project-authoring.trx` (88 passed).
 The Editor build and four CMD tests also pass in
 `artifacts/m13-5-ui/authoring-tests/native-authoring.log`: the three UI tests and
-`UnifiedScript.Unreal.Editor.AuthoringSurface`. Supplying
-`-UnifiedScriptProjectSurface=<staged Demo .surface.json>` to that run adds
+`Finare.Unreal.Editor.AuthoringSurface`. Supplying
+`-FinareProjectSurface=<staged Demo .surface.json>` to that run adds
 full-project native schema, selected-class focus and height-Graph checks.
 This authored-source check is not a new cooked-build or visual-appearance result.
 
 ### Focused Automation
 
-From the repository, build `UEUnifiedScriptHostEditor` and run
+From the repository, build `FinareHostEditor` and run
 `tools/emit-unreal-demo-chunk.ps1 -EngineRoot D:\UE_5.8 -Configuration Release`.
-The CMD Automation filter `UnifiedScript.Unreal.UI` runs:
+The CMD Automation filter `Finare.Unreal.UI` runs:
 
 - `AsyncGameplay`: materializes the actual emitted Script Class, saves and
   reloads it, then runs a real UMG viewport in a CMD/NullRHI Play World. It

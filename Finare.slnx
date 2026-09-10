@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Finare.Core/Finare.Core.csproj" />
+    <Project Path="src/Finare.Semantics/Finare.Semantics.csproj" />
+    <Project Path="src/Finare.CSharp/Finare.CSharp.csproj" />
+    <Project Path="src/Finare.Graph/Finare.Graph.csproj" />
+    <Project Path="src/Finare.Authoring/Finare.Authoring.csproj" />
+    <Project Path="src/Finare.Runtime/Finare.Runtime.csproj" />
+    <Project Path="src/Finare.Unreal/Finare.Unreal.csproj" />
+    <Project Path="src/Finare.Cli/Finare.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Finare.Tests/Finare.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/Unreal/">
+    <Project Path="samples/Unreal/Finare.Unreal.Demo/Finare.Unreal.Demo.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/ProjectLoading/ProjectLoadingDemo.csproj" />
+  </Folder>
+</Solution>

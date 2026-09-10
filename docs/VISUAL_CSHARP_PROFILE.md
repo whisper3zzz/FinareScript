@@ -1,6 +1,6 @@
 # Visual C# profile and opaque-code boundary
 
-UnifiedScript publishes `unifiedscript.visual-csharp-profile/v0.3` as the
+Finare publishes `unifiedscript.visual-csharp-profile/v0.3` as the
 machine-readable contract for code that can be edited both as C# and as a
 visual graph. `unifiedscript.visual-csharp-profile-report/v0.1` classifies every
 method in a type that contains at least one `[Visual]` method.
@@ -76,7 +76,7 @@ ref returns, default parameters, named arguments, and multiple local declarators
 
 ## Diagnostics and consumers
 
-`UnifiedScript.Cli analyze --out <path>` writes `<path>.profile.json` even when
+`Finare.Cli analyze --out <path>` writes `<path>.profile.json` even when
 a `[Visual]` body fails validation. This lets tooling show the exact unsupported
 method and source span without inventing a graph. The authoring workspace v0.5
 includes the same report; the browser prototype and native UE Workbench validate
@@ -85,4 +85,4 @@ boundary when an opaque call node is selected.
 
 The profile controls visual representability, not general C# compilation. Full
 C# is deliberately available behind an opaque boundary, but calls across that
-boundary still obey UnifiedScript's graph-safe type and lifetime contract.
+boundary still obey Finare's graph-safe type and lifetime contract.

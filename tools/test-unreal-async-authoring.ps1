@@ -8,8 +8,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$sourcePath = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\AsyncUiDemoScript.cs'
+$project = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$sourcePath = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\AsyncUiDemoScript.cs'
 $logs = Join-Path $repoRoot ('artifacts\ue\async-authoring\' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss-fff'))
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 # This test exercises the checked-in sample, not arbitrary user-authored gameplay.
@@ -30,7 +30,7 @@ $listener.Start()
 $port = $listener.LocalEndpoint.Port
 $listener.Stop()
 $url = "http://127.0.0.1:$port"
-$server = & (Join-Path $PSScriptRoot 'start-unifiedscript-authoring.ps1') `
+$server = & (Join-Path $PSScriptRoot 'start-finare-authoring.ps1') `
     -Project $project -EngineRoot $EngineRoot -Script $sourcePath `
     -ApiBrowserPath (Join-Path $repoRoot 'samples\Unreal\UMG.api-browser.json') `
     -Port $port -Background -LogDirectory $logs
@@ -52,14 +52,14 @@ function Wait-For {
 function Send-Edit {
     param([string]$Kind, [hashtable]$Patch)
     $headers = @{
-        'X-UnifiedScript-Baseline-Revision' = [string]$script:workspace.revision
-        'X-UnifiedScript-Transaction-Id' = [guid]::NewGuid().ToString('N')
+        'X-Finare-Baseline-Revision' = [string]$script:workspace.revision
+        'X-Finare-Transaction-Id' = [guid]::NewGuid().ToString('N')
     }
     $json = $Patch | ConvertTo-Json -Depth 30 -Compress
     $body = [Text.Encoding]::UTF8.GetBytes($json)
     $preview = Invoke-RestMethod "$url/api/authoring/preview/$Kind" -Method Post `
         -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 45
-    $headers['X-UnifiedScript-Preview-Token'] = $preview.previewToken
+    $headers['X-Finare-Preview-Token'] = $preview.previewToken
     $script:workspace = Invoke-RestMethod "$url/api/authoring/$Kind" -Method Post `
         -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 45
     $script:edits++
@@ -76,13 +76,13 @@ try {
     if ($NativeDailyBuild) {
         $game = Start-Process -FilePath (Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe') `
             -ArgumentList @(('"' + $project + '"'),
-                '-ExecCmds="Automation RunTests UnifiedScript.Unreal.Editor.ProjectRefresh"',
-                '-TestExit="Automation Test Queue Empty"', ('-UnifiedScriptAuthoringTestUrl=' + $url),
-                ('-UnifiedScriptAuthoringTestSignal="' + $signal + '"'),
+                '-ExecCmds="Automation RunTests Finare.Unreal.Editor.ProjectRefresh"',
+                '-TestExit="Automation Test Queue Empty"', ('-FinareAuthoringTestUrl=' + $url),
+                ('-FinareAuthoringTestSignal="' + $signal + '"'),
                 '-unattended', '-nop4', '-nosplash', '-NullRHI', ('-abslog="' + $runtimeLog + '"')) `
             -WindowStyle Hidden -PassThru
         Wait-For { (Test-Path -LiteralPath $runtimeLog) -and
-            (Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_PROJECT_REFRESH_READY_FOR_EDIT' -Quiet) } 'native authoring and the initial managed Actor'
+            (Select-String -LiteralPath $runtimeLog -Pattern 'FINARE_PROJECT_REFRESH_READY_FOR_EDIT' -Quiet) } 'native authoring and the initial managed Actor'
         if ([IO.File]::ReadAllText($sourcePath) -cne $workspace.sourceText) { throw 'Source changed before the simulated IDE save.' }
         [IO.File]::WriteAllText($sourcePath, $workspace.sourceText.Replace('return 100.0f;', 'return 120.0f;'), [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($signal, 'Build the external edit through the native coordinator.')
@@ -91,19 +91,19 @@ try {
             $workspace = Invoke-RestMethod "$url/api/authoring/workspace" -TimeoutSec 10
             if ($workspace.sourceText -match 'return 120\.0f;') { $edits++ }
         }
-        if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_PROJECT_REFRESH PASS' -Quiet)) {
+        if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'FINARE_PROJECT_REFRESH PASS' -Quiet)) {
             throw "Native Build & Reload verification failed. See $runtimeLog"
         }
         Write-Host 'Verified: external C# save -> native Build & Reload -> changed live Actor -> automatic Slate refresh; stale-tab recovery and dirty-buffer preservation.'
     } else {
     $game = Start-Process -FilePath (Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe') `
         -ArgumentList @(('"' + $project + '"'), '/Game/UnifiedScriptDemo/L_AsyncUiDemo',
-            '-game', '-UnifiedScriptAsyncUiVerify', '-UnifiedScriptAsyncUiHeight=100',
-            '-UnifiedScriptAsyncUiReloadedHeight=180', ('-UnifiedScriptAsyncUiReloadSignal="' + $signal + '"'),
+            '-game', '-FinareAsyncUiVerify', '-FinareAsyncUiHeight=100',
+            '-FinareAsyncUiReloadedHeight=180', ('-FinareAsyncUiReloadSignal="' + $signal + '"'),
             '-unattended', '-nop4', '-nosplash', '-NullRHI', ('-abslog="' + $runtimeLog + '"')) `
         -WindowStyle Hidden -PassThru
     Wait-For { (Test-Path -LiteralPath $runtimeLog) -and
-        (Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_READY_FOR_EDIT' -Quiet) } 'the initial live preview'
+        (Select-String -LiteralPath $runtimeLog -Pattern 'FINARE_ASYNC_UI_READY_FOR_EDIT' -Quiet) } 'the initial live preview'
 
     $digest = [Security.Cryptography.SHA256]::Create()
     try { $hash = [BitConverter]::ToString($digest.ComputeHash([Text.Encoding]::UTF8.GetBytes($workspace.sourceText))).Replace('-', '').ToLowerInvariant() }
@@ -118,8 +118,8 @@ try {
         if ([IO.File]::ReadAllText($sourcePath) -cne $workspace.sourceText) { throw 'Source changed before the simulated IDE save.' }
         [IO.File]::WriteAllText($sourcePath, $sourceEdit.sourceText, [Text.UTF8Encoding]::new($false))
         $workspace = Invoke-RestMethod "$url/api/authoring/refresh" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 45 -Headers @{
-            'X-UnifiedScript-Baseline-Revision' = [string]$workspace.revision
-            'X-UnifiedScript-Transaction-Id' = [guid]::NewGuid().ToString('N')
+            'X-Finare-Baseline-Revision' = [string]$workspace.revision
+            'X-Finare-Transaction-Id' = [guid]::NewGuid().ToString('N')
         }
         $edits++
     } else { Send-Edit 'source-text' $sourceEdit }
@@ -143,7 +143,7 @@ try {
     # The running game reloads only after both normal authoring transactions publish.
     [IO.File]::WriteAllText($signal, [string]$workspace.scriptAssets.sourceCompilationId)
     Wait-For { $game.HasExited } 'the authored runtime reload' 60
-    if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'UNIFIEDSCRIPT_ASYNC_UI_VERIFY PASS' -Quiet)) {
+    if ($game.ExitCode -ne 0 -or !(Select-String -LiteralPath $runtimeLog -Pattern 'FINARE_ASYNC_UI_VERIFY PASS' -Quiet)) {
         throw "Authored runtime verification failed. See $runtimeLog"
     }
     Write-Host "Verified: C# edit (external=$ExternalSourceEdit) -> Graph edit -> chunk publication -> live World reload -> changed preview height and teardown."
@@ -157,8 +157,8 @@ try {
         # Reuse transactional Undo; never force a filesystem restore over a concurrent edit.
         while ($edits -gt 0 -and !$server.HasExited) {
             $workspace = Invoke-RestMethod "$url/api/authoring/undo" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 45 -Headers @{
-                'X-UnifiedScript-Baseline-Revision' = [string]$workspace.revision
-                'X-UnifiedScript-Transaction-Id' = [guid]::NewGuid().ToString('N')
+                'X-Finare-Baseline-Revision' = [string]$workspace.revision
+                'X-Finare-Transaction-Id' = [guid]::NewGuid().ToString('N')
             }
             $edits--
         }

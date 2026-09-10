@@ -28,7 +28,7 @@ a fresh bag from the new C# defaults and calls UE 5.8's
 | removed ID | remove the value and stale override ID |
 | unchanged ID with incompatible type | drop the override and use the new typed default |
 
-`FUnifiedScriptStateMigrationReport` records declared, preserved, defaulted,
+`FFinareStateMigrationReport` records declared, preserved, defaulted,
 and dropped counts. The component exposes the active override count and a
 bounded `LastStateMigration` summary. Existing components saved before explicit
 tracking conservatively treat their old bag values as overrides once, then

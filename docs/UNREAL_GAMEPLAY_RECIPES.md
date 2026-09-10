@@ -20,9 +20,9 @@ names with the exact names shown by the project's **Unreal API Browser**.
 Examples use this generated namespace:
 
 ```csharp
-using UnifiedScript;
-using UnifiedScript.Unreal;
-using MyGame.UnifiedScript.Generated;
+using Finare;
+using Finare.Unreal;
+using MyGame.Finare.Generated;
 ```
 
 The API Browser is authoritative for member paths, parameter direction,
@@ -107,7 +107,7 @@ normal Blueprint CDO/instance property surface or resolve assets at runtime.
 
 Generated Unreal enum wrappers, `UnrealRotator` and `UnrealTransform` also have
 typed state/default contracts. For example, the
-[CommonStateGameplayDemoScript](../samples/Unreal/UnifiedScript.Unreal.Demo/CommonStateGameplayDemoScript.cs)
+[CommonStateGameplayDemoScript](../samples/Unreal/Finare.Unreal.Demo/CommonStateGameplayDemoScript.cs)
 exposes configuration used by ordinary generated Actor calls:
 
 ```csharp
@@ -124,7 +124,7 @@ public UnrealTransform Placement { get; set; } = new(
     UnrealVector.One);
 ```
 
-Import `UnifiedScript.Unreal.Generated` for the selected runtime bindings'
+Import `Finare.Unreal.Generated` for the selected runtime bindings'
 `ETickingGroup` wrapper. BeginPlay applies the configured tick group and
 Transform; each Tick changes `Facing` and applies it to the Actor. The native
 Script Class fields and managed properties exchange the same types. This sample
@@ -167,7 +167,7 @@ handle for generated native calls; it is not a replacement for the persistent
 soft-reference field. Keep cancellation, failed-load recovery and spawned Actor
 cleanup in the same lifecycle scope as other asynchronous gameplay work.
 
-[SoftReferenceGameplayDemoScript](../samples/Unreal/UnifiedScript.Unreal.Demo/SoftReferenceGameplayDemoScript.cs)
+[SoftReferenceGameplayDemoScript](../samples/Unreal/Finare.Unreal.Demo/SoftReferenceGameplayDemoScript.cs)
 uses editable mesh and Actor-class references to load assets and create a
 preview Actor through generated native APIs.
 
@@ -206,14 +206,14 @@ gameplay explicitly requests them. Check that the selected name is enabled,
 resolve its index through `ChoiceIndices`, and check the index against
 `Meshes.Count` before loading that path. Snapshot the selected path before
 awaiting the same async loader used by the scalar soft-reference example.
-The [collection-state example](../samples/Unreal/UnifiedScript.Unreal.Demo/CollectionStateGameplayDemoScript.cs)
+The [collection-state example](../samples/Unreal/Finare.Unreal.Demo/CollectionStateGameplayDemoScript.cs)
 combines that selection with generated Actor APIs. `SelectSpherePreview`
 publishes a new array, set and map configuration before loading its selected
 mesh. The prior preview remains alive until the replacement is ready, and the
 script releases its owned preview on shutdown or generation replacement.
 
-Attach the Script Asset to a `UnifiedScriptActor` or to a
-`UnifiedScriptComponent` whose target is the owning Actor. Verify BeginPlay,
+Attach the Script Asset to a `FinareActor` or to a
+`FinareComponent` whose target is the owning Actor. Verify BeginPlay,
 Tick, overlap, EndPlay, level travel, and one Build & Reload. `TargetHandle` is
 the gameplay Actor; `HostHandle` is the component that owns the generation.
 
@@ -283,7 +283,7 @@ pin is followed by the `ref`/`out` result pins in source order, while stable
 parameter names keep that contract intact even if Unreal internally reorders
 output properties. The same directions support reviewed `IReadOnlyList<T>`,
 `IReadOnlySet<T>`, `IReadOnlyDictionary<TKey, TValue>`, `UnrealSoftObjectHandle`
-and `UnrealSoftClassHandle` values. The [Demo library](../samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs)
+and `UnrealSoftClassHandle` values. The [Demo library](../samples/Unreal/Finare.Unreal.Demo/DemoScript.cs)
 contains exchange functions for all five families; connect their outputs to
 ordinary downstream Blueprint nodes.
 
@@ -374,7 +374,7 @@ private static UnrealObjectHandle LoadIcon(
     UnrealScriptContext context,
     string objectPath)
 {
-    var world = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+    var world = new FinareWorldLibrary(context.Target, context.Bridge);
     UnrealObjectHandle icon = world.LoadObjectByPath(context.Target, objectPath);
     if (icon.IsNull)
     {
@@ -398,7 +398,7 @@ handle to `SpawnActor`:
 ```csharp
 private static UnrealObjectHandle SpawnPickup(UnrealScriptContext context)
 {
-    var world = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+    var world = new FinareWorldLibrary(context.Target, context.Bridge);
     UnrealClassHandle actorClass = world.LoadClassByPath(
         context.Target,
         "/Game/Gameplay/BP_Pickup.BP_Pickup_C");
@@ -434,7 +434,7 @@ private static UnrealObjectHandle TraceForward(
     UnrealVector start,
     UnrealVector end)
 {
-    var world = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+    var world = new FinareWorldLibrary(context.Target, context.Bridge);
     bool hit = world.LineTraceSingle(
         context.Target,
         start,
@@ -523,7 +523,7 @@ Run the normal **Build & Reload** after changing a dependency. A chunk records
 managed dependency identities and content digests; the World loader verifies
 resolved runtime assemblies against that manifest. Replacing a dependency DLL
 without rebuilding the corresponding chunk can fail verification. The shared
-UnifiedScript contract/runtime assemblies belong to the host and are not private
+Finare contract/runtime assemblies belong to the host and are not private
 copies for each script generation. Follow `restartRequired` when those change.
 
 Each generation has a collectible assembly load context. Cancel owned work and
@@ -534,7 +534,7 @@ Script Class state contract, not a dependency's process-global cache.
 
 Library compilation does not expand the editable Graph language. Keep code that
 uses unsupported visual syntax in ordinary C# helper bodies. Compiler analyzers
-and source generators are not replayed by the UnifiedScript compilation host;
+and source generators are not replayed by the Finare compilation host;
 see the project-loading restrictions before adopting a package that generates
 required source. Native dependencies and P/Invoke additionally need a matching
 OS/architecture, deployment and lifetime strategy; the managed dependency loader
@@ -585,7 +585,7 @@ that may need the World invocation queue.
 
 Supported worker-originated generated calls are a specific transport route: the
 World host executes them on the game thread. The
-[callback worker example](../samples/Unreal/UnifiedScript.Unreal.Demo/CallbackGameplayDemoScript.cs)
+[callback worker example](../samples/Unreal/Finare.Unreal.Demo/CallbackGameplayDemoScript.cs)
 starts two workers, performs generated UE calls with nested callbacks, and only
 reads their completion from Tick after `IsCompleted` is true. This is not a
 general UObject thread-safety or synchronization-context guarantee. Register and
@@ -650,17 +650,17 @@ and delivered once after automatic activation. Pre-start changes coalesce while
 retaining the first old value; stop/failed activation discards the queue. This is
 not a promise that managed RepNotify precedes managed BeginPlay.
 
-The [checked-in example](../samples/Unreal/UnifiedScript.Unreal.Demo/NetworkingDemoScript.cs)
+The [checked-in example](../samples/Unreal/Finare.Unreal.Demo/NetworkingDemoScript.cs)
 combines replicated/owner-only state, RepNotify, Server/Client/Multicast RPCs and
 reload. After running `tools/emit-unreal-demo-chunk.ps1 -Configuration Release`,
-`UnifiedScript.Unreal.Networking.ConnectedScriptClass` consumes the emitted
+`Finare.Unreal.Networking.ConnectedScriptClass` consumes the emitted
 declarations, materializes the class, reloads its saved package and uses a server
 plus two connected clients under CMD/NullRHI. Ownership rejection and repeated replication are checked; role
 flags or manual state copies are not the network evidence.
 
-The [component example](../samples/Unreal/UnifiedScript.Unreal.Demo/NetworkingComponentDemoScript.cs)
+The [component example](../samples/Unreal/Finare.Unreal.Demo/NetworkingComponentDemoScript.cs)
 uses a dynamically created, registered component on an ordinary replicated Actor.
-`UnifiedScript.Unreal.Networking.ConnectedComponent` runs it through the same
+`Finare.Unreal.Networking.ConnectedComponent` runs it through the same
 saved-class/server/two-client workflow. `HostHandle` identifies the component;
 `TargetHandle` and `HasAuthority` refer to its owning Actor. RPC object parameters
 are resolved into each receiving World's object handles, not sent as raw managed
@@ -697,7 +697,7 @@ startup, and chunk freshness without rewriting source:
 
 ```powershell
 $projectRoot = Split-Path -Parent $project
-$projectTools = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Tools'
+$projectTools = Join-Path $projectRoot 'Plugins\Finare\Tools'
 powershell -ExecutionPolicy Bypass `
   -File "$projectTools\setup-unreal-project.ps1" `
   -Project $project `
@@ -705,7 +705,7 @@ powershell -ExecutionPolicy Bypass `
   -ValidateOnly
 ```
 
-Then use the ordinary Unreal pipeline; UnifiedScript stages the managed runtime
+Then use the ordinary Unreal pipeline; Finare stages the managed runtime
 and compiled chunks through the plugin:
 
 ```powershell
@@ -715,7 +715,7 @@ and compiled chunks through the plugin:
   -build -cook -stage -pak -archive `
   '-map=/Game/Maps/Main' `
   '-AdditionalCookerOptions=-SkipZenStore' `
-  '-archivedirectory=D:\Builds\MyGame-UnifiedScript'
+  '-archivedirectory=D:\Builds\MyGame-Finare'
 ```
 
 Launch the archived executable and verify the same Actor/Component lifecycle,

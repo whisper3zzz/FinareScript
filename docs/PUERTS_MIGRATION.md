@@ -1,6 +1,6 @@
 # Puerts Project Migration
 
-UnifiedScript migration starts with an evidence-producing project scan. It does
+Finare migration starts with an evidence-producing project scan. It does
 not promise blind source translation: the scanner establishes source ownership,
 identifies static migration work, and calls out dynamic behavior that requires a
 deliberate design decision before generated contracts or stubs are trusted.
@@ -10,7 +10,7 @@ deliberate design decision before generated contracts or stubs are trusted.
 Run the scanner against a Puerts Unreal project:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-scan D:\Project\MyPuertsGame `
   --out artifacts\migration\my-game.scan.json `
   --fail-on-blockers
@@ -31,7 +31,7 @@ intermediate, and reparse-point directories are excluded. Explicit roots remain
 available for non-standard layouts and intentional multi-root projects.
 
 The native scan automatically covers project `Source` and project plugin source,
-while excluding the Puerts and UEUnifiedScript runtime plugin implementations.
+while excluding the Puerts and Finare runtime plugin implementations.
 Passing explicit native roots can opt those trees back in.
 
 ## Scan contract
@@ -68,10 +68,10 @@ Generate a migration package from the scan, optionally assessing it against the
 target project's current Unreal API Contract:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-plan artifacts\migration\my-game.scan.json `
   --contract Contracts\MyGame.unreal-api-contract.json `
-  --namespace MyGame.UnifiedScript.Migration `
+  --namespace MyGame.Finare.Migration `
   --out artifacts\migration\my-game `
   --fail-on-blockers
 ```
@@ -90,7 +90,7 @@ The write is transactional and produces ten deterministic files:
 - `coexistence-manifest.json` assigns every discovered concrete script type a
   stable World lifecycle key and exactly one current runtime owner;
 - `PuertsOwnership.generated.ts` lets the retained Puerts boundary claim and
-  release those keys through the same native World arbiter as UnifiedScript;
+  release those keys through the same native World arbiter as Finare;
 - `verification-harness.json` defines required observable values for both the
   `puerts` and `unifiedScript` lanes under an exactly-one-runtime-per-World
   lifecycle policy;
@@ -117,10 +117,10 @@ The migration package starts safely with every discovered script type owned by
 Puerts. Promote only the concrete types whose managed replacement is ready:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-coexist artifacts\migration\my-game\migration-plan.json `
   --out artifacts\migration\my-game\coexistence `
-  --unified TS_Rifle=MyGame.UnifiedScript.RifleScript `
+  --unified TS_Rifle=MyGame.Finare.RifleScript `
   --fail-on-blockers
 ```
 
@@ -134,7 +134,7 @@ For each Puerts-owned concrete script instance, call the generated
 `claimPuertsLifecycle` once before its gameplay lifecycle starts and
 `releasePuertsLifecycle` once during teardown. Do not claim separately for base
 class hooks: for example, a `TS_Rifle` instance has one `BlockBreaker.TS_Rifle`
-claim even though it inherits `TS_BaseGun`. A UnifiedScript Component claims
+claim even though it inherits `TS_BaseGun`. A Finare Component claims
 the same route before managed activation. Set its `LifecycleOwnershipKey` to
 the manifest key; when left empty it falls back to the resolved managed type
 name. The World subsystem rejects a second claimant or runtime owner, prunes
@@ -150,11 +150,11 @@ side-by-side evidence gate below still decides whether a migrated type is ready.
 
 ## Side-by-side verification
 
-Run the same cases in isolated Puerts and UnifiedScript worlds, replace the two
+Run the same cases in isolated Puerts and Finare worlds, replace the two
 templates with captured evidence, then compare them:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-verify artifacts\migration\my-game\verification-harness.json `
   --puerts artifacts\migration\my-game\evidence\puerts.json `
   --unified artifacts\migration\my-game\evidence\unifiedscript.json `
@@ -173,7 +173,7 @@ reported as gameplay equivalence.
 ## Reproduced BlockBreaker evidence
 
 The generalized scanner was run against the original Puerts BlockBreaker source
-and the migrated UnifiedScript target on 2026-08-29. Automatic ownership
+and the migrated Finare target on 2026-08-29. Automatic ownership
 selection found exactly four authored TypeScript files and five project-native
 headers plus three relevant configuration files. The report contained 66
 findings: four modules, three script types, 38 Unreal API/type dependencies,
@@ -196,7 +196,7 @@ Contract/service requests, and the prototype extension remains manual. The
 the template-only mismatch gate correctly returned 65; no new live runtime
 equivalence is claimed by this planning slice. The reproduced coexistence
 manifest assigns `TS_BaseGun` and `TS_Player` to Puerts and promotes only
-`TS_Rifle` to `BlockBreaker.UnifiedScript.BlockBreakerRifleScript`. Native UE
-5.8.1 build and `UnifiedScript.Unreal.Coexistence.RuntimeOwnership` Automation
+`TS_Rifle` to `BlockBreaker.Finare.BlockBreakerRifleScript`. Native UE
+5.8.1 build and `Finare.Unreal.Coexistence.RuntimeOwnership` Automation
 evidence verify that independent routes coexist while conflicting claims are
 rejected.

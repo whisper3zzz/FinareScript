@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared diagnostics, identities, and HIR for Finare.</Description>
+  </PropertyGroup>
+</Project>

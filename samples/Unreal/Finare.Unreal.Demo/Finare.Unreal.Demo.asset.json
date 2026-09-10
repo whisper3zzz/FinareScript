@@ -1,0 +1,4334 @@
+{
+  "schemaVersion": "unifiedscript.script-asset/v0.3",
+  "sourceCompilationId": "us_d2e6d8b34f905ac62584cc5dd7aa9513",
+  "semanticConfigurationId": "us_9fed710d4b385d7425fac4d4f52e7681",
+  "assets": [
+    {
+      "id": "us_2c0d297f5be9811d8e6abdea8750e8ea",
+      "qualifiedName": "Finare.Unreal.Demo.BinaryPayloadDemoScript",
+      "assetPath": "Finare/Unreal/Demo/BinaryPayloadDemoScript",
+      "span": {
+        "filePath": "BinaryPayloadDemoScript.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 52,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_9dc03763f0a563dc0782936a7fc995ec",
+          "name": "Read",
+          "qualifiedName": "Finare.Unreal.Demo.BinaryPayloadDemoScript.Read(Finare.Unreal.Generated.FinareNativeExtensionFixture)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealByteBuffer",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_c463f34e882166a01e3effae4030a60b",
+              "name": "target",
+              "typeMetadataName": "Finare.Unreal.Generated.FinareNativeExtensionFixture"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_41261bfeb7b789e33c513173ec8ad3f7",
+      "qualifiedName": "Finare.Unreal.Demo.BlueprintComponentLifecycleDemoScript",
+      "assetPath": "Finare/Unreal/Demo/BlueprintComponentLifecycleDemoScript",
+      "span": {
+        "filePath": "BlueprintComponentLifecycleDemoScript.cs",
+        "start": {
+          "line": 13,
+          "column": 1
+        },
+        "end": {
+          "line": 49,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_609300822bc69949a076c57f2a518e7a",
+          "name": "ReceiveBeginPlay",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintComponentLifecycleDemoScript.ReceiveBeginPlay()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/Engine.ActorComponent",
+              "functionName": "ReceiveBeginPlay"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_2ef45a31be360d3d141ca62c8eae0b8c",
+          "name": "ReceiveEndPlay",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintComponentLifecycleDemoScript.ReceiveEndPlay(Finare.Unreal.Generated.EEndPlayReason)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_a7500d1ac4ff8ecb13bd23fb6eb2b167",
+              "name": "reason",
+              "typeMetadataName": "Finare.Unreal.Generated.EEndPlayReason",
+              "unrealType": {
+                "kind": "enum",
+                "unrealTypePath": "/Script/Engine.EEndPlayReason",
+                "unrealNativeName": "EEndPlayReason",
+                "fields": []
+              }
+            }
+          ],
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/Engine.ActorComponent",
+              "functionName": "ReceiveEndPlay"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": [
+        {
+          "id": "us_cfb7153442c633ffecc0b26741d17f80",
+          "kind": "beginPlay",
+          "managedName": "OnBeginPlay",
+          "span": {
+            "filePath": "BlueprintComponentLifecycleDemoScript.cs",
+            "start": {
+              "line": 17,
+              "column": 5
+            },
+            "end": {
+              "line": 21,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_acc3f8142298389324edebdf59a6ce6d",
+          "kind": "endPlay",
+          "managedName": "OnEndPlay",
+          "span": {
+            "filePath": "BlueprintComponentLifecycleDemoScript.cs",
+            "start": {
+              "line": 43,
+              "column": 5
+            },
+            "end": {
+              "line": 48,
+              "column": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "us_a50308bbb7d2113db1fd900571053ecc",
+      "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationComponentDemoScript",
+      "assetPath": "Finare/Unreal/Demo/BlueprintParentInvocationComponentDemoScript",
+      "span": {
+        "filePath": "BlueprintParentInvocationDemoScript.cs",
+        "start": {
+          "line": 54,
+          "column": 1
+        },
+        "end": {
+          "line": 61,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_ae1401d0193c979fef70b4241ad07ce5",
+          "name": "ReceiveTick",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationComponentDemoScript.ReceiveTick(System.Single)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_96b0f3be379556e3c78dfd487db5883f",
+              "name": "deltaSeconds",
+              "typeMetadataName": "System.Single"
+            }
+          ],
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/Engine.ActorComponent",
+              "functionName": "ReceiveTick"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_6de1f4e1b6787775ad0f26f24e03de23",
+      "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationDemoScript",
+      "assetPath": "Finare/Unreal/Demo/BlueprintParentInvocationDemoScript",
+      "span": {
+        "filePath": "BlueprintParentInvocationDemoScript.cs",
+        "start": {
+          "line": 12,
+          "column": 1
+        },
+        "end": {
+          "line": 52,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_9dfe2441a3556f5bc097caadafaa9a4c",
+          "name": "EvaluateInherited",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationDemoScript.EvaluateInherited(System.Int32,ref System.Int32,out System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_a3568544fb572db6a860a10a9289f290",
+              "name": "nativeInput",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_793ae1969b020fad5f0e484dbc01e962",
+              "name": "nativeAccumulator",
+              "typeMetadataName": "System.Int32",
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_985dc8146d4c175cc7dccf4846e3e118",
+              "name": "nativeOutput",
+              "typeMetadataName": "System.Int32",
+              "direction": "output"
+            }
+          ],
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/FinareRuntime.FinareEventExtensionFixture",
+              "functionName": "EvaluateInherited"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_eef07f4102904adfe1881be00c476fb1",
+          "name": "ExchangeInheritedArray",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationDemoScript.ExchangeInheritedArray(System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E,ref System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E,out System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E)",
+          "returnTypeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_d313e10fa18371ca60b2b30702e4521b",
+              "name": "nativeInput",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "us_4cded0b6431138192c1ce95c1c4d483b",
+              "name": "nativeState",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              },
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_207a2d187d3b45a0280df221c3775012",
+              "name": "nativeOutput",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              },
+              "direction": "output"
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          },
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/FinareRuntime.FinareEventExtensionFixture",
+              "functionName": "ExchangeInheritedArray"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_2e6dd28d3ec1592cc4139920fc7f5ff4",
+          "name": "ReceiveInherited",
+          "qualifiedName": "Finare.Unreal.Demo.BlueprintParentInvocationDemoScript.ReceiveInherited(System.String,Finare.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_51d7fe4b5f8d842ef5512c456d97de92",
+              "name": "nativeText",
+              "typeMetadataName": "System.String"
+            },
+            {
+              "id": "us_44a039e29980e8e9c9d6811db80b7a69",
+              "name": "nativeActor",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            }
+          ],
+          "blueprintEvent": {
+            "superMode": "explicit",
+            "override": {
+              "declaringTypePath": "/Script/FinareRuntime.FinareEventExtensionFixture",
+              "functionName": "ReceiveInherited"
+            }
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_6798718e4a69b3f32294d3db92d7415e",
+      "qualifiedName": "Finare.Unreal.Demo.CallbackGameplayDemoScript",
+      "assetPath": "Finare/Unreal/Demo/CallbackGameplayDemoScript",
+      "span": {
+        "filePath": "CallbackGameplayDemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 67,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_9d3b411b065fa8fc4d92c67704b7b229",
+          "name": "BindCallback",
+          "qualifiedName": "Finare.Unreal.Demo.CallbackGameplayDemoScript.BindCallback(Finare.Unreal.Generated.FinareCallbackService,Finare.Unreal.UnrealCallback\u003CFinare.Unreal.Generated.FinareQueryCallbackHandler\u003E)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_cc21492648190f8c96c9e1d403631615",
+              "name": "service",
+              "typeMetadataName": "Finare.Unreal.Generated.FinareCallbackService"
+            },
+            {
+              "id": "us_1cb9184adfa85e827c16b98962d34269",
+              "name": "callback",
+              "typeMetadataName": "Finare.Unreal.UnrealCallback\u003CFinare.Unreal.Generated.FinareQueryCallbackHandler\u003E"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_90f93d504b73ad81292767afbce9180c",
+      "qualifiedName": "Finare.Unreal.Demo.NativeExtensionDemoScript",
+      "assetPath": "Finare/Unreal/Demo/NativeExtensionDemoScript",
+      "span": {
+        "filePath": "NativeExtensionDemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 38,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_300b3d4535198375944d268937ffd3f1",
+          "name": "ScalePreview",
+          "qualifiedName": "Finare.Unreal.Demo.NativeExtensionDemoScript.ScalePreview(Finare.Unreal.Generated.FinareNativeExtensionFixture,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_334e4d88552b992977400200716aa47d",
+              "name": "fixture",
+              "typeMetadataName": "Finare.Unreal.Generated.FinareNativeExtensionFixture"
+            },
+            {
+              "id": "us_198b528aa9d00df3bd71496f02b9e86c",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_4e8b4990f096dc48057fe8ae76def9a5",
+      "qualifiedName": "Finare.Unreal.Demo.NativeObjectLifetimeDemoScript",
+      "assetPath": "Finare/Unreal/Demo/NativeObjectLifetimeDemoScript",
+      "span": {
+        "filePath": "NativeObjectLifetimeDemoScript.cs",
+        "start": {
+          "line": 10,
+          "column": 1
+        },
+        "end": {
+          "line": 103,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_47f43a7ab5da8cd0b9e9058d68fd3d2a",
+          "name": "Preview",
+          "qualifiedName": "Finare.Unreal.Demo.NativeObjectLifetimeDemoScript.Preview(Finare.Unreal.Generated.NativeCounter,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_b92582955a34bcb11ead554a45df379c",
+              "name": "counter",
+              "typeMetadataName": "Finare.Unreal.Generated.NativeCounter"
+            },
+            {
+              "id": "us_f329ed7eddaea60a0dee3bf1a70cafa8",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_762043152e714d68b05a31426591ee03",
+      "qualifiedName": "Finare.Unreal.Demo.AsyncUiDemoScript",
+      "assetPath": "Unreal/AsyncUiDemo",
+      "span": {
+        "filePath": "AsyncUiDemoScript.cs",
+        "start": {
+          "line": 8,
+          "column": 1
+        },
+        "end": {
+          "line": 202,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_a6cc4350e118008d553f693c9a3a5d18",
+          "name": "MeshPath",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "/Engine/BasicShapes/Cube.Cube",
+          "span": {
+            "filePath": "AsyncUiDemoScript.cs",
+            "start": {
+              "line": 16,
+              "column": 5
+            },
+            "end": {
+              "line": 17,
+              "column": 76
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_4d5342d5fd5fd3eab04010dbbdf7b1a3",
+          "name": "WidgetClassPath",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "/Script/FinareHost.FinareAsyncDemoWidget",
+          "span": {
+            "filePath": "AsyncUiDemoScript.cs",
+            "start": {
+              "line": 13,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 94
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_bf204e4c56d3b24c0b96dbc600fc7dee",
+          "name": "CancelSpawn",
+          "qualifiedName": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_679f32dba7aa531ec07eec48c5eab16a",
+          "name": "PreviewHeight",
+          "qualifiedName": "Finare.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_54596f746e682942c83dcf140e2ee8d3",
+          "name": "RequestSpawn",
+          "qualifiedName": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": [
+        {
+          "id": "us_d26e3cb793cc914b4e1662efab2a0925",
+          "kind": "beginPlay",
+          "managedName": "OnBeginPlay",
+          "span": {
+            "filePath": "AsyncUiDemoScript.cs",
+            "start": {
+              "line": 34,
+              "column": 5
+            },
+            "end": {
+              "line": 39,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_285e9ca05c13f24da63507bf701fb0f5",
+          "kind": "endPlay",
+          "managedName": "OnEndPlay",
+          "span": {
+            "filePath": "AsyncUiDemoScript.cs",
+            "start": {
+              "line": 179,
+              "column": 5
+            },
+            "end": {
+              "line": 188,
+              "column": 6
+            }
+          }
+        }
+      ],
+      "classBinding": {
+        "kind": "Actor",
+        "generatedClassPath": "/Game/UnifiedScriptDemo/BP_AsyncUiDemo.BP_AsyncUiDemo_C"
+      }
+    },
+    {
+      "id": "us_efcd16a91621a3c89bfbbe28004804c0",
+      "qualifiedName": "Finare.Unreal.Demo.CollectionStateGameplayDemoScript",
+      "assetPath": "Unreal/CollectionStateGameplay",
+      "span": {
+        "filePath": "CollectionStateGameplayDemoScript.cs",
+        "start": {
+          "line": 17,
+          "column": 1
+        },
+        "end": {
+          "line": 220,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_93f0850e2cb6f6aa5ca7246e32492882",
+          "name": "ChoiceIndices",
+          "typeDisplayName": "IReadOnlyDictionary\u003CUnrealName, int\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlyDictionary\u003CFinare.Unreal.UnrealName, System.Int32\u003E",
+          "typeKind": "map",
+          "defaultValue": [
+            {
+              "key": "Cube",
+              "value": 0
+            },
+            {
+              "key": "Sphere",
+              "value": 1
+            }
+          ],
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 34,
+              "column": 5
+            },
+            "end": {
+              "line": 40,
+              "column": 11
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Collection State"
+          },
+          "unrealType": {
+            "kind": "map",
+            "unrealTypePath": "",
+            "unrealNativeName": "TMap",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "Finare.Unreal.UnrealName"
+              },
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          }
+        },
+        {
+          "id": "us_afe93ca291dfeb354d72da5db0d777cd",
+          "name": "EnabledChoices",
+          "typeDisplayName": "IReadOnlySet\u003CUnrealName\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E",
+          "typeKind": "set",
+          "defaultValue": [
+            "Cube",
+            "Sphere"
+          ],
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 30,
+              "column": 5
+            },
+            "end": {
+              "line": 32,
+              "column": 64
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Collection State"
+          },
+          "unrealType": {
+            "kind": "set",
+            "unrealTypePath": "",
+            "unrealNativeName": "TSet",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "Finare.Unreal.UnrealName"
+              }
+            ]
+          }
+        },
+        {
+          "id": "us_4a212c79dddf9879bdf159ae5ba214fb",
+          "name": "Meshes",
+          "typeDisplayName": "IReadOnlyList\u003CUnrealSoftObjectHandle\u003E",
+          "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CFinare.Unreal.UnrealSoftObjectHandle\u003E",
+          "typeKind": "array",
+          "defaultValue": [
+            "/Engine/BasicShapes/Cube.Cube",
+            "/Engine/BasicShapes/Sphere.Sphere"
+          ],
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 23,
+              "column": 5
+            },
+            "end": {
+              "line": 28,
+              "column": 7
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Collection State"
+          },
+          "unrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+              }
+            ]
+          }
+        },
+        {
+          "id": "us_d265fe7fa6c51e49f8de85728c4fa6e9",
+          "name": "PreviewActorClass",
+          "typeDisplayName": "UnrealSoftClassHandle",
+          "typeMetadataName": "Finare.Unreal.UnrealSoftClassHandle",
+          "typeKind": "softClass",
+          "defaultValue": "/Script/Engine.StaticMeshActor",
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 45,
+              "column": 5
+            },
+            "end": {
+              "line": 47,
+              "column": 47
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Collection State"
+          }
+        },
+        {
+          "id": "us_067d0bb4e0f4a33f86682457039351ad",
+          "name": "SelectedChoice",
+          "typeDisplayName": "UnrealName",
+          "typeMetadataName": "Finare.Unreal.UnrealName",
+          "typeKind": "name",
+          "defaultValue": "Cube",
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 42,
+              "column": 5
+            },
+            "end": {
+              "line": 43,
+              "column": 66
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Collection State"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_f2ee2c837e53e227cf5ff4c11365b3bd",
+          "name": "RetryMissingPreview",
+          "qualifiedName": "Finare.Unreal.Demo.CollectionStateGameplayDemoScript.RetryMissingPreview()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_703e12783d5dbdb62dacb07f05d18103",
+          "name": "RetryPreview",
+          "qualifiedName": "Finare.Unreal.Demo.CollectionStateGameplayDemoScript.RetryPreview()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_b9a50b20625da118af9fc4596dc25b72",
+          "name": "SelectCubePreview",
+          "qualifiedName": "Finare.Unreal.Demo.CollectionStateGameplayDemoScript.SelectCubePreview()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_2f1c10cb1be863c11d15076f9a044f74",
+          "name": "SelectSpherePreview",
+          "qualifiedName": "Finare.Unreal.Demo.CollectionStateGameplayDemoScript.SelectSpherePreview()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": [
+        {
+          "id": "us_174f1738c8015feb8238cdc46af36061",
+          "kind": "beginPlay",
+          "managedName": "OnBeginPlay",
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 54,
+              "column": 5
+            },
+            "end": {
+              "line": 59,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_cb4468e097a4b0f2d4516e4ab104b179",
+          "kind": "endPlay",
+          "managedName": "OnEndPlay",
+          "span": {
+            "filePath": "CollectionStateGameplayDemoScript.cs",
+            "start": {
+              "line": 211,
+              "column": 5
+            },
+            "end": {
+              "line": 219,
+              "column": 6
+            }
+          }
+        }
+      ],
+      "classBinding": {
+        "kind": "Actor",
+        "generatedClassPath": "/Game/UnifiedScriptDemo/BP_CollectionStateGameplay.BP_CollectionStateGameplay_C"
+      }
+    },
+    {
+      "id": "us_0a1ec2c9fac77caa31d79e579d3c68f9",
+      "qualifiedName": "Finare.Unreal.Demo.CommonStateGameplayDemoScript",
+      "assetPath": "Unreal/CommonStateGameplay",
+      "span": {
+        "filePath": "CommonStateGameplayDemoScript.cs",
+        "start": {
+          "line": 11,
+          "column": 1
+        },
+        "end": {
+          "line": 60,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_03d75fd787adb79c5e89ccdf54646dae",
+          "name": "Facing",
+          "typeDisplayName": "UnrealRotator",
+          "typeMetadataName": "Finare.Unreal.UnrealRotator",
+          "typeKind": "struct",
+          "defaultValue": {
+            "pitch": 0,
+            "yaw": 45,
+            "roll": 0
+          },
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 20,
+              "column": 5
+            },
+            "end": {
+              "line": 21,
+              "column": 69
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Common State"
+          },
+          "unrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/CoreUObject.Rotator",
+            "unrealNativeName": "Rotator",
+            "fields": []
+          }
+        },
+        {
+          "id": "us_b869e12382e41b824c7e65282d77de24",
+          "name": "Placement",
+          "typeDisplayName": "UnrealTransform",
+          "typeMetadataName": "Finare.Unreal.UnrealTransform",
+          "typeKind": "struct",
+          "defaultValue": {
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0.3826834323650898,
+              "w": 0.9238795325112867
+            },
+            "translation": {
+              "x": 120,
+              "y": 0,
+              "z": 40
+            },
+            "scale3D": {
+              "x": 1.25,
+              "y": 0.75,
+              "z": 1
+            }
+          },
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 23,
+              "column": 5
+            },
+            "end": {
+              "line": 27,
+              "column": 44
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Common State"
+          },
+          "unrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/CoreUObject.Transform",
+            "unrealNativeName": "Transform",
+            "fields": []
+          }
+        },
+        {
+          "id": "us_f758ca9071f452b9a99c7b040a168f80",
+          "name": "TickGroup",
+          "typeDisplayName": "ETickingGroup",
+          "typeMetadataName": "Finare.Unreal.Generated.ETickingGroup",
+          "typeKind": "enum",
+          "defaultValue": "2",
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 17,
+              "column": 5
+            },
+            "end": {
+              "line": 18,
+              "column": 83
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Common State"
+          },
+          "unrealType": {
+            "kind": "enum",
+            "unrealTypePath": "/Script/Engine.ETickingGroup",
+            "unrealNativeName": "ETickingGroup",
+            "fields": []
+          }
+        }
+      ],
+      "functions": [],
+      "lifecycleHooks": [
+        {
+          "id": "us_0d474cb98ce9251008be56fa1438c045",
+          "kind": "beginPlay",
+          "managedName": "OnBeginPlay",
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 31,
+              "column": 5
+            },
+            "end": {
+              "line": 44,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_32d94d8e30b38c52472e4a6c9b01ac96",
+          "kind": "tick",
+          "managedName": "OnTick",
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 46,
+              "column": 5
+            },
+            "end": {
+              "line": 54,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_5371b419054e4f3740be180b9cfa95ba",
+          "kind": "endPlay",
+          "managedName": "OnEndPlay",
+          "span": {
+            "filePath": "CommonStateGameplayDemoScript.cs",
+            "start": {
+              "line": 56,
+              "column": 5
+            },
+            "end": {
+              "line": 59,
+              "column": 6
+            }
+          }
+        }
+      ],
+      "classBinding": {
+        "kind": "Actor",
+        "generatedClassPath": "/Game/UnifiedScriptDemo/BP_CommonStateGameplay.BP_CommonStateGameplay_C"
+      }
+    },
+    {
+      "id": "us_ae00de8f1bef49138766193d1c6ac5de",
+      "qualifiedName": "Finare.Unreal.Demo.DemoScript",
+      "assetPath": "Unreal/Demo",
+      "span": {
+        "filePath": "samples/Unreal/Finare.Unreal.Demo/DemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 182,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_d4463d57397c77264a0e282ca6c29432",
+          "name": "InitialValue",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 10,
+          "span": {
+            "filePath": "samples/Unreal/Finare.Unreal.Demo/DemoScript.cs",
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 13,
+              "column": 42
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Demo"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_cbe02435e2c3f41de4c535f53f59d39b",
+          "name": "NormalizeTickDelta",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.NormalizeTickDelta(System.Single)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_c3e0ef1591a863e8dda6d45e71a7b872",
+              "name": "deltaSeconds",
+              "typeMetadataName": "System.Single"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_38fdd6847ca3efd9424d76679ac31c51",
+          "name": "OnManagedActivated",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.OnManagedActivated(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_09639aa23010b7639744971cde7cae8d",
+              "name": "amount",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "blueprintEvent": {
+            "superMode": "explicit"
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_fda3ae2689c8366696b5304494435397",
+          "name": "OnManagedMove",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.OnManagedMove(System.Single)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_96adbff4df5029e43dd62fbee3e78134",
+              "name": "value",
+              "typeMetadataName": "System.Single"
+            }
+          ],
+          "inputActions": [
+            {
+              "id": "us_9be307f874985f5d1c8e7da8ba87c513",
+              "actionPath": "/Script/FinareRuntime.FinareInputActionFixture",
+              "triggerEvent": "triggered",
+              "valueType": "axis1D",
+              "consumeInput": true
+            }
+          ],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_f65690f6080bf7ccfb4f90350d38f1ba",
+          "name": "OnManagedSignal",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.OnManagedSignal(System.Int32,Finare.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": false,
+          "isEvent": true,
+          "parameters": [
+            {
+              "id": "us_bc733d469a77070511e12901d9d63013",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_52882d1ec462ccaee99f7a1f3337960d",
+              "name": "signalContext",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [
+            {
+              "id": "us_87ba3691962ed6483c10c5ef2823c36b",
+              "sourceTypePath": "/Script/FinareRuntime.FinareComponent",
+              "eventPath": "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
+              "source": "host"
+            }
+          ],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_53ede5680c125188e1ec147de92fa39d",
+          "name": "ResolveInitialValue",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.ResolveInitialValue(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_7412e315b43d22a504aba7cfdf441d35",
+              "name": "bonus",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_985041a29f846c06bab5bdc4c1c3a464",
+          "name": "ResolveTickDelta",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.ResolveTickDelta(System.Single)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_95bd5754af07e26694e21fb11d82d94a",
+              "name": "deltaSeconds",
+              "typeMetadataName": "System.Single"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_4b2b9a44f72edea2e4f0cdf31376c2d1",
+          "name": "RewirePreview",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.RewirePreview(System.Int32,System.Boolean)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_51ef57fe36095aff407260fb1714ea62",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_a753c6f378d5357dc67f7f9812e0af7a",
+              "name": "doubleValue",
+              "typeMetadataName": "System.Boolean"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_1af2030c438655d1a968f8c06ff1c3c5",
+          "name": "TransformManagedValue",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.TransformManagedValue(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_3841f3fedf06148f1942995e7ca78ca7",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [
+            {
+              "id": "us_29ec3c5ce8e417580c9594911e9b324c",
+              "interfacePath": "/Script/FinareRuntime.FinareInteropContract",
+              "functionName": "TransformManagedValue"
+            }
+          ]
+        },
+        {
+          "id": "us_066ad528d7581de1cd7ae1725a1a16b4",
+          "name": "UEApiPreview",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.UEApiPreview(Finare.Unreal.Generated.FinareComponent,System.Int32,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_3e31927a08cbabc6e8258b4a591119f8",
+              "name": "component",
+              "typeMetadataName": "Finare.Unreal.Generated.FinareComponent"
+            },
+            {
+              "id": "us_5fb1c8a78460cc4a043beead6880bd7a",
+              "name": "left",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_34c8d7e2fb10736b35b35bd174c0d2f9",
+              "name": "right",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_3f0fafd8bc21f0052298217cb2d7622f",
+          "name": "UEDefaultPreview",
+          "qualifiedName": "Finare.Unreal.Demo.DemoScript.UEDefaultPreview(Finare.Unreal.Generated.FinareInteropFixture,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_1604852504c777090ced5eee16bf9ee8",
+              "name": "fixture",
+              "typeMetadataName": "Finare.Unreal.Generated.FinareInteropFixture"
+            },
+            {
+              "id": "us_456885402c59440e3c453dbbf316574f",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_0fdbad6aa2af414e8d8f073115cf03ab",
+      "qualifiedName": "Finare.Unreal.Demo.DemoLibrary",
+      "assetPath": "Unreal/DemoLibrary",
+      "span": {
+        "filePath": "samples/Unreal/Finare.Unreal.Demo/DemoScript.cs",
+        "start": {
+          "line": 184,
+          "column": 1
+        },
+        "end": {
+          "line": 283,
+          "column": 2
+        }
+      },
+      "states": [],
+      "functions": [
+        {
+          "id": "us_b011d4f4e2ff5024343fbb553c8c4d53",
+          "name": "Describe",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.Describe(Finare.Unreal.UnrealObjectHandle,Finare.Unreal.UnrealVector,System.String)",
+          "returnTypeMetadataName": "System.String",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_15c05cc6d35c3ef8bf50717e865e1ec8",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            },
+            {
+              "id": "us_c551dbece27d48b33fb39d4e3c819230",
+              "name": "location",
+              "typeMetadataName": "Finare.Unreal.UnrealVector",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Vector",
+                "unrealNativeName": "Vector",
+                "fields": [
+                  {
+                    "index": 0,
+                    "nativeName": "X",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 1,
+                    "nativeName": "Y",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 2,
+                    "nativeName": "Z",
+                    "typeMetadataName": "System.Double"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "us_cc71203c374b31796daa202a3a8c7b0a",
+              "name": "label",
+              "typeMetadataName": "System.String"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_2af5513e10c9e9a08ce4bf0ff3781ac7",
+          "name": "EchoHitResult",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.EchoHitResult(Finare.Unreal.Generated.HitResult)",
+          "returnTypeMetadataName": "Finare.Unreal.Generated.HitResult",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_c01ef27438b06f40ea5f3825eef1d133",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.Generated.HitResult",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/Engine.HitResult",
+                "unrealNativeName": "FHitResult",
+                "fields": [
+                  {
+                    "index": 0,
+                    "nativeName": "BoneName",
+                    "typeMetadataName": "Finare.Unreal.UnrealName"
+                  },
+                  {
+                    "index": 1,
+                    "nativeName": "Distance",
+                    "typeMetadataName": "System.Single"
+                  },
+                  {
+                    "index": 2,
+                    "nativeName": "ElementIndex",
+                    "typeMetadataName": "System.Byte"
+                  },
+                  {
+                    "index": 3,
+                    "nativeName": "FaceIndex",
+                    "typeMetadataName": "System.Int32"
+                  },
+                  {
+                    "index": 4,
+                    "nativeName": "ImpactNormal",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 5,
+                    "nativeName": "ImpactPoint",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 6,
+                    "nativeName": "Item",
+                    "typeMetadataName": "System.Int32"
+                  },
+                  {
+                    "index": 7,
+                    "nativeName": "Location",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 8,
+                    "nativeName": "MyBoneName",
+                    "typeMetadataName": "Finare.Unreal.UnrealName"
+                  },
+                  {
+                    "index": 9,
+                    "nativeName": "MyItem",
+                    "typeMetadataName": "System.Int32"
+                  },
+                  {
+                    "index": 10,
+                    "nativeName": "Normal",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 11,
+                    "nativeName": "PenetrationDepth",
+                    "typeMetadataName": "System.Single"
+                  },
+                  {
+                    "index": 12,
+                    "nativeName": "Time",
+                    "typeMetadataName": "System.Single"
+                  },
+                  {
+                    "index": 13,
+                    "nativeName": "TraceEnd",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 14,
+                    "nativeName": "TraceStart",
+                    "typeMetadataName": "Finare.Unreal.UnrealVector",
+                    "unrealType": {
+                      "kind": "struct",
+                      "unrealTypePath": "/Script/CoreUObject.Vector",
+                      "unrealNativeName": "Vector",
+                      "fields": [
+                        {
+                          "index": 0,
+                          "nativeName": "X",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 1,
+                          "nativeName": "Y",
+                          "typeMetadataName": "System.Double"
+                        },
+                        {
+                          "index": 2,
+                          "nativeName": "Z",
+                          "typeMetadataName": "System.Double"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "index": 15,
+                    "nativeName": "bBlockingHit",
+                    "typeMetadataName": "System.Boolean"
+                  },
+                  {
+                    "index": 16,
+                    "nativeName": "bStartPenetrating",
+                    "typeMetadataName": "System.Boolean"
+                  }
+                ]
+              }
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/Engine.HitResult",
+            "unrealNativeName": "FHitResult",
+            "fields": [
+              {
+                "index": 0,
+                "nativeName": "BoneName",
+                "typeMetadataName": "Finare.Unreal.UnrealName"
+              },
+              {
+                "index": 1,
+                "nativeName": "Distance",
+                "typeMetadataName": "System.Single"
+              },
+              {
+                "index": 2,
+                "nativeName": "ElementIndex",
+                "typeMetadataName": "System.Byte"
+              },
+              {
+                "index": 3,
+                "nativeName": "FaceIndex",
+                "typeMetadataName": "System.Int32"
+              },
+              {
+                "index": 4,
+                "nativeName": "ImpactNormal",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 5,
+                "nativeName": "ImpactPoint",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 6,
+                "nativeName": "Item",
+                "typeMetadataName": "System.Int32"
+              },
+              {
+                "index": 7,
+                "nativeName": "Location",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 8,
+                "nativeName": "MyBoneName",
+                "typeMetadataName": "Finare.Unreal.UnrealName"
+              },
+              {
+                "index": 9,
+                "nativeName": "MyItem",
+                "typeMetadataName": "System.Int32"
+              },
+              {
+                "index": 10,
+                "nativeName": "Normal",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 11,
+                "nativeName": "PenetrationDepth",
+                "typeMetadataName": "System.Single"
+              },
+              {
+                "index": 12,
+                "nativeName": "Time",
+                "typeMetadataName": "System.Single"
+              },
+              {
+                "index": 13,
+                "nativeName": "TraceEnd",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 14,
+                "nativeName": "TraceStart",
+                "typeMetadataName": "Finare.Unreal.UnrealVector",
+                "unrealType": {
+                  "kind": "struct",
+                  "unrealTypePath": "/Script/CoreUObject.Vector",
+                  "unrealNativeName": "Vector",
+                  "fields": [
+                    {
+                      "index": 0,
+                      "nativeName": "X",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 1,
+                      "nativeName": "Y",
+                      "typeMetadataName": "System.Double"
+                    },
+                    {
+                      "index": 2,
+                      "nativeName": "Z",
+                      "typeMetadataName": "System.Double"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 15,
+                "nativeName": "bBlockingHit",
+                "typeMetadataName": "System.Boolean"
+              },
+              {
+                "index": 16,
+                "nativeName": "bStartPenetrating",
+                "typeMetadataName": "System.Boolean"
+              }
+            ]
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_31efc225f2c2331b8da1204b56d24e53",
+          "name": "EchoMode",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.EchoMode(Finare.Unreal.Generated.EFinareInteropMode)",
+          "returnTypeMetadataName": "Finare.Unreal.Generated.EFinareInteropMode",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_40d604291e22ae4b49fda5b0eb7c117d",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.Generated.EFinareInteropMode",
+              "unrealType": {
+                "kind": "enum",
+                "unrealTypePath": "/Script/FinareRuntime.EFinareInteropMode",
+                "unrealNativeName": "EFinareInteropMode",
+                "fields": []
+              }
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "enum",
+            "unrealTypePath": "/Script/FinareRuntime.EFinareInteropMode",
+            "unrealNativeName": "EFinareInteropMode",
+            "fields": []
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_e0269bc3f8a7d23491b8d318e438a974",
+          "name": "EchoObject",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.EchoObject(Finare.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealObjectHandle",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_777ebac089ea7700dea7e255f9fd47d4",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_bf113e01d021d7b50c81658794803aca",
+          "name": "ExchangeArray",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ExchangeArray(System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E,ref System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E,out System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E)",
+          "returnTypeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_09e4011818129b5676b77eea9cb36481",
+              "name": "replacement",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "us_613e15dbe483aba32342de29a48a5bdf",
+              "name": "value",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              },
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_44cc6209074b618b990d1effc180f6b9",
+              "name": "previous",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyList\u003CSystem.Int32\u003E",
+              "unrealType": {
+                "kind": "array",
+                "unrealTypePath": "",
+                "unrealNativeName": "TArray",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.Int32"
+                  }
+                ]
+              },
+              "direction": "output"
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "array",
+            "unrealTypePath": "",
+            "unrealNativeName": "TArray",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.Int32"
+              }
+            ]
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_d06678105ca5fdf294f43d3519ce74bc",
+          "name": "ExchangeMap",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ExchangeMap(System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E,ref System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E,out System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E)",
+          "returnTypeMetadataName": "System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_fb99c86c00ec5a81662073a4916d94b9",
+              "name": "replacement",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E",
+              "unrealType": {
+                "kind": "map",
+                "unrealTypePath": "",
+                "unrealNativeName": "TMap",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.String"
+                  },
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "us_e855cb6cb7a60f0cbf0ad772bd680f6f",
+              "name": "value",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E",
+              "unrealType": {
+                "kind": "map",
+                "unrealTypePath": "",
+                "unrealNativeName": "TMap",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.String"
+                  },
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+                  }
+                ]
+              },
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_c06c2252ce9c3abf8a123547947d0209",
+              "name": "previous",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlyDictionary\u003CSystem.String, Finare.Unreal.UnrealSoftObjectHandle\u003E",
+              "unrealType": {
+                "kind": "map",
+                "unrealTypePath": "",
+                "unrealNativeName": "TMap",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "System.String"
+                  },
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+                  }
+                ]
+              },
+              "direction": "output"
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "map",
+            "unrealTypePath": "",
+            "unrealNativeName": "TMap",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "System.String"
+              },
+              {
+                "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+              }
+            ]
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_f71ad2329b31006b3ae30361358c0be9",
+          "name": "ExchangeSet",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ExchangeSet(System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E,ref System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E,out System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E)",
+          "returnTypeMetadataName": "System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_11d8dbec4a6efb38e7c5fce2dc71ab8b",
+              "name": "replacement",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E",
+              "unrealType": {
+                "kind": "set",
+                "unrealTypePath": "",
+                "unrealNativeName": "TSet",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealName"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "us_1297f1529b2f987e3e5b5bb2aa004ccb",
+              "name": "value",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E",
+              "unrealType": {
+                "kind": "set",
+                "unrealTypePath": "",
+                "unrealNativeName": "TSet",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealName"
+                  }
+                ]
+              },
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_731f9698290c79defca4e1cdba2177ac",
+              "name": "previous",
+              "typeMetadataName": "System.Collections.Generic.IReadOnlySet\u003CFinare.Unreal.UnrealName\u003E",
+              "unrealType": {
+                "kind": "set",
+                "unrealTypePath": "",
+                "unrealNativeName": "TSet",
+                "fields": [],
+                "typeArguments": [
+                  {
+                    "typeMetadataName": "Finare.Unreal.UnrealName"
+                  }
+                ]
+              },
+              "direction": "output"
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "set",
+            "unrealTypePath": "",
+            "unrealNativeName": "TSet",
+            "fields": [],
+            "typeArguments": [
+              {
+                "typeMetadataName": "Finare.Unreal.UnrealName"
+              }
+            ]
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_21d5551eac71bbec4de4b631a8b35051",
+          "name": "ExchangeSoftClass",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ExchangeSoftClass(Finare.Unreal.UnrealSoftClassHandle,ref Finare.Unreal.UnrealSoftClassHandle,out Finare.Unreal.UnrealSoftClassHandle)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealSoftClassHandle",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_505e9aa937c60d34fc767e6295e2c689",
+              "name": "replacement",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftClassHandle"
+            },
+            {
+              "id": "us_45f9b7a77d92e3d6dcd33cfc22af26d7",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftClassHandle",
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_57abc951e544de03500d74fc1408474f",
+              "name": "previous",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftClassHandle",
+              "direction": "output"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_ea641d031c02966c67440c490536d448",
+          "name": "ExchangeSoftObject",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ExchangeSoftObject(Finare.Unreal.UnrealSoftObjectHandle,ref Finare.Unreal.UnrealSoftObjectHandle,out Finare.Unreal.UnrealSoftObjectHandle)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_5f53a1486b25d01beac4ba104a0e24df",
+              "name": "replacement",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle"
+            },
+            {
+              "id": "us_977f95c7e40e288f068dfe83f3435225",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle",
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_398df170fed284ff7f59d994febc8157",
+              "name": "previous",
+              "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle",
+              "direction": "output"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_ea0fb5fc4e7592459d37d73e802edbbe",
+          "name": "OffsetVector",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.OffsetVector(Finare.Unreal.UnrealVector)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealVector",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_595b7b863fe6f160def46eeb3e5728de",
+              "name": "value",
+              "typeMetadataName": "Finare.Unreal.UnrealVector",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Vector",
+                "unrealNativeName": "Vector",
+                "fields": [
+                  {
+                    "index": 0,
+                    "nativeName": "X",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 1,
+                    "nativeName": "Y",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 2,
+                    "nativeName": "Z",
+                    "typeMetadataName": "System.Double"
+                  }
+                ]
+              }
+            }
+          ],
+          "returnUnrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/CoreUObject.Vector",
+            "unrealNativeName": "Vector",
+            "fields": [
+              {
+                "index": 0,
+                "nativeName": "X",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 1,
+                "nativeName": "Y",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 2,
+                "nativeName": "Z",
+                "typeMetadataName": "System.Double"
+              }
+            ]
+          },
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_26d8a4afd5c20461f0b0c592af7db502",
+          "name": "ResolveCommonValues",
+          "qualifiedName": "Finare.Unreal.Demo.DemoLibrary.ResolveCommonValues(Finare.Unreal.UnrealName,ref Finare.Unreal.UnrealRotator,out Finare.Unreal.UnrealText,Finare.Unreal.UnrealTransform)",
+          "returnTypeMetadataName": "Finare.Unreal.UnrealClassHandle",
+          "isStatic": true,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_8991f6d24a29362d86179bf012372327",
+              "name": "name",
+              "typeMetadataName": "Finare.Unreal.UnrealName"
+            },
+            {
+              "id": "us_0183ec1e38b529b1e41c46eedc6a966e",
+              "name": "rotation",
+              "typeMetadataName": "Finare.Unreal.UnrealRotator",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Rotator",
+                "unrealNativeName": "Rotator",
+                "fields": []
+              },
+              "direction": "inputOutput"
+            },
+            {
+              "id": "us_cd5044cbdd257941e70bb27923c49514",
+              "name": "label",
+              "typeMetadataName": "Finare.Unreal.UnrealText",
+              "direction": "output"
+            },
+            {
+              "id": "us_461424eeff8e22bc6758d060a1526239",
+              "name": "transform",
+              "typeMetadataName": "Finare.Unreal.UnrealTransform",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Transform",
+                "unrealNativeName": "Transform",
+                "fields": []
+              }
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": [],
+      "classBinding": {
+        "kind": "BlueprintFunctionLibrary"
+      }
+    },
+    {
+      "id": "us_beb2a3d756dbeff0010b1972e730311b",
+      "qualifiedName": "Finare.Unreal.Demo.InterfaceGameplayDemoScript",
+      "assetPath": "Unreal/InterfaceGameplay",
+      "span": {
+        "filePath": "InterfaceGameplayDemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 78,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_4237c174d6c1eccac18a6714b47634b5",
+          "name": "InterfaceTarget",
+          "typeDisplayName": "UnrealObjectHandle",
+          "typeMetadataName": "Finare.Unreal.UnrealObjectHandle",
+          "typeKind": "object",
+          "defaultValue": null,
+          "span": {
+            "filePath": "InterfaceGameplayDemoScript.cs",
+            "start": {
+              "line": 14,
+              "column": 5
+            },
+            "end": {
+              "line": 15,
+              "column": 71
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Interop"
+          }
+        },
+        {
+          "id": "us_2ccdca2d5de137c31337ce08a2559550",
+          "name": "LastInterfaceResult",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "InterfaceGameplayDemoScript.cs",
+            "start": {
+              "line": 17,
+              "column": 5
+            },
+            "end": {
+              "line": 18,
+              "column": 62
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Interop"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_98f3b802ca9fb06b543f0e500ee13620",
+          "name": "CallSelectedInterface",
+          "qualifiedName": "Finare.Unreal.Demo.InterfaceGameplayDemoScript.CallSelectedInterface(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_834d2129a1b95975201539367c0d0007",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_141aee4a137aa0c8353dafcb24d9fa38",
+      "qualifiedName": "Finare.Unreal.Demo.NativeObjectTextGameplayDemoScript",
+      "assetPath": "Unreal/NativeObjectTextGameplay",
+      "span": {
+        "filePath": "NativeObjectTextGameplayDemoScript.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 55,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_11472db4f1a3df4251c38b577e5196a9",
+          "name": "EmbeddedNulLength",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NativeObjectTextGameplayDemoScript.cs",
+            "start": {
+              "line": 14,
+              "column": 5
+            },
+            "end": {
+              "line": 15,
+              "column": 60
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Native Object Text"
+          }
+        },
+        {
+          "id": "us_438a1b0f17644f3dcfe2a1676d02f858",
+          "name": "LastText",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "",
+          "span": {
+            "filePath": "NativeObjectTextGameplayDemoScript.cs",
+            "start": {
+              "line": 11,
+              "column": 5
+            },
+            "end": {
+              "line": 12,
+              "column": 55
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Native Object Text"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_033e0e23af88bf858ede1ef2f9a13e7e",
+          "name": "Echo",
+          "qualifiedName": "Finare.Unreal.Demo.NativeObjectTextGameplayDemoScript.Echo(Finare.Unreal.Generated.NativeCounter,System.String)",
+          "returnTypeMetadataName": "System.String",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_697f24b11cb1e596903ca5751a829e59",
+              "name": "counter",
+              "typeMetadataName": "Finare.Unreal.Generated.NativeCounter"
+            },
+            {
+              "id": "us_c4e2f7bada278eb3615dad66435b4fdb",
+              "name": "value",
+              "typeMetadataName": "System.String"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_762043152e714d68b05a31426591ee02",
+      "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript",
+      "assetPath": "Unreal/NetworkingComponentDemo",
+      "span": {
+        "filePath": "NetworkingComponentDemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 160,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_577cd7679b53cb340e935663bb18ca60",
+          "name": "AcknowledgedActor",
+          "typeDisplayName": "UnrealObjectHandle",
+          "typeMetadataName": "Finare.Unreal.UnrealObjectHandle",
+          "typeKind": "object",
+          "defaultValue": null,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 40,
+              "column": 5
+            },
+            "end": {
+              "line": 40,
+              "column": 73
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_0999f22fca65be40270ca0e206755f10",
+          "name": "AcknowledgedLabel",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "",
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 39,
+              "column": 5
+            },
+            "end": {
+              "line": 39,
+              "column": 56
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_f9d283ff1478ac5f5fcbfa204bdda8e6",
+          "name": "AcknowledgedScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 35,
+              "column": 5
+            },
+            "end": {
+              "line": 35,
+              "column": 52
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_297e5f9c85bebabf44d7c5666556e8c5",
+          "name": "AcknowledgedWide",
+          "typeDisplayName": "long",
+          "typeMetadataName": "System.Int64",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 47,
+              "column": 5
+            },
+            "end": {
+              "line": 47,
+              "column": 52
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_988c69b44e2130de3c21976f0914c2d0",
+          "name": "Aim",
+          "typeDisplayName": "UnrealVector",
+          "typeMetadataName": "Finare.Unreal.UnrealVector",
+          "typeKind": "struct",
+          "defaultValue": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 43,
+              "column": 5
+            },
+            "end": {
+              "line": 43,
+              "column": 63
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          },
+          "unrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/CoreUObject.Vector",
+            "unrealNativeName": "Vector",
+            "fields": [
+              {
+                "index": 0,
+                "nativeName": "X",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 1,
+                "nativeName": "Y",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 2,
+                "nativeName": "Z",
+                "typeMetadataName": "System.Double"
+              }
+            ]
+          }
+        },
+        {
+          "id": "us_045e249708609f8e44013d4867ef674e",
+          "name": "BroadcastGain",
+          "typeDisplayName": "float",
+          "typeMetadataName": "System.Single",
+          "typeKind": "floatingPoint",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 45,
+              "column": 5
+            },
+            "end": {
+              "line": 45,
+              "column": 50
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_5e4210959377ca0f38986d4273170287",
+          "name": "BroadcastScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 36,
+              "column": 5
+            },
+            "end": {
+              "line": 36,
+              "column": 49
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_46987e591d0efdedca77361c7d72bdac",
+          "name": "CommonPayloadError",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "",
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 48,
+              "column": 5
+            },
+            "end": {
+              "line": 48,
+              "column": 57
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_cc0b65039edc68d4947b1479ba5a9c49",
+          "name": "Enabled",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 42,
+              "column": 5
+            },
+            "end": {
+              "line": 42,
+              "column": 47
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_251109367dcf1fbfb2e5e0913c318c68",
+          "name": "Gain",
+          "typeDisplayName": "float",
+          "typeMetadataName": "System.Single",
+          "typeKind": "floatingPoint",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 41,
+              "column": 5
+            },
+            "end": {
+              "line": 41,
+              "column": 41
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_15e145f53611a203ebccde184f85e3fa",
+          "name": "InitialOrOwnerScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 24,
+              "column": 5
+            },
+            "end": {
+              "line": 25,
+              "column": 54
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true,
+            "replicationCondition": "initialOrOwner"
+          }
+        },
+        {
+          "id": "us_683aba96895762ed259a049f21dc2feb",
+          "name": "InitialScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 19,
+              "column": 47
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true,
+            "replicationCondition": "initialOnly"
+          }
+        },
+        {
+          "id": "us_33af93cf44f99ce0d29efd70e84ceb19",
+          "name": "Label",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "",
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 30,
+              "column": 5
+            },
+            "end": {
+              "line": 31,
+              "column": 44
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true
+          }
+        },
+        {
+          "id": "us_ee34a2aa94029e66e9d1e03d809a466a",
+          "name": "LabelNotifications",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 38,
+              "column": 5
+            },
+            "end": {
+              "line": 38,
+              "column": 53
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_1ed4aa6ddc453eb69be6cecce777585a",
+          "name": "Notifications",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 33,
+              "column": 5
+            },
+            "end": {
+              "line": 33,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_fd5efc68b41f1bbc5e7528e2f2bfe62e",
+          "name": "ObserverScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 21,
+              "column": 5
+            },
+            "end": {
+              "line": 22,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true,
+            "replicationCondition": "skipOwner"
+          }
+        },
+        {
+          "id": "us_d6e6cecadeef2d25dc22486462504f03",
+          "name": "OwnerSecret",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 15,
+              "column": 5
+            },
+            "end": {
+              "line": 16,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true,
+            "replicationCondition": "ownerOnly"
+          }
+        },
+        {
+          "id": "us_aac6438e907e5f56ada8bb28b0ac39d6",
+          "name": "Pings",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 27,
+              "column": 5
+            },
+            "end": {
+              "line": 28,
+              "column": 40
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true
+          }
+        },
+        {
+          "id": "us_330039398081afd1e092026008d0cdd5",
+          "name": "PreviousLabel",
+          "typeDisplayName": "string",
+          "typeMetadataName": "System.String",
+          "typeKind": "string",
+          "defaultValue": "",
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 37,
+              "column": 5
+            },
+            "end": {
+              "line": 37,
+              "column": 52
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_bb5f76b68924961e2911fbaee080e62c",
+          "name": "PreviousScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 34,
+              "column": 5
+            },
+            "end": {
+              "line": 34,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_788390b8b436c575ca448348693fe230",
+          "name": "ReceivedWide",
+          "typeDisplayName": "long",
+          "typeMetadataName": "System.Int64",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 46,
+              "column": 5
+            },
+            "end": {
+              "line": 46,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_ccb1d9f5cd427f7763b3a847e1ea5ee8",
+          "name": "RequestedAim",
+          "typeDisplayName": "UnrealVector",
+          "typeMetadataName": "Finare.Unreal.UnrealVector",
+          "typeKind": "struct",
+          "defaultValue": {
+            "x": 1,
+            "y": 2,
+            "z": 3
+          },
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 44,
+              "column": 67
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          },
+          "unrealType": {
+            "kind": "struct",
+            "unrealTypePath": "/Script/CoreUObject.Vector",
+            "unrealNativeName": "Vector",
+            "fields": [
+              {
+                "index": 0,
+                "nativeName": "X",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 1,
+                "nativeName": "Y",
+                "typeMetadataName": "System.Double"
+              },
+              {
+                "index": 2,
+                "nativeName": "Z",
+                "typeMetadataName": "System.Double"
+              }
+            ]
+          }
+        },
+        {
+          "id": "us_50be28059ccf9b3d77716689917777d0",
+          "name": "Score",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingComponentDemoScript.cs",
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 13,
+              "column": 40
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_c8b2082a437afdd37fdcfad425eb6943",
+          "name": "AllObserved",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.AllObserved(System.Int32,System.Single)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_03448fc8e66d903c3407cbf5b1c61950",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_c0be81175b9aba3f3329972a5de208bc",
+              "name": "gain",
+              "typeMetadataName": "System.Single"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "multicast",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_cc35a6bf2efbb29520641c94ae82d798",
+          "name": "ClientAccepted",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ClientAccepted(System.Int32,System.String,Finare.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_50be254577e7117777863aed2183f7f7",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_99e9e9126211cf6e4019ac8e74b697cb",
+              "name": "label",
+              "typeMetadataName": "System.String"
+            },
+            {
+              "id": "us_09bdf435d7ad24240f9df1690edd9ac8",
+              "name": "actor",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "client",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_8db8286d130bcc3fceb09fa968cf8b07",
+          "name": "ClientCommonValues",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ClientCommonValues(System.Int64,Finare.Unreal.Generated.EFinareInteropMode,Finare.Unreal.UnrealRotator,Finare.Unreal.UnrealTransform)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_62b4c22a3ed342c7414cb68f00bd30b3",
+              "name": "value",
+              "typeMetadataName": "System.Int64"
+            },
+            {
+              "id": "us_e46bb9dd30533d1498c5666e374d1757",
+              "name": "mode",
+              "typeMetadataName": "Finare.Unreal.Generated.EFinareInteropMode",
+              "unrealType": {
+                "kind": "enum",
+                "unrealTypePath": "/Script/FinareRuntime.EFinareInteropMode",
+                "unrealNativeName": "EFinareInteropMode",
+                "fields": []
+              }
+            },
+            {
+              "id": "us_4987d23ae8ae9cba3b39ea07b2dd1183",
+              "name": "rotation",
+              "typeMetadataName": "Finare.Unreal.UnrealRotator",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Rotator",
+                "unrealNativeName": "Rotator",
+                "fields": []
+              }
+            },
+            {
+              "id": "us_ad133d2cf00abe1aaf7e94d82660fdad",
+              "name": "transform",
+              "typeMetadataName": "Finare.Unreal.UnrealTransform",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Transform",
+                "unrealNativeName": "Transform",
+                "fields": []
+              }
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "client",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_aa1c160a8d7a82f7a00f3a713543cf65",
+          "name": "InitializeScore",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.InitializeScore(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_aeb04a4783637e73906d6501d25ae97c",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_55aea4c5d346c88d38dc860b2ceb1046",
+          "name": "LabelChanged",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.LabelChanged(System.String)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_56887ad73fbe55e0182d2187aa571514",
+              "name": "previous",
+              "typeMetadataName": "System.String"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "repNotifyProperty": "Label"
+        },
+        {
+          "id": "us_81568948bcad429b17d0415a35a5b28b",
+          "name": "RequestAdd",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.RequestAdd(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_c9e6aeadd582930a1ef84f9fd8a3aea3",
+              "name": "amount",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_2e958c6cd36b4af90fc7ecd1af9474c3",
+          "name": "RequestCommonValues",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.RequestCommonValues()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_4262fe8a326a4b92ac719f50fe68f468",
+          "name": "ScoreChanged",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ScoreChanged(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_d6838abcd4bc3dd6de0e7c3d65915fb4",
+              "name": "previous",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "repNotifyProperty": "Score"
+        },
+        {
+          "id": "us_edfafbd5186ee73ffb8ec97aa136946d",
+          "name": "ServerAdd",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ServerAdd(System.Int32,System.Single,System.Boolean,Finare.Unreal.UnrealVector)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_21702e5b81c23c02b80931915551e83c",
+              "name": "amount",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_b49a14f31e3fc193d6dfc3594defc963",
+              "name": "gain",
+              "typeMetadataName": "System.Single"
+            },
+            {
+              "id": "us_cc8f39279912d68b739fcdc15a953bbf",
+              "name": "enabled",
+              "typeMetadataName": "System.Boolean"
+            },
+            {
+              "id": "us_bf2ec3d9e2caed44ae5fd95d1075a81e",
+              "name": "aim",
+              "typeMetadataName": "Finare.Unreal.UnrealVector",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Vector",
+                "unrealNativeName": "Vector",
+                "fields": [
+                  {
+                    "index": 0,
+                    "nativeName": "X",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 1,
+                    "nativeName": "Y",
+                    "typeMetadataName": "System.Double"
+                  },
+                  {
+                    "index": 2,
+                    "nativeName": "Z",
+                    "typeMetadataName": "System.Double"
+                  }
+                ]
+              }
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "server",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_31001a09a5cef5bcdc0a4a83df2a2ec1",
+          "name": "ServerCommonValues",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ServerCommonValues(System.Int64,Finare.Unreal.Generated.EFinareInteropMode,Finare.Unreal.UnrealRotator,Finare.Unreal.UnrealTransform)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_9418328be496e6721d4e9a0757c60eee",
+              "name": "value",
+              "typeMetadataName": "System.Int64"
+            },
+            {
+              "id": "us_86d9e152e955b106a275ab0be1fef4b5",
+              "name": "mode",
+              "typeMetadataName": "Finare.Unreal.Generated.EFinareInteropMode",
+              "unrealType": {
+                "kind": "enum",
+                "unrealTypePath": "/Script/FinareRuntime.EFinareInteropMode",
+                "unrealNativeName": "EFinareInteropMode",
+                "fields": []
+              }
+            },
+            {
+              "id": "us_15673f5b11d147ae59e9e1abacbf0906",
+              "name": "rotation",
+              "typeMetadataName": "Finare.Unreal.UnrealRotator",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Rotator",
+                "unrealNativeName": "Rotator",
+                "fields": []
+              }
+            },
+            {
+              "id": "us_9e3d66e1714cbbb0040a544a39ebba3f",
+              "name": "transform",
+              "typeMetadataName": "Finare.Unreal.UnrealTransform",
+              "unrealType": {
+                "kind": "struct",
+                "unrealTypePath": "/Script/CoreUObject.Transform",
+                "unrealNativeName": "Transform",
+                "fields": []
+              }
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "server",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_22bcf725f006e05aab81501f8238cfe3",
+          "name": "ServerPing",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingComponentDemoScript.ServerPing()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "server",
+            "reliable": true
+          }
+        }
+      ],
+      "lifecycleHooks": [],
+      "classBinding": {
+        "kind": "ActorComponent",
+        "generatedClassPath": "/Game/UnifiedScriptTests/BP_NetworkingComponentDemo.BP_NetworkingComponentDemo_C"
+      }
+    },
+    {
+      "id": "us_762043152e714d68b05a31426591ee01",
+      "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript",
+      "assetPath": "Unreal/NetworkingDemo",
+      "span": {
+        "filePath": "NetworkingDemoScript.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 66,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_bf67302e8d623fd44a3ae98ce20bd82b",
+          "name": "AcknowledgedScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 19,
+              "column": 5
+            },
+            "end": {
+              "line": 19,
+              "column": 52
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_b18807d7e68cb55b8f5564beeaf58ac6",
+          "name": "BroadcastScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 20,
+              "column": 5
+            },
+            "end": {
+              "line": 20,
+              "column": 49
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_fdc4700704c0c0a7242470e500502ed9",
+          "name": "Notifications",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 17,
+              "column": 5
+            },
+            "end": {
+              "line": 17,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_122abe98afba653ab4399d64cfbd5225",
+          "name": "OwnerSecret",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 14,
+              "column": 5
+            },
+            "end": {
+              "line": 15,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true,
+            "replicationCondition": "ownerOnly"
+          }
+        },
+        {
+          "id": "us_4983c6699d7150cc41e73e53fccabf18",
+          "name": "PreviousScore",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 18,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false
+          }
+        },
+        {
+          "id": "us_fc5d5c02ff6a8ab203e671e6377277e0",
+          "name": "Score",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "NetworkingDemoScript.cs",
+            "start": {
+              "line": 11,
+              "column": 5
+            },
+            "end": {
+              "line": 12,
+              "column": 40
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": true
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_e6bff688bfe9c3adaac222a9c9089761",
+          "name": "AllObserved",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.AllObserved(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_cfc5cc8573753147a1d57d8aa663a60a",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "multicast",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_5c35bc6e386135dc40ef72c49341596c",
+          "name": "ClientAccepted",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.ClientAccepted(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_a9a893c0074bfc359934066cc2724562",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "client",
+            "reliable": true
+          }
+        },
+        {
+          "id": "us_c472da9e429e143b38451390384da685",
+          "name": "InitializeScore",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.InitializeScore(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_3bb5b319d232533685461f9868bf545d",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_0a2b3b5702645d3a2460bd40e5b80da7",
+          "name": "RequestAdd",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.RequestAdd(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_51a0848a31084eeec031ffcdab3026d2",
+              "name": "amount",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_1e4112d7419e2e1cc26d0085b0c5ec3a",
+          "name": "ScoreChanged",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.ScoreChanged(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_a62fc146fdcb1917f14789d50dc07d04",
+              "name": "previous",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "repNotifyProperty": "Score"
+        },
+        {
+          "id": "us_50adf3e7082fc5a5a9febda41f8b9085",
+          "name": "ServerAdd",
+          "qualifiedName": "Finare.Unreal.Demo.NetworkingDemoScript.ServerAdd(System.Int32)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_55527a86f79e9c898b42f1895c4eed5b",
+              "name": "amount",
+              "typeMetadataName": "System.Int32"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": [],
+          "rpc": {
+            "target": "server",
+            "reliable": true
+          }
+        }
+      ],
+      "lifecycleHooks": [],
+      "classBinding": {
+        "kind": "Actor",
+        "generatedClassPath": "/Game/UnifiedScriptTests/BP_NetworkingDemo.BP_NetworkingDemo_C"
+      }
+    },
+    {
+      "id": "us_5971119cfb8a903ee657fd68e6fc5bdc",
+      "qualifiedName": "Finare.Unreal.Demo.ReferenceCollectionGameplayDemoScript",
+      "assetPath": "Unreal/ReferenceCollectionGameplay",
+      "span": {
+        "filePath": "ReferenceCollectionGameplayDemoScript.cs",
+        "start": {
+          "line": 8,
+          "column": 1
+        },
+        "end": {
+          "line": 121,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_b3a971bd4f4a98f54b78ec4b651a9549",
+          "name": "AccumulatorActorCount",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "ReferenceCollectionGameplayDemoScript.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 19,
+              "column": 64
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Reference Containers"
+          }
+        },
+        {
+          "id": "us_5fe81f7580e3118c46ec43be8fa79c6d",
+          "name": "ActorClassCount",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "ReferenceCollectionGameplayDemoScript.cs",
+            "start": {
+              "line": 24,
+              "column": 5
+            },
+            "end": {
+              "line": 25,
+              "column": 58
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Reference Containers"
+          }
+        },
+        {
+          "id": "us_94b3bba7cc73da96580ae30567ebc170",
+          "name": "FoundActorCount",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "ReferenceCollectionGameplayDemoScript.cs",
+            "start": {
+              "line": 15,
+              "column": 5
+            },
+            "end": {
+              "line": 16,
+              "column": 58
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Reference Containers"
+          }
+        },
+        {
+          "id": "us_91e720028662ce47840614888ad3003b",
+          "name": "SoftPathCount",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 0,
+          "span": {
+            "filePath": "ReferenceCollectionGameplayDemoScript.cs",
+            "start": {
+              "line": 21,
+              "column": 5
+            },
+            "end": {
+              "line": 22,
+              "column": 56
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Reference Containers"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_dd615ad5dd01914bc04e0be1d4c5144b",
+          "name": "QueryActorCount",
+          "qualifiedName": "Finare.Unreal.Demo.ReferenceCollectionGameplayDemoScript.QueryActorCount(Finare.Unreal.UnrealObjectHandle,Finare.Unreal.UnrealClassHandle)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_ceb404cb802f5cdfed755ae170cf24ac",
+              "name": "worldContextObject",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            },
+            {
+              "id": "us_975f46dc8e9fc54a19caf868cad7d046",
+              "name": "actorClass",
+              "typeMetadataName": "Finare.Unreal.UnrealClassHandle"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    },
+    {
+      "id": "us_9239fdb122032474505c5bec7dd6059e",
+      "qualifiedName": "Finare.Unreal.Demo.SoftReferenceGameplayDemoScript",
+      "assetPath": "Unreal/SoftReferenceGameplay",
+      "span": {
+        "filePath": "SoftReferenceGameplayDemoScript.cs",
+        "start": {
+          "line": 12,
+          "column": 1
+        },
+        "end": {
+          "line": 135,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_919973e00e4bce8e3bdf3c91995e88e2",
+          "name": "PreviewActorClass",
+          "typeDisplayName": "UnrealSoftClassHandle",
+          "typeMetadataName": "Finare.Unreal.UnrealSoftClassHandle",
+          "typeKind": "softClass",
+          "defaultValue": "/Script/Engine.StaticMeshActor",
+          "span": {
+            "filePath": "SoftReferenceGameplayDemoScript.cs",
+            "start": {
+              "line": 22,
+              "column": 5
+            },
+            "end": {
+              "line": 24,
+              "column": 47
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Soft References"
+          }
+        },
+        {
+          "id": "us_2a483c78528eec1d29351f1ed767b8e4",
+          "name": "PreviewMesh",
+          "typeDisplayName": "UnrealSoftObjectHandle",
+          "typeMetadataName": "Finare.Unreal.UnrealSoftObjectHandle",
+          "typeKind": "softObject",
+          "defaultValue": "/Engine/BasicShapes/Cube.Cube",
+          "span": {
+            "filePath": "SoftReferenceGameplayDemoScript.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 20,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Soft References"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_805c867c75bfcb3736fdb77a25915e51",
+          "name": "RetryPreview",
+          "qualifiedName": "Finare.Unreal.Demo.SoftReferenceGameplayDemoScript.RetryPreview()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        },
+        {
+          "id": "us_80caa8f7ffa6856b584fc09f9e8d4aa0",
+          "name": "UseAlternatePreviewMesh",
+          "qualifiedName": "Finare.Unreal.Demo.SoftReferenceGameplayDemoScript.UseAlternatePreviewMesh()",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": [
+        {
+          "id": "us_9636f6763d30bb60e2df55bb80e0951a",
+          "kind": "beginPlay",
+          "managedName": "OnBeginPlay",
+          "span": {
+            "filePath": "SoftReferenceGameplayDemoScript.cs",
+            "start": {
+              "line": 31,
+              "column": 5
+            },
+            "end": {
+              "line": 36,
+              "column": 6
+            }
+          }
+        },
+        {
+          "id": "us_784d649f17258575a0d5b8ae884ae911",
+          "kind": "endPlay",
+          "managedName": "OnEndPlay",
+          "span": {
+            "filePath": "SoftReferenceGameplayDemoScript.cs",
+            "start": {
+              "line": 126,
+              "column": 5
+            },
+            "end": {
+              "line": 134,
+              "column": 6
+            }
+          }
+        }
+      ],
+      "classBinding": {
+        "kind": "Actor",
+        "generatedClassPath": "/Game/UnifiedScriptDemo/BP_SoftReferenceGameplay.BP_SoftReferenceGameplay_C"
+      }
+    },
+    {
+      "id": "us_74153fff7ffc911c93b35e4297151ca3",
+      "qualifiedName": "Finare.Unreal.Demo.SubsystemGameplayDemoScript",
+      "assetPath": "Unreal/SubsystemGameplay",
+      "span": {
+        "filePath": "SubsystemGameplayDemoScript.cs",
+        "start": {
+          "line": 8,
+          "column": 1
+        },
+        "end": {
+          "line": 176,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_71a07900ad87f2601d7ba0106b9cfd12",
+          "name": "InputMappingActive",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 23,
+              "column": 5
+            },
+            "end": {
+              "line": 24,
+              "column": 66
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        },
+        {
+          "id": "us_8045444ac7ff2624dae7a07c3ae3d124",
+          "name": "InputMappingWasRemoved",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 20,
+              "column": 5
+            },
+            "end": {
+              "line": 21,
+              "column": 70
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        },
+        {
+          "id": "us_b4721f9ab5cb6a2b8fc6eed4a62ebb5d",
+          "name": "MappingPriority",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": -1,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 26,
+              "column": 5
+            },
+            "end": {
+              "line": 27,
+              "column": 59
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        },
+        {
+          "id": "us_c6d048efedcf638695b86923405a5eca",
+          "name": "ReplayPlaying",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 29,
+              "column": 5
+            },
+            "end": {
+              "line": 30,
+              "column": 61
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        },
+        {
+          "id": "us_a1ef4365d5678a064f44f70795e3eaf2",
+          "name": "ReplayRecording",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 32,
+              "column": 5
+            },
+            "end": {
+              "line": 33,
+              "column": 63
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        },
+        {
+          "id": "us_599a3a78ef3f0f7e092a46bd3ffa9a1d",
+          "name": "WorldStreamingCompleted",
+          "typeDisplayName": "bool",
+          "typeMetadataName": "System.Boolean",
+          "typeKind": "boolean",
+          "defaultValue": false,
+          "span": {
+            "filePath": "SubsystemGameplayDemoScript.cs",
+            "start": {
+              "line": 35,
+              "column": 5
+            },
+            "end": {
+              "line": 36,
+              "column": 71
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Subsystems"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_3c997b4a7c48c1c67d10dc70860378a9",
+          "name": "QueryMapping",
+          "qualifiedName": "Finare.Unreal.Demo.SubsystemGameplayDemoScript.QueryMapping(Finare.Unreal.UnrealObjectHandle,Finare.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "System.Boolean",
+          "isStatic": false,
+          "isPublic": true,
+          "isEvent": false,
+          "parameters": [
+            {
+              "id": "us_d4ee8087564ef8d4eef8563d04238a88",
+              "name": "subsystem",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            },
+            {
+              "id": "us_1422e0c2ae3e0eb0a1869e54b2a3c795",
+              "name": "mappingContext",
+              "typeMetadataName": "Finare.Unreal.UnrealObjectHandle"
+            }
+          ],
+          "inputActions": [],
+          "delegateBindings": [],
+          "interfaceFunctions": []
+        }
+      ],
+      "lifecycleHooks": []
+    }
+  ]
+}

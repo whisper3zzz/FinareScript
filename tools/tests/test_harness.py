@@ -31,7 +31,7 @@ def fixture_gate(script="gate.py", **overrides):
 
 class HarnessTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="unifiedscript-harness-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="finare-harness-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
         self.write(".gitignore", "artifacts/\n.cache/\nharness.local.json\n")
@@ -162,7 +162,7 @@ class HarnessTests(unittest.TestCase):
 
     def test_blueprint_change_selects_packaged_gate(self):
         manifest = harness.load_manifest(REPO)
-        plan = harness.make_plan(REPO, manifest, paths=["src/UnifiedScript.Core/ScriptAssetModel.cs"])
+        plan = harness.make_plan(REPO, manifest, paths=["src/Finare.Core/ScriptAssetModel.cs"])
         self.assertIn("script-class-golden-path", plan["gates"])
         self.assertNotIn("workload-performance", plan["gates"])
 
@@ -283,7 +283,7 @@ class HarnessTests(unittest.TestCase):
             report, _ = self.run_fixture()
         self.assertEqual("interrupted", report["gates"][0]["status"])
         self.assertNotEqual("passed", report["status"])
-        self.assertFalse((self.root / ".cache/unifiedscript-harness.lock").exists())
+        self.assertFalse((self.root / ".cache/finare-harness.lock").exists())
 
     def test_timeout_terminates_the_owned_descendant(self):
         marker = self.root / "artifacts/descendant.txt"
@@ -381,8 +381,8 @@ class HarnessTests(unittest.TestCase):
         with harness.checkout_lock(self.root):
             with self.assertRaisesRegex(harness.HarnessError, "lock exists"):
                 self.run_fixture()
-            self.assertTrue((self.root / ".cache/unifiedscript-harness.lock").exists())
-        self.assertFalse((self.root / ".cache/unifiedscript-harness.lock").exists())
+            self.assertTrue((self.root / ".cache/finare-harness.lock").exists())
+        self.assertFalse((self.root / ".cache/finare-harness.lock").exists())
 
     def test_unsafe_paths_and_local_configuration_are_rejected(self):
         with self.assertRaises(harness.HarnessError):

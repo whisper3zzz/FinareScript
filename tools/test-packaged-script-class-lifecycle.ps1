@@ -18,7 +18,7 @@ $enginePath = [IO.Path]::GetFullPath($EngineRoot)
 $editorCmd = Join-Path $enginePath 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    Join-Path $projectRoot "Saved\UnifiedScript\PackagedLifecycle\$runId"
+    Join-Path $projectRoot "Saved\Finare\PackagedLifecycle\$runId"
 } elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -27,7 +27,7 @@ $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 $reportPath = Join-Path $outputRoot 'packaged-script-class-lifecycle-report.json'
 $engineLog = Join-Path $outputRoot 'script-class-lifecycle-editor.log'
 $stdoutLog = Join-Path $outputRoot 'script-class-lifecycle-stdout.log'
-$filter = 'UnifiedScript.Unreal.ScriptClass.AssetOperations'
+$filter = 'Finare.Unreal.ScriptClass.AssetOperations'
 
 function Write-Utf8 {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Text)
@@ -130,7 +130,7 @@ if (Test-Path -LiteralPath $outputRoot) {
 }
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
-$configPath = Join-Path $projectRoot 'Config\UnifiedScript.onboarding.json'
+$configPath = Join-Path $projectRoot 'Config\Finare.onboarding.json'
 if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
     throw "Packaged consumer onboarding configuration is missing: $configPath"
 }
@@ -150,9 +150,9 @@ $deploymentPath = Resolve-ConfigPath `
 $sourceRoot = Join-Path (Split-Path -Parent $managedProject) 'Classes'
 $contentRoot = Join-Path $projectRoot 'Content\UnifiedScriptAutomation'
 $firstPlayRequest = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ProjectSetup\first-play-request.json'
+    'Saved\Finare\ProjectSetup\first-play-request.json'
 $pendingRoot = Join-Path $projectRoot `
-    'Saved\UnifiedScript\ClassOperations\Pending'
+    'Saved\Finare\ClassOperations\Pending'
 $before = Get-SurfaceState `
     -Deployment $deploymentPath `
     -FirstPlayRequest $firstPlayRequest `

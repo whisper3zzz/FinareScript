@@ -6,7 +6,7 @@ The compiler/runtime foundation proves that text, HIR, Graph, source maps, and
 CoreCLR execution can share semantic identity. It does not yet constitute a
 visual authoring product.
 
-`UnifiedScript.Graph` projects executable method bodies. M5.5.1 now complements
+`Finare.Graph` projects executable method bodies. M5.5.1 now complements
 it with `unifiedscript.script-asset/v0.1`, making type-level state, defaults,
 exposure metadata, asset paths, and Visual signatures first-class. The first
 prototype connection consumes that compiler artifact, so those declarations no

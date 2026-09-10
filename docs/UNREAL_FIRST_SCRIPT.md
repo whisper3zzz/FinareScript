@@ -1,4 +1,4 @@
-# First UnifiedScript in an Unreal project
+# First Finare in an Unreal project
 
 This walkthrough starts from an existing C++ or Blueprint-only UE 5.8 project
 and ends with the same script running in editor play, opening in the native
@@ -19,17 +19,17 @@ work.
 Extract the SDK and run the packaged CLI. `adopt` is Apply by default:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
+$sdk = 'D:\SDK\Finare-SDK-1.0.0-rc.1-win-x64'
 $project = 'D:\Project\Game\Game.uproject'
 
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   adopt $project --sdk-root $sdk
 ```
 
 Use `--preview --report <path>` to inspect every create/update/unchanged/conflict
 decision without changing the project. Apply then performs one file transaction:
 
-- merges the enabled `UEUnifiedScript` entry while preserving other `.uproject`
+- merges the enabled `Finare` entry while preserving other `.uproject`
   fields;
 - installs the SDK source plugin, managed runtime closure, project-local CLI,
   templates, setup script, and deferred onboarding helper;
@@ -38,7 +38,7 @@ decision without changing the project. Apply then performs one file transaction:
 - for a Blueprint-only project, creates a minimal Runtime module and matching
   Game/Editor targets and merges the module into the `.uproject`;
 - records exact before/after hashes and backups under
-  `Saved/UnifiedScript/Adoption`.
+  `Saved/Finare/Adoption`.
 
 Those native host files are generated product scaffolding; you do not need to
 write or maintain C++ to run the first script. Existing native projects keep
@@ -50,7 +50,7 @@ silently overwritten. To restore the latest applied transaction, first preserve
 any changed files and run:
 
 ```powershell
-& "$sdk\Tools\unifiedscript.cmd" `
+& "$sdk\Tools\finare.cmd" `
   adopt $project --rollback
 ```
 
@@ -64,8 +64,8 @@ binding coverage baseline exists. After adoption, the project-local entry point
 is preferred because it proves the installed project is self-contained:
 
 ```powershell
-$projectTools = 'D:\Project\Game\Plugins\UEUnifiedScript\Tools'
-& "$projectTools\unifiedscript.cmd" `
+$projectTools = 'D:\Project\Game\Plugins\Finare\Tools'
+& "$projectTools\finare.cmd" `
   doctor $project --engine-root D:\UE_5.8
 ```
 
@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass `
   -EngineRoot D:\UE_5.8
 ```
 
-Once the plugin loads, open **Tools > UnifiedScript Project Setup**. The panel
+Once the plugin loads, open **Tools > Finare Project Setup**. The panel
 uses the same project-local CLI and configuration model:
 
 1. **Preview** shows the transactional adoption plan without writes;
@@ -99,7 +99,7 @@ The last action deliberately exits the Editor. Replacing or rebuilding a loaded
 native plugin in place is unsafe on Windows; the deferred helper waits for the
 exact Editor process and then runs the installed setup script.
 
-For the first attachable behavior, choose **Create UnifiedScript Class** from
+For the first attachable behavior, choose **Create Finare Class** from
 the Tools menu or Content Browser and select Actor or ActorComponent. Creation
 writes the C# lifecycle source, exact Script Asset sidecar, Blueprint proxy, and
 deployment entry, then opens Project Setup. Run **Build, Restart & Continue**
@@ -113,10 +113,10 @@ The adopted project owns:
 
 - `Source/Game/Game.cpp`, its module rules, and Game/Editor targets when the
   original project was Blueprint-only;
-- `Managed/Game.UnifiedScript/FirstScript.cs` and its SDK-style project;
-- `Config/UnifiedScript.onboarding.json`;
+- `Managed/Game.Finare/FirstScript.cs` and its SDK-style project;
+- `Config/Finare.onboarding.json`;
 - `Contracts/Game.unreal-api-contract.json`;
-- `Deployment/Game.unifiedscript-deployment.json`;
+- `Deployment/Game.finare-deployment.json`;
 - generated Declaration IR, Graph, Authoring Surface, bindings, native thunks,
   source API requests, development Contract/report, API nodes, API/diagnostic
   browser, coverage, and
@@ -126,7 +126,7 @@ Onboarding success means the managed project, reflection export, complete native
 Contract, final Editor target, Game target receipt, and Script Asset have passed
 together. This closes the same native dependency graph that normal packaging
 uses; generated thunk source is preserved by later no-change Repair. The older
-`install-unifiedscript-sdk.ps1` and `new-unifiedscript-project.ps1` entry points
+`install-finare-sdk.ps1` and `new-finare-project.ps1` entry points
 remain available for compatibility and advanced diagnosis; new projects should
 use `adopt` so installation and scaffolding share one ownership transaction.
 
@@ -135,7 +135,7 @@ use `adopt` so installation and scaffolding share one ownership transaction.
 Open the project in UE 5.8, then:
 
 1. open or create a gameplay map;
-2. place a `UnifiedScriptActor`;
+2. place a `FinareActor`;
 3. assign `SA_FirstScript` to its `Script Asset` property;
 4. start PIE and select the actor/component;
 5. confirm `bScriptRunning` is true and `LastScriptError` is empty.
@@ -143,7 +143,7 @@ Open the project in UE 5.8, then:
 The generated `FirstScript` exposes `StartValue`, a Visual
 `AddClamped(value, delta)` function, and ordinary source calls to
 `Actor.GetActorLocation` and `Pawn.GetController`. The source uses a normal
-`using Game.UnifiedScript.Generated;` import; an alias or fully qualified name is
+`using Game.Finare.Generated;` import; an alias or fully qualified name is
 no longer required. During the first Setup run, a deterministic source type-hint
 artifact requests `Pawn` even though it is absent from the seed reflection
 selection. UE resolves it uniquely, exports that one additional Engine class,
@@ -161,13 +161,13 @@ Start the project-specific transactional authoring host in a second terminal:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File "$sdk\Tools\start-unifiedscript-authoring.ps1" `
+  -File "$sdk\Tools\start-finare-authoring.ps1" `
   -Project $project `
   -EngineRoot D:\UE_5.8
 ```
 
 Keep that terminal open. In the editor, select `SA_FirstScript` in the Content
-Browser, choose **Tools > UnifiedScript Authoring**, and click
+Browser, choose **Tools > Finare Authoring**, and click
 **Selected Script Asset**. `AddClamped` opens as the same typed graph represented
 by its restricted C# source. Edit a supported node/default/connection and use
 **Apply & Reload**. The server commits the semantic patch, emits the next
@@ -185,7 +185,7 @@ restarts retained generations, and restores native state and overrides. The
 receipt records `batchPrepare`, `batchCommit`, `batchAbort`, and
 `batchFinalize` for this two-phase swap.
 
-For ordinary IDE source edits, use **Tools > UnifiedScript Project Setup >
+For ordinary IDE source edits, use **Tools > Finare Project Setup >
 Build & Reload**. It evaluates the persistent Build/Play graph without closing
 the Editor, rebuilds only invalidated managed/chunk outputs, and then routes all
 loaded Script Class assets through the same preflight/prepare/commit/finalize
@@ -215,14 +215,14 @@ Automation Tool. Replace the map path with the saved project map:
   -build -cook -stage -pak -archive `
   '-map=/Game/Maps/Main' `
   '-AdditionalCookerOptions=-SkipZenStore' `
-  '-archivedirectory=D:\Builds\Game-UnifiedScript' `
+  '-archivedirectory=D:\Builds\Game-Finare' `
   -unattended -utf8output -NoCodeSign -NoXGE
 ```
 
 The plugin stages all files under `Binaries/Managed`, the matching UE-bundled
 CoreCLR runtime, the generated Script Asset, and the project native thunk table.
 Launch the archived executable and inspect the same actor behavior. No SDK or
-UnifiedScript repository path is consulted at runtime. The clean Blueprint-only
+Finare repository path is consulted at runtime. The clean Blueprint-only
 acceptance also invokes the command-line-only smoke hook carried by its generated
 native host. It passes the exact generated Actor and ActorComponent class paths,
 loads both classes from the packaged asset store, and requires both to complete
@@ -231,10 +231,10 @@ exit successfully:
 
 ```powershell
 & $packagedExe `
-  -UnifiedScriptScriptClassSmoke `
-  '-UnifiedScriptActorClass=/Game/MyScripts/MyActor.MyActor_C' `
-  '-UnifiedScriptComponentClass=/Game/MyScripts/MyComponent.MyComponent_C' `
-  "-UnifiedScriptScriptClassSmokeResult=$resultPath" `
+  -FinareScriptClassSmoke `
+  '-FinareActorClass=/Game/MyScripts/MyActor.MyActor_C' `
+  '-FinareComponentClass=/Game/MyScripts/MyComponent.MyComponent_C' `
+  "-FinareScriptClassSmokeResult=$resultPath" `
   -unattended -nullrhi -nosplash
 ```
 

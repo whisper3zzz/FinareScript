@@ -1,6 +1,6 @@
 # Switch and pattern control flow
 
-UnifiedScript HIR v0.8 and Graph v0.13 preserve supported C# `switch`
+Finare HIR v0.8 and Graph v0.13 preserve supported C# `switch`
 statements instead of lowering them into nested branches. The compiler keeps the
 governing expression, ordered sections, labels, pattern variables, optional
 `when` guards, and section bodies as stable semantic nodes.

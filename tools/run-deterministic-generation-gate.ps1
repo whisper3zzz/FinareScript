@@ -17,30 +17,30 @@ $runDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 if ([string]::IsNullOrWhiteSpace($DotNet)) {
     $DotNet = (Get-Command dotnet -ErrorAction Stop).Source
 }
-$cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
-$cliAssembly = Join-Path $repoRoot 'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
-$reflection = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.reflection.json'
-$contract = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
-$dataPlane = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
+$cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
+$cliAssembly = Join-Path $repoRoot 'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
+$reflection = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.reflection.json'
+$contract = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.api-contract.json'
+$dataPlane = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.data-plane.json'
 $dataPlaneExtension = Join-Path $repoRoot `
     'samples\Unreal\BlockBreaker.data-plane-extension.json'
 $expected = [ordered]@{
-    'bindings.cs' = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.bindings.cs'
+    'bindings.cs' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.bindings.cs'
     'native-thunks.cpp' = Join-Path $repoRoot (
-        'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
-        'Private\Generated\UEUnifiedScriptRuntime.native-thunks.generated.cpp')
-    'api-nodes.json' = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
-    'binding-coverage.json' = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.binding-coverage.json'
-    'data-plane.g.cs' = Join-Path $repoRoot 'src\UnifiedScript.Unreal\UnrealDataPlaneLayouts.g.cs'
+        'HostProject\Plugins\Finare\Source\FinareRuntime\' +
+        'Private\Generated\FinareRuntime.native-thunks.generated.cpp')
+    'api-nodes.json' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.api-nodes.json'
+    'binding-coverage.json' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.binding-coverage.json'
+    'data-plane.g.cs' = Join-Path $repoRoot 'src\Finare.Unreal\UnrealDataPlaneLayouts.g.cs'
     'data-plane.gen.h' = Join-Path $repoRoot (
-        'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
-        'Public\UnifiedScriptDataPlaneLayouts.gen.h')
+        'HostProject\Plugins\Finare\Source\FinareRuntime\' +
+        'Public\FinareDataPlaneLayouts.gen.h')
     'data-plane-extension.g.cs' = Join-Path $repoRoot (
-        'samples\Unreal\UnifiedScript.Unreal.Demo\' +
+        'samples\Unreal\Finare.Unreal.Demo\' +
         'BlockBreakerDataPlaneExtension.g.cs')
     'data-plane-extension.gen.h' = Join-Path $repoRoot (
-        'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
-        'Private\Tests\Generated\UnifiedScriptBlockBreakerDataPlaneExtension.gen.h')
+        'HostProject\Plugins\Finare\Source\FinareRuntime\' +
+        'Private\Tests\Generated\FinareBlockBreakerDataPlaneExtension.gen.h')
     'data-plane-extension.catalog.json' = Join-Path $repoRoot `
         'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
 }
@@ -138,5 +138,5 @@ $reportPath = Join-Path $runDirectory 'deterministic-generation.json'
     $reportPath,
     ($report | ConvertTo-Json -Depth 6) + "`n",
     [Text.UTF8Encoding]::new($false))
-Write-Host "UnifiedScript deterministic generation: PASS ($($artifacts.Count)/$($artifacts.Count))"
+Write-Host "Finare deterministic generation: PASS ($($artifacts.Count)/$($artifacts.Count))"
 Write-Host "Report: $reportPath"

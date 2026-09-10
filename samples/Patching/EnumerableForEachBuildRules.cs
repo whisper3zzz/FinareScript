@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using UnifiedScript;
+using Finare;
 
 namespace Samples.Patching;
 

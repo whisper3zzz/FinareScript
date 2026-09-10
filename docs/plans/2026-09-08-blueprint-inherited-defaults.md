@@ -29,7 +29,7 @@ instances before native BeginPlay; it makes no inherited-subobject claim.
 
 The real-factory regression now confirms the supported native path: the base,
 ordinary child, grandchild and spawned child instance retain the exact Script
-Asset, stable `UnifiedScript` component name and immediate component archetype.
+Asset, stable `Finare` component name and immediate component archetype.
 Editing both automatic-start/tick bools through reflected property notifications
 survives base compilation and inheritance. Saving and unloading all four assets
 invalidates their old weak references; reloading preserves the same defaults and
@@ -37,7 +37,7 @@ identity relationships. No production ownership fallback was needed. This does
 not exercise managed startup or establish the exact cause of the old transient
 fixture failure.
 
-`CaptureCollectionInstanceOverrides` in `UnifiedScriptBlueprintClassMaterializer.cpp`
+`CaptureCollectionInstanceOverrides` in `FinareBlueprintClassMaterializer.cpp`
 now includes current generated descendant CDOs and live instances, excluding
 skeleton/obsolete classes and other templates. It records whether each value
 follows its immediate archetype or owns a whole-value override. Both validation
@@ -83,7 +83,7 @@ The factory uses public saved assets and calls `MarkBlueprintAsModified`, which
 refreshes Unreal's cached post-construction property list. The regression uses
 that authoring path instead of assigning ownership separately to descendants.
 
-Native factory checkpoint: `UnifiedScript.Unreal.ScriptClass.InheritedActorComponentDefaults`
+Native factory checkpoint: `Finare.Unreal.ScriptClass.InheritedActorComponentDefaults`
 passes after a HostEditor build. Evidence is under
 `artifacts/m13-3c-3-inherited-defaults`: `editor-build-inherited-defaults-cleanup-final.log`
 and `inherited-defaults-cmd-cleanup-final.log` (Success and Queue Empty). The
@@ -127,14 +127,14 @@ invalid before reading the saved packages. The no-guard run is collision-defect
 evidence, not passing persistence evidence.
 
 An earlier `CommonStateMaterialization` run failed during managed activation:
-`CreateScriptWithBlueprintContract` cannot load `UnifiedScript.Unreal, Version=1.0.0.0`.
+`CreateScriptWithBlueprintContract` cannot load `Finare.Unreal, Version=1.0.0.0`.
 See `common-state-cmd-final.log`. A read-only decode of the staged Demo chunk's
 DependencyManifest confirms that all six shared managed dependency SHA256 values
 differ from the DLLs in `Binaries/Managed`. The Unreal DLL exists; its digest is
 `e4ac8a41292b1c81b01a90acdbf6f99bcf1d263bf27eb64193e426e48c25c6c4`, while the
 chunk requires `1325cd60de53b2e814fb1962de86f2dad472e5e65c9069b3f83bed62600b992e`.
 The chunk load context verifies shared assemblies through
-`UnifiedScriptManagedDependencyCache.Verify`, which rejects differing digests.
+`FinareManagedDependencyCache.Verify`, which rejects differing digests.
 At the recovery point, all six staged DLLs matched the Release host output. Running
 `tools/emit-unreal-demo-chunk.ps1 -EngineRoot D:/UE_5.8 -Configuration Release -SkipManagedBuild`
 restores the matching chunk and declaration without rebuilding or restaging the
@@ -223,7 +223,7 @@ Cooked evidence is under `artifacts/m13-3c-3-inherited-cook`:
   actual chunk startup in both Worlds and archive-local hostfxr.
 - `fixture/build-cook-run.log` records successful execution and deletion of the
   four owned source `.uasset` files and three staged program files. The archive
-  remains at `package/Windows/UEUnifiedScriptHost`; shared host/Demo inputs were
+  remains at `package/Windows/FinareHost`; shared host/Demo inputs were
   not replaced or removed.
 
 The separate `InheritedClassAssetOperations` regression uses the real Actor
@@ -298,7 +298,7 @@ postcondition. Updating a default changes its effective owner constructor
 assignment when present, preserving earlier assignments, initializers and
 derived overrides. Function identities are persisted in sidecars so declaration
 patch renames retain the shared ID and repair callers. Semantic identity selection uses the
-actual UnifiedScript attributes, including attributes on another partial file;
+actual Finare attributes, including attributes on another partial file;
 the existing syntax-only reconciler overload remains available. Failed edits
 publish no partial source or sidecar.
 
@@ -307,7 +307,7 @@ The Release managed check passed 224 tests across
 `CSharpIdentityReconcilerTests`, `CSharpSourcePatchApplierTests`,
 `CoreClrExecutionHostTests`, `UnrealScriptObjectModelTests` and
 `InheritedStateContractTests`. It used the bundled UE SDK's `dotnet test` with
-`--no-restore -p:UnifiedScriptSkipManagedHostStaging=true` and a combined
+`--no-restore -p:FinareSkipManagedHostStaging=true` and a combined
 FullyQualifiedName filter for those classes. This result is recorded in tool
 stdout; no log/TRX was saved. Coverage includes shared-ID JSON/binary roundtrip,
 cross-file source-owner edits, derived defaults, full collection lifecycle on
@@ -394,7 +394,7 @@ managed source/deployment from `9310b22`. Evidence is under
   contract. It records the actual archive-local chunk and bundled hostfxr.
 - `fixture/build-cook-run.log`: PASS and exact cleanup of this fixture's four
   source packages and three staged program files. The archive remains at
-  `package/Windows/UEUnifiedScriptHost`.
+  `package/Windows/FinareHost`.
 
 Active managed Rename/Duplicate followed by rebuild/reload remains open and
 prevents closing C-3 as a whole. The earlier asset-operation checkpoint uses
@@ -514,7 +514,7 @@ resolve generated function names through their binding metadata and carry the
 source-adjacent identity sidecars through Rename before rebuilt execution can
 be evaluated.
 
-The repair uses an internal `unifiedscript-class/us_<id>:<member>` locator when
+The repair uses an internal `finare-class/us_<id>:<member>` locator when
 the selected managed Script Class declares a valid, nonzero persistent ClassId.
 Native resolution must match that ID against the exact target's generated-class
 ancestor chain and its retained Script Asset. It must not introduce global old
@@ -799,7 +799,7 @@ Final evidence is under `artifacts/m13-3c-3-active-class-ops-cook`:
   `fixture-6/packaged-build-cook.log` reports successful Cook/Stage/Archive.
 - `fixture-6/active-class-ops-cook-result.txt` and
   `fixture-6/packaged-active-class-ops.log` report PASS with the actual chunk and
-  hostfxr paths under `package-4/Windows/UEUnifiedScriptHost`.
+  hostfxr paths under `package-4/Windows/FinareHost`.
 - `cook-driver-4.log` records successful end-to-end execution and exact cleanup;
   onboarding configuration is restored and no owned source package remains.
 

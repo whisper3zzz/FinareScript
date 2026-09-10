@@ -238,7 +238,7 @@ order, declaration scope, or the distinct continue target.
 Analyze the lossless text-authored sample with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/ForRules.cs \
   --out artifacts/for-loops
 ```
@@ -255,7 +255,7 @@ The sample covers:
 Run the bounded visual-construction sample with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ForBuildRules.cs \
   --identity samples/Patching/ForBuildRules.cs.usids \
@@ -272,7 +272,7 @@ continue target remains the generated incrementor.
 Run the exact existing-header sample with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditForRules.cs \
   --identity samples/Patching/EditForRules.cs.usids \

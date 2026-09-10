@@ -6,10 +6,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.csproj'
-$identityPath = Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.cs.usids'
-$cliProject = Join-Path $repoRoot 'src/UnifiedScript.Cli/UnifiedScript.Cli.csproj'
-$cliAssembly = Join-Path $repoRoot 'src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.dll'
+$project = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.csproj'
+$identityPath = Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.cs.usids'
+$cliProject = Join-Path $repoRoot 'src/Finare.Cli/Finare.Cli.csproj'
+$cliAssembly = Join-Path $repoRoot 'src/Finare.Cli/bin/Release/net10.0/Finare.Cli.dll'
 $outputRootPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputRoot))
 $declarationOutput = Join-Path $outputRootPath 'declaration'
 $identitySeedPath = Join-Path $outputRootPath 'generated/BlueprintEventReloadFixture.usids'
@@ -27,7 +27,7 @@ foreach ($required in @($project, $cliProject, $cliAssembly)) {
 New-Item -ItemType Directory -Force -Path $outputRootPath, $declarationOutput | Out-Null
 
 & $DotNet build $project --configuration Release --nologo `
-    -p:BlueprintEventReloadVariant=V1 -p:UnifiedScriptSkipManagedHostStaging=true
+    -p:BlueprintEventReloadVariant=V1 -p:FinareSkipManagedHostStaging=true
 if ($LASTEXITCODE -ne 0) { throw "Blueprint event reload v1 build failed with exit code $LASTEXITCODE." }
 
 if (!(Test-Path -LiteralPath $identityPath -PathType Leaf)) {
@@ -36,7 +36,7 @@ if (!(Test-Path -LiteralPath $identityPath -PathType Leaf)) {
 
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $identitySeedPath) | Out-Null
     & $DotNet $cliAssembly identity-init `
-        (Join-Path $repoRoot 'tests/UnifiedScript.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.cs') `
+        (Join-Path $repoRoot 'tests/Finare.Tests/Fixtures/BlueprintEventReload/BlueprintEventReloadFixture.cs') `
         --out $identitySeedPath
     if ($LASTEXITCODE -ne 0) { throw "Generated identity initialization failed with exit code $LASTEXITCODE." }
     Copy-Item -LiteralPath $identitySeedPath -Destination $identityPath -Force
@@ -53,7 +53,7 @@ foreach ($variant in @(
     New-Item -ItemType Directory -Force -Path $output | Out-Null
     & $DotNet publish $project --configuration Release --no-restore --output $output `
         "-p:BlueprintEventReloadVariant=$($variant.Define)" `
-        -p:UnifiedScriptSkipManagedHostStaging=true
+        -p:FinareSkipManagedHostStaging=true
     if ($LASTEXITCODE -ne 0) { throw "Fixture '$($variant.Name)' publish failed with exit code $LASTEXITCODE." }
     if (!(Test-Path -LiteralPath (Join-Path $output 'BlueprintEventReloadFixture.dll'))) {
         throw "Fixture '$($variant.Name)' did not produce BlueprintEventReloadFixture.dll."

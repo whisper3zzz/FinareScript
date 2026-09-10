@@ -1,17 +1,17 @@
 # MSBuild project loading
 
-UnifiedScript can analyze or emit an SDK-style `.csproj` directly. Project
+Finare can analyze or emit an SDK-style `.csproj` directly. Project
 loading delegates evaluation to the selected .NET SDK's MSBuild, so imported
 props/targets, `Compile` globs, target-framework constants, NuGet compile assets,
 ordinary assembly references, and built `ProjectReference` outputs all come
 from the same evaluated build graph as `dotnet build`.
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- `
+dotnet run --project src/Finare.Cli -- `
   analyze samples/ProjectLoading/ProjectLoadingDemo.csproj `
   --out artifacts/project-loading
 
-dotnet run --project src/UnifiedScript.Cli -- `
+dotnet run --project src/Finare.Cli -- `
   emit samples/ProjectLoading/ProjectLoadingDemo.csproj `
   --out artifacts/project-loading-emit
 ```
@@ -31,8 +31,8 @@ never loaded as runtime implementations.
 
 Project loading executes restore, build, and custom MSBuild targets from the
 project. Treat an untrusted project like any other untrusted build input.
-Compiler analyzers and source generators are not replayed by the UnifiedScript
+Compiler analyzers and source generators are not replayed by the Finare
 compilation host yet; projects that depend on generator-only source can build in
-MSBuild but will receive ordinary missing-symbol diagnostics during UnifiedScript
+MSBuild but will receive ordinary missing-symbol diagnostics during Finare
 analysis. Project files must remain buildable, and project-reference outputs
 must exist when `--no-build` is used.

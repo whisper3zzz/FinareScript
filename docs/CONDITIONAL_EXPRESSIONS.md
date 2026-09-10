@@ -129,7 +129,7 @@ generated false arm with `value + 1`, and then changes the generated offset to
 `2`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditConditionalExpression.cs \
   --identity samples/Patching/EditConditionalExpression.cs.usids \

@@ -1,6 +1,6 @@
 # Representative performance workload suite
 
-M10 measures UnifiedScript and Puerts with one versioned end-to-end contract.
+M10 measures Finare and Puerts with one versioned end-to-end contract.
 The frozen M10.1 manifest remains
 `benchmarks/unreal/workload-suite.v0.1.json`. M10.3 runs
 `benchmarks/unreal/workload-suite.v1.1.0.json`; changing a recipe, asset set,
@@ -31,7 +31,7 @@ performance gate. M10.1 does not reinterpret those weights as a claim.
 - `unifiedscript.performance-workload-suite/v0.1` describes frozen work.
 - `unifiedscript.performance-engine-result/v0.1` carries one runtime's trials.
 - `unifiedscript.performance-comparison/v0.1` is emitted only for matched
-  UnifiedScript and Puerts inputs.
+  Finare and Puerts inputs.
 
 Every trial has all metric keys. A value is either a finite non-negative
 measurement or explicit JSON `null` when that metric is not applicable to the
@@ -44,7 +44,7 @@ This distinction prevents a scalar-call benchmark from inventing a frame time,
 while requiring the complete BlockBreaker workload to publish every M10.1
 metric.
 
-`allocatedBytes` currently has different collector semantics: UnifiedScript
+`allocatedBytes` currently has different collector semantics: Finare
 uses `GC.GetAllocatedBytesForCurrentThread()` around the measured interval,
 while the Puerts/V8 collector reports the non-negative change in V8 used heap.
 Both raw values remain useful diagnostics, but they are not equivalent
@@ -56,14 +56,14 @@ are observed directly on both runtimes and remain comparable.
 The complete BlockBreaker reload values also have different scopes. Puerts
 measures synchronous module-cache reexecution through `forceReload`; its full
 source/HMR path is not used because it is not shutdown-safe in this UE 5.8.1
-fixture. UnifiedScript measures a full ScriptComponent generation reload. Both
+fixture. Finare measures a full ScriptComponent generation reload. Both
 values prove the collectors execute, but their ratio is not a reload-performance
 claim until one matched lifecycle recipe is available.
 
 ## Matched execution
 
 The schedule is deterministic and contains 54 slots: nine workloads times
-three trials times two runtimes. Odd trials run UnifiedScript then Puerts for
+three trials times two runtimes. Odd trials run Finare then Puerts for
 each workload; even trials reverse the order. Each engine result records the
 global execution ordinal. The comparison rejects a missing/duplicate/failed
 trial or any ordinal that does not match this alternating schedule.
@@ -88,9 +88,9 @@ to repeat them and emits one independently verifiable
 scalar pair and immediately writes both normalized captures. Its default mode
 publishes neutral or losing evidence while leaving `gates.fasterThanPuerts`
 truthful; pass `-RequireWin` when the narrow scalar threshold must fail the run.
-Odd trials measure UnifiedScript before Puerts, then reuse the saved
-UnifiedScript measurement to merge the comparison report without a third engine
-run; even trials measure Puerts before UnifiedScript.
+Odd trials measure Finare before Puerts, then reuse the saved
+Finare measurement to merge the comparison report without a third engine
+run; even trials measure Puerts before Finare.
 Tracked dirty runtime sources are included in `runtimeCommit` as a stable
 worktree fingerprint rather than being mislabeled as a clean commit.
 
@@ -113,7 +113,7 @@ the checked-in M10.3 budget evaluator.
 After all 27 captures for one runtime exist, assemble them with:
 
 ```powershell
-dotnet src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.dll `
+dotnet src/Finare.Cli/bin/Release/net10.0/Finare.Cli.dll `
   ue-workload-assemble `
   --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
   --captures artifacts/comparison/suite/v1.1.0/unifiedscript/captures `
@@ -128,14 +128,14 @@ resumable without weakening the final matched-result gate.
 Compare two complete engine results with:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- ue-workload-compare `
+dotnet run --project src/Finare.Cli -- ue-workload-compare `
   --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
   --unified artifacts/comparison/suite/v1.1.0/unifiedscript.json `
   --puerts artifacts/comparison/suite/v1.1.0/puerts.json `
   --out artifacts/comparison/suite/v1.1.0/comparison.json
 ```
 
-The command publishes ratios even when UnifiedScript is neutral or slower. It
+The command publishes ratios even when Finare is neutral or slower. It
 does not fail a losing performance ratio; M10.3 owns reviewed budgets and the
 weighted at-least-5% product gate. It does fail malformed or unmatched evidence
 with data error exit code 65.
@@ -143,7 +143,7 @@ with data error exit code 65.
 Evaluate the versioned policy independently with:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- ue-workload-budget `
+dotnet run --project src/Finare.Cli -- ue-workload-budget `
   --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
   --comparison artifacts/comparison/suite/v1.1.0/comparison.json `
   --budgets benchmarks/unreal/performance-budgets.v1.1.0.json `
@@ -166,13 +166,13 @@ three trials, two runtimes, and all 54 execution ordinals. Both 27-trial engine
 results use machine fingerprint
 `sha256:fc848657...2c96512`, engine build fingerprint
 `sha256:d35d3d5f...f7a2997`, and the frozen runtime source identities
-`sha256:73607b...a7a76b` (UnifiedScript) and
+`sha256:73607b...a7a76b` (Finare) and
 `sha256:4e5f66...76cf0d` (Puerts). The final comparison reports matched
 environment, matched workloads, and alternating schedule.
 
 Representative three-trial medians are:
 
-| Workload | Comparison metric | UnifiedScript | Puerts | U/P ratio |
+| Workload | Comparison metric | Finare | Puerts | U/P ratio |
 | --- | --- | ---: | ---: | ---: |
 | Scalar/property, 100,000 calls | bridge ms | 16.8016 | 13.869699 | 1.211389 |
 | Struct/container, 16,384 calls | bridge ms | 448.6599 | 66.622298 | 6.734380 |
@@ -190,10 +190,10 @@ the same lifecycle mechanism.
 
 Complete BlockBreaker also records p95/p99 ratios of 0.955283/0.959456 and a
 bridge-time ratio of 0.336019. Its generated data plane uses 10,000 calls and
-40,000 logical copied bytes versus Puerts at 50,000 and 200,000. UnifiedScript
+40,000 logical copied bytes versus Puerts at 50,000 and 200,000. Finare
 records zero runtime GC collections in the measured window, while Puerts records
 eight. Memory high-water marks are effectively equal (ratio 0.998727).
-UnifiedScript startup is 5.13% slower and its commit-matched Development package
+Finare startup is 5.13% slower and its commit-matched Development package
 is 1,032,716,821 bytes versus 1,009,698,201 bytes (ratio 1.022798).
 
 Allocation medians remain published without a ratio because the CLR and V8
@@ -217,7 +217,7 @@ and workload, plus refreshed package evidence. The checked-in budget evaluates
 to `qualified`: weighted ratio 0.555769 against the 0.95 maximum, with all 14
 regression gates passing. The fixed-container median is 0.1118 ms versus
 64.0493 ms and the buffered-event median is 0.2813 ms versus 36.2080 ms; both
-UnifiedScript paths retain one acquisition, zero logical boundary-copy bytes,
+Finare paths retain one acquisition, zero logical boundary-copy bytes,
 and zero managed allocation. The report also preserves losses: scalar calls
 are 14.7766 ms versus 14.3339 ms (ratio 1.030885), resource/spawn is 4.7966 ms
 versus 4.002102 ms (ratio 1.198520), and the mechanism-mismatched hot-reload

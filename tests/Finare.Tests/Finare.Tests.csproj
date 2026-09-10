@@ -1,0 +1,103 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../../src/Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../../src/Finare.Authoring/Finare.Authoring.csproj" />
+    <ProjectReference Include="../../src/Finare.Cli/Finare.Cli.csproj" />
+    <ProjectReference Include="../../src/Finare.Graph/Finare.Graph.csproj" />
+    <ProjectReference Include="../../src/Finare.Runtime/Finare.Runtime.csproj" />
+    <ProjectReference Include="../../src/Finare.Semantics/Finare.Semantics.csproj" />
+    <ProjectReference Include="../../src/Finare.Unreal/Finare.Unreal.csproj" />
+    <ProjectReference Include="../../samples/Unreal/Finare.Unreal.Demo/Finare.Unreal.Demo.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../samples/ProjectLoading/ProjectLoadingDemo.csproj"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Fixtures/**/*.cs" />
+    <None Include="../../samples/Unreal/UMG.*.json" Link="UnrealFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/UMG.bindings.cs" Link="UnrealFixtures/UMG.bindings.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Source/FinareHost/Private/Generated/UMG.native-thunks.generated.cpp"
+          Link="UnrealFixtures/UMG.native-thunks.generated.cpp" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures/**/*.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/**/*.cpp" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/EnumerableForEachBuildRules.cs"
+          Link="ExecutionFixtures/EnumerableForEachBuildRules.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/EnumerableForEachBuildRules.cs.usids"
+          Link="ExecutionFixtures/EnumerableForEachBuildRules.cs.usids"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/BuildEnumerableForEach.plan.json"
+          Link="ExecutionFixtures/BuildEnumerableForEach.plan.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/FinareRuntime.reflection.json"
+          Link="UnrealFixtures/FinareRuntime.reflection.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/Diagnostics/*.json"
+          Link="UnrealDiagnostics/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs"
+          Link="UnrealDiagnostics/GameplayDiagnosisFixture.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/workload-suite.v0.1.json"
+          Link="UnrealPerformance/workload-suite.v0.1.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/workload-suite.v1.1.0.json"
+          Link="UnrealPerformance/workload-suite.v1.1.0.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/performance-budgets.v1.1.0.json"
+          Link="UnrealPerformance/performance-budgets.v1.1.0.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/usability-budgets.v0.1.json"
+          Link="UnrealPerformance/usability-budgets.v0.1.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/FinareRuntime.api-contract.json"
+          Link="UnrealFixtures/FinareRuntime.api-contract.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/FinareRuntime.data-plane.json"
+          Link="UnrealFixtures/FinareRuntime.data-plane.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Finare.Unreal/UnrealDataPlaneLayouts.g.cs"
+          Link="UnrealFixtures/UnrealDataPlaneLayouts.g.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Plugins/Finare/Source/FinareRuntime/Public/FinareDataPlaneLayouts.gen.h"
+          Link="UnrealFixtures/FinareDataPlaneLayouts.gen.h"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/BlockBreaker.data-plane-extension.json"
+          Link="UnrealFixtures/BlockBreaker.data-plane-extension.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/BlockBreaker.data-plane-extension.catalog.json"
+          Link="UnrealFixtures/BlockBreaker.data-plane-extension.catalog.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/Finare.Unreal.Demo/BlockBreakerDataPlaneExtension.g.cs"
+          Link="UnrealFixtures/BlockBreakerDataPlaneExtension.g.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Plugins/Finare/Source/FinareRuntime/Private/Tests/Generated/FinareBlockBreakerDataPlaneExtension.gen.h"
+          Link="UnrealFixtures/FinareBlockBreakerDataPlaneExtension.gen.h"
+          CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../samples/Unreal/FinareRuntime.bindings.cs"
+             Link="UnrealFixtures/FinareRuntime.bindings.cs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Plugins/Finare/Source/FinareRuntime/Private/Generated/FinareRuntime.native-thunks.generated.cpp"
+          Link="UnrealFixtures/FinareRuntime.native-thunks.generated.cpp"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../schemas/finare.compatibility-policy.v0.1.json"
+          Link="finare.compatibility-policy.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../schemas/finare.diagnostics-policy.v0.1.json"
+          Link="finare.diagnostics-policy.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

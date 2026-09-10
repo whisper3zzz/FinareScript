@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'HostProject'
-$projectFile = Join-Path $projectRoot 'UEUnifiedScriptHost.uproject'
+$projectFile = Join-Path $projectRoot 'FinareHost.uproject'
 $editorCmd = Join-Path $EngineRoot 'Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
 $runUat = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $FixtureOutputRoot))
@@ -56,9 +56,9 @@ if (!$UseExistingFixture) {
         '-NullRHI' `
         '-nosplash' `
         '-NoConfigChanges' `
-        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.ScriptClass.BlueprintManagedStaticFunctionDispatch' `
+        '-ExecCmds=Automation RunTests Finare.Unreal.ScriptClass.BlueprintManagedStaticFunctionDispatch' `
         '-TestExit=Automation Test Queue Empty' `
-        "-UnifiedScriptFunctionFixtureOutput=$fixtureRoot" `
+        "-FinareFunctionFixtureOutput=$fixtureRoot" `
         "-abslog=$fixtureLog" `
         '-log'
     $fixtureExit = $LASTEXITCODE
@@ -82,7 +82,7 @@ $contentRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'Content')).TrimEn
 $packageFilename = [IO.Path]::GetFullPath([string]$receipt.packageFilename)
 $packageDirectory = [IO.Path]::GetDirectoryName($packageFilename)
 $relativeFixtureDirectory = [IO.Path]::GetRelativePath($contentRoot, $packageDirectory)
-if ($relativeFixtureDirectory -notmatch '^UnifiedScriptFunctionFixture_[0-9A-Fa-f]{32}$' -or
+if ($relativeFixtureDirectory -notmatch '^FinareFunctionFixture_[0-9A-Fa-f]{32}$' -or
     [IO.Path]::GetExtension($packageFilename) -ne '.uasset' -or
     !(Test-Path -LiteralPath $packageFilename)) {
     throw "Receipt package is not a retained dedicated fixture under HostProject/Content: $packageFilename"
@@ -127,8 +127,8 @@ try {
         throw "Function closure BuildCookRun failed with exit code $LASTEXITCODE. Archive=$archiveRoot"
     }
 
-    $packageRoot = Join-Path $archiveRoot 'Windows/UEUnifiedScriptHost'
-    $executable = Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'UEUnifiedScriptHost*.exe' -File |
+    $packageRoot = Join-Path $archiveRoot 'Windows/FinareHost'
+    $executable = Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'FinareHost*.exe' -File |
         Select-Object -First 1
     if ($null -eq $executable) {
         throw "Packaged Host executable is missing below $packageRoot"
@@ -142,9 +142,9 @@ try {
         '-nop4',
         '-NullRHI',
         '-nosplash',
-        '-UnifiedScriptFunctionClosureVerify',
-        "-UnifiedScriptFunctionClosureReceipt=`"$receiptPath`"",
-        "-UnifiedScriptFunctionClosureResult=`"$resultPath`"",
+        '-FinareFunctionClosureVerify',
+        "-FinareFunctionClosureReceipt=`"$receiptPath`"",
+        "-FinareFunctionClosureResult=`"$resultPath`"",
         "-abslog=`"$runLog`"",
         '-log'
     )

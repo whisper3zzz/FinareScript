@@ -23,7 +23,7 @@ the caller buffer size and copy only its compatible prefix.
 
 ## Lifetime and threading
 
-- One `FUnifiedScriptSharedDataPlane` belongs to one World subsystem.
+- One `FFinareSharedDataPlane` belongs to one World subsystem.
 - Native publishes the inactive buffer and then flips the active buffer.
 - A view is valid only until the next World snapshot publication.
 - Managed exposes the view as a `ref struct`, so it cannot be retained on the
@@ -40,7 +40,7 @@ crosses the boundary.
 
 ## Transform row
 
-`FUnifiedScriptTransformSnapshotEntryV4` is a fixed 96-byte row:
+`FFinareTransformSnapshotEntryV4` is a fixed 96-byte row:
 
 | Offset | Field | Shape |
 | ---: | --- | --- |
@@ -72,7 +72,7 @@ is exposed.
 ## Discovery
 
 The append-only ABI v2 bootstrap now exposes a pointer to the independent
-56-byte `FUnifiedScriptSharedDataTransportV4` table after the call-frame and
+56-byte `FFinareSharedDataTransportV4` table after the call-frame and
 event table pointers. Older managed hosts ignore the suffix. New hosts validate
 the table and call `AcquireTransformSnapshot` once per gameplay phase.
 

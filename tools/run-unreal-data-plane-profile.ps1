@@ -1,14 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [string]$SuiteMetricsPath,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$managedProject = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $artifactDirectory = Join-Path $repoRoot 'artifacts\ue'
 $logPath = Join-Path $artifactDirectory 'data-plane-profile.log'
 $reportPath = Join-Path $artifactDirectory 'data-plane-profile.json'
@@ -19,7 +19,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
@@ -42,7 +42,7 @@ if (!$SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
         throw "Managed data-plane profile build failed with exit code $LASTEXITCODE."
     }
-    & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+    & $buildBat FinareHostEditor Win64 Development $projectPath `
         -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
     if ($LASTEXITCODE -ne 0) {
         throw "Unreal data-plane profile build failed with exit code $LASTEXITCODE."
@@ -69,7 +69,7 @@ try {
         $ErrorActionPreference = 'Continue'
         & $editorCmd $projectPath `
             -unattended -nop4 -NullRHI -nosplash `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.DataPlaneWorkloadProfile' `
+            '-ExecCmds=Automation RunTests Finare.Unreal.Performance.DataPlaneWorkloadProfile' `
             '-TestExit=Automation Test Queue Empty' `
             "-abslog=$logPath" -log
         $editorExitCode = $LASTEXITCODE
@@ -93,12 +93,12 @@ if ($editorExitCode -ne 0) {
     throw "Unreal data-plane profile process failed with exit code $editorExitCode."
 }
 $successPattern =
-    'Test Completed. Result={Success} Name={DataPlaneWorkloadProfile} Path={UnifiedScript.Unreal.Performance.DataPlaneWorkloadProfile}'
+    'Test Completed. Result={Success} Name={DataPlaneWorkloadProfile} Path={Finare.Unreal.Performance.DataPlaneWorkloadProfile}'
 if (!(Select-String -LiteralPath $logPath -SimpleMatch $successPattern -Quiet)) {
     throw "DataPlaneWorkloadProfile Automation did not succeed. Log: $logPath"
 }
 
-$marker = 'UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON '
+$marker = 'FINARE_DATA_PLANE_PROFILE_JSON '
 $line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
     Select-Object -Last 1
 if ($null -eq $line) {
@@ -152,7 +152,7 @@ $report = [ordered]@{
         'passed'
     } else { 'failed' }
     engineRoot = [IO.Path]::GetFullPath($EngineRoot)
-    test = 'UnifiedScript.Unreal.Performance.DataPlaneWorkloadProfile'
+    test = 'Finare.Unreal.Performance.DataPlaneWorkloadProfile'
     result = $result
     ratios = [ordered]@{
         commandSubmitToScalarBinding = $movementRatio

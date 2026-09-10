@@ -2,13 +2,13 @@
   "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
   "contractName": "__PROJECT_NAME__.Gameplay",
   "managedNamespace": "__MANAGED_NAMESPACE__.Generated",
-  "nativeHeader": "UnifiedScriptGeneratedThunks.h",
-  "nativeNamespace": "UE::UnifiedScript::Generated",
+  "nativeHeader": "FinareGeneratedThunks.h",
+  "nativeNamespace": "UE::Finare::Generated",
   "types": [
     {
-      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "path": "/Script/FinareRuntime.FinareActor",
       "members": [
-        "GetUnifiedScriptComponent",
+        "GetFinareComponent",
         "IncrementManagedTickCount",
         "ManagedActorState",
         "ManagedTickCount",
@@ -18,7 +18,7 @@
       ]
     },
     {
-      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "path": "/Script/FinareRuntime.FinareComponent",
       "members": [
         "Add",
         "GetScriptStateInt32",

@@ -1,0 +1,265 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "AsyncUiDemoScript.cs",
+  "sourceDigest": "sha256:1a49573ec2b5c1d29ba76691e16731fef06a5470ec204a8f2429579efcf7ca6f",
+  "generation": 3,
+  "entries": [
+    {
+      "id": "us_0d663a1905d489bf1f5798949a3a2fbe",
+      "kind": "invocation",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "expression",
+      "fingerprint": "sha256:c1e24523cdd1824c57c9633325447a7355b7761a659302a3672a712e0733cdfd",
+      "shapeFingerprint": "sha256:f45aa68a0fe5be3d5b9e9e49fc2e8b4f601f4a07032de47b5eacab14c8c52764",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 1630,
+        "length": 12
+      },
+      "contextBefore": "sha256:d1a6857673529ac06dc530cb92d4b7ca4bbc978ec7e7ee46abf07b5c1aa33774",
+      "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
+      "generation": 3
+    },
+    {
+      "id": "us_1c5e5fc10f6543eb85e0464e44ed65f9",
+      "kind": "identifier",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "target",
+      "fingerprint": "sha256:a4d087b03ac688705527c76c15a40090090bbae5f7b91b6977d10f63730e5374",
+      "shapeFingerprint": "sha256:a4d087b03ac688705527c76c15a40090090bbae5f7b91b6977d10f63730e5374",
+      "parentFingerprint": "sha256:f45aa68a0fe5be3d5b9e9e49fc2e8b4f601f4a07032de47b5eacab14c8c52764",
+      "anchor": {
+        "start": 1630,
+        "length": 10
+      },
+      "contextBefore": "sha256:d1a6857673529ac06dc530cb92d4b7ca4bbc978ec7e7ee46abf07b5c1aa33774",
+      "contextAfter": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "generation": 3
+    },
+    {
+      "id": "us_293852b5712e27c0f03422eb50c02ae6",
+      "kind": "return",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+      "role": "statement",
+      "fingerprint": "sha256:089cabae9cceae37e697eb57d926618ca1e9eff185653bb97226824ffd9b15b1",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 1875,
+        "length": 14
+      },
+      "contextBefore": "sha256:01dc16763fda1fd5834258833544e10a8c9db752db1c6cc214ec11ed925ad4b9",
+      "contextAfter": "sha256:fc3fa79354774379abcc8cc7c1b94fcc09d710700fd7e7a3ff523d9de173ac2c",
+      "generation": 3
+    },
+    {
+      "id": "us_420d33a2cdb66f8c08213fb6f45211ad",
+      "kind": "block",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+      "role": "body",
+      "fingerprint": "sha256:e81a8a59ead183153d2438d87fed2c4ece4cd04422864f198194cee94cfd6683",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:9918d5f439a95496424739669e4be6e258d186b5851240a4fa1758b50f1631a7",
+      "anchor": {
+        "start": 1865,
+        "length": 30
+      },
+      "contextBefore": "sha256:d4faa61c1aaf25b95005d34fd16a67d5a0a4e950a4605759a580b0ff8e47fe4d",
+      "contextAfter": "sha256:c855e587efa90ab037ccada587ad9e089284fb20cfba8ff5a1519e9573257fa5",
+      "generation": 3
+    },
+    {
+      "id": "us_4ba56949e0b9bca1f90547a7c8bdcc03",
+      "kind": "block",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "body",
+      "fingerprint": "sha256:1b3724d1082761bdd12b82885ede0a4574976aaa1a1364b271be8827140eb29b",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:3d5ae7a6ec16a5b0484803162efcb1211c37ebcb8d13246e61714c733bfb961f",
+      "anchor": {
+        "start": 1698,
+        "length": 37
+      },
+      "contextBefore": "sha256:6a7451be5525dcc0dd5fa883b2818da1cebd037b36dd7bde2e03024067262929",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
+      "id": "us_4d5342d5fd5fd3eab04010dbbdf7b1a3",
+      "kind": "state",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript",
+      "role": "state",
+      "fingerprint": "sha256:e63a41f6212b93dfe661b3d843ea7eb3367a40ef0c2792d4ac39ab3604d96f18",
+      "shapeFingerprint": "sha256:e63a41f6212b93dfe661b3d843ea7eb3367a40ef0c2792d4ac39ab3604d96f18",
+      "parentFingerprint": "sha256:ea15f35d8896c7246f9e2bbfe20fd8a5a2471888b6f15ab2f56b416b13f64e5b",
+      "anchor": {
+        "start": 496,
+        "length": 102
+      },
+      "contextBefore": "sha256:bae4aca916dcdaad1c6f3091ba78e65db07c758f5d06f8ef4cc3229cde7abb3e",
+      "contextAfter": "sha256:404e96cd3a60807463b5130969962525980e6e4bd4a7d866ac9daa5b6d581382",
+      "generation": 3
+    },
+    {
+      "id": "us_54596f746e682942c83dcf140e2ee8d3",
+      "kind": "function",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:a2168e14e0074c915aba781b45f98081c5b9e79f8151b753dead5495f8ea1a31",
+      "anchor": {
+        "start": 1576,
+        "length": 73
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
+      "id": "us_679f32dba7aa531ec07eec48c5eab16a",
+      "kind": "function",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:9918d5f439a95496424739669e4be6e258d186b5851240a4fa1758b50f1631a7",
+      "anchor": {
+        "start": 1819,
+        "length": 76
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:c855e587efa90ab037ccada587ad9e089284fb20cfba8ff5a1519e9573257fa5",
+      "generation": 3
+    },
+    {
+      "id": "us_782876a00b7dbdfa352bc7e8cbdf7f26",
+      "kind": "block",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "body",
+      "fingerprint": "sha256:1f5662f5898181cd312d049806b444738e99e738bbf3f7171187c9382905e828",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:a2168e14e0074c915aba781b45f98081c5b9e79f8151b753dead5495f8ea1a31",
+      "anchor": {
+        "start": 1620,
+        "length": 29
+      },
+      "contextBefore": "sha256:b60df376c3bec016e6371b5e6d5e0d46b2b7c5a6a174449d441af3a8a5cfd486",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
+      "id": "us_7ac2b32268e431651ae36e41707b8059",
+      "kind": "expressionStatement",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "statement",
+      "fingerprint": "sha256:3f56de2c3d5dc8836c178df662f71819bc798eb585f26ab75eedc09f2fc98c9f",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 1708,
+        "length": 21
+      },
+      "contextBefore": "sha256:e099900be77a2b3af0561887b07f0b01a80ec241b9e25a32961be9cba8a57b60",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 3
+    },
+    {
+      "id": "us_a6cc4350e118008d553f693c9a3a5d18",
+      "kind": "state",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript",
+      "role": "state",
+      "fingerprint": "sha256:e63a41f6212b93dfe661b3d843ea7eb3367a40ef0c2792d4ac39ab3604d96f18",
+      "shapeFingerprint": "sha256:e63a41f6212b93dfe661b3d843ea7eb3367a40ef0c2792d4ac39ab3604d96f18",
+      "parentFingerprint": "sha256:ea15f35d8896c7246f9e2bbfe20fd8a5a2471888b6f15ab2f56b416b13f64e5b",
+      "anchor": {
+        "start": 604,
+        "length": 84
+      },
+      "contextBefore": "sha256:acafb25f156f1916cadacd6ad85f86151d729ff4558a4280e42e8c3fe60cdc4a",
+      "contextAfter": "sha256:d36df1dc333a5d846dff84111669406494c25a5dab1217c5e4eba496e21b2e8a",
+      "generation": 3
+    },
+    {
+      "id": "us_ae232d41963d9d55ff48fc5a3544f019",
+      "kind": "identifier",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "target",
+      "fingerprint": "sha256:ea2e54d6e19bb10a7245cca7064b92572bda61c319ad3396aec2793815be9b3a",
+      "shapeFingerprint": "sha256:ea2e54d6e19bb10a7245cca7064b92572bda61c319ad3396aec2793815be9b3a",
+      "parentFingerprint": "sha256:f45aa68a0fe5be3d5b9e9e49fc2e8b4f601f4a07032de47b5eacab14c8c52764",
+      "anchor": {
+        "start": 1708,
+        "length": 18
+      },
+      "contextBefore": "sha256:e099900be77a2b3af0561887b07f0b01a80ec241b9e25a32961be9cba8a57b60",
+      "contextAfter": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "generation": 3
+    },
+    {
+      "id": "us_bf204e4c56d3b24c0b96dbc600fc7dee",
+      "kind": "function",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:3d5ae7a6ec16a5b0484803162efcb1211c37ebcb8d13246e61714c733bfb961f",
+      "anchor": {
+        "start": 1655,
+        "length": 80
+      },
+      "contextBefore": "sha256:704eccd5078dd4f84a78b7de2f804d106455007c7225dd2509e3501660a1ac33",
+      "contextAfter": "sha256:287284c630f55d871cc9cc7dff1f90bd5431548daca1e797e04d10671d3928dd",
+      "generation": 3
+    },
+    {
+      "id": "us_d2f29b18379893bcbde71d238931ccf0",
+      "kind": "expressionStatement",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.RequestSpawn()",
+      "role": "statement",
+      "fingerprint": "sha256:8218cc50d5727f284297ca1eed8a64a1c2833d26b1bcce9676648c48ded36f39",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 1630,
+        "length": 13
+      },
+      "contextBefore": "sha256:d1a6857673529ac06dc530cb92d4b7ca4bbc978ec7e7ee46abf07b5c1aa33774",
+      "contextAfter": "sha256:3dbc3952c4794bd1e1586fb4b2a85b97dda1452cfb7d76023cae4c2fd7a5faf4",
+      "generation": 3
+    },
+    {
+      "id": "us_dfd7c2e34e1efa346493d94caa58c14f",
+      "kind": "literal",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.PreviewHeight()",
+      "role": "returnValue",
+      "fingerprint": "sha256:65b0711a7f203894e5b3b4540fd4b6136bf8f07d777aa5f43e9c936bdc3687bb",
+      "shapeFingerprint": "sha256:65b0711a7f203894e5b3b4540fd4b6136bf8f07d777aa5f43e9c936bdc3687bb",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 1882,
+        "length": 6
+      },
+      "contextBefore": "sha256:1db858693f3fb1df8a5a78e1a21796fa316eb8829aa2db0e03df41d3a1a7334a",
+      "contextAfter": "sha256:4b961e05d01001732d896b388416afc7928db1a5e956f26a348d64d35296c91a",
+      "generation": 3
+    },
+    {
+      "id": "us_fa025b902436955373a6b8e1c9c7ef9d",
+      "kind": "invocation",
+      "owner": "Finare.Unreal.Demo.AsyncUiDemoScript.CancelSpawn()",
+      "role": "expression",
+      "fingerprint": "sha256:a6db06203e5f4f1c5870ecfb36c8ddf87ab054370c1cdd7cdf123fd99cac4931",
+      "shapeFingerprint": "sha256:f45aa68a0fe5be3d5b9e9e49fc2e8b4f601f4a07032de47b5eacab14c8c52764",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 1708,
+        "length": 20
+      },
+      "contextBefore": "sha256:e099900be77a2b3af0561887b07f0b01a80ec241b9e25a32961be9cba8a57b60",
+      "contextAfter": "sha256:f16e771e82a3cec4edd1134566b9e259a4a1cfce821d1287df14ce244f872af3",
+      "generation": 3
+    }
+  ],
+  "tombstones": []
+}

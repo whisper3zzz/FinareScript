@@ -1,7 +1,7 @@
-# UnifiedScript compiled chunks
+# Finare compiled chunks
 
 `.uschunk` is the deterministic delivery container for a compiled
-UnifiedScript program. It is analogous to the packaging role of a Lua chunk,
+Finare program. It is analogous to the packaging role of a Lua chunk,
 but it does **not** introduce another interpreter or bytecode virtual machine.
 Restricted C# still compiles to deterministic PE/IL and executes on CoreCLR;
 the chunk removes loose-file discovery and JSON framing from the shipping load
@@ -72,7 +72,7 @@ is configured.
 Pack already-produced runtime artifacts deterministically:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- chunk-pack `
+dotnet run --project src/Finare.Cli -- chunk-pack `
   --out Game.uschunk `
   --runtime-manifest Game.runtime.bin `
   --assembly Game.dll `
@@ -86,7 +86,7 @@ dotnet run --project src/UnifiedScript.Cli -- chunk-pack `
 Inspect and verify the envelope before staging it:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- chunk-inspect Game.uschunk
+dotnet run --project src/Finare.Cli -- chunk-inspect Game.uschunk
 ```
 
 `chunk-pack` writes transactionally. Repacking identical payload bytes in any
@@ -95,7 +95,7 @@ digest. `chunk-inspect` applies the strict runtime-program profile and only then
 emits a JSON tooling report; that report is not consumed by the game runtime.
 
 The normal compiler path does not require manually preparing those payloads.
-`unifiedscript emit` writes the loose migration artifacts and a sibling
+`finare emit` writes the loose migration artifacts and a sibling
 `.uschunk` from the same semantic program. Debug emission embeds the portable
 PDB section; Release emission omits it from the runtime chunk while retaining
 the sibling loose PDB for diagnostics. The Unreal demo helper builds and stages
@@ -130,7 +130,7 @@ migration fallback.
 The editor/World vertical slice is complete: UE 5.8 Automation starts and
 reloads the demo from one chunk while materializing state with no loose
 declaration path. A strict deployment commandlet validates all runtime sections
-before updating Script Assets, and `-UnifiedScriptDisableCompiledChunks`
+before updating Script Assets, and `-FinareDisableCompiledChunks`
 selects the loose DLL/JSON compatibility path for migration and A/B evidence.
 
 ## M11.4 phased load profiling
@@ -140,10 +140,10 @@ model. It writes a versioned report without embedding the input path or a wall
 clock timestamp:
 
 ```powershell
-dotnet UnifiedScript.Cli.dll chunk-profile Game.uschunk `
+dotnet Finare.Cli.dll chunk-profile Game.uschunk `
   --out Game.chunk-profile.json `
   --trials 5 `
-  --reference UnifiedScript.Unreal.dll
+  --reference Finare.Unreal.dll
 ```
 
 Each trial opens a fresh stream and collectible load context. Trial one is
@@ -175,7 +175,7 @@ publishes the individual reports plus one median suite:
 ```powershell
 .\tools\measure-compiled-chunk-load.ps1 `
   -ChunkPath Game.uschunk `
-  -ReferencePath UnifiedScript.Unreal.dll `
+  -ReferencePath Finare.Unreal.dll `
   -Trials 5
 ```
 
@@ -326,7 +326,7 @@ generation retirement, and World teardown cancel the operation before the
 generation bridge is released and the collectible load context is asked to
 unload. The existing managed reload-transaction v0.1 JSON exposes the live
 snapshot as an additive property that the native v0.1 reader safely ignores.
-`UNIFIEDSCRIPT_DISABLE_BACKGROUND_PREWARM=1` exists only for the controlled
+`FINARE_DISABLE_BACKGROUND_PREWARM=1` exists only for the controlled
 compatibility/A-B lane.
 
 `tools/measure-generation-prewarm.ps1` emits a deterministic no-native-bridge
@@ -369,7 +369,7 @@ for the operation. Defaults are 32 dependencies, 64 MiB, and a cooperative
 500 ms. The budget is checked between dependency operations, while the fixed
 1,729-byte codec probe is finite but not interruptible. Failures are contained
 as type-only diagnostics, the live snapshot is copied into reload transactions,
-and `UNIFIEDSCRIPT_DISABLE_PROGRAM_LOADER_PREWARM=1` is reserved for controlled
+and `FINARE_DISABLE_PROGRAM_LOADER_PREWARM=1` is reserved for controlled
 A/B runs.
 
 The seekable chunk reader also removed one redundant whole-file copy. A proposed

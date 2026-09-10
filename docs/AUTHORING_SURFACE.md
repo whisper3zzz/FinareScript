@@ -212,7 +212,7 @@ control transfer, async boundaries, name conflicts, or multiple outputs. See
 
 ## HTTP and CLI delivery
 
-`unifiedscript analyze ... --out <directory>` now writes
+`finare analyze ... --out <directory>` now writes
 `<name>.surface.json` beside HIR, semantic, Graph, and Declaration artifacts.
 The local authoring host publishes workspace v0.4, which contains Declaration
 IR, Graph, Surface, canonical source, revision, bounded transaction history, and
@@ -318,7 +318,7 @@ overload. Latent and current void-statement actions remain discoverable with an
 unavailable marker until their continuation/statement source transactions are
 implemented; deprecation remains a warning rather than silently hiding an API.
 
-`FUnifiedScriptGraphPresentation` is a read-only display policy above that
+`FFinareGraphPresentation` is a read-only display policy above that
 contract. It keeps every Surface record addressable while folding connected
 identifier/literal leaves into consumer labels, hiding unused data outputs,
 renaming IR pins to author-facing labels, and deciding which complex actions
@@ -345,7 +345,7 @@ For a concrete UE round trip, the checked-in Demo's `RewirePreview` function
 contains two pure parameter expressions. Dragging the `*` output to the
 `Declare incremented` value input now produces one shared local and connects
 both declarations to it. `UEApiPreview` supplies a typed
-`UnifiedScriptComponent` receiver plus `left`/`right` parameters, so the
+`FinareComponent` receiver plus `left`/`right` parameters, so the
 reflection palette can insert another generated-wrapper `Add` call, read a
 reflected component property, or create a typed integer Add Expression and
 publish the result immediately through the same compile/reload transaction.

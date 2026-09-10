@@ -161,7 +161,7 @@ Its two plan stages are:
 Run it with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditNestedInput.cs \
   --identity samples/Patching/EditNestedInput.cs.usids \

@@ -1,8 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <Description>Language-neutral types, symbols, effects, and bound HIR annotations.</Description>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
-  </ItemGroup>
-</Project>

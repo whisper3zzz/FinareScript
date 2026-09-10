@@ -13,11 +13,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($CliAssembly)) {
-    $packagedCli = Join-Path $repoRoot 'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll'
+    $packagedCli = Join-Path $repoRoot 'Tools\Finare.Cli\Finare.Cli.dll'
     $CliAssembly = if (Test-Path -LiteralPath $packagedCli -PathType Leaf) {
         $packagedCli
     } else {
-        Join-Path $repoRoot 'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
+        Join-Path $repoRoot 'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
     }
 }
 if ([string]::IsNullOrWhiteSpace($ProbeSource)) {
@@ -39,9 +39,9 @@ foreach ($required in @($dotnet, $resolvedCli, $resolvedProbe)) {
 
 $cliDirectory = Split-Path -Parent $resolvedCli
 $references = @(
-    (Join-Path $cliDirectory 'UnifiedScript.Core.dll'),
-    (Join-Path $cliDirectory 'UnifiedScript.Runtime.dll'),
-    (Join-Path $cliDirectory 'UnifiedScript.Unreal.dll')
+    (Join-Path $cliDirectory 'Finare.Core.dll'),
+    (Join-Path $cliDirectory 'Finare.Runtime.dll'),
+    (Join-Path $cliDirectory 'Finare.Unreal.dll')
 )
 foreach ($reference in $references) {
     if (!(Test-Path -LiteralPath $reference -PathType Leaf)) {
@@ -61,7 +61,7 @@ $emitArguments = @(
     '--out',
     $probeDirectory,
     '--assembly',
-    'UnifiedScript.GenerationPrewarmProbe'
+    'Finare.GenerationPrewarmProbe'
 )
 foreach ($reference in $references) {
     $emitArguments += @('--reference', $reference)
@@ -102,7 +102,7 @@ for ($trial = 1; $trial -le $Trials; ++$trial) {
             'chunk-first-tick-profile',
             $chunkPath,
             '--type',
-            'UnifiedScript.Benchmarks.GenerationPrewarmProbe',
+            'Finare.Benchmarks.GenerationPrewarmProbe',
             '--out',
             $trialPath,
             '--frame-gap-ms',

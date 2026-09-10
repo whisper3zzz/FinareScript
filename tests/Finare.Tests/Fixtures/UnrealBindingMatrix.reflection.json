@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "unifiedscript.unreal-reflection/v0.3",
+  "engine": { "major": 5, "minor": 8, "patch": 1, "branch": "fixture" },
+  "modules": [ "BindingMatrix" ],
+  "types": [
+    {
+      "path": "/Script/BindingMatrix.FixtureMode",
+      "name": "FixtureMode",
+      "nativeName": "EFixtureMode",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureTypes.h",
+      "kind": "enum",
+      "traits": { "abstract": false, "blueprintType": true, "interface": false },
+      "properties": [], "functions": [], "delegates": [], "interfacePaths": [],
+      "enumValues": [
+        { "name": "Idle", "value": 0, "displayName": "Idle" },
+        { "name": "Active", "value": 1, "displayName": "Active" }
+      ],
+      "metadata": { "displayName": "Fixture Mode", "deprecated": false }
+    },
+    {
+      "path": "/Script/BindingMatrix.InnerData",
+      "name": "InnerData",
+      "nativeName": "FInnerData",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureTypes.h",
+      "kind": "struct",
+      "traits": { "abstract": false, "blueprintType": true, "interface": false },
+      "properties": [
+        { "path": "/Script/BindingMatrix.InnerData:Value", "name": "Value", "type": { "kind": "int32", "nativeName": "int32" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } }
+      ],
+      "functions": [], "delegates": [], "interfacePaths": [], "enumValues": [],
+      "metadata": { "deprecated": false }
+    },
+    {
+      "path": "/Script/BindingMatrix.OuterData",
+      "name": "OuterData",
+      "nativeName": "FOuterData",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureTypes.h",
+      "kind": "struct",
+      "traits": { "abstract": false, "blueprintType": true, "interface": false },
+      "properties": [
+        { "path": "/Script/BindingMatrix.OuterData:Inner", "name": "Inner", "type": { "kind": "struct", "nativeName": "FInnerData", "typePath": "/Script/BindingMatrix.InnerData", "headerPath": "FixtureTypes.h" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.OuterData:Modes", "name": "Modes", "type": { "kind": "array", "nativeName": "TArray<EFixtureMode>", "elementType": { "kind": "enum", "nativeName": "EFixtureMode", "typePath": "/Script/BindingMatrix.FixtureMode", "headerPath": "FixtureTypes.h" } }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } }
+      ],
+      "functions": [], "delegates": [], "interfacePaths": [], "enumValues": [],
+      "metadata": { "deprecated": false }
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureInterface",
+      "name": "FixtureInterface",
+      "nativeName": "UFixtureInterface",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureInterface.h",
+      "kind": "class",
+      "baseTypePath": "/Script/CoreUObject.Interface",
+      "traits": { "abstract": true, "blueprintType": true, "interface": true },
+      "properties": [], "functions": [], "delegates": [], "interfacePaths": [], "enumValues": [],
+      "metadata": { "displayName": "Fixture Interface", "deprecated": false }
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureBase",
+      "name": "FixtureBase",
+      "nativeName": "UFixtureBase",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureBase.h",
+      "kind": "class",
+      "baseTypePath": "/Script/CoreUObject.Object",
+      "traits": { "abstract": true, "blueprintType": true, "interface": false },
+      "properties": [], "functions": [], "delegates": [], "interfacePaths": [], "enumValues": [],
+      "metadata": { "deprecated": false }
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived",
+      "name": "FixtureDerived",
+      "nativeName": "UFixtureDerived",
+      "module": "BindingMatrix",
+      "headerPath": "FixtureDerived.h",
+      "kind": "class",
+      "baseTypePath": "/Script/BindingMatrix.FixtureBase",
+      "traits": { "abstract": false, "blueprintType": true, "interface": false },
+      "interfacePaths": [ "/Script/BindingMatrix.FixtureInterface" ],
+      "enumValues": [],
+      "metadata": { "displayName": "Fixture Derived", "category": "Finare|Matrix", "tooltip": "M7.1 binding matrix fixture.", "deprecated": false },
+      "properties": [
+        { "path": "/Script/BindingMatrix.FixtureDerived:ClassValue", "name": "ClassValue", "type": { "kind": "class", "nativeName": "TSubclassOf<UObject>", "typePath": "/Script/CoreUObject.Object" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:MapValue", "name": "MapValue", "type": { "kind": "map", "nativeName": "TMap<FString,FOuterData>", "keyType": { "kind": "string", "nativeName": "FString" }, "valueType": { "kind": "struct", "nativeName": "FOuterData", "typePath": "/Script/BindingMatrix.OuterData", "headerPath": "FixtureTypes.h" } }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:Mode", "name": "Mode", "type": { "kind": "enum", "nativeName": "EFixtureMode", "typePath": "/Script/BindingMatrix.FixtureMode", "headerPath": "FixtureTypes.h" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:ObjectValue", "name": "ObjectValue", "type": { "kind": "object", "nativeName": "UObject*", "typePath": "/Script/CoreUObject.Object" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:ProtectedLabel", "name": "ProtectedLabel", "type": { "kind": "string", "nativeName": "FString" }, "access": { "readable": true, "writable": false, "editorVisible": true, "nativeAccess": "protected" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:SoftClass", "name": "SoftClass", "type": { "kind": "softClass", "nativeName": "TSoftClassPtr<UObject>", "typePath": "/Script/CoreUObject.Object" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:SoftObject", "name": "SoftObject", "type": { "kind": "softObject", "nativeName": "TSoftObjectPtr<UObject>", "typePath": "/Script/CoreUObject.Object" }, "access": { "readable": true, "writable": true, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "displayName": "Soft Object", "category": "Assets", "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:UnsafeValue", "name": "UnsafeValue", "type": { "kind": "unsupported", "nativeName": "TWeakObjectPtr<UObject>" }, "access": { "readable": true, "writable": false, "editorVisible": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } }
+      ],
+      "delegates": [],
+      "functions": [
+        { "path": "/Script/BindingMatrix.FixtureDerived:BatchMove", "name": "BatchMove", "returnType": { "kind": "void", "nativeName": "void" }, "parameters": [ { "name": "Targets", "type": { "kind": "array", "nativeName": "TArray<UObject*>", "elementType": { "kind": "object", "nativeName": "UObject*", "typePath": "/Script/CoreUObject.Object" } }, "direction": "input" } ], "traits": { "static": false, "pure": false, "callable": true, "nativeAccess": "public" }, "metadata": { "category": "Data Plane", "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:EchoOuter", "name": "EchoOuter", "returnType": { "kind": "struct", "nativeName": "FOuterData", "typePath": "/Script/BindingMatrix.OuterData", "headerPath": "FixtureTypes.h" }, "parameters": [ { "name": "Value", "type": { "kind": "struct", "nativeName": "FOuterData", "typePath": "/Script/BindingMatrix.OuterData", "headerPath": "FixtureTypes.h" }, "direction": "input" } ], "traits": { "static": false, "pure": true, "callable": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:Mutate", "name": "Mutate", "returnType": { "kind": "boolean", "nativeName": "bool" }, "parameters": [ { "name": "Value", "type": { "kind": "int32", "nativeName": "int32" }, "direction": "inputOutput" }, { "name": "Doubled", "type": { "kind": "int32", "nativeName": "int32" }, "direction": "output" } ], "traits": { "static": false, "pure": false, "callable": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:Scale(float)", "name": "Scale", "returnType": { "kind": "float32", "nativeName": "float" }, "parameters": [ { "name": "Value", "type": { "kind": "float32", "nativeName": "float" }, "direction": "input" } ], "traits": { "static": false, "pure": true, "callable": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:Scale(int32)", "name": "Scale", "returnType": { "kind": "int32", "nativeName": "int32" }, "parameters": [ { "name": "Value", "type": { "kind": "int32", "nativeName": "int32" }, "direction": "input" } ], "traits": { "static": false, "pure": true, "callable": true, "nativeAccess": "public" }, "metadata": { "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:Spawn", "name": "Spawn", "returnType": { "kind": "object", "nativeName": "UObject*", "typePath": "/Script/CoreUObject.Object" }, "parameters": [ { "name": "Count", "type": { "kind": "int32", "nativeName": "int32" }, "direction": "input", "defaultValue": "1" }, { "name": "Deferred", "type": { "kind": "boolean", "nativeName": "bool" }, "direction": "input", "defaultValue": "false" } ], "traits": { "static": false, "pure": false, "callable": true, "nativeAccess": "public" }, "metadata": { "displayName": "Spawn Fixture", "category": "Gameplay|Spawn", "tooltip": "Spawns fixture objects.", "deprecated": false } },
+        { "path": "/Script/BindingMatrix.FixtureDerived:WorldTime", "name": "WorldTime", "returnType": { "kind": "float64", "nativeName": "double" }, "parameters": [ { "name": "WorldContextObject", "type": { "kind": "object", "nativeName": "UObject*", "typePath": "/Script/CoreUObject.Object" }, "direction": "input" } ], "traits": { "static": true, "pure": true, "callable": true, "nativeAccess": "public" }, "metadata": { "displayName": "World Time", "category": "World", "worldContextParameter": "WorldContextObject", "deprecated": false } }
+      ]
+    }
+  ]
+}

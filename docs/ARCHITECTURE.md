@@ -1,8 +1,8 @@
-# UnifiedScript Architecture
+# Finare Architecture
 
 ## Purpose
 
-UnifiedScript provides one gameplay language with two authoring projections:
+Finare provides one gameplay language with two authoring projections:
 restricted C# text and a structured visual graph. Both projections must preserve
 semantic identity and ultimately execute the same compiled method body.
 
@@ -94,7 +94,7 @@ flowchart LR
 
 ## Project boundaries
 
-### UnifiedScript.Core
+### Finare.Core
 
 - `VisualAttribute`
 - `ScriptAssetAttribute` and `ExposeAttribute`
@@ -109,7 +109,7 @@ flowchart LR
 
 This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 
-### UnifiedScript.CSharp
+### Finare.CSharp
 
 - Roslyn parsing
 - detection of `[Visual]` methods
@@ -129,7 +129,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 
 It may depend on Core, Semantics, Graph, and Roslyn, but not on Runtime or UE.
 
-### UnifiedScript.Semantics
+### Finare.Semantics
 
 - primitive and nominal type descriptors
 - nullability annotations
@@ -143,7 +143,7 @@ It depends only on Core. It must never expose `ITypeSymbol`, `IMethodSymbol`,
 CoreCLR hosting objects, or UE reflection objects. Roslyn and future UE adapters
 translate into this contract.
 
-### UnifiedScript.Graph
+### Finare.Graph
 
 - graph document schema
 - data and control ports
@@ -155,7 +155,7 @@ translate into this contract.
 It depends on Core and Semantics. This lets later frontends render a typed,
 effect-aware graph without hosting Roslyn.
 
-### UnifiedScript.Runtime
+### Finare.Runtime
 
 - backend-neutral semantic-ID invocation and typed result/fault contracts
 - strict execution-result JSON
@@ -173,7 +173,7 @@ It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
 context is a reload mechanism, not a security sandbox.
 
-### UnifiedScript.Unreal
+### Finare.Unreal
 
 - strict Unreal reflection manifest v0.1 model and canonical JSON
 - engine version and selected-module identity without absolute engine paths
@@ -196,10 +196,10 @@ validated `bool`, `int32`, `FString`, and void property/function dispatch throug
 and stable failures into `IUnrealInvocationBridge`. A versioned native function
 table and `InProcessUnrealNativeInvocationTransport` now provide the concrete
 synchronous process boundary without sharing allocator ownership.
-`UUnifiedScriptWorldSubsystem` now owns one registry and bridge per supported
+`UFinareWorldSubsystem` now owns one registry and bridge per supported
 World. Its ref-counted context detaches before handle invalidation and native
 destruction, so retained managed transports fail safely after World teardown.
-A process-wide `FUnifiedScriptCoreClrHost` now loads hostfxr from the selected or
+A process-wide `FFinareCoreClrHost` now loads hostfxr from the selected or
 engine-bundled .NET root, initializes the checked-in runtimeconfig, and acquires
 the CoreCLR load-assembly delegate. Native World initialization calls an
 `UnmanagedCallersOnly` managed entry point, which retains the transport and owns
@@ -223,14 +223,14 @@ Transform Shared Data ABI publishes borrowed World snapshots, while Gameplay
 Data ABI v4 schedules managed/native phases and carries fixed command, event,
 and Batch Trace rows without exposing Unreal allocator or UObject layouts.
 
-`UUnifiedScriptAsset` now owns the managed assembly/type identity as a native
+`UFinareAsset` now owns the managed assembly/type identity as a native
 UE Data Asset. A component can hold a Content Browser reference, load a soft
 `ScriptAssetPath`, or use legacy direct fields. Start resolves and validates one
 configuration snapshot. Reload resolves a new snapshot and loads its assembly
 and type before stopping the current generation, so invalid asset edits leave
 the previous script running. Cook-time dependency discovery remains open.
 
-### UnifiedScript.Authoring
+### Finare.Authoring
 
 - deterministic multi-asset and multi-function authoring hierarchy
 - complete Graph-node projection with UI-selectable expression compaction
@@ -245,7 +245,7 @@ It depends only on Core and Graph. It does not parse source, host Roslyn or
 CoreCLR, render a browser/Slate UI, apply patches, or depend on UE. A frontend
 consumes this projection instead of becoming a second Graph interpreter.
 
-### UnifiedScript.Cli
+### Finare.Cli
 
 - filesystem input/output
 - diagnostics rendering

@@ -1,6 +1,6 @@
-using UnifiedScript;
+using Finare;
 
-namespace UnifiedScript.Unreal.Diagnostics;
+namespace Finare.Unreal.Diagnostics;
 
 public static class GameplayDiagnosisFixture
 {

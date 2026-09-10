@@ -1,13 +1,13 @@
 # Behavior Workbench M6.0
 
-This dependency-free frontend demonstrates the intended UnifiedScript
+This dependency-free frontend demonstrates the intended Finare
 authoring experience. It is a structured semantic workbench, not a
 Blueprint-style one-node-per-expression graph.
 
 ## Run the live single-asset workflow
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   debug-serve samples/Authoring/DamagePolicy.cs \
   --root prototype/visual-editor \
   --port 4173
@@ -18,7 +18,7 @@ Open <http://127.0.0.1:4173>.
 ## Run the multi-asset/control-flow workflow
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   debug-serve samples/Authoring/MultiAssetControlFlow.cs \
   --root prototype/visual-editor \
   --port 4173
@@ -71,7 +71,7 @@ artifacts, and reloads a new CoreCLR generation.
 
 The browser does not infer action promotion, reconstruct expressions from Graph
 edges, discover region ownership, guess state references, or choose patch
-preconditions. `UnifiedScript.Authoring` does this once in .NET and publishes a
+preconditions. `Finare.Authoring` does this once in .NET and publishes a
 strict engine-neutral Surface. The frontend only renders that Surface and
 translates an advertised capability to its existing patch operation.
 

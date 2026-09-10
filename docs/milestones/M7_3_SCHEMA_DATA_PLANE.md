@@ -54,9 +54,9 @@ powershell -ExecutionPolicy Bypass `
 - managed suite: 452/452 passed;
 - repository validator: 47/47 invariants passed;
 - UE 5.8.1 editor build: passed;
-- `UnifiedScript.Unreal.GameplayData.CommandEventAndBatchTrace`: passed with
+- `Finare.Unreal.GameplayData.CommandEventAndBatchTrace`: passed with
   command/event/trace/overlap bounds and telemetry;
-- `UnifiedScript.Unreal.Performance.DataPlaneWorkloadProfile`: passed;
+- `Finare.Unreal.Performance.DataPlaneWorkloadProfile`: passed;
 - profile report: `artifacts/ue/data-plane-profile.json`, status `passed`.
 - full onboarding: `artifacts/onboarding/m7-3-20260827.json`, 13/13 Automation
   tests passed with deterministic regeneration, both UE builds, deployment, and

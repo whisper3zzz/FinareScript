@@ -1,9 +1,9 @@
 # Unreal sample matrix
 
-UnifiedScript 1.0 RC1 has one versioned catalog for the five product sample
+Finare 1.0 RC1 has one versioned catalog for the five product sample
 categories. The catalog is
-`samples/Unreal/unifiedscript.samples.json`; the source-tree acceptance entry
-point is `tools/run-unifiedscript-sample-matrix.ps1`.
+`samples/Unreal/finare.samples.json`; the source-tree acceptance entry
+point is `tools/run-finare-sample-matrix.ps1`.
 
 The matrix is deliberately stricter than checking whether sample files exist.
 Every entry names its source, executable runner, versioned child-report schema,
@@ -29,13 +29,13 @@ and networked multi-process evidence.
 ## Run the complete matrix
 
 Use clean, isolated worktrees. The BlockBreaker comparison root must contain
-clean `BlockBreaker-UnifiedScript`, `BlockBreakerSource`, and
+clean `BlockBreaker-Finare`, `BlockBreakerSource`, and
 `BlockBreaker-Puerts` repositories.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/run-unifiedscript-sample-matrix.ps1 `
-  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT `
-  -ComparisonRoot $env:UNIFIEDSCRIPT_COMPARISON_ROOT
+powershell -ExecutionPolicy Bypass -File tools/run-finare-sample-matrix.ps1 `
+  -EngineRoot $env:FINARE_UE_ROOT `
+  -ComparisonRoot $env:FINARE_COMPARISON_ROOT
 ```
 
 By default the runner rejects dirty source or comparison repositories. The
@@ -67,9 +67,9 @@ For investigation, select one or more IDs without weakening their report
 contract:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/run-unifiedscript-sample-matrix.ps1 `
-  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT `
-  -ComparisonRoot $env:UNIFIEDSCRIPT_COMPARISON_ROOT `
+powershell -ExecutionPolicy Bypass -File tools/run-finare-sample-matrix.ps1 `
+  -EngineRoot $env:FINARE_UE_ROOT `
+  -ComparisonRoot $env:FINARE_COMPARISON_ROOT `
   -SampleIds dedicated-server-lifecycle,gameplay-data-plane
 ```
 
@@ -80,7 +80,7 @@ not the five-category release acceptance result.
 
 The SDK carries the project-agnostic first-script template and the runtime/API
 surface needed by host samples. The complete acceptance corpus also depends on
-the UnifiedScript source tree and the separately versioned BlockBreaker
+the Finare source tree and the separately versioned BlockBreaker
 comparison workspace. This prevents the SDK from silently republishing the
 third-party sample project and keeps comparison revisions explicit in every
 report.

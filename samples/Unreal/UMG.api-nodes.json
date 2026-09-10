@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
-  "contractName": "UnifiedScript.UMG.Demo",
-  "managedNamespace": "UnifiedScript.Unreal.Generated.UI",
+  "contractName": "Finare.UMG.Demo",
+  "managedNamespace": "Finare.Unreal.Generated.UI",
   "engine": {
     "major": 5,
     "minor": 8,
@@ -709,7 +709,7 @@
             "worldContextParameter": null
           },
           "nativeBinding": {
-            "extension": "UnifiedScript.UMG",
+            "extension": "Finare.UMG",
             "const": true,
             "parameters": [
               "constReference"
@@ -839,7 +839,7 @@
               "defaultValue": null
             }
           ],
-          "nativeExtension": "UnifiedScript.UMG",
+          "nativeExtension": "Finare.UMG",
           "deprecated": false,
           "deprecationMessage": null,
           "latent": false,

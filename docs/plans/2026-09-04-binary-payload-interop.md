@@ -30,7 +30,7 @@ case, not a promise to reproduce JavaScript memory ownership.
 
 ## Delivered
 
-- Public `UnrealByteBuffer` / `FUnifiedScriptByteBuffer`, direct property and
+- Public `UnrealByteBuffer` / `FFinareByteBuffer`, direct property and
   input/return/ref/out generation, typed bridge overloads and visual descriptions.
 - Append-only ABI v3 kind 25 and capability bit 11, keeping existing cell/frame
   sizes. One buffer carries contiguous bytes, up to 16 MiB; binary call arenas

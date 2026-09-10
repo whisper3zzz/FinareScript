@@ -15,11 +15,11 @@ $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
         'Directory.Build.props',
         'Directory.Packages.props',
         'global.json',
-        'src/UnifiedScript.Core',
-        'src/UnifiedScript.Runtime',
-        'src/UnifiedScript.Unreal',
-        'HostProject/Plugins/UEUnifiedScript/UEUnifiedScript.uplugin',
-        'HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime'
+        'src/Finare.Core',
+        'src/Finare.Runtime',
+        'src/Finare.Unreal',
+        'HostProject/Plugins/Finare/Finare.uplugin',
+        'HostProject/Plugins/Finare/Source/FinareRuntime'
     )
 } else {
     @('Plugins/Puerts')

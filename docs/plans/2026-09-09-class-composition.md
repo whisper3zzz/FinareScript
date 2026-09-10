@@ -123,7 +123,7 @@ component Outer and archetype objects, not only their names or classes. The
 root behavior's ScriptAsset binding is preserved even when it equals the old
 ordinary parent's value; descendants retain their own follow/override policy.
 The stopped-instance test must keep the script stopped through reinstancing,
-then explicitly restart it. `UUnifiedScriptComponent::BeginPlay` can start an
+then explicitly restart it. `UFinareComponent::BeginPlay` can start an
 automatically configured behavior, so rejecting already active instances does
 not by itself establish that compilation cannot activate a replacement.
 Any activation suppression must cover only the affected authoring owner and its
@@ -143,7 +143,7 @@ ordinary descendant instance's concrete class. Do not freeze mutable generated
 paths into the managed activation contract captured at first creation: C-3
 already permits compatible Rename with a stable ClassId. The factory's
 RequiredTargetClass and native behavior component also need reconciliation
-when a parent change leaves the original UnifiedScript native root family.
+when a parent change leaves the original Finare native root family.
 
 Next connect the native authoring control using the source patch preconditions
 and the existing publication/recovery workflow. Parent changes
@@ -192,7 +192,7 @@ before reusing that dispatch path. No parent control exists in the native
 authoring surface yet.
 
 Actor composition must reconcile the factory's `RequiredTargetClass` and its
-native `UnifiedScript` component when leaving `AUnifiedScriptActor`. Ordinary
+native `Finare` component when leaving `AFinareActor`. Ordinary
 managed function dispatch currently finds the first Script Component on an
 Actor, while Blueprint overrides already select an exact active owner. Multiple
 composed behaviors need exact function-owner routing before a second carrier is
@@ -202,7 +202,7 @@ enumeration order.
 ## Relevant verification
 
 The native parent transaction checkpoint passed the Editor build and six CMD
-tests under `UnifiedScript.Unreal.ScriptClass`: `ParentChange.Primitive`,
+tests under `Finare.Unreal.ScriptClass`: `ParentChange.Primitive`,
 `BlueprintStateMaterialization`, `BlueprintInheritedEventMaterialization`,
 `CollectionStateMaterialization`, `InheritedAddedStateDefaults` and
 `InheritedCollectionDefaults`. Evidence is in
@@ -238,7 +238,7 @@ through both commit and rollback, without changing automatic-start defaults.
 Editor build 21 and `editor-parent-change-active-worlds-2.log` passed
 `ParentChange.ActiveWorlds` and `ParentChange.Primitive` with this fix.
 The same invocation's old inherited-state fixture failed to load
-`UnifiedScript.Unreal`; its published dependencies differ from the current
+`Finare.Unreal`; its published dependencies differ from the current
 fixture. The unchanged `InheritedActorStateRuntime` test passed separately using
 the current `runtime-fixture/BlueprintInheritedStateFixture.config.json`, in
 `editor-parent-change-inherited-regression-1.log`. The old fixture failure is
@@ -318,7 +318,7 @@ stable member IDs, mixed state/base edits, old-schema rejection, v0.4 old-only
 normalization, conflicting asset targets and workspace commit/undo/redo.
 The final log/TRX are
 `artifacts/m13-3c-4-class-composition/base-patch/base-patch-regression-final-2.*`.
-Builds used `UnifiedScriptSkipManagedHostStaging=true`. This managed-only edit
+Builds used `FinareSkipManagedHostStaging=true`. This managed-only edit
 did not require a new native build, deployment or CMD run; the prior native
 evidence below remains evidence for declaration transport and existing behavior.
 
@@ -327,7 +327,7 @@ compiled-chunk checks. Three additional selected cases cover v0.1/v0.2 downgrade
 rejection and mixed binding/nonbinding assets in USRDEC 1.5. Logs and the actual
 emitted fixture are under `artifacts/m13-3c-4-class-composition/class-binding/`.
 The fixture is emitted by `ScriptClassBindingTests.EmitsClassBindingJsonAndChunkFixtureForNativeConsumer`.
-Use `-p:UnifiedScriptSkipManagedHostStaging=true` for focused managed builds;
+Use `-p:FinareSkipManagedHostStaging=true` for focused managed builds;
 the Demo staging target now also respects this flag.
 
 Editor build passed (`editor-class-binding-build-3.log`). Seven selected CMD
@@ -339,7 +339,7 @@ present in C-3 fixture 6; the selected tests report Success.
 
 The existing `emit-unreal-demo-chunk.ps1 -Configuration Release` deployed the
 matching host, Demo and chunk successfully (`managed-deploy-class-binding.log`).
-`UnifiedScript.Unreal.ScriptClass.CommonStateMaterialization` then passed with
+`Finare.Unreal.ScriptClass.CommonStateMaterialization` then passed with
 queue completion (`editor-class-binding-runtime-1.log`), covering the existing
 gameplay state/reload path with the new declaration format. These four logs are
 under `artifacts/m13-3c-4-class-composition/`. No additional native rebuild was

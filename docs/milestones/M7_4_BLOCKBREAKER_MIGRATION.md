@@ -2,7 +2,7 @@
 
 M7.4 turns BlockBreaker from a selected gameplay-path comparison into a
 whole-project migration proof. The source Puerts project remains the immutable
-reference; the UnifiedScript target is inventoried, covered, cleaned, built,
+reference; the Finare target is inventoried, covered, cleaned, built,
 packaged, and exercised as an independent product.
 
 ## Deterministic migration inventory
@@ -27,7 +27,7 @@ plane, the core runtime, project-native construction, deliberate elimination,
 or an explained verification-only route.
 
 The only remaining native facade is
-`AUnifiedScriptBlockBreakerCharacter.ReportManagedTick`. It increments the
+`AFinareBlockBreakerCharacter.ReportManagedTick`. It increments the
 exact-frame acceptance counter and terminates automated runs. It contains no
 movement, weapon, trace, damage, resource, or spawn policy. The former camera
 placement, gun mount, shot, hit, and status facade behavior now uses generated
@@ -49,10 +49,10 @@ The audit requires:
 - 74/74 inventory items covered with the exact source/target fingerprint;
 - no `Plugins/Puerts`, `TypeScript`, `Typing`, `Content/JavaScript`, legacy
   TypeScript Blueprint assets, Puerts config, or `tsconfig.json` in the target;
-- only `UEUnifiedScript` enabled and no Puerts/JavaScript/TypeScript module
+- only `Finare` enabled and no Puerts/JavaScript/TypeScript module
   dependency in the target build rules;
 - 19/19 non-map BlockBreaker gameplay assets byte-identical with the source;
-- exactly two deployed UnifiedScript Script Assets;
+- exactly two deployed Finare Script Assets;
 - nine contract types and 40 members producing 40 native thunks, with zero
   reflection fallback and zero rejected bindings.
 
@@ -73,9 +73,9 @@ TypeScript. `demo-delivery.json` hashes the migration audit beside the package.
 
 The exact three-trial 10,000-frame comparison also completed one shot, one hit,
 and both command events per trial with 120,031 fast/CallFrame calls and zero
-legacy calls. The local median was 4,927.191 ms for UnifiedScript and 4,759.930
+legacy calls. The local median was 4,927.191 ms for Finare and 4,759.930
 ms for Puerts, a ratio of 1.035139. This proves matched functional execution,
-not a performance advantage; M10 owns the release gate requiring UnifiedScript
+not a performance advantage; M10 owns the release gate requiring Finare
 to be at least 5% faster on the accepted workload.
 
 ## Exit and next cursor

@@ -14,21 +14,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 PROJECTS = [
-    ROOT / "src" / "UnifiedScript.Core" / "UnifiedScript.Core.csproj",
-    ROOT / "src" / "UnifiedScript.Semantics" / "UnifiedScript.Semantics.csproj",
-    ROOT / "src" / "UnifiedScript.CSharp" / "UnifiedScript.CSharp.csproj",
-    ROOT / "src" / "UnifiedScript.Graph" / "UnifiedScript.Graph.csproj",
-    ROOT / "src" / "UnifiedScript.Authoring" / "UnifiedScript.Authoring.csproj",
-    ROOT / "src" / "UnifiedScript.Runtime" / "UnifiedScript.Runtime.csproj",
-    ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj",
-    ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
+    ROOT / "src" / "Finare.Core" / "Finare.Core.csproj",
+    ROOT / "src" / "Finare.Semantics" / "Finare.Semantics.csproj",
+    ROOT / "src" / "Finare.CSharp" / "Finare.CSharp.csproj",
+    ROOT / "src" / "Finare.Graph" / "Finare.Graph.csproj",
+    ROOT / "src" / "Finare.Authoring" / "Finare.Authoring.csproj",
+    ROOT / "src" / "Finare.Runtime" / "Finare.Runtime.csproj",
+    ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj",
+    ROOT / "src" / "Finare.Cli" / "Finare.Cli.csproj",
     ROOT
     / "samples"
     / "Unreal"
-    / "UnifiedScript.Unreal.Demo"
-    / "UnifiedScript.Unreal.Demo.csproj",
+    / "Finare.Unreal.Demo"
+    / "Finare.Unreal.Demo.csproj",
     ROOT / "samples" / "ProjectLoading" / "ProjectLoadingDemo.csproj",
-    ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
+    ROOT / "tests" / "Finare.Tests" / "Finare.Tests.csproj",
 ]
 
 DOCUMENTS = [
@@ -129,7 +129,7 @@ def main() -> int:
     require(sdk_config["sdk"]["version"].startswith("10."), "The project must target .NET 10")
     checks.append("global.json selects .NET 10")
 
-    solution = ROOT / "UnifiedScript.slnx"
+    solution = ROOT / "Finare.slnx"
     solution_tree = ET.parse(solution)
     solution_projects = {
         (ROOT / element.attrib["Path"]).resolve()
@@ -151,13 +151,13 @@ def main() -> int:
     checks.append("architecture and milestone documents exist")
 
     compiled_chunk_source = (
-        ROOT / "src" / "UnifiedScript.Core" / "CompiledChunk.cs"
+        ROOT / "src" / "Finare.Core" / "CompiledChunk.cs"
     ).read_text(encoding="utf-8")
     compiled_chunk_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CompiledChunkTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CompiledChunkTests.cs"
     ).read_text(encoding="utf-8")
     cli_source = (
-        ROOT / "src" / "UnifiedScript.Cli" / "Program.cs"
+        ROOT / "src" / "Finare.Cli" / "Program.cs"
     ).read_text(encoding="utf-8")
     compiled_chunk_document = (
         ROOT / "docs" / "COMPILED_CHUNKS.md"
@@ -186,17 +186,17 @@ def main() -> int:
     )
     checks.append("live roadmap separates active work from historical delivery evidence")
     compiled_program_source = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
+        ROOT / "src" / "Finare.Runtime" / "CompiledProgramChunk.cs"
     ).read_text(encoding="utf-8")
     compiled_program_host = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrCompiledChunkHost.cs"
+        ROOT / "src" / "Finare.Runtime" / "CoreClrCompiledChunkHost.cs"
     ).read_text(encoding="utf-8")
     managed_dependency_cache = (
-        ROOT / "src" / "UnifiedScript.Runtime"
-        / "UnifiedScriptManagedDependencyCache.cs"
+        ROOT / "src" / "Finare.Runtime"
+        / "FinareManagedDependencyCache.cs"
     ).read_text(encoding="utf-8")
     compiled_chunk_profiler = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledChunkLoadProfiler.cs"
+        ROOT / "src" / "Finare.Runtime" / "CompiledChunkLoadProfiler.cs"
     ).read_text(encoding="utf-8")
     compiled_chunk_process_profiler = (
         ROOT / "tools" / "measure-compiled-chunk-load.ps1"
@@ -205,7 +205,7 @@ def main() -> int:
         ROOT / "tools" / "measure-readytorun-chunk.ps1"
     ).read_text(encoding="utf-8")
     generation_prewarm_source = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrGenerationPrewarm.cs"
+        ROOT / "src" / "Finare.Runtime" / "CoreClrGenerationPrewarm.cs"
     ).read_text(encoding="utf-8")
     generation_prewarm_profiler = (
         ROOT / "tools" / "measure-generation-prewarm.ps1"
@@ -214,44 +214,44 @@ def main() -> int:
         ROOT / "benchmarks" / "unreal" / "generation-prewarm-probe.cs"
     ).read_text(encoding="utf-8")
     generation_prewarm_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrGenerationPrewarmTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CoreClrGenerationPrewarmTests.cs"
     ).read_text(encoding="utf-8")
     program_loader_prewarm_source = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrProgramLoaderPrewarm.cs"
+        ROOT / "src" / "Finare.Runtime" / "CoreClrProgramLoaderPrewarm.cs"
     ).read_text(encoding="utf-8")
     program_loader_prewarm_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests"
+        ROOT / "tests" / "Finare.Tests"
         / "CoreClrProgramLoaderPrewarmTests.cs"
     ).read_text(encoding="utf-8")
     compiled_program_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CompiledProgramChunkTests.cs"
     ).read_text(encoding="utf-8")
     unreal_world_entry = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldManagedEntryPoint.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealWorldManagedEntryPoint.cs"
     ).read_text(encoding="utf-8")
     unreal_chunk_reader = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Private" / "UnifiedScriptCompiledChunk.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Private" / "FinareCompiledChunk.cpp"
     ).read_text(encoding="utf-8")
     unreal_component = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Private" / "UnifiedScriptComponent.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Private" / "FinareComponent.cpp"
     ).read_text(encoding="utf-8")
     unreal_asset = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptAsset.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareAsset.h"
     ).read_text(encoding="utf-8")
     unreal_chunk_stage = (
         ROOT / "tools" / "emit-unreal-demo-chunk.ps1"
     ).read_text(encoding="utf-8")
     chunk_deployment_commandlet = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private"
-        / "UnifiedScriptSyncChunksCommandlet.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private"
+        / "FinareSyncChunksCommandlet.cpp"
     ).read_text(encoding="utf-8")
     chunk_deployment_sample = (
         ROOT / "samples" / "Unreal"
-        / "UnifiedScript.Unreal.Demo.chunk-deployment.json"
+        / "Finare.Unreal.Demo.chunk-deployment.json"
     ).read_text(encoding="utf-8")
     chunk_delivery_measurement = (
         ROOT / "comparison" / "measure-blockbreaker-chunk-delivery.ps1"
@@ -263,29 +263,29 @@ def main() -> int:
         ROOT / "tools" / "package-unreal-release.ps1"
     ).read_text(encoding="utf-8")
     project_loader = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpProjectLoader.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpProjectLoader.cs"
     ).read_text(encoding="utf-8")
     require(
         '"USCHUNK\\0"u8' in compiled_chunk_source
         and "FormatMajorVersion = 1" in compiled_chunk_source
         and "ComputeContentDigest" in compiled_chunk_source
         and "FixedTimeEquals" in compiled_chunk_source
-        and "UnifiedScriptProgramChunk" in compiled_chunk_source
+        and "FinareProgramChunk" in compiled_chunk_source
         and 'args[0] == "chunk-pack"' in cli_source
         and 'args[0] == "chunk-inspect"' in cli_source
         and "Write_IsDeterministicAndCanonicalAcrossInputOrder"
         in compiled_chunk_tests
         and "Read_RejectsCorruptedPayloadBeforeItCanBeLoaded"
         in compiled_chunk_tests
-        and "UnifiedScriptRuntimeDeclarationBinary" in compiled_program_source
+        and "FinareRuntimeDeclarationBinary" in compiled_program_source
         and "CSharpProgramChunkCompiler" in compiled_program_source
         and "CoreClrCompiledChunkHost" in compiled_program_host
         and "CoreClrHost_LoadsAssemblyDirectlyFromVerifiedChunk" in compiled_program_tests
         and '".uschunk"' in unreal_world_entry
-        and "FUnifiedScriptCompiledChunk::LoadSection" in unreal_chunk_reader
+        and "FFinareCompiledChunk::LoadSection" in unreal_chunk_reader
         and "MaterializeChunkFileWithOverrides" in unreal_component
         and "CompiledChunkPath" in unreal_asset
-        and "UnifiedScript.Unreal.Demo.uschunk" in unreal_chunk_stage
+        and "Finare.Unreal.Demo.uschunk" in unreal_chunk_stage
         and "CSharpProjectReferenceKind.Assembly" in project_loader
         and "IncludePortablePdb: !string.Equals" in cli_source
         and "unifiedscript.unreal-chunk-deployment/v0.1" in chunk_deployment_commandlet
@@ -293,7 +293,7 @@ def main() -> int:
         and "UPackage::SavePackage" in chunk_deployment_commandlet
         and "CompiledChunkPath" in chunk_deployment_commandlet
         and "chunkPath" in chunk_deployment_sample
-        and "UnifiedScriptDisableCompiledChunks" in unreal_component
+        and "FinareDisableCompiledChunks" in unreal_component
         and "unifiedscript.blockbreaker-chunk-delivery/v0.2"
         in chunk_delivery_measurement
         and "BlockBreakerBenchmarkReload" in chunk_delivery_measurement
@@ -306,7 +306,7 @@ def main() -> int:
         "compiled chunks are deterministic, integrity-checked, and loaded end to end"
     )
     require(
-        "UnifiedScriptChunkReadProfile" in compiled_chunk_source
+        "FinareChunkReadProfile" in compiled_chunk_source
         and "ReadProfiled(Stream source)" in compiled_chunk_source
         and "WholeFileCopyCount" in compiled_chunk_source
         and "SectionDigestStopwatchTicks" in compiled_chunk_source
@@ -360,7 +360,7 @@ def main() -> int:
         and "LoadFromStream(stream)" in compiled_program_host
         and "DependencyCacheHitCount" in compiled_chunk_profiler
         and "dependencyCacheHitCount" in compiled_chunk_process_profiler
-        and "UnifiedScriptManagedDependencyCache.Shared" in unreal_world_entry
+        and "FinareManagedDependencyCache.Shared" in unreal_world_entry
         and "LoadAssemblySnapshot" in unreal_world_entry
         and "CoreClrHost_ReusesVerifiedDependencySnapshotsAcrossCollectibleContexts"
         in compiled_program_tests
@@ -401,7 +401,7 @@ def main() -> int:
         and "RuntimeHelpers.PrepareMethod" in generation_prewarm_source
         and "Prewarm.Cancel()" in unreal_world_entry
         and '"backgroundPrewarm"' in unreal_world_entry
-        and "UNIFIEDSCRIPT_DISABLE_BACKGROUND_PREWARM" in unreal_world_entry
+        and "FINARE_DISABLE_BACKGROUND_PREWARM" in unreal_world_entry
         and 'args[0] == "chunk-first-tick-profile"' in cli_source
         and "unifiedscript.generation-prewarm-trial/v0.1" in cli_source
         and "unifiedscript.generation-prewarm-experiment/v0.1"
@@ -443,7 +443,7 @@ def main() -> int:
         and "ReadCore(content, profile: null, content)" in compiled_chunk_source
         and "ProgramLoaderPrewarm.Start()" in unreal_world_entry
         and "current.Prewarm.Start()" in unreal_world_entry
-        and "UNIFIEDSCRIPT_DISABLE_PROGRAM_LOADER_PREWARM" in unreal_world_entry
+        and "FINARE_DISABLE_PROGRAM_LOADER_PREWARM" in unreal_world_entry
         and "ProgramLoaderPrewarm = ProgramLoaderPrewarm.GetSnapshot()"
         in unreal_world_entry
         and "Prewarm_CanPrepareDependenciesBeforeCodecWorkIsReleased"
@@ -455,7 +455,7 @@ def main() -> int:
         and "programLoaderPrewarm.failureCount" in chunk_delivery_measurement
         and "if (-not $report.acceptance.passed)" in chunk_delivery_measurement
         and 'TEXT("programLoaderPrewarm")' in unreal_component
-        and "UnifiedScript startup phases:" in unreal_component
+        and "Finare startup phases:" in unreal_component
         and "process loader prewarm and cold-start closure"
         in compiled_chunk_document
         and "0.970394" in compiled_chunk_document
@@ -468,37 +468,37 @@ def main() -> int:
     )
 
     deployment_sample_path = (
-        ROOT / "samples" / "Unreal" / "UnifiedScript.Unreal.Demo.deployment.json"
+        ROOT / "samples" / "Unreal" / "Finare.Unreal.Demo.deployment.json"
     )
     deployment_commandlet = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptSyncAssetsCommandlet.cpp"
+        / "FinareSyncAssetsCommandlet.cpp"
     ).read_text(encoding="utf-8")
     runtime_asset_header = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptAsset.h"
+        / "FinareAsset.h"
     ).read_text(encoding="utf-8")
     runtime_component_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptComponent.cpp"
+        / "FinareComponent.cpp"
     ).read_text(encoding="utf-8")
     with deployment_sample_path.open("r", encoding="utf-8") as handle:
         deployment_sample = json.load(handle)
@@ -521,41 +521,41 @@ def main() -> int:
     checks.append("UE deployment manifests materialize target-safe Script Assets")
 
     api_contract_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-contract.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.api-contract.json"
     )
     api_nodes_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-nodes.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.api-nodes.json"
     )
     with api_contract_path.open("r", encoding="utf-8") as handle:
         api_contract = json.load(handle)
     with api_nodes_path.open("r", encoding="utf-8") as handle:
         api_nodes = json.load(handle)
     contract_generator = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealApiContract.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealApiContract.cs"
     ).read_text(encoding="utf-8")
-    cli_source = (ROOT / "src" / "UnifiedScript.Cli" / "Program.cs").read_text(
+    cli_source = (ROOT / "src" / "Finare.Cli" / "Program.cs").read_text(
         encoding="utf-8"
     )
     reflection_exporter = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptReflectionExporter.cpp"
+        / "FinareReflectionExporter.cpp"
     ).read_text(encoding="utf-8")
     authoring_widget = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Widgets"
-        / "SUnifiedScriptAuthoringSurface.cpp"
+        / "SFinareAuthoringSurface.cpp"
     ).read_text(encoding="utf-8")
     contract_member_names = {
         (type_selector["path"], member)
@@ -565,7 +565,7 @@ def main() -> int:
     node_member_names = {
         (
             node_type["path"],
-            member["path"].rsplit(":", 1)[1]
+            member["path"].split(":", 1)[1]
             if member_group == "functions"
             and sum(item["name"] == member["name"] for item in node_type["functions"]) > 1
             else member["name"],
@@ -609,19 +609,19 @@ def main() -> int:
         and "WriteTransactionally(outputs)" in cli_source
         and "ClassPathSet" in reflection_exporter
         and "ResolveApiNodeCatalogPath" in authoring_widget
-        and "UEUnifiedScriptRuntime.api-nodes.json" in authoring_widget,
+        and "FinareRuntime.api-nodes.json" in authoring_widget,
         "Project API Contract generation or Script Asset-selected visual catalog is missing",
     )
     checks.append("one Unreal API Contract drives C++, C#, coverage, and visual nodes")
 
     onboarding_script_path = ROOT / "tools" / "setup-unreal-project.ps1"
-    build_graph_module_path = ROOT / "tools" / "UnifiedScript.BuildGraph.psm1"
-    build_graph_test_path = ROOT / "tools" / "test-unifiedscript-build-graph.ps1"
+    build_graph_module_path = ROOT / "tools" / "Finare.BuildGraph.psm1"
+    build_graph_test_path = ROOT / "tools" / "test-finare-build-graph.ps1"
     onboarding_config_path = (
-        ROOT / "HostProject" / "Config" / "UnifiedScript.onboarding.json"
+        ROOT / "HostProject" / "Config" / "Finare.onboarding.json"
     )
     onboarding_coverage_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.binding-coverage.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.binding-coverage.json"
     )
     onboarding_script = onboarding_script_path.read_text(encoding="utf-8")
     build_graph_module = build_graph_module_path.read_text(encoding="utf-8")
@@ -653,7 +653,7 @@ def main() -> int:
         onboarding_script_path.is_file()
         and onboarding_config["schemaVersion"]
         == "unifiedscript.unreal-project-onboarding/v0.1"
-        and onboarding_config["editorTarget"] == "UEUnifiedScriptHostEditor"
+        and onboarding_config["editorTarget"] == "FinareHostEditor"
         and onboarding_config["bindings"]["requireCompleteNativeCoverage"] is True
         and all(not Path(path).is_absolute() and ":" not in path for path in onboarding_paths)
         and coverage_summary["memberCount"]
@@ -671,7 +671,7 @@ def main() -> int:
         and "Current repository CLI build failed before validation" in onboarding_script
         and "unifiedscript.unreal-project-onboarding-report/v0.1" in onboarding_script
         and "Assert-GeneratedFileMatches" in onboarding_script
-        and "UnifiedScriptSyncAssets" in onboarding_script
+        and "FinareSyncAssets" in onboarding_script
         and "managed.chunks entry" in onboarding_script
         and "compiled-chunks" in onboarding_script
         and "native-game-build" in onboarding_script
@@ -694,10 +694,10 @@ def main() -> int:
         build_graph_module_path.is_file()
         and build_graph_test_path.is_file()
         and "unifiedscript.unreal-build-graph-state/v0.1" in build_graph_module
-        and "Get-UnifiedScriptBuildGraphStageDecision" in build_graph_module
+        and "Get-FinareBuildGraphStageDecision" in build_graph_module
         and "dependencyFingerprint" in build_graph_module
         and "tracked outputs are missing or modified" in build_graph_module
-        and "Save-UnifiedScriptBuildGraphState" in onboarding_script
+        and "Save-FinareBuildGraphState" in onboarding_script
         and "Invoke-DependencyAwareOnboardingPhase" in onboarding_script
         and "source-reflection-hints" in onboarding_script
         and "managed-gameplay-build" in onboarding_script
@@ -711,10 +711,10 @@ def main() -> int:
     )
 
     adoption_source_path = (
-        ROOT / "src" / "UnifiedScript.Cli" / "UnrealProjectAdoption.cs"
+        ROOT / "src" / "Finare.Cli" / "UnrealProjectAdoption.cs"
     )
     adoption_tests_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealProjectAdoptionTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "UnrealProjectAdoptionTests.cs"
     )
     packaged_adoption_path = ROOT / "tools" / "test-packaged-adoption.ps1"
     adoption_source = adoption_source_path.read_text(encoding="utf-8")
@@ -796,32 +796,32 @@ def main() -> int:
     )
 
     deferred_onboarding_path = (
-        ROOT / "tools" / "run-unifiedscript-onboarding-after-process.ps1"
+        ROOT / "tools" / "run-finare-onboarding-after-process.ps1"
     )
     project_setup_header_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Public" / "UnifiedScriptProjectSetup.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Public" / "FinareProjectSetup.h"
     )
     project_setup_source_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptProjectSetup.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareProjectSetup.cpp"
     )
     project_setup_widget_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
-        / "SUnifiedScriptProjectSetup.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Widgets"
+        / "SFinareProjectSetup.cpp"
     )
     project_setup_tests_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Tests"
-        / "UnifiedScriptProjectSetupTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Tests"
+        / "FinareProjectSetupTests.cpp"
     )
     editor_module_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UEUnifiedScriptEditorModule.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareEditorModule.cpp"
     )
     unreal_onboarding_guide_path = ROOT / "docs" / "UNREAL_ONBOARDING.md"
-    project_setup_sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"
+    project_setup_sdk_package_path = ROOT / "tools" / "package-finare-sdk.ps1"
     deferred_onboarding = deferred_onboarding_path.read_text(encoding="utf-8")
     project_setup_header = project_setup_header_path.read_text(encoding="utf-8")
     project_setup_source = project_setup_source_path.read_text(encoding="utf-8")
@@ -838,8 +838,8 @@ def main() -> int:
         and project_setup_source_path.is_file()
         and project_setup_widget_path.is_file()
         and project_setup_tests_path.is_file()
-        and '"UnifiedScript.Cli"' in adoption_source
-        and '"run-unifiedscript-onboarding-after-process.ps1"'
+        and '"Finare.Cli"' in adoption_source
+        and '"run-finare-onboarding-after-process.ps1"'
         in adoption_source
         and '"project-tools"' in adoption_source
         and "DeferredOnboardingScriptPath" in adoption_source
@@ -853,16 +853,16 @@ def main() -> int:
         and "RegisterActiveTimer" in project_setup_widget
         and "SaveDirtyPackages" in project_setup_widget
         and "RequestExit(false)" in project_setup_widget
-        and "UnifiedScript.OpenProjectSetup" in editor_module
+        and "Finare.OpenProjectSetup" in editor_module
         and "ProjectSetupTabName" in editor_module
-        and "UnifiedScript.Unreal.ProjectSetup.CommandContract"
+        and "Finare.Unreal.ProjectSetup.CommandContract"
         in project_setup_tests
-        and "run-unifiedscript-onboarding-after-process.ps1"
+        and "run-finare-onboarding-after-process.ps1"
         in project_setup_sdk_package
         and "Project-local repeated adoption changed product files"
         in packaged_adoption
         and "project-tools" in packaged_adoption
-        and "UnifiedScript Project Setup" in first_script_guide
+        and "Finare Project Setup" in first_script_guide
         and "sdkLayout: embedded" in unreal_onboarding_guide,
         "Project-local Editor setup, deferred build, packaged acceptance, or guide is missing",
     )
@@ -870,8 +870,8 @@ def main() -> int:
         "adopted projects carry one Editor-backed local setup, doctor, and deferred build path"
     )
 
-    sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"
-    sdk_install_path = ROOT / "tools" / "install-unifiedscript-sdk.ps1"
+    sdk_package_path = ROOT / "tools" / "package-finare-sdk.ps1"
+    sdk_install_path = ROOT / "tools" / "install-finare-sdk.ps1"
     sdk_distribution_path = ROOT / "docs" / "UNREAL_SDK.md"
     sdk_package = sdk_package_path.read_text(encoding="utf-8")
     sdk_install = sdk_install_path.read_text(encoding="utf-8")
@@ -886,16 +886,16 @@ def main() -> int:
         and '"us-sdk-$(' in sdk_package
         and "outside the SDK temp boundary" in sdk_package
         and "Managed\\Runtime" in sdk_package
-        and "Tools\\UnifiedScript.Cli" in sdk_package
-        and "unifiedscript.cmd" in sdk_package
+        and "Tools\\Finare.Cli" in sdk_package
+        and "finare.cmd" in sdk_package
         and "measure-compiled-chunk-load.ps1" in sdk_package
         and "measure-readytorun-chunk.ps1" in sdk_package
         and "measure-generation-prewarm.ps1" in sdk_package
-        and "unifiedscript.project-templates.json" in sdk_package
+        and "finare.project-templates.json" in sdk_package
         and "VisualGameplayScript.cs.template" in sdk_package
         and "DataPlaneScript.cs.template" in sdk_package
         and "generation-prewarm-probe.cs" in sdk_package
-        and "release\\unifiedscript.release.json" in sdk_package
+        and "release\\finare.release.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
@@ -903,7 +903,7 @@ def main() -> int:
         and "unifiedscript.sdk-manifest/v0.1" in sdk_install
         and "Get-FileHash" in sdk_install
         and "Unmanifested SDK payload file" in sdk_install
-        and "UEUnifiedScript.backup-" in sdk_install
+        and "Finare.backup-" in sdk_install
         and "sdkLayout = 'packaged'" in onboarding_script
         and "packagedSdkManifest" in onboarding_script
         and "sdkLayout: packaged" in sdk_distribution,
@@ -911,18 +911,18 @@ def main() -> int:
     )
     checks.append("SDK archive is deterministic, hashed, compatible, and installable")
 
-    product_release_path = ROOT / "release" / "unifiedscript.release.json"
+    product_release_path = ROOT / "release" / "finare.release.json"
     product_documentation_path = ROOT / "docs" / "DOCUMENTATION.md"
     product_release_notes_path = ROOT / "docs" / "RELEASE_NOTES_1_0_RC1.md"
     product_plugin_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript"
-        / "UEUnifiedScript.uplugin"
+        ROOT / "HostProject" / "Plugins" / "Finare"
+        / "Finare.uplugin"
     )
     compatibility_matrix_runner_path = (
         ROOT / "tools" / "run-unreal-compatibility-matrix.ps1"
     )
     release_readiness_runner_path = (
-        ROOT / "tools" / "run-unifiedscript-release-readiness.ps1"
+        ROOT / "tools" / "run-finare-release-readiness.ps1"
     )
     release_readiness_document_path = ROOT / "docs" / "RELEASE_READINESS.md"
     ci_workflow_path = ROOT / ".github" / "workflows" / "ci.yml"
@@ -988,7 +988,7 @@ def main() -> int:
             "managedTargetFramework": "net10.0",
         }
         and product_release["artifacts"]["sdkArchive"]
-        == "UnifiedScript-SDK-1.0.0-rc.1-win-x64.zip"
+        == "Finare-SDK-1.0.0-rc.1-win-x64.zip"
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
@@ -1069,7 +1069,7 @@ def main() -> int:
         and "status=passed" in release_readiness_document
         and "passed-local-diagnostics" in release_readiness_document
         and "docs/RELEASE_READINESS.md" in release_document_paths
-        and "run-unifiedscript-release-readiness.ps1" in ci_workflow
+        and "run-finare-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
         and "## Current execution cursor" in current_roadmap_document
@@ -1087,13 +1087,13 @@ def main() -> int:
     contract_proposal_source_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealApiContractProposal.cs"
     )
     contract_proposal_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealApiContractProposalTests.cs"
     )
     api_contract_document_path = ROOT / "docs" / "UNREAL_API_CONTRACT.md"
@@ -1148,40 +1148,40 @@ def main() -> int:
     development_surface_source_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealApiDevelopmentSurface.cs"
     )
     source_dependency_scanner_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Cli"
+        / "Finare.Cli"
         / "UnrealApiSourceDependencyScanner.cs"
     )
     source_type_hint_scanner_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Cli"
+        / "Finare.Cli"
         / "UnrealApiSourceTypeHintScanner.cs"
     )
     generated_surface_lock_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealApiGeneratedSurfaceLock.cs"
     )
     native_thunk_generator_b2_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeThunkGenerator.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealNativeThunkGenerator.cs"
     )
     managed_naming_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealManagedNaming.cs"
     )
     development_surface_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealApiDevelopmentSurfaceTests.cs"
     )
     onboarding_template_path = (
@@ -1189,7 +1189,7 @@ def main() -> int:
         / "templates"
         / "UnrealProject"
         / "Config"
-        / "UnifiedScript.onboarding.json.template"
+        / "Finare.onboarding.json.template"
     )
     first_script_template_path = (
         ROOT
@@ -1362,41 +1362,41 @@ def main() -> int:
     )
 
     script_asset_attributes = (
-        ROOT / "src" / "UnifiedScript.Core" / "ScriptAssetAttributes.cs"
+        ROOT / "src" / "Finare.Core" / "ScriptAssetAttributes.cs"
     ).read_text(encoding="utf-8")
     script_asset_lowerer = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpScriptAssetLowerer.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpScriptAssetLowerer.cs"
     ).read_text(encoding="utf-8")
     script_asset_runtime = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptAsset.cpp"
+        / "FinareAsset.cpp"
     ).read_text(encoding="utf-8")
     script_class_factory = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptClassFactory.cpp"
+        / "FinareClassFactory.cpp"
     ).read_text(encoding="utf-8")
     script_class_factory_tests = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Tests"
-        / "UnifiedScriptClassFactoryTests.cpp"
+        / "FinareClassFactoryTests.cpp"
     ).read_text(encoding="utf-8")
     script_class_golden_path_path = (
         ROOT / "tools" / "test-script-class-golden-path.ps1"
@@ -1414,8 +1414,8 @@ def main() -> int:
         and "DuplicateScriptClassId" in script_asset_lowerer
         and "ValidateDeclarationIdentity" in script_asset_runtime
         and "ValidateGeneratedClassIdentity" in script_asset_runtime
-        and "UUnifiedScriptActorClassFactory" in script_class_factory
-        and "UUnifiedScriptActorComponentClassFactory" in script_class_factory
+        and "UFinareActorClassFactory" in script_class_factory
+        and "UFinareActorComponentClassFactory" in script_class_factory
         and "RenderManagedSource" in script_class_factory
         and "AppendDeployment" in script_class_factory
         and "FactoryContract" in script_class_factory_tests
@@ -1430,9 +1430,9 @@ def main() -> int:
     require(
         "public int AddOne(int value)" in script_class_factory
         and "return value + 1;" in script_class_factory
-        and "UnifiedScript.Integration.ScriptClass.CreatePersistent"
+        and "Finare.Integration.ScriptClass.CreatePersistent"
         in script_class_factory_tests
-        and "UnifiedScript.Integration.ScriptClass.ReloadLifecycle"
+        and "Finare.Integration.ScriptClass.ReloadLifecycle"
         in script_class_factory_tests
         and "GetCurrentProcessId" in script_class_factory_tests
         and "$createProcessId -eq $reloadProcessId" in script_class_golden_path
@@ -1455,7 +1455,7 @@ def main() -> int:
         and "-RelaunchEditor" in project_setup_source
         and "Build, Restart & Continue" in project_setup_widget
         and "Locate Generated Class" in project_setup_widget
-        and "UnifiedScriptFirstPlay" in editor_module
+        and "FinareFirstPlay" in editor_module
         and "unifiedscript.first-play-request/v0.1" in deferred_onboarding
         and "UnrealEditor.exe" in deferred_onboarding
         and "firstPlayResult.status -ne 'ready'" in script_class_golden_path
@@ -1471,18 +1471,18 @@ def main() -> int:
         "M13.1C-1 connects Script Class creation to one packaged first-Play build"
     )
     runtime_world_tests = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Private" / "Tests"
-        / "UnifiedScriptWorldSubsystemTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Private" / "Tests"
+        / "FinareWorldSubsystemTests.cpp"
     ).read_text(encoding="utf-8")
     authoring_workbench_native = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private"
-        / "UnifiedScriptAuthoringWorkbench.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private"
+        / "FinareAuthoringWorkbench.cpp"
     ).read_text(encoding="utf-8")
     require(
         "BuildAuthoringCommand" in project_setup_header
-        and "start-unifiedscript-authoring.ps1" in project_setup_source
+        and "start-finare-authoring.ps1" in project_setup_source
         and "Open Authoring & Reload" in project_setup_widget
         and "OpenAuthoringSurface(ScriptAsset)" in project_setup_widget
         and "AuthoringScriptPath" in adoption_source
@@ -1504,27 +1504,27 @@ def main() -> int:
         "M13.1C-1b connects exact Script Classes to state-safe authoring reload"
     )
     editor_diagnostics_source = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptEditorDiagnostics.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareEditorDiagnostics.cpp"
     ).read_text(encoding="utf-8")
     editor_diagnostics_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Public" / "UnifiedScriptEditorDiagnostics.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Public" / "FinareEditorDiagnostics.h"
     ).read_text(encoding="utf-8")
     editor_diagnostics_tests = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Tests"
-        / "UnifiedScriptEditorDiagnosticsTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Tests"
+        / "FinareEditorDiagnosticsTests.cpp"
     ).read_text(encoding="utf-8")
     authoring_surface_widget = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
-        / "SUnifiedScriptAuthoringSurface.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Widgets"
+        / "SFinareAuthoringSurface.cpp"
     ).read_text(encoding="utf-8")
     debug_panel_widget = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
-        / "SUnifiedScriptDebugPanel.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Widgets"
+        / "SFinareDebugPanel.cpp"
     ).read_text(encoding="utf-8")
     authoring_diagnostics_document = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
@@ -1534,7 +1534,7 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         "MaximumRetainedDiagnosticCount = 128" in editor_diagnostics_header
-        and "UnifiedScriptDiagnostics" in editor_diagnostics_source
+        and "FinareDiagnostics" in editor_diagnostics_source
         and "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
         and "FromAuthoringFailure" in editor_diagnostics_source
         and "FromReloadTransaction" in editor_diagnostics_source
@@ -1546,15 +1546,15 @@ def main() -> int:
         and "WorldHostId" in editor_diagnostics_source
         and "Restart Editor" in editor_diagnostics_source
         and "PersistSnapshot" in editor_diagnostics_source
-        and "FUnifiedScriptEditorDiagnostics::Publish" in authoring_surface_widget
-        and "FUnifiedScriptEditorDiagnostics::Publish" in debug_panel_widget
+        and "FFinareEditorDiagnostics::Publish" in authoring_surface_widget
+        and "FFinareEditorDiagnostics::Publish" in debug_panel_widget
         and "Export Support Bundle" in project_setup_widget
         and "diagnostics-bundle" in project_setup_source
         and "ClipboardCopy" in project_setup_widget
         and "UnifiedEditorContract" in editor_diagnostics_tests
         and "Reads one structured report diagnostic" in editor_diagnostics_tests
         and "persists one bundle input" in editor_diagnostics_tests
-        and "UnifiedScript Diagnostics" in authoring_diagnostics_document
+        and "Finare Diagnostics" in authoring_diagnostics_document
         and "Export Support Bundle" in diagnostics_bundle_document
         and "M13.1C-1c — diagnostics" in roadmap_document
         and "M13.1C-1e headless workflow-contract closure" in roadmap_document,
@@ -1565,15 +1565,15 @@ def main() -> int:
     )
     ide_solution_template = (
         ROOT / "templates" / "UnrealProject" / "Managed"
-        / "Project.UnifiedScript.slnx.template"
+        / "Project.Finare.slnx.template"
     ).read_text(encoding="utf-8")
     ide_workspace_template = (
         ROOT / "templates" / "UnrealProject" / "IDE"
-        / "Project.UnifiedScript.code-workspace.template"
+        / "Project.Finare.code-workspace.template"
     ).read_text(encoding="utf-8")
     ide_manifest_template = (
         ROOT / "templates" / "UnrealProject" / "IDE"
-        / "UnifiedScript.ide.json.template"
+        / "Finare.ide.json.template"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
@@ -1584,16 +1584,16 @@ def main() -> int:
         in editor_diagnostics_source
         and "Resolve:" in editor_diagnostics_source
         and "ExecuteRecovery" in editor_diagnostics_source
-        and "Project.UnifiedScript.slnx.template" in adoption_source
-        and "Project.UnifiedScript.code-workspace.template" in adoption_source
-        and "UnifiedScript.ide.json.template" in adoption_source
+        and "Project.Finare.slnx.template" in adoption_source
+        and "Project.Finare.code-workspace.template" in adoption_source
+        and "Finare.ide.json.template" in adoption_source
         and "DocumentationRoot" in adoption_source
         and '"ide-workspace"' in adoption_source
         and '<Project Path="__ASSEMBLY_NAME__.csproj" />'
         in ide_solution_template
-        and "UnifiedScript: Build managed gameplay" in ide_workspace_template
-        and "UnifiedScript: Build and prepare Unreal" in ide_workspace_template
-        and "UnifiedScript: Validate project" in ide_workspace_template
+        and "Finare: Build managed gameplay" in ide_workspace_template
+        and "Finare: Build and prepare Unreal" in ide_workspace_template
+        and "Finare: Validate project" in ide_workspace_template
         and '"type": "coreclr"' in ide_workspace_template
         and "unifiedscript.ide-workspace/v0.1" in ide_manifest_template
         and "Generated/Unreal.bindings.generated.cs" in ide_manifest_template
@@ -1601,7 +1601,7 @@ def main() -> int:
         and "Generated IDE workspace lacks build, validate, or debugger configuration"
         in packaged_adoption
         and "Project-local IDE workspace" in packaged_native_onboarding
-        and "Project.UnifiedScript.slnx.template" in sdk_package
+        and "Project.Finare.slnx.template" in sdk_package
         and "project-local IDE links" in unreal_onboarding_guide
         and "M13.2C — diagnostics and IDE" in roadmap_document,
         "M13.2C diagnostic context, safe navigation, project-local IDE workspace, or packaged proof is incomplete",
@@ -1610,13 +1610,13 @@ def main() -> int:
         "M13.2C carries producer context into UE diagnostics and installs one project-local IDE workflow"
     )
     unreal_component_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptComponent.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareComponent.h"
     ).read_text(encoding="utf-8")
     authoring_surface_tests = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Tests"
-        / "UnifiedScriptAuthoringSurfaceTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Tests"
+        / "FinareAuthoringSurfaceTests.cpp"
     ).read_text(encoding="utf-8")
     require(
         "PreflightScriptReloadWithTransaction" in unreal_component_header
@@ -1625,7 +1625,7 @@ def main() -> int:
         and "ReloadMatchingComponentsForAsset" in authoring_surface_widget
         and "PreflightRejected > 0" in authoring_surface_widget
         and "PreflightTransactions[Index]" in authoring_surface_widget
-        and "UnifiedScript.Unreal.Editor.ReloadBatchPreflight"
+        and "Finare.Unreal.Editor.ReloadBatchPreflight"
         in authoring_surface_tests
         and "StoppedComponent" in authoring_surface_tests
         and "none was allowed to cross into runtime mutation"
@@ -1637,7 +1637,7 @@ def main() -> int:
         "M13.2D preflights every matching running and stopped instance before reload"
     )
     managed_reload_transaction_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests"
+        ROOT / "tests" / "Finare.Tests"
         / "UnrealManagedReloadTransactionTests.cs"
     ).read_text(encoding="utf-8")
     hot_reload_reliability_document = (
@@ -1683,7 +1683,7 @@ def main() -> int:
     require(
         "EditorAttached" in onboarding_script
         and "USONB3001" in onboarding_script
-        and "Defer-UnifiedScriptBuildGraphStage" in build_graph_module
+        and "Defer-FinareBuildGraphStage" in build_graph_module
         and "deferred" in build_graph_test
         and "DailyBuildAttached" in project_setup_header
         and "ReadDailyBuildReceipt" in project_setup_source
@@ -1698,12 +1698,12 @@ def main() -> int:
     )
     require(
         "public IPIEAuthorizer" in editor_module
-        and "UnifiedScript.BuildAndReload" in editor_module
+        and "Finare.BuildAndReload" in editor_module
         and "RequestPIEPermissionInternal" in editor_module
         and "ScheduleDeferredPlay" in editor_module
-        and "EUnifiedScriptDailyBuildReason::GraphPublication"
+        and "EFinareDailyBuildReason::GraphPublication"
         in authoring_surface_widget
-        and "UnifiedScript.Integration.DailyBuildPlayGate"
+        and "Finare.Integration.DailyBuildPlayGate"
         in project_setup_tests
         and "The Play gate publishes one shared daily-build receipt"
         in project_setup_tests
@@ -1716,9 +1716,9 @@ def main() -> int:
         "M13.2D-3b coalesces Graph and Play through one verified daily-build coordinator"
     )
     require(
-        "UnifiedScriptScriptClassSmoke" in native_host_source_template
-        and "LoadClass<AUnifiedScriptActor>" in native_host_source_template
-        and "LoadClass<UUnifiedScriptComponent>" in native_host_source_template
+        "FinareScriptClassSmoke" in native_host_source_template
+        and "LoadClass<AFinareActor>" in native_host_source_template
+        and "LoadClass<UFinareComponent>" in native_host_source_template
         and "ValidateGeneratedClassIdentity" in native_host_source_template
         and "GetManagedScriptCount" in native_host_source_template
         and "GetGameplayLifecycleClaimCount" in native_host_source_template
@@ -1737,7 +1737,7 @@ def main() -> int:
         and "restoredUserSentinelSha256" in packaged_native_onboarding
         and "unifiedscript.blueprint-only-baseline/v0.1"
         in packaged_native_onboarding
-        and "-UnifiedScriptScriptClassSmoke" in first_script_guide
+        and "-FinareScriptClassSmoke" in first_script_guide
         and "M13.1C-1d extends that gate" in sdk_distribution
         and "A post-smoke ValidateOnly run" in unreal_onboarding_guide
         and "[x] **M13.1C-1d — packaged execution" in roadmap_document
@@ -1749,35 +1749,35 @@ def main() -> int:
     )
 
     script_asset_definition_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptAssetDefinition.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareAssetDefinition.h"
     ).read_text(encoding="utf-8")
     script_asset_definition_source = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptAssetDefinition.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareAssetDefinition.cpp"
     ).read_text(encoding="utf-8")
     script_asset_definition_tests = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Tests"
-        / "UnifiedScriptAssetDefinitionTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Tests"
+        / "FinareAssetDefinitionTests.cpp"
     ).read_text(encoding="utf-8")
     editor_build_rules = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "UEUnifiedScriptEditor.Build.cs"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "FinareEditor.Build.cs"
     ).read_text(encoding="utf-8")
     require(
-        "UAssetDefinition_UnifiedScriptAsset" in script_asset_definition_header
+        "UAssetDefinition_FinareAsset" in script_asset_definition_header
         and "OpenAssets" in script_asset_definition_header
         and "CanRename" in script_asset_definition_header
         and "CanDuplicate" in script_asset_definition_header
         and "OpenAuthoringSurface(Asset)" in script_asset_definition_source
-        and "UnifiedScript.OpenAuthoring" in script_asset_definition_source
-        and "UnifiedScript.OpenSource" in script_asset_definition_source
-        and "UnifiedScript.LocateGeneratedClass" in script_asset_definition_source
-        and "UnifiedScript.OpenRepair" in script_asset_definition_source
-        and "RegisterUnifiedScriptAssetContextMenu" in editor_module
+        and "Finare.OpenAuthoring" in script_asset_definition_source
+        and "Finare.OpenSource" in script_asset_definition_source
+        and "Finare.LocateGeneratedClass" in script_asset_definition_source
+        and "Finare.OpenRepair" in script_asset_definition_source
+        and "RegisterFinareAssetContextMenu" in editor_module
         and '"AssetDefinition"' in editor_build_rules
-        and "UnifiedScript.Unreal.ScriptAsset.WorkflowContract"
+        and "Finare.Unreal.ScriptAsset.WorkflowContract"
         in script_asset_definition_tests
         and "FindExistingLiveTab" in script_asset_definition_tests
         and "M13.2A-1 — canonical Script Asset entry" in roadmap_document,
@@ -1788,30 +1788,30 @@ def main() -> int:
     )
 
     script_class_operations_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Public"
-        / "UnifiedScriptClassAssetOperations.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Public"
+        / "FinareClassAssetOperations.h"
     ).read_text(encoding="utf-8")
     script_class_operations_source = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private"
-        / "UnifiedScriptClassAssetOperations.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private"
+        / "FinareClassAssetOperations.cpp"
     ).read_text(encoding="utf-8")
     script_class_operations_tests = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "Tests"
-        / "UnifiedScriptClassAssetOperationsTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "Tests"
+        / "FinareClassAssetOperationsTests.cpp"
     ).read_text(encoding="utf-8")
     csharp_type_reference_planner = (
-        ROOT / "src" / "UnifiedScript.CSharp"
+        ROOT / "src" / "Finare.CSharp"
         / "CSharpTypeReferencePlanner.cs"
     ).read_text(encoding="utf-8")
     csharp_type_reference_planner_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests"
+        ROOT / "tests" / "Finare.Tests"
         / "CSharpTypeReferencePlannerTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FUnifiedScriptClassAssetOperations" in script_class_operations_header
+        "FFinareClassAssetOperations" in script_class_operations_header
         and "static bool Rename" in script_class_operations_header
         and "static bool Duplicate" in script_class_operations_header
         and "FAssetRenameData" in script_class_operations_source
@@ -1822,9 +1822,9 @@ def main() -> int:
         and "VerifyFilesUnchanged" in script_class_operations_source
         and "RollbackRename" in script_class_operations_source
         and "RollbackDuplicate" in script_class_operations_source
-        and "UnifiedScript.RenameClass" in script_asset_definition_source
-        and "UnifiedScript.DuplicateClass" in script_asset_definition_source
-        and "UnifiedScript.Unreal.ScriptClass.AssetOperations"
+        and "Finare.RenameClass" in script_asset_definition_source
+        and "Finare.DuplicateClass" in script_asset_definition_source
+        and "Finare.Unreal.ScriptClass.AssetOperations"
         in script_class_operations_tests
         and "AfterExternalPublication" in script_class_operations_tests
         and "restores deployment bytes exactly" in script_class_operations_tests
@@ -1843,8 +1843,8 @@ def main() -> int:
         and "RunManagedReferencePlanner" in script_class_operations_source
         and "PublishDeleteExternalFiles" in script_class_operations_source
         and "ObjectTools::DeleteObjectsUnchecked" in script_class_operations_source
-        and "UnifiedScript.DeleteClass" in script_asset_definition_source
-        and "RegisterUnifiedScriptAssetOperationGuards"
+        and "Finare.DeleteClass" in script_asset_definition_source
+        and "RegisterFinareAssetOperationGuards"
         in script_asset_definition_source
         and "managed semantic references remain"
         in script_class_operations_tests
@@ -1896,17 +1896,17 @@ def main() -> int:
         "M13.2A rewrites cross-file managed Script Class references semantically"
     )
     script_class_journal_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private"
-        / "UnifiedScriptClassOperationJournal.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private"
+        / "FinareClassOperationJournal.h"
     ).read_text(encoding="utf-8")
     script_class_journal_source = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private"
-        / "UnifiedScriptClassOperationJournal.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private"
+        / "FinareClassOperationJournal.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "FUnifiedScriptClassAssetRecoveryResult"
+        "FFinareClassAssetRecoveryResult"
         in script_class_operations_header
         and "RecoverPendingTransactions" in script_class_operations_header
         and "RecoveryReceiptPath" in script_class_operations_header
@@ -1948,18 +1948,18 @@ def main() -> int:
         "M13.2A persists and recovers interrupted Script Class transactions"
     )
     unified_script_blueprint_header = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptBlueprint.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareBlueprint.h"
     ).read_text(encoding="utf-8")
     unified_script_factory_source = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptClassFactory.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareEditor" / "Private" / "FinareClassFactory.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "UUnifiedScriptBlueprint" in unified_script_blueprint_header
-        and "UUnifiedScriptBlueprint::StaticClass()"
+        "UFinareBlueprint" in unified_script_blueprint_header
+        and "UFinareBlueprint::StaticClass()"
         in unified_script_factory_source
-        and "UAssetDefinition_UnifiedScriptBlueprint"
+        and "UAssetDefinition_FinareBlueprint"
         in script_asset_definition_header
         and '"EngineAssetDefinitions"' in editor_build_rules
         and "CollectExternalAssetReferencers"
@@ -1973,7 +1973,7 @@ def main() -> int:
         and "IsOrphanedGeneratedBlueprintDuplicate"
         in script_class_operations_header
         and "OnInMemoryAssetCreated" in script_asset_definition_source
-        and "ProcessPendingUnifiedScriptBlueprintDuplicateCleanup"
+        and "ProcessPendingFinareBlueprintDuplicateCleanup"
         in script_asset_definition_source
         and "Rename rewrites the UE soft class reference"
         in script_class_operations_tests
@@ -2022,8 +2022,8 @@ def main() -> int:
         "M13.2A replays the complete Script Class lifecycle from a packaged SDK"
     )
 
-    sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
-    sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"
+    sample_catalog_path = ROOT / "samples" / "Unreal" / "finare.samples.json"
+    sample_matrix_runner_path = ROOT / "tools" / "run-finare-sample-matrix.ps1"
     sample_document_path = ROOT / "docs" / "UNREAL_SAMPLES.md"
     for path in [sample_catalog_path, sample_matrix_runner_path, sample_document_path]:
         require(path.is_file(), f"Missing M12.2 sample-matrix artifact: {path}")
@@ -2037,15 +2037,15 @@ def main() -> int:
         sample["execution"]["runner"] for sample in sample_catalog["samples"]
     }
     blockbreaker_cleanup = {
-        "Managed/BlockBreaker.UnifiedScript.asset.json",
-        "Managed/BlockBreaker.UnifiedScript.sourcemap.json",
-        "Managed/BlockBreaker.UnifiedScript.uschunk",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptDataPlaneExtensionTests.cpp",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeBreadcrumbTests.cpp",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/UnifiedScriptDataPlaneExtension.cpp",
-        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptDataPlaneExtension.h",
+        "Managed/BlockBreaker.Finare.asset.json",
+        "Managed/BlockBreaker.Finare.sourcemap.json",
+        "Managed/BlockBreaker.Finare.uschunk",
+        "Plugins/Finare/Source/FinareRuntime/Private/Tests/Generated/FinareBlockBreakerDataPlaneExtension.gen.h",
+        "Plugins/Finare/Source/FinareRuntime/Private/Tests/FinareDataPlaneExtensionTests.cpp",
+        "Plugins/Finare/Source/FinareRuntime/Private/Tests/FinareRuntimeBreadcrumbTests.cpp",
+        "Plugins/Finare/Source/FinareRuntime/Private/Tests/FinareRuntimeOwnershipTests.cpp",
+        "Plugins/Finare/Source/FinareRuntime/Private/FinareDataPlaneExtension.cpp",
+        "Plugins/Finare/Source/FinareRuntime/Public/FinareDataPlaneExtension.h",
     }
     blockbreaker_samples = {
         sample["id"]: sample for sample in sample_catalog["samples"]
@@ -2092,7 +2092,7 @@ def main() -> int:
         )
         and sample_runners
         == {
-            "tools/run-unifiedscript-alpha-acceptance.ps1",
+            "tools/run-finare-alpha-acceptance.ps1",
             "comparison/package-blockbreaker-demo.ps1",
             "tools/run-unreal-lifecycle-stress.ps1",
             "tools/run-unreal-data-plane-profile.ps1",
@@ -2115,13 +2115,13 @@ def main() -> int:
     )
 
     compatibility_policy_path = (
-        ROOT / "schemas" / "unifiedscript.compatibility-policy.v0.1.json"
+        ROOT / "schemas" / "finare.compatibility-policy.v0.1.json"
     )
     compatibility_source_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScriptCompatibility.cs"
+        ROOT / "src" / "Finare.Unreal" / "FinareCompatibility.cs"
     )
     compatibility_tests_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScriptCompatibilityTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "FinareCompatibilityTests.cs"
     )
     compatibility_guide_path = ROOT / "docs" / "VERSIONING_AND_UPGRADES.md"
     with compatibility_policy_path.open("r", encoding="utf-8") as handle:
@@ -2170,7 +2170,7 @@ def main() -> int:
             "sharedData": 4,
         }
         and 'args[0] is "upgrade-plan" or "upgrade-apply"' in cli_source
-        and "UnifiedScriptUpgradeDisposition" in compatibility_source
+        and "FinareUpgradeDisposition" in compatibility_source
         and "RewriteMigrationsReadLegacyAndEmitCanonicalCurrentDocuments"
         in compatibility_tests
         and "UpgradeApplyIsAtomicWhenPlanRequiresRegenerationOrIsBlocked"
@@ -2262,22 +2262,22 @@ def main() -> int:
     checks.append("engineering Harness reuses gates with explicit scope and source-bound evidence")
 
     diagnostics_policy_path = (
-        ROOT / "schemas" / "unifiedscript.diagnostics-policy.v0.1.json"
+        ROOT / "schemas" / "finare.diagnostics-policy.v0.1.json"
     )
     diagnostics_source_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
-        / "UnifiedScriptDiagnosticsBundle.cs"
+        / "Finare.Unreal"
+        / "FinareDiagnosticsBundle.cs"
     )
     diagnostics_tests_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
-        / "UnifiedScriptDiagnosticsBundleTests.cs"
+        / "Finare.Tests"
+        / "FinareDiagnosticsBundleTests.cs"
     )
     diagnostics_guide_path = ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md"
-    cli_project_path = ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj"
+    cli_project_path = ROOT / "src" / "Finare.Cli" / "Finare.Cli.csproj"
     with diagnostics_policy_path.open("r", encoding="utf-8") as handle:
         diagnostics_policy = json.load(handle)
     diagnostics_source = diagnostics_source_path.read_text(encoding="utf-8")
@@ -2325,7 +2325,7 @@ def main() -> int:
             set(diagnostics_policy["sensitivePropertyNames"])
         )
         and 'args[0] == "diagnostics-bundle"' in cli_source
-        and "unifiedscript.diagnostics-policy.json" in cli_project
+        and "finare.diagnostics-policy.json" in cli_project
         and "unifiedscript.diagnostics-bundle/v0.1" in diagnostics_source
         and '"safe-default"' in diagnostics_source
         and "EnumerateFilesWithoutFollowingReparsePoints" in diagnostics_source
@@ -2347,38 +2347,38 @@ def main() -> int:
         "diagnostics bundles are allowlisted, bounded, deterministic, and string-redacted by default"
     )
 
-    scaffold_path = ROOT / "tools" / "new-unifiedscript-project.ps1"
-    authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"
+    scaffold_path = ROOT / "tools" / "new-finare-project.ps1"
+    authoring_start_path = ROOT / "tools" / "start-finare-authoring.ps1"
     first_script_guide_path = ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md"
     template_root = ROOT / "templates" / "UnrealProject"
     project_template_catalog_path = (
-        template_root / "unifiedscript.project-templates.json"
+        template_root / "finare.project-templates.json"
     )
     project_template_runner_path = (
-        ROOT / "tools" / "test-unifiedscript-project-templates.ps1"
+        ROOT / "tools" / "test-finare-project-templates.ps1"
     )
     api_browser_source_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealApiBrowser.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealApiBrowser.cs"
     )
     api_browser_sample_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-browser.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.api-browser.json"
     )
     api_browser_guide_path = (
         ROOT / "docs" / "PROJECT_TEMPLATES_AND_API_BROWSER.md"
     )
     api_browser_server_path = (
-        ROOT / "src" / "UnifiedScript.Cli" / "CoreClrDebugHttpServer.cs"
+        ROOT / "src" / "Finare.Cli" / "CoreClrDebugHttpServer.cs"
     )
-    cli_program_path = ROOT / "src" / "UnifiedScript.Cli" / "Program.cs"
+    cli_program_path = ROOT / "src" / "Finare.Cli" / "Program.cs"
     workbench_index_path = ROOT / "prototype" / "visual-editor" / "index.html"
     workbench_script_path = ROOT / "prototype" / "visual-editor" / "app.js"
     required_templates = [
-        template_root / "Config" / "UnifiedScript.onboarding.json.template",
+        template_root / "Config" / "Finare.onboarding.json.template",
         template_root / "Contracts" / "Project.unreal-api-contract.json.template",
         template_root
         / "Deployment"
-        / "Project.unifiedscript-deployment.json.template",
-        template_root / "Managed" / "Project.UnifiedScript.csproj.template",
+        / "Project.finare-deployment.json.template",
+        template_root / "Managed" / "Project.Finare.csproj.template",
         template_root / "Managed" / "FirstScript.cs.template",
         template_root / "Managed" / "VisualGameplayScript.cs.template",
         template_root / "Managed" / "DataPlaneScript.cs.template",
@@ -2404,7 +2404,7 @@ def main() -> int:
     workbench_index = workbench_index_path.read_text(encoding="utf-8")
     workbench_script = workbench_script_path.read_text(encoding="utf-8")
     plugin_source_root = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
     )
     plugin_implementation_files = [
         path
@@ -2417,23 +2417,23 @@ def main() -> int:
     )
     runtime_module = (
         plugin_source_root
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UEUnifiedScriptRuntimeModule.cpp"
+        / "FinareRuntimeModule.cpp"
     ).read_text(encoding="utf-8")
     host_module = (
         ROOT
         / "HostProject"
         / "Source"
-        / "UEUnifiedScriptHost"
+        / "FinareHost"
         / "Private"
-        / "UEUnifiedScriptHostModule.cpp"
+        / "FinareHostModule.cpp"
     ).read_text(encoding="utf-8")
     editor_module = (
         plugin_source_root
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UEUnifiedScriptEditorModule.cpp"
+        / "FinareEditorModule.cpp"
     ).read_text(encoding="utf-8")
     require(
         scaffold_path.is_file()
@@ -2456,14 +2456,14 @@ def main() -> int:
             fixture_name in plugin_implementation
             for fixture_name in (
                 "BlockBreaker",
-                "UnifiedScript.Unreal.Demo",
+                "Finare.Unreal.Demo",
                 "DamagePolicy",
                 "DemoSurfacePath",
                 "HandleLoadDemo",
             )
         )
-        and "UnifiedScriptSmoke" not in runtime_module
-        and "UnifiedScriptSmoke" in host_module
+        and "FinareSmoke" not in runtime_module
+        and "FinareSmoke" in host_module
         and ".InitialSurfacePath(" not in editor_module,
         "Project-agnostic first-script templates or fixture isolation is missing",
     )
@@ -2492,7 +2492,7 @@ def main() -> int:
         )
         and "unifiedscript.project-template-acceptance/v0.1"
         in project_template_runner
-        and "new-unifiedscript-project.ps1" in project_template_runner
+        and "new-finare-project.ps1" in project_template_runner
         and "-SkipOnboarding" in project_template_runner
         and api_browser_sample["schemaVersion"]
         == "unifiedscript.unreal-api-browser/v0.1"
@@ -2540,7 +2540,7 @@ def main() -> int:
     )
 
     alpha_acceptance_path = (
-        ROOT / "tools" / "run-unifiedscript-alpha-acceptance.ps1"
+        ROOT / "tools" / "run-finare-alpha-acceptance.ps1"
     )
     alpha_acceptance_doc_path = ROOT / "docs" / "ALPHA_ACCEPTANCE.md"
     release_gate_path = ROOT / "tools" / "package-unreal-release.ps1"
@@ -2779,7 +2779,7 @@ def main() -> int:
     runtime_source_path = ROOT / "samples" / "Execution" / "RuntimeRules.cs"
     require(runtime_source_path.is_file(), "Missing CoreCLR execution sample")
     runtime_source = runtime_source_path.read_text(encoding="utf-8")
-    cli_source = (ROOT / "src" / "UnifiedScript.Cli" / "Program.cs").read_text(
+    cli_source = (ROOT / "src" / "Finare.Cli" / "Program.cs").read_text(
         encoding="utf-8"
     )
     require(
@@ -2796,13 +2796,13 @@ def main() -> int:
         "CLI analysis/emission does not publish Declaration IR",
     )
     project_loader_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpProjectLoader.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpProjectLoader.cs"
     ).read_text(encoding="utf-8")
     compilation_request_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpCompilationRequest.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpCompilationRequest.cs"
     ).read_text(encoding="utf-8")
     project_loader_test = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpProjectLoaderTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CSharpProjectLoaderTests.cs"
     ).read_text(encoding="utf-8")
     project_loading_sample = (
         ROOT / "samples" / "ProjectLoading" / "ProjectLoadingDemo.cs"
@@ -2818,7 +2818,7 @@ def main() -> int:
         and "--no-restore" in cli_source
         and "LoaderUsesMsBuildSourcesConstantsNuGetAndProjectReferences"
         in project_loader_test
-        and "UNIFIEDSCRIPT_PROJECT_DEMO" in project_loading_sample,
+        and "FINARE_PROJECT_DEMO" in project_loading_sample,
         "MSBuild project, NuGet, project-reference, or CLI loading coverage is missing",
     )
     checks.append("MSBuild project loading carries sources, settings, NuGet, and runtime references")
@@ -2828,11 +2828,11 @@ def main() -> int:
     authoring_projector_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Authoring"
+        / "Finare.Authoring"
         / "AuthoringSurfaceProjector.cs"
     ).read_text(encoding="utf-8")
     authoring_model_source = (
-        ROOT / "src" / "UnifiedScript.Authoring" / "AuthoringSurfaceModel.cs"
+        ROOT / "src" / "Finare.Authoring" / "AuthoringSurfaceModel.cs"
     ).read_text(encoding="utf-8")
     require(
         'args[0] == "apply-declaration-patch"' in cli_source
@@ -2860,7 +2860,7 @@ def main() -> int:
     )
     checks.append("visual cards and inspectors consume generic Surface identities")
     debug_server_source = (
-        ROOT / "src" / "UnifiedScript.Cli" / "CoreClrDebugHttpServer.cs"
+        ROOT / "src" / "Finare.Cli" / "CoreClrDebugHttpServer.cs"
     ).read_text(encoding="utf-8")
     require(
         'args[0] == "debug-serve"' in cli_source
@@ -2884,7 +2884,7 @@ def main() -> int:
     )
     checks.append("visual pause, full step controls, per-frame locals, and watch use the live CoreCLR bridge")
     authoring_workspace_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpAuthoringWorkspace.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpAuthoringWorkspace.cs"
     ).read_text(encoding="utf-8")
     require(
         '"/api/authoring/workspace"' in debug_server_source
@@ -2907,9 +2907,9 @@ def main() -> int:
         and "saveSemanticPatch" in prototype_source
         and "navigateAuthoringHistory" in prototype_source
         and "toggleAuthoringGroup" in prototype_source
-        and "X-UnifiedScript-Group-Id" in prototype_source
-        and "X-UnifiedScript-Baseline-Revision" in prototype_source
-        and "X-UnifiedScript-Transaction-Id" in prototype_source
+        and "X-Finare-Group-Id" in prototype_source
+        and "X-Finare-Baseline-Revision" in prototype_source
+        and "X-Finare-Transaction-Id" in prototype_source
         and "unifiedscript.authoring-workspace/v0.5" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
         and "unifiedscript.patch/v0.28" in prototype_source,
@@ -2917,7 +2917,7 @@ def main() -> int:
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
     authoring_history_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpAuthoringHistory.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpAuthoringHistory.cs"
     )
     require(
         authoring_history_source.is_file()
@@ -2945,299 +2945,299 @@ def main() -> int:
     )
     checks.append("multi-asset authoring sample covers if, while, and for regions")
     unreal_manifest_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.reflection.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.reflection.json"
     )
     unreal_bindings_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.bindings.cs"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.bindings.cs"
     )
     unreal_native_thunk_generator_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeThunkGenerator.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealNativeThunkGenerator.cs"
     )
     unreal_generated_thunks_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Generated"
-        / "UEUnifiedScriptRuntime.native-thunks.generated.cpp"
+        / "FinareRuntime.native-thunks.generated.cpp"
     )
     unreal_native_thunk_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealNativeThunkGeneratorTests.cs"
     )
     unreal_plugin_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
-        / "UEUnifiedScript.uplugin"
+        / "Finare"
+        / "Finare.uplugin"
     )
     unreal_component_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptComponent.h"
+        / "FinareComponent.h"
     )
     unreal_delegate_proxy_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptDelegateProxy.h"
+        / "FinareDelegateProxy.h"
     )
     unreal_actor_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptActor.h"
+        / "FinareActor.h"
     )
     unreal_script_asset_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptAsset.h"
+        / "FinareAsset.h"
     )
     unreal_script_asset_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptAsset.cpp"
+        / "FinareAsset.cpp"
     )
     unreal_script_asset_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptAssetTests.cpp"
+        / "FinareAssetTests.cpp"
     )
     unreal_declaration_materializer_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptDeclarationMaterializer.h"
+        / "FinareDeclarationMaterializer.h"
     )
     unreal_declaration_materializer_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptDeclarationMaterializer.cpp"
+        / "FinareDeclarationMaterializer.cpp"
     )
     unreal_declaration_materializer_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptDeclarationMaterializerTests.cpp"
+        / "FinareDeclarationMaterializerTests.cpp"
     )
     unreal_exporter_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptReflectionExporter.cpp"
+        / "FinareReflectionExporter.cpp"
     )
     unreal_registry_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptObjectRegistry.h"
+        / "FinareObjectRegistry.h"
     )
     unreal_registry_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptObjectRegistry.cpp"
+        / "FinareObjectRegistry.cpp"
     )
     unreal_registry_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptObjectRegistryTests.cpp"
+        / "FinareObjectRegistryTests.cpp"
     )
     unreal_invocation_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptInvocationBridge.h"
+        / "FinareInvocationBridge.h"
     )
     unreal_invocation_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptInvocationBridge.cpp"
+        / "FinareInvocationBridge.cpp"
     )
     unreal_invocation_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptInvocationBridgeTests.cpp"
+        / "FinareInvocationBridgeTests.cpp"
     )
     unreal_native_transport_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptNativeTransport.h"
+        / "FinareNativeTransport.h"
     )
     unreal_native_transport_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptNativeTransport.cpp"
+        / "FinareNativeTransport.cpp"
     )
     unreal_native_transport_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptNativeTransportTests.cpp"
+        / "FinareNativeTransportTests.cpp"
     )
     unreal_gameplay_data_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptGameplayDataPlane.h"
+        / "FinareGameplayDataPlane.h"
     )
     unreal_gameplay_data_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptGameplayDataPlane.cpp"
+        / "FinareGameplayDataPlane.cpp"
     )
     unreal_shared_data_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptSharedDataPlane.h"
+        / "FinareSharedDataPlane.h"
     )
     unreal_shared_data_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptSharedDataPlane.cpp"
+        / "FinareSharedDataPlane.cpp"
     )
     unreal_data_plane_schema_path = (
-        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.data-plane.json"
+        ROOT / "samples" / "Unreal" / "FinareRuntime.data-plane.json"
     )
     unreal_data_plane_generator_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealDataPlaneLayoutGenerator.cs"
     )
     unreal_data_plane_managed_layout_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealDataPlaneLayouts.g.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealDataPlaneLayouts.g.cs"
     )
     unreal_data_plane_native_layout_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptDataPlaneLayouts.gen.h"
+        / "FinareDataPlaneLayouts.gen.h"
     )
     unreal_data_plane_generator_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealDataPlaneLayoutGeneratorTests.cs"
     )
     unreal_data_plane_generator_helper_path = (
@@ -3255,67 +3255,67 @@ def main() -> int:
     unreal_data_plane_extension_generator_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealDataPlaneExtensionGenerator.cs"
     )
     unreal_data_plane_extension_managed_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealDataPlaneExtensions.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealDataPlaneExtensions.cs"
     )
     unreal_data_plane_extension_generated_managed_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "BlockBreakerDataPlaneExtension.g.cs"
     )
     unreal_data_plane_extension_generated_native_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
         / "Generated"
-        / "UnifiedScriptBlockBreakerDataPlaneExtension.gen.h"
+        / "FinareBlockBreakerDataPlaneExtension.gen.h"
     )
     unreal_data_plane_extension_registry_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptDataPlaneExtension.h"
+        / "FinareDataPlaneExtension.h"
     )
     unreal_data_plane_extension_registry_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptDataPlaneExtension.cpp"
+        / "FinareDataPlaneExtension.cpp"
     )
     unreal_data_plane_extension_generator_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealDataPlaneExtensionGeneratorTests.cs"
     )
     unreal_data_plane_extension_registry_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptDataPlaneExtensionTests.cpp"
+        / "FinareDataPlaneExtensionTests.cpp"
     )
     unreal_data_plane_extension_helper_path = (
         ROOT / "tools" / "generate-unreal-data-plane-extension.ps1"
@@ -3325,7 +3325,7 @@ def main() -> int:
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "DataPlaneWorkloadProfileScript.cs"
     )
     unreal_data_plane_profile_helper_path = (
@@ -3335,181 +3335,181 @@ def main() -> int:
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptAsyncService.h"
+        / "FinareAsyncService.h"
     )
     unreal_async_service_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptAsyncService.cpp"
+        / "FinareAsyncService.cpp"
     )
     unreal_world_host_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptWorldSubsystem.h"
+        / "FinareWorldSubsystem.h"
     )
     unreal_world_host_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptWorldSubsystem.cpp"
+        / "FinareWorldSubsystem.cpp"
     )
     unreal_world_host_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptWorldSubsystemTests.cpp"
+        / "FinareWorldSubsystemTests.cpp"
     )
     unreal_lifecycle_stress_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptLifecycleStressTests.cpp"
+        / "FinareLifecycleStressTests.cpp"
     )
     unreal_runtime_breadcrumb_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptRuntimeBreadcrumbTests.cpp"
+        / "FinareRuntimeBreadcrumbTests.cpp"
     )
     unreal_coreclr_host_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptCoreClrHost.h"
+        / "FinareCoreClrHost.h"
     )
     unreal_coreclr_host_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptCoreClrHost.cpp"
+        / "FinareCoreClrHost.cpp"
     )
     unreal_coreclr_runtime_config_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Resources"
         / "Managed"
-        / "UnifiedScript.Unreal.runtimeconfig.json"
+        / "Finare.Unreal.runtimeconfig.json"
     )
     unreal_runtime_build_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
-        / "UEUnifiedScriptRuntime.Build.cs"
+        / "FinareRuntime"
+        / "FinareRuntime.Build.cs"
     )
     unreal_runtime_module_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UEUnifiedScriptRuntimeModule.cpp"
+        / "FinareRuntimeModule.cpp"
     )
     unreal_managed_bridge_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealManagedBridge.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealManagedBridge.cs"
     )
     unreal_native_adapter_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "NativeUnrealInvocationBridge.cs"
+        ROOT / "src" / "Finare.Unreal" / "NativeUnrealInvocationBridge.cs"
     )
     unreal_native_adapter_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "NativeUnrealInvocationBridgeTests.cs"
     )
     unreal_binding_coverage_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealBindingCoverage.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealBindingCoverage.cs"
     )
     unreal_binding_coverage_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealBindingCoverageTests.cs"
     )
     unreal_in_process_transport_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "InProcessUnrealNativeInvocationTransport.cs"
     )
     unreal_native_abi_v3_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeAbiV3.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealNativeAbiV3.cs"
     )
     unreal_native_event_abi_v4_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeEventAbiV4.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealNativeEventAbiV4.cs"
     )
     unreal_gameplay_data_abi_v4_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealGameplayDataAbiV4.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealGameplayDataAbiV4.cs"
     )
     unreal_shared_data_abi_v4_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealSharedDataAbiV4.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealSharedDataAbiV4.cs"
     )
     unreal_gameplay_data_abi_v4_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealGameplayDataAbiV4Tests.cs"
     )
     unreal_shared_data_abi_v4_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealSharedDataAbiV4Tests.cs"
     )
     unreal_async_service_abi_v5_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealAsyncServiceAbiV5.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealAsyncServiceAbiV5.cs"
     )
     unreal_async_service_abi_v5_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealAsyncServiceAbiV5Tests.cs"
     )
     unreal_async_service_doc_path = (
@@ -3521,64 +3521,64 @@ def main() -> int:
     unreal_generation_invocation_bridge_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealGenerationInvocationBridge.cs"
     )
     unreal_event_binder_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealEventBinder.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealEventBinder.cs"
     )
     unreal_event_binder_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealEventBinderTests.cs"
     )
     unreal_native_event_abi_v4_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealNativeEventAbiV4Tests.cs"
     )
     unreal_native_call_frame_v3_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeCallFrameV3.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealNativeCallFrameV3.cs"
     )
     unreal_in_process_transport_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "InProcessUnrealNativeInvocationTransportTests.cs"
     )
     unreal_world_managed_entry_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealWorldManagedEntryPoint.cs"
     )
     unreal_runtime_diagnostic_managed_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealRuntimeDiagnostic.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealRuntimeDiagnostic.cs"
     )
     unreal_script_object_model_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptObjectModel.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealScriptObjectModel.cs"
     )
     unreal_demo_project_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
-        / "UnifiedScript.Unreal.Demo.csproj"
+        / "Finare.Unreal.Demo"
+        / "Finare.Unreal.Demo.csproj"
     )
     unreal_demo_source_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "DemoScript.cs"
     )
     unreal_benchmark_demo_source_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "ManagedInteropBenchmarkScript.cs"
     )
     unreal_benchmark_helper_path = ROOT / "tools" / "run-unreal-benchmark.ps1"
@@ -3596,222 +3596,222 @@ def main() -> int:
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "ActorDemoScript.cs"
     )
     unreal_lifecycle_stress_demo_source_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "LifecycleStressScript.cs"
     )
     unreal_demo_declaration_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
-        / "UnifiedScript.Unreal.Demo.asset.json"
+        / "Finare.Unreal.Demo"
+        / "Finare.Unreal.Demo.asset.json"
     )
     unreal_demo_surface_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
-        / "UnifiedScript.Unreal.Demo.surface.json"
+        / "Finare.Unreal.Demo"
+        / "Finare.Unreal.Demo.surface.json"
     )
     unreal_authoring_surface_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptAuthoringSurface.h"
+        / "FinareAuthoringSurface.h"
     )
     unreal_authoring_surface_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptAuthoringSurface.cpp"
+        / "FinareAuthoringSurface.cpp"
     )
     unreal_authoring_workbench_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptAuthoringWorkbench.h"
+        / "FinareAuthoringWorkbench.h"
     )
     unreal_authoring_workbench_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptAuthoringWorkbench.cpp"
+        / "FinareAuthoringWorkbench.cpp"
     )
     unreal_debug_workbench_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptDebugWorkbench.h"
+        / "FinareDebugWorkbench.h"
     )
     unreal_debug_workbench_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptDebugWorkbench.cpp"
+        / "FinareDebugWorkbench.cpp"
     )
     unreal_debug_panel_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Widgets"
-        / "SUnifiedScriptDebugPanel.cpp"
+        / "SFinareDebugPanel.cpp"
     )
     unreal_runtime_diagnostic_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptRuntimeDiagnostic.h"
+        / "FinareRuntimeDiagnostic.h"
     )
     unreal_runtime_diagnostic_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptRuntimeDiagnostic.cpp"
+        / "FinareRuntimeDiagnostic.cpp"
     )
     unreal_authoring_widget_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Widgets"
-        / "SUnifiedScriptAuthoringSurface.cpp"
+        / "SFinareAuthoringSurface.cpp"
     )
     unreal_ed_graph_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptEdGraph.h"
+        / "FinareEdGraph.h"
     )
     unreal_ed_graph_source_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptEdGraph.cpp"
+        / "FinareEdGraph.cpp"
     )
     unreal_graph_layout_store_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Graph"
-        / "UnifiedScriptGraphLayoutStore.cpp"
+        / "FinareGraphLayoutStore.cpp"
     )
     unreal_graph_presentation_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Graph"
-        / "UnifiedScriptGraphPresentation.cpp"
+        / "FinareGraphPresentation.cpp"
     )
     unreal_node_palette_header_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Graph"
-        / "UnifiedScriptNodePalette.h"
+        / "FinareNodePalette.h"
     )
     unreal_node_palette_source_path = unreal_node_palette_header_path.with_suffix(".cpp")
     unreal_authoring_test_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Tests"
-        / "UnifiedScriptAuthoringSurfaceTests.cpp"
+        / "FinareAuthoringSurfaceTests.cpp"
     )
     unreal_editor_module_path = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UEUnifiedScriptEditorModule.cpp"
+        / "FinareEditorModule.cpp"
     )
     unreal_alternate_demo_source_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "AlternateDemoScript.cs"
     )
     unreal_test_project_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj"
+        ROOT / "tests" / "Finare.Tests" / "Finare.Tests.csproj"
     )
     unreal_game_target_path = (
-        ROOT / "HostProject" / "Source" / "UEUnifiedScriptHost.Target.cs"
+        ROOT / "HostProject" / "Source" / "FinareHost.Target.cs"
     )
     unreal_editor_target_path = (
-        ROOT / "HostProject" / "Source" / "UEUnifiedScriptHostEditor.Target.cs"
+        ROOT / "HostProject" / "Source" / "FinareHostEditor.Target.cs"
     )
     unreal_helper_path = ROOT / "tools" / "ue-adapter.sh"
     unreal_demo_helper_path = ROOT / "tools" / "run-unreal-demo.ps1"
@@ -3969,7 +3969,7 @@ def main() -> int:
         unreal_declaration_materializer_test_path.read_text(encoding="utf-8")
     )
     managed_reload_domain_test = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrReloadDomainTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CoreClrReloadDomainTests.cs"
     ).read_text(encoding="utf-8")
     unreal_exporter = unreal_exporter_path.read_text(encoding="utf-8")
     unreal_bindings = unreal_bindings_path.read_text(encoding="utf-8")
@@ -4092,9 +4092,9 @@ def main() -> int:
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
     )
     handwritten_dispatch_files = []
     for source_path in [
@@ -4110,7 +4110,7 @@ def main() -> int:
         ):
             handwritten_dispatch_files.append(str(source_path))
     binding_matrix_fixture_root = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "Fixtures"
+        ROOT / "tests" / "Finare.Tests" / "Fixtures"
     )
     binding_matrix_golden_files = [
         binding_matrix_fixture_root / "UnrealBindingMatrix.reflection.json",
@@ -4269,58 +4269,58 @@ def main() -> int:
         item
         for item in unreal_manifest["types"]
         if item["path"]
-        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+        == "/Script/FinareRuntime.FinareComponent"
     )
     unreal_interop_manifest = next(
         item
         for item in unreal_manifest["types"]
         if item["path"]
-        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+        == "/Script/FinareRuntime.FinareInteropFixture"
     )
     unreal_interop_contract_manifest = next(
         item
         for item in unreal_manifest["types"]
         if item["path"]
-        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract"
+        == "/Script/FinareRuntime.FinareInteropContract"
     )
     unreal_input_action_manifest = next(
         item
         for item in unreal_manifest["types"]
         if item["path"]
-        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture"
+        == "/Script/FinareRuntime.FinareInputActionFixture"
     )
     unreal_actor_manifest = next(
         item
         for item in unreal_manifest["types"]
-        if item["path"] == "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor"
+        if item["path"] == "/Script/FinareRuntime.FinareActor"
     )
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.5"
-        and unreal_manifest["modules"] == ["Engine", "UEUnifiedScriptRuntime"]
+        and unreal_manifest["modules"] == ["Engine", "FinareRuntime"]
         and {item["path"] for item in unreal_manifest["types"]}
         == {
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprint",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintFunctionLibrary",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptBlueprintGeneratedClass",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInputActionFixture",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptObject",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
+            "/Script/FinareRuntime.FinareActor",
+            "/Script/FinareRuntime.FinareAsset",
+            "/Script/FinareRuntime.FinareBlueprint",
+            "/Script/FinareRuntime.FinareBlueprintFunctionLibrary",
+            "/Script/FinareRuntime.FinareBlueprintGeneratedClass",
+            "/Script/FinareRuntime.FinareComponent",
+            "/Script/FinareRuntime.FinareInputActionFixture",
+            "/Script/FinareRuntime.FinareInteropContract",
+            "/Script/FinareRuntime.FinareInteropFixture",
+            "/Script/FinareRuntime.FinareNativeExtensionFixture",
+            "/Script/FinareRuntime.FinareObject",
+            "/Script/FinareRuntime.FinareWorldLibrary",
+            "/Script/FinareRuntime.FinareWorldSubsystem",
             "/Script/Engine.ActorInstanceHandle",
             "/Script/Engine.HitResult",
-            "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
-            "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
+            "/Script/FinareRuntime.EFinareInteropMode",
+            "/Script/FinareRuntime.EFinareRuntimeOwner",
         }
-        and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
+        and unreal_component_manifest["headerPath"] == "FinareComponent.h"
         and any(
-            item["path"] == "/Script/UEUnifiedScriptRuntime.UnifiedScriptNativeExtensionFixture"
+            item["path"] == "/Script/FinareRuntime.FinareNativeExtensionFixture"
             and item["properties"] == [] and item["functions"] == []
             for item in unreal_manifest["types"]
         )
@@ -4377,12 +4377,12 @@ def main() -> int:
             "StartScript",
             "StopScript",
         }
-        and unreal_actor_manifest["headerPath"] == "UnifiedScriptActor.h"
+        and unreal_actor_manifest["headerPath"] == "FinareActor.h"
         and {item["name"] for item in unreal_actor_manifest["properties"]}
         == {"ManagedActorState", "ManagedTickCount", "ScriptComponent"}
         and {item["name"] for item in unreal_actor_manifest["functions"]}
         == {
-            "GetUnifiedScriptComponent",
+            "GetFinareComponent",
             "IncrementManagedTickCount",
             "ReloadManagedBehavior",
             "SetManagedActorState",
@@ -4390,13 +4390,13 @@ def main() -> int:
             "StopManagedBehavior",
         }
         and unreal_interop_manifest["headerPath"]
-        == "UnifiedScriptInteropFixture.h"
+        == "FinareInteropFixture.h"
         and unreal_input_action_manifest["headerPath"]
-        == "UnifiedScriptInteropFixture.h"
+        == "FinareInteropFixture.h"
         and unreal_input_action_manifest["baseTypePath"]
         == "/Script/EnhancedInput.InputAction"
         and unreal_interop_contract_manifest["headerPath"]
-        == "UnifiedScriptInteropFixture.h"
+        == "FinareInteropFixture.h"
         and unreal_interop_contract_manifest["traits"]["interface"] is True
         and {
             item["name"]
@@ -4451,17 +4451,17 @@ def main() -> int:
         }
         and any(
             item["path"]
-            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset"
+            == "/Script/FinareRuntime.FinareAsset"
             for item in unreal_manifest["types"]
         )
         and any(
             item["path"]
-            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem"
+            == "/Script/FinareRuntime.FinareWorldSubsystem"
             for item in unreal_manifest["types"]
         )
         and not any(
             item["path"]
-            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptDelegateProxy"
+            == "/Script/FinareRuntime.FinareDelegateProxy"
             for item in unreal_manifest["types"]
         )
         and {
@@ -4470,9 +4470,9 @@ def main() -> int:
             for item in reflected_type["delegates"]
         }
         == {
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
+            "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal",
+            "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
+            "/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged",
         }
         and all(
             item["traits"]["kind"] == "multicast"
@@ -4488,40 +4488,40 @@ def main() -> int:
             for item in reflected_type["delegates"]
         }
         == {
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal": [
+            "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal": [
                 "int32",
                 "float32",
                 "boolean",
                 "object",
             ],
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal": [
+            "/Script/FinareRuntime.FinareComponent:OnManagedSignal": [
                 "int32",
                 "object",
             ],
-            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged": [
+            "/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged": [
                 "int32",
                 "object",
             ],
         }
         and {module["Name"] for module in unreal_plugin["Modules"]}
-        == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
-        and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
+        == {"FinareRuntime", "FinareEditor"}
+        and "UFinareComponent : public UActorComponent" in unreal_component
         and "unifiedscript.unreal-reflection/v0.5" in unreal_exporter
-        and "UnifiedScriptBindingInternal" in unreal_exporter
-        and "UnifiedScriptBindingInternal" in unreal_delegate_proxy
+        and "FinareBindingInternal" in unreal_exporter
+        and "FinareBindingInternal" in unreal_delegate_proxy
         and "TObjectIterator<UClass>" in unreal_exporter
         and "IUnrealInvocationBridge" in unreal_bindings
         and "UnrealEventEndpointAttribute" in unreal_bindings
         and "SubscribeOnManagedSignal" in unreal_bindings
-        and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add"
+        and "/Script/FinareRuntime.FinareComponent:Add"
         in unreal_bindings
         and 'args[0] == "ue-bindings"' in cli_source,
         "Unreal reflection fixture, plugin, exporter, bindings, or CLI is inconsistent",
     )
     checks.append("UE reflection export and managed binding vertical slice is connected")
     require(
-        "FUnifiedScriptObjectRegistry" in unreal_registry_header
-        and "EUnifiedScriptObjectHandleError" in unreal_registry_header
+        "FFinareObjectRegistry" in unreal_registry_header
+        and "EFinareObjectHandleError" in unreal_registry_header
         and "FUObjectArray::FUObjectDeleteListener" in unreal_registry_source
         and "TWeakObjectPtr<UObject>" in unreal_registry_source
         and "IsInGameThread()" in unreal_registry_source
@@ -4541,8 +4541,8 @@ def main() -> int:
     )
     checks.append("UE weak handles are generation-checked, world-bound, and deletion-aware")
     require(
-        "FUnifiedScriptInvocationBridge" in unreal_invocation_header
-        and "EUnifiedScriptInvocationError" in unreal_invocation_header
+        "FFinareInvocationBridge" in unreal_invocation_header
+        and "EFinareInvocationError" in unreal_invocation_header
         and "ObjectHandleFailure" in unreal_invocation_header
         and "Registry.ResolveObject" in unreal_invocation_source
         and "FStructOnScope" in unreal_invocation_source
@@ -4567,21 +4567,21 @@ def main() -> int:
         in unreal_native_adapter_test
         and "NativeFailurePreservesInvocationAndHandleCategories"
         in unreal_native_adapter_test
-        and "<Compile Include=\"../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs\""
+        and "<Compile Include=\"../../samples/Unreal/FinareRuntime.bindings.cs\""
         in unreal_test_project,
         "Managed Unreal invocation adapter or generated-wrapper integration is missing",
     )
     checks.append("generated UE wrapper uses the managed native invocation adapter contract")
     require(
-        "FUnifiedScriptNativeTransportV1" in unreal_native_transport_header
-        and "FUnifiedScriptNativeResultCallbackV1" in unreal_native_transport_header
-        and "UEUnifiedScript_GetNativeTransportV1" in unreal_native_transport_header
+        "FFinareNativeTransportV1" in unreal_native_transport_header
+        and "FFinareNativeResultCallbackV1" in unreal_native_transport_header
+        and "Finare_GetNativeTransportV1" in unreal_native_transport_header
         and "AbiVersion" in unreal_native_transport_header
         and "TableSize" in unreal_native_transport_header
         and "ValueSize" in unreal_native_transport_header
         and "RetainContext" in unreal_native_transport_header
         and "ReleaseContext" in unreal_native_transport_header
-        and "UEUnifiedScript_GetNativeTransportV1" in unreal_native_transport_source
+        and "Finare_GetNativeTransportV1" in unreal_native_transport_source
         and "NativeTransport.Abi" in unreal_native_transport_test
         and "InProcessUnrealNativeInvocationTransport"
         in unreal_in_process_transport
@@ -4599,9 +4599,9 @@ def main() -> int:
     require(
         "UnrealMemberId" in unreal_managed_bridge
         and "14695981039346656037UL" in unreal_managed_bridge
-        and "0xB324FB910D9CED26UL" in unreal_bindings
-        and "FUnifiedScriptNativeTransportV2" in unreal_native_transport_header
-        and "UEUnifiedScript_GetNativeTransportV2" in unreal_native_transport_source
+        and "0x0805E17D5F6614DEUL" in unreal_bindings
+        and "FFinareNativeTransportV2" in unreal_native_transport_header
+        and "Finare_GetNativeTransportV2" in unreal_native_transport_source
         and "ReadPropertyById" in unreal_native_transport_header
         and "WritePropertyById" in unreal_native_transport_header
         and "InvokeById" in unreal_native_transport_header
@@ -4627,10 +4627,10 @@ def main() -> int:
     )
     checks.append("generated UE members use automatic ABI v2 direct native thunks with ABI v1 fallback")
     require(
-        "FUnifiedScriptNativeTransportV3" in unreal_native_transport_header
-        and "FUnifiedScriptNativeCallFrameV3" in unreal_native_transport_header
+        "FFinareNativeTransportV3" in unreal_native_transport_header
+        and "FFinareNativeCallFrameV3" in unreal_native_transport_header
         and "CallFrameTransport" in unreal_native_transport_header
-        and "UEUnifiedScript_GetNativeTransportV3" in unreal_native_transport_source
+        and "Finare_GetNativeTransportV3" in unreal_native_transport_source
         and "UnrealNativeTransportTableV3" in unreal_native_abi_v3
         and "TransportTableSize = 64" in unreal_native_abi_v3
         and "IUnrealNativeCallFrameTransportV3" in unreal_native_call_frame_v3
@@ -4647,10 +4647,10 @@ def main() -> int:
     )
     checks.append("ABI v3 fixed calls use the live World call frame with observable v2 fallback")
     require(
-        "FUnifiedScriptNativeEventFrameV4" in unreal_native_transport_header
-        and "FUnifiedScriptNativeEventTransportV4" in unreal_native_transport_header
-        and "UEUnifiedScript_GetNativeEventTransportV4" in unreal_native_transport_source
-        and "sizeof(FUnifiedScriptNativeEventFrameV4) == 64"
+        "FFinareNativeEventFrameV4" in unreal_native_transport_header
+        and "FFinareNativeEventTransportV4" in unreal_native_transport_header
+        and "Finare_GetNativeEventTransportV4" in unreal_native_transport_source
+        and "sizeof(FFinareNativeEventFrameV4) == 64"
         in unreal_native_transport_header
         and "UnrealNativeEventFrameV4" in unreal_native_event_abi_v4
         and "FrameSize = 64" in unreal_native_event_abi_v4
@@ -4667,7 +4667,7 @@ def main() -> int:
         in unreal_world_host_test
         and "Reload rebinds one Event Entry and preserves compatible state"
         in unreal_world_host_test
-        and "UNIFIEDSCRIPT_MANAGED_DIAGNOSTIC_PATH" in unreal_world_managed_entry
+        and "FINARE_MANAGED_DIAGNOSTIC_PATH" in unreal_world_managed_entry
         and "BoundaryErrors" in unreal_world_managed_entry
         and "public static unsafe int GetLastError" in unreal_world_managed_entry
         and "DescribeManagedFailure" in unreal_coreclr_host_source
@@ -4713,11 +4713,11 @@ def main() -> int:
         and 'args[0] == "ue-data-plane"' in cli_source
         and "schema-fingerprint=0x" in cli_source
         and "UnrealDataPlaneLayoutV1" in unreal_data_plane_managed_layout
-        and "FUnifiedScriptCommandV4" in unreal_data_plane_native_layout
-        and "static_assert(sizeof(FUnifiedScriptCommandV4) == 224)"
+        and "FFinareCommandV4" in unreal_data_plane_native_layout
+        and "static_assert(sizeof(FFinareCommandV4) == 224)"
         in unreal_data_plane_native_layout
-        and "UnifiedScriptDataPlaneLayouts.gen.h" in unreal_shared_data_header
-        and "struct alignas(8) FUnifiedScriptCommandV4"
+        and "FinareDataPlaneLayouts.gen.h" in unreal_shared_data_header
+        and "struct alignas(8) FFinareCommandV4"
         not in unreal_gameplay_data_header
         and "CheckedInManagedAndNativeLayoutsAreDeterministicSchemaOutputs"
         in unreal_data_plane_generator_test
@@ -4727,20 +4727,20 @@ def main() -> int:
     )
     checks.append("one versioned schema generates native and managed data-plane layouts")
     require(
-        "FUnifiedScriptGameplayDataTransportV4" in unreal_gameplay_data_header
-        and "sizeof(FUnifiedScriptCommandV4) == 224" in unreal_data_plane_native_layout
-        and "sizeof(FUnifiedScriptTraceResultV4) == 168"
+        "FFinareGameplayDataTransportV4" in unreal_gameplay_data_header
+        and "sizeof(FFinareCommandV4) == 224" in unreal_data_plane_native_layout
+        and "sizeof(FFinareTraceResultV4) == 168"
         in unreal_data_plane_native_layout
-        and "sizeof(FUnifiedScriptOverlapRequestV1) == 160"
+        and "sizeof(FFinareOverlapRequestV1) == 160"
         in unreal_data_plane_native_layout
-        and "sizeof(FUnifiedScriptOverlapResultV1) == 48"
+        and "sizeof(FFinareOverlapResultV1) == 48"
         in unreal_data_plane_native_layout
         and "ExecuteCommittedCommands" in unreal_gameplay_data_source
         and "LineTraceSingleByChannel" in unreal_gameplay_data_source
         and "SweepSingleByChannel" in unreal_gameplay_data_source
         and "OverlapMultiByChannel" in unreal_gameplay_data_source
         and "GameplayDataTransport" in unreal_native_transport_header
-        and "UEUnifiedScript_GetGameplayDataTransportV4"
+        and "Finare_GetGameplayDataTransportV4"
         in unreal_native_transport_source
         and "OnWorldPreActorTick" in unreal_world_host_source
         and "OnWorldPostActorTick" in unreal_world_host_source
@@ -4792,7 +4792,7 @@ def main() -> int:
         and "DataPlaneAllocatedBytes" in unreal_data_plane_profile_demo
         and "BatchTraceGcPauseMilliseconds" in unreal_data_plane_profile_demo
         and "DataPlaneWorkloadProfile" in unreal_world_host_test
-        and "UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON" in unreal_world_host_test
+        and "FINARE_DATA_PLANE_PROFILE_JSON" in unreal_world_host_test
         and "unifiedscript.unreal-data-plane-profile-report/v0.3"
         in unreal_data_plane_profile_helper
         and "commandSubmitToScalarBinding" in unreal_data_plane_profile_helper
@@ -4851,12 +4851,12 @@ def main() -> int:
         "generated snapshot and event channels are schema-owned, bounded, World-safe, and zero-copy"
     )
     require(
-        "FUnifiedScriptAsyncTransportV5" in unreal_async_service_header
+        "FFinareAsyncTransportV5" in unreal_async_service_header
         and "GenerationOwnership" in unreal_async_service_header
         and "RequestAsyncLoad" in unreal_async_service_source
         and "CancelOwner" in unreal_async_service_source
         and "AsyncTransport" in unreal_native_transport_header
-        and "UEUnifiedScript_GetAsyncTransportV5" in unreal_native_transport_source
+        and "Finare_GetAsyncTransportV5" in unreal_native_transport_source
         and "UnrealAsyncScope" in unreal_async_service_abi_v5
         and "LoadObjectAsync" in unreal_async_service_abi_v5
         and "ScopeCompletesDelayAndAssetLoadThenCancelsItsGeneration"
@@ -4869,11 +4869,11 @@ def main() -> int:
     checks.append("UE async services are World-scoped, timeout-aware, and generation-owned")
     require(
         "WorldHost.LifecycleStress" in unreal_lifecycle_stress_test
-        and 'TEXT("UnifiedScriptSoakTravelCycles="), 8' in unreal_lifecycle_stress_test
-        and 'TEXT("UnifiedScriptSoakPieCycles="), 8' in unreal_lifecycle_stress_test
-        and 'TEXT("UnifiedScriptSoakConcurrentWorlds="), 4'
+        and 'TEXT("FinareSoakTravelCycles="), 8' in unreal_lifecycle_stress_test
+        and 'TEXT("FinareSoakPieCycles="), 8' in unreal_lifecycle_stress_test
+        and 'TEXT("FinareSoakConcurrentWorlds="), 4'
         in unreal_lifecycle_stress_test
-        and 'TEXT("UnifiedScriptSoakGenerationRollovers="), 16'
+        and 'TEXT("FinareSoakGenerationRollovers="), 16'
         in unreal_lifecycle_stress_test
         and "GetGlobalOwnedResourceCount" in unreal_async_service_header
         and "ReleaseOwnerResources" in unreal_async_service_source
@@ -4895,8 +4895,8 @@ def main() -> int:
         and unreal_benchmark_thresholds["minimumWarmupIterations"] >= 4096
         and unreal_benchmark_thresholds["minimumIterations"] >= 100000
         and unreal_benchmark_thresholds["minimumSampleCount"] >= 5
-        and unreal_benchmark_thresholds["maxUnifiedScriptAllocatedBytes"] == 0
-        and unreal_benchmark_thresholds["maxUnifiedScriptToPuertsRatio"] <= 0.95
+        and unreal_benchmark_thresholds["maxFinareAllocatedBytes"] == 0
+        and unreal_benchmark_thresholds["maxFinareToPuertsRatio"] <= 0.95
         and "SampleCount = 5" in unreal_benchmark_demo_source
         and "Benchmark:v3" in unreal_benchmark_demo_source
         and "GC.GetTotalPauseDuration" in unreal_benchmark_demo_source
@@ -4962,7 +4962,7 @@ def main() -> int:
         ROOT / "comparison" / "package-blockbreaker-demo.ps1"
     )
     puerts_inventory_builder_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsMigrationInventory.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealPuertsMigrationInventory.cs"
     )
     roadmap_path = ROOT / "docs" / "ROADMAP_HISTORY.md"
     for path in [
@@ -5061,12 +5061,12 @@ def main() -> int:
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
     puerts_project_scanner_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsProjectScanner.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealPuertsProjectScanner.cs"
     )
     puerts_project_scanner_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealPuertsProjectScannerTests.cs"
     )
     puerts_migration_document_path = ROOT / "docs" / "PUERTS_MIGRATION.md"
@@ -5119,18 +5119,18 @@ def main() -> int:
         "M12.1 scans generalized Puerts projects with bounded ownership and dynamic-risk evidence"
     )
     puerts_migration_planner_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsMigrationPlanner.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealPuertsMigrationPlanner.cs"
     )
     puerts_verification_harness_path = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealPuertsVerificationHarness.cs"
     )
     puerts_migration_planner_test_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealPuertsMigrationPlannerTests.cs"
     )
     for path in [
@@ -5196,27 +5196,27 @@ def main() -> int:
         "M12.1 emits deterministic Puerts migration packages and strict side-by-side evidence gates"
     )
     puerts_coexistence_path = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsCoexistence.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealPuertsCoexistence.cs"
     )
     puerts_coexistence_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealPuertsCoexistenceTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "UnrealPuertsCoexistenceTests.cs"
     )
     runtime_world_header_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptWorldSubsystem.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareWorldSubsystem.h"
     )
     runtime_world_library_header_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptWorldLibrary.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareWorldLibrary.h"
     )
     runtime_component_header_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptComponent.h"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Public" / "FinareComponent.h"
     )
     runtime_ownership_test_path = (
-        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
-        / "UEUnifiedScriptRuntime" / "Private" / "Tests"
-        / "UnifiedScriptRuntimeOwnershipTests.cpp"
+        ROOT / "HostProject" / "Plugins" / "Finare" / "Source"
+        / "FinareRuntime" / "Private" / "Tests"
+        / "FinareRuntimeOwnershipTests.cpp"
     )
     for path in [
         puerts_coexistence_path,
@@ -5246,7 +5246,7 @@ def main() -> int:
         and "--unified" in cli_source
         and "CliWritesPromotedRoutesAndBlockedPlanStillFailsAfterOutput"
         in puerts_coexistence_test
-        and "EUnifiedScriptRuntimeOwner" in runtime_world_header
+        and "EFinareRuntimeOwner" in runtime_world_header
         and "ClaimGameplayLifecycle" in runtime_world_header
         and "ReleaseGameplayLifecycle" in runtime_world_header
         and "BuildGameplayLifecycleOwnershipReport" in runtime_world_header
@@ -5254,7 +5254,7 @@ def main() -> int:
         and "ReleaseGameplayLifecycle" in runtime_world_library_header
         and "LifecycleOwnershipKey" in runtime_component_header
         and "Reload cannot change lifecycle ownership" in runtime_component_source
-        and "UnifiedScript.Unreal.Coexistence.RuntimeOwnership" in runtime_ownership_test
+        and "Finare.Unreal.Coexistence.RuntimeOwnership" in runtime_ownership_test
         and "For each Puerts-owned concrete script instance" in puerts_migration_document
         and "manifest and generated guard do not rewrite" in puerts_migration_document
         and "- [x] support incremental coexistence during migration" in roadmap
@@ -5262,7 +5262,7 @@ def main() -> int:
         "M12.1 coexistence manifest, shared World arbiter, tests, or lifecycle documentation is incomplete",
     )
     checks.append(
-        "M12.1 arbitrates incremental Puerts and UnifiedScript lifecycle ownership per World"
+        "M12.1 arbitrates incremental Puerts and Finare lifecycle ownership per World"
     )
     roundtrip_manifest_path = (
         ROOT / "comparison" / "blockbreaker-roundtrip.json"
@@ -5278,13 +5278,13 @@ def main() -> int:
         ROOT / "comparison" / "verify-blockbreaker-roundtrip.ps1"
     )
     roundtrip_runtime_path = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "RoundTripEquivalence.cs"
+        ROOT / "src" / "Finare.Runtime" / "RoundTripEquivalence.cs"
     )
     roundtrip_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "RoundTripEquivalenceTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "RoundTripEquivalenceTests.cs"
     )
     authoring_http_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrAuthoringHttpServerTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CoreClrAuthoringHttpServerTests.cs"
     )
     roundtrip_doc_path = ROOT / "docs" / "BLOCKBREAKER_ROUND_TRIP.md"
     comparison_readme_path = ROOT / "comparison" / "README.md"
@@ -5370,20 +5370,20 @@ def main() -> int:
     )
     checks.append("M8.4 BlockBreaker Visual/C# round trip passes full equivalence and conflict gates")
     semantic_model_path = (
-        ROOT / "src" / "UnifiedScript.Semantics" / "SemanticModel.cs"
+        ROOT / "src" / "Finare.Semantics" / "SemanticModel.cs"
     )
     semantic_binder_path = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "RoslynSemanticBinder.cs"
+        ROOT / "src" / "Finare.CSharp" / "RoslynSemanticBinder.cs"
     )
     graph_projector_path = (
-        ROOT / "src" / "UnifiedScript.Graph" / "HirGraphProjector.cs"
+        ROOT / "src" / "Finare.Graph" / "HirGraphProjector.cs"
     )
-    graph_json_path = ROOT / "src" / "UnifiedScript.Graph" / "GraphJson.cs"
+    graph_json_path = ROOT / "src" / "Finare.Graph" / "GraphJson.cs"
     semantic_pipeline_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpSemanticPipelineTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CSharpSemanticPipelineTests.cs"
     )
     graph_json_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "GraphJsonTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "GraphJsonTests.cs"
     )
     nullability_doc_path = ROOT / "docs" / "NULLABILITY_FLOW.md"
     for path in [
@@ -5422,18 +5422,18 @@ def main() -> int:
         "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
     )
     checks.append("M8.5 nullability follows Roslyn flow state through Semantics and Graph")
-    hir_nodes_path = ROOT / "src" / "UnifiedScript.Core" / "HirNodes.cs"
+    hir_nodes_path = ROOT / "src" / "Finare.Core" / "HirNodes.cs"
     profile_validator_path = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileValidator.cs"
+        ROOT / "src" / "Finare.CSharp" / "VisualProfileValidator.cs"
     )
     source_patch_path = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourcePatchApplier.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpSourcePatchApplier.cs"
     )
     source_patch_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpSourcePatchApplierTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CSharpSourcePatchApplierTests.cs"
     )
     profile_test_path = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "VisualProfileValidatorTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "VisualProfileValidatorTests.cs"
     )
     foreach_doc_path = ROOT / "docs" / "FOREACH_LOOPS.md"
     for path in [
@@ -5453,7 +5453,7 @@ def main() -> int:
     foreach_doc = foreach_doc_path.read_text(encoding="utf-8")
     require(
         'CurrentSchemaVersion = "unifiedscript.hir/v0.9"'
-        in (ROOT / "src" / "UnifiedScript.Core" / "HirDocument.cs").read_text(encoding="utf-8")
+        in (ROOT / "src" / "Finare.Core" / "HirDocument.cs").read_text(encoding="utf-8")
         and "HirForEachIterationKind" in hir_nodes_source
         and "RefReadOnly" in hir_nodes_source
         and "BorrowedSequence" in semantic_model_source
@@ -5478,7 +5478,7 @@ def main() -> int:
     )
     checks.append("M8.5 foreach preserves borrowed refs and exact conditional disposal")
     graph_cfg_source = (
-        ROOT / "src" / "UnifiedScript.Graph" / "GraphControlFlowAnalyzer.cs"
+        ROOT / "src" / "Finare.Graph" / "GraphControlFlowAnalyzer.cs"
     ).read_text(encoding="utf-8")
     require(
         "AsyncEnumerable" in semantic_model_source
@@ -5501,9 +5501,9 @@ def main() -> int:
     )
     checks.append("M8.5 await foreach preserves async move-next and disposal cleanup")
     require(
-        "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
+        "UFinareWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header
-        and "FUnifiedScriptNativeBridgeContext" in unreal_world_host_header
+        and "FFinareNativeBridgeContext" in unreal_world_host_header
         and "NativeContext->Detach()" in unreal_world_host_source
         and "ObjectRegistry->InvalidateAll" in unreal_world_host_source
         and "InvocationBridge.Reset()" in unreal_world_host_source
@@ -5519,9 +5519,9 @@ def main() -> int:
     )
     checks.append("UE World hosts detach retained bridge contexts before native teardown")
     require(
-        "FUnifiedScriptCoreClrHost" in unreal_coreclr_host_header
+        "FFinareCoreClrHost" in unreal_coreclr_host_header
         and "GetLoadAssemblyAndGetFunctionPointer" in unreal_coreclr_host_header
-        and "UNIFIEDSCRIPT_DOTNET_ROOT" in unreal_coreclr_host_source
+        and "FINARE_DOTNET_ROOT" in unreal_coreclr_host_source
         and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
         and "hostfxr_initialize_for_runtime_config" in unreal_coreclr_host_source
         and "hostfxr_get_runtime_delegate" in unreal_coreclr_host_source
@@ -5545,8 +5545,8 @@ def main() -> int:
         and 'StageBundledDotNetDirectory("shared/Microsoft.NETCore.App")'
         in unreal_runtime_build
         and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
-        and "UnifiedScriptSmoke" in host_module
-        and "UnifiedScriptSmokeResult=" in host_module
+        and "FinareSmoke" in host_module
+        and "FinareSmokeResult=" in host_module
         and "Managed Start/Tick/Stop succeeded" in host_module
         and "BuildCookRun" in unreal_release_helper
         and "Development', 'Shipping" in unreal_release_helper
@@ -5563,7 +5563,7 @@ def main() -> int:
     )
     checks.append("Win64 packages stage CoreCLR and run managed lifecycle smoke in Development/Shipping")
     unreal_managed_project = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj"
+        ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.unreal-compatibility-matrix/v0.1"
@@ -5575,13 +5575,13 @@ def main() -> int:
         and "clean-project-managed-chunk" in unreal_compatibility_helper
         and "clean-project-development-package" in unreal_compatibility_helper
         and "@('Development', 'Shipping')" in unreal_compatibility_helper
-        and "package-unifiedscript-sdk.ps1" in unreal_compatibility_helper
+        and "package-finare-sdk.ps1" in unreal_compatibility_helper
         and "archiveSha256 -ne" in unreal_compatibility_helper
         and "git -C $repoRoot archive" in unreal_compatibility_helper
         and "compatibilityScratchRoot" in unreal_compatibility_helper
         and "sdk-install-report.json" in unreal_compatibility_helper
         and "DOTNET_ROOT" in unreal_release_helper
-        and "UNIFIEDSCRIPT_DOTNET_ROOT" in unreal_release_helper
+        and "FINARE_DOTNET_ROOT" in unreal_release_helper
         and "not-declared" in unreal_compatibility_helper
         and "four declared UE 5.8.1 Win64 rows" in unreal_compatibility_doc
         and "171 payload files" in unreal_compatibility_doc
@@ -5608,12 +5608,12 @@ def main() -> int:
         "Managed World entry point or collectible load context is missing",
     )
     unreal_project = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj"
+        ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj"
     ).read_text(encoding="utf-8")
     require(
         "StageUnrealManagedHost" in unreal_project
         and "Binaries/Managed" in unreal_project
-        and "UnifiedScript.Unreal.dll" in unreal_coreclr_host_source
+        and "Finare.Unreal.dll" in unreal_coreclr_host_source
         and "CreateWorldEntryPoint" in unreal_coreclr_host_source
         and "DestroyWorldEntryPoint" in unreal_coreclr_host_source
         and "GetWorldCountEntryPoint" in unreal_coreclr_host_source
@@ -5634,7 +5634,7 @@ def main() -> int:
         and "ScriptAssemblyLoadContext" in unreal_world_managed_entry
         and "ManagedScriptInstance" in unreal_world_managed_entry
         and "ReloadScript" in unreal_world_managed_entry
-        and "UnifiedScriptComponent(context.Host, context.Bridge)"
+        and "FinareComponent(context.Host, context.Bridge)"
         in unreal_demo_source
         and '_component.Add(20, 22)' in unreal_demo_source
         and "StageUnrealManagedDemo" in unreal_demo_project
@@ -5651,14 +5651,14 @@ def main() -> int:
         in unreal_world_host_test
         and "Managed OnStop executes before handle release"
         in unreal_world_host_test
-        and "UnifiedScript demo completed:" in unreal_world_host_test
+        and "Finare demo completed:" in unreal_world_host_test
         and "WorldHost.Lifecycle" in unreal_demo_helper,
         "Component-driven managed lifecycle or collectible reload is missing",
     )
     checks.append("UE component drives managed Start, Tick, reload, and Stop on a live UObject")
     require(
-        "AUnifiedScriptActor : public AActor" in unreal_actor
-        and "UUnifiedScriptComponent" in unreal_actor
+        "AFinareActor : public AActor" in unreal_actor
+        and "UFinareComponent" in unreal_actor
         and "class UnrealObjectScript : IUnrealManagedScript"
         in unreal_script_object_model
         and "class UnrealActorScript : UnrealObjectScript"
@@ -5684,12 +5684,12 @@ def main() -> int:
     )
     checks.append("UE Actor host maps Blueprint identity to managed object lifecycle")
     require(
-        "UUnifiedScriptAsset : public UDataAsset" in unreal_script_asset_header
+        "UFinareAsset : public UDataAsset" in unreal_script_asset_header
         and "SchemaVersion = 1" in unreal_script_asset_header
         and "ResolveConfiguration" in unreal_script_asset_source
         and "unsupported schema version" in unreal_script_asset_source
         and "ScriptAsset.Configuration" in unreal_script_asset_test
-        and "TObjectPtr<UUnifiedScriptAsset> ScriptAsset" in unreal_component
+        and "TObjectPtr<UFinareAsset> ScriptAsset" in unreal_component
         and "ResolveScriptConfiguration" in unreal_component
         and "ActiveScriptAssetPath" in unreal_component
         and "ManagedState" in unreal_component
@@ -5697,11 +5697,11 @@ def main() -> int:
             ROOT
             / "HostProject"
             / "Plugins"
-            / "UEUnifiedScript"
+            / "Finare"
             / "Source"
-            / "UEUnifiedScriptRuntime"
+            / "FinareRuntime"
             / "Private"
-            / "UnifiedScriptComponent.cpp"
+            / "FinareComponent.cpp"
         ).read_text(encoding="utf-8")
         and "ReadUtf8(assemblyPathData, assemblyPathLength)"
         in unreal_world_managed_entry
@@ -5724,12 +5724,12 @@ def main() -> int:
         and "ResetAllScriptStateOverrides" in unreal_component
         and "MaterializedStateOverrideCount" in unreal_component
         and "MaterializeJson" in unreal_declaration_materializer_header
-        and "FUnifiedScriptStateMigrationReport"
+        and "FFinareStateMigrationReport"
         in unreal_declaration_materializer_header
         and "MigrateToNewBagInstanceWithOverrides"
         in unreal_declaration_materializer_source
         and "ParseSemanticId" in unreal_declaration_materializer_source
-        and "UnifiedScript.Unreal.Declaration.Materialization"
+        and "Finare.Unreal.Declaration.Materialization"
         in unreal_declaration_materializer_test
         and "Stable semantic ID preserves override across rename"
         in unreal_declaration_materializer_test
@@ -5804,7 +5804,7 @@ def main() -> int:
         }
         and len(unreal_demo_event_actions) == 1
         and unreal_demo_event_actions[0]["title"] == "Event OnManagedSignal"
-        and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal"
+        and "/Script/FinareRuntime.FinareComponent:OnManagedSignal"
         in unreal_demo_event_actions[0]["summary"]
         and [
             port["typeDisplayName"]
@@ -5813,7 +5813,7 @@ def main() -> int:
         ]
         == ["int", "UnrealObjectHandle"]
         and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 13
-        and "FUnifiedScriptAuthoringSurfaceReader" in unreal_authoring_surface_header
+        and "FFinareAuthoringSurfaceReader" in unreal_authoring_surface_header
         and "ParseJson" in unreal_authoring_surface_source
         and "BuildSemanticPatch" in unreal_authoring_surface_source
         and "BuildDataEdgeReconnectionPatch" in unreal_authoring_surface_source
@@ -5857,7 +5857,7 @@ def main() -> int:
         and "HandleExpandBlockRegion" in unreal_authoring_widget
         and 'TEXT("flow.switch")' in unreal_authoring_widget
         and "unifiedscript.patch/v0.28" in unreal_authoring_surface_source
-        and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
+        and "SFinareAuthoringSurface" in unreal_authoring_widget
         and "HandleDataRewireRequested" in unreal_authoring_widget
         and "SubmitSemanticPatch" in unreal_authoring_widget
         and "BuildSemanticPatchPlanUrl" in unreal_authoring_widget
@@ -5865,7 +5865,7 @@ def main() -> int:
         and "EventAction.bEvent = true" in unreal_authoring_widget
         and "/api/authoring/declaration-patch" in unreal_authoring_workbench_source
         and "PersistCurrentLayout" in unreal_authoring_widget
-        and "FUnifiedScriptGraphPresentation::ShouldInlineAction"
+        and "FFinareGraphPresentation::ShouldInlineAction"
         in unreal_graph_presentation
         and "Value = 100" in unreal_authoring_test
         and "CountVisibleActions(Function)" in unreal_authoring_test
@@ -5873,7 +5873,7 @@ def main() -> int:
         and "Copy Patch" in unreal_authoring_widget
         and "RegisterNomadTabSpawner" in unreal_editor_module
         and "LevelEditor.MainMenu.Tools" in unreal_editor_module
-        and "UnifiedScript.Unreal.Editor.AuthoringSurface" in unreal_authoring_test
+        and "Finare.Unreal.Editor.AuthoringSurface" in unreal_authoring_test
         and "Old compiler-owned wire remains until the server commits"
         in unreal_authoring_test
         and "Multi-selection can build a bounded callable extraction"
@@ -5893,7 +5893,7 @@ def main() -> int:
         "UE Slate losslessly compacts Surface v0.4 into author-facing nodes and pins"
     )
     require(
-        "FUnifiedScriptNodePaletteModel" in unreal_node_palette_header
+        "FFinareNodePaletteModel" in unreal_node_palette_header
         and "ScoreMatch" in unreal_node_palette_source
         and "MaxRecentActions" in unreal_node_palette_source
         and "SSearchBox" in unreal_authoring_widget
@@ -5909,13 +5909,13 @@ def main() -> int:
         "UE Slate Palette is searchable, context-filtered, keyboard-driven, and preference-aware"
     )
     semantic_patch_model = (
-        ROOT / "src" / "UnifiedScript.Core" / "SemanticPatch.cs"
+        ROOT / "src" / "Finare.Core" / "SemanticPatch.cs"
     ).read_text(encoding="utf-8")
     semantic_patch_json = (
-        ROOT / "src" / "UnifiedScript.Core" / "SemanticPatchJson.cs"
+        ROOT / "src" / "Finare.Core" / "SemanticPatchJson.cs"
     ).read_text(encoding="utf-8")
     source_patch_applier = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourcePatchApplier.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpSourcePatchApplier.cs"
     ).read_text(encoding="utf-8")
     require(
         "SetDataInputValuePatchOperation" in semantic_patch_model
@@ -5936,14 +5936,14 @@ def main() -> int:
         "UE Slate Pin Authoring writes typed values and promoted locals through source transactions"
     )
     require(
-        "UUnifiedScriptEdGraphCommentNode" in unreal_ed_graph_header
-        and "UUnifiedScriptEdGraphRerouteNode" in unreal_ed_graph_header
+        "UFinareEdGraphCommentNode" in unreal_ed_graph_header
+        and "UFinareEdGraphRerouteNode" in unreal_ed_graph_header
         and "OnPinConnectionDoubleCicked" in unreal_ed_graph_source
         and "Following->PointIndex" in unreal_ed_graph_source
         and 'SetArrayField(TEXT("commentRegions")' in unreal_graph_layout_store
         and 'SetArrayField(TEXT("routingHints")' in unreal_graph_layout_store
         and "invalid or duplicate semantic node" in unreal_graph_layout_store
-        and "SUnifiedScriptCanvasMinimap" in unreal_authoring_widget
+        and "SFinareCanvasMinimap" in unreal_authoring_widget
         and "PersistCanvasView" in unreal_authoring_widget
         and "RestoreCanvasView" in unreal_authoring_widget
         and "HandleFocusSelection" in unreal_authoring_widget
@@ -5994,7 +5994,7 @@ def main() -> int:
         and "/api/debug/step-over" in unreal_debug_workbench_source
         and "/api/debug/step-out" in unreal_debug_workbench_source
         and "/api/debug/evaluate" in unreal_debug_workbench_source
-        and "SUnifiedScriptDebugPanel" in unreal_authoring_widget
+        and "SFinareDebugPanel" in unreal_authoring_widget
         and "HandleBreakpointToggleRequested" in unreal_authoring_widget
         and "HandleDebugNodeFocused" in unreal_authoring_widget
         and "CALL STACK" in unreal_debug_panel
@@ -6016,7 +6016,7 @@ def main() -> int:
         ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md"
     ).read_text(encoding="utf-8")
     runtime_diagnostic_test = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealRuntimeDiagnosticTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "UnrealRuntimeDiagnosticTests.cs"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.runtime-diagnostic/v0.1" in unreal_runtime_diagnostic_managed
@@ -6055,25 +6055,25 @@ def main() -> int:
         "UE Slate correlates live World failures to generation, handles, source, and graph"
     )
     unreal_world_debug_session = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldDebugSession.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealWorldDebugSession.cs"
     ).read_text(encoding="utf-8")
     unreal_world_debug_session_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealWorldDebugSessionTests.cs"
     ).read_text(encoding="utf-8")
     authoring_http_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "CoreClrAuthoringHttpServerTests.cs"
     ).read_text(encoding="utf-8")
     semantic_debug_fixture_path = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "RuntimeSemanticDebugDemoScript.cs"
     )
     semantic_debug_fixture = semantic_debug_fixture_path.read_text(encoding="utf-8")
@@ -6081,7 +6081,7 @@ def main() -> int:
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "DemoScript.cs.usids"
     )
     with demo_identity_path.open("r", encoding="utf-8") as handle:
@@ -6096,7 +6096,7 @@ def main() -> int:
         and "checked(++nextFrameId)" in unreal_world_debug_session
         and "LiveWorldProbe_PreservesWorkerStackAndStepsWithoutBlockingCaller"
         in unreal_world_debug_session_test
-        and "typeof(global::UnifiedScript.Runtime.CoreClrDebugProbe).Assembly"
+        and "typeof(global::Finare.Runtime.CoreClrDebugProbe).Assembly"
         in unreal_world_managed_entry
         and "WrittenBytes > RequiredBytes" in unreal_coreclr_host_source
         and "PumpGameThreadCalls" in unreal_native_transport_source
@@ -6106,17 +6106,17 @@ def main() -> int:
         and "SegmentCount > 16" in unreal_debug_panel
         and "Native debugger parses the instrumented live World publication"
         in unreal_authoring_test
-        and "FUnifiedScriptWorldSemanticDebugTest" in unreal_world_host_test
+        and "FFinareWorldSemanticDebugTest" in unreal_world_host_test
         and "Worker-originated generated bridge calls return through the Game Thread"
         in unreal_world_host_test
         and "Reloaded generation reaches the migrated semantic breakpoint"
         in unreal_world_host_test
         and "stale-live-world-source" in authoring_http_test
-        and "UnifiedScript.Runtime" in authoring_http_test
+        and "Finare.Runtime" in authoring_http_test
         and "RuntimeSemanticDebugDemoScript" in semantic_debug_fixture
         and "CoreClrDebugProbe.Hit" in semantic_debug_fixture
         and demo_identity["sourcePath"]
-        == "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs"
+        == "samples/Unreal/Finare.Unreal.Demo/DemoScript.cs"
         and demo_identity["sourceDigest"] == f"sha256:{demo_source_digest}"
         and "- [x] bind semantic breakpoints to current managed generations"
         in roadmap
@@ -6170,7 +6170,7 @@ def main() -> int:
         encoding="utf-8"
     )
     coreclr_debug_coordinator = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrDebugCoordinator.cs"
+        ROOT / "src" / "Finare.Runtime" / "CoreClrDebugCoordinator.cs"
     ).read_text(encoding="utf-8")
     require(
         unreal_reliability_soak_helper_path.is_file()
@@ -6200,7 +6200,7 @@ def main() -> int:
         "M11.1 soaks editor and server-mode Worlds against explicit memory and queue bounds"
     )
     require(
-        "FUnifiedScriptRuntimeBreadcrumbSnapshot"
+        "FFinareRuntimeBreadcrumbSnapshot"
         in unreal_runtime_diagnostic_header
         and "MaximumEntryCount = 64" in unreal_runtime_diagnostic_header
         and "MaximumCrashContextEntryCount = 8"
@@ -6239,10 +6239,10 @@ def main() -> int:
         ROOT / "docs" / "LARGE_PROJECT_SCALE.md"
     ).read_text(encoding="utf-8")
     csharp_semantic_ids = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSemanticIds.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpSemanticIds.cs"
     ).read_text(encoding="utf-8")
     csharp_program_emitter_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpProgramEmitterTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CSharpProgramEmitterTests.cs"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.unreal-scale-gate/v0.1" in unreal_scale_runner
@@ -6262,7 +6262,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "## M12 — Migration ecosystem and UnifiedScript 1.0" in roadmap,
+        and "## M12 — Migration ecosystem and Finare 1.0" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -6274,26 +6274,26 @@ def main() -> int:
     gameplay_profiler_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealGameplayProfiler.cs"
     ).read_text(encoding="utf-8")
     gameplay_profiler_fixture = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "GameplayProfilerDemoScript.cs"
     ).read_text(encoding="utf-8")
     gameplay_profiler_native_test = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptGameplayProfilerTests.cpp"
+        / "FinareGameplayProfilerTests.cpp"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.gameplay-profile/v0.3" in gameplay_profiler_source
@@ -6311,11 +6311,11 @@ def main() -> int:
         and "GameplayProfilerDemoScript" in gameplay_profiler_fixture
         and "BeginTraceBatch" in gameplay_profiler_fixture
         and "BeginOverlapBatch" in gameplay_profiler_fixture
-        and "UnifiedScript.Unreal.Profiler.FullAttribution"
+        and "Finare.Unreal.Profiler.FullAttribution"
         in gameplay_profiler_native_test
         and "Semantic source and graph nodes share the gameplay timeline"
         in gameplay_profiler_native_test
-        and "Saved/UnifiedScript/Profiles" in gameplay_profiler_doc
+        and "Saved/Finare/Profiles" in gameplay_profiler_doc
         and "performance baseline" in gameplay_profiler_doc
         and "- [x] attribute time and count to scripts" in roadmap
         and "M9.3 is\ncomplete" in roadmap,
@@ -6327,31 +6327,31 @@ def main() -> int:
     remote_debug_frame_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Runtime"
+        / "Finare.Runtime"
         / "CoreClrDebugFrameProtocol.cs"
     ).read_text(encoding="utf-8")
     remote_debug_transport_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Runtime"
+        / "Finare.Runtime"
         / "CoreClrDebugRemoteTransport.cs"
     ).read_text(encoding="utf-8")
     remote_debug_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "CoreClrDebugRemoteTransportTests.cs"
     ).read_text(encoding="utf-8")
     gameplay_diagnosis_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealGameplayDiagnosis.cs"
     ).read_text(encoding="utf-8")
     gameplay_diagnosis_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealGameplayDiagnosisTests.cs"
     ).read_text(encoding="utf-8")
     remote_debug_doc = (
@@ -6407,32 +6407,32 @@ def main() -> int:
     performance_suite_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealPerformanceWorkloadSuite.cs"
     ).read_text(encoding="utf-8")
     performance_suite_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealPerformanceWorkloadSuiteTests.cs"
     ).read_text(encoding="utf-8")
     performance_budget_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealPerformanceBudgets.cs"
     ).read_text(encoding="utf-8")
     performance_budget_test = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealPerformanceBudgetTests.cs"
     ).read_text(encoding="utf-8")
     representative_workload_demo = (
         ROOT
         / "samples"
         / "Unreal"
-        / "UnifiedScript.Unreal.Demo"
+        / "Finare.Unreal.Demo"
         / "RepresentativeWorkloadBenchmarkScript.cs"
     ).read_text(encoding="utf-8")
     performance_suite_doc = (
@@ -6563,7 +6563,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "## M12 — Migration ecosystem and UnifiedScript 1.0" in roadmap
+        and "## M12 — Migration ecosystem and Finare 1.0" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"
@@ -6658,14 +6658,14 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.authoring-preview/v0.3" in debug_server_source
-        and "X-UnifiedScript-Preview-Token" in debug_server_source
+        and "X-Finare-Preview-Token" in debug_server_source
         and "TakePreparedPreview" in debug_server_source
         and "preparedPreviews" in debug_server_source
         and "CreateRollbackResponse" in debug_server_source
         and "AuthoringQuickFixResponse" in debug_server_source
         and "BuildPreviewUrl" in unreal_authoring_workbench_source
         and "ParsePreviewResponse" in unreal_authoring_workbench_source
-        and "FUnifiedScriptAuthoringErrorResult" in unreal_authoring_workbench_header
+        and "FFinareAuthoringErrorResult" in unreal_authoring_workbench_header
         and "ShowDiffPreview" in unreal_authoring_widget
         and "ROLLBACK CONFIRMED" in unreal_authoring_widget
         and "HandleWorkspaceRefreshResponse" in unreal_authoring_widget
@@ -6680,10 +6680,10 @@ def main() -> int:
         "UE Slate binds exact server previews to commits and exposes diagnostic rollback UX"
     )
     semantic_review_source = (
-        ROOT / "src" / "UnifiedScript.Graph" / "SemanticGraphReview.cs"
+        ROOT / "src" / "Finare.Graph" / "SemanticGraphReview.cs"
     ).read_text(encoding="utf-8")
     semantic_review_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "SemanticGraphReviewTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "SemanticGraphReviewTests.cs"
     ).read_text(encoding="utf-8")
     semantic_review_document = (
         ROOT / "docs" / "SEMANTIC_DIFF_AND_MERGE.md"
@@ -6707,7 +6707,7 @@ def main() -> int:
         and "SEMANTIC REVIEW" in unreal_authoring_widget
         and 'id="semanticReviewDialog"' in workbench_index
         and "reviewAndCommitAuthoring" in workbench_script
-        and "X-UnifiedScript-Preview-Token" in workbench_script
+        and "X-Finare-Preview-Token" in workbench_script
         and "MergeCombinesDisjointFunctionChangesDeterministically"
         in semantic_review_tests
         and "SemanticMergeCliWritesCleanGraphOrConflictReportAtomically"
@@ -6727,10 +6727,10 @@ def main() -> int:
         "M12.3 reviews stable-ID Graph/C# changes and conservatively merges disjoint functions"
     )
     ai_proposal_source = (
-        ROOT / "src" / "UnifiedScript.Core" / "AiSemanticPatchProposal.cs"
+        ROOT / "src" / "Finare.Core" / "AiSemanticPatchProposal.cs"
     ).read_text(encoding="utf-8")
     ai_proposal_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "AiSemanticPatchProposalTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "AiSemanticPatchProposalTests.cs"
     ).read_text(encoding="utf-8")
     ai_proposal_document = (
         ROOT / "docs" / "AI_SEMANTIC_PROPOSALS.md"
@@ -6766,10 +6766,10 @@ def main() -> int:
         "M12.3 binds typed AI proposal identity to compiler-reviewed transactional commits"
     )
     authoring_insight_source = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealAuthoringInsight.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealAuthoringInsight.cs"
     ).read_text(encoding="utf-8")
     authoring_insight_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealAuthoringInsightTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "UnrealAuthoringInsightTests.cs"
     ).read_text(encoding="utf-8")
     authoring_insight_document = (
         ROOT / "docs" / "INTEGRATED_RUNTIME_INSIGHTS.md"
@@ -6812,7 +6812,7 @@ def main() -> int:
         and unreal_data_plane_extension_catalog["schemaVersion"]
         == "unifiedscript.unreal-data-plane-extension-catalog/v0.1"
         and unreal_data_plane_extension_catalog["schemaFingerprint"]
-        == "0xDE4BA9E28216D610"
+        == "0xBB23EDDB69B7FD0C"
         and len(unreal_data_plane_extension_catalog["channels"]) == 2
         and "class UnrealDataPlaneExtensionGenerator"
         in unreal_data_plane_extension_generator
@@ -6825,7 +6825,7 @@ def main() -> int:
         in unreal_data_plane_extension_generated_managed
         and "FBlockBreakerTargetSnapshotV1) == 88)"
         in unreal_data_plane_extension_generated_native
-        and "FUnifiedScriptDataPlaneExtensionRegistry"
+        and "FFinareDataPlaneExtensionRegistry"
         in unreal_data_plane_extension_registry_header
         and "ValidateRows" in unreal_data_plane_extension_registry_source
         and "DataPlaneExtensionRegistry.Reset()" in unreal_world_host_source
@@ -6856,10 +6856,10 @@ def main() -> int:
         "M12.3 generates typed workload extensions without mutating the frozen core data-plane ABI"
     )
     identity_reconciler_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpIdentityReconciler.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FUnifiedScriptAuthoringWorkbench" in unreal_authoring_workbench_header
+        "FFinareAuthoringWorkbench" in unreal_authoring_workbench_header
         and "unifiedscript.authoring-workspace/v0.5"
         in unreal_authoring_workbench_source
         and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
@@ -6869,9 +6869,9 @@ def main() -> int:
         and "/api/authoring/group/commit" in unreal_authoring_workbench_source
         and "/api/authoring/group/cancel" in unreal_authoring_workbench_source
         and "FHttpModule::Get().CreateRequest" in unreal_authoring_widget
-        and "X-UnifiedScript-Baseline-Revision" in unreal_authoring_widget
-        and "X-UnifiedScript-Transaction-Id" in unreal_authoring_widget
-        and "X-UnifiedScript-Group-Id" in unreal_authoring_widget
+        and "X-Finare-Baseline-Revision" in unreal_authoring_widget
+        and "X-Finare-Transaction-Id" in unreal_authoring_widget
+        and "X-Finare-Group-Id" in unreal_authoring_widget
         and "HandleUndoAuthoringTransaction" in unreal_authoring_widget
         and "HandleRedoAuthoringTransaction" in unreal_authoring_widget
         and "HandleBeginAuthoringGroup" in unreal_authoring_widget
@@ -6907,7 +6907,7 @@ def main() -> int:
         and "WorkbenchSourceText = MoveTemp(Workspace.SourceText)"
         in unreal_authoring_widget
         and "SNew(SWidgetSwitcher)" in unreal_authoring_widget
-        and "EUnifiedScriptAuthoringViewMode::Code" in unreal_authoring_widget
+        and "EFinareAuthoringViewMode::Code" in unreal_authoring_widget
         and "Workspace v0.5 rejects a response without its canonical source snapshot"
         in unreal_authoring_test
         and "Assert.Equal(Source, baseline.SourceText)" in authoring_http_test
@@ -6919,10 +6919,10 @@ def main() -> int:
         "M13.2E-1 opens one canonical Script Asset snapshot as Graph or C#"
     )
     source_text_patch_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourceTextPatch.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpSourceTextPatch.cs"
     ).read_text(encoding="utf-8")
     authoring_workspace_test = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpAuthoringWorkspaceTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "CSharpAuthoringWorkspaceTests.cs"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.csharp-source-text-patch/v0.1" in source_text_patch_source
@@ -6955,7 +6955,7 @@ def main() -> int:
         "M13.2E-2 commits bounded C# buffers through exact semantic preview tokens"
     )
     csharp_graph_round_trip_source = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpGraphRoundTripInspector.cs"
+        ROOT / "src" / "Finare.CSharp" / "CSharpGraphRoundTripInspector.cs"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.csharp-graph-round-trip/v0.1"
@@ -6972,7 +6972,7 @@ def main() -> int:
         and 'case "--layout-out"' in cli_source
         and "--layout-out" in authoring_start_path.read_text(encoding="utf-8")
         and "--layout-out" in unreal_authoring_helper
-        and "FUnifiedScriptAuthoringRoundTripResult"
+        and "FFinareAuthoringRoundTripResult"
         in unreal_authoring_workbench_header
         and "RoundTripSchema" in unreal_authoring_workbench_source
         and "ROUND-TRIP GUARD" in unreal_authoring_widget
@@ -6989,10 +6989,10 @@ def main() -> int:
         "M13.2E-3 preserves identity, comments, source text, and layout bidirectionally"
     )
     product_guidance_source = (
-        ROOT / "src" / "UnifiedScript.Cli" / "ProductGuidance.cs"
+        ROOT / "src" / "Finare.Cli" / "ProductGuidance.cs"
     ).read_text(encoding="utf-8")
     product_guidance_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "ProductGuidanceTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "ProductGuidanceTests.cs"
     ).read_text(encoding="utf-8")
     first_project_guide = (
         ROOT / "docs" / "UNREAL_FIRST_PROJECT.md"
@@ -7009,7 +7009,7 @@ def main() -> int:
         and "guide first-project" in first_project_guide
         and "adopt $project --sdk-root $sdk --preview" in first_project_guide
         and "setup-unreal-project.ps1" in first_project_guide
-        and "start-unifiedscript-authoring.ps1" in first_project_guide
+        and "start-finare-authoring.ps1" in first_project_guide
         and "no internal generator ordering or repository path was required"
         in first_project_guide
         and all(
@@ -7046,10 +7046,10 @@ def main() -> int:
         "M13.2F packages one discoverable first-project path and nine gameplay task recipes"
     )
     usability_source = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealUsabilityRegression.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealUsabilityRegression.cs"
     ).read_text(encoding="utf-8")
     usability_tests = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealUsabilityRegressionTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "UnrealUsabilityRegressionTests.cs"
     ).read_text(encoding="utf-8")
     usability_document = (
         ROOT / "docs" / "UNREAL_USABILITY.md"
@@ -7101,115 +7101,115 @@ def main() -> int:
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptAsset.h"
+        / "FinareAsset.h"
     ).read_text(encoding="utf-8")
     script_class_blueprint_header = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptBlueprint.h"
+        / "FinareBlueprint.h"
     ).read_text(encoding="utf-8")
     script_class_bases_header = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptClassBases.h"
+        / "FinareClassBases.h"
     ).read_text(encoding="utf-8")
     script_class_factory_header = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptClassFactory.h"
+        / "FinareClassFactory.h"
     ).read_text(encoding="utf-8")
     script_class_factory_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptClassFactory.cpp"
+        / "FinareClassFactory.cpp"
     ).read_text(encoding="utf-8")
     script_class_asset_operations = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptClassAssetOperations.cpp"
+        / "FinareClassAssetOperations.cpp"
     ).read_text(encoding="utf-8")
     script_class_editor_module = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UEUnifiedScriptEditorModule.cpp"
+        / "FinareEditorModule.cpp"
     ).read_text(encoding="utf-8")
     script_class_factory_tests = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Tests"
-        / "UnifiedScriptClassFactoryTests.cpp"
+        / "FinareClassFactoryTests.cpp"
     ).read_text(encoding="utf-8")
     managed_script_class_model = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptClassModel.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealScriptClassModel.cs"
     ).read_text(encoding="utf-8")
     managed_script_object_model = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptObjectModel.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealScriptObjectModel.cs"
     ).read_text(encoding="utf-8")
     require(
         "Object," in script_class_asset_header
         and "BlueprintFunctionLibrary," in script_class_asset_header
-        and "TObjectPtr<UUnifiedScriptAsset> ScriptAsset" in script_class_blueprint_header
-        and "class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptObject" in script_class_bases_header
-        and "UUnifiedScriptBlueprintFunctionLibrary" in script_class_bases_header
-        and "UUnifiedScriptObjectClassFactory" in script_class_factory_header
-        and "UUnifiedScriptBlueprintFunctionLibraryClassFactory" in script_class_factory_header
+        and "TObjectPtr<UFinareAsset> ScriptAsset" in script_class_blueprint_header
+        and "class FINARERUNTIME_API UFinareObject" in script_class_bases_header
+        and "UFinareBlueprintFunctionLibrary" in script_class_bases_header
+        and "UFinareObjectClassFactory" in script_class_factory_header
+        and "UFinareBlueprintFunctionLibraryClassFactory" in script_class_factory_header
         and 'TEXT("actor")' in script_class_factory_source
         and 'TEXT("actorComponent")' in script_class_factory_source
         and 'TEXT("object")' in script_class_factory_source
         and 'TEXT("blueprintFunctionLibrary")' in script_class_factory_source
         and "UnrealActorComponentScript" in script_class_factory_source
         and "public static class" in script_class_factory_source
-        and "Context.ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::Actor"
+        and "Context.ScriptAsset->ScriptClassKind != EFinareClassKind::Actor"
         in script_class_asset_operations
         and "OutJson.Reset();" in script_class_asset_operations
         and "GetBlueprintScriptAsset" in script_class_asset_operations
-        and "Create UnifiedScript Class (Object)" in script_class_editor_module
-        and "Create UnifiedScript Class (Blueprint Function Library)"
+        and "Create Finare Class (Object)" in script_class_editor_module
+        and "Create Finare Class (Blueprint Function Library)"
         in script_class_editor_module
         and "UnrealScriptClassKind" in managed_script_class_model
         and "UnrealScriptClassAttribute" in managed_script_class_model
         and "class UnrealActorComponentScript" in managed_script_object_model
-        and "EUnifiedScriptClassKind::Object" in script_class_factory_tests
-        and "EUnifiedScriptClassKind::BlueprintFunctionLibrary"
+        and "EFinareClassKind::Object" in script_class_factory_tests
+        and "EFinareClassKind::BlueprintFunctionLibrary"
         in script_class_factory_tests
         and "Script Class pins the exact reviewed native target contract"
         in script_class_factory_tests
@@ -7223,57 +7223,57 @@ def main() -> int:
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Public"
-        / "UnifiedScriptBlueprintClassMaterializer.h"
+        / "FinareBlueprintClassMaterializer.h"
     ).read_text(encoding="utf-8")
     blueprint_class_materializer_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptBlueprintClassMaterializer.cpp"
+        / "FinareBlueprintClassMaterializer.cpp"
     ).read_text(encoding="utf-8")
     blueprint_class_materializer_tests = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
         / "Tests"
-        / "UnifiedScriptBlueprintClassMaterializerTests.cpp"
+        / "FinareBlueprintClassMaterializerTests.cpp"
     ).read_text(encoding="utf-8")
     sync_classes_commandlet = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UnifiedScriptSyncClassesCommandlet.cpp"
+        / "FinareSyncClassesCommandlet.cpp"
     ).read_text(encoding="utf-8")
     managed_state_synchronizer = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "UnrealScriptStateSynchronizer.cs"
     ).read_text(encoding="utf-8")
     managed_state_tests = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealScriptObjectModelTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FUnifiedScriptBlueprintClassSyncResult"
+        "FFinareBlueprintClassSyncResult"
         in blueprint_class_materializer_header
         and "UnifiedScript.ManagedState" in blueprint_class_materializer_source
         and "UnifiedScript.StateId" in blueprint_class_materializer_source
@@ -7301,10 +7301,10 @@ def main() -> int:
         in blueprint_class_materializer_tests
         and "A managed state cannot claim a user-owned Blueprint name"
         in blueprint_class_materializer_tests
-        and "UnifiedScript class proxies validated:" in sync_classes_commandlet
-        and "UnifiedScript class proxies synchronized:"
+        and "Finare class proxies validated:" in sync_classes_commandlet
+        and "Finare class proxies synchronized:"
         in sync_classes_commandlet
-        and "-run=UnifiedScriptSyncClasses" in onboarding_script
+        and "-run=FinareSyncClasses" in onboarding_script
         and "script-class-materialization.log" in onboarding_script
         and "GeneratedClassPath" in managed_script_class_model
         and "UnrealScriptStateSynchronizer.Open" in managed_script_object_model
@@ -7324,45 +7324,45 @@ def main() -> int:
         "M13.3B-1 materializes reviewed managed state as stable Blueprint properties"
     )
     managed_function_abi = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealManagedFunctionAbi.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealManagedFunctionAbi.cs"
     ).read_text(encoding="utf-8")
     managed_world_entry = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldManagedEntryPoint.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealWorldManagedEntryPoint.cs"
     ).read_text(encoding="utf-8")
     native_function_abi = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptManagedFunctionAbi.h"
+        / "FinareManagedFunctionAbi.h"
     ).read_text(encoding="utf-8")
     native_blueprint_header = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Public"
-        / "UnifiedScriptBlueprint.h"
+        / "FinareBlueprint.h"
     ).read_text(encoding="utf-8")
     editor_module_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptEditor"
+        / "FinareEditor"
         / "Private"
-        / "UEUnifiedScriptEditorModule.cpp"
+        / "FinareEditorModule.cpp"
     ).read_text(encoding="utf-8")
     managed_function_tests = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "UnrealManagedFunctionDispatchTests.cs"
     ).read_text(encoding="utf-8")
     require(
@@ -7370,7 +7370,7 @@ def main() -> int:
         and "MaximumArgumentCount = 4" in managed_function_abi
         and "Expression.Lambda<InvokeFunction>" in managed_function_abi
         and "InvokeScriptFunction" in managed_world_entry
-        and "FUnifiedScriptManagedFunctionValueV1" in native_function_abi
+        and "FFinareManagedFunctionValueV1" in native_function_abi
         and "execDispatchManagedFunction" in native_blueprint_header
         and 'TEXT("USF_%s")' in blueprint_class_materializer_source
         and "BlueprintManagedFunctionDispatch" in blueprint_class_materializer_tests
@@ -7389,16 +7389,16 @@ def main() -> int:
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptBlueprint.cpp"
+        / "FinareBlueprint.cpp"
     ).read_text(encoding="utf-8")
     lowerer_tests = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "CSharpScriptAssetLowererTests.cs"
     ).read_text(encoding="utf-8")
     require(
@@ -7435,18 +7435,18 @@ def main() -> int:
         "M13.3B-2b-1 dispatches static and inherited common-value Blueprint functions"
     )
     unreal_core_types = (
-        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealCoreTypes.cs"
+        ROOT / "src" / "Finare.Unreal" / "UnrealCoreTypes.cs"
     ).read_text(encoding="utf-8")
     script_asset_model = (
-        ROOT / "src" / "UnifiedScript.Core" / "ScriptAssetModel.cs"
+        ROOT / "src" / "Finare.Core" / "ScriptAssetModel.cs"
     ).read_text(encoding="utf-8")
     native_host_source = (
         ROOT
         / "HostProject"
         / "Source"
-        / "UEUnifiedScriptHost"
+        / "FinareHost"
         / "Private"
-        / "UEUnifiedScriptHostModule.cpp"
+        / "FinareHostModule.cpp"
     ).read_text(encoding="utf-8")
     require(
         "UnrealEnumAttribute" in unreal_core_types
@@ -7462,8 +7462,8 @@ def main() -> int:
         and "PostLoadDefaultObject" in native_blueprint_source
         and "$compiledDeclaration" in onboarding_script
         and "compiledDeclarations" in onboarding_script
-        and "UnifiedScriptScriptClassSmoke" in native_host_source
-        and "UNIFIEDSCRIPT_SCRIPT_CLASS_PACKAGED_SMOKE" in native_host_source
+        and "FinareScriptClassSmoke" in native_host_source
+        and "FINARE_SCRIPT_CLASS_PACKAGED_SMOKE" in native_host_source
         and "[x] **M13.3B-2b-2 — enum/UStruct persistence closure:**"
         in roadmap_document,
         "M13.3B-2b-2 typed enum/UStruct dispatch, persistent reload, Declaration IR staging, or packaged smoke proof is incomplete",
@@ -7497,57 +7497,57 @@ def main() -> int:
         "M13.3B-3a binds lifecycle and explicit-Super Blueprint events to managed instances"
     )
     compiled_program_chunk_source = (
-        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
+        ROOT / "src" / "Finare.Runtime" / "CompiledProgramChunk.cs"
     ).read_text(encoding="utf-8")
     declaration_materializer_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptDeclarationMaterializer.cpp"
+        / "FinareDeclarationMaterializer.cpp"
     ).read_text(encoding="utf-8")
     native_transport_source = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
-        / "UnifiedScriptNativeTransport.cpp"
+        / "FinareNativeTransport.cpp"
     ).read_text(encoding="utf-8")
     native_transport_tests = (
         ROOT
         / "HostProject"
         / "Plugins"
-        / "UEUnifiedScript"
+        / "Finare"
         / "Source"
-        / "UEUnifiedScriptRuntime"
+        / "FinareRuntime"
         / "Private"
         / "Tests"
-        / "UnifiedScriptNativeTransportTests.cpp"
+        / "FinareNativeTransportTests.cpp"
     ).read_text(encoding="utf-8")
     managed_native_transport_source = (
         ROOT
         / "src"
-        / "UnifiedScript.Unreal"
+        / "Finare.Unreal"
         / "InProcessUnrealNativeInvocationTransport.cs"
     ).read_text(encoding="utf-8")
     managed_native_transport_tests = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "InProcessUnrealNativeInvocationTransportTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "UnifiedScript.Unreal.UnrealName" in script_asset_lowerer
-        and "UnifiedScript.Unreal.UnrealText" in script_asset_lowerer
-        and "UnifiedScript.Unreal.UnrealObjectHandle" in script_asset_lowerer
-        and "UnifiedScript.Unreal.UnrealClassHandle" in script_asset_lowerer
-        and "UnifiedScript.Unreal.UnrealVector" in script_asset_lowerer
+        "Finare.Unreal.UnrealName" in script_asset_lowerer
+        and "Finare.Unreal.UnrealText" in script_asset_lowerer
+        and "Finare.Unreal.UnrealObjectHandle" in script_asset_lowerer
+        and "Finare.Unreal.UnrealClassHandle" in script_asset_lowerer
+        and "Finare.Unreal.UnrealVector" in script_asset_lowerer
         and "minorVersion: 1" in compiled_program_chunk_source
         and "EPropertyBagPropertyType::Name" in declaration_materializer_source
         and "EPropertyBagPropertyType::Text" in declaration_materializer_source
@@ -7599,25 +7599,25 @@ def main() -> int:
         "M13.3C-1c-a dispatches common Blueprint values and ordered ref/out results"
     )
     visual_profile_model = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
+        ROOT / "src" / "Finare.CSharp" / "VisualProfileModel.cs"
     ).read_text(encoding="utf-8")
     visual_profile_json = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileJson.cs"
+        ROOT / "src" / "Finare.CSharp" / "VisualProfileJson.cs"
     ).read_text(encoding="utf-8")
     visual_profile_inspector = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileInspector.cs"
+        ROOT / "src" / "Finare.CSharp" / "VisualProfileInspector.cs"
     ).read_text(encoding="utf-8")
     visual_profile_test = (
-        ROOT / "tests" / "UnifiedScript.Tests" / "VisualProfileInspectorTests.cs"
+        ROOT / "tests" / "Finare.Tests" / "VisualProfileInspectorTests.cs"
     ).read_text(encoding="utf-8")
     visual_profile_doc = (
         ROOT / "docs" / "VISUAL_CSHARP_PROFILE.md"
     ).read_text(encoding="utf-8")
     semantic_diagnostic_codes = (
-        ROOT / "src" / "UnifiedScript.CSharp" / "SemanticDiagnosticCodes.cs"
+        ROOT / "src" / "Finare.CSharp" / "SemanticDiagnosticCodes.cs"
     ).read_text(encoding="utf-8")
     authoring_surface_json = (
-        ROOT / "src" / "UnifiedScript.Authoring" / "AuthoringSurfaceJson.cs"
+        ROOT / "src" / "Finare.Authoring" / "AuthoringSurfaceJson.cs"
     ).read_text(encoding="utf-8")
     require(
         "unifiedscript.visual-csharp-profile/v0.3" in visual_profile_model
@@ -7635,7 +7635,7 @@ def main() -> int:
         and "VisualProfileReport Profile" in debug_server_source
         and "validateVisualProfile" in prototype_source
         and "OPAQUE CODE BOUNDARY" in prototype_source
-        and "FUnifiedScriptVisualProfileResult" in unreal_authoring_workbench_header
+        and "FFinareVisualProfileResult" in unreal_authoring_workbench_header
         and "source-only" in unreal_authoring_widget
         and "Source-only C#" in unreal_graph_presentation
         and 'TEXT("authoringBoundary")' in unreal_graph_presentation
@@ -7778,7 +7778,7 @@ def main() -> int:
     golden_manifest_path = (
         ROOT
         / "tests"
-        / "UnifiedScript.Tests"
+        / "Finare.Tests"
         / "Fixtures"
         / "GoldenVisual.golden.json"
     )
@@ -8929,7 +8929,7 @@ def main() -> int:
         "Conditional-expression source, sidecar, and chained plan are inconsistent",
     )
     require(
-        any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
+        any((ROOT / "tests" / "Finare.Tests").glob("*Tests.cs")),
         "No tests found",
     )
     require(

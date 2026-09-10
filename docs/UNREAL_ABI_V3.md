@@ -41,7 +41,7 @@ are compile-time asserted in C++ and tested through `Marshal.OffsetOf` in C#.
 
 | Offset | Field | Size | Meaning |
 | ---: | --- | ---: | --- |
-| 0 | `Kind` | 1 | `EUnifiedScriptNativeValueKindV3` |
+| 0 | `Kind` | 1 | `EFinareNativeValueKindV3` |
 | 1 | `Flags` | 1 | `Null` and `ArenaBacked` |
 | 2 | `Reserved16` | 2 | must be zero |
 | 4 | `Auxiliary` | 4 | kind-specific count or descriptor |
@@ -140,7 +140,7 @@ from result capabilities lets older runtimes decline shapes that lack the
 staging protocol.
 Every advertised capability must work through all three relevant entry points;
 unsupported capabilities deterministically fall back to v2 in the composite
-managed bridge. `UEUnifiedScript_GetNativeTransportV3` publishes the independent
+managed bridge. `Finare_GetNativeTransportV3` publishes the independent
 table, and the append-only v2 bootstrap table exposes its pointer to upgraded
 managed Worlds without changing the established CoreCLR World-entry signature.
 Older v2 clients ignore that suffix.

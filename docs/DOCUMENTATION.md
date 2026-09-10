@@ -1,8 +1,8 @@
-# UnifiedScript documentation
+# Finare documentation
 
-This is the curated documentation entry point shipped with UnifiedScript
+This is the curated documentation entry point shipped with Finare
 `1.0.0-rc.1`. The checked-in
-`release/unifiedscript.release.json` is the machine-readable source of truth for
+`release/finare.release.json` is the machine-readable source of truth for
 this catalog; SDK packaging fails if a listed document is missing, duplicated,
 unsafe, or outside `docs`.
 
@@ -42,12 +42,12 @@ unsafe, or outside `docs`.
 
 - [Win64 release packaging](UNREAL_RELEASE.md)
 - [Compatibility matrix](UNREAL_COMPATIBILITY_MATRIX.md)
-- [UnifiedScript 1.0 release readiness](RELEASE_READINESS.md)
+- [Finare 1.0 release readiness](RELEASE_READINESS.md)
 - [Compiled program chunks](COMPILED_CHUNKS.md)
 - [Versioning and upgrades](VERSIONING_AND_UPGRADES.md)
 - [Puerts migration](PUERTS_MIGRATION.md)
 - [Privacy-safe diagnostics bundles](DIAGNOSTICS_BUNDLES.md)
-- [UnifiedScript 1.0 RC1 release notes](RELEASE_NOTES_1_0_RC1.md)
+- [Finare 1.0 RC1 release notes](RELEASE_NOTES_1_0_RC1.md)
 
 ## Support boundary
 

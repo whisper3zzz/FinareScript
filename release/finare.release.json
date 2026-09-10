@@ -1,0 +1,242 @@
+{
+  "schemaVersion": "unifiedscript.product-release/v0.1",
+  "productVersion": "1.0.0-rc.1",
+  "channel": "rc",
+  "status": "releaseCandidate",
+  "productName": "Finare",
+  "compatibility": {
+    "platform": "win-x64",
+    "engineFamily": "5.8",
+    "verifiedEngineVersion": "5.8.1",
+    "managedTargetFramework": "net10.0"
+  },
+  "artifacts": {
+    "sdkArchive": "Finare-SDK-1.0.0-rc.1-win-x64.zip",
+    "pluginDescriptor": "Plugins/Finare/Finare.uplugin",
+    "pluginVersion": 1000001,
+    "pluginVersionName": "1.0.0-rc.1"
+  },
+  "releaseNotes": "docs/RELEASE_NOTES_1_0_RC1.md",
+  "documentation": [
+    {
+      "id": "index",
+      "category": "index",
+      "title": "Documentation index",
+      "path": "docs/DOCUMENTATION.md"
+    },
+    {
+      "id": "sdk",
+      "category": "sdk",
+      "title": "SDK distribution and installation",
+      "path": "docs/UNREAL_SDK.md"
+    },
+    {
+      "id": "first-script",
+      "category": "onboarding",
+      "title": "First script walkthrough",
+      "path": "docs/UNREAL_FIRST_SCRIPT.md"
+    },
+    {
+      "id": "first-project",
+      "category": "onboarding",
+      "title": "First project golden path",
+      "path": "docs/UNREAL_FIRST_PROJECT.md"
+    },
+    {
+      "id": "gameplay-recipes",
+      "category": "onboarding",
+      "title": "Gameplay task recipes",
+      "path": "docs/UNREAL_GAMEPLAY_RECIPES.md"
+    },
+    {
+      "id": "onboarding",
+      "category": "onboarding",
+      "title": "Project onboarding",
+      "path": "docs/UNREAL_ONBOARDING.md"
+    },
+    {
+      "id": "deployment",
+      "category": "onboarding",
+      "title": "Script deployment",
+      "path": "docs/UNREAL_DEPLOYMENT.md"
+    },
+    {
+      "id": "samples",
+      "category": "samples",
+      "title": "Executable sample matrix",
+      "path": "docs/UNREAL_SAMPLES.md"
+    },
+    {
+      "id": "authoring-model",
+      "category": "authoring",
+      "title": "Visual and C# authoring model",
+      "path": "docs/VISUAL_AUTHORING_MODEL.md"
+    },
+    {
+      "id": "authoring-surface",
+      "category": "authoring",
+      "title": "Native Authoring Surface",
+      "path": "docs/AUTHORING_SURFACE.md"
+    },
+    {
+      "id": "authoring-diagnostics",
+      "category": "authoring",
+      "title": "Authoring diagnostics",
+      "path": "docs/AUTHORING_DIAGNOSTICS.md"
+    },
+    {
+      "id": "semantic-diff-merge",
+      "category": "authoring",
+      "title": "Semantic Graph diff and merge",
+      "path": "docs/SEMANTIC_DIFF_AND_MERGE.md"
+    },
+    {
+      "id": "ai-semantic-proposals",
+      "category": "authoring",
+      "title": "Typed AI semantic patch proposals",
+      "path": "docs/AI_SEMANTIC_PROPOSALS.md"
+    },
+    {
+      "id": "api-contract",
+      "category": "api",
+      "title": "Unreal API Contract",
+      "path": "docs/UNREAL_API_CONTRACT.md"
+    },
+    {
+      "id": "project-templates-api-browser",
+      "category": "api",
+      "title": "Project templates and generated API browser",
+      "path": "docs/PROJECT_TEMPLATES_AND_API_BROWSER.md"
+    },
+    {
+      "id": "runtime-diagnostics",
+      "category": "debugging",
+      "title": "Runtime diagnostics",
+      "path": "docs/RUNTIME_DIAGNOSTICS.md"
+    },
+    {
+      "id": "native-debug",
+      "category": "debugging",
+      "title": "Native debug workbench",
+      "path": "docs/NATIVE_DEBUG_WORKBENCH.md"
+    },
+    {
+      "id": "hot-reload",
+      "category": "debugging",
+      "title": "Hot reload reliability",
+      "path": "docs/HOT_RELOAD_RELIABILITY.md"
+    },
+    {
+      "id": "gameplay-profiler",
+      "category": "performance",
+      "title": "Gameplay and bridge profiler",
+      "path": "docs/GAMEPLAY_PROFILER.md"
+    },
+    {
+      "id": "data-plane-extensions",
+      "category": "api",
+      "title": "Generated data-plane extensions",
+      "path": "docs/DATA_PLANE_EXTENSIONS.md"
+    },
+    {
+      "id": "integrated-runtime-insights",
+      "category": "debugging",
+      "title": "Integrated runtime insights",
+      "path": "docs/INTEGRATED_RUNTIME_INSIGHTS.md"
+    },
+    {
+      "id": "performance-suite",
+      "category": "performance",
+      "title": "Matched performance workload suite",
+      "path": "docs/PERFORMANCE_WORKLOAD_SUITE.md"
+    },
+    {
+      "id": "unreal-performance",
+      "category": "performance",
+      "title": "Unreal performance gates",
+      "path": "docs/UNREAL_PERFORMANCE.md"
+    },
+    {
+      "id": "unreal-usability",
+      "category": "performance",
+      "title": "Unreal workflow usability budgets",
+      "path": "docs/UNREAL_USABILITY.md"
+    },
+    {
+      "id": "packaging",
+      "category": "packaging",
+      "title": "Win64 release packaging",
+      "path": "docs/UNREAL_RELEASE.md"
+    },
+    {
+      "id": "compatibility",
+      "category": "packaging",
+      "title": "Compatibility matrix",
+      "path": "docs/UNREAL_COMPATIBILITY_MATRIX.md"
+    },
+    {
+      "id": "release-readiness",
+      "category": "packaging",
+      "title": "Finare 1.0 release readiness",
+      "path": "docs/RELEASE_READINESS.md"
+    },
+    {
+      "id": "compiled-chunks",
+      "category": "packaging",
+      "title": "Compiled program chunks",
+      "path": "docs/COMPILED_CHUNKS.md"
+    },
+    {
+      "id": "upgrades",
+      "category": "upgrades",
+      "title": "Versioning and upgrades",
+      "path": "docs/VERSIONING_AND_UPGRADES.md"
+    },
+    {
+      "id": "migration",
+      "category": "migration",
+      "title": "Puerts migration",
+      "path": "docs/PUERTS_MIGRATION.md"
+    },
+    {
+      "id": "diagnostics-bundles",
+      "category": "support",
+      "title": "Privacy-safe diagnostics bundles",
+      "path": "docs/DIAGNOSTICS_BUNDLES.md"
+    },
+    {
+      "id": "release-notes",
+      "category": "releaseNotes",
+      "title": "Finare 1.0 RC1 release notes",
+      "path": "docs/RELEASE_NOTES_1_0_RC1.md"
+    }
+  ],
+  "acceptance": {
+    "managedTests": 619,
+    "repositoryInvariants": 92,
+    "unrealAutomationTests": 19,
+    "requiredGates": [
+      "managed-tests",
+      "repository-validator",
+      "editor-development-build",
+      "editor-automation",
+      "source-development-shipping-package",
+      "deterministic-sdk-package",
+      "sample-matrix",
+      "project-template-and-api-browser",
+      "semantic-diff-merge",
+      "ai-semantic-proposals",
+      "integrated-runtime-insights",
+      "generated-data-plane-extensions",
+      "clean-project-sdk-install",
+      "clean-project-development-package",
+      "matched-performance-workload"
+    ]
+  },
+  "knownLimitations": [
+    "The declared packaged runtime target is Win64 on Unreal Engine 5.8.1.",
+    "The dedicated-server sample does not yet prove client/server replication or a packaged WindowsServer target.",
+    "Puerts migration manifests do not rewrite project spawn or asset routing.",
+    "Visual authoring supports the documented restricted C# profile rather than arbitrary C# syntax."
+  ]
+}

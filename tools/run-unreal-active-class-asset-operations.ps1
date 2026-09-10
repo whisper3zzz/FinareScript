@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Join-Path $repoRoot 'HostProject'
-$projectFile = Join-Path $projectRoot 'UEUnifiedScriptHost.uproject'
+$projectFile = Join-Path $projectRoot 'FinareHost.uproject'
 $editorCmd = Join-Path $EngineRoot 'Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
 $buildBat = Join-Path $EngineRoot 'Engine/Build/BatchFiles/Build.bat'
 $runUat = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
@@ -54,7 +54,7 @@ function Assert-ActiveClassOpsRuntimeDependencies([string]$TargetReceiptPath, [s
     if (!(Test-Path -LiteralPath $TargetReceiptPath -PathType Leaf)) { throw "Game target receipt is missing after Build.bat: $TargetReceiptPath" }
     $target = Get-Content -LiteralPath $TargetReceiptPath -Raw | ConvertFrom-Json
     $runtimeDependencies = @($target.RuntimeDependencies)
-    $activeEntries = @($runtimeDependencies | Where-Object { ([string]$_.Path) -match '/Plugins/UEUnifiedScript/Binaries/Managed/ActiveClassOps/' })
+    $activeEntries = @($runtimeDependencies | Where-Object { ([string]$_.Path) -match '/Plugins/Finare/Binaries/Managed/ActiveClassOps/' })
     $expectedLeaves = @(
         'ActiveClassAssetOperationsFixture.uschunk',
         'ActiveClassAssetOperationsFixture.dll',
@@ -62,7 +62,7 @@ function Assert-ActiveClassOpsRuntimeDependencies([string]$TargetReceiptPath, [s
     if ($activeEntries.Count -ne 3) { throw "Game target receipt has $($activeEntries.Count) ActiveClassOps runtime dependencies; expected exactly 3 for $FixtureId." }
     $actualPaths = @($activeEntries | ForEach-Object { [string]$_.Path })
     foreach ($leaf in $expectedLeaves) {
-        $expectedRaw = "`$(ProjectDir)/Plugins/UEUnifiedScript/Binaries/Managed/ActiveClassOps/$FixtureId/$leaf"
+        $expectedRaw = "`$(ProjectDir)/Plugins/Finare/Binaries/Managed/ActiveClassOps/$FixtureId/$leaf"
         if (@($actualPaths | Where-Object { $_ -ceq $expectedRaw }).Count -ne 1) { throw "Game target receipt is missing the current ActiveClassOps dependency '$expectedRaw'." }
         $physical = Join-Path $StageDirectory $leaf
         if (!(Test-Path -LiteralPath $physical -PathType Leaf)) { throw "Current ActiveClassOps runtime dependency is missing on disk: $physical" }
@@ -85,9 +85,9 @@ try {
         if (Test-Path -LiteralPath $receiptPath -PathType Leaf) { throw "An existing receipt owns retained active fixture files; use -UseExistingFixture: $receiptPath" }
         Delete-ExactFile $receiptPath; Delete-ExactFile $resultPath; Delete-ExactFile $fixtureLog
         & $editorCmd $projectFile '-unattended' '-nop4' '-NullRHI' '-nosplash' '-NoConfigChanges' `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.ScriptClass.ActiveClassAssetOperations' `
+            '-ExecCmds=Automation RunTests Finare.Unreal.ScriptClass.ActiveClassAssetOperations' `
             '-TestExit=Automation Test Queue Empty' `
-            "-UnifiedScriptActiveClassOpsCookReceipt=$receiptPath" `
+            "-FinareActiveClassOpsCookReceipt=$receiptPath" `
             "-abslog=$fixtureLog" '-log'
         if ($LASTEXITCODE -ne 0) { $generationError = "Active fixture generation failed with exit code $LASTEXITCODE. Log=$fixtureLog" }
         elseif (!(Select-String -LiteralPath $fixtureLog -Pattern 'Test Completed\. Result=\{Success\} Name=\{ActiveClassAssetOperations\}' -Quiet)) { $generationError = "Active fixture selector did not report Success: $fixtureLog" }
@@ -110,7 +110,7 @@ try {
     $contentRoot = FullPath (Join-Path $projectRoot 'Content')
     $contentLeaf = $packageDirectory.Substring('/Game/'.Length)
     $fixtureDirectory = Assert-UnderRoot (Join-Path $contentRoot $contentLeaf) $contentRoot 'Active cook content directory'
-    $stageRoot = FullPath (Join-Path $projectRoot 'Plugins/UEUnifiedScript/Binaries/Managed/ActiveClassOps')
+    $stageRoot = FullPath (Join-Path $projectRoot 'Plugins/Finare/Binaries/Managed/ActiveClassOps')
     $stageDirectory = Assert-UnderRoot (Join-Path $stageRoot $fixtureId) $stageRoot 'Active managed stage directory'
     $cleanupContentDirectory = $fixtureDirectory; $cleanupStageDirectory = $stageDirectory
     $expectedBranches = @('renamed', 'duplicate')
@@ -126,7 +126,7 @@ try {
     if ((FullPath ([string]$receipt.chunkPath)) -cne $expectedSourcePaths.chunk -or
         (FullPath ([string]$receipt.assemblyPath)) -cne $expectedSourcePaths.assembly -or
         (FullPath ([string]$receipt.declarationPath)) -cne $expectedSourcePaths.declaration) { throw 'Active receipt program sources do not match the GUID-owned fixture output.' }
-    $fixtureNamespace = 'UnifiedScript.Tests.Fixtures.ActiveClassAssetOperations'
+    $fixtureNamespace = 'Finare.Tests.Fixtures.ActiveClassAssetOperations'
     $expectedPackageNames = @(
         "$packageDirectory/ActiveBase_${fixtureId}_Renamed",
         "$packageDirectory/ActiveChild_$fixtureId",
@@ -151,7 +151,7 @@ try {
         $expectedAssetPath = "$packageDirectory/$expectedAssetLeaf.$expectedAssetLeaf"
         if ([string]$branch.baseClassPath -cne $expectedBasePath -or [string]$branch.childClassPath -cne $expectedChildPath -or
             [string]$branch.grandchildClassPath -cne $expectedGrandchildPath -or [string]$branch.scriptAssetPath -cne $expectedAssetPath -or
-            [string]$branch.typeName -cne "$fixtureNamespace.$expectedBaseLeaf" -or [string]$branch.declarationAssetPath -cne "UEUnifiedScriptHost/$expectedBaseLeaf") { throw "Active receipt branch '$($branch.role)' has unexpected class/type/selector layout." }
+            [string]$branch.typeName -cne "$fixtureNamespace.$expectedBaseLeaf" -or [string]$branch.declarationAssetPath -cne "FinareHost/$expectedBaseLeaf") { throw "Active receipt branch '$($branch.role)' has unexpected class/type/selector layout." }
         if ([Guid]::Parse(([string]$branch.classId).Substring(3)) -eq [Guid]::Empty) { throw "Active receipt branch '$($branch.role)' has a zero ClassId." }
     }
     if ([string]$branches[0].classId -ceq [string]$branches[1].classId) { throw 'Active renamed and duplicate branches must have distinct ClassIds.' }
@@ -185,23 +185,23 @@ try {
     if (!$CookAndRun) { return }
 
     Delete-ExactFile $resultPath; New-Item -ItemType Directory -Force -Path $archiveRoot | Out-Null
-    & $buildBat 'UEUnifiedScriptHost' 'Win64' 'Development' "-Project=$projectFile" '-NoUBTMakefiles' '-WaitMutex' '-NoHotReloadFromIDE' *>&1 | Tee-Object -FilePath $hostBuildLog
-    if ($LASTEXITCODE -ne 0) { throw "UEUnifiedScriptHost Build.bat failed with exit code $LASTEXITCODE. Log=$hostBuildLog" }
-    Assert-ActiveClassOpsRuntimeDependencies (Join-Path $projectRoot 'Binaries/Win64/UEUnifiedScriptHost.target') $fixtureId $stageDirectory
+    & $buildBat 'FinareHost' 'Win64' 'Development' "-Project=$projectFile" '-NoUBTMakefiles' '-WaitMutex' '-NoHotReloadFromIDE' *>&1 | Tee-Object -FilePath $hostBuildLog
+    if ($LASTEXITCODE -ne 0) { throw "FinareHost Build.bat failed with exit code $LASTEXITCODE. Log=$hostBuildLog" }
+    Assert-ActiveClassOpsRuntimeDependencies (Join-Path $projectRoot 'Binaries/Win64/FinareHost.target') $fixtureId $stageDirectory
     $cookDirectory = Assert-UnderRoot $fixtureDirectory $contentRoot 'Active CookDir'
     & $runUat BuildCookRun "-project=$projectFile" '-noP4' '-platform=Win64' '-clientconfig=Development' '-cook' '-stage' '-pak' '-archive' `
         '-map=/Engine/Maps/Entry' "-CookDir=$cookDirectory" "-archivedirectory=$archiveRoot" '-AdditionalCookerOptions=-SkipZenStore' `
         '-unattended' '-utf8output' '-NoCodeSign' '-NoXGE' '-UbtArgs=-NoUBTMakefiles' *>&1 | Tee-Object -FilePath $cookLog
     if ($LASTEXITCODE -ne 0) { throw "BuildCookRun failed with exit code $LASTEXITCODE." }
-    $packageRoot = Join-Path $archiveRoot 'Windows/UEUnifiedScriptHost'
-    $executables = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'UEUnifiedScriptHost.exe' -File)
-    if ($executables.Count -ne 1) { throw "Expected exactly one UEUnifiedScriptHost.exe below $packageRoot." }
-    $runtimeArgs = @('/Engine/Maps/Entry','-game','-unattended','-nop4','-NullRHI','-nosplash','-UnifiedScriptActiveClassOpsVerify',
-        "-UnifiedScriptActiveClassOpsReceipt=`"$receiptPath`"", "-UnifiedScriptActiveClassOpsResult=`"$resultPath`"", "-abslog=`"$runLog`"", '-log')
+    $packageRoot = Join-Path $archiveRoot 'Windows/FinareHost'
+    $executables = @(Get-ChildItem -LiteralPath (Join-Path $packageRoot 'Binaries/Win64') -Filter 'FinareHost.exe' -File)
+    if ($executables.Count -ne 1) { throw "Expected exactly one FinareHost.exe below $packageRoot." }
+    $runtimeArgs = @('/Engine/Maps/Entry','-game','-unattended','-nop4','-NullRHI','-nosplash','-FinareActiveClassOpsVerify',
+        "-FinareActiveClassOpsReceipt=`"$receiptPath`"", "-FinareActiveClassOpsResult=`"$resultPath`"", "-abslog=`"$runLog`"", '-log')
     $process = Start-Process -FilePath $executables[0].FullName -ArgumentList $runtimeArgs -WorkingDirectory $packageRoot -WindowStyle Hidden -PassThru
     if (!$process.WaitForExit(300000)) { $process.Kill(); throw "Packaged active verifier timed out. Log=$runLog" }
     if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $resultPath -PathType Leaf) -or (Get-Content -LiteralPath $resultPath -TotalCount 1).Trim() -ne 'PASS') { throw "Packaged active verifier failed. Log=$runLog" }
-    if (!(Select-String -LiteralPath $runLog -Pattern 'UNIFIEDSCRIPT_ACTIVE_CLASS_OPS PASS' -Quiet) -or !(Select-String -LiteralPath $runLog -Pattern 'ActiveClassOps' -Quiet)) { throw "Packaged active verifier lacks PASS/archive path evidence: $runLog" }
+    if (!(Select-String -LiteralPath $runLog -Pattern 'FINARE_ACTIVE_CLASS_OPS PASS' -Quiet) -or !(Select-String -LiteralPath $runLog -Pattern 'ActiveClassOps' -Quiet)) { throw "Packaged active verifier lacks PASS/archive path evidence: $runLog" }
     Write-Output "Cooked active class operations PASS: $resultPath"
 }
 finally {

@@ -48,7 +48,7 @@ The full C# compilation and projected CFG validation remain the final gates.
 
 ## Slate workflow
 
-In the UnifiedScript GraphEditor:
+In the Finare GraphEditor:
 
 1. select one or more consecutive deletable, non-terminal statements in one
    source block and press Ctrl/Cmd+C;

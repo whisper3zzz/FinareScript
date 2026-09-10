@@ -2,8 +2,8 @@
 
 ## Purpose
 
-`unifiedscript.script-asset` is the engine-neutral declaration contract for
-UnifiedScript-authored assets. It closes the type-level gap left by method-body
+`finare.script-asset` is the engine-neutral declaration contract for
+Finare-authored assets. It closes the type-level gap left by method-body
 HIR and Graph: script state, defaults, exposure policy, and Visual function
 signatures are now compiler artifacts rather than Blueprint-owned data.
 
@@ -432,7 +432,7 @@ startup/reload hydrates and flushes the corresponding strongly typed C# value.
 and Graph artifacts when `--out` is supplied:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Authoring/DamagePolicy.cs \
   --out artifacts/authoring
 ```
@@ -447,7 +447,7 @@ Apply the checked-in declaration patch and atomically write the patched source
 plus its revalidated Declaration IR:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-declaration-patch samples/Authoring/DamagePolicy.cs \
   --declaration-patch samples/Authoring/MakeMaxDamageEditable.declaration.patch.json \
   --out artifacts/authoring/DamagePolicy.cs \

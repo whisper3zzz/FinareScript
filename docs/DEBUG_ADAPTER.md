@@ -92,7 +92,7 @@ debug.StepInto(loaded.Generation.GenerationId, pause.PauseId);
 
 ## Visual workbench loopback bridge
 
-`unifiedscript debug-serve` is the development-only editor host. It serves the
+`finare debug-serve` is the development-only editor host. It serves the
 static workbench and a same-origin loopback JSON API from `127.0.0.1`:
 
 - `GET /api/debug/health` reports the loaded generation plus source and
@@ -161,7 +161,7 @@ this exact loopback contract; see
 
 ## Process transport
 
-`unifiedscript debug-frame-serve` preloads one debug compilation and publishes
+`finare debug-frame-serve` preloads one debug compilation and publishes
 a machine-readable endpoint. Each operation opens one correlated request/
 response connection. This allows a wait request to remain outstanding while
 Pause, Continue, Step, stack, locals, and evaluation use independent
@@ -174,14 +174,14 @@ clients; it is not a DAP or authenticated remote-machine endpoint.
 
 The Unreal host reuses the probe/snapshot semantics above rather than adding a
 second debugger model. Slate publishes an instrumented image, reloads the
-selected `UUnifiedScriptComponent`, and sends
+selected `UFinareComponent`, and sends
 `unifiedscript.unreal-debug-config/v0.1` with the exact runtime generation,
 program generation, and semantic breakpoint node IDs. The managed host starts
 each debug `OnTick` on a named background thread. A probe hit publishes the
 same immutable `unifiedscript.debug-session/v0.2` state and blocks only that
 thread on its resume signal.
 
-Unreal API calls cannot run on this worker. `FUnifiedScriptNativeTransport`
+Unreal API calls cannot run on this worker. `FFinareNativeTransport`
 therefore queues worker-originated generated calls in an MPSC queue, retains
 their World context, and waits on a pooled event. The World subsystem pumps the
 queue on the GameThread before managed phase work. Detach, reload, component

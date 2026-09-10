@@ -87,7 +87,7 @@ its World and check host cleanup. Keep the verifier independent of Editor APIs.
 
 The managed slot lifecycle and owned signature identities are implemented.
 Release compilation and 13 focused tests passed with the UE-bundled .NET 10 SDK
-against the real `UnifiedScript.Tests.csproj`. Tests cover body replacement,
+against the real `Finare.Tests.csproj`. Tests cover body replacement,
 rollback, additive callables, incompatible container/struct/soft-reference
 contracts, invalid assemblies and collectible current/pending context disposal.
 Evidence: `artifacts/m13-3c-1c-b-static-library-reload/managed-focused-release.log`.
@@ -97,7 +97,7 @@ Evidence: `artifacts/m13-3c-1c-b-static-library-reload/managed-focused-release.l
 Optional managed exports, native Host/World wrappers and the daily/selected-asset
 reload route are implemented. Editor compilation passed; the existing component
 batch reload, static and instance Blueprint dispatch regressions passed.
-`UnifiedScript.Unreal.ScriptClass.StaticLibraryReload` passed through ordinary
+`Finare.Unreal.ScriptClass.StaticLibraryReload` passed through ordinary
 Blueprint bytecode in two existing Worlds with three separately compiled DLL
 variants. It verifies changed v1/v2 results, restoration after commit/abort,
 rejection of incompatible candidates while current code remains callable, a

@@ -10,7 +10,7 @@ public class __PROJECT_MODULE__ : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "UEUnifiedScriptRuntime"
+            "FinareRuntime"
         });
     }
 }

@@ -498,7 +498,7 @@ The checked-in composed sample inserts `scale`, reconnects a consumer to that
 new declaration, changes `*` to `/`, and deletes `obsolete`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ComposedPlan.cs \
   --identity samples/Patching/ComposedPlan.cs.usids \
@@ -514,7 +514,7 @@ remains unchanged.
 The branch-population sample demonstrates the symbolic block path:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/GuardRules.cs \
   --identity samples/Patching/GuardRules.cs.usids \
@@ -533,7 +533,7 @@ insertion pins unaffected live nodes outside the replaced subtree, preventing
 same-shape identities from migrating to newly authored syntax:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/GuardRules.cs \
   --identity samples/Patching/GuardRules.cs.usids \
@@ -547,7 +547,7 @@ The recursive sample creates an outer `enabled` decision, inserts a nested
 paths with assignments:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/NestedDecisionRules.cs \
   --identity samples/Patching/NestedDecisionRules.cs.usids \
@@ -565,7 +565,7 @@ and appends assignment and transfer statements without predicting generated
 loop, body, or branch IDs:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/LoopBuildRules.cs \
   --identity samples/Patching/LoopBuildRules.cs.usids \
@@ -578,7 +578,7 @@ The for-construction sample creates a declaration-form loop, publishes its
 generated `index`, and consumes that local in later body stages:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ForBuildRules.cs \
   --identity samples/Patching/ForBuildRules.cs.usids \
@@ -591,7 +591,7 @@ The do-while sample constructs a post-test loop, replaces its condition through
 the producer handle, and appends its body assignment:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/DoWhileBuildRules.cs \
   --identity samples/Patching/DoWhileBuildRules.cs.usids \
@@ -604,7 +604,7 @@ The structured expression-edit sample uses the direct assignment and existing
 while wrappers in one transaction:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditLoopRules.cs \
   --identity samples/Patching/EditLoopRules.cs.usids \
@@ -617,7 +617,7 @@ The existing-for sample applies all four exact header wrappers in one
 transaction:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditForRules.cs \
   --identity samples/Patching/EditForRules.cs.usids \

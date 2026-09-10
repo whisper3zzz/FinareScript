@@ -155,7 +155,7 @@ discards all earlier in-memory stages.
 ## CLI sample
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/AssignmentRules.cs \
   --identity samples/Patching/AssignmentRules.cs.usids \

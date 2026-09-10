@@ -11,16 +11,16 @@ if (-not (Test-Path -LiteralPath $dotnetPath)) {
     throw "The UE bundled .NET runtime was not found: $dotnetPath"
 }
 
-$demoDirectory = Join-Path $repositoryRoot "samples\Unreal\UnifiedScript.Unreal.Demo"
-$demoProject = Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.csproj"
+$demoDirectory = Join-Path $repositoryRoot "samples\Unreal\Finare.Unreal.Demo"
+$demoProject = Join-Path $demoDirectory "Finare.Unreal.Demo.csproj"
 $demoSource = Join-Path $demoDirectory "DemoScript.cs"
 $alternateSource = Join-Path $demoDirectory "AlternateDemoScript.cs"
-$bindingsSource = Join-Path $repositoryRoot "samples\Unreal\UEUnifiedScriptRuntime.bindings.cs"
+$bindingsSource = Join-Path $repositoryRoot "samples\Unreal\FinareRuntime.bindings.cs"
 $workbenchRoot = Join-Path $repositoryRoot "prototype\visual-editor"
-$cliProject = Join-Path $repositoryRoot "src\UnifiedScript.Cli\UnifiedScript.Cli.csproj"
-$coreAssembly = Join-Path $repositoryRoot "src\UnifiedScript.Core\bin\Debug\net10.0\UnifiedScript.Core.dll"
-$unrealAssembly = Join-Path $repositoryRoot "src\UnifiedScript.Unreal\bin\Debug\net10.0\UnifiedScript.Unreal.dll"
-$managedDirectory = Join-Path $repositoryRoot "HostProject\Plugins\UEUnifiedScript\Binaries\Managed\Demo"
+$cliProject = Join-Path $repositoryRoot "src\Finare.Cli\Finare.Cli.csproj"
+$coreAssembly = Join-Path $repositoryRoot "src\Finare.Core\bin\Debug\net10.0\Finare.Core.dll"
+$unrealAssembly = Join-Path $repositoryRoot "src\Finare.Unreal\bin\Debug\net10.0\Finare.Unreal.dll"
+$managedDirectory = Join-Path $repositoryRoot "HostProject\Plugins\Finare\Binaries\Managed\Demo"
 $artifactDirectory = Join-Path $repositoryRoot "artifacts\ue\authoring"
 
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
@@ -33,21 +33,21 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[2/2] Starting the transactional authoring host at http://127.0.0.1:$Port/"
-Write-Host "Keep this window open, then use Apply & Reload in the UE UnifiedScript Authoring tab."
+Write-Host "Keep this window open, then use Apply & Reload in the Finare Authoring tab."
 & $dotnetPath run --project $cliProject -- `
     debug-serve $demoSource `
     --source $alternateSource `
     --source $bindingsSource `
     --root $workbenchRoot `
     --port $Port `
-    --assembly "UnifiedScript.Unreal.Demo" `
+    --assembly "Finare.Unreal.Demo" `
     --reference $coreAssembly `
     --reference $unrealAssembly `
     --identity (Join-Path $demoDirectory "DemoScript.cs.usids") `
-    --asset-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.asset.json") `
-    --surface-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.surface.json") `
-    --layout-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.usgraph") `
-    --managed-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.dll") `
-    --pdb-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.pdb") `
-    --history (Join-Path $artifactDirectory "UnifiedScript.Unreal.Demo.authoring-history.json")
+    --asset-out (Join-Path $demoDirectory "Finare.Unreal.Demo.asset.json") `
+    --surface-out (Join-Path $demoDirectory "Finare.Unreal.Demo.surface.json") `
+    --layout-out (Join-Path $demoDirectory "Finare.Unreal.Demo.usgraph") `
+    --managed-out (Join-Path $managedDirectory "Finare.Unreal.Demo.dll") `
+    --pdb-out (Join-Path $managedDirectory "Finare.Unreal.Demo.pdb") `
+    --history (Join-Path $artifactDirectory "Finare.Unreal.Demo.authoring-history.json")
 exit $LASTEXITCODE

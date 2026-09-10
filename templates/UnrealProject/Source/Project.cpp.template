@@ -7,13 +7,13 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Modules/ModuleManager.h"
-#include "UnifiedScriptActor.h"
-#include "UnifiedScriptAsset.h"
-#include "UnifiedScriptComponent.h"
-#include "UnifiedScriptCoreClrHost.h"
-#include "UnifiedScriptWorldSubsystem.h"
+#include "FinareActor.h"
+#include "FinareAsset.h"
+#include "FinareComponent.h"
+#include "FinareCoreClrHost.h"
+#include "FinareWorldSubsystem.h"
 
-namespace UE::UnifiedScript::PackagedScriptClassSmoke::Private
+namespace UE::Finare::PackagedScriptClassSmoke::Private
 {
 bool ReadArgument(const TCHAR* Name, FString& OutValue)
 {
@@ -28,7 +28,7 @@ bool ReadArgument(const TCHAR* Name, FString& OutValue)
 void Finish(bool bSuccess, const FString& Detail)
 {
     FString ResultPath;
-    ReadArgument(TEXT("UnifiedScriptScriptClassSmokeResult="), ResultPath);
+    ReadArgument(TEXT("FinareScriptClassSmokeResult="), ResultPath);
     const FString Result = FString::Printf(
         TEXT("%s\n%s\n"),
         bSuccess ? TEXT("PASS") : TEXT("FAIL"),
@@ -43,28 +43,28 @@ void Finish(bool bSuccess, const FString& Detail)
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_SCRIPT_CLASS_PACKAGED_SMOKE %s %s"),
+        TEXT("FINARE_SCRIPT_CLASS_PACKAGED_SMOKE %s %s"),
         bSuccess ? TEXT("PASS") : TEXT("FAIL"),
         *Detail.ReplaceCharWithEscapedChar());
     FPlatformMisc::RequestExitWithStatus(
         false,
         bSuccess ? 0 : 1,
-        TEXT("UnifiedScriptScriptClassPackagedSmoke"));
+        TEXT("FinareScriptClassPackagedSmoke"));
 }
 
 void Run()
 {
     FString ActorClassPath;
     FString ComponentClassPath;
-    if (!ReadArgument(TEXT("UnifiedScriptActorClass="), ActorClassPath) ||
-        !ReadArgument(TEXT("UnifiedScriptComponentClass="), ComponentClassPath))
+    if (!ReadArgument(TEXT("FinareActorClass="), ActorClassPath) ||
+        !ReadArgument(TEXT("FinareComponentClass="), ComponentClassPath))
     {
         Finish(false, TEXT("Required Actor or Component class path is missing."));
         return;
     }
 
-    UClass* ActorClass = LoadClass<AUnifiedScriptActor>(nullptr, *ActorClassPath);
-    UClass* ComponentClass = LoadClass<UUnifiedScriptComponent>(
+    UClass* ActorClass = LoadClass<AFinareActor>(nullptr, *ActorClassPath);
+    UClass* ComponentClass = LoadClass<UFinareComponent>(
         nullptr,
         *ComponentClassPath);
     if (ActorClass == nullptr || ComponentClass == nullptr)
@@ -79,7 +79,7 @@ void Run()
     }
 
     const int32 InitialManagedWorldCount =
-        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+        FFinareCoreClrHost::Get().GetManagedWorldCount();
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (World == nullptr)
     {
@@ -88,13 +88,13 @@ void Run()
     }
     World->AddToRoot();
 
-    UUnifiedScriptWorldSubsystem* Host =
-        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
-    AUnifiedScriptActor* ScriptActor = World->SpawnActor<AUnifiedScriptActor>(
+    UFinareWorldSubsystem* Host =
+        World->GetSubsystem<UFinareWorldSubsystem>();
+    AFinareActor* ScriptActor = World->SpawnActor<AFinareActor>(
         ActorClass);
     AActor* ComponentOwner = World->SpawnActor<AActor>();
-    UUnifiedScriptComponent* AttachedComponent = ComponentOwner != nullptr
-        ? NewObject<UUnifiedScriptComponent>(ComponentOwner, ComponentClass)
+    UFinareComponent* AttachedComponent = ComponentOwner != nullptr
+        ? NewObject<UFinareComponent>(ComponentOwner, ComponentClass)
         : nullptr;
     if (ComponentOwner != nullptr && AttachedComponent != nullptr)
     {
@@ -102,7 +102,7 @@ void Run()
         AttachedComponent->RegisterComponentWithWorld(World);
     }
 
-    UUnifiedScriptComponent* ActorComponent = ScriptActor != nullptr
+    UFinareComponent* ActorComponent = ScriptActor != nullptr
         ? ScriptActor->ScriptComponent
         : nullptr;
     FString Failure;
@@ -188,12 +188,12 @@ void Run()
     const FString ComponentProgram = AttachedComponent != nullptr
         ? AttachedComponent->GetActiveProgramPath()
         : FString();
-    const FString HostFxrPath = FUnifiedScriptCoreClrHost::Get().GetHostFxrPath();
+    const FString HostFxrPath = FFinareCoreClrHost::Get().GetHostFxrPath();
     const bool bCompiledChunks =
         ActorProgram.EndsWith(TEXT(".uschunk")) &&
         ComponentProgram.EndsWith(TEXT(".uschunk"));
     const bool bPluginLocalRuntime = HostFxrPath.Contains(
-        TEXT("UEUnifiedScript/Binaries/ThirdParty/DotNet/10.0"));
+        TEXT("Finare/Binaries/ThirdParty/DotNet/10.0"));
     if (Failure.IsEmpty() && (!bCompiledChunks || !bPluginLocalRuntime))
     {
         Failure = FString::Printf(
@@ -232,7 +232,7 @@ void Run()
     World->RemoveFromRoot();
     World->DestroyWorld(false);
     const int32 FinalManagedWorldCount =
-        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+        FFinareCoreClrHost::Get().GetManagedWorldCount();
     if (Failure.IsEmpty() &&
         (FinalManagedScriptCount != 0 || FinalLifecycleClaimCount != 0 ||
          FinalManagedWorldCount != InitialManagedWorldCount))
@@ -269,10 +269,10 @@ public:
         FDefaultGameModuleImpl::StartupModule();
         if (FParse::Param(
                 FCommandLine::Get(),
-                TEXT("UnifiedScriptScriptClassSmoke")))
+                TEXT("FinareScriptClassSmoke")))
         {
             SmokeDelegateHandle = FCoreDelegates::OnFEngineLoopInitComplete.AddStatic(
-                &UE::UnifiedScript::PackagedScriptClassSmoke::Private::Run);
+                &UE::Finare::PackagedScriptClassSmoke::Private::Run);
         }
     }
 

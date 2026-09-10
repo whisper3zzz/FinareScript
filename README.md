@@ -1,6 +1,11 @@
-# UnifiedScript
+# Finare
 
-UnifiedScript is an experimental dual-modal gameplay authoring system. A
+Formerly UEUnifiedScript / UnifiedScript. The solution, managed assemblies,
+namespaces, Unreal plugin and modules now use Finare. Rebuild managed scripts
+and regenerate or repair assets referencing the old UE types; this rename does
+not install Core Redirects. See [the migration notes](docs/UNREAL_SDK.md).
+
+Finare is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
@@ -13,7 +18,7 @@ completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
 IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
 M9-M11 complete observable hot reload, gameplay profiling, matched performance,
 reliability, packaging, compatibility, and compiled-chunk delivery. M12 turned
-the proven runtime into a migration ecosystem and UnifiedScript 1.0 RC; M13 now
+the proven runtime into a migration ecosystem and Finare 1.0 RC; M13 now
 targets Puerts-grade first-use and daily-development ergonomics without
 weakening the generated Contract or lifecycle model.
 
@@ -46,7 +51,7 @@ deployment, or onboarding JSON:
 
 ```powershell
 & D:\UE_5.8\Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe `
-  src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll `
+  src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll `
   adopt D:\Project\Game\Game.uproject --sdk-root . --preview
 ```
 
@@ -61,7 +66,7 @@ generated-contract path:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/setup-unreal-project.ps1 `
-  -Project HostProject/UEUnifiedScriptHost.uproject -EngineRoot D:\UE_5.8
+  -Project HostProject/FinareHost.uproject -EngineRoot D:\UE_5.8
 ```
 
 Re-run with `-ValidateOnly` to preflight Script Assets, compare deterministic
@@ -104,7 +109,7 @@ M9.3 adds an opt-in 120-frame gameplay profiler. The Unreal Debug panel can
 capture or stop a live trace, focus the hottest resolvable semantic node, and
 save `unifiedscript.gameplay-profile/v0.3` JSON with per-node runtime-boundary
 cost under
-`Saved/UnifiedScript/Profiles`. See
+`Saved/Finare/Profiles`. See
 [Gameplay and bridge profiler](docs/GAMEPLAY_PROFILER.md).
 
 M7.4 adds a deterministic Puerts-project inventory and exact migration coverage
@@ -128,7 +133,7 @@ strict deterministic report with source ownership, modules, APIs, lifecycle,
 assets, delegates, async work, native surfaces, and unsupported dynamic behavior:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-scan D:\Project\MyPuertsGame `
   --out artifacts\migration\my-game.scan.json `
   --fail-on-blockers
@@ -139,7 +144,7 @@ request set, compile-safe managed stubs, an ownership manifest, Puerts runtime
 guard, and a two-lane verification harness:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-plan artifacts\migration\my-game.scan.json `
   --contract Contracts\MyGame.unreal-api-contract.json `
   --out artifacts\migration\my-game `
@@ -149,14 +154,14 @@ dotnet run --project src/UnifiedScript.Cli -c Release -- `
 Keep both runtimes installed while moving one concrete script type at a time:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -c Release -- `
+dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-coexist artifacts\migration\my-game\migration-plan.json `
   --out artifacts\migration\my-game\coexistence `
-  --unified TS_Rifle=MyGame.UnifiedScript.RifleScript `
+  --unified TS_Rifle=MyGame.Finare.RifleScript `
   --fail-on-blockers
 ```
 
-The generated Puerts guard and the UnifiedScript Component share one native
+The generated Puerts guard and the Finare Component share one native
 World ownership arbiter, so the same host/lifecycle key cannot be activated by
 both runtimes. Route changes require stopping the old owner first; generation
 alone does not alter project spawn/asset selection or claim gameplay parity.
@@ -184,7 +189,7 @@ packaged executable. See
 Create a repository-independent alpha SDK with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/package-unifiedscript-sdk.ps1 `
+powershell -ExecutionPolicy Bypass -File tools/package-finare-sdk.ps1 `
   -Version 1.0.0-rc.1 -EngineRoot D:\UE_5.8
 ```
 
@@ -194,7 +199,7 @@ the complete release-owned documentation catalog while excluding
 engine-specific native outputs. See [Unreal SDK distribution](docs/UNREAL_SDK.md).
 To take a newly installed C++ project from no scripts to editor play, visual
 editing, hot reload, and packaged play, follow
-[First UnifiedScript in an Unreal project](docs/UNREAL_FIRST_SCRIPT.md).
+[First Finare in an Unreal project](docs/UNREAL_FIRST_SCRIPT.md).
 For the shorter product path use
 [First project golden path](docs/UNREAL_FIRST_PROJECT.md), then continue through
 the [Unreal gameplay task recipes](docs/UNREAL_GAMEPLAY_RECIPES.md).
@@ -203,7 +208,7 @@ Run the complete repository alpha gate with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File tools/run-unifiedscript-alpha-acceptance.ps1 `
+  -File tools/run-finare-alpha-acceptance.ps1 `
   -EngineRoot D:\UE_5.8
 ```
 
@@ -357,16 +362,16 @@ The repository currently implements:
   callable/property/delegate shapes, latent/thread/World execution policy,
   deterministic managed-wrapper/event proxy generation, and the `ue-bindings`
   CLI command;
-- an UE 5.7/5.8-compatible host project and `UEUnifiedScript` plugin with a reflected script
+- an UE 5.7/5.8-compatible host project and `Finare` plugin with a reflected script
   component plus headless reflection-export commandlet;
 - an opaque 64-bit slot/generation handle shared by managed wrappers and a
   game-thread-only, world-bound native weak UObject registry with deletion
   invalidation and stale-generation rejection;
-- a placeable, Blueprintable `AUnifiedScriptActor` and managed
+- a placeable, Blueprintable `AFinareActor` and managed
   `UnrealObjectScript`/`UnrealActorScript` object model with distinct
   generation-safe host and gameplay-target handles;
 - versioned Unreal deployment manifests that preflight and synchronize real
-  `UUnifiedScriptAsset` packages, with required target-class validation before
+  `UFinareAsset` packages, with required target-class validation before
   CoreCLR startup and no per-host assembly/type literals;
 - strict project-owned Unreal API contracts that atomically generate one
   allowlisted C# surface, Native Thunk table, coverage report, and typed visual
@@ -496,7 +501,7 @@ the canonical C#, and AI Lens exposes the coordinate-free machine outline.
 M5.5 is therefore complete before Unreal integration begins.
 
 M6.0 removes the last sample-specific browser adapter before that integration.
-The new `UnifiedScript.Authoring` project projects every Script Asset and Visual
+The new `Finare.Authoring` project projects every Script Asset and Visual
 function into strict `unifiedscript.authoring-surface/v0.5` JSON with source-owner
 identities for inherited declarations. Readers retain v0.4 compatibility. The Workbench
 now renders asset/function navigation, `if` and loop regions, compact actions,
@@ -511,11 +516,11 @@ runtime, authoring, data-plane, performance, and packaged-demo baseline; M6.3
 now turns that baseline into a project-installable alpha.
 
 M6.1 Phase A establishes the first real UE toolchain slice. The
-`UnifiedScript.Unreal` boundary validates and normalizes engine reflection
+`Finare.Unreal` boundary validates and normalizes engine reflection
 without exposing `UClass` or `FProperty` to Core, Semantics, Graph, or
 Authoring. The UE plugin exports selected native modules through a headless
 commandlet; the CLI consumes that manifest and generates typed managed wrappers
-over `IUnrealInvocationBridge`. `UUnifiedScriptComponent` is the initial host
+over `IUnrealInvocationBridge`. `UFinareComponent` is the initial host
 component and reflection fixture. UHT validation passes against the discovered
 UE 5.7.4 source tree. Phase B.1 now defines the lifetime foundation: managed
 handles use the same 64-bit slot/generation encoding as a native weak registry,
@@ -537,7 +542,7 @@ and stable error categories. The checked-in generated wrapper exercises this
 adapter for every fixture property and function. Phase B.4 adds a versioned
 in-process native function table and a managed transport that copies synchronous
 UTF-8 results before control returns. Phase B.5 adds one
-`UUnifiedScriptWorldSubsystem` per supported World. It owns the registry and
+`UFinareWorldSubsystem` per supported World. It owns the registry and
 bridge, exposes a retained native context, detaches it before teardown, and makes
 post-teardown calls fail safely. Phase B.6 now performs a real
 process-wide hostfxr bootstrap from the engine-bundled .NET runtime and acquires
@@ -545,14 +550,14 @@ the CoreCLR load-assembly delegate. The per-World managed entry point and
 collectible load context are now connected in Phase B.7: each native World host
 creates a managed entry that retains its transport until native context
 detachment. Phase B.8 proved hosted generated-wrapper execution. Phase B.9 now
-makes `UUnifiedScriptComponent` a real runtime host: `BeginPlay` automatically
+makes `UFinareComponent` a real runtime host: `BeginPlay` automatically
 registers and starts its configured managed type, component Tick dispatches
 `OnTick`, `EndPlay` calls `OnStop` before handle release, and Reload swaps to a
 fresh collectible script generation. Phase B.10 now gives every generated
 member a stable 64-bit ID and extends the in-process transport with ABI v2.
-Generated `UUnifiedScriptComponent` calls use direct native field/function
+Generated `UFinareComponent` calls use direct native field/function
 thunks; ABI v1 and string/reflection dispatch remain as compatibility fallback.
-Phase B.11 adds `UUnifiedScriptAsset`, Content Browser selection, soft-path
+Phase B.11 adds `UFinareAsset`, Content Browser selection, soft-path
 loading, schema/config validation, and transactional Reload into a different
 managed type. Phase B.12 removes the fixture-specific native switch: reflection
 now exports header/native-access metadata, and `ue-bindings --native-out`
@@ -692,7 +697,7 @@ powershell -ExecutionPolicy Bypass -File tools/launch-unreal-authoring-demo.ps1 
 ```
 
 It builds and stages the demo, starts the transactional host in the background,
-opens the editor directly on the UnifiedScript Authoring tab, and stops the
+opens the editor directly on the Finare Authoring tab, and stops the
 host when the editor closes. See `docs/UNREAL_DEMO.md` for the short walkthrough.
 
 Run the live CoreCLR-to-UObject performance gate (the Puerts verdict remains
@@ -707,7 +712,7 @@ See `docs/UNREAL_PERFORMANCE.md` for the fixed scenario and competitive gate.
 M10's representative nine-workload contract, strict matched-environment rules,
 and alternating trial schedule are documented in
 [`docs/PERFORMANCE_WORKLOAD_SUITE.md`](docs/PERFORMANCE_WORKLOAD_SUITE.md).
-The current UE 5.8.1 run completed all 54 scheduled captures. UnifiedScript's
+The current UE 5.8.1 run completed all 54 scheduled captures. Finare's
 complete BlockBreaker p50/p95/p99 frame ratios are 0.898835/0.955283/0.959456
 and its bridge-time ratio is 0.336019, while direct scalar, container, delegate,
 and resource-flow workloads still lose. M10.2 therefore targets generated
@@ -724,7 +729,7 @@ adds suite v1.1.0 plus reviewed budgets, and routes only the representative
 high-volume fixed-container/event workloads through those channels. Their
 three-trial matched medians improved from losing ratios of 6.734380/3.800531 to
 0.002026/0.007390, with one acquisition, zero logical boundary copies, and zero
-managed allocation on every UnifiedScript trial. The complete 54-slot v1.1.0
+managed allocation on every Finare trial. The complete 54-slot v1.1.0
 rerun is still required before changing the broad product claim.
 
 Build, archive, and smoke-test the self-contained Win64 Development and
@@ -758,23 +763,23 @@ open:
 powershell -ExecutionPolicy Bypass -File tools/run-unreal-authoring.ps1 -EngineRoot D:\UE_5.8
 ```
 
-Open `Tools > UnifiedScript Authoring`, load the Demo or selected Script Asset,
+Open `Tools > Finare Authoring`, load the Demo or selected Script Asset,
 change a promoted literal/operator, and choose `Apply & Reload`. For a graph
 round trip, select `RewirePreview` and drag the `*` output onto
 `Declare incremented` -> `Value`; the committed C# changes from `value + 1` to
 `value * 2`, then Slate reloads the regenerated Surface.
 
-For an Editor actor, create a Data Asset using `UnifiedScriptAsset`, set:
+For an Editor actor, create a Data Asset using `FinareAsset`, set:
 
 ```text
-ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll
-ScriptTypeName     = UnifiedScript.Unreal.Demo.DemoScript
-DeclarationPath   = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json
+ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.dll
+ScriptTypeName     = Finare.Unreal.Demo.DemoScript
+DeclarationPath   = {PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.asset.json
 DeclarationAssetPath = Unreal/Demo
-AuthoringSurfacePath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json
+AuthoringSurfacePath = {PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.surface.json
 ```
 
-Assign that asset to `UnifiedScriptComponent.Script Asset`. With automatic Start
+Assign that asset to `FinareComponent.Script Asset`. With automatic Start
 and Tick enabled, PIE drives managed `OnStart`, `OnTick`, reload generations,
 and `OnStop`. `Refresh Script State` makes C# defaults editable in the component
 Details panel; the verified demo overrides `InitialValue` to `37`, reads it from
@@ -899,7 +904,7 @@ M5.1 executes the same validated method body regardless of whether its C# was
 authored as text or produced through visual semantic patches:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   execute samples/Execution/RuntimeRules.cs \
   --method Samples.Execution.RuntimeRules.LastNonNegative \
   --args '[[1,-2,9],4]'
@@ -918,7 +923,7 @@ collectible reload context, not a security sandbox. See
 M5.2 exposes the same program image without executing it:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   emit samples/Execution/RuntimeRules.cs \
   --out artifacts/runtime-image
 ```
@@ -938,7 +943,7 @@ The host project is deliberately checked in without machine-specific engine
 paths. Its TargetRules follow the selected engine's latest build settings and
 include order, which maps to V6/5.7 on UE 5.7 and V7/5.8 on UE 5.8. On macOS,
 the helper discovers common source and Launcher layouts; set
-`UNIFIEDSCRIPT_UE_ROOT` when the engine lives elsewhere:
+`FINARE_UE_ROOT` when the engine lives elsewhere:
 
 ```bash
 tools/ue-adapter.sh detect
@@ -953,9 +958,9 @@ fixture and its deterministic output live under `samples/Unreal/`. Generate a
 wrapper directly with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
-  ue-bindings samples/Unreal/UEUnifiedScriptRuntime.reflection.json \
-  --contract samples/Unreal/UEUnifiedScriptRuntime.api-contract.json \
+dotnet run --project src/Finare.Cli -- \
+  ue-bindings samples/Unreal/FinareRuntime.reflection.json \
+  --contract samples/Unreal/FinareRuntime.api-contract.json \
   --out artifacts/UEUnifiedScriptRuntime.bindings.cs \
   --native-out artifacts/UEUnifiedScriptRuntime.thunks.cpp \
   --nodes-out artifacts/UEUnifiedScriptRuntime.api-nodes.json \
@@ -965,7 +970,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 Game modules can own their generated ABI v3 table by also setting
 `--native-header` and `--native-namespace`, then registering the resulting
-function table with `FUnifiedScriptGeneratedThunkRegistry` during module
+function table with `FFinareGeneratedThunkRegistry` during module
 startup. The BlockBreaker comparison project is the executable example.
 
 See [UNREAL_API_CONTRACT.md](docs/UNREAL_API_CONTRACT.md) and
@@ -979,16 +984,16 @@ boundaries, exFAT considerations, and remaining runtime phases.
 ## Build and test
 
 ```bash
-dotnet restore UnifiedScript.slnx
-dotnet build UnifiedScript.slnx --no-restore
-dotnet test UnifiedScript.slnx --no-build
+dotnet restore Finare.slnx
+dotnet build Finare.slnx --no-restore
+dotnet test Finare.slnx --no-build
 python3 tools/validate_project.py
 ```
 
 ## Analyze the sample
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/DoorController.cs \
   --out artifacts/sample
 ```
@@ -996,7 +1001,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 Analyze or emit a complete SDK project with the same command shape:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/ProjectLoading/ProjectLoadingDemo.csproj \
   --out artifacts/project-loading
 ```
@@ -1019,7 +1024,7 @@ Without `--out`, the graph JSON is written to stdout.
 To inspect the first authoring asset directly:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Authoring/DamagePolicy.cs \
   --out artifacts/authoring
 ```
@@ -1031,7 +1036,7 @@ Apply the checked-in state-exposure edit and emit a revalidated source/artifact
 pair:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-declaration-patch samples/Authoring/DamagePolicy.cs \
   --declaration-patch samples/Authoring/MakeMaxDamageEditable.declaration.patch.json \
   --out artifacts/authoring/DamagePolicy.cs \
@@ -1049,7 +1054,7 @@ nesting, plus explicit `loopInitializer` and `loopIncrement` phases for `for`.
 Generate the early-return example with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Regions/EarlyReturn.cs \
   --out artifacts/regions
 ```
@@ -1073,7 +1078,7 @@ nearest-loop `continue`, and normal body back edges while retaining persistent
 node identity:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/Countdown.cs \
   --identity samples/Loops/Countdown.cs.usids \
   --out artifacts/loops
@@ -1103,7 +1108,7 @@ incrementors return to the effective condition header. Initializer execution is
 outside the cyclic component and therefore occurs exactly once.
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/ForRules.cs \
   --out artifacts/for-loops
 ```
@@ -1117,11 +1122,11 @@ lossier `while` payload. See
 ## Analyze multiple source files
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze-files \
   samples/MultiFile/GameplayApi.cs \
   samples/MultiFile/DamageScript.cs \
-  --assembly UnifiedScript.MultiFileSample \
+  --assembly Finare.MultiFileSample \
   --effects samples/MultiFile/effects.json \
   --out artifacts/multi-file
 ```
@@ -1141,7 +1146,7 @@ unmatched calls remain conservatively read/write effectful.
 Create the source-controlled identity sidecar once:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   identity-init \
   samples/Patching/DamageRules.cs \
   --out artifacts/identity/DamageRules.cs.usids
@@ -1165,7 +1170,7 @@ The patching sample changes the graph literal `1.0f` to `100.0f`, deliberately
 changing its source width while retaining the same persistent node ID:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/DamageRules.cs \
   --identity samples/Patching/DamageRules.cs.usids \
@@ -1193,7 +1198,7 @@ operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/DamageRules.cs \
   --identity samples/Patching/DamageRules.cs.usids \
@@ -1229,7 +1234,7 @@ operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/DamageRules.cs \
   --identity samples/Patching/DamageRules.cs.usids \
@@ -1258,7 +1263,7 @@ The M4.3 sample inserts `result = result + 1;` between an existing local
 declaration and return:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/AssignmentRules.cs \
   --identity samples/Patching/AssignmentRules.cs.usids \
@@ -1282,7 +1287,7 @@ The structured-control-flow sample builds `(damage > threshold) && !disabled`
 from typed expression nodes and inserts an `if` before the existing return:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/GuardRules.cs \
   --identity samples/Patching/GuardRules.cs.usids \
@@ -1325,7 +1330,7 @@ their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/GuardRules.cs \
   --identity samples/Patching/GuardRules.cs.usids \
@@ -1348,7 +1353,7 @@ the next branch producer. Later steps can therefore address its generated
 `then` and `else` blocks without knowing any intermediate random IDs:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/NestedDecisionRules.cs \
   --identity samples/Patching/NestedDecisionRules.cs.usids \
@@ -1394,7 +1399,7 @@ The M3 closure sample inserts the guard, returns `true` from its generated
 plan:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/GuardRules.cs \
   --identity samples/Patching/GuardRules.cs.usids \
@@ -1437,7 +1442,7 @@ the initializer and keeps its persistent ID; a new identifier replaces the old
 position:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/DamageRules.cs \
   --identity samples/Patching/DamageRules.cs.usids \
@@ -1487,7 +1492,7 @@ return bonus + 1.0f;
 Run it with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-patch \
   samples/Patching/SharedValueRules.cs \
   --identity samples/Patching/SharedValueRules.cs.usids \
@@ -1547,7 +1552,7 @@ return damage * 2.0f + damage * 3.0f + 1.0f;
 Run the plan with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/SharedExpressionPlan.cs \
   --identity samples/Patching/SharedExpressionPlan.cs.usids \
@@ -1590,7 +1595,7 @@ the return expression to that new local, change multiplication to division, and
 delete an obsolete declaration:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ComposedPlan.cs \
   --identity samples/Patching/ComposedPlan.cs.usids \
@@ -1640,7 +1645,7 @@ inserts a typed while, adds a stop branch and `break`, decrements the local, and
 adds `continue`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/LoopBuildRules.cs \
   --identity samples/Patching/LoopBuildRules.cs.usids \
@@ -1662,7 +1667,7 @@ generated `index` local in a nested skip guard and an outer-local assignment,
 and proves that `continue` routes through the incrementor:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ForBuildRules.cs \
   --identity samples/Patching/ForBuildRules.cs.usids \
@@ -1693,7 +1698,7 @@ The checked-in four-step sample gates a declaration-form condition with
 prefix `++index`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditForRules.cs \
   --identity samples/Patching/EditForRules.cs.usids \
@@ -1715,7 +1720,7 @@ three-stage plan constructs the loop, edits its produced condition, and fills
 its body:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/DoWhileBuildRules.cs \
   --identity samples/Patching/DoWhileBuildRules.cs.usids \
@@ -1741,7 +1746,7 @@ from `primary` to `fallback`, and assigns its produced `value` local in the
 generated body:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ForEachBuildRules.cs \
   --identity samples/Patching/ForEachBuildRules.cs.usids \
@@ -1775,7 +1780,7 @@ The checked-in two-step sample changes `result - 1` to `result - 2` and changes
 `result > 0` to `enabled && (result > stopAt)` atomically:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditLoopRules.cs \
   --identity samples/Patching/EditLoopRules.cs.usids \
@@ -1805,7 +1810,7 @@ The checked-in three-step sample changes `value + 1` to `value - 2`, expands
 `return result + stopAt` atomically:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditDecisionValues.cs \
   --identity samples/Patching/EditDecisionValues.cs.usids \
@@ -1839,7 +1844,7 @@ The checked-in four-stage sample inserts `offset`, uses it in a generated guard,
 a generated branch return, and the original fallback return:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ConnectGeneratedValues.cs \
   --identity samples/Patching/ConnectGeneratedValues.cs.usids \
@@ -1871,7 +1876,7 @@ The checked-in plan inserts `offset` and connects it only to the inner
 addition's `right` port:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditNestedInput.cs \
   --identity samples/Patching/EditNestedInput.cs.usids \
@@ -1900,7 +1905,7 @@ generated `right` input with `value * 2`, then uses that second step as a new
 handle and changes its generated `right` input to `3`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditGeneratedExpression.cs \
   --identity samples/Patching/EditGeneratedExpression.cs.usids \
@@ -1934,7 +1939,7 @@ replaces its generated `whenFalse` input with `value + 1`, and then edits the
 new binary input to `2`:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditConditionalExpression.cs \
   --identity samples/Patching/EditConditionalExpression.cs.usids \
@@ -1967,7 +1972,7 @@ required.
 Generate the checked-in example with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/ShortCircuitRules.cs \
   --out artifacts/short-circuit
 ```
@@ -1994,7 +1999,7 @@ payload and the same exact graph-safe scalar families such as `T? ?? T` and
 Generate the checked-in example with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/CoalesceRules.cs \
   --out artifacts/coalesce
 ```
@@ -2031,7 +2036,7 @@ implicit receiver safely.
 Generate the checked-in example with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/NullConditionalRules.cs \
   --out artifacts/null-conditional
 ```
@@ -2046,7 +2051,7 @@ HIR, bound semantics, and persistent `.usids` identity. Initialize a layout from
 an emitted Graph document:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   layout-init artifacts/sample/DoorController.graph.json \
   --out artifacts/sample/DoorController.usgraph
 ```
@@ -2057,7 +2062,7 @@ and edge routing control points. After a semantic edit emits an updated Graph,
 synchronize the existing visual state into it:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   layout-sync artifacts/updated/DoorController.graph.json \
   --layout artifacts/sample/DoorController.usgraph \
   --out artifacts/updated/DoorController.usgraph
@@ -2075,13 +2080,13 @@ artifacts are not writable inputs to the synchronizer. See
 ## Repository layout
 
 ```text
-src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
-src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
-src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
-src/UnifiedScript.Graph/     Graph projection, regions, CFG analysis, layout
-src/UnifiedScript.Runtime/   CoreCLR invocation contracts and collectible host
-src/UnifiedScript.Cli/       Analysis, patching, layout, and execution CLI
-tests/UnifiedScript.Tests/   Unit and vertical-slice tests
+src/Finare.Core/      Semantic IDs, diagnostics, HIR, [Visual]
+src/Finare.Semantics/ Language-neutral types, symbols, effects, bindings
+src/Finare.CSharp/    Roslyn profile validation and lowering
+src/Finare.Graph/     Graph projection, regions, CFG analysis, layout
+src/Finare.Runtime/   CoreCLR invocation contracts and collectible host
+src/Finare.Cli/       Analysis, patching, layout, and execution CLI
+tests/Finare.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection
 prototype/visual-editor/     Clickable authoring-experience prototype
 docs/                        Architecture and milestone plans

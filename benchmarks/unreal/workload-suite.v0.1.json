@@ -1,6 +1,6 @@
 {
   "schemaVersion": "unifiedscript.performance-workload-suite/v0.1",
-  "suiteId": "unifiedscript-puerts-representative",
+  "suiteId": "finare-puerts-representative",
   "suiteVersion": "1.0.0",
   "trialCount": 3,
   "build": {

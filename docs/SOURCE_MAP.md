@@ -2,7 +2,7 @@
 
 ## Purpose
 
-M5.2 connects stable UnifiedScript semantic identity to the executable CLR
+M5.2 connects stable Finare semantic identity to the executable CLR
 image. Text-authored and visually patched C# now produce the same versioned
 mapping:
 
@@ -59,7 +59,7 @@ not receive invented execution offsets.
 Emit one source file:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   emit samples/Execution/RuntimeRules.cs \
   --out artifacts/runtime-image
 ```

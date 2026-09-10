@@ -3,7 +3,7 @@
 `tools/run-unreal-benchmark.ps1` runs a live UE 5.8 Development Editor
 Automation test against the staged CoreCLR demo. The fixed scenario performs
 4,096 warm-up calls followed by five samples of 100,000 generated C# wrapper calls to
-`UUnifiedScriptComponent.Add(int32, int32)`. The reported UnifiedScript time
+`UFinareComponent.Add(int32, int32)`. The reported Finare time
 therefore includes the managed wrapper, ABI v3 call frame, native transport,
 generation-safe World handle resolution, and generated C++ thunk.
 
@@ -28,7 +28,7 @@ same `generated-int32-add` scenario,
 machine fingerprint, UE engine version, platform, build configuration, warm-up,
 iteration count, and sample count, with a positive `puertsNsPerCall`. Supply it with
 `-PuertsResult <file> -RequirePuerts`. The competitive gate only passes when
-UnifiedScript is at least 5% faster. Without that file the report deliberately
+Finare is at least 5% faster. Without that file the report deliberately
 leaves the Puerts result and competitive verdict empty; no performance claim
 should be made from an unmatched or cross-machine number.
 
@@ -54,7 +54,7 @@ checked-in v1.0.0 manifest. The fixed-container recipe keeps 16,384 rows; the
 event recipe uses the declared 65,536-entry channel bound on both runtimes.
 Three alternating trials produced 0.1118 ms versus 64.0493 ms for containers
 (ratio 0.001746), and 0.2813 ms versus 36.2080 ms for events (ratio 0.007769).
-Every UnifiedScript trial reports one acquisition, zero logical boundary-copy
+Every Finare trial reports one acquisition, zero logical boundary-copy
 bytes, and zero managed allocation. The complete 54-slot suite qualifies at a
 weighted ratio of 0.555769 versus the 0.95 maximum, with every absolute
 regression gate passing.
@@ -85,8 +85,8 @@ powershell -ExecutionPolicy Bypass -File comparison/run-performance-comparison.p
 The latest local `artifacts/comparison/performance/comparison.json` uses the
 same machine, UE 5.8.1 Development Editor configuration, 4,096 warm-up calls,
 and five 100,000-call samples. The current formal three-trial suite median is
-147.766 ns per UnifiedScript call versus 143.339 ns per Puerts call, a losing
-ratio of 1.030885. UnifiedScript still records zero managed allocation in the
+147.766 ns per Finare call versus 143.339 ns per Puerts call, a losing
+ratio of 1.030885. Finare still records zero managed allocation in the
 measured loop. This result applies only to the generated
 `int32 Add(int32, int32)` boundary; it is published as a loss and the artifacts
 are not treated as portable cross-machine evidence.
@@ -105,14 +105,14 @@ powershell -ExecutionPolicy Bypass -File comparison/run-gameplay-comparison.ps1 
 
 Run `comparison/measure-blockbreaker-package-size.ps1` first; the gameplay
 runner rejects a missing, stale, or commit-mismatched package report. The
-current UnifiedScript player routes that shot through one
+current Finare player routes that shot through one
 Batch Trace plus an emitter/damage command reservation and consumes both
 completion events on the next managed frame. The runner prepares both runtimes
 once, performs only runtime work inside measured trials, alternates which
 runtime executes first to reduce build heat and ordering bias, and now runs the
 full 74-item migration audit before measurement. The latest local three-trial
 result reports zero legacy calls and p50/p95/p99 frame medians of
-0.4340/0.8549/1.2585 ms for UnifiedScript versus
+0.4340/0.8549/1.2585 ms for Finare versus
 0.4740/0.9416/1.3735 ms for Puerts. The ratios are
 0.915612/0.907923/0.916272. Bridge time is 122.1483 ms versus 328.9069 ms
 (ratio 0.371377), and every trial completed exactly one shot and one hit. All

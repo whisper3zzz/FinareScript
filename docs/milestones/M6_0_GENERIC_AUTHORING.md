@@ -11,7 +11,7 @@ versioned Surface.
 
 ## Delivered
 
-- new `UnifiedScript.Authoring` project with no browser, Roslyn, Runtime, or UE
+- new `Finare.Authoring` project with no browser, Roslyn, Runtime, or UE
   dependency;
 - strict deterministic `unifiedscript.authoring-surface/v0.1` JSON;
 - generic Declaration/Graph-to-Surface projection;

@@ -1,6 +1,6 @@
 using System;
-using UnifiedScript;
-using UnifiedScript.Unreal;
+using Finare;
+using Finare.Unreal;
 
 namespace __MANAGED_NAMESPACE__;
 

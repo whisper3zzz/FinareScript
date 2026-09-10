@@ -23,7 +23,7 @@ path instead of adding facades.
 ### Completed batch: ordinary object arguments
 
 Puerts' [argument holders](https://github.com/Tencent/puerts/blob/master/unreal/Puerts/Source/JsEnv/Public/StaticCall.hpp)
-handle object pointers and reference wrappers. UnifiedScript now supports that
+handle object pointers and reference wrappers. Finare now supports that
 public path for constructors, static and instance methods, through generated
 wrappers and a CoreCLR example rather than only a registry primitive.
 
@@ -67,7 +67,7 @@ wrappers and a CoreCLR example rather than only a registry primitive.
 
 ### Ordinary C++ runtime checkpoint
 
-- Implemented `FUnifiedScriptNativeObjectRegistry`, owned by the World bridge
+- Implemented `FFinareNativeObjectRegistry`, owned by the World bridge
   context, and optional Native Object ABI v1 appended to the existing v2 table.
   Existing UObject ABI cells and prefixes are unchanged. Native object and scope
   IDs are separate process-unique tokens, never pointers and never recycled.

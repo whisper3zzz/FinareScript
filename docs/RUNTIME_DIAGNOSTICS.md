@@ -60,7 +60,7 @@ handle from outliving its native owner.
 ## Live World controls
 
 The Slate debugger automatically discovers the best matching PIE/Game
-`UUnifiedScriptComponent` for the selected managed type. It displays exact
+`UFinareComponent` for the selected managed type. It displays exact
 World, instance, generation, and target-handle identity. **Attach Semantic**
 publishes and reloads an instrumented image, then binds graph/source semantic
 breakpoints to that exact live runtime generation. The normal debugger controls
@@ -95,7 +95,7 @@ These three controls deliberately do not preserve an in-progress CLR stack;
 they remain useful for coarse gameplay stepping and diagnostics.
 
 When the selected live component receives a new diagnostic sequence, the Slate
-debugger publishes that detached record to **UnifiedScript Diagnostics**. The
+debugger publishes that detached record to **Finare Diagnostics**. The
 Message Log links to its exact Portable-PDB source location and exposes the
 generated bridge member or semantic method as a navigable member token. It uses
 the same normalized Retry/Repair/Restart guidance and bounded editor snapshot as
@@ -117,7 +117,7 @@ breakpoint rebinding, and detach while suspended.
 
 Native Automation additionally fills and overwrites the 64-entry ring, checks
 field bounds and exact 64-bit identities, parses the eight-entry CrashContext
-tail, and clears only UnifiedScript-owned crash keys. The lifecycle soak checks
+tail, and clears only Finare-owned crash keys. The lifecycle soak checks
 every created World's shutdown sequence immediately after destruction and the
 component test proves a faulted script stops without interrupting a healthy
 sibling in the same World.

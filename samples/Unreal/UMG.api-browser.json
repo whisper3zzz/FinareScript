@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.unreal-api-browser/v0.1",
-  "contractName": "UnifiedScript.UMG.Demo",
-  "managedNamespace": "UnifiedScript.Unreal.Generated.UI",
+  "contractName": "Finare.UMG.Demo",
+  "managedNamespace": "Finare.Unreal.Generated.UI",
   "engine": {
     "major": 5,
     "minor": 8,
@@ -12,7 +12,7 @@
     "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
     "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
     "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-    "inputSha256": "4d4990d47e627b52d34fc1ab8b9bc4ceba5db3c095dbf2755f19a3a47831c4de"
+    "inputSha256": "ff229873f4476e759bb38adae0794ec3556b546a83b6867280ddd37c646cc3d6"
   },
   "summary": {
     "typeCount": 8,

@@ -24,7 +24,7 @@ incorrect node.
 
 ## Workbench workflow
 
-In Unreal, open the UnifiedScript debugger for a running component:
+In Unreal, open the Finare debugger for a running component:
 
 1. choose **Start Profile**, reproduce the interval, then **Capture Profile**
    or **Stop Profile**;

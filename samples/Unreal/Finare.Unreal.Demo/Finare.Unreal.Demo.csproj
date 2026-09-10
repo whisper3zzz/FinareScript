@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Finare.Unreal.Demo</AssemblyName>
+    <Description>Minimal gameplay assembly loaded by the UE World demo host.</Description>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <FinareDemoStageDir>$(MSBuildProjectDirectory)/../../../HostProject/Plugins/Finare/Binaries/Managed/Demo</FinareDemoStageDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Finare.Unreal/Finare.Unreal.csproj" />
+    <Compile Include="../FinareRuntime.bindings.cs"
+             Link="Generated/FinareRuntime.bindings.cs" />
+    <Compile Include="../UMG.bindings.cs" Link="Generated/UMG.bindings.cs" />
+  </ItemGroup>
+  <Target Name="StageUnrealManagedDemo" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(FinareSkipManagedHostStaging)' != 'true'">
+    <ItemGroup>
+      <_FinareDemoFile Include="$(TargetPath)" />
+      <_FinareDemoFile Include="$(TargetDir)$(AssemblyName).pdb"
+                              Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <_FinareDemoFile Include="$(TargetDir)Finare.Unreal.Demo.deps.json"
+                              Condition="Exists('$(TargetDir)Finare.Unreal.Demo.deps.json')" />
+      <_FinareDemoFile Include="$(MSBuildProjectDirectory)/Finare.Unreal.Demo.asset.json" />
+      <_FinareDemoFile Include="$(MSBuildProjectDirectory)/Finare.Unreal.Demo.surface.json" />
+      <!-- Seed the layout once; authoring owns it after first deployment. -->
+      <_FinareDemoFile Include="$(MSBuildProjectDirectory)/Finare.Unreal.Demo.usgraph"
+                              Condition="!Exists('$(FinareDemoStageDir)/Finare.Unreal.Demo.usgraph')" />
+    </ItemGroup>
+    <MakeDir Directories="$(FinareDemoStageDir)" />
+    <Copy SourceFiles="@(_FinareDemoFile)"
+          DestinationFolder="$(FinareDemoStageDir)" />
+  </Target>
+</Project>

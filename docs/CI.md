@@ -1,6 +1,6 @@
 # Continuous integration lanes
 
-UnifiedScript uses seven independent release-candidate lanes. The local entry
+Finare uses seven independent release-candidate lanes. The local entry
 point and GitHub Actions call the same command:
 
 ```powershell
@@ -27,10 +27,10 @@ relative artifact paths. Detailed child output remains in per-phase logs.
 | --- | --- | --- |
 | `managed-tests` | GitHub-hosted Windows | Debug `dotnet test` plus repository validator; Debug matches the ProjectLoader default configuration |
 | `deterministic-generation` | GitHub-hosted Windows | Build CLI once; generate bindings, native thunks, node catalog, coverage, and both data-plane layouts twice; compare both runs and checked-in files |
-| `ue-build` | dedicated UE runner | Managed Release build plus `UEUnifiedScriptHostEditor` Win64 Development build |
-| `unreal-automation` | dedicated UE runner | Validate-only onboarding, deterministic generation, UE build, deployment validation, managed startup, and all `UnifiedScript.Unreal` Automation tests |
+| `ue-build` | dedicated UE runner | Managed Release build plus `FinareHostEditor` Win64 Development build |
+| `unreal-automation` | dedicated UE runner | Validate-only onboarding, deterministic generation, UE build, deployment validation, managed startup, and all `Finare.Unreal` Automation tests |
 | `package-smoke` | dedicated UE runner | Development Build/Cook/Stage/Pak/Archive, plugin-local CoreCLR closure, and packaged managed gameplay smoke |
-| `workload-performance` | dedicated comparison runner | Complete 54-slot matched UnifiedScript/Puerts suite and reviewed performance budgets |
+| `workload-performance` | dedicated comparison runner | Complete 54-slot matched Finare/Puerts suite and reviewed performance budgets |
 | `sdk-installation` | dedicated UE runner | Exact UE 5.8.1 compatibility matrix, deterministic SDK archive, clean project installation, package, poisoned external .NET roots, and runtime smoke |
 
 The first two lanes run for pull requests, `main` pushes, schedules, and manual
@@ -61,10 +61,10 @@ self-hosted, Windows, X64, ue-5.8.1
 
 The runner must expose:
 
-- `UNIFIEDSCRIPT_UE_ROOT`: an exact UE 5.8.1 installed build with bundled .NET
+- `FINARE_UE_ROOT`: an exact UE 5.8.1 installed build with bundled .NET
   10 under `Engine/Binaries/ThirdParty/DotNet/10.0/win-x64`;
-- `UNIFIEDSCRIPT_COMPARISON_ROOT`: the prepared comparison root containing
-  `BlockBreaker-Puerts` and `BlockBreaker-UnifiedScript`; required by the
+- `FINARE_COMPARISON_ROOT`: the prepared comparison root containing
+  `BlockBreaker-Puerts` and `BlockBreaker-Finare`; required by the
   workload lane;
 - Git, Windows PowerShell, and Python on `PATH`;
 - enough disk for parallel UE intermediates and packaged archives.
@@ -118,4 +118,4 @@ non-empty output root so stale reports cannot turn a failed retry green.
   a microbenchmark, resumable partial suite, or unmatched machine result cannot
   substitute for the lane.
 - SDK installation is intentionally independent of source-tree plugin state and
-  must remain green in a project initially containing no UnifiedScript plugin.
+  must remain green in a project initially containing no Finare plugin.

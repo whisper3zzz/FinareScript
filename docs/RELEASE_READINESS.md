@@ -1,31 +1,31 @@
-# UnifiedScript 1.0 release readiness
+# Finare 1.0 release readiness
 
-`tools/run-unifiedscript-release-readiness.ps1` is the final local acceptance
-boundary for `1.0.0-rc.1`. It reads `release/unifiedscript.release.json`, requires
+`tools/run-finare-release-readiness.ps1` is the final local acceptance
+boundary for `1.0.0-rc.1`. It reads `release/finare.release.json`, requires
 an exact provider for every declared `requiredGate`, executes all providers from
 one Git revision, and emits one machine-readable verdict.
 
 ## Strict run
 
-Run from a clean UnifiedScript checkout and clean comparison repositories:
+Run from a clean Finare checkout and clean comparison repositories:
 
 ```powershell
 powershell -ExecutionPolicy Bypass `
-  -File tools/run-unifiedscript-release-readiness.ps1 `
+  -File tools/run-finare-release-readiness.ps1 `
   -EngineRoot D:\UE_5.8 `
-  -ComparisonRoot D:\Comparison\UEUnifiedScript
+  -ComparisonRoot D:\Comparison\Finare
 ```
 
 The command owns these evidence families:
 
 - all managed tests and repository invariants;
 - deterministic Contract and data-plane generation;
-- UE 5.8.1 Editor build and complete `UnifiedScript.Unreal` Automation;
+- UE 5.8.1 Editor build and complete `Finare.Unreal` Automation;
 - source Development and Shipping packages plus packaged smoke;
 - two byte-identical SDK archives, clean SDK installation, and a clean-project
   Development package with external .NET roots poisoned;
 - all five executable sample categories and all three project templates;
-- the complete matched UnifiedScript/Puerts workload budget;
+- the complete matched Finare/Puerts workload budget;
 - explicit test and runtime evidence for semantic diff/merge, typed AI
   proposals, Runtime Insight, and generated data-plane extensions.
 
@@ -66,7 +66,7 @@ The strict acceptance run completed on 2026-08-29 from clean source revision
 - packaged BlockBreaker measured 1,033,732,983 bytes versus Puerts
   1,009,756,057 bytes, ratio 1.023745 against the 1.05 maximum.
 
-The source checkout and the frozen UnifiedScript, source, and Puerts comparison
+The source checkout and the frozen Finare, source, and Puerts comparison
 checkouts were clean before and after the run. The Windows PowerShell 5.1 lane
 uses long-path-safe package enumeration and snapshot cleanup, and restores the
 comparison checkout on both success and failure. This evidence accepts the

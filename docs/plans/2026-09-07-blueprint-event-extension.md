@@ -320,7 +320,7 @@ ghost events do not block a new declaration. This retarget test is an asset
 materialization test, not evidence for retargeting a running managed instance.
 
 Editor Development compilation and
-`UnifiedScript.Unreal.ScriptClass.BlueprintInheritedEventMaterialization` passed,
+`Finare.Unreal.ScriptClass.BlueprintInheritedEventMaterialization` passed,
 including real Actor event ownership, invalid declarations, idempotency,
 retargeting and transactional collision rejection. The existing
 `BlueprintManagedFunctionDispatch` regression passed after fresh Release
@@ -374,7 +374,7 @@ target remains the Actor; this does not establish BeginPlay/EndPlay ordering.
 component followed by an active matching owner, rejects two active owners,
 and resumes the original instance after the conflicting instance stops.
 Direct invalid Host, result descriptor and uncorrelated requests are rejected
-without executing the parent. `UnifiedScript.Unreal.NativeTransport.Abi` also
+without executing the parent. `Finare.Unreal.NativeTransport.Abi` also
 passes. Evidence is `parent-component-automation-1.log`,
 `parent-ownership-automation-4.log`, `editor-parent-ownership-build-5.log` and
 `native-transport-abi-parent-automation.log`. Test assets were cleaned up.

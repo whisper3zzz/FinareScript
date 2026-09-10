@@ -168,7 +168,7 @@ non-async/task-like limit.
 ## CLI sample
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/NestedDecisionRules.cs \
   --identity samples/Patching/NestedDecisionRules.cs.usids \

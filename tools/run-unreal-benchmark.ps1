@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
     [string]$PuertsResult,
     [string]$SuiteMetricsPath,
     [switch]$RequirePuerts,
@@ -11,8 +11,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
-$managedProject = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+$projectPath = Join-Path $repoRoot 'HostProject\FinareHost.uproject'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $thresholdPath = Join-Path $repoRoot 'benchmarks\unreal\performance-thresholds.json'
 $artifactDirectory = Join-Path $repoRoot 'artifacts\ue'
 $logPath = Join-Path $artifactDirectory 'managed-interop-benchmark.log'
@@ -24,7 +24,7 @@ if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
         Select-Object -First 1
 }
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
-    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+    throw 'Pass -EngineRoot or set FINARE_UE_ROOT.'
 }
 
 $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
@@ -53,7 +53,7 @@ if (-not $ReportOnly) {
             if ($LASTEXITCODE -ne 0) {
                 throw "Managed benchmark build failed with exit code $LASTEXITCODE."
             }
-            & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+            & $buildBat FinareHostEditor Win64 Development $projectPath `
                 -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
             if ($LASTEXITCODE -ne 0) {
                 throw "Unreal benchmark build failed with exit code $LASTEXITCODE."
@@ -62,7 +62,7 @@ if (-not $ReportOnly) {
 
         & $editorCmd $projectPath `
             -unattended -nop4 -NullRHI -nosplash `
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.ManagedInterop' `
+            '-ExecCmds=Automation RunTests Finare.Unreal.Performance.ManagedInterop' `
             '-TestExit=Automation Test Queue Empty' `
             "-abslog=$logPath" -log
         $editorExitCode = $LASTEXITCODE
@@ -84,11 +84,11 @@ if (-not $ReportOnly) {
     }
 }
 $successPattern =
-    'Test Completed. Result={Success} Name={ManagedInterop} Path={UnifiedScript.Unreal.Performance.ManagedInterop}'
+    'Test Completed. Result={Success} Name={ManagedInterop} Path={Finare.Unreal.Performance.ManagedInterop}'
 if (!(Select-String -LiteralPath $logPath -SimpleMatch $successPattern -Quiet)) {
     throw "Managed interop benchmark Automation did not succeed. Log: $logPath"
 }
-$marker = 'UNIFIEDSCRIPT_BENCHMARK_JSON '
+$marker = 'FINARE_BENCHMARK_JSON '
 $line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
     Select-Object -Last 1
 if ($null -eq $line) {
@@ -150,14 +150,14 @@ if (![string]::IsNullOrWhiteSpace($PuertsResult)) {
 }
 
 $absolutePass =
-    [double]$nativeResult.unifiedScriptNsPerCall -le [double]$thresholds.maxUnifiedScriptNsPerCall
+    [double]$nativeResult.unifiedScriptNsPerCall -le [double]$thresholds.maxFinareNsPerCall
 $allocationPass =
-    [long]$nativeResult.unifiedScriptAllocatedBytes -le [long]$thresholds.maxUnifiedScriptAllocatedBytes
+    [long]$nativeResult.unifiedScriptAllocatedBytes -le [long]$thresholds.maxFinareAllocatedBytes
 $competitiveRatio = if ($null -ne $puertsNsPerCall) {
     [double]$nativeResult.unifiedScriptNsPerCall / $puertsNsPerCall
 } else { $null }
 $competitiveThresholdPass = if ($null -ne $competitiveRatio) {
-    $competitiveRatio -le [double]$thresholds.maxUnifiedScriptToPuertsRatio
+    $competitiveRatio -le [double]$thresholds.maxFinareToPuertsRatio
 } else { $null }
 $competitivePass = if ($null -ne $competitiveThresholdPass) {
     $competitiveThresholdPass -or $AllowLosingComparison
@@ -223,7 +223,7 @@ if (![string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
         Set-Content -LiteralPath $SuiteMetricsPath -Encoding utf8
 }
 
-Write-Host "UnifiedScript: $($nativeResult.unifiedScriptNsPerCall) ns/call, $($nativeResult.unifiedScriptAllocatedBytes) B"
+Write-Host "Finare: $($nativeResult.unifiedScriptNsPerCall) ns/call, $($nativeResult.unifiedScriptAllocatedBytes) B"
 Write-Host "C++ direct lower bound: $($nativeResult.cppDirectNsPerCall) ns/call"
 if ($null -ne $puertsNsPerCall) {
     Write-Host "Puerts: $puertsNsPerCall ns/call; ratio: $competitiveRatio"

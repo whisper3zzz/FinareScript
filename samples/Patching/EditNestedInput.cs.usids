@@ -1,8 +1,8 @@
 {
   "schemaVersion": "unifiedscript.identity/v0.1",
   "sourcePath": "samples/Patching/EditNestedInput.cs",
-  "sourceDigest": "sha256:25c78c37b74217356b7cfb395b79bfeb273571060300e4d799beaaefd7b4db16",
-  "generation": 1,
+  "sourceDigest": "sha256:2371cd4c8a75adc3bee8b6f6d77b7c2c0d9e60ce065910ca774c8db638f95828",
+  "generation": 2,
   "entries": [
     {
       "id": "us_21b95c617ea215de2d8bcb7050bc458b",
@@ -13,12 +13,12 @@
       "shapeFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
       "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "anchor": {
-        "start": 149,
+        "start": 142,
         "length": 15
       },
       "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
       "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_3a2846a3d338a5f2916159475e32ef2d",
@@ -29,12 +29,12 @@
       "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "parentFingerprint": "sha256:e76b543dca1077c6c157e08c3e29a199dc18515ccd81028d2851c20fc6ad9fc7",
       "anchor": {
-        "start": 132,
+        "start": 125,
         "length": 39
       },
       "contextBefore": "sha256:f206b58da67eecf05561bf3793b1daac74076d6722df4669be01772da8d913b5",
       "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_4cb874cbeefab8a4a4f62492626a7b75",
@@ -45,12 +45,12 @@
       "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
       "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
       "anchor": {
-        "start": 142,
+        "start": 135,
         "length": 23
       },
       "contextBefore": "sha256:f20474240e265b99c6e3d429b017e3100d94193a112f6d409b45892cfc945bfc",
       "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_6f75b4d28bb76c8380a76067fefd67a6",
@@ -61,12 +61,12 @@
       "shapeFingerprint": "sha256:d4d49cb4d943a64e760bac5dd592de88e050926e09a3ac91203ea9580124e1ba",
       "parentFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "anchor": {
-        "start": 158,
+        "start": 151,
         "length": 1
       },
       "contextBefore": "sha256:11d8d777be772e4bb73465560800ef24956a39fadd03fe2ab81052f16631f68f",
       "contextAfter": "sha256:0b0619ca98e9f7a1d938d7b59077d24c16350a6c1fefb43ff731e56d7559db94",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_b57d7412256d16dfbcd28786dba217bc",
@@ -77,12 +77,12 @@
       "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
       "parentFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "anchor": {
-        "start": 150,
+        "start": 143,
         "length": 5
       },
       "contextBefore": "sha256:b07858280f3b3877fa868554fd6ee2150190334789f5c66382db7eb99bacf9d8",
       "contextAfter": "sha256:05a870fd7f73bf10392bbaaa97f7fb55fe3500b0782845a7804afbbe98013979",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_cd6de3c9d5f206254cebe55834f6e422",
@@ -93,12 +93,12 @@
       "shapeFingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
       "parentFingerprint": "sha256:e76b543dca1077c6c157e08c3e29a199dc18515ccd81028d2851c20fc6ad9fc7",
       "anchor": {
-        "start": 117,
+        "start": 110,
         "length": 9
       },
       "contextBefore": "sha256:e764406da39e2ca4379ddb80d770a265413c7e440ddb0278a0287d82906b5f0e",
       "contextAfter": "sha256:b07858280f3b3877fa868554fd6ee2150190334789f5c66382db7eb99bacf9d8",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_dc6cd509b8734b56845c25b40a84baf0",
@@ -109,12 +109,12 @@
       "shapeFingerprint": "sha256:a36e5482572d89f0b6d71ebf65216152b2c103d6e3cf73056b6a8200dd9746c4",
       "parentFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
       "anchor": {
-        "start": 163,
+        "start": 156,
         "length": 1
       },
       "contextBefore": "sha256:05a870fd7f73bf10392bbaaa97f7fb55fe3500b0782845a7804afbbe98013979",
       "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
-      "generation": 1
+      "generation": 2
     },
     {
       "id": "us_f86d690b291772f40e971c721ae9bca8",
@@ -125,12 +125,28 @@
       "shapeFingerprint": "sha256:97dfc011af7deb2eb3642f6adcb1d3492429c887441be3bcddfab3628d6fdf17",
       "parentFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
       "anchor": {
-        "start": 150,
+        "start": 143,
         "length": 9
       },
       "contextBefore": "sha256:b07858280f3b3877fa868554fd6ee2150190334789f5c66382db7eb99bacf9d8",
       "contextAfter": "sha256:0b0619ca98e9f7a1d938d7b59077d24c16350a6c1fefb43ff731e56d7559db94",
-      "generation": 1
+      "generation": 2
+    },
+    {
+      "id": "us_feb06f2e31dedbc44881f0b70364ab62",
+      "kind": "function",
+      "owner": "Game.NestedInputRules.Run(int)",
+      "role": "function",
+      "fingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "shapeFingerprint": "sha256:c8d566369fe179390f5e6e3bbd16c1368461ad569207459f81b8009987a199a2",
+      "parentFingerprint": "sha256:e76b543dca1077c6c157e08c3e29a199dc18515ccd81028d2851c20fc6ad9fc7",
+      "anchor": {
+        "start": 75,
+        "length": 89
+      },
+      "contextBefore": "sha256:0b9700cf551d0b232ae4fc8ddc904e879bc40969a60cc2cbd0b576b0a4ef2e21",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 2
     }
   ],
   "tombstones": []

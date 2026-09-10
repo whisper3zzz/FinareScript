@@ -215,7 +215,7 @@ the same plan coordinator used by while, do-while, and for.
 Analyze the text-authored array loop:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/ForEachRules.cs \
   --out artifacts/foreach
 ```
@@ -223,7 +223,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 Run the visual construction sample:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/ForEachBuildRules.cs \
   --identity samples/Patching/ForEachBuildRules.cs.usids \
@@ -240,7 +240,7 @@ same indexed foreach Graph contract.
 Analyze the disposal-aware enumerator sample:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Loops/EnumerableForEachRules.cs \
   --out artifacts/enumerable-foreach
 ```
@@ -249,7 +249,7 @@ Build and reconnect an `IEnumerable<int>` loop through the same visual
 protocol:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EnumerableForEachBuildRules.cs \
   --identity samples/Patching/EnumerableForEachBuildRules.cs.usids \

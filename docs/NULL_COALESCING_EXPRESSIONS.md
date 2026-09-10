@@ -125,7 +125,7 @@ effects are required, author explicit statement-level control flow.
 Generate the sample with:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   analyze samples/Expressions/CoalesceRules.cs \
   --out artifacts/coalesce
 ```

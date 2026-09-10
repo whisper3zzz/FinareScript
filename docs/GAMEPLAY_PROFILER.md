@@ -7,7 +7,7 @@ Status: M9.3 attribution slice, schema
 
 The gameplay profiler attributes one managed script Tick across the same
 boundaries that determine real frame cost. It is opt-in and scoped to one live
-`UUnifiedScriptComponent`; normal gameplay keeps the counters disabled.
+`UFinareComponent`; normal gameplay keeps the counters disabled.
 
 Each captured frame records:
 
@@ -28,7 +28,7 @@ history.
 
 ## Unreal workflow
 
-Select a running component in the UnifiedScript Debug panel, then:
+Select a running component in the Finare Debug panel, then:
 
 1. choose **Start Profile**;
 2. reproduce the gameplay frame or interval;
@@ -39,7 +39,7 @@ Select a running component in the UnifiedScript Debug panel, then:
 5. select any hotspot, or choose **Focus Hot Node**, to jump to the matching
    node in the active authoring surface;
 6. choose **Save JSON** to persist the exact portable trace under
-   `Saved/UnifiedScript/Profiles`.
+   `Saved/Finare/Profiles`.
 
 The summary separates script time from World scheduler time and displays the
 direct, CallFrame, reflection, batch, command/event, allocation, and pressure
@@ -109,7 +109,7 @@ trace's frame, node, and boundary collection limits.
 The checked-in fixture is reproducible with:
 
 ```powershell
-dotnet run --project src/UnifiedScript.Cli -- `
+dotnet run --project src/Finare.Cli -- `
   ue-profile-diagnose `
   --baseline samples/Unreal/Diagnostics/GameplayDiagnosis.baseline.json `
   --current samples/Unreal/Diagnostics/GameplayDiagnosis.current.json `
@@ -146,8 +146,8 @@ published command event:
 
 ```powershell
 & D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe `
-  HostProject\UEUnifiedScriptHost.uproject `
-  -ExecCmds="Automation RunTests UnifiedScript.Unreal.Profiler.FullAttribution;Quit" `
+  HostProject\FinareHost.uproject `
+  -ExecCmds="Automation RunTests Finare.Unreal.Profiler.FullAttribution;Quit" `
   -Unattended -NullRHI -NoSound -NoSplash
 ```
 

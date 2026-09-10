@@ -10,20 +10,20 @@ The first slice has four explicit boundaries:
 
 ```text
 UE 5.7/5.8 native reflection
-  -> UnifiedScriptExport commandlet
+  -> FinareExport commandlet
   -> unifiedscript.unreal-reflection/v0.5
-  -> UnifiedScript.Unreal binding generator
+  -> Finare.Unreal binding generator
   -> typed C# wrappers over IUnrealInvocationBridge
 ```
 
-The checked-in host is `HostProject/UEUnifiedScriptHost.uproject`. Its plugin
+The checked-in host is `HostProject/FinareHost.uproject`. Its plugin
 contains:
 
-- `UEUnifiedScriptRuntime`: `UUnifiedScriptComponent` and the eventual native
+- `FinareRuntime`: `UFinareComponent` and the eventual native
   runtime/lifetime bridge;
-- `UEUnifiedScriptEditor`: reflection export and native Slate authoring tooling.
+- `FinareEditor`: reflection export and native Slate authoring tooling.
 
-The .NET `UnifiedScript.Unreal` project contains no UE dependency. It owns the
+The .NET `Finare.Unreal` project contains no UE dependency. It owns the
 wire contract, validation, normalization, managed wrapper generation, and the
 handle-only bridge API. This makes the extractor and generator testable without
 launching an editor and prevents engine upgrades from contaminating HIR,
@@ -76,7 +76,7 @@ marshalling and class-default-object rules exist.
 
 ## Phase B.1 UObject lifetime boundary
 
-`FUnifiedScriptObjectRegistry` is the native authority for those handles. Each
+`FFinareObjectRegistry` is the native authority for those handles. Each
 registry is bound to one `UWorld`, stores only `TWeakObjectPtr<UObject>`, and
 requires the game thread for registration, resolution, release, and bulk
 invalidation. Duplicate registration returns the existing handle. A released or
@@ -94,15 +94,15 @@ this slice.
 The native Automation Test covers registration identity, world isolation,
 release/reuse, off-thread rejection, GC deletion, and stale lookup. It compiles,
 links, and passes under an installed UE 5.8.1 Release build. The same host also
-runs `UnifiedScriptExport` successfully, producing one fixture type with three
+runs `FinareExport` successfully, producing one fixture type with three
 properties and two functions; that live manifest passes the managed binding
 generator. A separate source-engine checkout had corrupt local DLL outputs, but
 that was an engine-build artifact rather than a UE 5.8 compatibility boundary.
 
 ## Phase B.2 primitive invocation core
 
-`FUnifiedScriptInvocationBridge` resolves every target through
-`FUnifiedScriptObjectRegistry` before member lookup. It accepts the exact
+`FFinareInvocationBridge` resolves every target through
+`FFinareObjectRegistry` before member lookup. It accepts the exact
 `/Script/Module.Type:Member` identities emitted into generated wrappers, checks
 the target class and Blueprint access flags, and owns all transported values.
 No property address, parameter buffer, or UObject pointer escapes the call.
@@ -123,7 +123,7 @@ value kinds used by the native core. Native invocation and handle categories are
 preserved in `UnrealInvocationException`; the numeric values are fixed on both
 sides of the boundary.
 
-The checked-in generated `UnifiedScriptComponent` wrapper is compiled into the
+The checked-in generated `FinareComponent` wrapper is compiled into the
 .NET test suite. It reads and writes all fixture properties, calls `Add` and
 `RequestReload`, and preserves a simulated native stale-handle failure through
 an injected `IUnrealNativeInvocationTransport`. This proves generated-wrapper
@@ -131,7 +131,7 @@ and CLR-side semantics without pretending that the process boundary exists.
 
 ## Phase B.4 versioned in-process transport
 
-`UEUnifiedScript_GetNativeTransportV1` exports a size-checked native function
+`Finare_GetNativeTransportV1` exports a size-checked native function
 table for property reads, property writes, and function calls. Responses use a
 synchronous callback whose UTF-8 slices are valid only for the callback, so the
 managed side copies them immediately and neither runtime frees memory allocated
@@ -147,9 +147,9 @@ also exposes context retain/release operations; the managed transport implements
 
 ## Phase B.5 world host and bridge-context lifetime
 
-`UUnifiedScriptWorldSubsystem` is instantiated once for each supported Game,
+`UFinareWorldSubsystem` is instantiated once for each supported Game,
 PIE, or Editor World. It exclusively owns that World's weak-object registry and
-invocation bridge. Its opaque `FUnifiedScriptNativeBridgeContext` starts with one
+invocation bridge. Its opaque `FFinareNativeBridgeContext` starts with one
 host reference; each managed transport retains another reference during
 construction and releases it on disposal.
 
@@ -166,8 +166,8 @@ the process host, managed World entry, and hosted C# demo on this lifetime base.
 
 ## Phase B.6 process CoreCLR bootstrap
 
-`FUnifiedScriptCoreClrHost` discovers .NET through
-`UNIFIEDSCRIPT_DOTNET_ROOT`, `DOTNET_ROOT`, or the engine-bundled .NET 10 runtime.
+`FFinareCoreClrHost` discovers .NET through
+`FINARE_DOTNET_ROOT`, `DOTNET_ROOT`, or the engine-bundled .NET 10 runtime.
 It dynamically loads hostfxr, initializes the checked-in runtimeconfig, and
 acquires `load_assembly_and_get_function_pointer`. CoreCLR is process-wide;
 World isolation will be provided by managed collectible load contexts rather
@@ -179,7 +179,7 @@ entry-point invocation, and per-World unload are completed in Phase B.7.
 
 ## Phase B.7 managed World entry and collectible domain
 
-The `UnifiedScript.Unreal` build stages its managed host DLL and dependency
+The `Finare.Unreal` build stages its managed host DLL and dependency
 manifest under the plugin's ignored `Binaries/Managed` directory. The native
 process host resolves three `UnmanagedCallersOnly` methods: create World, destroy
 World, and query active World count.
@@ -193,13 +193,13 @@ returns to baseline as both Worlds are destroyed.
 
 ## Phase B.8 hosted managed demo
 
-`UnifiedScript.Unreal.Demo.dll` is staged beside the managed host. Its
-`DemoScript` constructs the checked-in generated `UnifiedScriptComponent`
+`Finare.Unreal.Demo.dll` is staged beside the managed host. Its
+`DemoScript` constructs the checked-in generated `FinareComponent`
 wrapper and proves live property access plus `Add(20, 22) == 42`.
 
 ## Phase B.9 component-driven lifecycle and reload
 
-`UUnifiedScriptComponent` now exposes `ScriptAssemblyPath`, `ScriptTypeName`,
+`UFinareComponent` now exposes `ScriptAssemblyPath`, `ScriptTypeName`,
 automatic start/tick switches, running state, active generation, and last error.
 `BeginPlay` registers the component and dispatches managed `OnStart`; Tick calls
 `OnTick`; `EndPlay` calls `OnStop` before releasing the UObject handle.
@@ -218,14 +218,14 @@ powershell -ExecutionPolicy Bypass -File tools/run-unreal-demo.ps1 -EngineRoot D
 ```
 
 The same demo can be attached to an Editor actor by creating a
-`UnifiedScriptAsset` Data Asset and configuring:
+`FinareAsset` Data Asset and configuring:
 
 ```text
-ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll
-ScriptTypeName     = UnifiedScript.Unreal.Demo.DemoScript
+ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/Finare.Unreal.Demo.dll
+ScriptTypeName     = Finare.Unreal.Demo.DemoScript
 ```
 
-Assign the Data Asset to `UnifiedScriptComponent.Script Asset`. The component's
+Assign the Data Asset to `FinareComponent.Script Asset`. The component's
 direct fields remain available under advanced settings for compatibility.
 
 ## Phase B.10 generated native fast thunks
@@ -235,9 +235,9 @@ FNV-1a and emits the 64-bit ID beside its readable path. `UnrealObject` selects
 `IUnrealFastInvocationBridge` when available and otherwise calls the original
 string-path bridge, so old injected bridges and ABI v1 hosts remain compatible.
 
-`UEUnifiedScript_GetNativeTransportV2` preserves the complete ABI v1 prefix and
+`Finare_GetNativeTransportV2` preserves the complete ABI v1 prefix and
 appends read/write/invoke entry points keyed by Member ID. The first generated
-native thunk table covers the full reflected `UUnifiedScriptComponent` surface.
+native thunk table covers the full reflected `UFinareComponent` surface.
 It still resolves the world-scoped weak handle first, then accesses fields or
 calls C++ methods directly without path decoding, `FProperty` lookup,
 `FStructOnScope`, or `ProcessEvent`. Native and managed tests cover both ABI
@@ -254,10 +254,10 @@ from the C++ lower bound.
 
 ## Phase B.11 Script Asset resolution and transactional reload
 
-`UUnifiedScriptAsset` is a native UE Data Asset with schema version, managed
+`UFinareAsset` is a native UE Data Asset with schema version, managed
 assembly path, managed type name, and optional authoring source path. It can be
 created through the ordinary Content Browser Data Asset flow and selected on a
-`UUnifiedScriptComponent`. Components may alternatively load the same asset from
+`UFinareComponent`. Components may alternatively load the same asset from
 `ScriptAssetPath`; direct assembly/type fields remain an advanced compatibility
 fallback.
 
@@ -312,7 +312,7 @@ thunks for containers or `out`/`ref` functions because the legacy value contract
 cannot preserve those shapes.
 
 The checked-in runtime thunk file is generated from the checked-in live UE 5.8
-manifest, including `UUnifiedScriptInteropFixture`, and a golden test prevents
+manifest, including `UFinareInteropFixture`, and a golden test prevents
 it from drifting. UE Automation executes generated int64, enum, FVector, and
 FTransform property/function thunks against that fixture. ABI v1/v2 remain
 available for existing hosts. Without changing the frozen v1 table or value
@@ -391,8 +391,8 @@ and entry point is compatible.
 
 ## Phase B.13 Declaration IR state materialization
 
-`UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
-asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
+`UFinareAsset` now carries an optional declaration JSON path and exact
+asset key. `UFinareComponent.RefreshScriptState` parses
 `unifiedscript.script-asset/v0.1`, maps the reviewed scalar/enum plus `FName`,
 `FText`, `UObject`, `UClass`, soft-object/soft-class paths, `FVector`, `FRotator`
 and `FTransform` state matrix, plus reviewed Array/Set/Map configuration, into a
@@ -493,11 +493,11 @@ it across Reload, and currently reports `DeclarationState=37`, `FastCalls=20`,
 
 ## Phase B.14 native Slate Authoring Surface
 
-The editor module now registers a `UnifiedScript Authoring` nomad tab and a
+The editor module now registers a `Finare Authoring` nomad tab and a
 Tools-menu entry. Its native Slate workspace consumes only the strict
 `unifiedscript.authoring-surface/v0.4` artifact; it does not parse C# or recreate
 Graph semantics inside Unreal. A surface can be opened directly, loaded from
-the selected `UUnifiedScriptAsset.AuthoringSurfacePath`, reset to the staged
+the selected `UFinareAsset.AuthoringSurfacePath`, reset to the staged
 Demo, and automatically refreshed when its file changes.
 
 The workspace presents Script Asset state and behavior as a semantic hierarchy:
@@ -624,8 +624,8 @@ new compiler-owned Surface.
 
 ## Phase B.20 managed UObject and Actor object model
 
-`AUnifiedScriptActor` is now a placeable, Blueprintable native identity with a
-default `UUnifiedScriptComponent` and Blueprint-visible managed state. Managed
+`AFinareActor` is now a placeable, Blueprintable native identity with a
+default `UFinareComponent` and Blueprint-visible managed state. Managed
 gameplay code can derive from `UnrealObjectScript` or `UnrealActorScript`; the
 latter maps the component lifecycle onto `OnBeginPlay`, `OnTick`, and
 `OnEndPlay` overrides.
@@ -638,7 +638,7 @@ are released after managed EndPlay, and are recreated without aliasing during a
 new instance. Reload cancels and tears down the old managed lifetime before the
 next generation receives BeginPlay.
 
-The live UE 5.8 Automation gate spawns `AUnifiedScriptActor`, starts
+The live UE 5.8 Automation gate spawns `AFinareActor`, starts
 `ActorDemoScript`, writes a Blueprint-visible Actor property, ticks through a
 generated native thunk, reloads into generation two, and verifies managed
 EndPlay executes before both handles are retired.
@@ -668,7 +668,7 @@ reflected multicast delegates.
 ## Phase B.22 arbitrary reflected delegates and visual Event Entries
 
 Reflection manifest v0.2 exports Blueprint-assignable delegates with canonical
-paths and ordered value shapes. Types tagged `UnifiedScriptBindingInternal` are
+paths and ordered value shapes. Types tagged `FinareBindingInternal` are
 excluded, so the transient native dispatch proxy never appears as a user API.
 The binding generator emits a strong handler delegate, a typed subscribe method,
 and an `UnrealEventEndpointAttribute` keyed by the canonical path.
@@ -701,7 +701,7 @@ gate proves a failed `MissingScript` reload reports `ReloadScript` plus the
 Blueprint function libraries now generate as `UnrealStaticService` wrappers.
 Their managed instance retains the ordinary World context handle, while the
 native thunk invokes the static C++ function directly and never casts that
-context to the library class. `UUnifiedScriptWorldLibrary` supplies typed
+context to the library class. `UFinareWorldLibrary` supplies typed
 object/class loading, Actor spawn and destroy, component lookup, input polling,
 World time, and visibility tracing. Synchronously loaded objects are retained by
 the World subsystem until teardown, so a managed handle cannot become stale
@@ -735,7 +735,7 @@ longer contains resource, trace, cached-hit, effect, or damage facade functions.
 The complete migration inventory covers 74/74 source and native items and the
 target contains no Puerts/TypeScript payload. The matched three-trial
 10,000-frame gate prepares both runtimes once, alternates execution order, and
-currently reports a local median of 4,927.191 ms for UnifiedScript versus
+currently reports a local median of 4,927.191 ms for Finare versus
 4,759.930 ms for Puerts (ratio 1.035139). This is functional evidence, not a
 performance claim; the accepted performance workload remains an M10 gate.
 
@@ -743,7 +743,7 @@ The performance gate builds managed code in Release, warms both runtimes with
 4,096 calls, measures five 100,000-call samples, and uses the median. A
 competitive Puerts result must match machine fingerprint, engine, platform,
 configuration, warm-up, iteration count, and sample count. The checked gate
-requires zero managed allocation and a UnifiedScript/Puerts ratio no greater
+requires zero managed allocation and a Finare/Puerts ratio no greater
 than 0.95; without a matched Puerts result the competitive verdict remains
 empty. The generated scalar ABI v3 lane avoids generic call-frame construction
 for the measured fixed signature while preserving the complete marshaller for
@@ -930,7 +930,7 @@ signatures must remain compatible; cold Worlds stay unloaded. Optional managed
 control exports preserve ordinary dispatch with an older host while reporting
 the reload feature as unavailable. No invocation ABI layout changes are needed.
 
-The dedicated `UnifiedScript.Unreal.ScriptClass.StaticLibraryReload` CMD test
+The dedicated `Finare.Unreal.ScriptClass.StaticLibraryReload` CMD test
 uses separately compiled v1/v2/incompatible DLLs and ordinary Blueprint callers
 in two existing Worlds. It covers changed results, commit/abort restoration,
 rejected candidates, cold-World exclusion, daily-action target deduplication
@@ -972,7 +972,7 @@ read its ordered results. Pure `out` parameters need no input placeholder:
 
 ```csharp
 [UnrealBlueprintOverride(
-    "/Script/UEUnifiedScriptRuntime.UnifiedScriptEventExtensionFixture",
+    "/Script/FinareRuntime.FinareEventExtensionFixture",
     "EvaluateInherited")]
 public int EvaluateInherited(int input, ref int accumulator, out int output)
 {
@@ -989,7 +989,7 @@ reflected event path and signature. `GetOutput(index)` supports the current
 Visual C# subset without an indexer or explicit generic member invocation.
 `CallParent<TResult>` is also available to source-only helper code for an
 input-only return contract. The
-[Demo source](../samples/Unreal/UnifiedScript.Unreal.Demo/BlueprintParentInvocationDemoScript.cs)
+[Demo source](../samples/Unreal/Finare.Unreal.Demo/BlueprintParentInvocationDemoScript.cs)
 includes the container form using `IReadOnlyList<int>`.
 
 Parent resolution starts above the active Script Class in the actual UE class
@@ -1062,7 +1062,7 @@ the compatible DLL, the second component can reload independently.
 
 Build the isolated variants with `tools/build-blueprint-event-reload-fixture.ps1`,
 then run CMD Automation selector
-`UnifiedScript.Unreal.ScriptClass.BlueprintEventOverrideReload`. Its default
+`Finare.Unreal.ScriptClass.BlueprintEventOverrideReload`. Its default
 fixture directory is `artifacts/m13-3c-2-event-reload/fixture`; an optional
 `-BlueprintEventReloadFixtureRoot` overrides it. The test configures the real
 instances before BeginPlay and restores the active DLL afterward. Actor native
@@ -1071,11 +1071,11 @@ subobject default inheritance remains C-3 work. Detailed evidence is in the
 
 Prepare the separate inherited Actor state fixture with
 `tools/build-blueprint-inherited-state-fixture.ps1`, then run CMD Automation
-selector `UnifiedScript.Unreal.ScriptClass.InheritedActorStateRuntime`. Use
+selector `Finare.Unreal.ScriptClass.InheritedActorStateRuntime`. Use
 Editor mode with `-NullRHI`; `-game` omits the Editor module that owns this test.
 The default config is
 `artifacts/m13-3c-3-inherited-runtime/fixture/BlueprintInheritedStateFixture.config.json`;
-`-UnifiedScriptInheritedStateFixture=<config>` selects another generated config.
+`-FinareInheritedStateFixture=<config>` selects another generated config.
 The builder's `-OutputRoot` stays below `artifacts` and is shared by build and
 emit. It references the already deployed managed host DLLs, so rebuilding the
 fixture after a local commit does not silently select a differently stamped
@@ -1105,13 +1105,13 @@ the latest verified boundary; this workflow does not close general C# base-state
 inheritance or class asset-operation coverage by itself.
 
 Run CMD Automation selector
-`UnifiedScript.Unreal.ScriptClass.InheritedClassAssetOperations` for the separate
+`Finare.Unreal.ScriptClass.InheritedClassAssetOperations` for the separate
 factory Rename/Duplicate/Delete inheritance regression. It uses the configured
 onboarding deployment manifest, creates GUID-named ordinary child/grandchild
 assets, verifies native defaults and ownership through rollback and package
 reload, and restores its shared-file snapshots during cleanup. Its native Actor
 spawn checks do not start the factory-generated managed source. The existing
-`UnifiedScript.Unreal.ScriptClass.AssetOperations` selector covers the associated
+`Finare.Unreal.ScriptClass.AssetOperations` selector covers the associated
 source/deployment transaction and soft-reference cases.
 
 ## Commands
@@ -1129,7 +1129,7 @@ tools/ue-adapter.sh verify
 Direct CLI generation of both managed and native sides:
 
 ```bash
-unifiedscript ue-bindings reflection.json \
+finare ue-bindings reflection.json \
   --contract game.unreal-api-contract.json \
   --out bindings.cs \
   --native-out native-thunks.generated.cpp \
@@ -1140,19 +1140,19 @@ unifiedscript ue-bindings reflection.json \
 
 For project-owned ABI v3 fast bindings, pass `--native-header` and a globally
 unique `--native-namespace`, compile the emitted C++ in that game module, and
-register its `FUnifiedScriptGeneratedThunkTable` for the module lifetime.
+register its `FFinareGeneratedThunkTable` for the module lifetime.
 
 Set an explicit engine when discovery is ambiguous:
 
 ```bash
-UNIFIEDSCRIPT_UE_ROOT=/path/to/UnrealEngine tools/ue-adapter.sh verify
+FINARE_UE_ROOT=/path/to/UnrealEngine tools/ue-adapter.sh verify
 ```
 
 The TargetRules use the selected engine's `Latest` build settings and include
 order, mapping to V6/5.7 for UE 5.7 and V7/5.8 for UE 5.8. The helper build
-target is `UEUnifiedScriptHostEditor Mac Development`. Export invokes
-the editor headlessly with `-run=UnifiedScriptExport` and defaults to the
-`UEUnifiedScriptRuntime` module. Runtime artifacts are written to
+target is `FinareHostEditor Mac Development`. Export invokes
+the editor headlessly with `-run=FinareExport` and defaults to the
+`FinareRuntime` module. Runtime artifacts are written to
 `artifacts/ue/`.
 
 ## External exFAT engine

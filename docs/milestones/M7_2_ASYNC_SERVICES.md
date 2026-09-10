@@ -26,14 +26,14 @@ Status: **complete**.
 - product coverage: 98 members, 96 native paths, zero rejected;
 - UE 5.8.1: bootstrap and final editor builds passed;
 - Automation: 12/12 passed, including
-  `UnifiedScript.Unreal.AsyncService.DelayLoadCancelAndLifecycle`;
+  `Finare.Unreal.AsyncService.DelayLoadCancelAndLifecycle`;
 - onboarding: `artifacts/onboarding/m7-2-lifecycle-20260827.json`, passed in
   110,938 ms with deterministic regeneration, deployment, CoreCLR startup, and
   all 12 Automation tests.
 
 ## Completed lifecycle stress matrix
 
-`UnifiedScript.Unreal.WorldHost.LifecycleStress` exercises real lifecycle
+`Finare.Unreal.WorldHost.LifecycleStress` exercises real lifecycle
 transitions rather than only single-operation correctness:
 
 1. deletes a managed Actor target while a class load and long timer are owned;

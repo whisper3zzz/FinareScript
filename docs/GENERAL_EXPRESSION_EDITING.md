@@ -249,7 +249,7 @@ if (enabled)
 Run its three-step direct plan:
 
 ```bash
-dotnet run --project src/UnifiedScript.Cli -- \
+dotnet run --project src/Finare.Cli -- \
   apply-plan \
   samples/Patching/EditDecisionValues.cs \
   --identity samples/Patching/EditDecisionValues.cs.usids \

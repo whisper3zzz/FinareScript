@@ -2,7 +2,7 @@
 
 using System;
 
-namespace UnifiedScript.Samples.Expressions;
+namespace Finare.Samples.Expressions;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class VisualAttribute : Attribute;

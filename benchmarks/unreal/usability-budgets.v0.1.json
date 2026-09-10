@@ -78,7 +78,7 @@
       ],
       "requiredEvidenceMarkers": [
         "Test Completed. Result={Success} Name={ReloadBatchPreflight}",
-        "UnifiedScript demo completed: DeclarationState=37, ReflectedEvent=73"
+        "Finare demo completed: DeclarationState=37, ReflectedEvent=73"
       ],
       "rationale": "A body-compatible daily edit may rebuild managed gameplay and its compiled chunk only; native/schema invalidation or an Editor restart is a regression for this scenario."
     }

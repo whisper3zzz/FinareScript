@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)]
     [string]$SdkArchive,
 
-    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$EngineRoot = $env:FINARE_UE_ROOT,
 
     [string]$OutputDirectory
 )
@@ -55,7 +55,7 @@ function Get-ProductSnapshot {
         if ($relative.StartsWith('Saved/', [StringComparison]::OrdinalIgnoreCase) -or
             $relative -match '^Managed/[^/]+/(?:bin|obj)/' -or
             $relative.StartsWith(
-                'Plugins/UEUnifiedScript/Binaries/Managed/Scripts/',
+                'Plugins/Finare/Binaries/Managed/Scripts/',
                 [StringComparison]::OrdinalIgnoreCase)) {
             continue
         }
@@ -71,7 +71,7 @@ function Invoke-AdoptionCli {
 
     & $Cli @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
+        throw "Finare CLI failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
 }
 
@@ -80,7 +80,7 @@ function Invoke-AdoptionCliJson {
 
     $output = @(& $Cli @Arguments)
     if ($LASTEXITCODE -ne 0) {
-        throw "UnifiedScript CLI failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
+        throw "Finare CLI failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
     return (($output -join "`n") | ConvertFrom-Json)
 }
@@ -122,9 +122,9 @@ $sdkRoot = Get-ChildItem -LiteralPath $extractRoot -Directory |
 if ([string]::IsNullOrWhiteSpace($sdkRoot)) {
     throw 'The SDK archive has no top-level directory.'
 }
-$cli = Join-Path $sdkRoot 'Tools\unifiedscript.cmd'
+$cli = Join-Path $sdkRoot 'Tools\finare.cmd'
 if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-    throw "Packaged UnifiedScript entry point is missing: $cli"
+    throw "Packaged Finare entry point is missing: $cli"
 }
 $results = [Collections.Generic.List[object]]::new()
 foreach ($fixture in @(
@@ -133,7 +133,7 @@ foreach ($fixture in @(
     $project = [string]$fixture.project
     $projectRoot = [string]$fixture.root
     $before = Get-ProductSnapshot -ProjectRoot $projectRoot
-    $previewPath = Join-Path $projectRoot 'Saved\UnifiedScript\Adoption\preview.json'
+    $previewPath = Join-Path $projectRoot 'Saved\Finare\Adoption\preview.json'
     Invoke-AdoptionCli `
         -Cli $cli `
         -Arguments @('adopt', $project, '--sdk-root', $sdkRoot, '--preview', '--report', $previewPath)
@@ -149,24 +149,24 @@ foreach ($fixture in @(
         -Cli $cli `
         -Arguments @('adopt', $project, '--sdk-root', $sdkRoot)
     $projectName = [IO.Path]::GetFileNameWithoutExtension($project)
-    $assemblyName = "$projectName.UnifiedScript"
+    $assemblyName = "$projectName.Finare"
     foreach ($required in @(
-            'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
-            'Plugins\UEUnifiedScript\Tools\UnifiedScript.Cli\UnifiedScript.Cli.exe',
-            'Plugins\UEUnifiedScript\Tools\unifiedscript.cmd',
-            'Plugins\UEUnifiedScript\Tools\setup-unreal-project.ps1',
-            'Plugins\UEUnifiedScript\Tools\run-unifiedscript-onboarding-after-process.ps1',
-            'Plugins\UEUnifiedScript\Tools\start-unifiedscript-authoring.ps1',
-            'Plugins\UEUnifiedScript\Tools\Documentation\DOCUMENTATION.md',
-            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_FIRST_PROJECT.md',
-            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_GAMEPLAY_RECIPES.md',
-            'Plugins\UEUnifiedScript\Tools\Documentation\UNREAL_USABILITY.md',
-            'Plugins\UEUnifiedScript\Authoring\Workbench\index.html',
+            'Plugins\Finare\Finare.uplugin',
+            'Plugins\Finare\Tools\Finare.Cli\Finare.Cli.exe',
+            'Plugins\Finare\Tools\finare.cmd',
+            'Plugins\Finare\Tools\setup-unreal-project.ps1',
+            'Plugins\Finare\Tools\run-finare-onboarding-after-process.ps1',
+            'Plugins\Finare\Tools\start-finare-authoring.ps1',
+            'Plugins\Finare\Tools\Documentation\DOCUMENTATION.md',
+            'Plugins\Finare\Tools\Documentation\UNREAL_FIRST_PROJECT.md',
+            'Plugins\Finare\Tools\Documentation\UNREAL_GAMEPLAY_RECIPES.md',
+            'Plugins\Finare\Tools\Documentation\UNREAL_USABILITY.md',
+            'Plugins\Finare\Authoring\Workbench\index.html',
             "Managed\$assemblyName\FirstScript.cs",
             "Managed\$assemblyName\$assemblyName.slnx",
-            'Managed\UnifiedScript.ide.json',
-            "$projectName.UnifiedScript.code-workspace",
-            'Config\UnifiedScript.onboarding.json')) {
+            'Managed\Finare.ide.json',
+            "$projectName.Finare.code-workspace",
+            'Config\Finare.onboarding.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $required) -PathType Leaf)) {
             throw "Adoption output is missing: $required"
         }
@@ -177,19 +177,19 @@ foreach ($fixture in @(
         throw "Generated IDE solution does not reference the managed project for $project"
     }
     $workspace = Get-Content -LiteralPath `
-        (Join-Path $projectRoot "$projectName.UnifiedScript.code-workspace") `
+        (Join-Path $projectRoot "$projectName.Finare.code-workspace") `
         -Raw | ConvertFrom-Json
     $workspaceTasks = @($workspace.tasks.tasks | ForEach-Object { [string]$_.label })
-    if ('UnifiedScript: Build managed gameplay' -notin $workspaceTasks -or
-        'UnifiedScript: Build and prepare Unreal' -notin $workspaceTasks -or
-        'UnifiedScript: Validate project' -notin $workspaceTasks -or
+    if ('Finare: Build managed gameplay' -notin $workspaceTasks -or
+        'Finare: Build and prepare Unreal' -notin $workspaceTasks -or
+        'Finare: Validate project' -notin $workspaceTasks -or
         @($workspace.launch.configurations | Where-Object {
             $_.type -eq 'coreclr' -and $_.request -eq 'attach'
         }).Count -ne 1) {
         throw "Generated IDE workspace lacks build, validate, or debugger configuration for $project"
     }
     $ideManifest = Get-Content -LiteralPath `
-        (Join-Path $projectRoot 'Managed\UnifiedScript.ide.json') `
+        (Join-Path $projectRoot 'Managed\Finare.ide.json') `
         -Raw | ConvertFrom-Json
     if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
         $ideManifest.typedApi.generatedBindings -ne
@@ -203,8 +203,8 @@ foreach ($fixture in @(
     # generated-surface publication have run.
     $afterAdoption = Get-ProductSnapshot -ProjectRoot $projectRoot
 
-    $projectPlugin = Join-Path $projectRoot 'Plugins\UEUnifiedScript'
-    $projectCli = Join-Path $projectPlugin 'Tools\unifiedscript.cmd'
+    $projectPlugin = Join-Path $projectRoot 'Plugins\Finare'
+    $projectCli = Join-Path $projectPlugin 'Tools\finare.cmd'
     $firstProjectGuide = Invoke-AdoptionCliJson `
         -Cli $projectCli `
         -Arguments @('guide', 'first-project', '--json')
@@ -221,7 +221,7 @@ foreach ($fixture in @(
         throw "Project-local product guidance did not resolve installed documentation for $project"
     }
     $doctorReportPath = Join-Path $projectRoot `
-        'Saved\UnifiedScript\ProjectSetup\doctor-report.json'
+        'Saved\Finare\ProjectSetup\doctor-report.json'
     $doctorArguments = @('doctor', $project, '--report', $doctorReportPath)
     if (-not [string]::IsNullOrWhiteSpace($EngineRoot)) {
         $doctorArguments += @('--engine-root', [IO.Path]::GetFullPath($EngineRoot))
@@ -244,7 +244,7 @@ foreach ($fixture in @(
         throw "Project-local doctor did not validate the installed tools for $project"
     }
 
-    $diagnosticsInput = Join-Path $projectRoot 'Saved\UnifiedScript\EditorDiagnostics'
+    $diagnosticsInput = Join-Path $projectRoot 'Saved\Finare\EditorDiagnostics'
     New-Item -ItemType Directory -Force -Path $diagnosticsInput | Out-Null
     $editorDiagnostic = [ordered]@{
         schemaVersion = 'unifiedscript.editor-diagnostics/v0.2'
@@ -274,14 +274,14 @@ foreach ($fixture in @(
         ($editorDiagnostic | ConvertTo-Json -Depth 8) + "`n",
         [Text.UTF8Encoding]::new($false))
     $supportBundlePath = Join-Path $projectRoot `
-        'Saved\UnifiedScriptSupport\UnifiedScriptSupport.zip'
+        'Saved\FinareSupport\FinareSupport.zip'
     New-Item -ItemType Directory -Force -Path `
         ([IO.Path]::GetDirectoryName($supportBundlePath)) | Out-Null
     Invoke-AdoptionCli `
         -Cli $projectCli `
         -Arguments @(
             'diagnostics-bundle',
-            (Join-Path $projectRoot 'Saved\UnifiedScript'),
+            (Join-Path $projectRoot 'Saved\Finare'),
             '--out', $supportBundlePath)
     if (-not (Test-Path -LiteralPath $supportBundlePath -PathType Leaf) -or
         (Get-Item -LiteralPath $supportBundlePath).Length -le 0) {
@@ -289,7 +289,7 @@ foreach ($fixture in @(
     }
 
     $rerunReportPath = Join-Path $projectRoot `
-        'Saved\UnifiedScript\ProjectSetup\adoption-rerun.json'
+        'Saved\Finare\ProjectSetup\adoption-rerun.json'
     Invoke-AdoptionCli `
         -Cli $projectCli `
         -Arguments @(
@@ -341,5 +341,5 @@ $report = [ordered]@{
     durationMs = [long]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 }
 Write-Utf8 -Path $reportPath -Text (($report | ConvertTo-Json -Depth 10) + "`n")
-Write-Host "UnifiedScript packaged adoption: PASS ($($results.Count)/$($results.Count))"
+Write-Host "Finare packaged adoption: PASS ($($results.Count)/$($results.Count))"
 Write-Host $reportPath

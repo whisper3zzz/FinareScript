@@ -1,0 +1,1603 @@
+{
+  "schemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
+  "engine": {
+    "major": 5,
+    "minor": 8,
+    "patch": 1,
+    "branch": "//UE5/Release-5.8"
+  },
+  "summary": {
+    "typeCount": 22,
+    "memberCount": 190,
+    "directThunkCount": 66,
+    "callFrameCount": 121,
+    "dataPlaneOperationCount": 0,
+    "reflectionFallbackCount": 3,
+    "rejectedCount": 0,
+    "nativeThunkCount": 187,
+    "deferredTypeCount": 0
+  },
+  "baseline": {
+    "minimumMemberCount": 105,
+    "minimumDirectThunkCount": 25,
+    "minimumCallFrameCount": 76,
+    "minimumDataPlaneOperationCount": 0,
+    "minimumReflectionFallbackCount": 2,
+    "maximumRejectedCount": 0
+  },
+  "gate": {
+    "passed": true,
+    "diagnostics": []
+  },
+  "entries": [
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:AddFrom(UE::Finare::NativeExample::FCounterChildconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:AddTo(UE::Finare::NativeExample::FCounterChild\u0026,int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Bias",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Clone()",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Create()",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Create(FStringconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Create(UE::Finare::NativeExample::FCounterChildconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Create(int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:EchoStdText(std::stringconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:EchoText(FStringconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Flip(bool)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:GetChild()",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:InvalidOwnedAliasForTest()",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:MixText(UE::Finare::NativeExample::FCounterChildconst\u0026,FStringconst\u0026,int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Multiply(int32,int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:ReadConstPointer(UE::Finare::NativeExample::FCounterChildconst*)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:ReadOptional(UE::Finare::NativeExample::FCounterChild*)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:ReadOptionalConst(UE::Finare::NativeExample::FCounterChildconst*)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:ReadPointer(UE::Finare::NativeExample::FCounterChild*)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Reset()",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Scale(double)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Scale(int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Shift(FVectorconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:StdTextValue",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:Sum(UE::Finare::NativeExample::FCounterChildconst\u0026,UE::Finare::NativeExample::FCounterChildconst\u0026)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounter:TextValue",
+      "ownerPath": "/Native/FinareRuntime.NativeCounter",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounterChild:Add(int32)",
+      "ownerPath": "/Native/FinareRuntime.NativeCounterChild",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Native/FinareRuntime.NativeCounterChild:Value",
+      "ownerPath": "/Native/FinareRuntime.NativeCounterChild",
+      "kind": "property",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "Generated Native Object ABI v1 dispatch; no UObject/reflection fallback.",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/Engine.Actor:K2_SetActorRotation",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.Actor:K2_SetActorTransform",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.Actor:SetTickGroup",
+      "ownerPath": "/Script/Engine.Actor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
+      "ownerPath": "/Script/Engine.GameplayStatics",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:BoneName",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Distance",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ElementIndex",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:FaceIndex",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ImpactNormal",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ImpactPoint",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Item",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Location",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:MyBoneName",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:MyItem",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Normal",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:PenetrationDepth",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Time",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:TraceEnd",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:TraceStart",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:bBlockingHit",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:bStartPenetrating",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.ReplaySubsystem:GetActiveReplayName",
+      "ownerPath": "/Script/Engine.ReplaySubsystem",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.ReplaySubsystem:IsPlaying",
+      "ownerPath": "/Script/Engine.ReplaySubsystem",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.ReplaySubsystem:IsRecording",
+      "ownerPath": "/Script/Engine.ReplaySubsystem",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem",
+      "ownerPath": "/Script/Engine.SubsystemBlueprintLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController",
+      "ownerPath": "/Script/Engine.SubsystemBlueprintLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem",
+      "ownerPath": "/Script/Engine.SubsystemBlueprintLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem",
+      "ownerPath": "/Script/Engine.SubsystemBlueprintLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted",
+      "ownerPath": "/Script/Engine.WorldPartitionSubsystem",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+      "ownerPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [
+        "USUE2008"
+      ],
+      "message": "One or more reflected default parameter literals cannot be projected safely to C#; callers must pass those parameters explicitly."
+    },
+    {
+      "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
+      "ownerPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+      "ownerPath": "/Script/EnhancedInput.EnhancedInputSubsystemInterface",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [
+        "USUE2008"
+      ],
+      "message": "One or more reflected default parameter literals cannot be projected safely to C#; callers must pass those parameters explicitly."
+    },
+    {
+      "path": "/Script/EnhancedInput.ModifyContextOptions:bForceImmediately",
+      "ownerPath": "/Script/EnhancedInput.ModifyContextOptions",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/EnhancedInput.ModifyContextOptions:bIgnoreAllPressedKeysUntilRelease",
+      "ownerPath": "/Script/EnhancedInput.ModifyContextOptions",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/EnhancedInput.ModifyContextOptions:bNotifyUserSettings",
+      "ownerPath": "/Script/EnhancedInput.ModifyContextOptions",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:GetFinareComponent",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:IncrementManagedTickCount",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:ManagedActorState",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:ManagedTickCount",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:ReloadManagedBehavior",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:ScriptComponent",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:SetManagedActorState",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:StartManagedBehavior",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareActor:StopManagedBehavior",
+      "ownerPath": "/Script/FinareRuntime.FinareActor",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:ClearCallback",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:Create",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:Evaluate",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:EvaluateNow",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:FormatReply",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:LastQueryValue",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareCallbackService:StoreCallback",
+      "ownerPath": "/Script/FinareRuntime.FinareCallbackService",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ActiveDeclarationAssetPath",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ActiveGeneration",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ActiveScriptAssetPath",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:Add",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:AddBenchmarkVector",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ApplyBenchmarkActorInput",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:BroadcastBenchmarkSignal",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:BroadcastManagedSignal",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:EchoBenchmarkArray",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:EchoBenchmarkMap",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:GetScriptStateInt32",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:GetScriptTarget",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:IsScriptStateOverridden",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:LastScriptError",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:LastStateMigration",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ManagedState",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:MaterializedStateCount",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:MaterializedStateOverrideCount",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:RefreshScriptState",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ReloadScript",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:RequestReload",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ResetAllScriptStateOverrides",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ResetBenchmarkActorState",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ResetScriptStateOverride",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ScriptAssemblyPath",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ScriptAssetPath",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:ScriptTypeName",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:SetScriptStateInt32",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:StartScript",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:StopScript",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:bScriptRunning",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:bStartAutomatically",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareComponent:bTickAutomatically",
+      "ownerPath": "/Script/FinareRuntime.FinareComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropContract:TransformManagedValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropContract",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:ActorArrayValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:ActorClassSetValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:AddInt64",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:AddVector",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:AddWithDefault",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:BroadcastInteropChanged",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:ByteValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:ClassValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:CountSet",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:DoubleValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoActorArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoActorClassSet",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoClass",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoInterface",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoMap",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoObject",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoSet",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoSoftClassArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoSoftObjectMap",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:EchoTransform",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FixedArity0",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FixedArity1",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FixedArity2",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FixedArity3",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FixedArity4",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:FloatValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:Int32Value",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:Int64Value",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:IntArrayValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:IntMapValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:IntSetValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:InterfaceValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MakeArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:Mode",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateActorArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateActorClasses",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateInterfaces",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateSoftClassArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateSoftObjectMap",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:MutateValues",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:NameValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:ObjectValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:RotatorValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SoftClassArrayValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SoftClassValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SoftObjectMapValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SoftObjectValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:StringLength",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:StringValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SumArray",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:SumMap",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:TextValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:TransformValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareInteropFixture:VectorValue",
+      "ownerPath": "/Script/FinareRuntime.FinareInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Accumulate(TArray\u003Cint32\u003Econst\u0026,int32\u0026,FString\u0026)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:BinaryCalls",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Counter",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Multiply(int32,int32)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Payload",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:ReadBytes()",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Reset()",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Scale(double)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:Scale(int32)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:StoreBytes(FFinareByteBufferconst\u0026)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareNativeExtensionFixture:TransformBytes(FFinareByteBufferconst\u0026,FFinareByteBuffer\u0026,int32\u0026)",
+      "ownerPath": "/Script/FinareRuntime.FinareNativeExtensionFixture",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": "",
+      "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:FindComponentByClass",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:GetWorldTimeSeconds",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:IsInputKeyDown",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:LineTraceSingle",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:LoadClassByPath",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:LoadObjectByPath",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:SpawnActor",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    }
+  ]
+}

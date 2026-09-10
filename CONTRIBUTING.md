@@ -11,7 +11,7 @@
 4. New HIR nodes require graph projection and serialization tests.
 5. Core and graph projects stay independent of Unreal Engine.
 6. UE integration must arrive through adapters after the core model stabilizes.
-7. `UnifiedScript.Semantics` must not expose Roslyn, CLR-hosting, or UE types.
+7. `Finare.Semantics` must not expose Roslyn, CLR-hosting, or UE types.
 8. Unknown calls are effectful by default; purity must be established explicitly.
 9. `.usgraph` layout is non-semantic: layout reconciliation must never mutate
    source, HIR, bound semantics, or `.usids`.
@@ -47,7 +47,7 @@ solely because a final documentation update changed a report fingerprint.
 Underlying commands remain available when their coverage is needed:
 
 ```bash
-dotnet build UnifiedScript.slnx
-dotnet test UnifiedScript.slnx --no-build
+dotnet build Finare.slnx
+dotnet test Finare.slnx --no-build
 python3 tools/validate_project.py
 ```

@@ -1,17 +1,17 @@
 # Privacy-safe diagnostics bundles
 
-`diagnostics-bundle` turns a directory of UnifiedScript gate/report artifacts
+`diagnostics-bundle` turns a directory of Finare gate/report artifacts
 into one deterministic support ZIP. Its default policy is deliberately strict:
 the command collects known versioned reports, not every file that happens to be
 near them.
 
 ```powershell
-dotnet UnifiedScript.Cli.dll diagnostics-bundle Saved\UnifiedScript `
-  --out unifiedscript-diagnostics.zip
+dotnet Finare.Cli.dll diagnostics-bundle Saved\Finare `
+  --out finare-diagnostics.zip
 ```
 
 The source checkout ships
-`schemas/unifiedscript.diagnostics-policy.v0.1.json`; an installed SDK carries
+`schemas/finare.diagnostics-policy.v0.1.json`; an installed SDK carries
 the same policy in `Schemas` and beside its CLI. `--policy <file>` exists for a
 release-owned policy override, not for silently broadening a customer support
 upload.
@@ -73,14 +73,14 @@ input bytes therefore produce the same ZIP bytes and SHA-256.
 
 The CLI prints the output path, archive SHA-256, report count, total redactions,
 and privacy mode. It writes the completed archive through the same transactional
-output mechanism as other UnifiedScript artifacts, so an interrupted build does
+output mechanism as other Finare artifacts, so an interrupted build does
 not leave a successful-looking partial ZIP.
 
 ## Recommended support workflow
 
-From Unreal, open **Tools > UnifiedScript Project Setup** and select **Export Support Bundle**.
-The project-local CLI collects `Saved/UnifiedScript`, writes
-`Saved/UnifiedScriptSupport/UnifiedScriptSupport.zip`, and copies that path to
+From Unreal, open **Tools > Finare Project Setup** and select **Export Support Bundle**.
+The project-local CLI collects `Saved/Finare`, writes
+`Saved/FinareSupport/FinareSupport.zip`, and copies that path to
 the clipboard. The ZIP lives outside its input root, so repeated exports do not
 recursively collect previous bundles.
 

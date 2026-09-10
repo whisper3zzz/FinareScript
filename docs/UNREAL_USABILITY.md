@@ -1,6 +1,6 @@
 # Unreal workflow usability budgets
 
-UnifiedScript treats daily usability as a versioned regression contract, not a
+Finare treats daily usability as a versioned regression contract, not a
 subjective claim. The packaged SDK ships
 `benchmarks/unreal/usability-budgets.v0.1.json`; the `ue-usability-budget`
 command combines existing CMD receipts into one hash-bound report and can fail
@@ -38,13 +38,13 @@ From an extracted SDK, pass the exact receipts produced by the packaged and
 daily workflows:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-1.0.0-rc.1'
+$sdk = 'D:\SDK\Finare-1.0.0-rc.1'
 $firstPlay = 'D:\Evidence\packaged-native-onboarding-report.json'
 $dailyReload = 'D:\Evidence\daily-managed-edit.json'
-$automation = 'D:\Evidence\unifiedscript-unreal-full.log'
+$automation = 'D:\Evidence\finare-unreal-full.log'
 $report = 'D:\Evidence\usability-report.json'
 
-& "$sdk\Tools\unifiedscript.cmd" ue-usability-budget `
+& "$sdk\Tools\finare.cmd" ue-usability-budget `
   --packaged-first-play $firstPlay `
   --daily-reload $dailyReload `
   --automation-evidence $automation `

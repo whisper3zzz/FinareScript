@@ -68,5 +68,5 @@ Verified locally on 2026-08-26:
 - repository validator: 42/42 invariants passed;
 - product coverage: 73/73 classified, 71 generated native members, two safe
   delegate fallbacks, zero rejected, baseline gate passed;
-- UE 5.8.1 native build and `UnifiedScript.Unreal` Automation are recorded in
+- UE 5.8.1 native build and `Finare.Unreal` Automation are recorded in
   the Roadmap acceptance evidence.
