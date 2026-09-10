@@ -29,6 +29,20 @@ struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptBlueprintClassSyncResult
     bool bChanged = false;
 };
 
+/** Deterministic seams used by editor Automation to exercise parent rollback. */
+enum class EUnifiedScriptBlueprintClassMaterializerFailurePoint : uint8
+{
+    None,
+    AfterParentMutation,
+    AfterPackageSave,
+};
+
+struct UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptBlueprintClassMaterializerOptions
+{
+    EUnifiedScriptBlueprintClassMaterializerFailurePoint FailurePoint =
+        EUnifiedScriptBlueprintClassMaterializerFailurePoint::None;
+};
+
 /**
  * Materializes reviewed managed state and functions as ordinary Blueprint members.
  *
@@ -58,4 +72,13 @@ public:
         bool bValidateOnly,
         FUnifiedScriptBlueprintClassSyncResult& OutResult,
         FString& OutError);
+
+    static bool SynchronizeJson(
+        UUnifiedScriptAsset& ScriptAsset,
+        UBlueprint& Blueprint,
+        const FString& DeclarationJson,
+        bool bValidateOnly,
+        FUnifiedScriptBlueprintClassSyncResult& OutResult,
+        FString& OutError,
+        const FUnifiedScriptBlueprintClassMaterializerOptions& Options);
 };

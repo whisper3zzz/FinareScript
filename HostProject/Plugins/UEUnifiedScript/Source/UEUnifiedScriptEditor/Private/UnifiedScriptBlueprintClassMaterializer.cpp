@@ -5,7 +5,12 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "Editor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Editor/TransBuffer.h"
+#include "Editor/Transactor.h"
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 #include "Interfaces/IPluginManager.h"
@@ -18,21 +23,29 @@
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/ArchiveReplaceObjectRef.h"
+#include "Serialization/ArchiveUObject.h"
 #include "Serialization/StructuredArchive.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptClassBinding.h"
 #include "UnifiedScriptBlueprint.h"
+#include "UnifiedScriptActor.h"
+#include "UnifiedScriptClassBases.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
+#include "UnifiedScriptClassOperationJournal.h"
+#include "UnifiedScriptAuthoringTransBuffer.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/EnumProperty.h"
 #include "UObject/GCObject.h"
+#include "UObject/ObjectKey.h"
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/StrongObjectPtr.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UObjectArray.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectIterator.h"
@@ -40,6 +53,7 @@
 
 namespace UE::UnifiedScript::BlueprintClass::Private
 {
+namespace ClassOperationJournal = UE::UnifiedScript::ClassOperationJournal;
 constexpr TCHAR LegacySchemaVersion[] = TEXT("unifiedscript.script-asset/v0.1");
 constexpr TCHAR OverrideSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.2");
 constexpr TCHAR ClassBindingSchemaVersion[] = TEXT("unifiedscript.script-asset/v0.3");
@@ -57,6 +71,34 @@ const FName BlueprintEventSuperModeKey(TEXT("UnifiedScript.SuperMode"));
 const FName BlueprintOverrideDeclaringTypePathKey(TEXT("UnifiedScript.BlueprintOverrideDeclaringTypePath"));
 const FName BlueprintOverrideFunctionNameKey(TEXT("UnifiedScript.BlueprintOverrideFunctionName"));
 const FName WorldContextObjectName(TEXT("WorldContextObject"));
+
+struct FSnapshotObjectIdentity
+{
+    FObjectKey Key;
+    FString CapturedObjectPath;
+    TStrongObjectPtr<UBlueprint> OwnerBlueprint;
+    TStrongObjectPtr<UClass> ExpectedClass;
+    bool bClassDefaultObject = false;
+
+    void Capture(UObject* Object)
+    {
+        Key = FObjectKey(Object);
+        CapturedObjectPath = Object != nullptr ? Object->GetPathName() : FString();
+        ExpectedClass.Reset(Object != nullptr ? Object->GetClass() : nullptr);
+        OwnerBlueprint.Reset();
+        bClassDefaultObject = false;
+        if (Object == nullptr || Object->GetClass() == nullptr)
+        {
+            return;
+        }
+        UBlueprint* GeneratedBy = Cast<UBlueprint>(Object->GetClass()->ClassGeneratedBy);
+        if (GeneratedBy != nullptr && GeneratedBy->GeneratedClass == Object->GetClass())
+        {
+            OwnerBlueprint.Reset(GeneratedBy);
+            bClassDefaultObject = Object->HasAnyFlags(RF_ClassDefaultObject);
+        }
+    }
+};
 
 bool ReadJsonNumberToken(const TSharedPtr<FJsonValue>& Value, FString& OutToken)
 {
@@ -255,6 +297,1492 @@ struct FSyncPlan
     bool bGameplayBindingsChanged = false;
 };
 
+struct FParentChangePlan
+{
+    UClass* CurrentParent = nullptr;
+    UClass* RequestedParent = nullptr;
+    bool bChanged = false;
+};
+
+struct FParentDefaultOverrideSnapshot
+{
+    UObject* OldObject = nullptr;
+    TStrongObjectPtr<UObject> OldObjectRoot;
+    TStrongObjectPtr<UObject> OldArchetypeRoot;
+    FSnapshotObjectIdentity ObjectIdentity;
+    bool bFollowsArchetype = false;
+    FName PropertyName;
+    FInstancedPropertyBag Value;
+};
+
+struct FParentDefaultSnapshotReferenceGuard final : FGCObject
+{
+    TArray<FParentDefaultOverrideSnapshot>& Snapshots;
+
+    explicit FParentDefaultSnapshotReferenceGuard(
+        TArray<FParentDefaultOverrideSnapshot>& InSnapshots)
+        : Snapshots(InSnapshots)
+    {
+    }
+
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        for (FParentDefaultOverrideSnapshot& Snapshot : Snapshots)
+        {
+            Snapshot.Value.AddStructReferencedObjects(Collector);
+        }
+    }
+
+    virtual FString GetReferencerName() const override
+    {
+        return TEXT("UnifiedScriptParentDefaultSnapshots");
+    }
+};
+
+struct FManagedStateValueSnapshot
+{
+    UObject* OldObject = nullptr;
+    TStrongObjectPtr<UObject> OldObjectRoot;
+    TStrongObjectPtr<UObject> OldArchetypeRoot;
+    FSnapshotObjectIdentity ObjectIdentity;
+    bool bFollowsArchetype = false;
+    bool bRestoreOnSuccess = true;
+    FGuid StateId;
+    FName OldPropertyName;
+    FName NewPropertyName;
+    FInstancedPropertyBag Value;
+};
+
+struct FManagedStateSnapshotReferenceGuard final : FGCObject
+{
+    TArray<FManagedStateValueSnapshot>& Snapshots;
+
+    explicit FManagedStateSnapshotReferenceGuard(
+        TArray<FManagedStateValueSnapshot>& InSnapshots)
+        : Snapshots(InSnapshots)
+    {
+    }
+
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        for (FManagedStateValueSnapshot& Snapshot : Snapshots)
+        {
+            Snapshot.Value.AddStructReferencedObjects(Collector);
+        }
+    }
+
+    virtual FString GetReferencerName() const override
+    {
+        return TEXT("UnifiedScriptManagedStateSnapshots");
+    }
+};
+
+const FName CollectionSnapshotValueName(TEXT("UnifiedScriptSnapshotValue"));
+
+struct FCollectionReplacementTarget
+{
+    FObjectKey Identity;
+    // Reinstance can publish a worldless destination without another rooted
+    // owner.  Keep each exact destination alive for this operation while the
+    // stable identity chain is resolved; retired intermediates still resolve
+    // through their later key edge instead of becoming a terminal value.
+    TStrongObjectPtr<UObject> DestinationRoot;
+    bool bExplicitNull = false;
+};
+
+using FCollectionReplacementMap = TMap<FObjectKey, FCollectionReplacementTarget>;
+
+UObject* ResolveReplacedObject(
+    const FObjectKey& OldObjectKey,
+    const FCollectionReplacementMap& ReplacedObjects,
+    bool& bFoundReplacement,
+    bool* bExplicitNull = nullptr);
+
+UObject* ResolveSnapshotObject(
+    FSnapshotObjectIdentity& Identity,
+    UObject* OldObjectRoot,
+    const FCollectionReplacementMap& ReplacedObjects,
+    bool& bFoundReplacement,
+    bool* bExplicitNull = nullptr);
+
+TMap<UObject*, UObject*> FlattenReplacedObjects(
+    const FCollectionReplacementMap& ReplacedObjects);
+
+bool ValidateSnapshotReplacementReferences(
+    const FProperty* SnapshotProperty,
+    void* SnapshotContainer,
+    const FCollectionReplacementMap& ReplacedObjects,
+    const FString& SnapshotDescription,
+    FString& OutError);
+
+struct FScriptComponentOwnerSnapshot
+{
+    struct FEditablePropertySnapshot
+    {
+        FName PropertyName = NAME_None;
+        bool bFollowsArchetype = false;
+    };
+
+    // These snapshots live on the stack while Blueprint compilation can run
+    // GC.  TObjectPtr fields in a local TArray are not GC roots by themselves.
+    TStrongObjectPtr<UBlueprint> OwnerBlueprint;
+    bool bHadComponent = false;
+    TStrongObjectPtr<UUnifiedScriptComponent> ComponentRoot;
+    TStrongObjectPtr<UClass> ComponentClass;
+    TStrongObjectPtr<UUnifiedScriptAsset> ScriptAsset;
+    FString ScriptAssetPath;
+    TArray<FEditablePropertySnapshot> EditableProperties;
+    FInstancedPropertyBag EditableValues;
+};
+
+struct FScriptComponentSnapshotReferenceGuard final : FGCObject
+{
+    TArray<FScriptComponentOwnerSnapshot>& Snapshots;
+
+    explicit FScriptComponentSnapshotReferenceGuard(
+        TArray<FScriptComponentOwnerSnapshot>& InSnapshots)
+        : Snapshots(InSnapshots)
+    {
+    }
+
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        for (FScriptComponentOwnerSnapshot& Snapshot : Snapshots)
+        {
+            Snapshot.EditableValues.AddStructReferencedObjects(Collector);
+        }
+    }
+
+    virtual FString GetReferencerName() const override
+    {
+        return TEXT("UnifiedScriptScriptComponentSnapshots");
+    }
+};
+
+struct FManagedGeneratedClassSnapshot
+{
+    bool bCaptured = false;
+    TMap<FName, FUnifiedScriptManagedFunctionBinding> ManagedFunctionBindings;
+    TMap<EUnifiedScriptManagedLifecycleHookKind, FUnifiedScriptManagedLifecycleBinding>
+        ManagedLifecycleBindings;
+    TArray<FUnifiedScriptManagedInputActionBinding> ManagedInputActionBindings;
+    TArray<FUnifiedScriptManagedDelegateBinding> ManagedDelegateBindings;
+    TArray<FUnifiedScriptManagedInterfaceFunctionBinding> ManagedInterfaceBindings;
+    TStrongObjectPtr<UUnifiedScriptAsset> ManagedScriptAsset;
+
+    void Capture(const UUnifiedScriptBlueprintGeneratedClass& GeneratedClass)
+    {
+        bCaptured = true;
+        ManagedFunctionBindings = GeneratedClass.ManagedFunctionBindings;
+        ManagedLifecycleBindings = GeneratedClass.ManagedLifecycleBindings;
+        ManagedInputActionBindings = GeneratedClass.ManagedInputActionBindings;
+        ManagedDelegateBindings = GeneratedClass.ManagedDelegateBindings;
+        ManagedInterfaceBindings = GeneratedClass.ManagedInterfaceBindings;
+        ManagedScriptAsset.Reset(GeneratedClass.ManagedScriptAsset.Get());
+    }
+
+    bool RestoreTo(UBlueprint& Blueprint, FString& OutError) const
+    {
+        if (!bCaptured)
+        {
+            OutError.Reset();
+            return true;
+        }
+        UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+        if (GeneratedClass == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Blueprint '%s' lost its UnifiedScript generated class while restoring the authoring transaction."),
+                *Blueprint.GetPathName());
+            return false;
+        }
+        GeneratedClass->ManagedFunctionBindings = ManagedFunctionBindings;
+        GeneratedClass->ManagedLifecycleBindings = ManagedLifecycleBindings;
+        GeneratedClass->ManagedInputActionBindings = ManagedInputActionBindings;
+        GeneratedClass->ManagedDelegateBindings = ManagedDelegateBindings;
+        GeneratedClass->ManagedInterfaceBindings = ManagedInterfaceBindings;
+        GeneratedClass->ManagedScriptAsset = ManagedScriptAsset.Get();
+        OutError.Reset();
+        return true;
+    }
+};
+
+struct FBlueprintAuthoringSnapshot
+{
+    TStrongObjectPtr<UBlueprint> Blueprint;
+    TStrongObjectPtr<UPackage> Package;
+    bool bPackageDirty = false;
+    TStrongObjectPtr<UClass> OriginalParent;
+    TStrongObjectPtr<UClass> OriginalGeneratedClass;
+    TStrongObjectPtr<UClass> OriginalSkeletonGeneratedClass;
+    FManagedGeneratedClassSnapshot ManagedGeneratedClass;
+
+    void Capture(UBlueprint& InBlueprint)
+    {
+        Blueprint.Reset(&InBlueprint);
+        Package.Reset(InBlueprint.GetOutermost());
+        bPackageDirty = Package.IsValid() && Package->IsDirty();
+        OriginalParent.Reset(InBlueprint.ParentClass.Get());
+        OriginalGeneratedClass.Reset(InBlueprint.GeneratedClass.Get());
+        OriginalSkeletonGeneratedClass.Reset(InBlueprint.SkeletonGeneratedClass.Get());
+        if (const UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+                Cast<UUnifiedScriptBlueprintGeneratedClass>(InBlueprint.GeneratedClass))
+        {
+            ManagedGeneratedClass.Capture(*GeneratedClass);
+        }
+    }
+
+    void RestorePackageDirtyFlag() const
+    {
+        if (Package.IsValid())
+        {
+            Package->SetDirtyFlag(bPackageDirty);
+        }
+    }
+};
+
+bool IsManagedState(const FBPVariableDescription& Variable);
+
+bool ArePropertiesExactlyCompatible(
+    const FProperty* Left,
+    const FProperty* Right);
+
+void CopyTypedPropertyValue(
+    const FProperty* DestinationProperty,
+    void* DestinationContainer,
+    const FProperty* SourceProperty,
+    const void* SourceContainer);
+
+bool AreTypedPropertyValuesIdentical(
+    const FProperty* LeftProperty,
+    const void* LeftContainer,
+    const FProperty* RightProperty,
+    const void* RightContainer);
+
+bool CaptureParentDefaultOverrides(
+    const UBlueprint& Blueprint,
+    UClass* OriginalParent,
+    UClass* RequestedParent,
+    TArray<FParentDefaultOverrideSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    OutSnapshots.Reset();
+    if (Blueprint.GeneratedClass == nullptr || OriginalParent == nullptr ||
+        RequestedParent == nullptr)
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    TArray<UObject*> Objects;
+    GetObjectsOfClass(Blueprint.GeneratedClass, Objects, true, RF_MirroredGarbage);
+    for (UObject* Object : Objects)
+    {
+        if (Object == nullptr ||
+            Object->HasAnyFlags(RF_BeginDestroyed | RF_FinishDestroyed | RF_MirroredGarbage) ||
+            Object->GetClass() == nullptr ||
+            !Object->GetClass()->IsChildOf(Blueprint.GeneratedClass))
+        {
+            continue;
+        }
+        UBlueprint* GeneratedBy = Cast<UBlueprint>(Object->GetClass()->ClassGeneratedBy);
+        if (GeneratedBy == nullptr || GeneratedBy->GeneratedClass != Object->GetClass())
+        {
+            continue;
+        }
+        const bool bRootClassDefaultObject =
+            Object == Blueprint.GeneratedClass->GetDefaultObject(false);
+        const bool bDerivedClassDefaultObject =
+            Object->HasAnyFlags(RF_ClassDefaultObject) && Object->GetClass() != Blueprint.GeneratedClass;
+        if (!bRootClassDefaultObject && !bDerivedClassDefaultObject && Object->IsTemplate())
+        {
+            continue;
+        }
+        UObject* OldArchetype = Object->GetArchetype();
+        if (OldArchetype == nullptr || OldArchetype == Object ||
+            OldArchetype->GetClass() == nullptr)
+        {
+            continue;
+        }
+
+        for (TFieldIterator<FProperty> It(
+             OriginalParent,
+                 EFieldIteratorFlags::IncludeSuper);
+             It;
+             ++It)
+        {
+            FProperty* OldProperty = *It;
+            if (OldProperty == nullptr ||
+                OldProperty->HasAnyPropertyFlags(CPF_Transient | CPF_EditConst) ||
+                !OldProperty->HasAnyPropertyFlags(CPF_Edit))
+            {
+                continue;
+            }
+            FProperty* ObjectProperty = FindFProperty<FProperty>(
+                Object->GetClass(),
+                OldProperty->GetFName());
+            FProperty* ArchetypeProperty = FindFProperty<FProperty>(
+                OldArchetype->GetClass(),
+                OldProperty->GetFName());
+            if (ObjectProperty == nullptr || ArchetypeProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(ObjectProperty, ArchetypeProperty) ||
+                !ArePropertiesExactlyCompatible(ObjectProperty, OldProperty))
+            {
+                continue;
+            }
+
+            const bool bFollowsArchetype = AreTypedPropertyValuesIdentical(
+                ObjectProperty,
+                Object,
+                ArchetypeProperty,
+                OldArchetype);
+            FProperty* NewProperty = FindFProperty<FProperty>(
+                RequestedParent,
+                OldProperty->GetFName());
+            if (NewProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(OldProperty, NewProperty))
+            {
+                if (!bFollowsArchetype)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Inherited property '%s' has an explicit value on '%s' but the requested parent removed or changed its reflected type."),
+                        *OldProperty->GetName(),
+                        *Object->GetPathName());
+                    return false;
+                }
+                continue;
+            }
+            FParentDefaultOverrideSnapshot& Snapshot = OutSnapshots.AddDefaulted_GetRef();
+            Snapshot.OldObject = Object;
+            Snapshot.OldObjectRoot = TStrongObjectPtr<UObject>(Object);
+            Snapshot.OldArchetypeRoot = TStrongObjectPtr<UObject>(OldArchetype);
+            Snapshot.ObjectIdentity.Capture(Object);
+            Snapshot.bFollowsArchetype = bFollowsArchetype;
+            Snapshot.PropertyName = OldProperty->GetFName();
+            if (bFollowsArchetype)
+            {
+                continue;
+            }
+            if (Snapshot.Value.AddProperty(CollectionSnapshotValueName, OldProperty) !=
+                EPropertyBagAlterationResult::Success)
+            {
+                OutError = FString::Printf(
+                    TEXT("Inherited property '%s' on '%s' cannot be represented by a typed preservation snapshot."),
+                    *OldProperty->GetName(),
+                    *Object->GetPathName());
+                return false;
+            }
+            const FPropertyBagPropertyDesc* SnapshotDesc =
+                Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+            if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Inherited property '%s' produced an incomplete typed preservation snapshot."),
+                    *OldProperty->GetName());
+                return false;
+            }
+            CopyTypedPropertyValue(
+                SnapshotDesc->CachedProperty,
+                Snapshot.Value.GetMutableValue().GetMemory(),
+                OldProperty,
+                Object);
+        }
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool RestoreParentDefaultOverrides(
+    TArray<FParentDefaultOverrideSnapshot>& Snapshots,
+    const FCollectionReplacementMap& ReplacedObjects,
+    FString& OutError)
+{
+    const TMap<UObject*, UObject*> FlattenedReplacedObjects =
+        FlattenReplacedObjects(ReplacedObjects);
+    const auto ResolveSnapshotTarget =
+        [&ReplacedObjects](FParentDefaultOverrideSnapshot& Snapshot, bool& bFoundReplacement)
+        {
+            UObject* NewObject = ResolveSnapshotObject(
+                Snapshot.ObjectIdentity,
+                Snapshot.OldObjectRoot.Get(),
+                ReplacedObjects,
+                bFoundReplacement);
+            return NewObject;
+        };
+    const auto GetArchetypeDepth = [](UObject* Object)
+    {
+        int32 Depth = 0;
+        TSet<UObject*> Visited;
+        for (UObject* Current = Object != nullptr ? Object->GetArchetype() : nullptr;
+             Current != nullptr && !Visited.Contains(Current) && Depth < 256;
+             Current = Current->GetArchetype())
+        {
+            Visited.Add(Current);
+            ++Depth;
+        }
+        return Depth;
+    };
+    TArray<int32> SnapshotOrder;
+    SnapshotOrder.Reserve(Snapshots.Num());
+    for (int32 Index = 0; Index < Snapshots.Num(); ++Index)
+    {
+        SnapshotOrder.Add(Index);
+    }
+    SnapshotOrder.Sort(
+        [&Snapshots, &ResolveSnapshotTarget, &GetArchetypeDepth](int32 Left, int32 Right)
+        {
+            bool bLeftReplaced = false;
+            bool bRightReplaced = false;
+            const int32 LeftDepth = GetArchetypeDepth(
+                ResolveSnapshotTarget(Snapshots[Left], bLeftReplaced));
+            const int32 RightDepth = GetArchetypeDepth(
+                ResolveSnapshotTarget(Snapshots[Right], bRightReplaced));
+            return LeftDepth == RightDepth ? Left < Right : LeftDepth < RightDepth;
+        });
+    for (const int32 SnapshotIndex : SnapshotOrder)
+    {
+        FParentDefaultOverrideSnapshot& Snapshot = Snapshots[SnapshotIndex];
+        bool bFoundReplacement = false;
+        UObject* NewObject = ResolveSnapshotTarget(Snapshot, bFoundReplacement);
+        if (NewObject == nullptr ||
+            NewObject->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed) ||
+            NewObject->GetClass() == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Inherited property '%s' lost its snapshotted owner during Blueprint reinstancing."),
+                *Snapshot.PropertyName.ToString());
+            return false;
+        }
+        FProperty* NewProperty = FindFProperty<FProperty>(
+            NewObject->GetClass(),
+            Snapshot.PropertyName);
+        if (NewProperty == nullptr)
+        {
+            if (Snapshot.bFollowsArchetype)
+            {
+                continue;
+            }
+            OutError = FString::Printf(
+                TEXT("Inherited property '%s' could not be restored on '%s' after Blueprint reinstancing."),
+                *Snapshot.PropertyName.ToString(),
+                *NewObject->GetPathName());
+            return false;
+        }
+        UObject* NewArchetype = NewObject->GetArchetype();
+        FProperty* NewArchetypeProperty = NewArchetype != nullptr && NewArchetype != NewObject
+            ? FindFProperty<FProperty>(NewArchetype->GetClass(), Snapshot.PropertyName)
+            : nullptr;
+        if (NewArchetype == nullptr || NewArchetypeProperty == nullptr ||
+            !ArePropertiesExactlyCompatible(NewProperty, NewArchetypeProperty))
+        {
+            OutError = FString::Printf(
+                TEXT("Inherited property '%s' lost its immediate archetype on '%s' after Blueprint reinstancing."),
+                *Snapshot.PropertyName.ToString(),
+                *NewObject->GetPathName());
+            return false;
+        }
+        void* NewValue = NewProperty->ContainerPtrToValuePtr<void>(NewObject);
+        if (Snapshot.bFollowsArchetype)
+        {
+            CopyTypedPropertyValue(
+                NewProperty,
+                NewObject,
+                NewArchetypeProperty,
+                NewArchetype);
+        }
+        else
+        {
+            const FPropertyBagPropertyDesc* SnapshotDesc =
+                Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+            if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(NewProperty, SnapshotDesc->CachedProperty))
+            {
+                OutError = FString::Printf(
+                    TEXT("Inherited property '%s' changed reflected identity while restoring '%s'."),
+                    *Snapshot.PropertyName.ToString(),
+                    *NewObject->GetPathName());
+                return false;
+            }
+            void* SnapshotValue = SnapshotDesc->CachedProperty->ContainerPtrToValuePtr<void>(
+                Snapshot.Value.GetMutableValue().GetMemory());
+            if (!ValidateSnapshotReplacementReferences(
+                    SnapshotDesc->CachedProperty,
+                    SnapshotValue,
+                    ReplacedObjects,
+                    FString::Printf(
+                        TEXT("inherited property '%s' on '%s'"),
+                        *Snapshot.PropertyName.ToString(),
+                        *NewObject->GetPathName()),
+                    OutError))
+            {
+                return false;
+            }
+            FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+                NewObject,
+                FlattenedReplacedObjects,
+                EArchiveReplaceObjectFlags::DelayStart);
+            FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
+            SnapshotDesc->CachedProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
+            CopyTypedPropertyValue(
+                NewProperty,
+                NewObject,
+                SnapshotDesc->CachedProperty,
+                Snapshot.Value.GetMutableValue().GetMemory());
+        }
+        if (const FSetProperty* SetProperty = CastField<FSetProperty>(NewProperty))
+        {
+            FScriptSetHelper SetHelper(SetProperty, NewValue);
+            SetHelper.Rehash();
+        }
+        else if (const FMapProperty* MapProperty = CastField<FMapProperty>(NewProperty))
+        {
+            FScriptMapHelper MapHelper(MapProperty, NewValue);
+            MapHelper.Rehash();
+        }
+    }
+    OutError.Reset();
+    return true;
+}
+
+UUnifiedScriptComponent* FindManagedScriptComponent(UClass* GeneratedClass)
+{
+    if (GeneratedClass == nullptr)
+    {
+        return nullptr;
+    }
+    if (AUnifiedScriptActor* ActorDefaults =
+            Cast<AUnifiedScriptActor>(GeneratedClass->GetDefaultObject()))
+    {
+        return ActorDefaults->ScriptComponent;
+    }
+    return Cast<UUnifiedScriptComponent>(GeneratedClass->GetDefaultObject());
+}
+
+bool ValidateScriptComponentIdentity(
+    const UBlueprint& Blueprint,
+    UUnifiedScriptComponent* Component,
+    const UClass* ExpectedComponentClass,
+    FString& OutError)
+{
+    UClass* GeneratedClass = Blueprint.GeneratedClass;
+    UObject* CurrentCdo = GeneratedClass != nullptr
+        ? GeneratedClass->GetDefaultObject(false)
+        : nullptr;
+    const bool bComponentIsClassDefaultObject = Component != nullptr && Component == CurrentCdo;
+    const bool bClassIdentityMatches = bComponentIsClassDefaultObject
+        ? Component->GetClass() == GeneratedClass &&
+            GeneratedClass->ClassGeneratedBy == &Blueprint
+        : ExpectedComponentClass != nullptr &&
+            Component != nullptr && Component->GetClass() == ExpectedComponentClass;
+    if (GeneratedClass == nullptr || CurrentCdo == nullptr || Component == nullptr ||
+        !bClassIdentityMatches)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint '%s' could not resolve the exact managed ScriptComponent class identity."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+
+    UObject* ExpectedOuter = bComponentIsClassDefaultObject
+        ? GeneratedClass->GetOuter()
+        : CurrentCdo;
+    if (Component->GetOuter() != ExpectedOuter)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint '%s' changed the managed ScriptComponent outer from its CDO owner."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+
+    // During preflight PrepareParentChange updates Blueprint.ParentClass before
+    // the duplicate GeneratedClass is compiled.  The existing generated
+    // hierarchy is therefore the only valid capture baseline; after compile
+    // its SuperClass reflects the prospective parent for exact restore checks.
+    UUnifiedScriptComponent* ExpectedArchetype = FindManagedScriptComponent(
+        GeneratedClass->GetSuperClass());
+    if (Component->GetArchetype() != ExpectedArchetype)
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint '%s' changed the managed ScriptComponent immediate archetype identity."),
+            *Blueprint.GetPathName());
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool CaptureScriptComponentOwner(
+    const UBlueprint& Blueprint,
+    FScriptComponentOwnerSnapshot& OutSnapshot,
+    FString& OutError)
+{
+    OutSnapshot = FScriptComponentOwnerSnapshot();
+    OutSnapshot.OwnerBlueprint.Reset(const_cast<UBlueprint*>(&Blueprint));
+    UUnifiedScriptComponent* Component = FindManagedScriptComponent(Blueprint.GeneratedClass);
+    if (Component == nullptr)
+    {
+        OutError.Reset();
+        return true;
+    }
+    OutSnapshot.bHadComponent = true;
+    OutSnapshot.ComponentRoot.Reset(Component);
+    OutSnapshot.ComponentClass.Reset(Component->GetClass());
+    OutSnapshot.ScriptAsset.Reset(Component->ScriptAsset.Get());
+    OutSnapshot.ScriptAssetPath = Component->ScriptAssetPath;
+    if (!ValidateScriptComponentIdentity(
+            Blueprint,
+            Component,
+            OutSnapshot.ComponentClass.Get(),
+            OutError))
+    {
+        return false;
+    }
+    UObject* OldArchetype = Component->GetArchetype();
+    for (TFieldIterator<FProperty> It(
+             Component->GetClass(),
+             EFieldIteratorFlags::IncludeSuper);
+         It;
+         ++It)
+    {
+        FProperty* Property = *It;
+        if (Property == nullptr ||
+            Property->HasAnyPropertyFlags(CPF_Transient | CPF_EditConst) ||
+            !Property->HasAnyPropertyFlags(CPF_Edit))
+        {
+            continue;
+        }
+        if (OutSnapshot.EditableValues.AddProperty(Property->GetFName(), Property) !=
+            EPropertyBagAlterationResult::Success)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed ScriptComponent property '%s' cannot be represented by a typed preservation snapshot."),
+                *Property->GetName());
+            return false;
+        }
+        const FPropertyBagPropertyDesc* SnapshotDesc =
+            OutSnapshot.EditableValues.FindPropertyDescByName(Property->GetFName());
+        if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed ScriptComponent property '%s' produced an incomplete typed preservation snapshot."),
+                *Property->GetName());
+            return false;
+        }
+        FScriptComponentOwnerSnapshot::FEditablePropertySnapshot& PropertySnapshot =
+            OutSnapshot.EditableProperties.AddDefaulted_GetRef();
+        PropertySnapshot.PropertyName = Property->GetFName();
+        const FProperty* ArchetypeProperty = OldArchetype != nullptr
+            ? FindFProperty<FProperty>(OldArchetype->GetClass(), Property->GetFName())
+            : nullptr;
+        PropertySnapshot.bFollowsArchetype = ArchetypeProperty != nullptr &&
+            ArePropertiesExactlyCompatible(Property, ArchetypeProperty) &&
+            AreTypedPropertyValuesIdentical(Property, Component, ArchetypeProperty, OldArchetype);
+        CopyTypedPropertyValue(
+            SnapshotDesc->CachedProperty,
+            OutSnapshot.EditableValues.GetMutableValue().GetMemory(),
+            Property,
+            Component);
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool RestoreScriptComponentOwner(
+    FScriptComponentOwnerSnapshot& Snapshot,
+    const FCollectionReplacementMap& ReplacedObjects,
+    const bool bRollback,
+    FString& OutError)
+{
+    if (!Snapshot.bHadComponent)
+    {
+        OutError.Reset();
+        return true;
+    }
+    UBlueprint* Blueprint = Snapshot.OwnerBlueprint.Get();
+    UUnifiedScriptComponent* Component = Blueprint != nullptr
+        ? FindManagedScriptComponent(Blueprint->GeneratedClass)
+        : nullptr;
+    if (Blueprint == nullptr)
+    {
+        OutError = TEXT("Blueprint parent change lost the managed ScriptComponent owner Blueprint.");
+        return false;
+    }
+    if (Blueprint->GeneratedClass == nullptr ||
+        Blueprint->GeneratedClass->GetSuperClass() != Blueprint->ParentClass.Get())
+    {
+        OutError = FString::Printf(
+            TEXT("Blueprint '%s' has not compiled its current ParentClass before managed ScriptComponent identity restore."),
+            *Blueprint->GetPathName());
+        return false;
+    }
+    if (!ValidateScriptComponentIdentity(
+            *Blueprint,
+            Component,
+            Snapshot.ComponentClass.Get(),
+            OutError))
+    {
+        return false;
+    }
+    UObject* CurrentArchetype = Component->GetArchetype();
+    Component->Modify();
+    const TMap<UObject*, UObject*> FlattenedReplacedObjects =
+        FlattenReplacedObjects(ReplacedObjects);
+    for (const FScriptComponentOwnerSnapshot::FEditablePropertySnapshot& PropertySnapshot :
+         Snapshot.EditableProperties)
+    {
+        const FName PropertyName = PropertySnapshot.PropertyName;
+        FProperty* TargetProperty = FindFProperty<FProperty>(
+            Component->GetClass(),
+            PropertyName);
+        const FPropertyBagPropertyDesc* SnapshotDesc =
+            Snapshot.EditableValues.FindPropertyDescByName(PropertyName);
+        if (TargetProperty == nullptr || SnapshotDesc == nullptr ||
+            SnapshotDesc->CachedProperty == nullptr ||
+            !ArePropertiesExactlyCompatible(TargetProperty, SnapshotDesc->CachedProperty))
+        {
+            OutError = FString::Printf(
+                TEXT("Managed ScriptComponent property '%s' changed reflected identity during Blueprint reinstancing."),
+                *PropertyName.ToString());
+            return false;
+        }
+        void* TargetValue = TargetProperty->ContainerPtrToValuePtr<void>(Component);
+        if (!bRollback && PropertySnapshot.bFollowsArchetype)
+        {
+            FProperty* ArchetypeProperty = CurrentArchetype != nullptr
+                ? FindFProperty<FProperty>(CurrentArchetype->GetClass(), PropertyName)
+                : nullptr;
+            if (ArchetypeProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(TargetProperty, ArchetypeProperty))
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed ScriptComponent follower property '%s' lost its immediate archetype value during Blueprint reinstancing."),
+                    *PropertyName.ToString());
+                return false;
+            }
+            CopyTypedPropertyValue(
+                TargetProperty,
+                Component,
+                ArchetypeProperty,
+                CurrentArchetype);
+        }
+        else
+        {
+            void* SnapshotValue = SnapshotDesc->CachedProperty->ContainerPtrToValuePtr<void>(
+                Snapshot.EditableValues.GetMutableValue().GetMemory());
+            if (!ValidateSnapshotReplacementReferences(
+                    SnapshotDesc->CachedProperty,
+                    SnapshotValue,
+                    ReplacedObjects,
+                    FString::Printf(
+                        TEXT("managed ScriptComponent property '%s' on '%s'"),
+                        *PropertyName.ToString(),
+                        *Component->GetPathName()),
+                    OutError))
+            {
+                return false;
+            }
+            FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+                Component,
+                FlattenedReplacedObjects,
+                EArchiveReplaceObjectFlags::DelayStart);
+            FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
+            SnapshotDesc->CachedProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
+            CopyTypedPropertyValue(
+                TargetProperty,
+                Component,
+                SnapshotDesc->CachedProperty,
+                Snapshot.EditableValues.GetMutableValue().GetMemory());
+        }
+        if (const FSetProperty* SetProperty = CastField<FSetProperty>(TargetProperty))
+        {
+            FScriptSetHelper SetHelper(SetProperty, TargetValue);
+            SetHelper.Rehash();
+        }
+        else if (const FMapProperty* MapProperty = CastField<FMapProperty>(TargetProperty))
+        {
+            FScriptMapHelper MapHelper(MapProperty, TargetValue);
+            MapHelper.Rehash();
+        }
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool CaptureScriptComponentOwners(
+    UBlueprint& Blueprint,
+    TArray<FScriptComponentOwnerSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    OutSnapshots.Reset();
+    if (!CaptureScriptComponentOwner(Blueprint, OutSnapshots.AddDefaulted_GetRef(), OutError))
+    {
+        OutSnapshots.Reset();
+        return false;
+    }
+    const UClass* OriginalGeneratedClass = Blueprint.GeneratedClass;
+    if (OriginalGeneratedClass != nullptr)
+    {
+        for (TObjectIterator<UBlueprint> It; It; ++It)
+        {
+            UBlueprint* Descendant = *It;
+            if (Descendant != nullptr && Descendant != &Blueprint &&
+                Descendant->GeneratedClass != nullptr &&
+                Descendant->GeneratedClass->IsChildOf(OriginalGeneratedClass))
+            {
+                if (!CaptureScriptComponentOwner(
+                        *Descendant,
+                        OutSnapshots.AddDefaulted_GetRef(),
+                        OutError))
+                {
+                    OutSnapshots.Reset();
+                    return false;
+                }
+            }
+        }
+    }
+    auto GetBlueprintDepth = [](const UBlueprint* Candidate)
+    {
+        int32 Depth = 0;
+        TSet<UClass*> Visited;
+        for (UClass* ParentClass = Candidate != nullptr
+                 ? Candidate->ParentClass.Get()
+                 : nullptr;
+             ParentClass != nullptr && !Visited.Contains(ParentClass);
+             )
+        {
+            Visited.Add(ParentClass);
+            ++Depth;
+            const UBlueprint* ParentBlueprint = Cast<UBlueprint>(ParentClass->ClassGeneratedBy);
+            ParentClass = ParentBlueprint != nullptr
+                ? ParentBlueprint->ParentClass.Get()
+                : nullptr;
+        }
+        return Depth;
+    };
+    OutSnapshots.Sort(
+        [&GetBlueprintDepth](
+            const FScriptComponentOwnerSnapshot& Left,
+            const FScriptComponentOwnerSnapshot& Right)
+        {
+            const int32 LeftDepth = GetBlueprintDepth(Left.OwnerBlueprint.Get());
+            const int32 RightDepth = GetBlueprintDepth(Right.OwnerBlueprint.Get());
+            if (LeftDepth != RightDepth)
+            {
+                return LeftDepth < RightDepth;
+            }
+            return Left.OwnerBlueprint.Get() != nullptr &&
+                Right.OwnerBlueprint.Get() != nullptr &&
+                Left.OwnerBlueprint->GetPathName() < Right.OwnerBlueprint->GetPathName();
+        });
+    for (FScriptComponentOwnerSnapshot& Snapshot : OutSnapshots)
+    {
+        if (Snapshot.OwnerBlueprint.Get() != &Blueprint)
+        {
+            continue;
+        }
+        // The root managed owner is the persisted behavior binding.  Its
+        // ScriptAsset fields remain explicit even when the old parent happens
+        // to carry the same value; a new ordinary parent may legitimately
+        // expose a null component asset.
+        for (FScriptComponentOwnerSnapshot::FEditablePropertySnapshot& PropertySnapshot :
+             Snapshot.EditableProperties)
+        {
+            if (PropertySnapshot.PropertyName == TEXT("ScriptAsset") ||
+                PropertySnapshot.PropertyName == TEXT("ScriptAssetPath"))
+            {
+                PropertySnapshot.bFollowsArchetype = false;
+            }
+        }
+        break;
+    }
+    OutError.Reset();
+    return true;
+}
+
+/**
+ * A local transaction deliberately kept outside the editor undo stack.  The
+ * Blueprint and its serialized graph/class objects are recorded before the
+ * parent or the generated members are touched, so a compiler or package
+ * failure can restore the complete authoring object rather than only its
+ * variable list.
+ */
+class FLocalBlueprintTransaction final : public FGCObject
+{
+public:
+    explicit FLocalBlueprintTransaction(UBlueprint& InBlueprint)
+        : Blueprint(InBlueprint)
+    {
+    }
+
+    bool Isolate(FString& OutError)
+    {
+        if (bIsolated)
+        {
+            return true;
+        }
+        if (GEditor == nullptr || GEditor->Trans == nullptr || GIsTransacting)
+        {
+            OutError = TEXT("Cannot begin Blueprint parent transaction while another editor transaction is active.");
+            return false;
+        }
+        LocalTransactor = TStrongObjectPtr<UTransBuffer>(
+            NewObject<UUnifiedScriptAuthoringTransBuffer>(GetTransientPackage()));
+        if (!LocalTransactor.IsValid())
+        {
+            OutError = TEXT("Could not allocate a private Blueprint parent transaction buffer.");
+            return false;
+        }
+        LocalTransactor->Initialize(64ull * 1024ull * 1024ull);
+        // GEditor->Trans is a reflected property, but assigning the local
+        // transactor into it removes the editor's only reflected reference to
+        // this previous host.  Keep the host strongly rooted for the whole
+        // swap and restoration; its current transaction is the owner of the
+        // raw GUndo pointer saved below.
+        PreviousTransactor.Reset(GEditor->Trans.Get());
+        PreviousUndo = GUndo;
+        GEditor->Trans = LocalTransactor.Get();
+        GUndo = nullptr;
+        bIsolated = true;
+        OutError.Reset();
+        return true;
+    }
+
+    bool Begin(FString& OutError)
+    {
+        if (bActive)
+        {
+            return true;
+        }
+        if (!bIsolated || GEditor == nullptr || LocalTransactor == nullptr || GIsTransacting)
+        {
+            OutError = TEXT("Cannot begin Blueprint parent transaction outside its isolated editor transaction scope.");
+            return false;
+        }
+        const int32 BeginResult = LocalTransactor->Begin(
+            TEXT("UnifiedScriptBlueprintClassMaterializer"),
+            FText::FromString(TEXT("Synchronize UnifiedScript Blueprint")));
+        if (BeginResult != 0)
+        {
+            OutError = TEXT("Could not begin a private Blueprint parent transaction.");
+            return false;
+        }
+        CaptureBlueprint(Blueprint);
+        const UClass* OriginalGeneratedClass = Blueprint.GeneratedClass;
+        if (OriginalGeneratedClass != nullptr)
+        {
+            for (TObjectIterator<UBlueprint> It; It; ++It)
+            {
+                UBlueprint* Descendant = *It;
+                if (Descendant != nullptr && Descendant != &Blueprint &&
+                    Descendant->GeneratedClass != nullptr &&
+                    Descendant->GeneratedClass->IsChildOf(OriginalGeneratedClass))
+                {
+                    CaptureBlueprint(*Descendant);
+                }
+            }
+            AuthoringSnapshots.Sort(
+                [OriginalGeneratedClass](
+                    const FBlueprintAuthoringSnapshot& Left,
+                    const FBlueprintAuthoringSnapshot& Right)
+                {
+                    auto DepthFromRoot = [OriginalGeneratedClass](
+                                             const FBlueprintAuthoringSnapshot& Snapshot)
+                    {
+                        int32 Depth = 0;
+                        for (const UClass* Current = Snapshot.OriginalGeneratedClass.Get();
+                             Current != nullptr && Current != OriginalGeneratedClass;
+                             Current = Current->GetSuperClass())
+                        {
+                            ++Depth;
+                        }
+                        return Depth;
+                    };
+                    return DepthFromRoot(Left) < DepthFromRoot(Right);
+                });
+        }
+        bActive = true;
+        OutError.Reset();
+        return true;
+    }
+
+    bool Finalize(FString& OutError)
+    {
+        if (!bActive)
+        {
+            OutError.Reset();
+            return true;
+        }
+        const int32 EndResult = LocalTransactor->End();
+        if (EndResult != 1)
+        {
+            OutError = TEXT("Could not finalize the private Blueprint parent transaction.");
+            return false;
+        }
+        bActive = false;
+        bRollbackAvailable = true;
+        OutError.Reset();
+        return true;
+    }
+
+    bool Rollback(FString& OutError)
+    {
+        if (!bRollbackAvailable && !bActive)
+        {
+            OutError.Reset();
+            return true;
+        }
+        if (!Finalize(OutError))
+        {
+            return false;
+        }
+        const bool bRestored = LocalTransactor->Undo(false);
+        bRollbackAvailable = false;
+        if (!bRestored)
+        {
+            OutError = TEXT("The private Blueprint parent transaction could not restore its captured state.");
+            return false;
+        }
+        if (!RecompileRestoredAuthoring(OutError))
+        {
+            return false;
+        }
+        OutError.Reset();
+        return true;
+    }
+
+    void DiscardRollbackAbility()
+    {
+        bRollbackAvailable = false;
+    }
+
+    void RestoreCapturedPackageDirtyFlags() const
+    {
+        for (const FBlueprintAuthoringSnapshot& Snapshot : AuthoringSnapshots)
+        {
+            Snapshot.RestorePackageDirtyFlag();
+        }
+    }
+
+    ~FLocalBlueprintTransaction()
+    {
+        if (bActive)
+        {
+            FString Ignored;
+            Rollback(Ignored);
+        }
+        ReleaseIsolation();
+    }
+
+    virtual void AddReferencedObjects(FReferenceCollector& Collector) override
+    {
+        if (LocalTransactor.IsValid())
+        {
+            UTransBuffer::AddReferencedObjects(LocalTransactor.Get(), Collector);
+        }
+        for (TObjectPtr<UObject>& Object : ReferencedObjects)
+        {
+            Collector.AddReferencedObject(Object);
+        }
+    }
+
+    virtual FString GetReferencerName() const override
+    {
+        return TEXT("FLocalBlueprintTransaction");
+    }
+
+private:
+    void ReleaseIsolation()
+    {
+        if (!bIsolated)
+        {
+            return;
+        }
+        if (GEditor != nullptr && LocalTransactor.IsValid())
+        {
+            GEditor->Trans = PreviousTransactor.Get();
+        }
+        GUndo = PreviousUndo;
+        PreviousUndo = nullptr;
+        // Release only after both globals point back at the original host.
+        PreviousTransactor.Reset();
+        LocalTransactor.Reset();
+        bIsolated = false;
+        bActive = false;
+        bRollbackAvailable = false;
+    }
+
+    void Save(UObject* Object)
+    {
+        if (Object != nullptr && GUndo != nullptr)
+        {
+            GUndo->SaveObject(Object);
+            ReferencedObjects.AddUnique(Object);
+        }
+    }
+
+    void CaptureObjectTree(UObject* Root)
+    {
+        if (Root == nullptr)
+        {
+            return;
+        }
+        Save(Root);
+        ForEachObjectWithOuter(
+            Root,
+            [this](UObject* SubObject)
+            {
+                Save(SubObject);
+            },
+            EGetObjectsFlags::IncludeNestedObjects,
+            RF_NoFlags,
+            EInternalObjectFlags::None);
+    }
+
+    void CaptureBlueprint(UBlueprint& Candidate)
+    {
+        FBlueprintAuthoringSnapshot& AuthoringSnapshot = AuthoringSnapshots.AddDefaulted_GetRef();
+        AuthoringSnapshot.Capture(Candidate);
+        Save(&Candidate);
+        if (Candidate.GeneratedClass != nullptr)
+        {
+            CaptureObjectTree(Candidate.GeneratedClass->GetDefaultObject());
+        }
+        if (Candidate.SimpleConstructionScript != nullptr)
+        {
+            CaptureObjectTree(Candidate.SimpleConstructionScript);
+            for (USCS_Node* Node : Candidate.SimpleConstructionScript->GetAllNodes())
+            {
+                if (Node != nullptr)
+                {
+                    Save(Node);
+                    Save(Node->ComponentTemplate);
+                }
+            }
+        }
+        auto CaptureGraph = [this](UEdGraph* Graph)
+        {
+            if (Graph == nullptr)
+            {
+                return;
+            }
+            CaptureObjectTree(Graph);
+            for (UEdGraphNode* Node : Graph->Nodes)
+            {
+                Save(Node);
+            }
+        };
+        for (UEdGraph* Graph : Candidate.FunctionGraphs) CaptureGraph(Graph);
+        for (UEdGraph* Graph : Candidate.UbergraphPages) CaptureGraph(Graph);
+        for (UEdGraph* Graph : Candidate.MacroGraphs) CaptureGraph(Graph);
+        for (const FBPInterfaceDescription& Interface : Candidate.ImplementedInterfaces)
+        {
+            for (UEdGraph* Graph : Interface.Graphs) CaptureGraph(Graph);
+        }
+    }
+
+    bool RecompileRestoredAuthoring(FString& OutError)
+    {
+        for (const FBlueprintAuthoringSnapshot& Snapshot : AuthoringSnapshots)
+        {
+            UBlueprint* Candidate = Snapshot.Blueprint.Get();
+            if (Candidate == nullptr ||
+                Candidate->ParentClass != Snapshot.OriginalParent.Get())
+            {
+                OutError = Candidate != nullptr
+                    ? FString::Printf(
+                        TEXT("Blueprint '%s' did not restore its original parent before authoring rollback recompilation."),
+                        *Candidate->GetPathName())
+                    : TEXT("A Blueprint captured by the private transaction was destroyed before authoring rollback recompilation.");
+                return false;
+            }
+        }
+
+        for (const FBlueprintAuthoringSnapshot& Snapshot : AuthoringSnapshots)
+        {
+            UBlueprint* Candidate = Snapshot.Blueprint.Get();
+            if (Candidate == nullptr)
+            {
+                OutError = TEXT("A Blueprint captured by the private transaction was destroyed during authoring rollback recompilation.");
+                return false;
+            }
+
+            if (UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+                    Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate->GeneratedClass))
+            {
+                // Clear routes from the post-mutation generated class before
+                // restoring the captured maps.  The mutated class may have
+                // routes which are absent from the old snapshot.
+                GeneratedClass->PrepareManagedFunctionsForRecompile();
+            }
+            if (!Snapshot.ManagedGeneratedClass.RestoreTo(*Candidate, OutError))
+            {
+                return false;
+            }
+
+            if (UBlueprintGeneratedClass* GeneratedClass =
+                    Cast<UBlueprintGeneratedClass>(Candidate->GeneratedClass))
+            {
+                if (UClass* OriginalParent = Snapshot.OriginalParent.Get())
+                {
+                    GeneratedClass->PrepareToConformSparseClassData(
+                        OriginalParent->GetSparseClassDataStruct());
+                }
+            }
+
+            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Candidate);
+            FKismetEditorUtilities::CompileBlueprint(
+                Candidate,
+                EBlueprintCompileOptions::SkipSave |
+                    EBlueprintCompileOptions::UseDeltaSerializationDuringReinstancing);
+            if (Candidate->Status == BS_Error || Candidate->GeneratedClass == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint '%s' failed to recompile its restored authoring state during transaction rollback."),
+                    *Candidate->GetPathName());
+                return false;
+            }
+
+            if (!Snapshot.ManagedGeneratedClass.RestoreTo(*Candidate, OutError))
+            {
+                return false;
+            }
+            if (UUnifiedScriptBlueprintGeneratedClass* GeneratedClass =
+                    Cast<UUnifiedScriptBlueprintGeneratedClass>(Candidate->GeneratedClass))
+            {
+                GeneratedClass->BindManagedFunctions();
+                for (const TPair<FName, FUnifiedScriptManagedFunctionBinding>& Pair :
+                         GeneratedClass->ManagedFunctionBindings)
+                {
+                    if (!GeneratedClass->IsManagedFunctionBound(Pair.Key))
+                    {
+                        OutError = FString::Printf(
+                            TEXT("Blueprint '%s' did not restore managed function binding '%s' during transaction rollback."),
+                            *Candidate->GetPathName(),
+                            *Pair.Key.ToString());
+                        return false;
+                    }
+                }
+            }
+            else if (Snapshot.ManagedGeneratedClass.bCaptured)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint '%s' lost its UnifiedScript generated class after authoring rollback recompilation."),
+                    *Candidate->GetPathName());
+                return false;
+            }
+
+            if (Candidate->GeneratedClass->GetSuperClass() != Candidate->ParentClass)
+            {
+                OutError = FString::Printf(
+                    TEXT("Blueprint '%s' did not restore its original generated superclass during transaction rollback."),
+                    *Candidate->GetPathName());
+                return false;
+            }
+        }
+
+        OutError.Reset();
+        return true;
+    }
+
+    UBlueprint& Blueprint;
+    TStrongObjectPtr<UTransBuffer> LocalTransactor;
+    TStrongObjectPtr<UTransactor> PreviousTransactor;
+    ITransaction* PreviousUndo = nullptr;
+    TArray<TObjectPtr<UObject>> ReferencedObjects;
+    TArray<FBlueprintAuthoringSnapshot> AuthoringSnapshots;
+    bool bIsolated = false;
+    bool bActive = false;
+    bool bRollbackAvailable = false;
+};
+
+bool PrepareParentChange(UBlueprint& Blueprint, UClass& NewParent, FString& OutError)
+{
+    Blueprint.Modify();
+    if (Blueprint.SimpleConstructionScript != nullptr)
+    {
+        Blueprint.SimpleConstructionScript->Modify();
+        for (USCS_Node* Node : Blueprint.SimpleConstructionScript->GetAllNodes())
+        {
+            if (Node != nullptr)
+            {
+                Node->Modify();
+            }
+        }
+    }
+    Blueprint.ParentClass = &NewParent;
+    if (Blueprint.SimpleConstructionScript != nullptr)
+    {
+        Blueprint.SimpleConstructionScript->ValidateSceneRootNodes();
+    }
+    FBlueprintEditorUtils::MarkBlueprintAsModified(&Blueprint);
+    if (UBlueprintGeneratedClass* GeneratedClass =
+            Cast<UBlueprintGeneratedClass>(Blueprint.GeneratedClass))
+    {
+        GeneratedClass->PrepareToConformSparseClassData(NewParent.GetSparseClassDataStruct());
+    }
+    OutError.Reset();
+    return true;
+}
+
+UClass* LoadExactParentClass(const FString& Path, FString& OutError)
+{
+    UObject* Loaded = StaticLoadObject(UClass::StaticClass(), nullptr, *Path);
+    UClass* Result = Cast<UClass>(Loaded);
+    if (Result == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' could not be loaded exactly."),
+            *Path);
+        return nullptr;
+    }
+    if (!Result->GetPathName().Equals(Path, ESearchCase::CaseSensitive))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' resolved to '%s'; redirects are not accepted."),
+            *Path,
+            *Result->GetPathName());
+        return nullptr;
+    }
+    return Result;
+}
+
+bool ValidateParentFamily(
+    const UUnifiedScriptAsset& ScriptAsset,
+    UClass& ParentClass,
+    FString& OutError)
+{
+    if (ParentClass.HasAnyClassFlags(CLASS_Interface | CLASS_Deprecated | CLASS_NewerVersionExists))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' is an interface, deprecated class, or newer-version class."),
+            *ParentClass.GetPathName());
+        return false;
+    }
+
+    bool bFamilyMatches = false;
+    bool bCarrierMatches = false;
+    switch (ScriptAsset.ScriptClassKind)
+    {
+    case EUnifiedScriptClassKind::Actor:
+        bFamilyMatches = ParentClass.IsChildOf(AActor::StaticClass());
+        bCarrierMatches = ParentClass.IsChildOf(AUnifiedScriptActor::StaticClass());
+        break;
+    case EUnifiedScriptClassKind::ActorComponent:
+        bFamilyMatches = ParentClass.IsChildOf(UActorComponent::StaticClass());
+        bCarrierMatches = ParentClass.IsChildOf(UUnifiedScriptComponent::StaticClass());
+        break;
+    case EUnifiedScriptClassKind::Object:
+        bFamilyMatches = ParentClass.IsChildOf(UObject::StaticClass()) &&
+            !ParentClass.IsChildOf(AActor::StaticClass()) &&
+            !ParentClass.IsChildOf(UActorComponent::StaticClass()) &&
+            !ParentClass.IsChildOf(UBlueprintFunctionLibrary::StaticClass());
+        bCarrierMatches = ParentClass.IsChildOf(UUnifiedScriptObject::StaticClass());
+        break;
+    case EUnifiedScriptClassKind::BlueprintFunctionLibrary:
+        bFamilyMatches = ParentClass.IsChildOf(UBlueprintFunctionLibrary::StaticClass());
+        bCarrierMatches = ParentClass.IsChildOf(UUnifiedScriptBlueprintFunctionLibrary::StaticClass());
+        break;
+    default:
+        break;
+    }
+    if (!bFamilyMatches)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' is not compatible with class kind %d."),
+            *ParentClass.GetPathName(),
+            static_cast<int32>(ScriptAsset.ScriptClassKind));
+        return false;
+    }
+    if (!bCarrierMatches)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' requires composition: its behavior carrier is not compatible with class kind %d."),
+            *ParentClass.GetPathName(),
+            static_cast<int32>(ScriptAsset.ScriptClassKind));
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool BuildParentChangePlan(
+    UUnifiedScriptAsset& ScriptAsset,
+    UBlueprint& Blueprint,
+    const TOptional<FUnifiedScriptClassBindingDeclaration>& Binding,
+    FParentChangePlan& OutPlan,
+    FString& OutError)
+{
+    OutPlan = FParentChangePlan();
+    OutPlan.CurrentParent = Blueprint.ParentClass;
+    if (!Binding.IsSet() || !Binding->BaseClassPath.IsSet())
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    const FString& RequestedPath = Binding->BaseClassPath.GetValue();
+    UClass* RequestedParent = LoadExactParentClass(RequestedPath, OutError);
+    if (RequestedParent == nullptr || !ValidateParentFamily(ScriptAsset, *RequestedParent, OutError))
+    {
+        return false;
+    }
+    if (RequestedParent == Blueprint.GeneratedClass ||
+        (Blueprint.GeneratedClass != nullptr &&
+            RequestedParent->IsChildOf(Blueprint.GeneratedClass)))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript class binding base '%s' would create a self or descendant cycle."),
+            *RequestedPath);
+        return false;
+    }
+    for (UClass* Cursor = RequestedParent; Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+    {
+        const UUnifiedScriptBlueprintGeneratedClass* ManagedParent =
+            Cast<UUnifiedScriptBlueprintGeneratedClass>(Cursor);
+        if (ManagedParent != nullptr && ManagedParent->ManagedScriptAsset != nullptr &&
+            ManagedParent->ManagedScriptAsset != &ScriptAsset)
+        {
+            OutError = FString::Printf(
+                TEXT("UnifiedScript class binding base '%s' has an unrelated managed-generated owner '%s' in its ancestry."),
+                *RequestedPath,
+                *Cursor->GetPathName());
+            return false;
+        }
+    }
+
+    if (Blueprint.ParentClass == nullptr ||
+        !Blueprint.ParentClass->GetPathName().Equals(RequestedPath, ESearchCase::CaseSensitive))
+    {
+        OutPlan.RequestedParent = RequestedParent;
+        OutPlan.bChanged = Blueprint.ParentClass != RequestedParent;
+    }
+    if (OutPlan.bChanged)
+    {
+        for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
+        {
+            UUnifiedScriptComponent* Component = *It;
+            if (!IsValid(Component) || !Component->bScriptRunning)
+            {
+                continue;
+            }
+            const UUnifiedScriptBlueprintGeneratedClass* ActiveClass =
+                Component->GetActiveManagedGeneratedClass();
+            if (ActiveClass != nullptr &&
+            (ActiveClass == Blueprint.GeneratedClass.Get() ||
+                    (Blueprint.GeneratedClass != nullptr && ActiveClass->IsChildOf(Blueprint.GeneratedClass.Get()))))
+            {
+                OutError = FString::Printf(
+                    TEXT("Cannot change parent of Blueprint '%s' while a managed instance is active; stop the affected World first."),
+                    *Blueprint.GetPathName());
+                return false;
+            }
+        }
+    }
+    OutError.Reset();
+    return true;
+}
+
 bool ParseSemanticId(const FString& SemanticId, FGuid& OutId)
 {
     FString Digits = SemanticId;
@@ -316,8 +1844,14 @@ bool ValidateAddedStateNameConflicts(
     TArray<const FStateDeclaration*> AddedDeclarations;
     for (const FStateDeclaration& Declaration : Declarations)
     {
-        if (FindVariableByGuid(Blueprint, Declaration.Id) == INDEX_NONE &&
-            FindVariableByStateId(Blueprint, Declaration.SemanticId) == INDEX_NONE)
+        int32 ExistingIndex = FindVariableByGuid(Blueprint, Declaration.Id);
+        if (ExistingIndex == INDEX_NONE)
+        {
+            ExistingIndex = FindVariableByStateId(Blueprint, Declaration.SemanticId);
+        }
+        const bool bNameChanged = ExistingIndex != INDEX_NONE &&
+            Blueprint.NewVariables[ExistingIndex].VarName != Declaration.Name;
+        if (ExistingIndex == INDEX_NONE || bNameChanged)
         {
             AddedDeclarations.Add(&Declaration);
         }
@@ -721,7 +2255,8 @@ bool ResolveBlueprintOverrideFunction(
     const UBlueprint& Blueprint,
     const FFunctionDeclaration& Declaration,
     UFunction*& OutFunction,
-    FString& OutError)
+    FString& OutError,
+    const UClass* ProspectiveParentClass = nullptr)
 {
     OutFunction = nullptr;
     if (!Declaration.bBlueprintOverride)
@@ -741,14 +2276,17 @@ bool ResolveBlueprintOverrideFunction(
             *Declaration.BlueprintOverrideDeclaringTypePath);
         return false;
     }
-    if (Blueprint.ParentClass == nullptr ||
-        !Blueprint.ParentClass->IsChildOf(DeclaringClass))
+    const UClass* EffectiveParentClass = ProspectiveParentClass != nullptr
+        ? ProspectiveParentClass
+        : Blueprint.ParentClass;
+    if (EffectiveParentClass == nullptr ||
+        !EffectiveParentClass->IsChildOf(DeclaringClass))
     {
         OutError = FString::Printf(
             TEXT("Blueprint override '%s' targets '%s', but Blueprint parent '%s' is not its child."),
             *Declaration.ManagedName.ToString(),
             *Declaration.BlueprintOverrideDeclaringTypePath,
-            *GetPathNameSafe(Blueprint.ParentClass));
+            *GetPathNameSafe(EffectiveParentClass));
         return false;
     }
 
@@ -2506,6 +4044,7 @@ bool ParseGameplayBindings(
 bool ParseDeclaration(
     UUnifiedScriptAsset& ScriptAsset,
     const UBlueprint& Blueprint,
+    const UClass* ProspectiveParentClass,
     const FString& DeclarationJson,
     TArray<FStateDeclaration>& OutStates,
     TArray<FFunctionDeclaration>& OutFunctions,
@@ -2513,8 +4052,10 @@ bool ParseDeclaration(
     TArray<FInputActionDeclaration>& OutInputBindings,
     TArray<FDelegateBindingDeclaration>& OutDelegateBindings,
     TArray<FInterfaceFunctionDeclaration>& OutInterfaceBindings,
+    TOptional<FUnifiedScriptClassBindingDeclaration>& OutClassBinding,
     FString& OutError)
 {
+    OutClassBinding.Reset();
     TSharedPtr<FJsonObject> Root;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeclarationJson);
     if (!FJsonSerializer::Deserialize(
@@ -2636,11 +4177,24 @@ bool ParseDeclaration(
     }
     TOptional<FUnifiedScriptClassBindingDeclaration> ClassBinding;
     if (!FUnifiedScriptClassBindingDeclaration::ReadJson(
-            SelectedAsset, ClassBinding, OutError) ||
-        !ScriptAsset.ValidateDeclarationClassBinding(ClassBinding, OutError))
+            SelectedAsset, ClassBinding, OutError))
     {
         return false;
     }
+    // The existing generated owner must remain valid before a prospective
+    // parent is considered.  BaseClassPath is deliberately validated in the
+    // parent-change plan below; validating it against the old owner here
+    // would reject the very reparent operation this materializer owns.
+    TOptional<FUnifiedScriptClassBindingDeclaration> ExistingOwnerBinding = ClassBinding;
+    if (ExistingOwnerBinding.IsSet())
+    {
+        ExistingOwnerBinding->BaseClassPath.Reset();
+    }
+    if (!ScriptAsset.ValidateDeclarationClassBinding(ExistingOwnerBinding, OutError))
+    {
+        return false;
+    }
+    OutClassBinding = MoveTemp(ClassBinding);
 
     const TArray<TSharedPtr<FJsonValue>>* States = nullptr;
     const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
@@ -3180,7 +4734,8 @@ bool ParseDeclaration(
                     Blueprint,
                     Declaration,
                     NativeOverrideFunction,
-                    OutError) ||
+                    OutError,
+                    ProspectiveParentClass) ||
                 NativeOverrideFunction == nullptr)
             {
                 return false;
@@ -3324,7 +4879,8 @@ bool ParseDeclaration(
                     Blueprint,
                     Declaration,
                     NativeOverrideFunction,
-                    OutError) ||
+                    OutError,
+                    ProspectiveParentClass) ||
                 NativeOverrideFunction == nullptr ||
                 !ValidateBlueprintOverrideSignature(
                     *NativeOverrideFunction,
@@ -3373,6 +4929,60 @@ bool ParseDeclaration(
         State->PropertyFlags |= CPF_RepNotify;
     }
     return true;
+}
+
+bool ReadSelectedClassBinding(
+    UUnifiedScriptAsset& ScriptAsset,
+    const FString& DeclarationJson,
+    TOptional<FUnifiedScriptClassBindingDeclaration>& OutBinding,
+    FString& OutError)
+{
+    OutBinding.Reset();
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeclarationJson);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = FString::Printf(
+            TEXT("Script Class declaration JSON is invalid: %s"),
+            *Reader->GetErrorMessage());
+        return false;
+    }
+    FString Schema;
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        !Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr || Assets->IsEmpty() ||
+        !ValidateUnifiedScriptClassBindingsJson(*Assets, Schema, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("Script Class declaration has no valid assets array for parent planning.");
+        }
+        return false;
+    }
+    FString RequestedAssetPath = ScriptAsset.DeclarationAssetPath;
+    RequestedAssetPath.TrimStartAndEndInline();
+    TSharedPtr<FJsonObject> Selected;
+    for (const TSharedPtr<FJsonValue>& AssetValue : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Candidate = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString CandidatePath;
+        if (Candidate.IsValid() && Candidate->TryGetStringField(TEXT("assetPath"), CandidatePath) &&
+            ((RequestedAssetPath.IsEmpty() && Assets->Num() == 1) || CandidatePath == RequestedAssetPath))
+        {
+            Selected = Candidate;
+            break;
+        }
+    }
+    if (!Selected.IsValid())
+    {
+        OutError = FString::Printf(
+            TEXT("Script Class declaration does not contain assetPath '%s' for parent planning."),
+            *RequestedAssetPath);
+        return false;
+    }
+    return FUnifiedScriptClassBindingDeclaration::ReadJson(Selected, OutBinding, OutError);
 }
 
 bool CanonicalCurrentDefault(
@@ -3548,6 +5158,133 @@ bool CanonicalCurrentDefault(
     return false;
 }
 
+bool ArePropertiesExactlyCompatible(
+    const FProperty* Left,
+    const FProperty* Right)
+{
+    if (Left == nullptr || Right == nullptr ||
+        Left->GetClass() != Right->GetClass() ||
+        !Left->SameType(Right) ||
+        Left->GetSize() != Right->GetSize())
+    {
+        return false;
+    }
+    if (const FObjectPropertyBase* LeftObject = CastField<FObjectPropertyBase>(Left))
+    {
+        const FObjectPropertyBase* RightObject = CastField<FObjectPropertyBase>(Right);
+        return RightObject != nullptr &&
+            LeftObject->PropertyClass == RightObject->PropertyClass;
+    }
+    if (const FStructProperty* LeftStruct = CastField<FStructProperty>(Left))
+    {
+        const FStructProperty* RightStruct = CastField<FStructProperty>(Right);
+        return RightStruct != nullptr && LeftStruct->Struct == RightStruct->Struct;
+    }
+    if (const FEnumProperty* LeftEnum = CastField<FEnumProperty>(Left))
+    {
+        const FEnumProperty* RightEnum = CastField<FEnumProperty>(Right);
+        return RightEnum != nullptr && LeftEnum->GetEnum() == RightEnum->GetEnum();
+    }
+    if (const FByteProperty* LeftByte = CastField<FByteProperty>(Left))
+    {
+        const FByteProperty* RightByte = CastField<FByteProperty>(Right);
+        return RightByte != nullptr && LeftByte->Enum == RightByte->Enum;
+    }
+    if (const FArrayProperty* LeftArray = CastField<FArrayProperty>(Left))
+    {
+        const FArrayProperty* RightArray = CastField<FArrayProperty>(Right);
+        return RightArray != nullptr &&
+            ArePropertiesExactlyCompatible(LeftArray->Inner, RightArray->Inner);
+    }
+    if (const FSetProperty* LeftSet = CastField<FSetProperty>(Left))
+    {
+        const FSetProperty* RightSet = CastField<FSetProperty>(Right);
+        return RightSet != nullptr &&
+            ArePropertiesExactlyCompatible(LeftSet->ElementProp, RightSet->ElementProp);
+    }
+    if (const FMapProperty* LeftMap = CastField<FMapProperty>(Left))
+    {
+        const FMapProperty* RightMap = CastField<FMapProperty>(Right);
+        return RightMap != nullptr &&
+            ArePropertiesExactlyCompatible(LeftMap->KeyProp, RightMap->KeyProp) &&
+            ArePropertiesExactlyCompatible(LeftMap->ValueProp, RightMap->ValueProp);
+    }
+    return true;
+}
+
+void CopyTypedPropertyValue(
+    const FProperty* DestinationProperty,
+    void* DestinationContainer,
+    const FProperty* SourceProperty,
+    const void* SourceContainer)
+{
+    if (DestinationProperty == nullptr || DestinationContainer == nullptr ||
+        SourceProperty == nullptr || SourceContainer == nullptr)
+    {
+        return;
+    }
+    const FBoolProperty* DestinationBool = CastField<FBoolProperty>(DestinationProperty);
+    const FBoolProperty* SourceBool = CastField<FBoolProperty>(SourceProperty);
+    if (DestinationBool != nullptr && SourceBool != nullptr &&
+        DestinationProperty->ArrayDim == SourceProperty->ArrayDim)
+    {
+        for (int32 Index = 0; Index < DestinationProperty->ArrayDim; ++Index)
+        {
+            void* DestinationValue = DestinationProperty->ContainerPtrToValuePtr<void>(
+                DestinationContainer,
+                Index);
+            const void* SourceValue = SourceProperty->ContainerPtrToValuePtr<void>(
+                SourceContainer,
+                Index);
+            DestinationBool->SetPropertyValue(
+                DestinationValue,
+                SourceBool->GetPropertyValue(SourceValue));
+        }
+        return;
+    }
+    DestinationProperty->CopyCompleteValue(
+        DestinationProperty->ContainerPtrToValuePtr<void>(DestinationContainer),
+        SourceProperty->ContainerPtrToValuePtr<void>(SourceContainer));
+}
+
+bool AreTypedPropertyValuesIdentical(
+    const FProperty* LeftProperty,
+    const void* LeftContainer,
+    const FProperty* RightProperty,
+    const void* RightContainer)
+{
+    if (LeftProperty == nullptr || LeftContainer == nullptr ||
+        RightProperty == nullptr || RightContainer == nullptr ||
+        !ArePropertiesExactlyCompatible(LeftProperty, RightProperty))
+    {
+        return false;
+    }
+    const FBoolProperty* LeftBool = CastField<FBoolProperty>(LeftProperty);
+    const FBoolProperty* RightBool = CastField<FBoolProperty>(RightProperty);
+    if (LeftBool != nullptr && RightBool != nullptr &&
+        LeftProperty->ArrayDim == RightProperty->ArrayDim)
+    {
+        for (int32 Index = 0; Index < LeftProperty->ArrayDim; ++Index)
+        {
+            const void* LeftValue = LeftProperty->ContainerPtrToValuePtr<void>(
+                LeftContainer,
+                Index);
+            const void* RightValue = RightProperty->ContainerPtrToValuePtr<void>(
+                RightContainer,
+                Index);
+            if (LeftBool->GetPropertyValue(LeftValue) != RightBool->GetPropertyValue(RightValue))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    return LeftProperty->Identical(
+        LeftProperty->ContainerPtrToValuePtr<void>(LeftContainer),
+        RightProperty->ContainerPtrToValuePtr<void>(RightContainer),
+        PPF_None);
+}
+
 bool IsCollectionProperty(const FProperty* Property)
 {
     return Property != nullptr &&
@@ -3619,6 +5356,7 @@ bool HasMetadataValue(
 
 bool BuildPlan(
     const UBlueprint& Blueprint,
+    const UClass* EffectiveParentClass,
     TConstArrayView<FStateDeclaration> Declarations,
     FSyncPlan& OutPlan,
     FUnifiedScriptBlueprintClassSyncResult& OutResult,
@@ -3713,12 +5451,12 @@ bool BuildPlan(
                 return false;
             }
         }
-        if (FindFProperty<FProperty>(Blueprint.ParentClass, Declaration.Name) != nullptr)
+        if (FindFProperty<FProperty>(EffectiveParentClass, Declaration.Name) != nullptr)
         {
             OutError = FString::Printf(
                 TEXT("State '%s' masks a property declared by parent class '%s'."),
                 *Declaration.Name.ToString(),
-                *GetPathNameSafe(Blueprint.ParentClass));
+                *GetPathNameSafe(EffectiveParentClass));
             return false;
         }
 
@@ -3839,6 +5577,7 @@ bool BuildPlan(
 
 bool BuildFunctionPlan(
     const UBlueprint& Blueprint,
+    const UClass* EffectiveParentClass,
     TConstArrayView<FFunctionDeclaration> Declarations,
     FSyncPlan& OutPlan,
     FUnifiedScriptBlueprintClassSyncResult& OutResult,
@@ -3938,8 +5677,8 @@ bool BuildFunctionPlan(
             }
         }
         if (!Declaration.bInterfaceFunction && !Declaration.bBlueprintOverride &&
-            Blueprint.ParentClass != nullptr &&
-            Blueprint.ParentClass->FindFunctionByName(
+            EffectiveParentClass != nullptr &&
+            EffectiveParentClass->FindFunctionByName(
                 Declaration.InternalName,
                 EIncludeSuperFlag::IncludeSuper) != nullptr)
         {
@@ -4598,8 +6337,50 @@ bool ConfigureFunctionGraph(
     return true;
 }
 
-bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
+struct FScopedBlueprintStructuralSuppression
 {
+    UBlueprint& Blueprint;
+    const bool bEnabled;
+    const uint8 PreviousValue;
+    bool bRestored = false;
+
+    FScopedBlueprintStructuralSuppression(
+        UBlueprint& InBlueprint,
+        const bool bInEnabled)
+        : Blueprint(InBlueprint)
+        , bEnabled(bInEnabled)
+        , PreviousValue(InBlueprint.bSuppressStructurallyModified)
+    {
+        if (bEnabled)
+        {
+            Blueprint.bSuppressStructurallyModified = true;
+        }
+    }
+
+    void Restore()
+    {
+        if (!bRestored)
+        {
+            Blueprint.bSuppressStructurallyModified = PreviousValue;
+            bRestored = true;
+        }
+    }
+
+    ~FScopedBlueprintStructuralSuppression()
+    {
+        Restore();
+    }
+};
+
+bool ApplyPlan(
+    UBlueprint& Blueprint,
+    const FSyncPlan& Plan,
+    FString& OutError,
+    const bool bCombinedParentChange)
+{
+    FScopedBlueprintStructuralSuppression StructuralSuppression(
+        Blueprint,
+        bCombinedParentChange);
     Blueprint.Modify();
     for (const FName& StaleName : Plan.StaleGeneratedVariables)
     {
@@ -4797,6 +6578,15 @@ bool ApplyPlan(UBlueprint& Blueprint, const FSyncPlan& Plan, FString& OutError)
         }
     }
 
+    // Parent preparation is deliberately separate from compilation.  Refresh
+    // generated nodes only after stale members and renamed declarations have
+    // been applied, so a removed override is never reconstructed against the
+    // old generated class before the combined compile.
+    StructuralSuppression.Restore();
+    if (bCombinedParentChange)
+    {
+        FBlueprintEditorUtils::RefreshAllNodes(&Blueprint);
+    }
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
     FKismetEditorUtilities::CompileBlueprint(&Blueprint);
     if (Blueprint.Status == BS_Error)
@@ -4911,6 +6701,7 @@ struct FCollectionInstanceOverrideSnapshot
     UObject* OldObject = nullptr;
     TStrongObjectPtr<UObject> OldObjectRoot;
     TStrongObjectPtr<UObject> OldArchetypeRoot;
+    FSnapshotObjectIdentity ObjectIdentity;
     bool bFollowsArchetype = false;
     FName OldPropertyName;
     FName NewPropertyName;
@@ -4918,95 +6709,268 @@ struct FCollectionInstanceOverrideSnapshot
     FInstancedPropertyBag Value;
 };
 
-const FName CollectionSnapshotValueName(TEXT("UnifiedScriptSnapshotValue"));
-
-struct FCollectionReplacementTarget
-{
-    // Keep the raw destination only as an identity key for a later
-    // replacement notification.  It is never dereferenced after the
-    // callback returns; the weak reference is the only safe way to obtain a
-    // live UObject pointer.
-    UObject* Identity = nullptr;
-    TWeakObjectPtr<UObject> Weak;
-};
-
-using FCollectionReplacementMap = TMap<UObject*, FCollectionReplacementTarget>;
-
 UObject* ResolveReplacedObject(
-    UObject* OldObject,
+    const FObjectKey& OldObjectKey,
     const FCollectionReplacementMap& ReplacedObjects,
-    bool& bFoundReplacement)
+    bool& bFoundReplacement,
+    bool* bExplicitNull)
 {
-    UObject* Result = OldObject;
     bFoundReplacement = false;
-    TSet<UObject*> Visited;
-    while (Result != nullptr)
+    if (bExplicitNull != nullptr)
     {
-        if (Visited.Contains(Result))
+        *bExplicitNull = false;
+    }
+    FObjectKey CurrentKey = OldObjectKey;
+    TSet<FObjectKey> Visited;
+    while (true)
+    {
+        if (Visited.Contains(CurrentKey))
         {
             return nullptr;
         }
-        Visited.Add(Result);
-        const FCollectionReplacementTarget* Next = ReplacedObjects.Find(Result);
+        Visited.Add(CurrentKey);
+        const FCollectionReplacementTarget* Next = ReplacedObjects.Find(CurrentKey);
         if (Next == nullptr)
         {
-            break;
+            return CurrentKey.ResolveObjectPtrEvenIfUnreachable();
         }
         bFoundReplacement = true;
-        if (UObject* LiveDestination = Next->Weak.Get())
+        if (Next->bExplicitNull)
         {
-            Result = LiveDestination;
-            continue;
+            if (bExplicitNull != nullptr)
+            {
+                *bExplicitNull = true;
+            }
+            return nullptr;
         }
-
+        if (Next->Identity == FObjectKey())
+        {
+            return nullptr;
+        }
         // A reinstance can publish A->B and then retire B before publishing
-        // B->C.  Continue through B by identity so the later map entry can
-        // still resolve C without ever dereferencing the retired address.
-        if (Next->Identity != nullptr && ReplacedObjects.Contains(Next->Identity))
+        // B->C.  Continue through B by stable object identity so a recycled
+        // address can never select an unrelated replacement entry.
+        CurrentKey = Next->Identity;
+    }
+}
+
+struct FReplacementChainDiagnostics
+{
+    bool bFoundReplacement = false;
+    bool bSelfEdge = false;
+    bool bCycle = false;
+};
+
+FReplacementChainDiagnostics InspectReplacementChain(
+    const FObjectKey& OldObjectKey,
+    const FCollectionReplacementMap& ReplacedObjects)
+{
+    FReplacementChainDiagnostics Diagnostics;
+    FObjectKey CurrentKey = OldObjectKey;
+    TSet<FObjectKey> Visited;
+    while (true)
+    {
+        if (Visited.Contains(CurrentKey))
         {
-            Result = Next->Identity;
+            Diagnostics.bCycle = true;
+            return Diagnostics;
         }
-        else
+        Visited.Add(CurrentKey);
+        const FCollectionReplacementTarget* Next = ReplacedObjects.Find(CurrentKey);
+        if (Next == nullptr)
         {
-            Result = nullptr;
-            break;
+            return Diagnostics;
+        }
+        Diagnostics.bFoundReplacement = true;
+        if (Next->bExplicitNull || Next->Identity == FObjectKey())
+        {
+            return Diagnostics;
+        }
+        if (Next->Identity == CurrentKey)
+        {
+            Diagnostics.bSelfEdge = true;
+            return Diagnostics;
+        }
+        if (Visited.Contains(Next->Identity))
+        {
+            Diagnostics.bCycle = true;
+            return Diagnostics;
+        }
+        CurrentKey = Next->Identity;
+    }
+}
+
+UObject* ResolveSnapshotObject(
+    FSnapshotObjectIdentity& Identity,
+    UObject* OldObjectRoot,
+    const FCollectionReplacementMap& ReplacedObjects,
+    bool& bFoundReplacement,
+    bool* bExplicitNull)
+{
+    bFoundReplacement = false;
+    if (bExplicitNull != nullptr)
+    {
+        *bExplicitNull = false;
+    }
+    if (Identity.bClassDefaultObject && Identity.OwnerBlueprint.IsValid())
+    {
+        UClass* CurrentGeneratedClass = Identity.OwnerBlueprint->GeneratedClass.Get();
+        UObject* CurrentCdo = CurrentGeneratedClass != nullptr
+            ? CurrentGeneratedClass->GetDefaultObject(false)
+            : nullptr;
+        if (CurrentCdo == nullptr || CurrentCdo->GetClass() != CurrentGeneratedClass ||
+            CurrentGeneratedClass->ClassGeneratedBy != Identity.OwnerBlueprint.Get())
+        {
+            return nullptr;
+        }
+        // A CDO's owner Blueprint is the stable authoring identity.  Do not
+        // resolve it through a raw replacement address that may now belong to
+        // a component or another reinstanced object.
+        bFoundReplacement = CurrentCdo != Identity.Key.ResolveObjectPtrEvenIfUnreachable();
+        return CurrentCdo;
+    }
+
+    UObject* NewObject = ResolveReplacedObject(
+        Identity.Key,
+        ReplacedObjects,
+        bFoundReplacement,
+        bExplicitNull);
+    if (NewObject == nullptr && !bFoundReplacement)
+    {
+        NewObject = OldObjectRoot;
+    }
+    if (NewObject == nullptr)
+    {
+        return nullptr;
+    }
+    if (Identity.OwnerBlueprint.IsValid())
+    {
+        UClass* CurrentGeneratedClass = Identity.OwnerBlueprint->GeneratedClass.Get();
+        if (CurrentGeneratedClass == nullptr || NewObject->GetClass() != CurrentGeneratedClass ||
+            CurrentGeneratedClass->ClassGeneratedBy != Identity.OwnerBlueprint.Get())
+        {
+            return nullptr;
         }
     }
-    return Result;
+    else if (Identity.ExpectedClass.IsValid() &&
+             NewObject->GetClass() != Identity.ExpectedClass.Get())
+    {
+        return nullptr;
+    }
+    return NewObject;
+}
+
+class FSnapshotObjectReferenceCollector final : public FArchiveUObject
+{
+public:
+    FSnapshotObjectReferenceCollector()
+    {
+        ArIsObjectReferenceCollector = true;
+        ArIsModifyingWeakAndStrongReferences = true;
+    }
+
+    virtual FArchive& operator<<(UObject*& Value) override
+    {
+        if (Value != nullptr)
+        {
+            ReferencedKeys.AddUnique(FObjectKey(Value));
+        }
+        return *this;
+    }
+
+    TArray<FObjectKey> ReferencedKeys;
+};
+
+bool ValidateSnapshotReplacementReferences(
+    const FProperty* SnapshotProperty,
+    void* SnapshotContainer,
+    const FCollectionReplacementMap& ReplacedObjects,
+    const FString& SnapshotDescription,
+    FString& OutError)
+{
+    if (SnapshotProperty == nullptr || SnapshotContainer == nullptr)
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    FSnapshotObjectReferenceCollector Collector;
+    FStructuredArchiveFromArchive StructuredArchive(Collector);
+    SnapshotProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotContainer);
+    for (const FObjectKey& ReferencedKey : Collector.ReferencedKeys)
+    {
+        bool bFoundReplacement = false;
+        bool bExplicitNull = false;
+        UObject* FinalObject = ResolveReplacedObject(
+            ReferencedKey,
+            ReplacedObjects,
+            bFoundReplacement,
+            &bExplicitNull);
+        if (bExplicitNull)
+        {
+            OutError = FString::Printf(
+                TEXT("Snapshot '%s' contains an intentional object reference whose owner was explicitly destroyed without an authorized replacement."),
+                *SnapshotDescription);
+            return false;
+        }
+        if (FinalObject == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Snapshot '%s' contains an object reference whose replacement identity has no live terminal object."),
+                *SnapshotDescription);
+            return false;
+        }
+        if (FinalObject->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed))
+        {
+            OutError = FString::Printf(
+                TEXT("Snapshot '%s' contains an object reference whose replacement terminal is destroyed or garbage."),
+                *SnapshotDescription);
+            return false;
+        }
+    }
+    OutError.Reset();
+    return true;
 }
 
 TMap<UObject*, UObject*> FlattenReplacedObjects(
     const FCollectionReplacementMap& ReplacedObjects)
 {
     TMap<UObject*, UObject*> Flattened;
-    for (const TPair<UObject*, FCollectionReplacementTarget>& Pair : ReplacedObjects)
+    for (const TPair<FObjectKey, FCollectionReplacementTarget>& Pair : ReplacedObjects)
     {
+        UObject* OldObject = Pair.Key.ResolveObjectPtrEvenIfUnreachable();
+        if (OldObject == nullptr || FObjectKey(OldObject) != Pair.Key)
+        {
+            // The original object is gone and no GC rooted snapshot can still
+            // require an archive replacement for this key.
+            continue;
+        }
         bool bFoundReplacement = false;
+        bool bExplicitNull = false;
         UObject* FinalObject = ResolveReplacedObject(
             Pair.Key,
             ReplacedObjects,
-            bFoundReplacement);
-        if (bFoundReplacement)
+            bFoundReplacement,
+            &bExplicitNull);
+        if (!bFoundReplacement)
         {
-            // Replacement notifications can contain an intermediate object
-            // which is immediately retired by a later reinstance.  Never
-            // hand that dangling address to FArchiveReplaceObjectRef; an
-            // explicit null is the only safe representation of a destroyed
-            // destination.
-            Flattened.Add(
-                Pair.Key,
-                FinalObject != nullptr && !FinalObject->HasAnyFlags(RF_MirroredGarbage)
-                    ? FinalObject
-                    : nullptr);
+            continue;
         }
-        else
+        if (FinalObject != nullptr &&
+            !FinalObject->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed) &&
+            FObjectKey(FinalObject) != FObjectKey())
         {
-            UObject* DirectObject = Pair.Value.Weak.Get();
-            Flattened.Add(
-                Pair.Key,
-                DirectObject != nullptr && !DirectObject->HasAnyFlags(RF_MirroredGarbage)
-                    ? DirectObject
-                    : nullptr);
+            // Unreachable objects can still participate in UE's replacement
+            // semantics, but destroyed or mirrored-garbage terminals are no
+            // longer valid values to write into a snapshot.  Actual snapshot
+            // references to one are rejected by the validator above.
+            Flattened.Add(OldObject, FinalObject);
+        }
+        else if (bExplicitNull)
+        {
+            // An explicit old->nullptr publication is different from a chain
+            // whose terminal object disappeared; only the former clears refs.
+            Flattened.Add(OldObject, nullptr);
         }
     }
     return Flattened;
@@ -5032,6 +6996,316 @@ FProperty* FindStateProperty(
         }
     }
     return Class->FindPropertyByName(FallbackName);
+}
+
+bool CaptureManagedStateValueSnapshots(
+    const UBlueprint& Blueprint,
+    const FSyncPlan& Plan,
+    TArray<FManagedStateValueSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    OutSnapshots.Reset();
+    if (Blueprint.GeneratedClass == nullptr)
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    TMap<FGuid, FName> NewNamesByStateId;
+    for (const FPlannedState& Planned : Plan.States)
+    {
+        NewNamesByStateId.Add(Planned.Declaration.Id, Planned.Declaration.Name);
+    }
+
+    TArray<const FBPVariableDescription*> ManagedVariables;
+    for (const FBPVariableDescription& Variable : Blueprint.NewVariables)
+    {
+        if (IsManagedState(Variable) && Variable.HasMetaData(StateIdKey))
+        {
+            ManagedVariables.Add(&Variable);
+        }
+    }
+    if (ManagedVariables.IsEmpty())
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    TArray<UObject*> Objects;
+    GetObjectsOfClass(Blueprint.GeneratedClass, Objects, true, RF_MirroredGarbage);
+    for (UObject* Object : Objects)
+    {
+        if (Object == nullptr ||
+            Object->HasAnyFlags(RF_BeginDestroyed | RF_FinishDestroyed | RF_MirroredGarbage) ||
+            Object->GetClass() == nullptr ||
+            !Object->GetClass()->IsChildOf(Blueprint.GeneratedClass))
+        {
+            continue;
+        }
+        UBlueprint* GeneratedBy = Cast<UBlueprint>(Object->GetClass()->ClassGeneratedBy);
+        if (GeneratedBy == nullptr || GeneratedBy->GeneratedClass != Object->GetClass())
+        {
+            continue;
+        }
+        const bool bRootClassDefaultObject =
+            Object == Blueprint.GeneratedClass->GetDefaultObject(false);
+        const bool bDerivedClassDefaultObject =
+            Object->HasAnyFlags(RF_ClassDefaultObject) && Object->GetClass() != Blueprint.GeneratedClass;
+        if (!bRootClassDefaultObject && !bDerivedClassDefaultObject && Object->IsTemplate())
+        {
+            continue;
+        }
+
+        UObject* OldArchetype = Object->GetArchetype();
+        for (const FBPVariableDescription* Variable : ManagedVariables)
+        {
+            FGuid StateId;
+            if (!ParseSemanticId(Variable->GetMetaData(StateIdKey), StateId))
+            {
+                continue;
+            }
+            FProperty* OldProperty = FindStateProperty(
+                Object->GetClass(),
+                StateId,
+                Variable->VarName);
+            if (OldProperty == nullptr || OldProperty->HasAnyPropertyFlags(CPF_Transient))
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state '%s' lost its reflected property on '%s' before typed preservation."),
+                    *Variable->VarName.ToString(),
+                    *Object->GetPathName());
+                return false;
+            }
+            FProperty* ArchetypeProperty = OldArchetype != nullptr && OldArchetype != Object
+                ? FindStateProperty(OldArchetype->GetClass(), StateId, Variable->VarName)
+                : nullptr;
+            if (ArchetypeProperty != nullptr &&
+                !ArePropertiesExactlyCompatible(OldProperty, ArchetypeProperty))
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state '%s' has an incompatible immediate archetype on '%s'."),
+                    *Variable->VarName.ToString(),
+                    *Object->GetPathName());
+                return false;
+            }
+            const bool bFollowsArchetype = ArchetypeProperty != nullptr &&
+                AreTypedPropertyValuesIdentical(
+                    OldProperty,
+                    Object,
+                    ArchetypeProperty,
+                    OldArchetype);
+            FManagedStateValueSnapshot& Snapshot = OutSnapshots.AddDefaulted_GetRef();
+            Snapshot.OldObject = Object;
+            Snapshot.OldObjectRoot = TStrongObjectPtr<UObject>(Object);
+            Snapshot.OldArchetypeRoot = TStrongObjectPtr<UObject>(OldArchetype);
+            Snapshot.ObjectIdentity.Capture(Object);
+            Snapshot.bFollowsArchetype = bFollowsArchetype;
+            Snapshot.StateId = StateId;
+            Snapshot.OldPropertyName = Variable->VarName;
+            if (const FName* NewName = NewNamesByStateId.Find(StateId))
+            {
+                Snapshot.NewPropertyName = *NewName;
+                if (Object == Blueprint.GeneratedClass->GetDefaultObject(false))
+                {
+                    if (const FPlannedState* Planned = Plan.States.FindByPredicate(
+                            [&StateId](const FPlannedState& Candidate)
+                            {
+                                return Candidate.Declaration.Id == StateId;
+                            }))
+                    {
+                        Snapshot.bRestoreOnSuccess = Planned->bPreserveDefaultOverride;
+                    }
+                }
+            }
+            if (bFollowsArchetype)
+            {
+                continue;
+            }
+            if (Snapshot.Value.AddProperty(CollectionSnapshotValueName, OldProperty) !=
+                EPropertyBagAlterationResult::Success)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state '%s' on '%s' cannot be represented by a typed preservation snapshot."),
+                    *Variable->VarName.ToString(),
+                    *Object->GetPathName());
+                return false;
+            }
+            const FPropertyBagPropertyDesc* SnapshotDesc =
+                Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+            if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr)
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state '%s' produced an incomplete typed preservation snapshot."),
+                    *Variable->VarName.ToString());
+                return false;
+            }
+            CopyTypedPropertyValue(
+                SnapshotDesc->CachedProperty,
+                Snapshot.Value.GetMutableValue().GetMemory(),
+                OldProperty,
+                Object);
+        }
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool RestoreManagedStateValueSnapshots(
+    TArray<FManagedStateValueSnapshot>& Snapshots,
+    const FCollectionReplacementMap& ReplacedObjects,
+    const bool bRollback,
+    FString& OutError)
+{
+    const TMap<UObject*, UObject*> FlattenedReplacedObjects =
+        FlattenReplacedObjects(ReplacedObjects);
+    TArray<int32> SnapshotOrder;
+    SnapshotOrder.Reserve(Snapshots.Num());
+    for (int32 Index = 0; Index < Snapshots.Num(); ++Index)
+    {
+        SnapshotOrder.Add(Index);
+    }
+    const auto ResolveSnapshotTarget =
+        [&ReplacedObjects](FManagedStateValueSnapshot& Snapshot, bool& bFoundReplacement)
+        {
+            UObject* NewObject = ResolveSnapshotObject(
+                Snapshot.ObjectIdentity,
+                Snapshot.OldObjectRoot.Get(),
+                ReplacedObjects,
+                bFoundReplacement);
+            return NewObject;
+        };
+    const auto GetArchetypeDepth = [](UObject* Object)
+    {
+        int32 Depth = 0;
+        TSet<UObject*> Visited;
+        for (UObject* Current = Object != nullptr ? Object->GetArchetype() : nullptr;
+             Current != nullptr && !Visited.Contains(Current) && Depth < 256;
+             Current = Current->GetArchetype())
+        {
+            Visited.Add(Current);
+            ++Depth;
+        }
+        return Depth;
+    };
+    SnapshotOrder.Sort(
+        [&Snapshots, &ResolveSnapshotTarget, &GetArchetypeDepth](int32 Left, int32 Right)
+        {
+            bool bLeftReplaced = false;
+            bool bRightReplaced = false;
+            const int32 LeftDepth = GetArchetypeDepth(
+                ResolveSnapshotTarget(Snapshots[Left], bLeftReplaced));
+            const int32 RightDepth = GetArchetypeDepth(
+                ResolveSnapshotTarget(Snapshots[Right], bRightReplaced));
+            return LeftDepth == RightDepth ? Left < Right : LeftDepth < RightDepth;
+        });
+
+    for (const int32 SnapshotIndex : SnapshotOrder)
+    {
+        FManagedStateValueSnapshot& Snapshot = Snapshots[SnapshotIndex];
+        const FName TargetName = bRollback
+            ? Snapshot.OldPropertyName
+            : Snapshot.NewPropertyName;
+        if (TargetName.IsNone() || (!bRollback && !Snapshot.bRestoreOnSuccess &&
+                                   !Snapshot.bFollowsArchetype))
+        {
+            continue;
+        }
+        bool bFoundReplacement = false;
+        UObject* NewObject = ResolveSnapshotTarget(Snapshot, bFoundReplacement);
+        if (NewObject == nullptr || NewObject->HasAnyFlags(RF_MirroredGarbage) ||
+            NewObject->GetClass() == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed state '%s' lost its snapshotted owner during Blueprint reinstancing."),
+                *TargetName.ToString());
+            return false;
+        }
+        FProperty* NewProperty = FindStateProperty(
+            NewObject->GetClass(),
+            Snapshot.StateId,
+            TargetName);
+        if (NewProperty == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Managed state '%s' could not be restored on '%s' after Blueprint reinstancing."),
+                *TargetName.ToString(),
+                *NewObject->GetPathName());
+            return false;
+        }
+        void* NewValue = NewProperty->ContainerPtrToValuePtr<void>(NewObject);
+        if (Snapshot.bFollowsArchetype)
+        {
+            UObject* NewArchetype = NewObject->GetArchetype();
+            FProperty* NewArchetypeProperty = NewArchetype != nullptr && NewArchetype != NewObject
+                ? FindStateProperty(NewArchetype->GetClass(), Snapshot.StateId, TargetName)
+                : nullptr;
+            if (NewArchetype == nullptr || NewArchetypeProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(NewProperty, NewArchetypeProperty))
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state follower '%s' lost its immediate archetype on '%s' after Blueprint reinstancing."),
+                    *TargetName.ToString(),
+                    *NewObject->GetPathName());
+                return false;
+            }
+            CopyTypedPropertyValue(
+                NewProperty,
+                NewObject,
+                NewArchetypeProperty,
+                NewArchetype);
+        }
+        else
+        {
+            const FPropertyBagPropertyDesc* SnapshotDesc =
+                Snapshot.Value.FindPropertyDescByName(CollectionSnapshotValueName);
+            if (SnapshotDesc == nullptr || SnapshotDesc->CachedProperty == nullptr ||
+                !ArePropertiesExactlyCompatible(NewProperty, SnapshotDesc->CachedProperty))
+            {
+                OutError = FString::Printf(
+                    TEXT("Managed state '%s' changed reflected identity while restoring '%s'."),
+                    *Snapshot.OldPropertyName.ToString(),
+                    *NewObject->GetPathName());
+                return false;
+            }
+            void* SnapshotValue = SnapshotDesc->CachedProperty->ContainerPtrToValuePtr<void>(
+                Snapshot.Value.GetMutableValue().GetMemory());
+            if (!ValidateSnapshotReplacementReferences(
+                    SnapshotDesc->CachedProperty,
+                    SnapshotValue,
+                    ReplacedObjects,
+                    FString::Printf(
+                        TEXT("managed state '%s' on '%s'"),
+                        *Snapshot.OldPropertyName.ToString(),
+                        *NewObject->GetPathName()),
+                    OutError))
+            {
+                return false;
+            }
+            FArchiveReplaceObjectRef<UObject> ReplaceArchive(
+                NewObject,
+                FlattenedReplacedObjects,
+                EArchiveReplaceObjectFlags::DelayStart);
+            FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
+            SnapshotDesc->CachedProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
+            CopyTypedPropertyValue(
+                NewProperty,
+                NewObject,
+                SnapshotDesc->CachedProperty,
+                Snapshot.Value.GetMutableValue().GetMemory());
+        }
+        if (const FSetProperty* SetProperty = CastField<FSetProperty>(NewProperty))
+        {
+            FScriptSetHelper SetHelper(SetProperty, NewValue);
+            SetHelper.Rehash();
+        }
+        else if (const FMapProperty* MapProperty = CastField<FMapProperty>(NewProperty))
+        {
+            FScriptMapHelper MapHelper(MapProperty, NewValue);
+            MapHelper.Rehash();
+        }
+    }
+    OutError.Reset();
+    return true;
 }
 
 struct FCollectionSnapshotReferenceGuard final : FGCObject
@@ -5166,8 +7440,11 @@ bool CaptureCollectionInstanceOverrides(
                     OldPropertyName);
             }
             const bool bFollowsArchetype = ArchetypeProperty != nullptr &&
-                Property->SameType(ArchetypeProperty) &&
-                Property->Identical_InContainer(Instance, OldArchetype, 0, PPF_None);
+                AreTypedPropertyValuesIdentical(
+                    Property,
+                    Instance,
+                    ArchetypeProperty,
+                    OldArchetype);
             if (bFollowsArchetype && !bNewCollection)
             {
                 continue;
@@ -5184,6 +7461,7 @@ bool CaptureCollectionInstanceOverrides(
             Snapshot.OldObject = Instance;
             Snapshot.OldObjectRoot = TStrongObjectPtr<UObject>(Instance);
             Snapshot.OldArchetypeRoot = TStrongObjectPtr<UObject>(OldArchetype);
+            Snapshot.ObjectIdentity.Capture(Instance);
             Snapshot.bFollowsArchetype = bFollowsArchetype;
             Snapshot.OldPropertyName = OldPropertyName;
             Snapshot.NewPropertyName = Planned.Declaration.Name;
@@ -5209,10 +7487,11 @@ bool CaptureCollectionInstanceOverrides(
                     *Planned.Declaration.Name.ToString());
                 return false;
             }
-            SnapshotDesc->CachedProperty->CopyCompleteValue(
-                SnapshotDesc->CachedProperty->ContainerPtrToValuePtr<void>(
-                    Snapshot.Value.GetMutableValue().GetMemory()),
-                Property->ContainerPtrToValuePtr<void>(Instance));
+            CopyTypedPropertyValue(
+                SnapshotDesc->CachedProperty,
+                Snapshot.Value.GetMutableValue().GetMemory(),
+                Property,
+                Instance);
         }
     }
     return true;
@@ -5236,28 +7515,104 @@ bool RestoreCollectionInstanceOverrides(
     };
 
     TArray<FRestoreTarget> Targets;
+    const auto DescribeResolvedObject = [](UObject* Object)
+    {
+        if (Object == nullptr)
+        {
+            return FString(TEXT("<null>"));
+        }
+        const UClass* ObjectClass = Object->GetClass();
+        return ObjectClass != nullptr
+            ? FString::Printf(
+                TEXT("%s [%s]"),
+                *Object->GetPathName(),
+                *ObjectClass->GetPathName())
+            : FString::Printf(TEXT("%s [<null-class>]"), *Object->GetPathName());
+    };
     for (FCollectionInstanceOverrideSnapshot& Snapshot : Snapshots)
     {
         if (Snapshot.OldObject == nullptr ||
-            (!Snapshot.bFollowsArchetype && !Snapshot.Value.IsValid()))
+            Snapshot.ObjectIdentity.Key == FObjectKey())
         {
-            continue;
+            OutError = TEXT("Collection state override lost its captured owner identity before Blueprint reinstancing.");
+            return false;
+        }
+        if (!Snapshot.bFollowsArchetype && !Snapshot.Value.IsValid())
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' lost its typed value before Blueprint reinstancing."),
+                *Snapshot.OldPropertyName.ToString());
+            return false;
         }
         bool bFoundReplacement = false;
-        UObject* NewObject = ResolveReplacedObject(
-            Snapshot.OldObject,
+        bool bExplicitNull = false;
+        UObject* NewObject = ResolveSnapshotObject(
+            Snapshot.ObjectIdentity,
+            Snapshot.OldObjectRoot.Get(),
             ReplacedObjects,
-            bFoundReplacement);
-        if (NewObject == nullptr && !bFoundReplacement)
+            bFoundReplacement,
+            &bExplicitNull);
+        bool bTerminalFoundReplacement = false;
+        bool bTerminalExplicitNull = false;
+        UObject* TerminalObject = ResolveReplacedObject(
+            Snapshot.ObjectIdentity.Key,
+            ReplacedObjects,
+            bTerminalFoundReplacement,
+            &bTerminalExplicitNull);
+        if (!bTerminalFoundReplacement && NewObject != nullptr)
         {
-            NewObject = Snapshot.OldObjectRoot.Get();
+            TerminalObject = NewObject;
+        }
+        UBlueprint* OwnerBlueprint = Snapshot.ObjectIdentity.OwnerBlueprint.Get();
+        UClass* CurrentGeneratedClass = OwnerBlueprint != nullptr
+            ? OwnerBlueprint->GeneratedClass.Get()
+            : nullptr;
+        const FString OwnerBlueprintPath = OwnerBlueprint != nullptr
+            ? OwnerBlueprint->GetPathName()
+            : TEXT("<none>");
+        const FString CurrentGeneratedClassDescription =
+            DescribeResolvedObject(CurrentGeneratedClass);
+        const FString TerminalDescription = DescribeResolvedObject(TerminalObject);
+        const FReplacementChainDiagnostics ChainDiagnostics = InspectReplacementChain(
+            Snapshot.ObjectIdentity.Key,
+            ReplacedObjects);
+        const TCHAR* ChainState = ChainDiagnostics.bSelfEdge
+            ? TEXT("self-edge")
+            : ChainDiagnostics.bCycle
+                ? TEXT("cycle")
+                : ChainDiagnostics.bFoundReplacement
+                    ? TEXT("chain")
+                    : TEXT("none");
+        if (bExplicitNull)
+        {
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' lost captured owner '%s' because the engine published an explicit null replacement; terminal=%s; bFoundReplacement=%s; replacementChain=%s; ownerBlueprint='%s'; currentGeneratedClass=%s."),
+                *Snapshot.OldPropertyName.ToString(),
+                Snapshot.ObjectIdentity.CapturedObjectPath.IsEmpty()
+                    ? TEXT("<unknown>")
+                    : *Snapshot.ObjectIdentity.CapturedObjectPath,
+                *TerminalDescription,
+                bFoundReplacement ? TEXT("true") : TEXT("false"),
+                ChainState,
+                *OwnerBlueprintPath,
+                *CurrentGeneratedClassDescription);
+            return false;
         }
         if (NewObject == nullptr || NewObject->HasAnyFlags(RF_MirroredGarbage) ||
             NewObject->GetClass() == nullptr)
         {
-            // The instance was destroyed during reinstancing and no longer
-            // needs an override restored.
-            continue;
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' lost captured owner '%s' or failed replacement identity during Blueprint reinstancing; terminal=%s; bFoundReplacement=%s; replacementChain=%s; ownerBlueprint='%s'; currentGeneratedClass=%s."),
+                *Snapshot.OldPropertyName.ToString(),
+                Snapshot.ObjectIdentity.CapturedObjectPath.IsEmpty()
+                    ? TEXT("<unknown>")
+                    : *Snapshot.ObjectIdentity.CapturedObjectPath,
+                *TerminalDescription,
+                bFoundReplacement ? TEXT("true") : TEXT("false"),
+                ChainState,
+                *OwnerBlueprintPath,
+                *CurrentGeneratedClassDescription);
+            return false;
         }
         const FName TargetName = bRollback
             ? Snapshot.OldPropertyName
@@ -5281,7 +7636,7 @@ bool RestoreCollectionInstanceOverrides(
                 ? FindStateProperty(NewArchetype->GetClass(), Snapshot.StateId, TargetName)
                 : nullptr;
             if (NewArchetype == nullptr || NewArchetype == NewObject ||
-                NewArchetype->HasAnyFlags(RF_MirroredGarbage) ||
+                NewArchetype->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed) ||
                 NewArchetypeProperty == nullptr ||
                 !NewProperty->SameType(NewArchetypeProperty) ||
                 NewProperty->GetSize() != NewArchetypeProperty->GetSize())
@@ -5385,32 +7740,35 @@ bool RestoreCollectionInstanceOverrides(
     for (const FRestoreTarget& Target : Targets)
     {
         if (Target.Object == nullptr ||
-            Target.Object->HasAnyFlags(RF_MirroredGarbage))
+            Target.Object->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed))
         {
-            // The instance may have been destroyed after the preflight pass;
-            // its override no longer has a destination to restore.
-            continue;
+            OutError = FString::Printf(
+                TEXT("Collection state override '%s' lost its resolved owner before restore."),
+                *Target.Snapshot->OldPropertyName.ToString());
+            return false;
         }
         FCollectionInstanceOverrideSnapshot& Snapshot = *Target.Snapshot;
-        void* NewValue = Target.Property->ContainerPtrToValuePtr<void>(Target.Object);
         bool bValueChanged = false;
         if (Target.bFollowsArchetype)
         {
             if (Target.Archetype == nullptr ||
-                Target.Archetype->HasAnyFlags(RF_MirroredGarbage))
+                Target.Archetype->HasAnyFlags(RF_MirroredGarbage | RF_BeginDestroyed | RF_FinishDestroyed))
             {
                 OutError = FString::Printf(
                     TEXT("Collection state follower '%s' lost its final archetype before restore."),
                     *Snapshot.NewPropertyName.ToString());
                 return false;
             }
-            const void* ArchetypeValue = Target.ArchetypeProperty->ContainerPtrToValuePtr<void>(
+            bValueChanged = !AreTypedPropertyValuesIdentical(
+                Target.Property,
+                Target.Object,
+                Target.ArchetypeProperty,
                 Target.Archetype);
-            bValueChanged = !Target.Property->Identical(
-                NewValue,
-                ArchetypeValue,
-                PPF_None);
-            Target.Property->CopyCompleteValue(NewValue, ArchetypeValue);
+            CopyTypedPropertyValue(
+                Target.Property,
+                Target.Object,
+                Target.ArchetypeProperty,
+                Target.Archetype);
         }
         else
         {
@@ -5420,17 +7778,34 @@ bool RestoreCollectionInstanceOverrides(
             // Object/Class leaves need the same old-to-new mapping that Blueprint
             // reinstancing used for the containing instance.  Soft references are
             // handled by the archive as well and remain unloaded.
+            if (!ValidateSnapshotReplacementReferences(
+                    Target.SnapshotProperty,
+                    SnapshotValue,
+                    ReplacedObjects,
+                    FString::Printf(
+                        TEXT("collection state '%s' on '%s'"),
+                        *Snapshot.NewPropertyName.ToString(),
+                        *Target.Object->GetPathName()),
+                    OutError))
+            {
+                return false;
+            }
             FArchiveReplaceObjectRef<UObject> ReplaceArchive(
                 Target.Object,
                 FlattenedReplacedObjects,
                 EArchiveReplaceObjectFlags::DelayStart);
             FStructuredArchiveFromArchive StructuredArchive(ReplaceArchive);
             Target.SnapshotProperty->SerializeItem(StructuredArchive.GetSlot(), SnapshotValue);
-            bValueChanged = !Target.SnapshotProperty->Identical(
-                NewValue,
-                SnapshotValue,
-                PPF_None);
-            Target.Property->CopyCompleteValue(NewValue, SnapshotValue);
+            bValueChanged = !AreTypedPropertyValuesIdentical(
+                Target.Property,
+                Target.Object,
+                Target.SnapshotProperty,
+                Snapshot.Value.GetMutableValue().GetMemory());
+            CopyTypedPropertyValue(
+                Target.Property,
+                Target.Object,
+                Target.SnapshotProperty,
+                Snapshot.Value.GetMutableValue().GetMemory());
         }
 
         if (const FSetProperty* SetProperty = CastField<FSetProperty>(Target.Property))
@@ -5600,6 +7975,25 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
     FUnifiedScriptBlueprintClassSyncResult& OutResult,
     FString& OutError)
 {
+    return SynchronizeJson(
+        ScriptAsset,
+        Blueprint,
+        DeclarationJson,
+        bValidateOnly,
+        OutResult,
+        OutError,
+        FUnifiedScriptBlueprintClassMaterializerOptions());
+}
+
+bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
+    UUnifiedScriptAsset& ScriptAsset,
+    UBlueprint& Blueprint,
+    const FString& DeclarationJson,
+    bool bValidateOnly,
+    FUnifiedScriptBlueprintClassSyncResult& OutResult,
+    FString& OutError,
+    const FUnifiedScriptBlueprintClassMaterializerOptions& Options)
+{
     using namespace UE::UnifiedScript::BlueprintClass::Private;
 
     OutResult = FUnifiedScriptBlueprintClassSyncResult();
@@ -5622,9 +8016,30 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
     TArray<FInputActionDeclaration> InputDeclarations;
     TArray<FDelegateBindingDeclaration> DelegateDeclarations;
     TArray<FInterfaceFunctionDeclaration> InterfaceDeclarations;
+    TOptional<FUnifiedScriptClassBindingDeclaration> PlannedClassBinding;
+    if (!ReadSelectedClassBinding(
+            ScriptAsset,
+            DeclarationJson,
+            PlannedClassBinding,
+            OutError))
+    {
+        return false;
+    }
+    FParentChangePlan ParentPlan;
+    if (!BuildParentChangePlan(
+            ScriptAsset,
+            Blueprint,
+            PlannedClassBinding,
+            ParentPlan,
+            OutError))
+    {
+        return false;
+    }
+    TOptional<FUnifiedScriptClassBindingDeclaration> ClassBinding;
     if (!ParseDeclaration(
             ScriptAsset,
             Blueprint,
+            ParentPlan.bChanged ? ParentPlan.RequestedParent : nullptr,
             DeclarationJson,
             StateDeclarations,
             FunctionDeclarations,
@@ -5632,9 +8047,58 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             InputDeclarations,
             DelegateDeclarations,
             InterfaceDeclarations,
+            ClassBinding,
             OutError))
     {
         return false;
+    }
+    // Rebuild from the fully validated selected asset so malformed or
+    // mismatched multi-asset documents cannot smuggle a different parent
+    // between the preflight ancestry check and member parsing.
+    if (!BuildParentChangePlan(
+            ScriptAsset,
+            Blueprint,
+            ClassBinding,
+            ParentPlan,
+            OutError))
+    {
+        return false;
+    }
+
+    FLocalBlueprintTransaction ParentTransaction(Blueprint);
+    if (ParentPlan.bChanged && !ParentTransaction.Isolate(OutError))
+    {
+        return false;
+    }
+
+    UBlueprint* PlanningBlueprint = &Blueprint;
+    TArray<FParentDefaultOverrideSnapshot> PlanningParentDefaultOverrides;
+    FParentDefaultSnapshotReferenceGuard PlanningParentDefaultSnapshotReferenceGuard(
+        PlanningParentDefaultOverrides);
+    if (ParentPlan.bChanged)
+    {
+        PlanningBlueprint = Cast<UBlueprint>(StaticDuplicateObject(
+            &Blueprint,
+            GetTransientPackage(),
+            MakeUniqueObjectName(
+                GetTransientPackage(),
+                Blueprint.GetClass(),
+                TEXT("UnifiedScriptParentChangePreflight"))));
+        if (PlanningBlueprint == nullptr || ParentPlan.RequestedParent == nullptr ||
+            !CaptureParentDefaultOverrides(
+                *PlanningBlueprint,
+                ParentPlan.CurrentParent,
+                ParentPlan.RequestedParent,
+                PlanningParentDefaultOverrides,
+                OutError) ||
+            !PrepareParentChange(*PlanningBlueprint, *ParentPlan.RequestedParent, OutError))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Could not prepare the prospective UnifiedScript Blueprint parent.");
+            }
+            return false;
+        }
     }
 
     if (!ValidateAddedStateNameConflicts(Blueprint, StateDeclarations, OutError))
@@ -5693,10 +8157,14 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         }
     }
 
+    const UClass* EffectiveParentClass = ParentPlan.bChanged
+        ? ParentPlan.RequestedParent
+        : Blueprint.ParentClass.Get();
     FSyncPlan Plan;
-    if (!BuildPlan(Blueprint, StateDeclarations, Plan, OutResult, OutError) ||
+    if (!BuildPlan(Blueprint, EffectiveParentClass, StateDeclarations, Plan, OutResult, OutError) ||
         !BuildFunctionPlan(
             Blueprint,
+            EffectiveParentClass,
             FunctionDeclarations,
             Plan,
             OutResult,
@@ -5719,9 +8187,42 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         return OutError.IsEmpty();
     }
 
+    OutResult.bChanged |= ParentPlan.bChanged;
+
     if (!OutResult.bChanged)
     {
         return OutError.IsEmpty();
+    }
+
+    TArray<FParentDefaultOverrideSnapshot> ParentDefaultOverrides;
+    if (ParentPlan.bChanged &&
+        !CaptureParentDefaultOverrides(
+            Blueprint,
+            ParentPlan.CurrentParent,
+            ParentPlan.RequestedParent,
+            ParentDefaultOverrides,
+            OutError))
+    {
+        return false;
+    }
+    TArray<FScriptComponentOwnerSnapshot> ScriptComponentOwners;
+    if (ParentPlan.bChanged &&
+        !CaptureScriptComponentOwners(Blueprint, ScriptComponentOwners, OutError))
+    {
+        return false;
+    }
+    FParentDefaultSnapshotReferenceGuard ParentDefaultSnapshotReferenceGuard(
+        ParentDefaultOverrides);
+
+    TArray<FManagedStateValueSnapshot> ManagedStateSnapshots;
+    if (ParentPlan.bChanged &&
+        !CaptureManagedStateValueSnapshots(
+            Blueprint,
+            Plan,
+            ManagedStateSnapshots,
+            OutError))
+    {
+        return false;
     }
 
     // Capture before validate-only returns and before the transactional
@@ -5742,6 +8243,8 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         return false;
     }
     FCollectionSnapshotReferenceGuard SnapshotReferenceGuard(CollectionInstanceOverrides);
+    FManagedStateSnapshotReferenceGuard ManagedStateSnapshotReferenceGuard(ManagedStateSnapshots);
+    FScriptComponentSnapshotReferenceGuard ScriptComponentSnapshotReferenceGuard(ScriptComponentOwners);
 
     FCollectionReplacementMap ReplacedObjects;
     const FDelegateHandle ReplacedObjectsHandle = FCoreUObjectDelegates::OnObjectsReplaced.AddLambda(
@@ -5749,32 +8252,140 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         {
             for (const TPair<UObject*, UObject*>& Pair : ReplacementMap)
             {
-                // The delegate is the only point where the replacement value
-                // is guaranteed to be a live UObject.  Convert it to a weak
-                // reference here; all later traversals use Weak.Get() and
-                // never dereference a stale raw destination from the map.
+                if (Pair.Key == nullptr)
+                {
+                    continue;
+                }
+                // Raw pointers are converted immediately to serialised object
+                // identities.  The event's addresses may be recycled before
+                // the snapshot is restored, so they cannot be map keys.
                 FCollectionReplacementTarget Target;
-                Target.Identity = Pair.Value;
-                Target.Weak = TWeakObjectPtr<UObject>(Pair.Value);
-                ReplacedObjects.Add(Pair.Key, MoveTemp(Target));
+                Target.Identity = FObjectKey(Pair.Value);
+                Target.DestinationRoot.Reset(Pair.Value);
+                Target.bExplicitNull = Pair.Value == nullptr;
+                ReplacedObjects.Add(FObjectKey(Pair.Key), MoveTemp(Target));
             }
-        });
+    });
     if (bValidateOnly)
     {
+        if (!ParentPlan.bChanged)
+        {
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return OutError.IsEmpty();
+        }
+        UBlueprint* ValidationOnlyBlueprint = PlanningBlueprint;
+        TArray<FManagedStateValueSnapshot> ValidationManagedStateSnapshots;
+        TArray<FScriptComponentOwnerSnapshot> ValidationScriptComponentOwners;
+        if (ValidationOnlyBlueprint == nullptr ||
+            !CaptureManagedStateValueSnapshots(
+                *ValidationOnlyBlueprint,
+                Plan,
+                ValidationManagedStateSnapshots,
+                OutError) ||
+            !CaptureScriptComponentOwners(
+                *ValidationOnlyBlueprint,
+                ValidationScriptComponentOwners,
+                OutError))
+        {
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return false;
+        }
+        FManagedStateSnapshotReferenceGuard ValidationManagedStateSnapshotReferenceGuard(
+            ValidationManagedStateSnapshots);
+        FScriptComponentSnapshotReferenceGuard ValidationScriptComponentSnapshotReferenceGuard(
+            ValidationScriptComponentOwners);
+        if (ValidationOnlyBlueprint != nullptr)
+        {
+            if (!ApplyPlan(
+                    *ValidationOnlyBlueprint,
+                    Plan,
+                    OutError,
+                    ParentPlan.bChanged))
+            {
+                if (OutError.IsEmpty())
+                {
+                    OutError = TEXT("Could not compile the prospective parent Blueprint materialization.");
+                }
+                DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+                FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+                return false;
+            }
+            if (ParentPlan.bChanged &&
+                !RestoreParentDefaultOverrides(
+                    PlanningParentDefaultOverrides,
+                    ReplacedObjects,
+                    OutError))
+            {
+                DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+                FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+                return false;
+            }
+            if (!RestoreManagedStateValueSnapshots(
+                    ValidationManagedStateSnapshots,
+                    ReplacedObjects,
+                    false,
+                    OutError))
+            {
+                DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+                FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+                return false;
+            }
+            for (FScriptComponentOwnerSnapshot& ComponentSnapshot :
+                 ValidationScriptComponentOwners)
+            {
+                if (!RestoreScriptComponentOwner(
+                        ComponentSnapshot,
+                        ReplacedObjects,
+                        false,
+                        OutError))
+                {
+                    DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+                    FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+                    return false;
+                }
+            }
+        }
         DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
         FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         return OutError.IsEmpty();
     }
 
-    UBlueprint* ValidationBlueprint = Cast<UBlueprint>(StaticDuplicateObject(
-        &Blueprint,
-        GetTransientPackage(),
-        MakeUniqueObjectName(
+    UBlueprint* ValidationBlueprint = ParentPlan.bChanged
+        ? PlanningBlueprint
+        : Cast<UBlueprint>(StaticDuplicateObject(
+            &Blueprint,
             GetTransientPackage(),
-            Blueprint.GetClass(),
-            TEXT("UnifiedScriptMaterializationPreflight"))));
+            MakeUniqueObjectName(
+                GetTransientPackage(),
+                Blueprint.GetClass(),
+                TEXT("UnifiedScriptMaterializationPreflight"))));
+    TArray<FManagedStateValueSnapshot> ValidationManagedStateSnapshots;
+    TArray<FScriptComponentOwnerSnapshot> ValidationScriptComponentOwners;
+    if (ParentPlan.bChanged && ValidationBlueprint != nullptr &&
+        (!CaptureManagedStateValueSnapshots(
+             *ValidationBlueprint,
+             Plan,
+             ValidationManagedStateSnapshots,
+             OutError) ||
+         !CaptureScriptComponentOwners(
+             *ValidationBlueprint,
+             ValidationScriptComponentOwners,
+             OutError)))
+    {
+        ValidationBlueprint = nullptr;
+    }
+    FManagedStateSnapshotReferenceGuard ValidationManagedStateSnapshotReferenceGuard(
+        ValidationManagedStateSnapshots);
+    FScriptComponentSnapshotReferenceGuard ValidationScriptComponentSnapshotReferenceGuard(
+        ValidationScriptComponentOwners);
     if (ValidationBlueprint == nullptr ||
-        !ApplyPlan(*ValidationBlueprint, Plan, OutError))
+        !ApplyPlan(
+            *ValidationBlueprint,
+            Plan,
+            OutError,
+            ParentPlan.bChanged))
     {
         if (OutError.IsEmpty())
         {
@@ -5784,38 +8395,303 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
         FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         return false;
     }
-
-    const TArray<FBPVariableDescription> OriginalVariables = Blueprint.NewVariables;
-    const bool bApplied = ApplyPlan(Blueprint, Plan, OutError);
-    if (!bApplied)
+    if (ParentPlan.bChanged &&
+        !RestoreParentDefaultOverrides(
+            PlanningParentDefaultOverrides,
+            ReplacedObjects,
+            OutError))
     {
-        // Keep the replacement listener and snapshots alive while the original
-        // declaration is compiled back.  That rollback can itself reinstance
-        // the class, and the accumulated map is needed to follow every link
-        // before restoring the captured collection values.
-        Blueprint.NewVariables = OriginalVariables;
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
-        FKismetEditorUtilities::CompileBlueprint(&Blueprint);
-        FString RollbackRestoreError;
+        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+        return false;
+    }
+    if (ParentPlan.bChanged)
+    {
+        if (!RestoreManagedStateValueSnapshots(
+                ValidationManagedStateSnapshots,
+                ReplacedObjects,
+                false,
+                OutError))
+        {
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return false;
+        }
+        for (FScriptComponentOwnerSnapshot& ComponentSnapshot :
+             ValidationScriptComponentOwners)
+        {
+            if (!RestoreScriptComponentOwner(
+                    ComponentSnapshot,
+                    ReplacedObjects,
+                    false,
+                    OutError))
+            {
+                DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+                FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+                return false;
+            }
+        }
+    }
+
+    const UPackage* BlueprintPackage = Blueprint.GetOutermost();
+    const bool bPersistentPackage = BlueprintPackage != nullptr &&
+        BlueprintPackage != GetTransientPackage() &&
+        !BlueprintPackage->GetName().StartsWith(TEXT("/Engine/Transient"));
+    const FString PackageFilename =
+        bPersistentPackage
+        ? FPackageName::LongPackageNameToFilename(
+            BlueprintPackage->GetName(),
+            FPackageName::GetAssetPackageExtension())
+        : FString();
+    bool bSaveStarted = false;
+    bool bJournalActive = false;
+    bool bJournalCloseAttempted = false;
+    ClassOperationJournal::FReceipt JournalReceipt;
+    auto CloseJournal = [
+        &OutError,
+        &JournalReceipt,
+        &bJournalActive,
+        &bJournalCloseAttempted]() -> bool
+    {
+        if (!bJournalActive)
+        {
+            return true;
+        }
+        bJournalCloseAttempted = true;
+        FString JournalError;
+        if (!ClassOperationJournal::Close(JournalReceipt, JournalError))
+        {
+            OutError += OutError.IsEmpty() ? FString() : TEXT(" ");
+            OutError += TEXT("Cannot close parent change recovery journal: ") + JournalError;
+            return false;
+        }
+        bJournalActive = false;
+        return true;
+    };
+    auto RestorePackageSnapshots = [&]() -> bool
+    {
+        if (!bSaveStarted || !bJournalActive)
+        {
+            return true;
+        }
+        FString RestoreError;
+        if (!ClassOperationJournal::RestoreCapturedFiles(JournalReceipt, RestoreError))
+        {
+            OutError += OutError.IsEmpty() ? FString() : TEXT(" ");
+            OutError += TEXT("Failed to restore the Blueprint package bytes after parent transaction failure: ") +
+                RestoreError;
+            return false;
+        }
+        return true;
+    };
+    const TArray<FBPVariableDescription> OriginalVariables = Blueprint.NewVariables;
+    const auto AppendError = [&OutError](const FString& Message)
+    {
+        if (!Message.IsEmpty())
+        {
+            if (!OutError.IsEmpty())
+            {
+                OutError += TEXT(" ");
+            }
+            OutError += Message;
+        }
+    };
+    auto RollbackMemory = [&]() -> bool
+    {
+        if (!ParentPlan.bChanged)
+        {
+            Blueprint.NewVariables = OriginalVariables;
+            FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
+            FKismetEditorUtilities::CompileBlueprint(&Blueprint);
+            if (Blueprint.Status == BS_Error || Blueprint.GeneratedClass == nullptr)
+            {
+                AppendError(TEXT("Blueprint materialization rollback could not recompile the original authoring state."));
+                return false;
+            }
+            return true;
+        }
+        FString RollbackError;
+        if (!ParentTransaction.Rollback(RollbackError))
+        {
+            AppendError(TEXT("Blueprint parent transaction rollback failed: ") + RollbackError);
+            return false;
+        }
+        if (Blueprint.ParentClass != ParentPlan.CurrentParent ||
+            Blueprint.GeneratedClass == nullptr ||
+            Blueprint.GeneratedClass->GetSuperClass() != ParentPlan.CurrentParent)
+        {
+            AppendError(TEXT("Blueprint parent transaction rollback did not restore the original generated superclass."));
+            return false;
+        }
+        if (!RestoreParentDefaultOverrides(
+                ParentDefaultOverrides,
+                ReplacedObjects,
+                RollbackError))
+        {
+            AppendError(TEXT("Blueprint parent transaction rollback could not restore inherited values: ") + RollbackError);
+            return false;
+        }
+        if (!RestoreManagedStateValueSnapshots(
+                ManagedStateSnapshots,
+                ReplacedObjects,
+                true,
+                RollbackError))
+        {
+            AppendError(TEXT("Blueprint parent transaction rollback could not restore managed values: ") + RollbackError);
+            return false;
+        }
+        for (FScriptComponentOwnerSnapshot& ComponentSnapshot : ScriptComponentOwners)
+        {
+            FString ComponentRestoreError;
+            if (!RestoreScriptComponentOwner(
+                    ComponentSnapshot,
+                    ReplacedObjects,
+                    true,
+                    ComponentRestoreError))
+            {
+                AppendError(
+                    TEXT("Blueprint parent transaction rollback could not restore the managed ScriptComponent owner: ") +
+                    ComponentRestoreError);
+                return false;
+            }
+        }
+        return true;
+    };
+    auto RollbackAll = [&]() -> bool
+    {
+        bool bSucceeded = RollbackMemory();
+        FString RollbackCollectionError;
         if (!RestoreCollectionInstanceOverrides(
                 CollectionInstanceOverrides,
                 ReplacedObjects,
                 true,
-                RollbackRestoreError) &&
-            !RollbackRestoreError.IsEmpty())
+                RollbackCollectionError))
         {
-            if (!OutError.IsEmpty())
-            {
-                OutError += FString::Printf(TEXT(" Rollback also failed: %s"), *RollbackRestoreError);
-            }
-            else
-            {
-                OutError = RollbackRestoreError;
-            }
+            AppendError(TEXT("Rollback also failed: ") + RollbackCollectionError);
+            bSucceeded = false;
+        }
+        if (!RestorePackageSnapshots())
+        {
+            bSucceeded = false;
+        }
+        return bSucceeded;
+    };
+    auto FinishFailure = [&]()
+    {
+        const bool bRollbackSucceeded = RollbackAll();
+        bool bRecoveryReceiptClosed = !bJournalActive;
+        if (bRollbackSucceeded && bJournalActive && !bJournalCloseAttempted)
+        {
+            bRecoveryReceiptClosed = CloseJournal();
+        }
+        if (bRollbackSucceeded && bRecoveryReceiptClosed)
+        {
+            ParentTransaction.RestoreCapturedPackageDirtyFlags();
         }
         DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
         FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+    };
+
+    if (ParentPlan.bChanged && !PackageFilename.IsEmpty())
+    {
+        ClassOperationJournal::FSnapshot PackageSnapshot;
+        TArray<ClassOperationJournal::FSnapshot> JournalSnapshots;
+        FString JournalError;
+        const bool bCaptured = ClassOperationJournal::CaptureSnapshot(
+            PackageFilename,
+            PackageSnapshot,
+            JournalError);
+        if (bCaptured)
+        {
+            JournalSnapshots.Add(PackageSnapshot);
+        }
+        if (!bCaptured ||
+            !ClassOperationJournal::Begin(
+                TEXT("parentChange"),
+                FGuid::NewGuid().ToString(EGuidFormats::Digits),
+                JournalSnapshots,
+                JournalReceipt,
+                JournalError))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot begin the Blueprint parent change recovery journal: %s"),
+                *JournalError);
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return false;
+        }
+        bJournalActive = true;
+    }
+
+    if (ParentPlan.bChanged)
+    {
+        if (ParentPlan.RequestedParent == nullptr || !ParentTransaction.Begin(OutError))
+        {
+            if (bJournalActive)
+            {
+                CloseJournal();
+            }
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return false;
+        }
+        if (!PrepareParentChange(Blueprint, *ParentPlan.RequestedParent, OutError))
+        {
+            FinishFailure();
+            return false;
+        }
+        if (Options.FailurePoint ==
+            EUnifiedScriptBlueprintClassMaterializerFailurePoint::AfterParentMutation)
+        {
+            OutError = TEXT("Injected parent mutation failure for UnifiedScript Blueprint transaction test.");
+            FinishFailure();
+            return false;
+        }
+    }
+
+    const bool bApplied = ApplyPlan(
+        Blueprint,
+        Plan,
+        OutError,
+        ParentPlan.bChanged);
+    if (!bApplied)
+    {
+        FinishFailure();
         return false;
+    }
+    if (ParentPlan.bChanged &&
+        !RestoreParentDefaultOverrides(
+            ParentDefaultOverrides,
+            ReplacedObjects,
+            OutError))
+    {
+        FinishFailure();
+        return false;
+    }
+    if (ParentPlan.bChanged &&
+        !RestoreManagedStateValueSnapshots(
+            ManagedStateSnapshots,
+            ReplacedObjects,
+            false,
+            OutError))
+    {
+        FinishFailure();
+        return false;
+    }
+    if (ParentPlan.bChanged)
+    {
+        for (FScriptComponentOwnerSnapshot& ComponentSnapshot : ScriptComponentOwners)
+        {
+            if (!RestoreScriptComponentOwner(
+                    ComponentSnapshot,
+                    ReplacedObjects,
+                    false,
+                    OutError))
+            {
+                FinishFailure();
+                return false;
+            }
+        }
     }
     FString RestoreError;
     if (!RestoreCollectionInstanceOverrides(
@@ -5824,29 +8700,61 @@ bool FUnifiedScriptBlueprintClassMaterializer::SynchronizeJson(
             false,
             RestoreError))
     {
-        Blueprint.NewVariables = OriginalVariables;
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
-        FKismetEditorUtilities::CompileBlueprint(&Blueprint);
-        FString RollbackRestoreError;
-        const bool bRollbackRestored = RestoreCollectionInstanceOverrides(
-            CollectionInstanceOverrides,
-            ReplacedObjects,
-            true,
-            RollbackRestoreError);
-        DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
-        FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         OutError = RestoreError;
-        if (!bRollbackRestored && !RollbackRestoreError.IsEmpty())
-        {
-            OutError += FString::Printf(TEXT(" Rollback also failed: %s"), *RollbackRestoreError);
-        }
+        FinishFailure();
         return false;
     }
-    DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
-    FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+    if (bJournalActive)
+    {
+        FString JournalError;
+        if (!ClassOperationJournal::Advance(
+                JournalReceipt,
+                ClassOperationJournal::EPhase::AssetsMutated,
+                JournalError))
+        {
+            OutError = TEXT("Cannot advance the parent change recovery journal after Blueprint mutation: ") + JournalError;
+            FinishFailure();
+            return false;
+        }
+    }
+    bSaveStarted = ParentPlan.bChanged;
     if (!SaveBlueprint(Blueprint, OutError))
     {
+        FinishFailure();
         return false;
     }
+    if (Options.FailurePoint ==
+        EUnifiedScriptBlueprintClassMaterializerFailurePoint::AfterPackageSave)
+    {
+        OutError = TEXT("Injected package publication failure for UnifiedScript Blueprint transaction test.");
+        FinishFailure();
+        return false;
+    }
+    if (bJournalActive)
+    {
+        FString JournalError;
+        if (!ClassOperationJournal::Advance(
+                JournalReceipt,
+                ClassOperationJournal::EPhase::ExternalPublished,
+                JournalError))
+        {
+            OutError = TEXT("Cannot finalize the parent change recovery journal: ") + JournalError;
+            FinishFailure();
+            return false;
+        }
+    }
+    if (!ParentTransaction.Finalize(OutError))
+    {
+        FinishFailure();
+        return false;
+    }
+    if (!CloseJournal())
+    {
+        FinishFailure();
+        return false;
+    }
+    ParentTransaction.DiscardRollbackAbility();
+    DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+    FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
     return true;
 }
