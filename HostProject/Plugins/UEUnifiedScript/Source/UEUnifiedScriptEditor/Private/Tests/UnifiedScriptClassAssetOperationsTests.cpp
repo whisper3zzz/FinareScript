@@ -311,6 +311,7 @@ bool RunJournalRecoveryProbe(FAutomationTestBase& Test)
              FString(TEXT("rename")),
              FString(TEXT("duplicate")),
              FString(TEXT("delete")),
+             FString(TEXT("parentChange")),
          })
     {
         if (!RunJournalRecoveryProbeForOperation(Test, Operation))

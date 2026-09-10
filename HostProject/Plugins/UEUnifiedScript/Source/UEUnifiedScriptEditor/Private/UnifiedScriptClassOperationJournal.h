@@ -58,6 +58,9 @@ bool Begin(
 
 bool Advance(FReceipt& Receipt, EPhase Phase, FString& OutError);
 
+/** Restores only this receipt's captured files and leaves it pending. */
+bool RestoreCapturedFiles(const FReceipt& Receipt, FString& OutError);
+
 /** Marks the transaction terminal and removes its pending receipt when possible. */
 bool Close(FReceipt& Receipt, FString& OutError);
 

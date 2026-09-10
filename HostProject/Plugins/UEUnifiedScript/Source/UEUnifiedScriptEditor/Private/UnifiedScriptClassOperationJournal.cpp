@@ -176,9 +176,8 @@ bool SerializeReceipt(
     return SerializeJson(Root, OutJson, OutError);
 }
 
-bool WriteReceipt(FReceipt& Receipt, FString& OutError)
+bool WriteReceipt(const FReceipt& Receipt, FString& OutError)
 {
-    Receipt.UpdatedUtc = FDateTime::UtcNow().ToIso8601();
     FString Json;
     return SerializeReceipt(Receipt, Json, OutError) &&
         WriteTextAtomically(Receipt.ReceiptPath, Json, OutError);
@@ -224,7 +223,8 @@ bool ReadReceipt(
         (Operation != TEXT("create") &&
             Operation != TEXT("rename") &&
             Operation != TEXT("duplicate") &&
-            Operation != TEXT("delete")) ||
+            Operation != TEXT("delete") &&
+            Operation != TEXT("parentChange")) ||
         !Root->TryGetStringField(TEXT("phase"), PhaseText) ||
         !ParsePhase(PhaseText, Phase) ||
         !Root->TryGetStringField(TEXT("createdUtc"), CreatedUtc) ||
@@ -503,23 +503,38 @@ bool Advance(FReceipt& Receipt, EPhase Phase, FString& OutError)
             PhaseName(Phase));
         return false;
     }
-    Receipt.Phase = Phase;
-    return WriteReceipt(Receipt, OutError);
+    FReceipt NextReceipt = Receipt;
+    NextReceipt.Phase = Phase;
+    NextReceipt.UpdatedUtc = FDateTime::UtcNow().ToIso8601();
+    if (!WriteReceipt(NextReceipt, OutError))
+    {
+        return false;
+    }
+    Receipt = MoveTemp(NextReceipt);
+    return true;
 }
 
 bool Close(FReceipt& Receipt, FString& OutError)
 {
     if (Receipt.Phase != EPhase::Committed)
     {
-        Receipt.Phase = EPhase::Committed;
-        if (!WriteReceipt(Receipt, OutError))
+        FReceipt NextReceipt = Receipt;
+        NextReceipt.Phase = EPhase::Committed;
+        NextReceipt.UpdatedUtc = FDateTime::UtcNow().ToIso8601();
+        if (!WriteReceipt(NextReceipt, OutError))
         {
             return false;
         }
+        Receipt = MoveTemp(NextReceipt);
     }
     // A committed receipt is harmless and will be cleaned on the next startup.
     IFileManager::Get().Delete(*Receipt.ReceiptPath, false, true);
     return true;
+}
+
+bool RestoreCapturedFiles(const FReceipt& Receipt, FString& OutError)
+{
+    return RestoreSnapshots(Receipt, OutError);
 }
 
 bool RecoverPending(
