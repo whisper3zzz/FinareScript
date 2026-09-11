@@ -5,8 +5,10 @@
     {
       "id": "authoring-surface",
       "category": "derivedArtifact",
-      "currentVersion": "unifiedscript.authoring-surface/v0.4",
-      "readableVersions": [],
+      "currentVersion": "unifiedscript.authoring-surface/v0.5",
+      "readableVersions": [
+        "unifiedscript.authoring-surface/v0.4"
+      ],
       "upgradeStrategy": "regenerate",
       "sourceOfTruth": "C# source plus persistent identity and graph layout",
       "producer": "finare emit",

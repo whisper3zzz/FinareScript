@@ -209,7 +209,7 @@ public static class FinareUpgradePlanner
             .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
         FinareCompatibilityFamily[] schemaFamilies = policy.Families
             .Where(static family => family.CurrentVersion.StartsWith(
-                "finare.",
+                "unifiedscript.",
                 StringComparison.Ordinal))
             .ToArray();
 

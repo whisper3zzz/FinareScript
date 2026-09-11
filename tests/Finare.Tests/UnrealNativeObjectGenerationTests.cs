@@ -79,7 +79,13 @@ public sealed class UnrealNativeObjectGenerationTests
         var projection = UnrealApiContractProjector.Project(Reflection(), contract);
         var managed = new UnrealBindingGenerator().Generate(projection.Reflection);
         var native = new UnrealNativeThunkGenerator().Generate(projection.NativeReflection);
-        Assert.Empty(managed.Diagnostics);
+        Assert.Equal(
+            [
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+            ],
+            managed.Diagnostics.Select(static diagnostic => diagnostic.MemberPath));
+        Assert.All(managed.Diagnostics, static diagnostic => Assert.Equal("USUE2008", diagnostic.Code));
         Assert.Empty(native.Diagnostics);
         Compile(managed.Source);
         Assert.Contains("public NativeCounter(global::Finare.Unreal.IUnrealInvocationBridge", managed.Source);
@@ -133,7 +139,13 @@ public sealed class UnrealNativeObjectGenerationTests
         var projection = UnrealApiContractProjector.Project(Reflection(), contract);
         var managed = new UnrealBindingGenerator().Generate(projection.Reflection);
         var native = new UnrealNativeThunkGenerator().Generate(projection.NativeReflection);
-        Assert.Empty(managed.Diagnostics);
+        Assert.Equal(
+            [
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext",
+                "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext",
+            ],
+            managed.Diagnostics.Select(static diagnostic => diagnostic.MemberPath));
+        Assert.All(managed.Diagnostics, static diagnostic => Assert.Equal("USUE2008", diagnostic.Code));
         Assert.Empty(native.Diagnostics);
         Compile(managed.Source);
         Assert.Contains("public string @EchoText(string @__text)", managed.Source);

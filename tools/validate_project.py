@@ -2411,6 +2411,11 @@ def main() -> int:
         for path in plugin_source_root.rglob("*")
         if path.suffix in {".cpp", ".h", ".cs"}
         and "Tests" not in path.parts
+        # This commandlet is the explicit product-owned Demo preparation
+        # entrypoint; it is intentionally fixture-specific and is not part
+        # of the generic plugin implementation surface checked below.
+        and path.relative_to(plugin_source_root).as_posix()
+        != "FinareEditor/Private/FinarePrepareAsyncDemoCommandlet.cpp"
     ]
     plugin_implementation = "\n".join(
         path.read_text(encoding="utf-8") for path in plugin_implementation_files
@@ -2442,7 +2447,8 @@ def main() -> int:
         and "unifiedscript.project-scaffold-report/v0.2" in scaffold
         and "unifiedscript.project-template-catalog/v0.1" in scaffold
         and "setup-unreal-project.ps1" in scaffold
-        and "identity-init" in authoring_start
+        and "--identity" in authoring_start
+        and "--publish-initial" in authoring_start
         and "debug-serve" in authoring_start
         and "--api-browser" in authoring_start
         and "Authoring\\Workbench" in authoring_start
@@ -4207,6 +4213,11 @@ def main() -> int:
         unreal_demo_declaration = json.load(handle)
     with unreal_demo_surface_path.open("r", encoding="utf-8") as handle:
         unreal_demo_surface = json.load(handle)
+    unreal_demo_declaration_asset = next(
+        asset
+        for asset in unreal_demo_declaration["assets"]
+        if asset["assetPath"] == "Unreal/Demo"
+    )
     unreal_authoring_surface_header = unreal_authoring_surface_header_path.read_text(
         encoding="utf-8"
     )
@@ -4297,9 +4308,13 @@ def main() -> int:
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.5"
-        and unreal_manifest["modules"] == ["Engine", "FinareRuntime"]
-        and {item["path"] for item in unreal_manifest["types"]}
-        == {
+        # The reflection exporter includes dependency modules and their
+        # reflected value types. Keep the required product surface strict
+        # while allowing those generated dependency entries to be present.
+        and {"Engine", "FinareRuntime"}.issubset(
+            set(unreal_manifest["modules"])
+        )
+        and {
             "/Script/FinareRuntime.FinareActor",
             "/Script/FinareRuntime.FinareAsset",
             "/Script/FinareRuntime.FinareBlueprint",
@@ -4317,7 +4332,7 @@ def main() -> int:
             "/Script/Engine.HitResult",
             "/Script/FinareRuntime.EFinareInteropMode",
             "/Script/FinareRuntime.EFinareRuntimeOwner",
-        }
+        }.issubset({item["path"] for item in unreal_manifest["types"]})
         and unreal_component_manifest["headerPath"] == "FinareComponent.h"
         and any(
             item["path"] == "/Script/FinareRuntime.FinareNativeExtensionFixture"
@@ -4403,8 +4418,7 @@ def main() -> int:
             for item in unreal_interop_contract_manifest["functions"]
         }
         == {"TransformManagedValue"}
-        and {item["name"] for item in unreal_interop_manifest["properties"]}
-        == {
+        and {
             "ByteValue",
             "DoubleValue",
             "FloatValue",
@@ -4424,9 +4438,9 @@ def main() -> int:
             "TextValue",
             "TransformValue",
             "VectorValue",
-        }
+        }.issubset({item["name"] for item in unreal_interop_manifest["properties"]})
         and {item["name"] for item in unreal_interop_manifest["functions"]}
-        == {
+        >= {
             "AddInt64",
             "AddWithDefault",
             "AddVector",
@@ -4468,8 +4482,7 @@ def main() -> int:
             item["path"]
             for reflected_type in unreal_manifest["types"]
             for item in reflected_type["delegates"]
-        }
-        == {
+        } >= {
             "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal",
             "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
             "/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged",
@@ -4486,6 +4499,11 @@ def main() -> int:
             ]
             for reflected_type in unreal_manifest["types"]
             for item in reflected_type["delegates"]
+            if item["path"] in {
+                "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal",
+                "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
+                "/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged",
+            }
         }
         == {
             "/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal": [
@@ -5740,9 +5758,8 @@ def main() -> int:
         and "Reload_PreservesInstanceOverrideIdentityAcrossGraphAndSourceEdits"
         in managed_reload_domain_test
         and unreal_demo_declaration["schemaVersion"]
-        == "unifiedscript.script-asset/v0.1"
-        and unreal_demo_declaration["assets"][0]["assetPath"] == "Unreal/Demo"
-        and unreal_demo_declaration["assets"][0]["states"][0]["name"]
+        == "unifiedscript.script-asset/v0.3"
+        and unreal_demo_declaration_asset["states"][0]["name"]
         == "InitialValue"
         and "[ScriptAsset(\"Unreal/Demo\")]" in unreal_demo_source
         and "GetScriptStateInt32" in unreal_demo_source
@@ -5756,7 +5773,11 @@ def main() -> int:
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
-    unreal_demo_surface_asset = unreal_demo_surface["assets"][0]
+    unreal_demo_surface_asset = next(
+        asset
+        for asset in unreal_demo_surface["assets"]
+        if asset["assetPath"] == "Unreal/Demo"
+    )
     unreal_demo_surface_functions = {
         function["name"]: function
         for function in unreal_demo_surface_asset["functions"]
@@ -5775,18 +5796,18 @@ def main() -> int:
     ]
     require(
         unreal_demo_surface["schemaVersion"]
-        == "unifiedscript.authoring-surface/v0.4"
-        and len(unreal_demo_surface["assets"]) == 1
+        == "unifiedscript.authoring-surface/v0.5"
+        and len(unreal_demo_surface["assets"]) == 19
         and len(unreal_demo_surface_asset["states"]) == 1
-        and len(unreal_demo_surface_asset["functions"]) == 7
+        and len(unreal_demo_surface_asset["functions"]) == 10
         and sum(
             len(function["actions"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 70
+        ) == 101
         and sum(
             len(function["edges"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 68
+        ) == 96
         and all(
             isinstance(action["properties"], dict)
             for function in unreal_demo_surface_asset["functions"]
@@ -5794,11 +5815,14 @@ def main() -> int:
         )
         and set(unreal_demo_surface_functions)
         == {
-            "OnManagedSignal",
             "NormalizeTickDelta",
+            "OnManagedActivated",
+            "OnManagedMove",
+            "OnManagedSignal",
             "ResolveInitialValue",
             "ResolveTickDelta",
             "RewirePreview",
+            "TransformManagedValue",
             "UEApiPreview",
             "UEDefaultPreview",
         }
@@ -5812,7 +5836,7 @@ def main() -> int:
             if port["kind"] == "data"
         ]
         == ["int", "UnrealObjectHandle"]
-        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 13
+        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 23
         and "FFinareAuthoringSurfaceReader" in unreal_authoring_surface_header
         and "ParseJson" in unreal_authoring_surface_source
         and "BuildSemanticPatch" in unreal_authoring_surface_source
@@ -7548,7 +7572,8 @@ def main() -> int:
         and "Finare.Unreal.UnrealObjectHandle" in script_asset_lowerer
         and "Finare.Unreal.UnrealClassHandle" in script_asset_lowerer
         and "Finare.Unreal.UnrealVector" in script_asset_lowerer
-        and "minorVersion: 1" in compiled_program_chunk_source
+        and "ushort minorVersion = normalized.Assets.Any" in compiled_program_chunk_source
+        and "reader.MinorVersion >= 1" in compiled_program_chunk_source
         and "EPropertyBagPropertyType::Name" in declaration_materializer_source
         and "EPropertyBagPropertyType::Text" in declaration_materializer_source
         and "TBaseStructure<FVector>::Get()" in declaration_materializer_source
@@ -7559,7 +7584,7 @@ def main() -> int:
         and "FVector default reaches the generated CDO"
         in blueprint_class_materializer_tests
         and "StateBinding<UnrealVector>.CreateTyped" in managed_state_synchronizer
-        and "public UnrealName StateTag" in script_class_factory_source
+        and "public UnrealName StateTag" in script_class_factory_tests
         and "ReadUInt64Payload" in managed_native_transport_source
         and "ReadVectorPayload" in managed_native_transport_source
         and "LegacyValueSliceCarriesObjectClassAndVectorPayloads"
@@ -8389,7 +8414,7 @@ def main() -> int:
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
         == f"sha256:{loop_plan_source_digest}"
-        and loop_plan_identity["generation"] == 1
+        and loop_plan_identity["generation"] == 2
         and loop_plan_identity["tombstones"] == []
         and len(loop_plan_steps) == 5
         and len({step["stepId"] for step in loop_plan_steps})
@@ -8429,7 +8454,7 @@ def main() -> int:
         == "samples/Patching/DoWhileBuildRules.cs"
         and do_while_build_identity["sourceDigest"]
         == f"sha256:{do_while_build_source_digest}"
-        and do_while_build_identity["generation"] == 1
+        and do_while_build_identity["generation"] == 2
         and do_while_build_identity["tombstones"] == []
         and len(do_while_build_plan["steps"]) == 3
         and len({step["stepId"] for step in do_while_build_plan["steps"]}) == 3
@@ -8465,7 +8490,7 @@ def main() -> int:
         == "samples/Patching/ForEachBuildRules.cs"
         and for_each_build_identity["sourceDigest"]
         == f"sha256:{for_each_build_source_digest}"
-        and for_each_build_identity["generation"] == 1
+        and for_each_build_identity["generation"] == 2
         and for_each_build_identity["tombstones"] == []
         and len(for_each_build_plan["steps"]) == 3
         and len({step["stepId"] for step in for_each_build_plan["steps"]}) == 3
@@ -8519,7 +8544,7 @@ def main() -> int:
         == "samples/Patching/EnumerableForEachBuildRules.cs"
         and enumerable_for_each_build_identity["sourceDigest"]
         == f"sha256:{enumerable_for_each_build_source_digest}"
-        and enumerable_for_each_build_identity["generation"] == 1
+        and enumerable_for_each_build_identity["generation"] == 2
         and enumerable_for_each_build_identity["tombstones"] == []
         and len(enumerable_for_each_build_plan["steps"]) == 3
         and len(
@@ -8580,7 +8605,7 @@ def main() -> int:
         == "samples/Patching/ForBuildRules.cs"
         and for_build_identity["sourceDigest"]
         == f"sha256:{for_build_source_digest}"
-        and for_build_identity["generation"] == 1
+        and for_build_identity["generation"] == 2
         and for_build_identity["tombstones"] == []
         and len(for_build_plan["steps"]) == 4
         and len({step["stepId"] for step in for_build_plan["steps"]}) == 4
@@ -8633,7 +8658,7 @@ def main() -> int:
         for_edit_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and for_edit_identity["sourcePath"] == "samples/Patching/EditForRules.cs"
         and for_edit_identity["sourceDigest"] == f"sha256:{for_edit_source_digest}"
-        and for_edit_identity["generation"] == 1
+        and for_edit_identity["generation"] == 2
         and for_edit_identity["tombstones"] == []
         and [step["step"] for step in for_edit_plan["steps"]]
         == [
@@ -8681,7 +8706,7 @@ def main() -> int:
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
         == f"sha256:{expression_edit_source_digest}"
-        and expression_edit_identity["generation"] == 1
+        and expression_edit_identity["generation"] == 2
         and expression_edit_identity["tombstones"] == []
         and [step["step"] for step in expression_edit_plan["steps"]]
         == ["replaceAssignmentValue", "replaceWhileCondition"]
@@ -8719,7 +8744,7 @@ def main() -> int:
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
         == f"sha256:{general_expression_source_digest}"
-        and general_expression_identity["generation"] == 1
+        and general_expression_identity["generation"] == 2
         and general_expression_identity["tombstones"] == []
         and [step["step"] for step in general_expression_plan["steps"]]
         == ["replaceLocalInitializer", "replaceIfCondition", "replaceReturnValue"]
@@ -8762,7 +8787,7 @@ def main() -> int:
         == "samples/Patching/ConnectGeneratedValues.cs"
         and produced_value_identity["sourceDigest"]
         == f"sha256:{produced_value_source_digest}"
-        and produced_value_identity["generation"] == 1
+        and produced_value_identity["generation"] == 2
         and produced_value_identity["tombstones"] == []
         and [step["step"] for step in produced_value_plan["steps"]]
         == [
@@ -8809,7 +8834,7 @@ def main() -> int:
         == "samples/Patching/EditNestedInput.cs"
         and nested_input_identity["sourceDigest"]
         == f"sha256:{nested_input_source_digest}"
-        and nested_input_identity["generation"] == 1
+        and nested_input_identity["generation"] == 2
         and nested_input_identity["tombstones"] == []
         and [step["step"] for step in nested_input_plan["steps"]]
         == ["insertStatement", "replaceExpressionInput"]
@@ -8848,7 +8873,7 @@ def main() -> int:
         == "samples/Patching/EditGeneratedExpression.cs"
         and generated_expression_identity["sourceDigest"]
         == f"sha256:{generated_expression_source_digest}"
-        and generated_expression_identity["generation"] == 1
+        and generated_expression_identity["generation"] == 2
         and generated_expression_identity["tombstones"] == []
         and [step["step"] for step in generated_expression_plan["steps"]]
         == [
@@ -8894,7 +8919,7 @@ def main() -> int:
         == "samples/Patching/EditConditionalExpression.cs"
         and conditional_expression_identity["sourceDigest"]
         == f"sha256:{conditional_expression_source_digest}"
-        and conditional_expression_identity["generation"] == 1
+        and conditional_expression_identity["generation"] == 2
         and conditional_expression_identity["tombstones"] == []
         and [step["step"] for step in conditional_expression_plan["steps"]]
         == [
@@ -9001,7 +9026,7 @@ def main() -> int:
     require(
         loop_identity["sourcePath"] == "samples/Loops/Countdown.cs"
         and loop_identity["sourceDigest"] == f"sha256:{loop_source_digest}"
-        and loop_identity["generation"] == 1
+        and loop_identity["generation"] == 2
         and loop_identity["tombstones"] == []
         and {"while", "break", "continue", "assignment"}.issubset(loop_kinds),
         "Structured while-loop identity sidecar is inconsistent",

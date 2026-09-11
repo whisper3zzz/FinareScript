@@ -31,7 +31,7 @@ public sealed class UnrealBlueprintOverrideContractTests
         """;
 
     [Fact]
-    public void OverrideWithoutVisualEntersHirDeclarationAndV2Schema()
+    public void OverrideWithoutVisualEntersHirDeclarationAndClassBindingSchema()
     {
         CSharpAnalysisResult result = Analyze(ValidSource);
 
@@ -49,7 +49,7 @@ public sealed class UnrealBlueprintOverrideContractTests
             function.BlueprintEvent);
         ScriptFunctionOverrideDeclaration blueprintOverride = Assert.IsType<ScriptFunctionOverrideDeclaration>(
             blueprintEvent.Override);
-        Assert.Equal(ScriptAssetDocument.OverrideSchemaVersion, result.ScriptAssets.SchemaVersion);
+        Assert.Equal(ScriptAssetDocument.ClassBindingSchemaVersion, result.ScriptAssets.SchemaVersion);
         Assert.Equal("/Script/Engine.Actor", blueprintOverride.DeclaringTypePath);
         Assert.Equal("ReceiveBeginPlay", blueprintOverride.FunctionName);
 
@@ -124,7 +124,7 @@ public sealed class UnrealBlueprintOverrideContractTests
     }
 
     [Fact]
-    public void ExistingBlueprintEventKeepsV01Shape()
+    public void ExistingBlueprintEventKeepsClassBindingShape()
     {
         const string source = """
             using Finare;
@@ -146,7 +146,7 @@ public sealed class UnrealBlueprintOverrideContractTests
         CSharpAnalysisResult result = Analyze(source);
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
-        Assert.Equal(ScriptAssetDocument.CurrentSchemaVersion, result.ScriptAssets!.SchemaVersion);
+        Assert.Equal(ScriptAssetDocument.ClassBindingSchemaVersion, result.ScriptAssets!.SchemaVersion);
         string json = ScriptAssetJson.Serialize(result.ScriptAssets);
         Assert.DoesNotContain("\"override\"", json, StringComparison.Ordinal);
         Assert.Equal(json, ScriptAssetJson.Serialize(ScriptAssetJson.Deserialize(json)));
@@ -238,14 +238,14 @@ public sealed class UnrealBlueprintOverrideContractTests
     }
 
     [Fact]
-    public void CoreJsonRejectsV01OverridesAndMalformedTargets()
+    public void CoreJsonRejectsDowngradedOverridesAndMalformedTargets()
     {
         CSharpAnalysisResult result = Analyze(ValidSource);
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         string json = ScriptAssetJson.Serialize(result.ScriptAssets!);
 
         string v01 = json.Replace(
-            ScriptAssetDocument.OverrideSchemaVersion,
+            ScriptAssetDocument.ClassBindingSchemaVersion,
             ScriptAssetDocument.CurrentSchemaVersion,
             StringComparison.Ordinal);
         Assert.Throws<JsonException>(() => ScriptAssetJson.Deserialize(v01));
