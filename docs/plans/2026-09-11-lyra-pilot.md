@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: installed FirstPlay/reload and original health/HUD passed; normal component loading repair in progress
+Status: installed normal ActorComponent workflow and original health/HUD passed; health logic migration in progress
 
 ## Outcome and scope
 
@@ -65,9 +65,8 @@ loading thread. `FFinareBlueprintCompilerContext::FinishCompilingClass` calls
 the game-thread-only `BindManagedFunctions` during UE skeleton compilation;
 the runtime load hooks already defer that work to the game thread. Evidence:
 `artifacts/finare-usability/lyra-health-class-play-engine-2.log`, Editor exit 3.
-Repair this compiler boundary and repeat actual function/event invocation,
-state reload and World teardown before accepting the normal class workflow.
-Do not disable asynchronous loading to turn this failure into a pass.
+Revision `3a13fc1` defers these compiler binding hooks to the existing game-thread
+load/instance path, retaining the runtime assertions and asynchronous loading.
 
 Normal factory/configuration edits also expose an SDK upgrade conflict:
 adoption currently treats a customized deployment/configuration template as a
@@ -75,6 +74,27 @@ conflict even when the incoming template has not changed. Preserve project
 customizations when the SDK has no change to that template, while retaining
 conflicts for two-sided template changes and modified product payload files.
 The preview is `artifacts/finare-usability/lyra-upgrade-after-class-preview.log`.
+Revision `06665b5` implements that preservation rule using the nearest receipt's
+kind and template hash. Twelve adoption tests pass, including two upgrades,
+rollback preservation and two-sided template conflicts.
+
+The SDK at `06665b5` installed with one create, 29 updates, 266 unchanged files
+and no conflicts; receipt `20260911-063100-3e14c46a`. The customized health API
+contract and both deployment entries survived. Full installed onboarding passed
+in `Saved/Finare/Onboarding/20260911-143100/onboarding-report.json`. The contract
+now also selects the original `OnPosessedPawnChanged` function for reuse of its
+presentation initialization after subscription management moves to C#.
+
+Actual fresh class loading, ordinary Actor component attachment and PIE now
+pass in `lyra-health-class-play-engine-4.log` and `lyra-health-class-play.json`
+under the artifact directory, with Editor exit 0. The generated `StartValue`
+property becomes 2 on BeginPlay; native `AddOne(41)` returns 42; the Blueprint
+event adds 5 to produce 7; generation 1 reloads to 2 with state 8 and retains
+native method dispatch. Explicit stop and World destruction succeed. The
+earlier `-3.log` harness read the hosted ScriptState bag rather than the generated
+UE property; that assertion was corrected to inspect the actual production
+state owner. No product state-sync code was changed for that harness correction.
+This establishes the normal class carrier, not migrated health subscriptions.
 
 The unmodified-copy `LyraEditor Win64 Development` build passed against UE 5.8.1
 (561 actions, 144.88 seconds). Its output is
