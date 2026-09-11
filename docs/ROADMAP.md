@@ -647,9 +647,13 @@ Start after the M13.5 capability breadth target and the remaining M13.3 class
 integration, not as the discovery prerequisite for either. This stage tests how
 the broadly usable capabilities compose in practice.
 
-- [ ] Select an authorized non-BlockBreaker project and one representative
-  gameplay slice. `D:\Project\LyraStarterGame` is only a candidate, not a selected
-  target or permission to modify it.
+- [x] Select an authorized non-BlockBreaker project and one representative
+  gameplay slice. The user selected `D:\Project\LyraStarterGame`; implementation
+  and verification use the independent copy `D:\Project\FinareLyraPilot-20260911`.
+  The selected slice is Lyra's GAS health changes driving the health HUD,
+  including pawn replacement and subscription cleanup. Its unmodified-copy
+  Editor build and read-only asset inspection pass; SDK adoption and gameplay
+  comparison remain pending. See the [pilot scope](plans/2026-09-11-lyra-pilot.md).
 - [ ] Install through the shipped SDK workflow, inventory the slice's actual
   Puerts/Blueprint/C++ boundaries and migrate its required behavior using generated
   APIs. Classify unsupported dependencies before promising full migration.
