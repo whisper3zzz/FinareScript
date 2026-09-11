@@ -123,7 +123,14 @@ protected:
         else
         {
             ManagedClass->ClassGeneratedBy = Blueprint;
-            ManagedClass->PrepareManagedFunctionsForRecompile();
+            // Skeleton generation can run on the async loading thread.  The
+            // managed binding table is runtime-owned and its recompile helper
+            // deliberately requires the game thread; defer the actual bind
+            // to the generated-class post-load/instance hooks in that case.
+            if (IsInGameThread())
+            {
+                ManagedClass->PrepareManagedFunctionsForRecompile();
+            }
             FBlueprintCompileReinstancer::Create(ManagedClass);
         }
         NewClass = ManagedClass;
@@ -143,7 +150,15 @@ protected:
             // Direct Editor compiles must restore the same native contract as
             // declaration-driven materialization; users should not need a
             // second Build action after pressing Compile.
-            GeneratedClass->BindManagedFunctions();
+            // FinishCompilingClass is also reached by FastGenerateSkeletonClass
+            // on the async loading thread.  BindManagedFunctions keeps its
+            // game-thread check; the generated class's PostLoad/PostInitInstance
+            // hooks perform the deferred rebind once the object is on the game
+            // thread.
+            if (IsInGameThread())
+            {
+                GeneratedClass->BindManagedFunctions();
+            }
         }
     }
 
