@@ -25,6 +25,7 @@
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/ArchiveReplaceObjectRef.h"
@@ -7912,6 +7913,73 @@ bool SaveBlueprint(UBlueprint& Blueprint, FString& OutError)
     }
     return true;
 }
+
+bool ResolveExternalPublicationPath(
+    const FString& InputPath,
+    FString& OutPath,
+    FString& OutError)
+{
+    if (InputPath.IsEmpty() || FPaths::IsRelative(InputPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The native publication output path '%s' must be a non-empty absolute path."),
+            *InputPath);
+        return false;
+    }
+
+    OutPath = FPaths::ConvertRelativePathToFull(InputPath);
+    FPaths::NormalizeFilename(OutPath);
+    if (OutPath.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("The native publication output path '%s' is invalid."),
+            *InputPath);
+        return false;
+    }
+    return true;
+}
+
+bool WriteExternalPublicationFile(
+    const FFinareExternalPublicationFile& File,
+    FString& OutError)
+{
+    FString AbsolutePath;
+    if (!ResolveExternalPublicationPath(File.Path, AbsolutePath, OutError))
+    {
+        return false;
+    }
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (PlatformFile.FileExists(*AbsolutePath) && PlatformFile.IsReadOnly(*AbsolutePath))
+    {
+        OutError = FString::Printf(
+            TEXT("The native publication output '%s' is read-only and cannot be overwritten."),
+            *AbsolutePath);
+        return false;
+    }
+
+    const FString TemporaryPath = FString::Printf(
+        TEXT("%s.finare-publication.%s.tmp"),
+        *AbsolutePath,
+        *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsolutePath), true);
+    if (!FFileHelper::SaveArrayToFile(File.Content, *TemporaryPath))
+    {
+        IFileManager::Get().Delete(*TemporaryPath, false, true);
+        OutError = FString::Printf(
+            TEXT("Cannot write prepared native publication '%s'."),
+            *AbsolutePath);
+        return false;
+    }
+    if (!IFileManager::Get().Move(*AbsolutePath, *TemporaryPath, true, false, false, true))
+    {
+        IFileManager::Get().Delete(*TemporaryPath, false, true);
+        OutError = FString::Printf(
+            TEXT("Cannot publish prepared native output '%s'."),
+            *AbsolutePath);
+        return false;
+    }
+    return true;
+}
 } // namespace UE::Finare::BlueprintClass::Private
 
 bool FFinareBlueprintClassMaterializer::Synchronize(
@@ -8032,6 +8100,15 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
     {
         return false;
     }
+    if (Options.bOverrideParentClassPath)
+    {
+        if (!PlannedClassBinding.IsSet())
+        {
+            OutError = TEXT("Native history supplied a parent for a declaration without class binding.");
+            return false;
+        }
+        PlannedClassBinding->BaseClassPath = Options.ParentClassPathOverride;
+    }
     FParentChangePlan ParentPlan;
     if (!BuildParentChangePlan(
             ScriptAsset,
@@ -8059,6 +8136,15 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
     {
         return false;
     }
+    if (Options.bOverrideParentClassPath)
+    {
+        if (!ClassBinding.IsSet())
+        {
+            OutError = TEXT("Native history supplied a parent for a declaration without class binding.");
+            return false;
+        }
+        ClassBinding->BaseClassPath = Options.ParentClassPathOverride;
+    }
     // Rebuild from the fully validated selected asset so malformed or
     // mismatched multi-asset documents cannot smuggle a different parent
     // between the preflight ancestry check and member parsing.
@@ -8070,6 +8156,18 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             OutError))
     {
         return false;
+    }
+    const bool bHasExternalPublicationFiles = !Options.ExternalPublicationFiles.IsEmpty();
+    const bool bTransactional = ParentPlan.bChanged || bHasExternalPublicationFiles;
+
+    if (!Options.JournalTransactionId.IsEmpty())
+    {
+        FGuid ParsedJournalTransactionId;
+        if (!FGuid::Parse(Options.JournalTransactionId, ParsedJournalTransactionId))
+        {
+            OutError = TEXT("The native publication journal transaction id is invalid.");
+            return false;
+        }
     }
 
 #if WITH_EDITOR
@@ -8084,7 +8182,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 #endif
 
     FLocalBlueprintTransaction ParentTransaction(Blueprint);
-    if (ParentPlan.bChanged && !ParentTransaction.Isolate(OutError))
+    if (bTransactional && !ParentTransaction.Isolate(OutError))
     {
         return false;
     }
@@ -8205,7 +8303,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         return OutError.IsEmpty();
     }
 
-    OutResult.bChanged |= ParentPlan.bChanged;
+    OutResult.bChanged |= bTransactional;
 
     if (!OutResult.bChanged)
     {
@@ -8224,7 +8322,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         return false;
     }
     TArray<FScriptComponentOwnerSnapshot> ScriptComponentOwners;
-    if (ParentPlan.bChanged &&
+    if (bTransactional &&
         !CaptureScriptComponentOwners(Blueprint, ScriptComponentOwners, OutError))
     {
         return false;
@@ -8233,7 +8331,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         ParentDefaultOverrides);
 
     TArray<FManagedStateValueSnapshot> ManagedStateSnapshots;
-    if (ParentPlan.bChanged &&
+    if (bTransactional &&
         !CaptureManagedStateValueSnapshots(
             Blueprint,
             Plan,
@@ -8402,7 +8500,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
                 TEXT("FinareMaterializationPreflight"))));
     TArray<FManagedStateValueSnapshot> ValidationManagedStateSnapshots;
     TArray<FScriptComponentOwnerSnapshot> ValidationScriptComponentOwners;
-    if (ParentPlan.bChanged && ValidationBlueprint != nullptr &&
+    if (bTransactional && ValidationBlueprint != nullptr &&
         (!CaptureManagedStateValueSnapshots(
              *ValidationBlueprint,
              Plan,
@@ -8444,7 +8542,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
         return false;
     }
-    if (ParentPlan.bChanged)
+    if (bTransactional)
     {
         if (!RestoreManagedStateValueSnapshots(
                 ValidationManagedStateSnapshots,
@@ -8537,7 +8635,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
     };
     auto RollbackMemory = [&]() -> bool
     {
-        if (!ParentPlan.bChanged)
+        if (!bTransactional)
         {
             Blueprint.NewVariables = OriginalVariables;
             FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(&Blueprint);
@@ -8555,14 +8653,16 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             AppendError(TEXT("Blueprint parent transaction rollback failed: ") + RollbackError);
             return false;
         }
-        if (Blueprint.ParentClass != ParentPlan.CurrentParent ||
-            Blueprint.GeneratedClass == nullptr ||
-            Blueprint.GeneratedClass->GetSuperClass() != ParentPlan.CurrentParent)
+        if (ParentPlan.bChanged &&
+            (Blueprint.ParentClass != ParentPlan.CurrentParent ||
+             Blueprint.GeneratedClass == nullptr ||
+             Blueprint.GeneratedClass->GetSuperClass() != ParentPlan.CurrentParent))
         {
             AppendError(TEXT("Blueprint parent transaction rollback did not restore the original generated superclass."));
             return false;
         }
-        if (!RestoreParentDefaultOverrides(
+        if (ParentPlan.bChanged &&
+            !RestoreParentDefaultOverrides(
                 ParentDefaultOverrides,
                 ReplacedObjects,
                 RollbackError))
@@ -8570,7 +8670,8 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             AppendError(TEXT("Blueprint parent transaction rollback could not restore inherited values: ") + RollbackError);
             return false;
         }
-        if (!RestoreManagedStateValueSnapshots(
+        if (bTransactional &&
+            !RestoreManagedStateValueSnapshots(
                 ManagedStateSnapshots,
                 ReplacedObjects,
                 true,
@@ -8579,19 +8680,22 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             AppendError(TEXT("Blueprint parent transaction rollback could not restore managed values: ") + RollbackError);
             return false;
         }
-        for (FScriptComponentOwnerSnapshot& ComponentSnapshot : ScriptComponentOwners)
+        if (bTransactional)
         {
-            FString ComponentRestoreError;
-            if (!RestoreScriptComponentOwner(
-                    ComponentSnapshot,
-                    ReplacedObjects,
-                    true,
-                    ComponentRestoreError))
+            for (FScriptComponentOwnerSnapshot& ComponentSnapshot : ScriptComponentOwners)
             {
-                AppendError(
-                    TEXT("Blueprint parent transaction rollback could not restore the managed ScriptComponent owner: ") +
-                    ComponentRestoreError);
-                return false;
+                FString ComponentRestoreError;
+                if (!RestoreScriptComponentOwner(
+                        ComponentSnapshot,
+                        ReplacedObjects,
+                        true,
+                        ComponentRestoreError))
+                {
+                    AppendError(
+                        TEXT("Blueprint parent transaction rollback could not restore the managed ScriptComponent owner: ") +
+                        ComponentRestoreError);
+                    return false;
+                }
             }
         }
         return true;
@@ -8631,23 +8735,84 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
     };
 
-    if (ParentPlan.bChanged && !PackageFilename.IsEmpty())
+    const bool bNeedsJournal =
+        (ParentPlan.bChanged && !PackageFilename.IsEmpty()) ||
+        !Options.ExternalPublicationFiles.IsEmpty();
+    if (bNeedsJournal)
     {
         ClassOperationJournal::FSnapshot PackageSnapshot;
         TArray<ClassOperationJournal::FSnapshot> JournalSnapshots;
+        TSet<FString> JournalPaths;
         FString JournalError;
-        const bool bCaptured = ClassOperationJournal::CaptureSnapshot(
-            PackageFilename,
-            PackageSnapshot,
-            JournalError);
-        if (bCaptured)
+        bool bCaptured = true;
+        if (!PackageFilename.IsEmpty())
         {
-            JournalSnapshots.Add(PackageSnapshot);
+            bCaptured = ClassOperationJournal::CaptureSnapshot(
+                PackageFilename,
+                PackageSnapshot,
+                JournalError);
+            if (bCaptured)
+            {
+                JournalPaths.Add(FPaths::ConvertRelativePathToFull(PackageFilename));
+                JournalSnapshots.Add(PackageSnapshot);
+            }
         }
+        for (const FFinareExternalPublicationFile& ExternalFile :
+             Options.ExternalPublicationFiles)
+        {
+            FString ExternalPath;
+            if (!ResolveExternalPublicationPath(ExternalFile.Path, ExternalPath, JournalError))
+            {
+                bCaptured = false;
+                break;
+            }
+            if (JournalPaths.Contains(ExternalPath))
+            {
+                JournalError = FString::Printf(
+                    TEXT("The native publication output path '%s' is duplicated or collides with the Blueprint package."),
+                    *ExternalPath);
+                bCaptured = false;
+                break;
+            }
+            IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+            if (PlatformFile.FileExists(*ExternalPath) && PlatformFile.IsReadOnly(*ExternalPath))
+            {
+                JournalError = FString::Printf(
+                    TEXT("The native publication output '%s' is read-only and cannot be overwritten."),
+                    *ExternalPath);
+                bCaptured = false;
+                break;
+            }
+            ClassOperationJournal::FSnapshot Snapshot;
+            if (!ClassOperationJournal::CaptureSnapshot(
+                    ExternalPath,
+                    Snapshot,
+                    JournalError))
+            {
+                bCaptured = false;
+                break;
+            }
+            JournalPaths.Add(ExternalPath);
+            JournalSnapshots.Add(MoveTemp(Snapshot));
+        }
+        FGuid ParsedJournalTransactionId;
+        const bool bHasJournalTransactionId = Options.JournalTransactionId.IsEmpty()
+            ? false
+            : FGuid::Parse(Options.JournalTransactionId, ParsedJournalTransactionId);
+        if (!Options.JournalTransactionId.IsEmpty() && !bHasJournalTransactionId)
+        {
+            OutError = TEXT("The native publication journal transaction id is invalid.");
+            DestroyCollectionInstanceOverrides(CollectionInstanceOverrides);
+            FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
+            return false;
+        }
+        const FString JournalTransactionId = bHasJournalTransactionId
+            ? Options.JournalTransactionId
+            : FGuid::NewGuid().ToString(EGuidFormats::Digits);
         if (!bCaptured ||
             !ClassOperationJournal::Begin(
                 TEXT("parentChange"),
-                FGuid::NewGuid().ToString(EGuidFormats::Digits),
+                JournalTransactionId,
                 JournalSnapshots,
                 JournalReceipt,
                 JournalError))
@@ -8662,9 +8827,10 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         bJournalActive = true;
     }
 
-    if (ParentPlan.bChanged)
+    if (bTransactional)
     {
-        if (ParentPlan.RequestedParent == nullptr || !ParentTransaction.Begin(OutError))
+        if ((ParentPlan.bChanged && ParentPlan.RequestedParent == nullptr) ||
+            !ParentTransaction.Begin(OutError))
         {
             if (bJournalActive)
             {
@@ -8674,12 +8840,14 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             FCoreUObjectDelegates::OnObjectsReplaced.Remove(ReplacedObjectsHandle);
             return false;
         }
-        if (!PrepareParentChange(Blueprint, *ParentPlan.RequestedParent, OutError))
+        if (ParentPlan.bChanged &&
+            !PrepareParentChange(Blueprint, *ParentPlan.RequestedParent, OutError))
         {
             FinishFailure();
             return false;
         }
-        if (Options.FailurePoint ==
+        if (ParentPlan.bChanged &&
+            Options.FailurePoint ==
             EFinareBlueprintClassMaterializerFailurePoint::AfterParentMutation)
         {
             OutError = TEXT("Injected parent mutation failure for Finare Blueprint transaction test.");
@@ -8707,7 +8875,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         FinishFailure();
         return false;
     }
-    if (ParentPlan.bChanged &&
+    if (bTransactional &&
         !RestoreManagedStateValueSnapshots(
             ManagedStateSnapshots,
             ReplacedObjects,
@@ -8717,7 +8885,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         FinishFailure();
         return false;
     }
-    if (ParentPlan.bChanged)
+    if (bTransactional)
     {
         for (FScriptComponentOwnerSnapshot& ComponentSnapshot : ScriptComponentOwners)
         {
@@ -8756,7 +8924,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             return false;
         }
     }
-    bSaveStarted = ParentPlan.bChanged;
+    bSaveStarted = bTransactional;
     if (!SaveBlueprint(Blueprint, OutError))
     {
         FinishFailure();
@@ -8768,6 +8936,26 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
         OutError = TEXT("Injected package publication failure for Finare Blueprint transaction test.");
         FinishFailure();
         return false;
+    }
+    int32 ExternalPublicationWriteCount = 0;
+    for (const FFinareExternalPublicationFile& ExternalFile :
+         Options.ExternalPublicationFiles)
+    {
+        if (!WriteExternalPublicationFile(ExternalFile, OutError))
+        {
+            FinishFailure();
+            return false;
+        }
+        ++ExternalPublicationWriteCount;
+        if (Options.FailAfterExternalPublicationWrite != INDEX_NONE &&
+            ExternalPublicationWriteCount == Options.FailAfterExternalPublicationWrite)
+        {
+            OutError = FString::Printf(
+                TEXT("Injected external publication failure after %d external file writes."),
+                ExternalPublicationWriteCount);
+            FinishFailure();
+            return false;
+        }
     }
     if (bJournalActive)
     {

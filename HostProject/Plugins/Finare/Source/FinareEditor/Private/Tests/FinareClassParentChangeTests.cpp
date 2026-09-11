@@ -254,9 +254,26 @@ bool FFinareClassParentChangeTest::RunTest(const FString& Parameters)
     const FString ManagedPackageFilename = FPackageName::LongPackageNameToFilename(
         ManagedPackage->GetName(),
         FPackageName::GetAssetPackageExtension());
+    const FString ExternalProbeRoot = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("Finare/ParentChangeExternal_") + FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+    const FString ExistingExternalPath = FPaths::Combine(ExternalProbeRoot, TEXT("existing.output"));
+    const FString CreatedExternalPath = FPaths::Combine(ExternalProbeRoot, TEXT("created.output"));
+    if (!TestFalse(
+            TEXT("External publication existing probe path is initially absent"),
+            IFileManager::Get().FileExists(*ExistingExternalPath)) ||
+        !TestFalse(
+            TEXT("External publication created probe path is initially absent"),
+            IFileManager::Get().FileExists(*CreatedExternalPath)))
+    {
+        return false;
+    }
     ON_SCOPE_EXIT
     {
         IFileManager::Get().Delete(*ManagedPackageFilename, false, true, true);
+        IFileManager::Get().Delete(*ExistingExternalPath, false, true, true);
+        IFileManager::Get().Delete(*CreatedExternalPath, false, true, true);
+        IFileManager::Get().DeleteDirectory(*ExternalProbeRoot, false, true);
     };
     ScriptAsset->ScriptClassId = FixtureClassId;
     ScriptAsset->ScriptClassKind = EFinareClassKind::Actor;
@@ -1127,6 +1144,226 @@ bool FFinareClassParentChangeTest::RunTest(const FString& Parameters)
             Error));
     TestTrue(TEXT("Null base binding preserves current parent"),
         ManagedBlueprint->ParentClass == OrdinaryParent->GeneratedClass);
+
+    const TArray<uint8> ExistingExternalBefore = { 0x11, 0x22, 0x33, 0x44 };
+    const TArray<uint8> ExistingExternalCandidate = { 0x91, 0x92, 0x93, 0x94 };
+    const TArray<uint8> CreatedExternalCandidate = { 0xA1, 0xA2, 0xA3, 0xA4 };
+    IFileManager::Get().MakeDirectory(*ExternalProbeRoot, true);
+    TestTrue(
+        TEXT("External publication writes its existing baseline probe"),
+        FFileHelper::SaveArrayToFile(ExistingExternalBefore, *ExistingExternalPath));
+    TArray<uint8> PackageBytesBeforeExternalFailure;
+    TestTrue(
+        TEXT("External publication captures the owner package baseline"),
+        FFileHelper::LoadFileToArray(PackageBytesBeforeExternalFailure, *ManagedPackageFilename));
+    const bool bManagedPackageDirtyBeforeExternalFailure = ManagedPackage->IsDirty();
+    const FString ExternalMixedDeclaration = WithBaseClassPathAndStateName(
+        Declaration,
+        OrdinaryParent != nullptr && OrdinaryParent->GeneratedClass != nullptr
+            ? OrdinaryParent->GeneratedClass->GetPathName()
+            : FString(),
+        TEXT("ExternalRenamedCount"));
+    TestTrue(
+        TEXT("No-op parent mixed external declaration is constructed"),
+        !ExternalMixedDeclaration.IsEmpty());
+    AFinareActor* ExternalRootDefaults =
+        ManagedBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>();
+    AFinareActor* ExternalChildDefaults = ChildBlueprint != nullptr &&
+            ChildBlueprint->GeneratedClass != nullptr
+        ? ChildBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>()
+        : nullptr;
+    AFinareActor* ExternalGrandchildDefaults = GrandchildBlueprint != nullptr &&
+            GrandchildBlueprint->GeneratedClass != nullptr
+        ? GrandchildBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>()
+        : nullptr;
+    FIntProperty* ExternalRootCountProperty = ExternalRootDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalRootDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    FIntProperty* ExternalChildCountProperty = ExternalChildDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalChildDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    FIntProperty* ExternalGrandchildCountProperty = ExternalGrandchildDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalGrandchildDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    if (ExternalRootCountProperty != nullptr)
+    {
+        ExternalRootCountProperty->SetPropertyValue_InContainer(ExternalRootDefaults, 37);
+    }
+    if (ExternalChildCountProperty != nullptr)
+    {
+        ExternalChildCountProperty->SetPropertyValue_InContainer(ExternalChildDefaults, 47);
+    }
+    if (ExternalGrandchildCountProperty != nullptr)
+    {
+        ExternalGrandchildCountProperty->SetPropertyValue_InContainer(ExternalGrandchildDefaults, 57);
+    }
+    UFinareComponent* ExternalRootComponent = GetScriptComponent(ManagedBlueprint);
+    UFinareComponent* ExternalChildComponent = GetScriptComponent(ChildBlueprint);
+    UFinareComponent* ExternalGrandchildComponent = GetScriptComponent(GrandchildBlueprint);
+    if (ExternalRootComponent != nullptr)
+    {
+        ExternalRootComponent->ScriptAssemblyPath = TEXT("ExternalRootComponent");
+    }
+    if (ExternalChildComponent != nullptr)
+    {
+        ExternalChildComponent->ScriptAssemblyPath = TEXT("ExternalChildComponent");
+    }
+    if (ExternalGrandchildComponent != nullptr)
+    {
+        ExternalGrandchildComponent->ScriptAssemblyPath = TEXT("ExternalChildComponent");
+    }
+    TestTrue(
+        TEXT("External rollback starts with distinct managed Count values"),
+        ExternalRootCountProperty != nullptr &&
+        ExternalChildCountProperty != nullptr &&
+        ExternalGrandchildCountProperty != nullptr &&
+        ExternalRootCountProperty->GetPropertyValue_InContainer(ExternalRootDefaults) == 37 &&
+        ExternalChildCountProperty->GetPropertyValue_InContainer(ExternalChildDefaults) == 47 &&
+        ExternalGrandchildCountProperty->GetPropertyValue_InContainer(ExternalGrandchildDefaults) == 57);
+
+    FFinareBlueprintClassMaterializerOptions ExternalFailureOptions;
+    ExternalFailureOptions.JournalTransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    ExternalFailureOptions.FailAfterExternalPublicationWrite = 2;
+    FFinareExternalPublicationFile ExistingExternalOutput;
+    ExistingExternalOutput.Path = ExistingExternalPath;
+    ExistingExternalOutput.Content = ExistingExternalCandidate;
+    ExternalFailureOptions.ExternalPublicationFiles.Add(MoveTemp(ExistingExternalOutput));
+    FFinareExternalPublicationFile CreatedExternalOutput;
+    CreatedExternalOutput.Path = CreatedExternalPath;
+    CreatedExternalOutput.Content = CreatedExternalCandidate;
+    ExternalFailureOptions.ExternalPublicationFiles.Add(MoveTemp(CreatedExternalOutput));
+
+    Error.Reset();
+    const bool bExternalFailure = FFinareBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *ManagedBlueprint,
+        ExternalMixedDeclaration,
+        false,
+        Result,
+        Error,
+        ExternalFailureOptions);
+    TestFalse(TEXT("Mid-external-write failure rejects the no-op parent publication"), bExternalFailure);
+    TestEqual(
+        TEXT("Mid-external-write failure reports its exact seam"),
+        Error,
+        FString(TEXT("Injected external publication failure after 2 external file writes.")));
+    TArray<uint8> ExternalBytesAfterFailure;
+    TestTrue(
+        TEXT("Mid-external-write failure restores the existing external bytes"),
+        FFileHelper::LoadFileToArray(ExternalBytesAfterFailure, *ExistingExternalPath) &&
+        ExternalBytesAfterFailure == ExistingExternalBefore);
+    TestFalse(
+        TEXT("Mid-external-write failure removes the not-yet-published external output"),
+        IFileManager::Get().FileExists(*CreatedExternalPath));
+    TArray<uint8> PackageBytesAfterExternalFailure;
+    TestTrue(
+        TEXT("Mid-external-write failure restores the owner package bytes"),
+        FFileHelper::LoadFileToArray(PackageBytesAfterExternalFailure, *ManagedPackageFilename) &&
+        PackageBytesAfterExternalFailure == PackageBytesBeforeExternalFailure);
+    TestTrue(
+        TEXT("Mid-external-write failure preserves the no-op parent and dirty flag"),
+        ManagedBlueprint->ParentClass == OrdinaryParent->GeneratedClass &&
+        ManagedPackage->IsDirty() == bManagedPackageDirtyBeforeExternalFailure);
+    TestTrue(
+        TEXT("Mid-external-write failure restores the original Count identity"),
+        ManagedBlueprint->NewVariables.ContainsByPredicate(
+            [&OriginalStateGuids](const FBPVariableDescription& Variable)
+            {
+                return Variable.VarName == TEXT("Count") &&
+                    OriginalStateGuids.Contains(Variable.VarGuid);
+            }));
+    ExternalRootDefaults = ManagedBlueprint->GeneratedClass != nullptr
+        ? ManagedBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>()
+        : nullptr;
+    ExternalChildDefaults = ChildBlueprint != nullptr && ChildBlueprint->GeneratedClass != nullptr
+        ? ChildBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>()
+        : nullptr;
+    ExternalGrandchildDefaults = GrandchildBlueprint != nullptr &&
+            GrandchildBlueprint->GeneratedClass != nullptr
+        ? GrandchildBlueprint->GeneratedClass->GetDefaultObject<AFinareActor>()
+        : nullptr;
+    ExternalRootCountProperty = ExternalRootDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalRootDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    ExternalChildCountProperty = ExternalChildDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalChildDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    ExternalGrandchildCountProperty = ExternalGrandchildDefaults != nullptr
+        ? FindFProperty<FIntProperty>(ExternalGrandchildDefaults->GetClass(), TEXT("Count"))
+        : nullptr;
+    ExternalRootComponent = GetScriptComponent(ManagedBlueprint);
+    ExternalChildComponent = GetScriptComponent(ChildBlueprint);
+    ExternalGrandchildComponent = GetScriptComponent(GrandchildBlueprint);
+    TestTrue(
+        TEXT("Mid-external-write failure restores all managed Count values"),
+        ExternalRootCountProperty != nullptr &&
+        ExternalChildCountProperty != nullptr &&
+        ExternalGrandchildCountProperty != nullptr &&
+        ExternalRootCountProperty->GetPropertyValue_InContainer(ExternalRootDefaults) == 37 &&
+        ExternalChildCountProperty->GetPropertyValue_InContainer(ExternalChildDefaults) == 47 &&
+        ExternalGrandchildCountProperty->GetPropertyValue_InContainer(ExternalGrandchildDefaults) == 57);
+    bool bExternalGraphGuidsPreserved =
+        OriginalGraphGuids.Num() ==
+        ManagedBlueprint->FunctionGraphs.Num() +
+        ManagedBlueprint->UbergraphPages.Num() +
+        ManagedBlueprint->MacroGraphs.Num();
+    for (UEdGraph* Graph : ManagedBlueprint->FunctionGraphs)
+    {
+        bExternalGraphGuidsPreserved &= Graph != nullptr && OriginalGraphGuids.Contains(Graph->GraphGuid);
+    }
+    for (UEdGraph* Graph : ManagedBlueprint->UbergraphPages)
+    {
+        bExternalGraphGuidsPreserved &= Graph != nullptr && OriginalGraphGuids.Contains(Graph->GraphGuid);
+    }
+    for (UEdGraph* Graph : ManagedBlueprint->MacroGraphs)
+    {
+        bExternalGraphGuidsPreserved &= Graph != nullptr && OriginalGraphGuids.Contains(Graph->GraphGuid);
+    }
+    TestTrue(TEXT("Mid-external-write failure restores graph identities"), bExternalGraphGuidsPreserved);
+    TestTrue(
+        TEXT("Mid-external-write failure restores ScriptComponent ownership and values"),
+        ExternalRootComponent != nullptr &&
+        ExternalChildComponent != nullptr &&
+        ExternalGrandchildComponent != nullptr &&
+        ExternalRootComponent->GetOuter() == ExternalRootDefaults &&
+        ExternalChildComponent->GetOuter() == ExternalChildDefaults &&
+        ExternalGrandchildComponent->GetOuter() == ExternalGrandchildDefaults &&
+        ExternalRootComponent->ScriptAsset == ScriptAsset &&
+        ExternalChildComponent->ScriptAsset == ScriptAsset &&
+        ExternalGrandchildComponent->ScriptAsset == ScriptAsset &&
+        ExternalRootComponent->ScriptAssemblyPath == TEXT("ExternalRootComponent") &&
+        ExternalChildComponent->ScriptAssemblyPath == TEXT("ExternalChildComponent") &&
+        ExternalGrandchildComponent->ScriptAssemblyPath == TEXT("ExternalChildComponent"));
+
+    ExternalFailureOptions.FailAfterExternalPublicationWrite = INDEX_NONE;
+    ExternalFailureOptions.JournalTransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    Error.Reset();
+    TestTrue(
+        TEXT("No-op parent mixed external publication succeeds once"),
+        FFinareBlueprintClassMaterializer::SynchronizeJson(
+            *ScriptAsset,
+            *ManagedBlueprint,
+            ExternalMixedDeclaration,
+            false,
+            Result,
+            Error,
+            ExternalFailureOptions));
+    TestTrue(
+        TEXT("Successful external publication writes both candidate outputs"),
+        FFileHelper::LoadFileToArray(ExternalBytesAfterFailure, *ExistingExternalPath) &&
+            ExternalBytesAfterFailure == ExistingExternalCandidate &&
+            FFileHelper::LoadFileToArray(ExternalBytesAfterFailure, *CreatedExternalPath) &&
+            ExternalBytesAfterFailure == CreatedExternalCandidate);
+    TestTrue(
+        TEXT("Successful external publication applies the mixed declaration without changing parent"),
+        ManagedBlueprint->ParentClass == OrdinaryParent->GeneratedClass &&
+        ManagedBlueprint->NewVariables.ContainsByPredicate(
+            [](const FBPVariableDescription& Variable)
+            {
+                return Variable.VarName == TEXT("ExternalRenamedCount");
+            }));
 
     TestFalse(
         TEXT("A non-carrier Actor parent reports composition requirement"),

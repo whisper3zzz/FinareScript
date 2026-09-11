@@ -29,6 +29,13 @@ struct FINAREEDITOR_API FFinareBlueprintClassSyncResult
     bool bChanged = false;
 };
 
+/** Candidate bytes published together with the UE Blueprint transaction. */
+struct FINAREEDITOR_API FFinareExternalPublicationFile
+{
+    FString Path;
+    TArray<uint8> Content;
+};
+
 /** Deterministic seams used by editor Automation to exercise parent rollback. */
 enum class EFinareBlueprintClassMaterializerFailurePoint : uint8
 {
@@ -41,6 +48,15 @@ struct FINAREEDITOR_API FFinareBlueprintClassMaterializerOptions
 {
     EFinareBlueprintClassMaterializerFailurePoint FailurePoint =
         EFinareBlueprintClassMaterializerFailurePoint::None;
+    /** Authoring operation id used by the shared recovery receipt. */
+    FString JournalTransactionId;
+    /** Files whose preimages and candidate bytes belong to the same receipt. */
+    TArray<FFinareExternalPublicationFile> ExternalPublicationFiles;
+    /** Test seam: fail after this many external outputs have been written. */
+    int32 FailAfterExternalPublicationWrite = INDEX_NONE;
+    /** Overrides a null BaseClassPath with the parent observed by native history. */
+    bool bOverrideParentClassPath = false;
+    FString ParentClassPathOverride;
 };
 
 /**
