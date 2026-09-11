@@ -3,7 +3,7 @@ name: Finare CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: ['**']
   workflow_dispatch:
   schedule:
     - cron: "0 18 * * *"
@@ -16,7 +16,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  plan:
+    runs-on: windows-latest
+    outputs:
+      native: ${{ steps.coverage.outputs.native }}
+      trusted: ${{ steps.coverage.outputs.trusted }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Select required coverage for this revision
+        id: coverage
+        run: python -B tools/ci_policy.py plan --output artifacts/ci/plan.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ci-plan
+          path: artifacts/ci/plan.json
+          if-no-files-found: error
+
   managed-tests:
+    needs: plan
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -65,6 +87,7 @@ jobs:
           if-no-files-found: error
 
   deterministic-generation:
+    needs: plan
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -74,6 +97,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.201
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
       - name: Run generation twice and compare checked artifacts
         shell: powershell
         run: >-
@@ -92,16 +118,15 @@ jobs:
           if-no-files-found: error
 
   unreal:
-    if: github.event_name != 'pull_request'
+    needs: plan
+    # Fork code stays off persistent UE hosts. Required but unavailable coverage
+    # fails CI acceptance; it is never silently reclassified as optional.
+    if: needs.plan.outputs.trusted == 'true' && needs.plan.outputs.native != '[]'
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        lane:
-          - ue-build
-          - unreal-automation
-          - package-smoke
-          - workload-performance
-          - sdk-installation
+        lane: ${{ fromJSON(needs.plan.outputs.native) }}
     runs-on: [self-hosted, Windows, X64, ue-5.8.1]
     timeout-minutes: 480
     steps:
@@ -126,4 +151,34 @@ jobs:
             artifacts/ci/${{ matrix.lane }}/**/*.log
             artifacts/ci/${{ matrix.lane }}/**/*.trx
             artifacts/ci/${{ matrix.lane }}/**/*.txt
+          if-no-files-found: error
+
+  acceptance:
+    name: CI acceptance
+    if: always()
+    needs: [plan, managed-tests, deterministic-generation, unreal]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ci-*
+          path: artifacts/ci-evidence
+      - name: Reject failed, skipped, missing or stale required evidence
+        if: always()
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: >-
+          python -B tools/ci_policy.py verify
+          --plan artifacts/ci-evidence/ci-plan/plan.json
+          --reports artifacts/ci-evidence
+          --output artifacts/ci-verdict.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ci-verdict
+          path: artifacts/ci-verdict.json
           if-no-files-found: error

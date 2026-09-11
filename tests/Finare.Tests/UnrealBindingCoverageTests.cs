@@ -5,6 +5,7 @@ using Finare.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealBindingCoverageTests
 {
     [Fact]

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Engine-neutral compiled C# program images and source maps.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
+    <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
+    <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
+  </ItemGroup>
+</Project>

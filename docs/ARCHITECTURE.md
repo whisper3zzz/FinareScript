@@ -94,6 +94,21 @@ flowchart LR
 
 ## Project boundaries
 
+```mermaid
+flowchart TD
+    CLI["CLI / authoring application"] --> Compilation["Compilation orchestration"]
+    Compilation --> CSharp["CSharp / Roslyn"]
+    Compilation --> Runtime["Runtime loading and execution"]
+    Unreal["Unreal managed host"] --> Runtime
+    CSharp --> Model["ProgramModel: images and source maps"]
+    Runtime --> Model
+    Model --> Neutral["Core / Semantics / Graph"]
+```
+
+`tools/repository_checks/architecture.py` checks project-reference cycles and
+the runtime's transitive dependency closure. Runtime and Unreal must remain
+independent of compiler implementations even when a tooling consumer uses both.
+
 ### Finare.Core
 
 - `VisualAttribute`
@@ -127,7 +142,29 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - PE/PDB-derived semantic method/node source-map generation and strict JSON
 - reconciled identity sidecars retained in the executable program image
 
-It may depend on Core, Semantics, Graph, and Roslyn, but not on Runtime or UE.
+It may depend on Core, Semantics, Graph, ProgramModel and Roslyn, but not on
+Runtime or UE. It emits program artifacts; loading or publishing those artifacts
+belongs to the consuming host.
+
+### Finare.ProgramModel
+
+The compiled program image, source-map records and their JSON contract live in
+this shared project. It depends on Core, Semantics and Graph, with no Roslyn or
+hosting dependency. The existing `Finare.CSharp` type namespaces and serialized
+schema identifiers remain stable even though their assembly ownership changes.
+
+### Finare.Compilation
+
+This is the composition layer for compile-and-load, program-image compilation
+caching, compiled-chunk creation, source-based debug transports and round-trip
+execution comparison. It depends on CSharp and Runtime. CLI/tools explicitly
+reference it; the Unreal runtime dependency closure must not include it.
+
+The existing `Finare.Runtime` namespaces of these tooling APIs are retained.
+Consumers of moved types must rebuild against the new project references.
+`CompileAndLoad` is supplied by a compilation-layer extension; the runtime's
+own execution host loads an already emitted image. Wire formats, semantic IDs
+and existing chunk schemas are unchanged by the assembly split.
 
 ### Finare.Semantics
 
@@ -164,14 +201,30 @@ effect-aware graph without hosting Roslyn.
 - collectible CoreCLR assembly loading and dependency resolution
 - explicit reload-session lifetime and unloading
 - immutable semantic-ID/IL/PDB source-map exposure without reflection leakage
-- bounded content-addressed program-image cache and monotonic reload generations
+- program-image identity, chunk decoding and runtime generation contracts
 - semantic breakpoint binding/migration and stale-generation hit rejection
-- cooperative CoreCLR suspension, step-over, stack/value snapshots, and
-  generation-safe loopback debug transport
+- cooperative CoreCLR probes, suspension, stepping and stack/value snapshots
 
-It depends on Core, Semantics, and the C# emission boundary. It does not parse
-source, project Graph, apply patches, or depend on UE. A collectible load
-context is a reload mechanism, not a security sandbox.
+It depends on Core, Semantics and ProgramModel. Compilation and source-based
+debug orchestration belong to Finare.Compilation. Runtime does not reference
+CSharp, Compilation or Roslyn, parse source, apply patches, or depend on UE.
+The program model still includes the existing graph metadata; this split does
+not redefine that contract. A collectible load context is a reload mechanism,
+not a security sandbox.
+
+### Authoring application boundary
+
+`AuthoringSession` owns workspace revisions, previews, publication reservations,
+confirmation/cancellation, history and failure preservation. It has no HTTP
+listener or status-code dependency and is directly exercised by session tests.
+`CoreClrDebugHttpServer` adapts HTTP headers/payloads to session calls and maps
+domain failures to the existing wire responses. Shared DTOs describe the same
+protocol used by the browser and native Editor.
+
+Publication continues to prepare a candidate before adopting it, keep uncertain
+reservations available for recovery, reject stale/foreign requests and make
+duplicate confirmations idempotent. Extracting the service must preserve these
+existing transaction guarantees across the managed and native participants.
 
 ### Finare.Unreal
 
@@ -185,7 +238,7 @@ context is a reload mechanism, not a security sandbox.
   claim over a UObject
 - unsigned 64-bit slot/generation handle encoding shared with the native plugin
 
-It depends only on Core. It does not reference UE assemblies or headers, scan a
+It depends on Core and Runtime. It does not reference UE assemblies or headers, scan a
 local engine tree, load CoreCLR into UE, or reinterpret Declaration IR and
 Authoring Surface. The native plugin translates `UClass`, `FProperty`, and
 `UFunction` into this contract. The native runtime plugin now implements the

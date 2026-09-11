@@ -5,6 +5,7 @@ using Finare.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpAuthoringWorkspaceTests
 {
     private const string Source = """

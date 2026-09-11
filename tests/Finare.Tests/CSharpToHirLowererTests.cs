@@ -3,6 +3,7 @@ using Finare.Core.Hir;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class CSharpToHirLowererTests
 {
     private const string SupportedSource = """

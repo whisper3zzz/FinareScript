@@ -1,6 +1,6 @@
 # Continuous integration lanes
 
-Finare uses seven independent release-candidate lanes. The local entry
+Finare uses seven verification lanes and one **CI acceptance** job. The local entry
 point and GitHub Actions call the same command:
 
 ```powershell
@@ -33,11 +33,48 @@ relative artifact paths. Detailed child output remains in per-phase logs.
 | `workload-performance` | dedicated comparison runner | Complete 54-slot matched Finare/Puerts suite and reviewed performance budgets |
 | `sdk-installation` | dedicated UE runner | Exact UE 5.8.1 compatibility matrix, deterministic SDK archive, clean project installation, package, poisoned external .NET roots, and runtime smoke |
 
-The first two lanes run for pull requests, `main` pushes, schedules, and manual
-runs. UE lanes do not run untrusted pull-request code on a persistent machine;
-they run for `main`, scheduled, and manually dispatched workflows. Each matrix
-entry gets a fresh checkout and uploads its own report directory, so one lane
-cannot satisfy another lane with an earlier job's binaries.
+The first two lanes run for pull requests and pushes to every branch. The
+coverage selector in `tools/ci_policy.py` chooses additional required lanes:
+
+- Source, schema, sample and native changes require Editor build and Automation.
+- Runtime, compiler and shared program contracts, and build/dependency
+  declarations additionally require packaging and SDK checks.
+- Delivery/tooling/CI and otherwise unclassified executable changes require the
+  full matrix. Main pushes, scheduled and manual runs also require all seven.
+- Documentation-only and managed-test-only changes retain the hosted scope.
+
+Same-repository PRs can run the selected UE lanes. Fork code never runs on a
+persistent UE runner. If a fork change requires native evidence, **CI acceptance
+fails** until the change is reviewed and validated through a trusted repository
+branch. Missing runner capacity cannot turn required coverage into a pass.
+
+Each matrix entry gets a fresh checkout and its own report directory. Native
+matrix entries run sequentially to avoid contention over Unreal build resources.
+Artifact downloads are limited to this workflow run.
+
+## Meaning of CI acceptance
+
+The aggregate job always runs, including after a failed or skipped dependency.
+It checks the coverage plan against the current checkout revision and requires
+every selected job and lane report to pass. Each lane must contain its expected
+phases, logs and child reports. Dirty checkouts, duplicate/missing lane reports,
+old revisions, zero-test or partially executed TRX reports, failed Automation,
+incomplete package smoke and missing SDK coverage are rejected.
+
+The summary lists each lane as `passed`, `failed` or `not-required`, and states
+whether the scope was change-selected or the full matrix. A change-selected pass
+does not renew release acceptance. `-PlanOnly` checks provider configuration;
+it never substitutes for executed tests or the full release-readiness command.
+
+Repository branch rules should require the stable **CI acceptance** check.
+Editing workflow files does not configure GitHub branch protection or provide
+the self-hosted runner; those remote settings must exist for merge enforcement.
+
+The local lane driver also validates child evidence before printing PASS. Local
+dirty runs remain labelled dirty and are rejected by aggregate CI. Onboarding
+counts distinct Automation test paths across engine logs/stdout, retains failures
+even after a later success, and rejects Ensure/assertion/fatal/World-cleanup
+errors. Expected application-error regression cases remain valid.
 
 Only JSON/Markdown/text logs and TRX evidence are uploaded. Cooked content,
 archives, SDK ZIPs, native binaries, and other large executable payloads stay on

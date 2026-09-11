@@ -5,6 +5,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpProjectLoaderTests
 {
     [Fact]

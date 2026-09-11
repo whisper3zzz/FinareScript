@@ -87,6 +87,9 @@ function Resolve-DotNet {
         $engineDotNet = Join-Path $EngineRoot `
             'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
         if (Test-Path -LiteralPath $engineDotNet -PathType Leaf) {
+            $engineDotNetDirectory = Split-Path -Parent $engineDotNet
+            $env:DOTNET_ROOT = $engineDotNetDirectory
+            $env:PATH = "$engineDotNetDirectory;$env:PATH"
             return $engineDotNet
         }
     }
@@ -420,6 +423,35 @@ try {
         $reportPath,
         ($report | ConvertTo-Json -Depth 8) + "`n",
         [Text.UTF8Encoding]::new($false))
+}
+
+# Exit codes are necessary but do not prove that tests ran or that a child
+# report accepted the requested scope. Local dirty runs remain labelled dirty;
+# the workflow's aggregate verifier never accepts them as CI evidence.
+if ($status -eq 'passed') {
+    try {
+        $python = (Get-Command python -ErrorAction Stop).Source
+        $evidenceArguments = @('-B', (Join-Path $repoRoot 'tools\ci_policy.py'),
+            'verify-lane', '--report', $reportPath, '--lane', $Lane,
+            '--revision', $sourceRevision)
+        if (-not $RequireCleanTree) { $evidenceArguments += '--allow-dirty' }
+        & $python @evidenceArguments
+        $evidenceExitCode = $LASTEXITCODE
+        $changedAfterRun = $RequireCleanTree -and @(
+            & git -C $repoRoot status --porcelain --untracked-files=all).Count -ne 0
+        if ($changedAfterRun) { throw 'Source tree changed during the CI lane.' }
+        if ($evidenceExitCode -ne 0) { throw 'Child reports did not establish the required passing coverage.' }
+    } catch {
+        $status = 'failed'
+        $failure = [ordered]@{
+            phase = 'evidence-validation'
+            message = $_.Exception.Message
+        }
+        $report.status = $status
+        $report.failure = $failure
+        [IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 8) + "`n",
+            [Text.UTF8Encoding]::new($false))
+    }
 }
 
 if ($status -ne 'passed') {

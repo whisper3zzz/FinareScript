@@ -7,6 +7,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class CSharpSemanticPipelineTests
 {
     private const string Source = """

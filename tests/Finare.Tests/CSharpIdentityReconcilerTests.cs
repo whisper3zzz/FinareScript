@@ -4,6 +4,7 @@ using Finare.Core.Hir;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpIdentityReconcilerTests
 {
     private const string Source = """

@@ -14,6 +14,8 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
+[Collection("Authoring HTTP servers")]
 public sealed class CoreClrAuthoringHttpServerTests
 {
     private const string Source = """

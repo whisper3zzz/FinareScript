@@ -1,6 +1,12 @@
 # 2026-09-04 — Script Class replication and RPC
 
-Status: in-progress
+Status: planned
+
+The basic Actor/ActorComponent connected-example breadth checkpoint is delivered.
+Broader networking combinations remain planned; this is not a second active
+implementation queue. See [CAPABILITIES.md](../CAPABILITIES.md) for current
+limits and [ROADMAP.md](../ROADMAP.md) for selection of the next consumer-driven
+follow-up. The detailed checkpoints below retain their original evidence.
 
 ## Outcome and scope
 

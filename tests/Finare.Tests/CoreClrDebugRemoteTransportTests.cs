@@ -8,6 +8,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CoreClrDebugRemoteTransportTests
 {
     private const string Path = "Tests/Debug/RemoteRules.cs";

@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Delivery")]
 public sealed class UnrealProjectAdoptionTests
 {
     [Fact]

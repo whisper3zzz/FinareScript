@@ -6,6 +6,11 @@ This is the curated documentation entry point shipped with Finare
 this catalog; SDK packaging fails if a listed document is missing, duplicated,
 unsafe, or outside `docs`.
 
+For a first session, follow **First project golden path**, then choose a gameplay
+recipe. The remaining sections are references for a particular task. This index
+stays portable inside the installed SDK; source development and test selection
+are documented in the repository README and contributing guide.
+
 ## Start here
 
 - [SDK distribution and installation](UNREAL_SDK.md)

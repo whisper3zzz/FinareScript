@@ -8,6 +8,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealNativeObjectGenerationTests
 {
     private const string Owner = "/Native/FinareRuntime.NativeCounter";

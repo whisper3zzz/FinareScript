@@ -1,5 +1,8 @@
 # Finare roadmap history — through 2026-09-04
 
+See the [history index](history/README.md) for later snapshots and the
+[capability summary](CAPABILITIES.md) for the current supported scope.
+
 This is the historical implementation and acceptance record, retained when the
 live roadmap was reorganized. Status tables, proposed priorities, and "current"
 cursors below describe earlier points in development and may contradict later

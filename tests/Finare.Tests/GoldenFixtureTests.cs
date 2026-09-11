@@ -8,6 +8,7 @@ using Finare.Semantics;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Graph")]
 public sealed class GoldenFixtureTests
 {
     [Fact]

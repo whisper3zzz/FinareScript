@@ -5,7 +5,9 @@
     <Project Path="src/Finare.CSharp/Finare.CSharp.csproj" />
     <Project Path="src/Finare.Graph/Finare.Graph.csproj" />
     <Project Path="src/Finare.Authoring/Finare.Authoring.csproj" />
+    <Project Path="src/Finare.ProgramModel/Finare.ProgramModel.csproj" />
     <Project Path="src/Finare.Runtime/Finare.Runtime.csproj" />
+    <Project Path="src/Finare.Compilation/Finare.Compilation.csproj" />
     <Project Path="src/Finare.Unreal/Finare.Unreal.csproj" />
     <Project Path="src/Finare.Cli/Finare.Cli.csproj" />
   </Folder>

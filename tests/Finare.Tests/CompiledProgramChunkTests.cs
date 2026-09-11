@@ -6,6 +6,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CompiledProgramChunkTests
 {
     private const string Source = """

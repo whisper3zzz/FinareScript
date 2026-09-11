@@ -3,6 +3,7 @@ using Finare.Core;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class DeclarationPatchJsonTests
 {
     [Fact]

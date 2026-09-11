@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealManagedStaticLibraryReloadTests
 {
     [Fact]

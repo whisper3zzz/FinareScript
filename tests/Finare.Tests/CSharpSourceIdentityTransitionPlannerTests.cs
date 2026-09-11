@@ -3,6 +3,7 @@ using Finare.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpSourceIdentityTransitionPlannerTests
 {
     private const string Path = "Game/ActiveBase.cs";

@@ -3,6 +3,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealAuthoringInsightTests
 {
     [Fact]

@@ -6,6 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
     <ProjectReference Include="../Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../Finare.Compilation/Finare.Compilation.csproj" />
     <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
     <ProjectReference Include="../Finare.Authoring/Finare.Authoring.csproj" />
     <ProjectReference Include="../Finare.Runtime/Finare.Runtime.csproj" />

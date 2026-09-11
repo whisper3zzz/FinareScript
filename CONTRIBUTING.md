@@ -1,5 +1,10 @@
 # Contributing
 
+Start with [architecture](docs/ARCHITECTURE.md) for module boundaries and the
+[testing guide](docs/TESTING.md) for focused commands. The
+[capability summary](docs/CAPABILITIES.md) describes current support; the
+[roadmap](docs/ROADMAP.md) owns unfinished product outcomes.
+
 ## Invariants
 
 1. `[Visual]` syntax must be either losslessly representable or rejected with a
@@ -19,6 +24,12 @@
     internal rebasing may account only for earlier stages in the same plan.
 
 ## Verification
+
+Managed tests are grouped by behavior using xUnit categories; Python tools,
+native UE Automation, consumer workflows and release gates retain separate
+execution scopes. Follow [TESTING.md](docs/TESTING.md) to select a suite and
+interpret its result. Preserve test names, fixtures and assertions when
+reorganizing coverage; fix failures rather than silently excluding cases.
 
 Use the risk-based rules in [AGENTS.md](AGENTS.md): validate the behavior that
 changed. Documentation normally needs a content/link review, a local logic fix
@@ -51,3 +62,22 @@ dotnet build Finare.slnx
 dotnet test Finare.slnx --no-build
 python3 tools/validate_project.py
 ```
+
+## Documentation ownership
+
+| Document | Owns |
+| --- | --- |
+| `README.md` | Project introduction, first steps and navigation |
+| `docs/DOCUMENTATION.md` | Consumer documentation shipped in the SDK |
+| `docs/CAPABILITIES.md` | Current supported behaviors and limits |
+| `docs/ROADMAP.md` | Active outcome, remaining work and completion conditions |
+| `docs/TESTING.md` | Test selection, execution and evidence boundaries |
+| Technical documents and active plans | Contracts, design decisions and relevant detailed evidence |
+| `docs/history/` and `docs/ROADMAP_HISTORY.md` | Dated implementation and acceptance history |
+
+Keep consumer links portable within the packaged catalog. Repository-only
+development instructions belong in this guide or the root README. A document
+move must preserve useful examples and repair relative links. Historical logs
+must retain their original revision and scope; moving them does not make them
+new validation results. Do not require exact prose in tests when document
+existence, links or executable contracts express the actual requirement.

@@ -4,6 +4,10 @@ Harness 是开发者和 Agent 共用的执行框架，不是新的 gameplay runt
 它把任务边界、源码导航、验证选择和证据串在一起，复用已有 CI lanes。
 产品顺序仍由 [ROADMAP.md](ROADMAP.md) 的 Current execution cursor 决定。
 
+按行为选择托管测试、Python 工具测试和原生集成检查，先看
+[TESTING.md](TESTING.md)。当前能力边界见 [CAPABILITIES.md](CAPABILITIES.md)，
+历史计数和验收记录见 [历史索引](history/README.md)。
+
 ## 使用原则：工具可选，必要验证不能省
 
 AI 的执行约束以 [AGENTS.md](../AGENTS.md) 为准。Harness 提供能力，不规定每轮
@@ -59,7 +63,7 @@ Golden Path/performance gate，而不是自行恢复用户文件。
 
 | Profile | 含依赖的验收范围 | 不代表什么 |
 | --- | --- | --- |
-| `quick` | Harness 自测、仓库结构/契约不变量 | 不是 .NET 编译或 UE 运行 |
+| `quick` | Python 工具自测（Harness、文档检查、托管测试分类）、仓库结构/契约不变量 | 不是 .NET 编译或 UE 运行 |
 | `managed` | quick + 全量 Debug .NET 测试 | 不是原生 ABI 运行证据 |
 | `precommit` | managed + 确定性生成 | 名字不触发 Git commit；不是打包验收 |
 | `native` | precommit + UE Editor 构建 + CMD Automation | Editor 构建不等于 Game/打包通过 |
@@ -74,7 +78,7 @@ Golden Path/performance gate，而不是自行恢复用户文件。
 `--require-clean` 可用于严格验证，拒绝任何 Git 脏状态。Harness 本身不提供发布
 认证；完整发布仍用 [RELEASE_READINESS.md](RELEASE_READINESS.md) 的现有入口，
 其 clean revision、SDK、平台、性能、package 独立 gate 不被缩减。
-CI 的七条 lane 保留，轻量 CI 另外运行 Harness 自测。
+CI 的七条 lane 保留，轻量 CI 通过 `tools/run-tool-tests.py` 运行全部 Python 工具自测。
 
 ## 任务记录按需维护
 

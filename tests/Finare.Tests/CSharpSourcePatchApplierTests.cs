@@ -6,6 +6,7 @@ using Finare.Semantics;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpSourcePatchApplierTests
 {
     private const string Source = """

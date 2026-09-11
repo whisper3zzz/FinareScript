@@ -6,6 +6,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CoreClrDebugAdapterTests
 {
     private const string Path = "Tests/Debug/Rules.cs";

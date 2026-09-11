@@ -5,6 +5,7 @@ using System.Text.Json;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class RoundTripEquivalenceTests
 {
     private const string VisualSource = """

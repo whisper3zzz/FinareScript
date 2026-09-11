@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Finare.Core/Finare.Core.csproj" />
     <ProjectReference Include="../../src/Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../../src/Finare.Compilation/Finare.Compilation.csproj" />
     <ProjectReference Include="../../src/Finare.Authoring/Finare.Authoring.csproj" />
     <ProjectReference Include="../../src/Finare.Cli/Finare.Cli.csproj" />
     <ProjectReference Include="../../src/Finare.Graph/Finare.Graph.csproj" />

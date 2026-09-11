@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using Finare.Core;
 using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CoreClrProgramLoaderPrewarmTests
 {
     [Fact]
@@ -15,10 +17,11 @@ public sealed class CoreClrProgramLoaderPrewarmTests
         {
             var cache = new FinareManagedDependencyCache();
             CoreClrProgramLoaderPrewarmOperation operation =
-                CoreClrProgramLoaderPrewarmOperation.Create(
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
                     directory,
                     cache,
-                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 250));
+                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 250),
+                    static () => 0);
 
             Assert.Equal(
                 CoreClrProgramLoaderPrewarmState.Scheduled,
@@ -28,7 +31,9 @@ public sealed class CoreClrProgramLoaderPrewarmTests
             await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5));
 
             CoreClrProgramLoaderPrewarmSnapshot snapshot = operation.GetSnapshot();
-            Assert.Equal(CoreClrProgramLoaderPrewarmState.Completed, snapshot.State);
+            Assert.Equal(
+                CoreClrProgramLoaderPrewarmState.Completed,
+                snapshot.State);
             Assert.True(snapshot.CodecPrepared);
             Assert.Equal(2, snapshot.CandidateDependencyCount);
             Assert.Equal(2, snapshot.PreparedDependencyCount);
@@ -53,10 +58,11 @@ public sealed class CoreClrProgramLoaderPrewarmTests
         try
         {
             CoreClrProgramLoaderPrewarmOperation operation =
-                CoreClrProgramLoaderPrewarmOperation.Create(
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
                     directory,
                     new FinareManagedDependencyCache(),
-                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 250));
+                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 250),
+                    static () => 0);
 
             Assert.True(operation.StartDependencyPreparation());
             await WaitUntilAsync(
@@ -85,10 +91,11 @@ public sealed class CoreClrProgramLoaderPrewarmTests
         try
         {
             CoreClrProgramLoaderPrewarmOperation countBound =
-                CoreClrProgramLoaderPrewarmOperation.Create(
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
                     directory,
                     new FinareManagedDependencyCache(),
-                    new CoreClrProgramLoaderPrewarmOptions(1, 32 * 1024 * 1024, 250));
+                    new CoreClrProgramLoaderPrewarmOptions(1, 32 * 1024 * 1024, 250),
+                    static () => 0);
             Assert.True(countBound.Start());
             await countBound.Completion.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(
@@ -97,10 +104,11 @@ public sealed class CoreClrProgramLoaderPrewarmTests
             Assert.Equal(1, countBound.GetSnapshot().PreparedDependencyCount);
 
             CoreClrProgramLoaderPrewarmOperation byteBound =
-                CoreClrProgramLoaderPrewarmOperation.Create(
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
                     directory,
                     new FinareManagedDependencyCache(),
-                    new CoreClrProgramLoaderPrewarmOptions(8, 1, 250));
+                    new CoreClrProgramLoaderPrewarmOptions(8, 1, 250),
+                    static () => 0);
             Assert.True(byteBound.Start());
             await byteBound.Completion.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(
@@ -123,10 +131,11 @@ public sealed class CoreClrProgramLoaderPrewarmTests
         try
         {
             CoreClrProgramLoaderPrewarmOperation operation =
-                CoreClrProgramLoaderPrewarmOperation.Create(
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
                     directory,
                     new FinareManagedDependencyCache(),
-                    new CoreClrProgramLoaderPrewarmOptions(8, 1024 * 1024, 250));
+                    new CoreClrProgramLoaderPrewarmOptions(8, 1024 * 1024, 250),
+                    static () => 0);
             Assert.True(operation.Start());
             await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5));
 
@@ -139,6 +148,70 @@ public sealed class CoreClrProgramLoaderPrewarmTests
             Assert.Equal(0, snapshot.PreparedDependencyCount);
             Assert.Equal(1, snapshot.FailureCount);
             Assert.NotNull(snapshot.FailureType);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Prewarm_TimeBudgetExpiresBetweenDependenciesWithoutPublishingTheNextOne()
+    {
+        string directory = CreateDependencyDirectory(
+            typeof(SemanticId).Assembly.Location,
+            typeof(CoreClrGenerationPrewarmOperation).Assembly.Location);
+        try
+        {
+            var cache = new FinareManagedDependencyCache();
+            CoreClrProgramLoaderPrewarmOperation operation =
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
+                    directory,
+                    cache,
+                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 150),
+                    ClockWith100MillisecondSteps());
+
+            Assert.True(operation.Start());
+            await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+
+            CoreClrProgramLoaderPrewarmSnapshot snapshot = operation.GetSnapshot();
+            Assert.Equal(CoreClrProgramLoaderPrewarmState.TimeBudgetReached, snapshot.State);
+            Assert.True(snapshot.CodecPrepared);
+            Assert.Equal(2, snapshot.CandidateDependencyCount);
+            Assert.Equal(1, snapshot.PreparedDependencyCount);
+            Assert.Equal(1, cache.GetSnapshot().EntryCount);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Prewarm_TimeBudgetCanExpireAfterCodecPreparation()
+    {
+        string directory = CreateDependencyDirectory(
+            typeof(SemanticId).Assembly.Location,
+            typeof(CoreClrGenerationPrewarmOperation).Assembly.Location);
+        try
+        {
+            var cache = new FinareManagedDependencyCache();
+            CoreClrProgramLoaderPrewarmOperation operation =
+                CoreClrProgramLoaderPrewarmOperation.CreateForTests(
+                    directory,
+                    cache,
+                    new CoreClrProgramLoaderPrewarmOptions(8, 32 * 1024 * 1024, 350),
+                    ClockWith100MillisecondSteps());
+
+            Assert.True(operation.Start());
+            await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+
+            CoreClrProgramLoaderPrewarmSnapshot snapshot = operation.GetSnapshot();
+            Assert.Equal(CoreClrProgramLoaderPrewarmState.TimeBudgetReached, snapshot.State);
+            Assert.True(snapshot.CodecPrepared);
+            Assert.Equal(2, snapshot.CandidateDependencyCount);
+            Assert.Equal(2, snapshot.PreparedDependencyCount);
+            Assert.Equal(2, cache.GetSnapshot().EntryCount);
         }
         finally
         {
@@ -192,6 +265,15 @@ public sealed class CoreClrProgramLoaderPrewarmTests
             File.Copy(dependency, Path.Combine(directory, Path.GetFileName(dependency)));
         }
         return directory;
+    }
+
+    private static Func<long> ClockWith100MillisecondSteps()
+    {
+        // Each measured phase costs 100 ms: enumeration, each dependency, then
+        // codec preparation. This lets the cases select the expiration boundary
+        // without sleeping or relying on the host's I/O and JIT speed.
+        long timestamp = 0;
+        return () => Interlocked.Add(ref timestamp, Stopwatch.Frequency / 10);
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)

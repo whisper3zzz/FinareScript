@@ -5,6 +5,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class ProgramImageCacheTests
 {
     private const string Source = """

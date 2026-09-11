@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealApiContractTests
 {
     [Fact]

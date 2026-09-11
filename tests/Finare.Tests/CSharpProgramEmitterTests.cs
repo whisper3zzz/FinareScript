@@ -5,6 +5,7 @@ using Core = Finare.Core;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class CSharpProgramEmitterTests
 {
     private const string Source = """

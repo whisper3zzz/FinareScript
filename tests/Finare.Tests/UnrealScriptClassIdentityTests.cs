@@ -2,6 +2,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealScriptClassIdentityTests
 {
     private const string StableId = "us_0123456789abcdef0123456789abcdef";

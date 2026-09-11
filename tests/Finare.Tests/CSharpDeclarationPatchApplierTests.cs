@@ -6,6 +6,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpDeclarationPatchApplierTests
 {
     private const string Path = "Game/CombatPolicy.cs";

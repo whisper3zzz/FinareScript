@@ -3,6 +3,7 @@ using Finare.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class CSharpProgramSourceMapJsonTests
 {
     private const string Source = """

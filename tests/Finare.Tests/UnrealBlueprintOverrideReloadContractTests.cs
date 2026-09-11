@@ -7,6 +7,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealBlueprintOverrideReloadContractTests
 {
     public static IEnumerable<object[]> IncompatibleCandidates()

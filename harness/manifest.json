@@ -1,10 +1,10 @@
 {
   "schemaVersion": "unifiedscript.harness-manifest/v0.1",
-  "documents": ["AGENTS.md", ".codex/config.toml", ".codex/agents/executor.toml", "docs/HARNESS.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "CONTRIBUTING.md", "docs/plans/TEMPLATE.md"],
+  "documents": ["AGENTS.md", ".codex/config.toml", ".codex/agents/executor.toml", "docs/HARNESS.md", "docs/ROADMAP.md", "docs/CAPABILITIES.md", "docs/TESTING.md", "docs/ARCHITECTURE.md", "CONTRIBUTING.md", "docs/plans/TEMPLATE.md"],
   "gates": {
     "harness-tests": {
-      "description": "Harness behavior tests, without Unreal or .NET",
-      "driver": "python", "script": "tools/tests/test_harness.py", "args": [],
+      "description": "Python tooling behavior: Harness, documentation checks and managed suite classification",
+      "driver": "python", "script": "tools/run-tool-tests.py", "args": [],
       "dependsOn": [], "requires": [], "timeoutSeconds": 120, "mayRegenerateSource": false
     },
     "repository": {

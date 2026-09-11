@@ -116,6 +116,7 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
     private readonly string assemblyDirectory;
     private readonly FinareManagedDependencyCache dependencyCache;
     private readonly CoreClrProgramLoaderPrewarmOptions options;
+    private readonly Func<long> getTimestamp;
     private readonly TaskCompletionSource completion = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource codecPreparationRequested = new(
@@ -135,11 +136,13 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
     private CoreClrProgramLoaderPrewarmOperation(
         string assemblyDirectory,
         FinareManagedDependencyCache dependencyCache,
-        CoreClrProgramLoaderPrewarmOptions options)
+        CoreClrProgramLoaderPrewarmOptions options,
+        Func<long>? getTimestamp = null)
     {
         this.assemblyDirectory = Path.GetFullPath(assemblyDirectory);
         this.dependencyCache = dependencyCache;
         this.options = options;
+        this.getTimestamp = getTimestamp ?? Stopwatch.GetTimestamp;
         state = options.IsDisabled
             ? CoreClrProgramLoaderPrewarmState.Disabled
             : CoreClrProgramLoaderPrewarmState.Scheduled;
@@ -164,6 +167,24 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
             assemblyDirectory,
             dependencyCache ?? FinareManagedDependencyCache.Shared,
             resolvedOptions);
+    }
+
+    internal static CoreClrProgramLoaderPrewarmOperation CreateForTests(
+        string assemblyDirectory,
+        FinareManagedDependencyCache dependencyCache,
+        CoreClrProgramLoaderPrewarmOptions options,
+        Func<long> getTimestamp)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(assemblyDirectory);
+        ArgumentNullException.ThrowIfNull(dependencyCache);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(getTimestamp);
+        options.Validate();
+        return new CoreClrProgramLoaderPrewarmOperation(
+            assemblyDirectory,
+            dependencyCache,
+            options,
+            getTimestamp);
     }
 
     public bool Start()
@@ -245,7 +266,7 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
             CoreClrProgramLoaderPrewarmState.Completed;
         try
         {
-            long phaseStartedTimestamp = Stopwatch.GetTimestamp();
+            long phaseStartedTimestamp = getTimestamp();
             string[] candidates = Directory.Exists(assemblyDirectory)
                 ? Directory.GetFiles(
                         assemblyDirectory,
@@ -284,7 +305,7 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
 
                 try
                 {
-                    phaseStartedTimestamp = Stopwatch.GetTimestamp();
+                    phaseStartedTimestamp = getTimestamp();
                     Assembly? sharedAssembly = FindLoadedAssembly(candidate);
                     FinareManagedDependencyVerification verification =
                         dependencyCache.Preload(candidate, sharedAssembly);
@@ -316,7 +337,7 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
             }
 
             await codecPreparationRequested.Task.ConfigureAwait(false);
-            phaseStartedTimestamp = Stopwatch.GetTimestamp();
+            phaseStartedTimestamp = getTimestamp();
             WarmBinaryCodec();
             activeStopwatchTicks = checked(
                 activeStopwatchTicks + ElapsedStopwatchTicks(phaseStartedTimestamp));
@@ -394,8 +415,8 @@ public sealed class CoreClrProgramLoaderPrewarmOperation
         return null;
     }
 
-    private static long ElapsedStopwatchTicks(long startedTimestamp) =>
-        Math.Max(0, Stopwatch.GetTimestamp() - startedTimestamp);
+    private long ElapsedStopwatchTicks(long startedTimestamp) =>
+        Math.Max(0, getTimestamp() - startedTimestamp);
 
     private static long StopwatchTicksToNanoseconds(long elapsedTicks)
     {

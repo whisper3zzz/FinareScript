@@ -2,6 +2,7 @@ using System.Text.Json;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Delivery")]
 public sealed class UnrealOnboardingSurfaceTests
 {
     [Fact]

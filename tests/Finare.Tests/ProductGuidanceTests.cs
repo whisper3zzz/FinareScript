@@ -4,6 +4,7 @@ using Finare.Cli;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Delivery")]
 public sealed partial class ProductGuidanceTests
 {
     [Fact]
@@ -122,7 +123,6 @@ public sealed partial class ProductGuidanceTests
                      "setup-unreal-project.ps1",
                      "start-finare-authoring.ps1",
                      "Build & Reload",
-                     "no internal generator ordering or repository path was required",
                  })
         {
             Assert.Contains(token, firstProject, StringComparison.Ordinal);

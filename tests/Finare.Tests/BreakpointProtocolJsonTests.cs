@@ -4,6 +4,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class BreakpointProtocolJsonTests
 {
     private static readonly SemanticId DomainId = SemanticId.FromKey("debug-domain");

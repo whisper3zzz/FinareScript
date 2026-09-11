@@ -4,6 +4,7 @@ using Finare.Graph;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Graph")]
 public sealed class GraphLayoutJsonTests
 {
     [Fact]

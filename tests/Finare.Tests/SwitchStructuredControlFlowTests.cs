@@ -8,6 +8,7 @@ using Finare.Semantics;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class SwitchStructuredControlFlowTests
 {
     private const string Source = """

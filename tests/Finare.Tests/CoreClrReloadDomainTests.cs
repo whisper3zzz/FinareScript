@@ -7,6 +7,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CoreClrReloadDomainTests
 {
     private const string Path = "Tests/Reload/PersistentRules.cs";

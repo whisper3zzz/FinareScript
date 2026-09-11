@@ -10,6 +10,8 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from repository_checks.markdown import format_report, validate_markdown
+from repository_checks.architecture import validate_architecture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,6 +22,8 @@ PROJECTS = [
     ROOT / "src" / "Finare.Graph" / "Finare.Graph.csproj",
     ROOT / "src" / "Finare.Authoring" / "Finare.Authoring.csproj",
     ROOT / "src" / "Finare.Runtime" / "Finare.Runtime.csproj",
+    ROOT / "src" / "Finare.ProgramModel" / "Finare.ProgramModel.csproj",
+    ROOT / "src" / "Finare.Compilation" / "Finare.Compilation.csproj",
     ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj",
     ROOT / "src" / "Finare.Cli" / "Finare.Cli.csproj",
     ROOT
@@ -32,9 +36,22 @@ PROJECTS = [
 ]
 
 DOCUMENTS = [
+    ROOT / "comparison" / "README.md",
     ROOT / "README.md",
     ROOT / "CONTRIBUTING.md",
     ROOT / "docs" / "ARCHITECTURE.md",
+    ROOT / "docs" / "CAPABILITIES.md",
+    ROOT / "docs" / "ROADMAP.md",
+    ROOT / "docs" / "TESTING.md",
+    ROOT / "docs" / "DATA_PLANE_EXTENSIONS.md",
+    ROOT / "docs" / "HARNESS.md",
+    ROOT / "docs" / "PROJECT_TEMPLATES_AND_API_BROWSER.md",
+    ROOT / "docs" / "PUERTS_MIGRATION.md",
+    ROOT / "docs" / "UNREAL_ASYNC_SERVICE_ABI_V5.md",
+    ROOT / "docs" / "UNREAL_GAMEPLAY_DATA_ABI_V4.md",
+    ROOT / "docs" / "UNREAL_PERFORMANCE.md",
+    ROOT / "docs" / "UNREAL_SAMPLES.md",
+    ROOT / "docs" / "VISUAL_CSHARP_PROFILE.md",
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
     ROOT / "docs" / "GRAPH_LAYOUT.md",
     ROOT / "docs" / "GRAPH_REGIONS.md",
@@ -140,15 +157,21 @@ def main() -> int:
         "Solution project set differs from the expected architecture",
     )
     checks.append("solution contains the expected project boundaries")
+    architecture_issues = validate_architecture(ROOT)
+    require(not architecture_issues, "\n".join(architecture_issues))
+    checks.append("runtime dependency closure excludes compiler tooling and Roslyn")
 
     for project in PROJECTS:
         require(project.is_file(), f"Missing project: {project}")
         ET.parse(project)
     checks.append("all project files are present and valid XML")
 
-    for document in DOCUMENTS:
-        require(document.is_file(), f"Missing document: {document}")
-    checks.append("architecture and milestone documents exist")
+    document_report = validate_markdown(ROOT, tuple(DOCUMENTS))
+    require(document_report.passed, format_report(document_report, ROOT))
+    checks.append(
+        "Markdown files and local links are structurally valid "
+        f"({len(document_report.files)} files, {document_report.checked_links} links)"
+    )
 
     compiled_chunk_source = (
         ROOT / "src" / "Finare.Core" / "CompiledChunk.cs"
@@ -159,25 +182,19 @@ def main() -> int:
     cli_source = (
         ROOT / "src" / "Finare.Cli" / "Program.cs"
     ).read_text(encoding="utf-8")
-    compiled_chunk_document = (
-        ROOT / "docs" / "COMPILED_CHUNKS.md"
-    ).read_text(encoding="utf-8")
     current_roadmap_document = (
         ROOT / "docs" / "ROADMAP.md"
     ).read_text(encoding="utf-8")
-    # Completed-delivery assertions belong to the historical record, not the
-    # live priority document. Preserve their existing source and test checks.
-    roadmap_document = (
-        ROOT / "docs" / "ROADMAP_HISTORY.md"
-    ).read_text(encoding="utf-8")
+    # The cursor is a small structural contract consumed by the Harness.
+    # Historical milestone wording is intentionally not an acceptance predicate.
     current_tranches = re.findall(
-        r"^- Current tranche: \*\*(\S+)", current_roadmap_document, re.MULTILINE
+        r"^- Current tranche:\s*\*\*([^*\s]+)", current_roadmap_document, re.MULTILINE
     )
     require(
         current_roadmap_document.count("- Active milestone:") == 1
         and len(current_tranches) == 1
         and re.search(
-            rf"^- \[ \] \*\*{re.escape(current_tranches[0])}(?:\s|:)",
+            rf"^- \[ \]\s+\*\*{re.escape(current_tranches[0])}\*\*(?:\s|:)",
             current_roadmap_document,
             re.MULTILINE,
         ) is not None
@@ -187,6 +204,9 @@ def main() -> int:
     checks.append("live roadmap separates active work from historical delivery evidence")
     compiled_program_source = (
         ROOT / "src" / "Finare.Runtime" / "CompiledProgramChunk.cs"
+    ).read_text(encoding="utf-8")
+    compiled_program_source += "\n" + (
+        ROOT / "src" / "Finare.Compilation" / "CSharpProgramChunkCompiler.cs"
     ).read_text(encoding="utf-8")
     compiled_program_host = (
         ROOT / "src" / "Finare.Runtime" / "CoreClrCompiledChunkHost.cs"
@@ -266,201 +286,153 @@ def main() -> int:
         ROOT / "src" / "Finare.CSharp" / "CSharpProjectLoader.cs"
     ).read_text(encoding="utf-8")
     require(
-        '"USCHUNK\\0"u8' in compiled_chunk_source
-        and "FormatMajorVersion = 1" in compiled_chunk_source
-        and "ComputeContentDigest" in compiled_chunk_source
-        and "FixedTimeEquals" in compiled_chunk_source
-        and "FinareProgramChunk" in compiled_chunk_source
-        and 'args[0] == "chunk-pack"' in cli_source
-        and 'args[0] == "chunk-inspect"' in cli_source
-        and "Write_IsDeterministicAndCanonicalAcrossInputOrder"
-        in compiled_chunk_tests
-        and "Read_RejectsCorruptedPayloadBeforeItCanBeLoaded"
-        in compiled_chunk_tests
-        and "FinareRuntimeDeclarationBinary" in compiled_program_source
-        and "CSharpProgramChunkCompiler" in compiled_program_source
-        and "CoreClrCompiledChunkHost" in compiled_program_host
-        and "CoreClrHost_LoadsAssemblyDirectlyFromVerifiedChunk" in compiled_program_tests
-        and '".uschunk"' in unreal_world_entry
-        and "FFinareCompiledChunk::LoadSection" in unreal_chunk_reader
-        and "MaterializeChunkFileWithOverrides" in unreal_component
-        and "CompiledChunkPath" in unreal_asset
-        and "Finare.Unreal.Demo.uschunk" in unreal_chunk_stage
-        and "CSharpProjectReferenceKind.Assembly" in project_loader
-        and "IncludePortablePdb: !string.Equals" in cli_source
-        and "unifiedscript.unreal-chunk-deployment/v0.1" in chunk_deployment_commandlet
-        and "ValidateChunk" in chunk_deployment_commandlet
-        and "UPackage::SavePackage" in chunk_deployment_commandlet
-        and "CompiledChunkPath" in chunk_deployment_commandlet
-        and "chunkPath" in chunk_deployment_sample
-        and "FinareDisableCompiledChunks" in unreal_component
-        and "unifiedscript.blockbreaker-chunk-delivery/v0.2"
-        in chunk_delivery_measurement
-        and "BlockBreakerBenchmarkReload" in chunk_delivery_measurement
-        and "compiledChunkPrograms" in blockbreaker_package
-        and "compiledChunkStartupMilliseconds" in release_package
-        and "does **not** introduce another interpreter" in compiled_chunk_document,
+        '"USCHUNK\\0"u8' in compiled_chunk_source and
+        'FormatMajorVersion = 1' in compiled_chunk_source and
+        'ComputeContentDigest' in compiled_chunk_source and
+        'FixedTimeEquals' in compiled_chunk_source and
+        'FinareProgramChunk' in compiled_chunk_source and
+        'args[0] == "chunk-pack"' in cli_source and
+        'args[0] == "chunk-inspect"' in cli_source and
+        'Write_IsDeterministicAndCanonicalAcrossInputOrder' in compiled_chunk_tests and
+        'Read_RejectsCorruptedPayloadBeforeItCanBeLoaded' in compiled_chunk_tests and
+        'FinareRuntimeDeclarationBinary' in compiled_program_source and
+        'CSharpProgramChunkCompiler' in compiled_program_source and
+        'CoreClrCompiledChunkHost' in compiled_program_host and
+        'CoreClrHost_LoadsAssemblyDirectlyFromVerifiedChunk' in compiled_program_tests and
+        '".uschunk"' in unreal_world_entry and
+        'FFinareCompiledChunk::LoadSection' in unreal_chunk_reader and
+        'MaterializeChunkFileWithOverrides' in unreal_component and
+        'CompiledChunkPath' in unreal_asset and
+        'Finare.Unreal.Demo.uschunk' in unreal_chunk_stage and
+        'CSharpProjectReferenceKind.Assembly' in project_loader and
+        'IncludePortablePdb: !string.Equals' in cli_source and
+        'unifiedscript.unreal-chunk-deployment/v0.1' in chunk_deployment_commandlet and
+        'ValidateChunk' in chunk_deployment_commandlet and
+        'UPackage::SavePackage' in chunk_deployment_commandlet and
+        'CompiledChunkPath' in chunk_deployment_commandlet and
+        'chunkPath' in chunk_deployment_sample and
+        'FinareDisableCompiledChunks' in unreal_component and
+        'unifiedscript.blockbreaker-chunk-delivery/v0.2' in chunk_delivery_measurement and
+        'BlockBreakerBenchmarkReload' in chunk_delivery_measurement and
+        'compiledChunkPrograms' in blockbreaker_package and
+        'compiledChunkStartupMilliseconds' in release_package,
         "Compiled chunk compiler, hosts, strict readers, staging, tests, or contract are disconnected",
     )
     checks.append(
         "compiled chunks are deterministic, integrity-checked, and loaded end to end"
     )
     require(
-        "FinareChunkReadProfile" in compiled_chunk_source
-        and "ReadProfiled(Stream source)" in compiled_chunk_source
-        and "WholeFileCopyCount" in compiled_chunk_source
-        and "SectionDigestStopwatchTicks" in compiled_chunk_source
-        and "CoreClrCompiledChunkLoadProfile" in compiled_program_host
-        and "ManagedAssemblyMaterializationStopwatchTicks"
-        in compiled_program_host
-        and "RuntimeHelpers.PrepareMethod" in compiled_program_host
-        and "unifiedscript.compiled-chunk-load-profile/v0.1"
-        in compiled_chunk_profiler
-        and all(
-            phase in compiled_chunk_profiler
-            for phase in {
-                '"streamRead"',
-                '"wholeFileDigest"',
-                '"sectionDigests"',
-                '"declarationDecode"',
-                '"assemblyLoad"',
-                '"entryMethodJitPreparation"',
-            }
-        )
-        and 'args[0] == "chunk-profile"' in cli_source
-        and "unifiedscript.compiled-chunk-process-profile/v0.1"
-        in compiled_chunk_process_profiler
-        and "Get-Int64Median" in compiled_chunk_process_profiler
-        and "processFirstLoad" in compiled_chunk_process_profiler
-        and "output directory must be empty" in compiled_chunk_process_profiler
-        and "ProfiledStreamReadOwnsOneWholeFileCopyAndDigest"
-        in compiled_chunk_tests
-        and "ChunkProfilerMeasuresCopiesDecodeLoadAndEntryMethodJitPreparation"
-        in compiled_program_tests
-        and "M11.4 phased load profiling" in compiled_chunk_document
-        and "one exact-length whole-file" in compiled_chunk_document
-        and "does not flush the operating-system file cache"
-        in compiled_chunk_document,
+        'FinareChunkReadProfile' in compiled_chunk_source and
+        'ReadProfiled(Stream source)' in compiled_chunk_source and
+        'WholeFileCopyCount' in compiled_chunk_source and
+        'SectionDigestStopwatchTicks' in compiled_chunk_source and
+        'CoreClrCompiledChunkLoadProfile' in compiled_program_host and
+        'ManagedAssemblyMaterializationStopwatchTicks' in compiled_program_host and
+        'RuntimeHelpers.PrepareMethod' in compiled_program_host and
+        'unifiedscript.compiled-chunk-load-profile/v0.1' in compiled_chunk_profiler and
+        all((phase in compiled_chunk_profiler for phase in {'"streamRead"', '"wholeFileDigest"', '"sectionDigests"', '"declarationDecode"', '"assemblyLoad"', '"entryMethodJitPreparation"'})) and
+        'args[0] == "chunk-profile"' in cli_source and
+        'unifiedscript.compiled-chunk-process-profile/v0.1' in compiled_chunk_process_profiler and
+        'Get-Int64Median' in compiled_chunk_process_profiler and
+        'processFirstLoad' in compiled_chunk_process_profiler and
+        'output directory must be empty' in compiled_chunk_process_profiler and
+        'ProfiledStreamReadOwnsOneWholeFileCopyAndDigest' in compiled_chunk_tests and
+        'ChunkProfilerMeasuresCopiesDecodeLoadAndEntryMethodJitPreparation' in compiled_program_tests,
         "M11.4 chunk copy, digest, decode, CoreCLR load, or JIT profiling is incomplete",
     )
     checks.append(
         "M11.4 profiles chunk I/O, copies, verification, decode, CoreCLR load, and JIT preparation"
     )
     require(
-        "DefaultMaximumEntryCount = 128" in managed_dependency_cache
-        and "DefaultMaximumByteCount = 256L * 1024 * 1024"
-        in managed_dependency_cache
-        and "FileShare.Read" in managed_dependency_cache
-        and "PEReader" in managed_dependency_cache
-        and "ModuleVersionId" in managed_dependency_cache
-        and "sharedAssemblyDigests" in managed_dependency_cache
-        and "leastRecentlyUsed" in managed_dependency_cache
-        and "DependencyCacheHitCount" in compiled_program_host
-        and "DependencySnapshotCopyBytes" in compiled_program_host
-        and "LoadFromStream(stream)" in compiled_program_host
-        and "DependencyCacheHitCount" in compiled_chunk_profiler
-        and "dependencyCacheHitCount" in compiled_chunk_process_profiler
-        and "FinareManagedDependencyCache.Shared" in unreal_world_entry
-        and "LoadAssemblySnapshot" in unreal_world_entry
-        and "CoreClrHost_ReusesVerifiedDependencySnapshotsAcrossCollectibleContexts"
-        in compiled_program_tests
-        and "DependencyCache_UsesImmutableContentThenRejectsChangedDiskEvidence"
-        in compiled_program_tests
-        and "DependencyCache_IsSingleFlightAndBounded" in compiled_program_tests
-        and "verified dependency snapshot cache" in compiled_chunk_document,
+        'DefaultMaximumEntryCount = 128' in managed_dependency_cache and
+        'DefaultMaximumByteCount = 256L * 1024 * 1024' in managed_dependency_cache and
+        'FileShare.Read' in managed_dependency_cache and
+        'PEReader' in managed_dependency_cache and
+        'ModuleVersionId' in managed_dependency_cache and
+        'sharedAssemblyDigests' in managed_dependency_cache and
+        'leastRecentlyUsed' in managed_dependency_cache and
+        'DependencyCacheHitCount' in compiled_program_host and
+        'DependencySnapshotCopyBytes' in compiled_program_host and
+        'LoadFromStream(stream)' in compiled_program_host and
+        'DependencyCacheHitCount' in compiled_chunk_profiler and
+        'dependencyCacheHitCount' in compiled_chunk_process_profiler and
+        'FinareManagedDependencyCache.Shared' in unreal_world_entry and
+        'LoadAssemblySnapshot' in unreal_world_entry and
+        'CoreClrHost_ReusesVerifiedDependencySnapshotsAcrossCollectibleContexts' in compiled_program_tests and
+        'DependencyCache_UsesImmutableContentThenRejectsChangedDiskEvidence' in compiled_program_tests and
+        'DependencyCache_IsSingleFlightAndBounded' in compiled_program_tests,
         "M11.4 verified dependency cache, immutable ALC snapshots, metrics, tests, or documentation are incomplete",
     )
     checks.append(
         "M11.4 atomically caches bounded verified dependency snapshots across World generations"
     )
     require(
-        "unifiedscript.readytorun-experiment/v0.1" in readytorun_profiler
-        and "Crossgen2 output does not preserve the exact IL identity"
-        in readytorun_profiler
-        and "managedNativeHeaderBytes" in readytorun_profiler
-        and "collectible-memory-stream" in readytorun_profiler
-        and "maximumLoadRatio = 0.95" in readytorun_profiler
-        and "maximumJitPreparationRatio = 0.95" in readytorun_profiler
-        and "maximumChunkSizeRatio = 1.5" in readytorun_profiler
-        and "promoteReadyToRun = $promote" in readytorun_profiler
-        and "M11.4 ReadyToRun decision" in compiled_chunk_document
-        and "R2R failed all three promotion gates" in compiled_chunk_document,
+        'unifiedscript.readytorun-experiment/v0.1' in readytorun_profiler and
+        'Crossgen2 output does not preserve the exact IL identity' in readytorun_profiler and
+        'managedNativeHeaderBytes' in readytorun_profiler and
+        'collectible-memory-stream' in readytorun_profiler and
+        'maximumLoadRatio = 0.95' in readytorun_profiler and
+        'maximumJitPreparationRatio = 0.95' in readytorun_profiler and
+        'maximumChunkSizeRatio = 1.5' in readytorun_profiler and
+        'promoteReadyToRun = $promote' in readytorun_profiler,
         "M11.4 exact-identity ReadyToRun experiment, promotion budgets, SDK tool, or decision record is incomplete",
     )
     checks.append(
         "M11.4 rejects ReadyToRun when exact-identity cold load, JIT, or size budgets fail"
     )
     require(
-        "DefaultMaximumMethodCount = 64" in generation_prewarm_source
-        and "DefaultTimeBudgetMilliseconds = 8" in generation_prewarm_source
-        and "MaximumSupportedMethodCount = 1024" in generation_prewarm_source
-        and "MaximumSupportedTimeBudgetMilliseconds = 100"
-        in generation_prewarm_source
-        and "Task.Run(Run)" in generation_prewarm_source
-        and "ObserveFirstTick" in generation_prewarm_source
-        and "RuntimeHelpers.PrepareMethod" in generation_prewarm_source
-        and "Prewarm.Cancel()" in unreal_world_entry
-        and '"backgroundPrewarm"' in unreal_world_entry
-        and "FINARE_DISABLE_BACKGROUND_PREWARM" in unreal_world_entry
-        and 'args[0] == "chunk-first-tick-profile"' in cli_source
-        and "unifiedscript.generation-prewarm-trial/v0.1" in cli_source
-        and "unifiedscript.generation-prewarm-experiment/v0.1"
-        in generation_prewarm_profiler
-        and "$maximumFirstTickRatio = 0.80" in generation_prewarm_profiler
-        and "$maximumScheduleNanoseconds = 2000000" in generation_prewarm_profiler
-        and "$maximumTeardownNanoseconds = 2000000" in generation_prewarm_profiler
-        and "@('disabled', 'background')" in generation_prewarm_profiler
-        and "MethodImplOptions.NoInlining" in generation_prewarm_probe
-        and "Cancellation_IsNonBlockingAndGenerationWorkFinishesCooperatively"
-        in generation_prewarm_tests
-        and "CandidateCancellationBeforeActivation_DoesNotScheduleWork"
-        in generation_prewarm_tests
-        and "FirstTickProfileCommand_UsesTheGenerationPrewarmOperation"
-        in compiled_program_tests
-        and "generation-owned background prewarm" in compiled_chunk_document,
+        'DefaultMaximumMethodCount = 64' in generation_prewarm_source and
+        'DefaultTimeBudgetMilliseconds = 8' in generation_prewarm_source and
+        'MaximumSupportedMethodCount = 1024' in generation_prewarm_source and
+        'MaximumSupportedTimeBudgetMilliseconds = 100' in generation_prewarm_source and
+        'Task.Run(Run)' in generation_prewarm_source and
+        'ObserveFirstTick' in generation_prewarm_source and
+        'RuntimeHelpers.PrepareMethod' in generation_prewarm_source and
+        'Prewarm.Cancel()' in unreal_world_entry and
+        '"backgroundPrewarm"' in unreal_world_entry and
+        'FINARE_DISABLE_BACKGROUND_PREWARM' in unreal_world_entry and
+        'args[0] == "chunk-first-tick-profile"' in cli_source and
+        'unifiedscript.generation-prewarm-trial/v0.1' in cli_source and
+        'unifiedscript.generation-prewarm-experiment/v0.1' in generation_prewarm_profiler and
+        '$maximumFirstTickRatio = 0.80' in generation_prewarm_profiler and
+        '$maximumScheduleNanoseconds = 2000000' in generation_prewarm_profiler and
+        '$maximumTeardownNanoseconds = 2000000' in generation_prewarm_profiler and
+        "@('disabled', 'background')" in generation_prewarm_profiler and
+        'MethodImplOptions.NoInlining' in generation_prewarm_probe and
+        'Cancellation_IsNonBlockingAndGenerationWorkFinishesCooperatively' in generation_prewarm_tests and
+        'CandidateCancellationBeforeActivation_DoesNotScheduleWork' in generation_prewarm_tests and
+        'FirstTickProfileCommand_UsesTheGenerationPrewarmOperation' in compiled_program_tests,
         "M11.4 background prewarm bounds, ownership, cancellation, first-Tick evidence, or documentation are incomplete",
     )
     checks.append(
         "M11.4 moves bounded cancellable JIT prewarm outside activation and first Tick"
     )
     require(
-        "DefaultMaximumDependencyCount = 32" in program_loader_prewarm_source
-        and "DefaultMaximumDependencyBytes = 64L * 1024 * 1024"
-        in program_loader_prewarm_source
-        and "DefaultTimeBudgetMilliseconds = 50"
-        in program_loader_prewarm_source
-        and "HardMaximumDependencyCount = 256" in program_loader_prewarm_source
-        and "HardMaximumDependencyBytes = 512L * 1024 * 1024"
-        in program_loader_prewarm_source
-        and "HardMaximumTimeBudgetMilliseconds = 500"
-        in program_loader_prewarm_source
-        and "Task.Run(ExecuteAsync)" in program_loader_prewarm_source
-        and "StartDependencyPreparation" in program_loader_prewarm_source
-        and "StartCodecPreparation" in program_loader_prewarm_source
-        and "WarmBinaryCodec" in program_loader_prewarm_source
-        and "dependencyCache.Preload" in program_loader_prewarm_source
-        and "ReadOwnedContent" in compiled_chunk_source
-        and "ReadCore(content, profile: null, content)" in compiled_chunk_source
-        and "ProgramLoaderPrewarm.Start()" in unreal_world_entry
-        and "current.Prewarm.Start()" in unreal_world_entry
-        and "FINARE_DISABLE_PROGRAM_LOADER_PREWARM" in unreal_world_entry
-        and "ProgramLoaderPrewarm = ProgramLoaderPrewarm.GetSnapshot()"
-        in unreal_world_entry
-        and "Prewarm_CanPrepareDependenciesBeforeCodecWorkIsReleased"
-        in program_loader_prewarm_tests
-        and "Options_EnforceHardBoundsAndZeroDisables"
-        in program_loader_prewarm_tests
-        and "MaximumStartupRatio = 1.0" in chunk_delivery_measurement
-        and "programLoaderPrewarm.codecPrepared" in chunk_delivery_measurement
-        and "programLoaderPrewarm.failureCount" in chunk_delivery_measurement
-        and "if (-not $report.acceptance.passed)" in chunk_delivery_measurement
-        and 'TEXT("programLoaderPrewarm")' in unreal_component
-        and "Finare startup phases:" in unreal_component
-        and "process loader prewarm and cold-start closure"
-        in compiled_chunk_document
-        and "0.970394" in compiled_chunk_document
-        and "M11.4 is complete and the cursor advances to M12.1"
-        in roadmap_document,
+        'DefaultMaximumDependencyCount = 32' in program_loader_prewarm_source and
+        'DefaultMaximumDependencyBytes = 64L * 1024 * 1024' in program_loader_prewarm_source and
+        'DefaultTimeBudgetMilliseconds = 50' in program_loader_prewarm_source and
+        'HardMaximumDependencyCount = 256' in program_loader_prewarm_source and
+        'HardMaximumDependencyBytes = 512L * 1024 * 1024' in program_loader_prewarm_source and
+        'HardMaximumTimeBudgetMilliseconds = 500' in program_loader_prewarm_source and
+        'Task.Run(ExecuteAsync)' in program_loader_prewarm_source and
+        'StartDependencyPreparation' in program_loader_prewarm_source and
+        'StartCodecPreparation' in program_loader_prewarm_source and
+        'WarmBinaryCodec' in program_loader_prewarm_source and
+        'dependencyCache.Preload' in program_loader_prewarm_source and
+        'ReadOwnedContent' in compiled_chunk_source and
+        'ReadCore(content, profile: null, content)' in compiled_chunk_source and
+        'ProgramLoaderPrewarm.Start()' in unreal_world_entry and
+        'current.Prewarm.Start()' in unreal_world_entry and
+        'FINARE_DISABLE_PROGRAM_LOADER_PREWARM' in unreal_world_entry and
+        'ProgramLoaderPrewarm = ProgramLoaderPrewarm.GetSnapshot()' in unreal_world_entry and
+        'Prewarm_CanPrepareDependenciesBeforeCodecWorkIsReleased' in program_loader_prewarm_tests and
+        'Options_EnforceHardBoundsAndZeroDisables' in program_loader_prewarm_tests and
+        'MaximumStartupRatio = 1.0' in chunk_delivery_measurement and
+        'programLoaderPrewarm.codecPrepared' in chunk_delivery_measurement and
+        'programLoaderPrewarm.failureCount' in chunk_delivery_measurement and
+        'if (-not $report.acceptance.passed)' in chunk_delivery_measurement and
+        'TEXT("programLoaderPrewarm")' in unreal_component and
+        'Finare startup phases:' in unreal_component,
         "M11.4 process loader prewarm, one-copy reader, hard gate, evidence, or cursor closure is incomplete",
     )
     checks.append(
@@ -720,42 +692,29 @@ def main() -> int:
     adoption_source = adoption_source_path.read_text(encoding="utf-8")
     adoption_tests = adoption_tests_path.read_text(encoding="utf-8")
     packaged_adoption = packaged_adoption_path.read_text(encoding="utf-8")
-    first_script_guide = (ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md").read_text(
-        encoding="utf-8"
-    )
     require(
-        adoption_source_path.is_file()
-        and adoption_tests_path.is_file()
-        and packaged_adoption_path.is_file()
-        and 'args[0] == "adopt"' in cli_source
-        and 'args[0] == "doctor"' in cli_source
-        and "unifiedscript.unreal-project-adoption-plan/v0.1" in adoption_source
-        and "unifiedscript.unreal-project-adoption-transaction/v0.1"
-        in adoption_source
-        and "unifiedscript.unreal-project-doctor/v0.1" in adoption_source
-        and 'action = "conflict"' in adoption_source
-        and "ValidateCurrentPlanInputs" in adoption_source
-        and "RestoreCommittedFiles" in adoption_source
-        and "Rollback would overwrite post-adoption changes" in adoption_source
-        and "IsOwnedAndUnmodified" in adoption_source
-        and "CliPreviewsAppliesDiagnosesAndRerunsWithoutProductDiff"
-        in adoption_tests
-        and "InterruptedApplyRestoresEveryPreviouslyCommittedFile"
-        in adoption_tests
-        and "OwnedSdkPayloadUpgradesAndRollsBackOneGenerationAtATime"
-        in adoption_tests
-        and "BlueprintOnlyProjectReceivesTransactionalNativeHostTargets"
-        in adoption_tests
-        and "unifiedscript.packaged-adoption-acceptance/v0.1"
-        in packaged_adoption
-        and "Project-local repeated adoption changed product files"
-        in packaged_adoption
-        and "Rollback did not restore the original product files"
-        in packaged_adoption
-        and "deferredToPackagedNativeOnboarding" in packaged_adoption
-        and "Build/Onboard" in packaged_adoption
-        and "adopt $project --sdk-root $sdk" in first_script_guide
-        and "doctor $project --engine-root" in first_script_guide,
+        adoption_source_path.is_file() and
+        adoption_tests_path.is_file() and
+        packaged_adoption_path.is_file() and
+        'args[0] == "adopt"' in cli_source and
+        'args[0] == "doctor"' in cli_source and
+        'unifiedscript.unreal-project-adoption-plan/v0.1' in adoption_source and
+        'unifiedscript.unreal-project-adoption-transaction/v0.1' in adoption_source and
+        'unifiedscript.unreal-project-doctor/v0.1' in adoption_source and
+        'action = "conflict"' in adoption_source and
+        'ValidateCurrentPlanInputs' in adoption_source and
+        'RestoreCommittedFiles' in adoption_source and
+        'Rollback would overwrite post-adoption changes' in adoption_source and
+        'IsOwnedAndUnmodified' in adoption_source and
+        'CliPreviewsAppliesDiagnosesAndRerunsWithoutProductDiff' in adoption_tests and
+        'InterruptedApplyRestoresEveryPreviouslyCommittedFile' in adoption_tests and
+        'OwnedSdkPayloadUpgradesAndRollsBackOneGenerationAtATime' in adoption_tests and
+        'BlueprintOnlyProjectReceivesTransactionalNativeHostTargets' in adoption_tests and
+        'unifiedscript.packaged-adoption-acceptance/v0.1' in packaged_adoption and
+        'Project-local repeated adoption changed product files' in packaged_adoption and
+        'Rollback did not restore the original product files' in packaged_adoption and
+        'deferredToPackagedNativeOnboarding' in packaged_adoption and
+        'Build/Onboard' in packaged_adoption,
         "Zero-config Unreal adoption, safe rollback, doctor, fixtures, or guide is missing",
     )
     checks.append(
@@ -828,42 +787,35 @@ def main() -> int:
     project_setup_widget = project_setup_widget_path.read_text(encoding="utf-8")
     project_setup_tests = project_setup_tests_path.read_text(encoding="utf-8")
     editor_module = editor_module_path.read_text(encoding="utf-8")
-    unreal_onboarding_guide = unreal_onboarding_guide_path.read_text(encoding="utf-8")
     project_setup_sdk_package = project_setup_sdk_package_path.read_text(
         encoding="utf-8"
     )
     require(
-        deferred_onboarding_path.is_file()
-        and project_setup_header_path.is_file()
-        and project_setup_source_path.is_file()
-        and project_setup_widget_path.is_file()
-        and project_setup_tests_path.is_file()
-        and '"Finare.Cli"' in adoption_source
-        and '"run-finare-onboarding-after-process.ps1"'
-        in adoption_source
-        and '"project-tools"' in adoption_source
-        and "DeferredOnboardingScriptPath" in adoption_source
-        and "WaitForProcessId" in deferred_onboarding
-        and "setup-unreal-project.ps1" in deferred_onboarding
-        and "PreviewAdoption" in project_setup_header
-        and "BuildAfterEditorExit" in project_setup_header
-        and 'TEXT("powershell.exe")' in project_setup_source
-        and "--sdk-root %s --preview" in project_setup_source
-        and "FPlatformProcess::CreateProc" in project_setup_widget
-        and "RegisterActiveTimer" in project_setup_widget
-        and "SaveDirtyPackages" in project_setup_widget
-        and "RequestExit(false)" in project_setup_widget
-        and "Finare.OpenProjectSetup" in editor_module
-        and "ProjectSetupTabName" in editor_module
-        and "Finare.Unreal.ProjectSetup.CommandContract"
-        in project_setup_tests
-        and "run-finare-onboarding-after-process.ps1"
-        in project_setup_sdk_package
-        and "Project-local repeated adoption changed product files"
-        in packaged_adoption
-        and "project-tools" in packaged_adoption
-        and "Finare Project Setup" in first_script_guide
-        and "sdkLayout: embedded" in unreal_onboarding_guide,
+        deferred_onboarding_path.is_file() and
+        project_setup_header_path.is_file() and
+        project_setup_source_path.is_file() and
+        project_setup_widget_path.is_file() and
+        project_setup_tests_path.is_file() and
+        '"Finare.Cli"' in adoption_source and
+        '"run-finare-onboarding-after-process.ps1"' in adoption_source and
+        '"project-tools"' in adoption_source and
+        'DeferredOnboardingScriptPath' in adoption_source and
+        'WaitForProcessId' in deferred_onboarding and
+        'setup-unreal-project.ps1' in deferred_onboarding and
+        'PreviewAdoption' in project_setup_header and
+        'BuildAfterEditorExit' in project_setup_header and
+        'TEXT("powershell.exe")' in project_setup_source and
+        '--sdk-root %s --preview' in project_setup_source and
+        'FPlatformProcess::CreateProc' in project_setup_widget and
+        'RegisterActiveTimer' in project_setup_widget and
+        'SaveDirtyPackages' in project_setup_widget and
+        'RequestExit(false)' in project_setup_widget and
+        'Finare.OpenProjectSetup' in editor_module and
+        'ProjectSetupTabName' in editor_module and
+        'Finare.Unreal.ProjectSetup.CommandContract' in project_setup_tests and
+        'run-finare-onboarding-after-process.ps1' in project_setup_sdk_package and
+        'Project-local repeated adoption changed product files' in packaged_adoption and
+        'project-tools' in packaged_adoption,
         "Project-local Editor setup, deferred build, packaged acceptance, or guide is missing",
     )
     checks.append(
@@ -875,38 +827,36 @@ def main() -> int:
     sdk_distribution_path = ROOT / "docs" / "UNREAL_SDK.md"
     sdk_package = sdk_package_path.read_text(encoding="utf-8")
     sdk_install = sdk_install_path.read_text(encoding="utf-8")
-    sdk_distribution = sdk_distribution_path.read_text(encoding="utf-8")
     require(
-        sdk_package_path.is_file()
-        and sdk_install_path.is_file()
-        and "unifiedscript.sdk-manifest/v0.1" in sdk_package
-        and "Write-DeterministicArchive" in sdk_package
-        and "LastWriteTime" in sdk_package
-        and "GetTempPath" in sdk_package
-        and '"us-sdk-$(' in sdk_package
-        and "outside the SDK temp boundary" in sdk_package
-        and "Managed\\Runtime" in sdk_package
-        and "Tools\\Finare.Cli" in sdk_package
-        and "finare.cmd" in sdk_package
-        and "measure-compiled-chunk-load.ps1" in sdk_package
-        and "measure-readytorun-chunk.ps1" in sdk_package
-        and "measure-generation-prewarm.ps1" in sdk_package
-        and "finare.project-templates.json" in sdk_package
-        and "VisualGameplayScript.cs.template" in sdk_package
-        and "DataPlaneScript.cs.template" in sdk_package
-        and "generation-prewarm-probe.cs" in sdk_package
-        and "release\\finare.release.json" in sdk_package
-        and "$releaseDocumentation" in sdk_package
-        and "Engine-version-specific plugin Binaries leaked" in sdk_package
-        and "Assert-NoMachinePathLeak" in sdk_package
-        and "$pluginDescriptor.Installed = $false" in sdk_package
-        and "unifiedscript.sdk-manifest/v0.1" in sdk_install
-        and "Get-FileHash" in sdk_install
-        and "Unmanifested SDK payload file" in sdk_install
-        and "Finare.backup-" in sdk_install
-        and "sdkLayout = 'packaged'" in onboarding_script
-        and "packagedSdkManifest" in onboarding_script
-        and "sdkLayout: packaged" in sdk_distribution,
+        sdk_package_path.is_file() and
+        sdk_install_path.is_file() and
+        'unifiedscript.sdk-manifest/v0.1' in sdk_package and
+        'Write-DeterministicArchive' in sdk_package and
+        'LastWriteTime' in sdk_package and
+        'GetTempPath' in sdk_package and
+        '"us-sdk-$(' in sdk_package and
+        'outside the SDK temp boundary' in sdk_package and
+        'Managed\\Runtime' in sdk_package and
+        'Tools\\Finare.Cli' in sdk_package and
+        'finare.cmd' in sdk_package and
+        'measure-compiled-chunk-load.ps1' in sdk_package and
+        'measure-readytorun-chunk.ps1' in sdk_package and
+        'measure-generation-prewarm.ps1' in sdk_package and
+        'finare.project-templates.json' in sdk_package and
+        'VisualGameplayScript.cs.template' in sdk_package and
+        'DataPlaneScript.cs.template' in sdk_package and
+        'generation-prewarm-probe.cs' in sdk_package and
+        'release\\finare.release.json' in sdk_package and
+        '$releaseDocumentation' in sdk_package and
+        'Engine-version-specific plugin Binaries leaked' in sdk_package and
+        'Assert-NoMachinePathLeak' in sdk_package and
+        '$pluginDescriptor.Installed = $false' in sdk_package and
+        'unifiedscript.sdk-manifest/v0.1' in sdk_install and
+        'Get-FileHash' in sdk_install and
+        'Unmanifested SDK payload file' in sdk_install and
+        'Finare.backup-' in sdk_install and
+        "sdkLayout = 'packaged'" in onboarding_script and
+        'packagedSdkManifest' in onboarding_script,
         "Deterministic SDK packaging, compatibility, or verified installation is missing",
     )
     checks.append("SDK archive is deterministic, hashed, compatible, and installable")
@@ -941,15 +891,10 @@ def main() -> int:
         product_release = json.load(handle)
     with product_plugin_path.open("r", encoding="utf-8") as handle:
         product_plugin = json.load(handle)
-    product_documentation = product_documentation_path.read_text(encoding="utf-8")
-    product_release_notes = product_release_notes_path.read_text(encoding="utf-8")
     compatibility_matrix_runner = compatibility_matrix_runner_path.read_text(
         encoding="utf-8"
     )
     release_readiness_runner = release_readiness_runner_path.read_text(
-        encoding="utf-8"
-    )
-    release_readiness_document = release_readiness_document_path.read_text(
         encoding="utf-8"
     )
     ci_workflow = ci_workflow_path.read_text(encoding="utf-8")
@@ -975,56 +920,33 @@ def main() -> int:
         "releaseNotes",
     }
     require(
-        product_release["schemaVersion"]
-        == "unifiedscript.product-release/v0.1"
-        and product_release["productVersion"] == "1.0.0-rc.1"
-        and product_release["channel"] == "rc"
-        and product_release["status"] == "releaseCandidate"
-        and product_release["compatibility"]
-        == {
-            "platform": "win-x64",
-            "engineFamily": "5.8",
-            "verifiedEngineVersion": "5.8.1",
-            "managedTargetFramework": "net10.0",
-        }
-        and product_release["artifacts"]["sdkArchive"]
-        == "Finare-SDK-1.0.0-rc.1-win-x64.zip"
-        and product_release["artifacts"]["pluginVersion"] == 1000001
-        and product_plugin["Version"] == 1000001
-        and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 32
-        and len(set(release_document_ids)) == len(release_document_ids)
-        and len(set(release_document_paths)) == len(release_document_paths)
-        and required_release_categories <= release_document_categories
-        and all(
-            path.startswith("docs/")
-            and (ROOT / path).is_file()
-            and (ROOT / path).resolve().parent == (ROOT / "docs").resolve()
-            for path in release_document_paths
-        )
-        and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 619
-        and product_release["acceptance"]["repositoryInvariants"] == 92
-        and product_release["acceptance"]["unrealAutomationTests"] == 19
-        and "release-manifest.json" in sdk_package
-        and "$releaseDocumentation" in sdk_package
-        and "documentationEntryCount" in sdk_package
-        and "does not match release manifest" in sdk_package
-        and "1.0.0-rc.1" in compatibility_matrix_runner
-        and "$ExpectedAutomationTests = 19" in compatibility_matrix_runner
-        and "$automationExitCode = $LASTEXITCODE" in compatibility_matrix_runner
-        and "$ErrorActionPreference = 'Continue'" in compatibility_matrix_runner
-        and "releaseStatus -ne 'releaseCandidate'" in compatibility_matrix_runner
-        and "Start here" in product_documentation
-        and "Authoring and API" in product_documentation
-        and "Debugging and profiling" in product_documentation
-        and "Packaging, upgrades, and migration" in product_documentation
-        and "Other platforms and UE versions are not"
-        in product_release_notes
-        and "- [x] publish versioned plugin/SDK archives" in roadmap_document
-        and "M12.2 is complete" in roadmap_document
-        and "M12.2 release-surface evidence" in roadmap_document
-        and "sourceTreeDirty=false" in roadmap_document,
+        product_release['schemaVersion'] == 'unifiedscript.product-release/v0.1' and
+        product_release['productVersion'] == '1.0.0-rc.1' and
+        product_release['channel'] == 'rc' and
+        product_release['status'] == 'releaseCandidate' and
+        product_release['compatibility'] == {'platform': 'win-x64', 'engineFamily': '5.8', 'verifiedEngineVersion': '5.8.1', 'managedTargetFramework': 'net10.0'} and
+        product_release['artifacts']['sdkArchive'] == 'Finare-SDK-1.0.0-rc.1-win-x64.zip' and
+        product_release['artifacts']['pluginVersion'] == 1000001 and
+        product_plugin['Version'] == 1000001 and
+        product_plugin['VersionName'] == '1.0.0-rc.1' and
+        len(release_documents) == 32 and
+        len(set(release_document_ids)) == len(release_document_ids) and
+        len(set(release_document_paths)) == len(release_document_paths) and
+        required_release_categories <= release_document_categories and
+        all((path.startswith('docs/') and (ROOT / path).is_file() and ((ROOT / path).resolve().parent == (ROOT / 'docs').resolve()) for path in release_document_paths)) and
+        product_release['releaseNotes'] in release_document_paths and
+        product_release['acceptance']['managedTests'] == 619 and
+        product_release['acceptance']['repositoryInvariants'] == 92 and
+        product_release['acceptance']['unrealAutomationTests'] == 19 and
+        'release-manifest.json' in sdk_package and
+        '$releaseDocumentation' in sdk_package and
+        'documentationEntryCount' in sdk_package and
+        'does not match release manifest' in sdk_package and
+        '1.0.0-rc.1' in compatibility_matrix_runner and
+        '$ExpectedAutomationTests = 19' in compatibility_matrix_runner and
+        '$automationExitCode = $LASTEXITCODE' in compatibility_matrix_runner and
+        "$ErrorActionPreference = 'Continue'" in compatibility_matrix_runner and
+        "releaseStatus -ne 'releaseCandidate'" in compatibility_matrix_runner,
         "M12.2 product release manifest, versioned SDK, documentation catalog, or compatibility gate is incomplete",
     )
     checks.append(
@@ -1049,35 +971,19 @@ def main() -> int:
         "matched-performance-workload",
     }
     require(
-        set(product_release["acceptance"]["requiredGates"])
-        == release_required_gates
-        and len(product_release["acceptance"]["requiredGates"]) == 15
-        and all(
-            f"'{gate}' =" in release_readiness_runner
-            for gate in release_required_gates
-        )
-        and "unifiedscript.release-readiness/v0.1"
-        in release_readiness_runner
-        and "passed-local-diagnostics" in release_readiness_runner
-        and "Every release requiredGate must have exactly one"
-        in release_readiness_runner
-        and "Test-GitStatePreserved" in release_readiness_runner
-        and "unifiedscript.performance-budget-report/v0.1"
-        in release_readiness_runner
-        and "GeneratedExtensionRegistry" in release_readiness_runner
-        and "status=planned" in release_readiness_document
-        and "status=passed" in release_readiness_document
-        and "passed-local-diagnostics" in release_readiness_document
-        and "docs/RELEASE_READINESS.md" in release_document_paths
-        and "run-finare-release-readiness.ps1" in ci_workflow
-        and "-PlanOnly" in ci_workflow
-        and "15-gate contract" in roadmap_document
-        and "## Current execution cursor" in current_roadmap_document
-        and "### M13.2 — Puerts-grade daily authoring" in roadmap_document
-        and "M12 strict release acceptance" in roadmap_document
-        and "Frozen RC1 acceptance" in release_readiness_document
-        and "One release-readiness command" in product_release_notes
-        and "frozen clean-revision run" in product_release_notes,
+        set(product_release['acceptance']['requiredGates']) == release_required_gates and
+        len(product_release['acceptance']['requiredGates']) == 15 and
+        all((f"'{gate}' =" in release_readiness_runner for gate in release_required_gates)) and
+        'unifiedscript.release-readiness/v0.1' in release_readiness_runner and
+        'passed-local-diagnostics' in release_readiness_runner and
+        'Every release requiredGate must have exactly one' in release_readiness_runner and
+        'Test-GitStatePreserved' in release_readiness_runner and
+        'unifiedscript.performance-budget-report/v0.1' in release_readiness_runner and
+        'GeneratedExtensionRegistry' in release_readiness_runner and
+        'docs/RELEASE_READINESS.md' in release_document_paths and
+        'run-finare-release-readiness.ps1' in ci_workflow and
+        '-PlanOnly' in ci_workflow and
+        '## Current execution cursor' in current_roadmap_document,
         "M12 release-readiness providers, strict evidence boundary, CI plan, or performance gate is incomplete",
     )
     checks.append(
@@ -1109,36 +1015,16 @@ def main() -> int:
     contract_proposal_test = contract_proposal_test_path.read_text(
         encoding="utf-8"
     )
-    api_contract_document = api_contract_document_path.read_text(encoding="utf-8")
     require(
-        "unifiedscript.unreal-api-contract-proposal/v0.1"
-        in contract_proposal_source
-        and "ReviewRequired: true" in contract_proposal_source
-        and "NormalizeSha256(normalizedRequests.ContractFingerprint) != contractFingerprint"
-        in contract_proposal_source
-        and all(
-            status in contract_proposal_source
-            for status in [
-                '"selected"',
-                '"already-selected"',
-                '"manual-review"',
-                '"unresolved-type"',
-                '"unresolved-member"',
-                '"ambiguous-type"',
-                '"ambiguous-member"',
-            ]
-        )
-        and "ue-contract-propose" in cli_source
-        and "--fail-on-open-decisions" in cli_source
-        and "ProposalIsDeterministicAndClassifiesEveryDependencyRequest"
-        in contract_proposal_test
-        and "ProposalRejectsRequestsAssessedAgainstAnotherContract"
-        in contract_proposal_test
-        and "CliWritesReviewArtifactBeforeOpenDecisionGateFails"
-        in contract_proposal_test
-        and "Review-only Contract proposals" in api_contract_document
-        and "dependency request" in api_contract_document
-        and "first M13.1 tranche" in roadmap_document,
+        'unifiedscript.unreal-api-contract-proposal/v0.1' in contract_proposal_source and
+        'ReviewRequired: true' in contract_proposal_source and
+        'NormalizeSha256(normalizedRequests.ContractFingerprint) != contractFingerprint' in contract_proposal_source and
+        all((status in contract_proposal_source for status in ['"selected"', '"already-selected"', '"manual-review"', '"unresolved-type"', '"unresolved-member"', '"ambiguous-type"', '"ambiguous-member"'])) and
+        'ue-contract-propose' in cli_source and
+        '--fail-on-open-decisions' in cli_source and
+        'ProposalIsDeterministicAndClassifiesEveryDependencyRequest' in contract_proposal_test and
+        'ProposalRejectsRequestsAssessedAgainstAnotherContract' in contract_proposal_test and
+        'CliWritesReviewArtifactBeforeOpenDecisionGateFails' in contract_proposal_test,
         "M13.1 deterministic review-only Contract proposal loop is incomplete",
     )
     checks.append(
@@ -1230,131 +1116,99 @@ def main() -> int:
     onboarding_template = onboarding_template_path.read_text(encoding="utf-8")
     first_script_template = first_script_template_path.read_text(encoding="utf-8")
     require(
-        "unifiedscript.unreal-api-dependency-requests/v0.1"
-        in development_surface_source
-        and "unifiedscript.unreal-api-development-surface/v0.1"
-        in development_surface_source
-        and '"unsupported-member"' in development_surface_source
-        and '"USUE3105"' in development_surface_source
-        and "result.Applied != (open == 0)" in development_surface_source
-        and "ue-surface-expand" in cli_source
-        and "--requests-out" in cli_source
-        and "--overlay-out" in cli_source
-        and "CSharpProjectLoader" in cli_source
-        and "directive.Alias?.Name.Identifier.ValueText" in source_dependency_scanner
-        and 'StartsWith("// <auto-generated"' in source_dependency_scanner
-        and '"USAPI-" + StableHash' in source_dependency_scanner
-        and 'StartsWith("K2_"' in managed_naming
-        and "UnrealManagedNaming.FunctionName(function)" in contract_generator
-        and "UnrealManagedNaming.FunctionName(" in contract_proposal_source
-        and "development-surface" in onboarding_script
-        and "development-surface-validation" in onboarding_script
-        and "effectiveContract" in onboarding_script
-        and '"developmentSurface"' in onboarding_template
-        and '"/Script/Engine.Actor"' in onboarding_template
-        and "using __MANAGED_NAMESPACE__.Generated;"
-        in first_script_template
-        and "GetActorLocation" in first_script_template
-        and "SourceUseCreatesDeterministicSafeDevelopmentOverlay"
-        in development_surface_test
-        and "AmbiguousOrUnsupportedUseDoesNotPartiallyApplyOverlay"
-        in development_surface_test
-        and "PolicyRejectedMemberReturnsSourceLinkedDiagnosticWithoutOverlay"
-        in development_surface_test
-        and "ManagedK2NameResolvesToReflectedIdentityAcrossGeneratedSurfaces"
-        in development_surface_test
-        and "CliExpandsProjectSourcesWithoutRequiringThemToCompileFirst"
-        in development_surface_test
-        and "Automatic Actor/Pawn development surface acceptance failed."
-        in packaged_native_onboarding
-        and "M13.1B-1 source-use vertical" in roadmap_document,
+        'unifiedscript.unreal-api-dependency-requests/v0.1' in development_surface_source and
+        'unifiedscript.unreal-api-development-surface/v0.1' in development_surface_source and
+        '"unsupported-member"' in development_surface_source and
+        '"USUE3105"' in development_surface_source and
+        'result.Applied != (open == 0)' in development_surface_source and
+        'ue-surface-expand' in cli_source and
+        '--requests-out' in cli_source and
+        '--overlay-out' in cli_source and
+        'CSharpProjectLoader' in cli_source and
+        'directive.Alias?.Name.Identifier.ValueText' in source_dependency_scanner and
+        'StartsWith("// <auto-generated"' in source_dependency_scanner and
+        '"USAPI-" + StableHash' in source_dependency_scanner and
+        'StartsWith("K2_"' in managed_naming and
+        'UnrealManagedNaming.FunctionName(function)' in contract_generator and
+        'UnrealManagedNaming.FunctionName(' in contract_proposal_source and
+        'development-surface' in onboarding_script and
+        'development-surface-validation' in onboarding_script and
+        'effectiveContract' in onboarding_script and
+        '"developmentSurface"' in onboarding_template and
+        '"/Script/Engine.Actor"' in onboarding_template and
+        'using __MANAGED_NAMESPACE__.Generated;' in first_script_template and
+        'GetActorLocation' in first_script_template and
+        'SourceUseCreatesDeterministicSafeDevelopmentOverlay' in development_surface_test and
+        'AmbiguousOrUnsupportedUseDoesNotPartiallyApplyOverlay' in development_surface_test and
+        'PolicyRejectedMemberReturnsSourceLinkedDiagnosticWithoutOverlay' in development_surface_test and
+        'ManagedK2NameResolvesToReflectedIdentityAcrossGeneratedSurfaces' in development_surface_test and
+        'CliExpandsProjectSourcesWithoutRequiringThemToCompileFirst' in development_surface_test and
+        'Automatic Actor/Pawn development surface acceptance failed.' in packaged_native_onboarding,
         "M13.1B source dependency requests, safe overlay, Setup integration, fixtures, or acceptance are incomplete",
     )
     checks.append(
         "M13.1B expands source API use through one all-or-nothing development surface"
     )
     require(
-        "GetImportScope" in source_dependency_scanner
-        and "CanUseBareGeneratedName" in source_dependency_scanner
-        and "LookupSymbols" in source_dependency_scanner
-        and "ResolveMemberSelector" in source_dependency_scanner
-        and "InvocationMatches" in source_dependency_scanner
-        and "FunctionSelector" in source_dependency_scanner
-        and "CSharpCompilationRequest compilationRequest" in source_dependency_scanner
-        and "ScannerSupportsOrdinaryAndGlobalImportsWithoutCapturingUserOrReferencedTypes"
-        in development_surface_test
-        and "ScannerSelectsExactOverloadsFromInvocationArgumentTypes"
-        in development_surface_test
-        and "OrdinarySourceExpandsRepresentativeBlueprintSignatureMatrix"
-        in development_surface_test
-        and "SubscribeOnChanged" in development_surface_test
-        and "IReadOnlySet<int>" in development_surface_test
-        and "using __MANAGED_NAMESPACE__.Generated;" in first_script_template
-        and "using UnrealApi =" not in first_script_template
-        and "ordinary generated-namespace import" in packaged_native_onboarding
-        and "normal import scope with Roslyn symbols" in api_contract_document
-        and "M13.1B-2 execution checklist" in roadmap_document
-        and "M13.1B-2 ordinary source/signature matrix" in roadmap_document
-        and "M13.1B-2a — native reflected breadth" in roadmap_document
-        and "Progress (2026-08-31, M13.1B-2 ordinary-source/signature tranche)"
-        in roadmap_document,
+        'GetImportScope' in source_dependency_scanner and
+        'CanUseBareGeneratedName' in source_dependency_scanner and
+        'LookupSymbols' in source_dependency_scanner and
+        'ResolveMemberSelector' in source_dependency_scanner and
+        'InvocationMatches' in source_dependency_scanner and
+        'FunctionSelector' in source_dependency_scanner and
+        'CSharpCompilationRequest compilationRequest' in source_dependency_scanner and
+        'ScannerSupportsOrdinaryAndGlobalImportsWithoutCapturingUserOrReferencedTypes' in development_surface_test and
+        'ScannerSelectsExactOverloadsFromInvocationArgumentTypes' in development_surface_test and
+        'OrdinarySourceExpandsRepresentativeBlueprintSignatureMatrix' in development_surface_test and
+        'SubscribeOnChanged' in development_surface_test and
+        'IReadOnlySet<int>' in development_surface_test and
+        'using __MANAGED_NAMESPACE__.Generated;' in first_script_template and
+        'using UnrealApi =' not in first_script_template and
+        'ordinary generated-namespace import' in packaged_native_onboarding,
         "M13.1B-2 ordinary imports, semantic collision safety, overload selection, or product fixture is incomplete",
     )
     checks.append(
         "M13.1B-2 resolves ordinary C# imports and exact overloads without capturing user types"
     )
     require(
-        "unifiedscript.unreal-api-source-type-hints/v0.1"
-        in source_type_hint_scanner
-        and "CanUseBareGeneratedName" in source_type_hint_scanner
-        and "IsPotentialStaticTypeReceiver" in source_type_hint_scanner
-        and "SourceTypeHintsAreDeterministicAndRejectCSharpTypeCollisions"
-        in development_surface_test
-        and "ue-reflection-hints" in cli_source
-        and "source-reflection-hints" in onboarding_script
-        and "developmentSurfaceTypeHints" in onboarding_script
-        and "typeHintsOutput" in onboarding_template
-        and "Options.TypeNames" in reflection_exporter
-        and "CandidatesByName" in reflection_exporter
-        and "DiscoveredClassCount" in reflection_exporter
-        and "new Pawn" in first_script_template
-        and "Managed source did not produce the bounded Pawn reflection hint."
-        in packaged_native_onboarding
-        and "unifiedscript.unreal-api-source-type-hints/v0.1"
-        in api_contract_document
-        and "M13.1B-2 bounded native reflection discovery" in roadmap_document,
+        'unifiedscript.unreal-api-source-type-hints/v0.1' in source_type_hint_scanner and
+        'CanUseBareGeneratedName' in source_type_hint_scanner and
+        'IsPotentialStaticTypeReceiver' in source_type_hint_scanner and
+        'SourceTypeHintsAreDeterministicAndRejectCSharpTypeCollisions' in development_surface_test and
+        'ue-reflection-hints' in cli_source and
+        'source-reflection-hints' in onboarding_script and
+        'developmentSurfaceTypeHints' in onboarding_script and
+        'typeHintsOutput' in onboarding_template and
+        'Options.TypeNames' in reflection_exporter and
+        'CandidatesByName' in reflection_exporter and
+        'DiscoveredClassCount' in reflection_exporter and
+        'new Pawn' in first_script_template and
+        'Managed source did not produce the bounded Pawn reflection hint.' in packaged_native_onboarding,
         "M13.1B-2 bounded source-driven native reflection discovery is incomplete",
     )
     checks.append(
         "M13.1B-2 discovers bounded native Unreal types before reflection export"
     )
     require(
-        "unifiedscript.unreal-api-generated-surface-lock/v0.1"
-        in generated_surface_lock
-        and "TypeFingerprint" in generated_surface_lock
-        and "changed:{path}" in generated_surface_lock
-        and "--lock-out" in cli_source
-        and "--verify-lock" in cli_source
-        and "USUE3201" in cli_source
-        and "BlueprintAssetPaths" in reflection_exporter
-        and "FAssetRegistryModule" in reflection_exporter
-        and "BlueprintAssets" in reflection_exporter
-        and "DiscoveredBlueprintClassCount" in reflection_exporter
-        and "USUE3010" in native_thunk_generator_b2
-        and "developmentSurfaceLock" in onboarding_script
-        and "lockMode" in onboarding_script
-        and '"blueprintAssets"' in onboarding_template
-        and '"lockOutput"' in onboarding_template
-        and "BlueprintGeneratedClassUsesExactAssetIdentityAndSafeReflectionRoute"
-        in development_surface_test
-        and "GeneratedSurfaceLockIsDeterministicLocalizedAndStaleSafe"
-        in development_surface_test
-        and "BlueprintReflectionDiscovery" in project_setup_tests
-        and "Generated API surface lock did not freeze the exact Actor/Pawn surface."
-        in packaged_native_onboarding
-        and "unifiedscript.unreal-api-generated-surface-lock/v0.1"
-        in api_contract_document
-        and "M13.1B-2b" in roadmap_document,
+        'unifiedscript.unreal-api-generated-surface-lock/v0.1' in generated_surface_lock and
+        'TypeFingerprint' in generated_surface_lock and
+        'changed:{path}' in generated_surface_lock and
+        '--lock-out' in cli_source and
+        '--verify-lock' in cli_source and
+        'USUE3201' in cli_source and
+        'BlueprintAssetPaths' in reflection_exporter and
+        'FAssetRegistryModule' in reflection_exporter and
+        'BlueprintAssets' in reflection_exporter and
+        'DiscoveredBlueprintClassCount' in reflection_exporter and
+        'USUE3010' in native_thunk_generator_b2 and
+        'developmentSurfaceLock' in onboarding_script and
+        'lockMode' in onboarding_script and
+        '"blueprintAssets"' in onboarding_template and
+        '"lockOutput"' in onboarding_template and
+        'BlueprintGeneratedClassUsesExactAssetIdentityAndSafeReflectionRoute' in development_surface_test and
+        'GeneratedSurfaceLockIsDeterministicLocalizedAndStaleSafe' in development_surface_test and
+        'BlueprintReflectionDiscovery' in project_setup_tests and
+        'Generated API surface lock did not freeze the exact Actor/Pawn surface.' in packaged_native_onboarding,
         "M13.1B-2b Blueprint identity, generated surface lock, stale-lock gate, or acceptance is incomplete",
     )
     checks.append(
@@ -1409,62 +1263,52 @@ def main() -> int:
         encoding="utf-8"
     )
     require(
-        "public string? ClassId" in script_asset_attributes
-        and "InvalidScriptClassId" in script_asset_lowerer
-        and "DuplicateScriptClassId" in script_asset_lowerer
-        and "ValidateDeclarationIdentity" in script_asset_runtime
-        and "ValidateGeneratedClassIdentity" in script_asset_runtime
-        and "UFinareActorClassFactory" in script_class_factory
-        and "UFinareActorComponentClassFactory" in script_class_factory
-        and "RenderManagedSource" in script_class_factory
-        and "AppendDeployment" in script_class_factory
-        and "FactoryContract" in script_class_factory_tests
-        and "Generated Actor is selectable" in script_class_factory_tests
-        and "Generated Component is attachable" in script_class_factory_tests
-        and "M13.1C-0 attachable class foundation" in roadmap_document,
+        'public string? ClassId' in script_asset_attributes and
+        'InvalidScriptClassId' in script_asset_lowerer and
+        'DuplicateScriptClassId' in script_asset_lowerer and
+        'ValidateDeclarationIdentity' in script_asset_runtime and
+        'ValidateGeneratedClassIdentity' in script_asset_runtime and
+        'UFinareActorClassFactory' in script_class_factory and
+        'UFinareActorComponentClassFactory' in script_class_factory and
+        'RenderManagedSource' in script_class_factory and
+        'AppendDeployment' in script_class_factory and
+        'FactoryContract' in script_class_factory_tests and
+        'Generated Actor is selectable' in script_class_factory_tests and
+        'Generated Component is attachable' in script_class_factory_tests,
         "M13.1C-0 persistent Script Class identity, Editor factory, or save contract is incomplete",
     )
     checks.append(
         "M13.1C-0 creates exact-identity Actor and Component Script Class proxies"
     )
     require(
-        "public int AddOne(int value)" in script_class_factory
-        and "return value + 1;" in script_class_factory
-        and "Finare.Integration.ScriptClass.CreatePersistent"
-        in script_class_factory_tests
-        and "Finare.Integration.ScriptClass.ReloadLifecycle"
-        in script_class_factory_tests
-        and "GetCurrentProcessId" in script_class_factory_tests
-        and "$createProcessId -eq $reloadProcessId" in script_class_golden_path
-        and "BuildCookRun" in script_class_golden_path
-        and "SA_M13C0PersistentActor" in script_class_golden_path
-        and "SA_M13C0PersistentComponent" in script_class_golden_path
-        and "M13.1C-1e headless workflow-contract closure" in roadmap_document
-        and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
-        and "require no handwritten facade | Complete |" in roadmap_document,
+        'public int AddOne(int value)' in script_class_factory and
+        'return value + 1;' in script_class_factory and
+        'Finare.Integration.ScriptClass.CreatePersistent' in script_class_factory_tests and
+        'Finare.Integration.ScriptClass.ReloadLifecycle' in script_class_factory_tests and
+        'GetCurrentProcessId' in script_class_factory_tests and
+        '$createProcessId -eq $reloadProcessId' in script_class_golden_path and
+        'BuildCookRun' in script_class_golden_path and
+        'SA_M13C0PersistentActor' in script_class_golden_path and
+        'SA_M13C0PersistentComponent' in script_class_golden_path,
         "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
     )
     checks.append(
         "M13.1C-0 persists Script Classes across Editor processes, lifecycle, and cook"
     )
     require(
-        "unifiedscript.first-play-request/v0.1" in project_setup_source
-        and "WriteFirstPlayRequest" in project_setup_header
-        and "WriteFirstPlayRequest" in script_class_factory
-        and "-FirstPlayRequest" in project_setup_source
-        and "-RelaunchEditor" in project_setup_source
-        and "Build, Restart & Continue" in project_setup_widget
-        and "Locate Generated Class" in project_setup_widget
-        and "FinareFirstPlay" in editor_module
-        and "unifiedscript.first-play-request/v0.1" in deferred_onboarding
-        and "UnrealEditor.exe" in deferred_onboarding
-        and "firstPlayResult.status -ne 'ready'" in script_class_golden_path
-        and "IncludeScriptClassFirstPlay" in packaged_native_onboarding
-        and "cook.cookedAssets).Count -ne 4" in packaged_native_onboarding
-        and "M13.1C-1 — first-Play golden path" in roadmap_document
-        and "M13.1C-1a — first Build" in roadmap_document
-        and "connect class creation to the adopted project's single Build/Onboard"
-        in roadmap_document,
+        'unifiedscript.first-play-request/v0.1' in project_setup_source and
+        'WriteFirstPlayRequest' in project_setup_header and
+        'WriteFirstPlayRequest' in script_class_factory and
+        '-FirstPlayRequest' in project_setup_source and
+        '-RelaunchEditor' in project_setup_source and
+        'Build, Restart & Continue' in project_setup_widget and
+        'Locate Generated Class' in project_setup_widget and
+        'FinareFirstPlay' in editor_module and
+        'unifiedscript.first-play-request/v0.1' in deferred_onboarding and
+        'UnrealEditor.exe' in deferred_onboarding and
+        "firstPlayResult.status -ne 'ready'" in script_class_golden_path and
+        'IncludeScriptClassFirstPlay' in packaged_native_onboarding and
+        'cook.cookedAssets).Count -ne 4' in packaged_native_onboarding,
         "M13.1C-1 first-Play receipt, single Build/relaunch, Editor continuation, or packaged acceptance is incomplete",
     )
     checks.append(
@@ -1481,23 +1325,22 @@ def main() -> int:
         / "FinareAuthoringWorkbench.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "BuildAuthoringCommand" in project_setup_header
-        and "start-finare-authoring.ps1" in project_setup_source
-        and "Open Authoring & Reload" in project_setup_widget
-        and "OpenAuthoringSurface(ScriptAsset)" in project_setup_widget
-        and "AuthoringScriptPath" in adoption_source
-        and "AuthoringWorkbenchRoot" in adoption_source
-        and '"authoring"' in adoption_source
-        and "IsAuthoringPublication" in unreal_component
-        and 'TEXT("schemaCompatibility")' in unreal_component
-        and 'TEXT("restartRequired")' in unreal_component
-        and 'TEXT("requiredAction"), TEXT("restartEditor")' in unreal_component
-        and "RefreshScriptStateWithTransaction" in unreal_component
-        and "authoring-stopped-incompatible-state" in runtime_world_tests
-        and "authoring-compatible-state" in runtime_world_tests
-        and "authoring-incompatible-state" in runtime_world_tests
-        and "Restart Editor required" in authoring_workbench_native
-        and "M13.1C-1b — edit/reload" in roadmap_document,
+        'BuildAuthoringCommand' in project_setup_header and
+        'start-finare-authoring.ps1' in project_setup_source and
+        'Open Authoring & Reload' in project_setup_widget and
+        'OpenAuthoringSurface(ScriptAsset)' in project_setup_widget and
+        'AuthoringScriptPath' in adoption_source and
+        'AuthoringWorkbenchRoot' in adoption_source and
+        '"authoring"' in adoption_source and
+        'IsAuthoringPublication' in unreal_component and
+        'TEXT("schemaCompatibility")' in unreal_component and
+        'TEXT("restartRequired")' in unreal_component and
+        'TEXT("requiredAction"), TEXT("restartEditor")' in unreal_component and
+        'RefreshScriptStateWithTransaction' in unreal_component and
+        'authoring-stopped-incompatible-state' in runtime_world_tests and
+        'authoring-compatible-state' in runtime_world_tests and
+        'authoring-incompatible-state' in runtime_world_tests and
+        'Restart Editor required' in authoring_workbench_native,
         "M13.1C-1b exact Script Class authoring launch, state-preserving reload, or restart-required rejection is incomplete",
     )
     checks.append(
@@ -1526,38 +1369,28 @@ def main() -> int:
         / "FinareEditor" / "Private" / "Widgets"
         / "SFinareDebugPanel.cpp"
     ).read_text(encoding="utf-8")
-    authoring_diagnostics_document = (
-        ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
-    ).read_text(encoding="utf-8")
-    diagnostics_bundle_document = (
-        ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md"
-    ).read_text(encoding="utf-8")
     require(
-        "MaximumRetainedDiagnosticCount = 128" in editor_diagnostics_header
-        and "FinareDiagnostics" in editor_diagnostics_source
-        and "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
-        and "FromAuthoringFailure" in editor_diagnostics_source
-        and "FromReloadTransaction" in editor_diagnostics_source
-        and "FromRuntime" in editor_diagnostics_source
-        and "Open Source" in editor_diagnostics_source
-        and "OpenAuthoringMember" in editor_diagnostics_source
-        and "ExecuteRecovery" in editor_diagnostics_source
-        and "Graph node:" in editor_diagnostics_source
-        and "WorldHostId" in editor_diagnostics_source
-        and "Restart Editor" in editor_diagnostics_source
-        and "PersistSnapshot" in editor_diagnostics_source
-        and "FFinareEditorDiagnostics::Publish" in authoring_surface_widget
-        and "FFinareEditorDiagnostics::Publish" in debug_panel_widget
-        and "Export Support Bundle" in project_setup_widget
-        and "diagnostics-bundle" in project_setup_source
-        and "ClipboardCopy" in project_setup_widget
-        and "UnifiedEditorContract" in editor_diagnostics_tests
-        and "Reads one structured report diagnostic" in editor_diagnostics_tests
-        and "persists one bundle input" in editor_diagnostics_tests
-        and "Finare Diagnostics" in authoring_diagnostics_document
-        and "Export Support Bundle" in diagnostics_bundle_document
-        and "M13.1C-1c — diagnostics" in roadmap_document
-        and "M13.1C-1e headless workflow-contract closure" in roadmap_document,
+        'MaximumRetainedDiagnosticCount = 128' in editor_diagnostics_header and
+        'FinareDiagnostics' in editor_diagnostics_source and
+        'unifiedscript.editor-diagnostics/v0.2' in editor_diagnostics_source and
+        'FromAuthoringFailure' in editor_diagnostics_source and
+        'FromReloadTransaction' in editor_diagnostics_source and
+        'FromRuntime' in editor_diagnostics_source and
+        'Open Source' in editor_diagnostics_source and
+        'OpenAuthoringMember' in editor_diagnostics_source and
+        'ExecuteRecovery' in editor_diagnostics_source and
+        'Graph node:' in editor_diagnostics_source and
+        'WorldHostId' in editor_diagnostics_source and
+        'Restart Editor' in editor_diagnostics_source and
+        'PersistSnapshot' in editor_diagnostics_source and
+        'FFinareEditorDiagnostics::Publish' in authoring_surface_widget and
+        'FFinareEditorDiagnostics::Publish' in debug_panel_widget and
+        'Export Support Bundle' in project_setup_widget and
+        'diagnostics-bundle' in project_setup_source and
+        'ClipboardCopy' in project_setup_widget and
+        'UnifiedEditorContract' in editor_diagnostics_tests and
+        'Reads one structured report diagnostic' in editor_diagnostics_tests and
+        'persists one bundle input' in editor_diagnostics_tests,
         "M13.1C-1c unified UE diagnostics, navigation, recovery guidance, or support bundle is incomplete",
     )
     checks.append(
@@ -1576,34 +1409,29 @@ def main() -> int:
         / "Finare.ide.json.template"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.editor-diagnostics/v0.2" in editor_diagnostics_source
-        and 'TEXT("stage")' in editor_diagnostics_source
-        and 'TEXT("graphNodeId")' in editor_diagnostics_source
-        and 'TEXT("packagePath")' in editor_diagnostics_source
-        and "Diagnostic.WorldHostId = Runtime.WorldHostId"
-        in editor_diagnostics_source
-        and "Resolve:" in editor_diagnostics_source
-        and "ExecuteRecovery" in editor_diagnostics_source
-        and "Project.Finare.slnx.template" in adoption_source
-        and "Project.Finare.code-workspace.template" in adoption_source
-        and "Finare.ide.json.template" in adoption_source
-        and "DocumentationRoot" in adoption_source
-        and '"ide-workspace"' in adoption_source
-        and '<Project Path="__ASSEMBLY_NAME__.csproj" />'
-        in ide_solution_template
-        and "Finare: Build managed gameplay" in ide_workspace_template
-        and "Finare: Build and prepare Unreal" in ide_workspace_template
-        and "Finare: Validate project" in ide_workspace_template
-        and '"type": "coreclr"' in ide_workspace_template
-        and "unifiedscript.ide-workspace/v0.1" in ide_manifest_template
-        and "Generated/Unreal.bindings.generated.cs" in ide_manifest_template
-        and "unifiedscript.ide-workspace/v0.1" in adoption_tests
-        and "Generated IDE workspace lacks build, validate, or debugger configuration"
-        in packaged_adoption
-        and "Project-local IDE workspace" in packaged_native_onboarding
-        and "Project.Finare.slnx.template" in sdk_package
-        and "project-local IDE links" in unreal_onboarding_guide
-        and "M13.2C — diagnostics and IDE" in roadmap_document,
+        'unifiedscript.editor-diagnostics/v0.2' in editor_diagnostics_source and
+        'TEXT("stage")' in editor_diagnostics_source and
+        'TEXT("graphNodeId")' in editor_diagnostics_source and
+        'TEXT("packagePath")' in editor_diagnostics_source and
+        'Diagnostic.WorldHostId = Runtime.WorldHostId' in editor_diagnostics_source and
+        'Resolve:' in editor_diagnostics_source and
+        'ExecuteRecovery' in editor_diagnostics_source and
+        'Project.Finare.slnx.template' in adoption_source and
+        'Project.Finare.code-workspace.template' in adoption_source and
+        'Finare.ide.json.template' in adoption_source and
+        'DocumentationRoot' in adoption_source and
+        '"ide-workspace"' in adoption_source and
+        '<Project Path="__ASSEMBLY_NAME__.csproj" />' in ide_solution_template and
+        'Finare: Build managed gameplay' in ide_workspace_template and
+        'Finare: Build and prepare Unreal' in ide_workspace_template and
+        'Finare: Validate project' in ide_workspace_template and
+        '"type": "coreclr"' in ide_workspace_template and
+        'unifiedscript.ide-workspace/v0.1' in ide_manifest_template and
+        'Generated/Unreal.bindings.generated.cs' in ide_manifest_template and
+        'unifiedscript.ide-workspace/v0.1' in adoption_tests and
+        'Generated IDE workspace lacks build, validate, or debugger configuration' in packaged_adoption and
+        'Project-local IDE workspace' in packaged_native_onboarding and
+        'Project.Finare.slnx.template' in sdk_package,
         "M13.2C diagnostic context, safe navigation, project-local IDE workspace, or packaged proof is incomplete",
     )
     checks.append(
@@ -1619,18 +1447,15 @@ def main() -> int:
         / "FinareAuthoringSurfaceTests.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "PreflightScriptReloadWithTransaction" in unreal_component_header
-        and 'TEXT("batchPreflight")' in unreal_component
-        and 'TEXT("preflightPassed")' in unreal_component
-        and "ReloadMatchingComponentsForAsset" in authoring_surface_widget
-        and "PreflightRejected > 0" in authoring_surface_widget
-        and "PreflightTransactions[Index]" in authoring_surface_widget
-        and "Finare.Unreal.Editor.ReloadBatchPreflight"
-        in authoring_surface_tests
-        and "StoppedComponent" in authoring_surface_tests
-        and "none was allowed to cross into runtime mutation"
-        in authoring_surface_widget
-        and "M13.2D-1 — all-instance preflight barrier" in roadmap_document,
+        'PreflightScriptReloadWithTransaction' in unreal_component_header and
+        'TEXT("batchPreflight")' in unreal_component and
+        'TEXT("preflightPassed")' in unreal_component and
+        'ReloadMatchingComponentsForAsset' in authoring_surface_widget and
+        'PreflightRejected > 0' in authoring_surface_widget and
+        'PreflightTransactions[Index]' in authoring_surface_widget and
+        'Finare.Unreal.Editor.ReloadBatchPreflight' in authoring_surface_tests and
+        'StoppedComponent' in authoring_surface_tests and
+        'none was allowed to cross into runtime mutation' in authoring_surface_widget,
         "M13.2D-1 all-instance non-mutating reload preflight or mixed-state regression is incomplete",
     )
     checks.append(
@@ -1640,108 +1465,84 @@ def main() -> int:
         ROOT / "tests" / "Finare.Tests"
         / "UnrealManagedReloadTransactionTests.cs"
     ).read_text(encoding="utf-8")
-    hot_reload_reliability_document = (
-        ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md"
-    ).read_text(encoding="utf-8")
     require(
-        "public static int PrepareScriptReload(" in unreal_world_entry
-        and "public static int CommitScriptReload(" in unreal_world_entry
-        and "public static int AbortScriptReload(" in unreal_world_entry
-        and "public static int FinalizeScriptReload(" in unreal_world_entry
-        and "oldGenerationRetention" in unreal_world_entry
-        and "The managed script generation did not retire cleanly."
-        in unreal_world_entry
-        and "PrepareScriptReloadWithTransaction" in unreal_component_header
-        and "CommitPreparedScriptReload" in unreal_component_header
-        and "AbortPreparedScriptReload" in unreal_component_header
-        and "FinalizePreparedScriptReload" in unreal_component_header
-        and 'TEXT("batchPrepare")' in unreal_component
-        and 'TEXT("batchCommit")' in unreal_component
-        and 'TEXT("batchAbort")' in unreal_component
-        and 'TEXT("batchFinalize")' in unreal_component
-        and "PrepareScriptReloadWithTransaction(" in authoring_surface_widget
-        and "CommitPreparedScriptReload()" in authoring_surface_widget
-        and "AbortPreparedScriptReload(Reason)" in authoring_surface_widget
-        and "FinalizePreparedScriptReload()" in authoring_surface_widget
-        and "CandidateStartFailureNeverPublishesOrRetiresOldGeneration"
-        in managed_reload_transaction_tests
-        and "AbortAfterCommitRestoresRetainedGeneration"
-        in managed_reload_transaction_tests
-        and "Candidate OnStart failure is a prepare rejection"
-        in authoring_surface_tests
-        and "Dynamic prepare failure commits no instance"
-        in authoring_surface_tests
-        and "late candidate `OnStart` or event-rebinding failure"
-        in hot_reload_reliability_document
-        and "- [x] **M13.2D-2 — two-phase runtime swap:**"
-        in roadmap_document,
+        'public static int PrepareScriptReload(' in unreal_world_entry and
+        'public static int CommitScriptReload(' in unreal_world_entry and
+        'public static int AbortScriptReload(' in unreal_world_entry and
+        'public static int FinalizeScriptReload(' in unreal_world_entry and
+        'oldGenerationRetention' in unreal_world_entry and
+        'The managed script generation did not retire cleanly.' in unreal_world_entry and
+        'PrepareScriptReloadWithTransaction' in unreal_component_header and
+        'CommitPreparedScriptReload' in unreal_component_header and
+        'AbortPreparedScriptReload' in unreal_component_header and
+        'FinalizePreparedScriptReload' in unreal_component_header and
+        'TEXT("batchPrepare")' in unreal_component and
+        'TEXT("batchCommit")' in unreal_component and
+        'TEXT("batchAbort")' in unreal_component and
+        'TEXT("batchFinalize")' in unreal_component and
+        'PrepareScriptReloadWithTransaction(' in authoring_surface_widget and
+        'CommitPreparedScriptReload()' in authoring_surface_widget and
+        'AbortPreparedScriptReload(Reason)' in authoring_surface_widget and
+        'FinalizePreparedScriptReload()' in authoring_surface_widget and
+        'CandidateStartFailureNeverPublishesOrRetiresOldGeneration' in managed_reload_transaction_tests and
+        'AbortAfterCommitRestoresRetainedGeneration' in managed_reload_transaction_tests and
+        'Candidate OnStart failure is a prepare rejection' in authoring_surface_tests and
+        'Dynamic prepare failure commits no instance' in authoring_surface_tests,
         "M13.2D-2 retained-generation prepare/commit/abort/finalize transaction or late-failure proof is incomplete",
     )
     checks.append(
         "M13.2D-2 atomically swaps all prepared runtime generations and restores late failures"
     )
     require(
-        "EditorAttached" in onboarding_script
-        and "USONB3001" in onboarding_script
-        and "Defer-FinareBuildGraphStage" in build_graph_module
-        and "deferred" in build_graph_test
-        and "DailyBuildAttached" in project_setup_header
-        and "ReadDailyBuildReceipt" in project_setup_source
-        and "Build & Reload" in project_setup_widget
-        and "ReloadAllScriptClassComponents" in authoring_surface_widget
-        and "Daily Build coordinator reloads" in authoring_surface_tests
-        and "[x] **M13.2D-3a" in roadmap_document,
+        'EditorAttached' in onboarding_script and
+        'USONB3001' in onboarding_script and
+        'Defer-FinareBuildGraphStage' in build_graph_module and
+        'deferred' in build_graph_test and
+        'DailyBuildAttached' in project_setup_header and
+        'ReadDailyBuildReceipt' in project_setup_source and
+        'Build & Reload' in project_setup_widget and
+        'ReloadAllScriptClassComponents' in authoring_surface_widget and
+        'Daily Build coordinator reloads' in authoring_surface_tests,
         "M13.2D-3a editor-attached dependency-aware build, exact restart receipt, or all-instance reload path is incomplete",
     )
     checks.append(
         "M13.2D-3a runs one editor-attached build/reload or returns an exact restart action"
     )
     require(
-        "public IPIEAuthorizer" in editor_module
-        and "Finare.BuildAndReload" in editor_module
-        and "RequestPIEPermissionInternal" in editor_module
-        and "ScheduleDeferredPlay" in editor_module
-        and "EFinareDailyBuildReason::GraphPublication"
-        in authoring_surface_widget
-        and "Finare.Integration.DailyBuildPlayGate"
-        in project_setup_tests
-        and "The Play gate publishes one shared daily-build receipt"
-        in project_setup_tests
-        and "$moduleSearchPaths" in onboarding_script
-        and "function global:Get-FileHash" in onboarding_script
-        and "[x] **M13.2D-3b" in roadmap_document,
+        'public IPIEAuthorizer' in editor_module and
+        'Finare.BuildAndReload' in editor_module and
+        'RequestPIEPermissionInternal' in editor_module and
+        'ScheduleDeferredPlay' in editor_module and
+        'EFinareDailyBuildReason::GraphPublication' in authoring_surface_widget and
+        'Finare.Integration.DailyBuildPlayGate' in project_setup_tests and
+        'The Play gate publishes one shared daily-build receipt' in project_setup_tests and
+        '$moduleSearchPaths' in onboarding_script and
+        'function global:Get-FileHash' in onboarding_script,
         "M13.2D-3b shared Graph/Play coordinator, retained Play replay, UE child process repair, or integration proof is incomplete",
     )
     checks.append(
         "M13.2D-3b coalesces Graph and Play through one verified daily-build coordinator"
     )
     require(
-        "FinareScriptClassSmoke" in native_host_source_template
-        and "LoadClass<AFinareActor>" in native_host_source_template
-        and "LoadClass<UFinareComponent>" in native_host_source_template
-        and "ValidateGeneratedClassIdentity" in native_host_source_template
-        and "GetManagedScriptCount" in native_host_source_template
-        and "GetGameplayLifecycleClaimCount" in native_host_source_template
-        and "GetHostFxrPath" in native_host_source_template
-        and "RequestExitWithStatus" in native_host_source_template
-        and "unifiedscript.script-class-golden-path/v0.2"
-        in script_class_golden_path
-        and "packaged-script-class-smoke" in script_class_golden_path
-        and "actorStarted=true" in script_class_golden_path
-        and "componentStarted=true" in script_class_golden_path
-        and "postSmokeGeneratedDiff" in script_class_golden_path
-        and "Assert-FingerprintsUnchanged" in script_class_golden_path
-        and "packagedSmoke.status" in packaged_native_onboarding
-        and "userOwnedFilesPreserved" in packaged_native_onboarding
-        and "restoredDefaultEngineSha256" in packaged_native_onboarding
-        and "restoredUserSentinelSha256" in packaged_native_onboarding
-        and "unifiedscript.blueprint-only-baseline/v0.1"
-        in packaged_native_onboarding
-        and "-FinareScriptClassSmoke" in first_script_guide
-        and "M13.1C-1d extends that gate" in sdk_distribution
-        and "A post-smoke ValidateOnly run" in unreal_onboarding_guide
-        and "[x] **M13.1C-1d — packaged execution" in roadmap_document
-        and "M13.1C-1e headless workflow-contract closure" in roadmap_document,
+        'FinareScriptClassSmoke' in native_host_source_template and
+        'LoadClass<AFinareActor>' in native_host_source_template and
+        'LoadClass<UFinareComponent>' in native_host_source_template and
+        'ValidateGeneratedClassIdentity' in native_host_source_template and
+        'GetManagedScriptCount' in native_host_source_template and
+        'GetGameplayLifecycleClaimCount' in native_host_source_template and
+        'GetHostFxrPath' in native_host_source_template and
+        'RequestExitWithStatus' in native_host_source_template and
+        'unifiedscript.script-class-golden-path/v0.2' in script_class_golden_path and
+        'packaged-script-class-smoke' in script_class_golden_path and
+        'actorStarted=true' in script_class_golden_path and
+        'componentStarted=true' in script_class_golden_path and
+        'postSmokeGeneratedDiff' in script_class_golden_path and
+        'Assert-FingerprintsUnchanged' in script_class_golden_path and
+        'packagedSmoke.status' in packaged_native_onboarding and
+        'userOwnedFilesPreserved' in packaged_native_onboarding and
+        'restoredDefaultEngineSha256' in packaged_native_onboarding and
+        'restoredUserSentinelSha256' in packaged_native_onboarding and
+        'unifiedscript.blueprint-only-baseline/v0.1' in packaged_native_onboarding,
         "M13.1C-1d packaged generated-class execution, no-change replay, or user-owned rollback proof is incomplete",
     )
     checks.append(
@@ -1766,21 +1567,19 @@ def main() -> int:
         / "FinareEditor" / "FinareEditor.Build.cs"
     ).read_text(encoding="utf-8")
     require(
-        "UAssetDefinition_FinareAsset" in script_asset_definition_header
-        and "OpenAssets" in script_asset_definition_header
-        and "CanRename" in script_asset_definition_header
-        and "CanDuplicate" in script_asset_definition_header
-        and "OpenAuthoringSurface(Asset)" in script_asset_definition_source
-        and "Finare.OpenAuthoring" in script_asset_definition_source
-        and "Finare.OpenSource" in script_asset_definition_source
-        and "Finare.LocateGeneratedClass" in script_asset_definition_source
-        and "Finare.OpenRepair" in script_asset_definition_source
-        and "RegisterFinareAssetContextMenu" in editor_module
-        and '"AssetDefinition"' in editor_build_rules
-        and "Finare.Unreal.ScriptAsset.WorkflowContract"
-        in script_asset_definition_tests
-        and "FindExistingLiveTab" in script_asset_definition_tests
-        and "M13.2A-1 — canonical Script Asset entry" in roadmap_document,
+        'UAssetDefinition_FinareAsset' in script_asset_definition_header and
+        'OpenAssets' in script_asset_definition_header and
+        'CanRename' in script_asset_definition_header and
+        'CanDuplicate' in script_asset_definition_header and
+        'OpenAuthoringSurface(Asset)' in script_asset_definition_source and
+        'Finare.OpenAuthoring' in script_asset_definition_source and
+        'Finare.OpenSource' in script_asset_definition_source and
+        'Finare.LocateGeneratedClass' in script_asset_definition_source and
+        'Finare.OpenRepair' in script_asset_definition_source and
+        'RegisterFinareAssetContextMenu' in editor_module and
+        '"AssetDefinition"' in editor_build_rules and
+        'Finare.Unreal.ScriptAsset.WorkflowContract' in script_asset_definition_tests and
+        'FindExistingLiveTab' in script_asset_definition_tests,
         "M13.2A native Script Asset opening, safe operations, actions, or headless contract is incomplete",
     )
     checks.append(
@@ -1811,85 +1610,65 @@ def main() -> int:
         / "CSharpTypeReferencePlannerTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FFinareClassAssetOperations" in script_class_operations_header
-        and "static bool Rename" in script_class_operations_header
-        and "static bool Duplicate" in script_class_operations_header
-        and "FAssetRenameData" in script_class_operations_source
-        and "DuplicateAsset" in script_class_operations_source
-        and "TransformSource" in script_class_operations_source
-        and "BuildDeployment" in script_class_operations_source
-        and "BuildFirstPlayRequest" in script_class_operations_source
-        and "VerifyFilesUnchanged" in script_class_operations_source
-        and "RollbackRename" in script_class_operations_source
-        and "RollbackDuplicate" in script_class_operations_source
-        and "Finare.RenameClass" in script_asset_definition_source
-        and "Finare.DuplicateClass" in script_asset_definition_source
-        and "Finare.Unreal.ScriptClass.AssetOperations"
-        in script_class_operations_tests
-        and "AfterExternalPublication" in script_class_operations_tests
-        and "restores deployment bytes exactly" in script_class_operations_tests
-        and "M13.2A-2a — rename and duplicate transaction"
-        in roadmap_document,
+        'FFinareClassAssetOperations' in script_class_operations_header and
+        'static bool Rename' in script_class_operations_header and
+        'static bool Duplicate' in script_class_operations_header and
+        'FAssetRenameData' in script_class_operations_source and
+        'DuplicateAsset' in script_class_operations_source and
+        'TransformSource' in script_class_operations_source and
+        'BuildDeployment' in script_class_operations_source and
+        'BuildFirstPlayRequest' in script_class_operations_source and
+        'VerifyFilesUnchanged' in script_class_operations_source and
+        'RollbackRename' in script_class_operations_source and
+        'RollbackDuplicate' in script_class_operations_source and
+        'Finare.RenameClass' in script_asset_definition_source and
+        'Finare.DuplicateClass' in script_asset_definition_source and
+        'Finare.Unreal.ScriptClass.AssetOperations' in script_class_operations_tests and
+        'AfterExternalPublication' in script_class_operations_tests and
+        'restores deployment bytes exactly' in script_class_operations_tests,
         "M13.2A-2a complete-class rename, duplicate, conflict detection, or rollback coverage is incomplete",
     )
     checks.append(
         "M13.2A renames and duplicates complete Script Class identities transactionally"
     )
     require(
-        "static bool Delete" in script_class_operations_header
-        and "IsCompleteClassAsset" in script_class_operations_header
-        and "BuildDeleteDeployment" in script_class_operations_source
-        and "ValidateNoExternalAssetReferencers" in script_class_operations_source
-        and "RunManagedReferencePlanner" in script_class_operations_source
-        and "PublishDeleteExternalFiles" in script_class_operations_source
-        and "ObjectTools::DeleteObjectsUnchecked" in script_class_operations_source
-        and "Finare.DeleteClass" in script_asset_definition_source
-        and "RegisterFinareAssetOperationGuards"
-        in script_asset_definition_source
-        and "managed semantic references remain"
-        in script_class_operations_tests
-        and "Delete rollback restores source bytes exactly"
-        in script_class_operations_tests
-        and "Delete removes the exact deployment identity"
-        in script_class_operations_tests
-        and "M13.2A-2b1 — guarded safe delete"
-        in roadmap_document,
+        'static bool Delete' in script_class_operations_header and
+        'IsCompleteClassAsset' in script_class_operations_header and
+        'BuildDeleteDeployment' in script_class_operations_source and
+        'ValidateNoExternalAssetReferencers' in script_class_operations_source and
+        'RunManagedReferencePlanner' in script_class_operations_source and
+        'PublishDeleteExternalFiles' in script_class_operations_source and
+        'ObjectTools::DeleteObjectsUnchecked' in script_class_operations_source and
+        'Finare.DeleteClass' in script_asset_definition_source and
+        'RegisterFinareAssetOperationGuards' in script_asset_definition_source and
+        'managed semantic references remain' in script_class_operations_tests and
+        'Delete rollback restores source bytes exactly' in script_class_operations_tests and
+        'Delete removes the exact deployment identity' in script_class_operations_tests,
         "M13.2A-2b1 safe delete, referencer rejection, direct-operation guards, or rollback coverage is incomplete",
     )
     checks.append(
         "M13.2A safely deletes unreferenced complete Script Classes"
     )
     require(
-        "CSharpProjectSource" in project_loader
-        and "IReadOnlyList<CSharpProjectSource> Sources" in project_loader
-        and "CSharpTypeReferencePlanner" in csharp_type_reference_planner
-        and "unifiedscript.csharp-type-reference-plan/v0.1"
-        in csharp_type_reference_planner
-        and "GetTypeByMetadataName" in csharp_type_reference_planner
-        and "SymbolEqualityComparer.Default" in csharp_type_reference_planner
-        and "CSharpTypeReferenceEditKind.TypeReference"
-        in csharp_type_reference_planner
-        and 'args[0] == "script-class-reference-plan"' in cli_source
-        and 'case "--dotnet"' in cli_source
-        and "RunManagedReferencePlanner" in script_class_operations_source
-        and "ValidateManagedReferencePlanSnapshots"
-        in script_class_operations_source
-        and "BuildManagedRenameOutputs" in script_class_operations_source
-        and "PublishManagedRenameExternalFiles"
-        in script_class_operations_source
-        and "managed semantic references remain"
-        in script_class_operations_source
-        and "Rename updates the Roslyn-bound external type reference"
-        in script_class_operations_tests
-        and "Rename rollback restores semantic reference bytes exactly"
-        in script_class_operations_tests
-        and "PlannerRenamesOnlyRoslynBoundTypeDeclarationsAndReferences"
-        in csharp_type_reference_planner_tests
-        and "DeletePlanReportsExternalSemanticReferencesWithoutReplacement"
-        in csharp_type_reference_planner_tests
-        and "CliWritesDeterministicProjectReferencePlan"
-        in csharp_type_reference_planner_tests
-        and "M13.2A-2b2a — Roslyn reference plan" in roadmap_document,
+        'CSharpProjectSource' in project_loader and
+        'IReadOnlyList<CSharpProjectSource> Sources' in project_loader and
+        'CSharpTypeReferencePlanner' in csharp_type_reference_planner and
+        'unifiedscript.csharp-type-reference-plan/v0.1' in csharp_type_reference_planner and
+        'GetTypeByMetadataName' in csharp_type_reference_planner and
+        'SymbolEqualityComparer.Default' in csharp_type_reference_planner and
+        'CSharpTypeReferenceEditKind.TypeReference' in csharp_type_reference_planner and
+        'args[0] == "script-class-reference-plan"' in cli_source and
+        'case "--dotnet"' in cli_source and
+        'RunManagedReferencePlanner' in script_class_operations_source and
+        'ValidateManagedReferencePlanSnapshots' in script_class_operations_source and
+        'BuildManagedRenameOutputs' in script_class_operations_source and
+        'PublishManagedRenameExternalFiles' in script_class_operations_source and
+        'managed semantic references remain' in script_class_operations_source and
+        'Rename updates the Roslyn-bound external type reference' in script_class_operations_tests and
+        'Rename rollback restores semantic reference bytes exactly' in script_class_operations_tests and
+        'PlannerRenamesOnlyRoslynBoundTypeDeclarationsAndReferences' in csharp_type_reference_planner_tests and
+        'DeletePlanReportsExternalSemanticReferencesWithoutReplacement' in csharp_type_reference_planner_tests and
+        'CliWritesDeterministicProjectReferencePlan' in csharp_type_reference_planner_tests,
         "M13.2A-2b2a Roslyn reference planning, UE transaction integration, or rollback coverage is incomplete",
     )
     checks.append(
@@ -1906,42 +1685,31 @@ def main() -> int:
         / "FinareClassOperationJournal.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "FFinareClassAssetRecoveryResult"
-        in script_class_operations_header
-        and "RecoverPendingTransactions" in script_class_operations_header
-        and "RecoveryReceiptPath" in script_class_operations_header
-        and "Prepared" in script_class_journal_header
-        and "AssetsMutated" in script_class_journal_header
-        and "ExternalPublished" in script_class_journal_header
-        and "DeferredLiveReceiptCount" in script_class_journal_header
-        and "unifiedscript.class-operation-receipt/v0.1"
-        in script_class_journal_source
-        and "unifiedscript.class-operation-recovery/v0.1"
-        in script_class_journal_source
-        and "ownerProcessId" in script_class_journal_source
-        and "FPlatformProcess::IsApplicationRunning"
-        in script_class_journal_source
-        and "MaxSnapshotCount" in script_class_journal_source
-        and "MaxSnapshotBytes" in script_class_journal_source
-        and "PreserveInterruptedFiles" in script_class_journal_source
-        and "RestoreSnapshots" in script_class_journal_source
-        and "BuildRecoverySnapshots" in script_class_operations_source
-        and "ClassOperationJournal::Begin" in script_class_operations_source
-        and "ClassOperationJournal::Advance" in script_class_operations_source
-        and "ClassOperationJournal::Close" in script_class_operations_source
-        and "RecoverPendingTransactions" in editor_module
-        and "Recovery defers a receipt owned by the live Editor process"
-        in script_class_operations_tests
-        and "Recovery restores the existing preimage exactly"
-        in script_class_operations_tests
-        and "Recovery archives the interrupted receipt"
-        in script_class_operations_tests
-        and "Rename closes its committed recovery receipt"
-        in script_class_operations_tests
-        and "Delete rollback closes its recovery receipt"
-        in script_class_operations_tests
-        and "M13.2A-2b2b — persisted crash recovery"
-        in roadmap_document,
+        'FFinareClassAssetRecoveryResult' in script_class_operations_header and
+        'RecoverPendingTransactions' in script_class_operations_header and
+        'RecoveryReceiptPath' in script_class_operations_header and
+        'Prepared' in script_class_journal_header and
+        'AssetsMutated' in script_class_journal_header and
+        'ExternalPublished' in script_class_journal_header and
+        'DeferredLiveReceiptCount' in script_class_journal_header and
+        'unifiedscript.class-operation-receipt/v0.1' in script_class_journal_source and
+        'unifiedscript.class-operation-recovery/v0.1' in script_class_journal_source and
+        'ownerProcessId' in script_class_journal_source and
+        'FPlatformProcess::IsApplicationRunning' in script_class_journal_source and
+        'MaxSnapshotCount' in script_class_journal_source and
+        'MaxSnapshotBytes' in script_class_journal_source and
+        'PreserveInterruptedFiles' in script_class_journal_source and
+        'RestoreSnapshots' in script_class_journal_source and
+        'BuildRecoverySnapshots' in script_class_operations_source and
+        'ClassOperationJournal::Begin' in script_class_operations_source and
+        'ClassOperationJournal::Advance' in script_class_operations_source and
+        'ClassOperationJournal::Close' in script_class_operations_source and
+        'RecoverPendingTransactions' in editor_module and
+        'Recovery defers a receipt owned by the live Editor process' in script_class_operations_tests and
+        'Recovery restores the existing preimage exactly' in script_class_operations_tests and
+        'Recovery archives the interrupted receipt' in script_class_operations_tests and
+        'Rename closes its committed recovery receipt' in script_class_operations_tests and
+        'Delete rollback closes its recovery receipt' in script_class_operations_tests,
         "M13.2A-2b2b persisted crash receipt, live-owner deferral, startup recovery, or archive coverage is incomplete",
     )
     checks.append(
@@ -1956,35 +1724,22 @@ def main() -> int:
         / "FinareEditor" / "Private" / "FinareClassFactory.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "UFinareBlueprint" in unified_script_blueprint_header
-        and "UFinareBlueprint::StaticClass()"
-        in unified_script_factory_source
-        and "UAssetDefinition_FinareBlueprint"
-        in script_asset_definition_header
-        and '"EngineAssetDefinitions"' in editor_build_rules
-        and "CollectExternalAssetReferencers"
-        in script_class_operations_source
-        and "AdditionalPackageNames" in script_class_operations_source
-        and "RenameReferencingSoftObjectPaths"
-        in script_class_operations_source
-        and "FixupReferencers" in script_class_operations_source
-        and "RepairedUEReferencerPackages"
-        in script_class_operations_header
-        and "IsOrphanedGeneratedBlueprintDuplicate"
-        in script_class_operations_header
-        and "OnInMemoryAssetCreated" in script_asset_definition_source
-        and "ProcessPendingFinareBlueprintDuplicateCleanup"
-        in script_asset_definition_source
-        and "Rename rewrites the UE soft class reference"
-        in script_class_operations_tests
-        and "Rename rollback restores the UE soft class reference"
-        in script_class_operations_tests
-        and "Deferred guard removes exactly one Blueprint-only copy"
-        in script_class_operations_tests
-        and "Content Browser blocks generated Blueprint duplicate"
-        in script_asset_definition_tests
-        and "[x] **M13.2A-2b2c — UE reference and duplicate closure:**"
-        in roadmap_document,
+        'UFinareBlueprint' in unified_script_blueprint_header and
+        'UFinareBlueprint::StaticClass()' in unified_script_factory_source and
+        'UAssetDefinition_FinareBlueprint' in script_asset_definition_header and
+        '"EngineAssetDefinitions"' in editor_build_rules and
+        'CollectExternalAssetReferencers' in script_class_operations_source and
+        'AdditionalPackageNames' in script_class_operations_source and
+        'RenameReferencingSoftObjectPaths' in script_class_operations_source and
+        'FixupReferencers' in script_class_operations_source and
+        'RepairedUEReferencerPackages' in script_class_operations_header and
+        'IsOrphanedGeneratedBlueprintDuplicate' in script_class_operations_header and
+        'OnInMemoryAssetCreated' in script_asset_definition_source and
+        'ProcessPendingFinareBlueprintDuplicateCleanup' in script_asset_definition_source and
+        'Rename rewrites the UE soft class reference' in script_class_operations_tests and
+        'Rename rollback restores the UE soft class reference' in script_class_operations_tests and
+        'Deferred guard removes exactly one Blueprint-only copy' in script_class_operations_tests and
+        'Content Browser blocks generated Blueprint duplicate' in script_asset_definition_tests,
         "M13.2A-2b2c UE reference repair, redirector cleanup, generated Blueprint identity, or direct-duplicate closure is incomplete",
     )
     checks.append(
@@ -1997,25 +1752,20 @@ def main() -> int:
         packaged_script_class_lifecycle_path.read_text(encoding="utf-8")
     )
     require(
-        packaged_script_class_lifecycle_path.is_file()
-        and "IncludeScriptClassLifecycleReplay" in packaged_native_onboarding
-        and "scriptClassLifecycleReplay" in packaged_native_onboarding
-        and "unifiedscript.packaged-script-class-lifecycle/v0.1"
-        in packaged_script_class_lifecycle
-        and "byte-exact-baseline" in packaged_script_class_lifecycle
-        and "beforeEqualsAfter" in packaged_script_class_lifecycle
-        and "@('create', 'rename', 'duplicate', 'delete')"
-        in packaged_script_class_lifecycle
-        and "persisted-recovery-passed" in packaged_script_class_lifecycle
-        and "CaptureCreationRecoverySnapshots" in unified_script_factory_source
-        and "SaveCreatedClassPackages" in unified_script_factory_source
-        and "ClassOperationJournal::Begin" in unified_script_factory_source
-        and 'TEXT("create")' in script_class_journal_source
-        and "Create rollback restores deployment bytes exactly"
-        in script_class_operations_tests
-        and "for (const FString& Operation" in script_class_operations_tests
-        and "[x] **M13.2A-2b2d — packaged lifecycle replay:**"
-        in roadmap_document,
+        packaged_script_class_lifecycle_path.is_file() and
+        'IncludeScriptClassLifecycleReplay' in packaged_native_onboarding and
+        'scriptClassLifecycleReplay' in packaged_native_onboarding and
+        'unifiedscript.packaged-script-class-lifecycle/v0.1' in packaged_script_class_lifecycle and
+        'byte-exact-baseline' in packaged_script_class_lifecycle and
+        'beforeEqualsAfter' in packaged_script_class_lifecycle and
+        "@('create', 'rename', 'duplicate', 'delete')" in packaged_script_class_lifecycle and
+        'persisted-recovery-passed' in packaged_script_class_lifecycle and
+        'CaptureCreationRecoverySnapshots' in unified_script_factory_source and
+        'SaveCreatedClassPackages' in unified_script_factory_source and
+        'ClassOperationJournal::Begin' in unified_script_factory_source and
+        'TEXT("create")' in script_class_journal_source and
+        'Create rollback restores deployment bytes exactly' in script_class_operations_tests and
+        'for (const FString& Operation' in script_class_operations_tests,
         "M13.2A-2b2d packaged create/rename/duplicate/delete replay, exact rollback, or persisted recovery closure is incomplete",
     )
     checks.append(
@@ -2030,7 +1780,6 @@ def main() -> int:
     with sample_catalog_path.open("r", encoding="utf-8") as handle:
         sample_catalog = json.load(handle)
     sample_matrix_runner = sample_matrix_runner_path.read_text(encoding="utf-8")
-    sample_document = sample_document_path.read_text(encoding="utf-8")
     sample_categories = [sample["category"] for sample in sample_catalog["samples"]]
     sample_ids = [sample["id"] for sample in sample_catalog["samples"]]
     sample_runners = {
@@ -2059,55 +1808,30 @@ def main() -> int:
         "visual-code",
     }
     require(
-        sample_catalog["schemaVersion"] == "unifiedscript.sample-catalog/v0.1"
-        and sample_catalog["productVersion"] == product_release["productVersion"]
-        and set(sample_catalog["categories"]) == required_sample_categories
-        and len(sample_catalog["samples"]) == 5
-        and len(set(sample_categories)) == 5
-        and len(set(sample_ids)) == 5
-        and set(sample_categories) == required_sample_categories
-        and all(sample["sources"] for sample in sample_catalog["samples"])
-        and all(sample["assertions"] for sample in sample_catalog["samples"])
-        and all(sample["guarantees"] for sample in sample_catalog["samples"])
-        and all(sample["nonClaims"] for sample in sample_catalog["samples"])
-        and all(
-            sample["execution"]["reportSchema"].startswith("unifiedscript.")
-            for sample in sample_catalog["samples"]
-        )
-        and "unifiedscript.sample-matrix-report/v0.1" in sample_matrix_runner
-        and "Test-SampleAssertion" in sample_matrix_runner
-        and "Get-GitState" in sample_matrix_runner
-        and "Remove-DeclaredUntrackedOutputs" in sample_matrix_runner
-        and "cleanupUntracked" in sample_matrix_runner
-        and "declaredCleanupPaths" in sample_matrix_runner
-        and "finally" in sample_matrix_runner
-        and set(blockbreaker_samples) == {
-            "blockbreaker-gameplay",
-            "blockbreaker-visual-code",
-        }
-        and all(
-            set(sample["execution"]["cleanupUntracked"])
-            == blockbreaker_cleanup
-            for sample in blockbreaker_samples.values()
-        )
-        and sample_runners
-        == {
-            "tools/run-finare-alpha-acceptance.ps1",
-            "comparison/package-blockbreaker-demo.ps1",
-            "tools/run-unreal-lifecycle-stress.ps1",
-            "tools/run-unreal-data-plane-profile.ps1",
-            "comparison/verify-blockbreaker-roundtrip.ps1",
-        }
-        and "client/server gameplay replication" in sample_document
-        and "complete acceptance corpus" in sample_document
-        and "rejects an undeclared path" in sample_document
-        and "docs/UNREAL_SAMPLES.md" in release_document_paths
-        and "sample-matrix" in product_release["acceptance"]["requiredGates"]
-        and "- [x] ship minimal, gameplay, networking/server, data-plane, and visual/code"
-        in roadmap_document
-        and "M12.2 sample-matrix evidence" in roadmap_document
-        and "sample-matrix.json` reports 5/5" in roadmap_document
-        and "dedicated-server World host lifecycle" in product_release_notes,
+        sample_catalog['schemaVersion'] == 'unifiedscript.sample-catalog/v0.1' and
+        sample_catalog['productVersion'] == product_release['productVersion'] and
+        set(sample_catalog['categories']) == required_sample_categories and
+        len(sample_catalog['samples']) == 5 and
+        len(set(sample_categories)) == 5 and
+        len(set(sample_ids)) == 5 and
+        set(sample_categories) == required_sample_categories and
+        all((sample['sources'] for sample in sample_catalog['samples'])) and
+        all((sample['assertions'] for sample in sample_catalog['samples'])) and
+        all((sample['guarantees'] for sample in sample_catalog['samples'])) and
+        all((sample['nonClaims'] for sample in sample_catalog['samples'])) and
+        all((sample['execution']['reportSchema'].startswith('unifiedscript.') for sample in sample_catalog['samples'])) and
+        'unifiedscript.sample-matrix-report/v0.1' in sample_matrix_runner and
+        'Test-SampleAssertion' in sample_matrix_runner and
+        'Get-GitState' in sample_matrix_runner and
+        'Remove-DeclaredUntrackedOutputs' in sample_matrix_runner and
+        'cleanupUntracked' in sample_matrix_runner and
+        'declaredCleanupPaths' in sample_matrix_runner and
+        'finally' in sample_matrix_runner and
+        set(blockbreaker_samples) == {'blockbreaker-gameplay', 'blockbreaker-visual-code'} and
+        all((set(sample['execution']['cleanupUntracked']) == blockbreaker_cleanup for sample in blockbreaker_samples.values())) and
+        sample_runners == {'tools/run-finare-alpha-acceptance.ps1', 'comparison/package-blockbreaker-demo.ps1', 'tools/run-unreal-lifecycle-stress.ps1', 'tools/run-unreal-data-plane-profile.ps1', 'comparison/verify-blockbreaker-roundtrip.ps1'} and
+        'docs/UNREAL_SAMPLES.md' in release_document_paths and
+        'sample-matrix' in product_release['acceptance']['requiredGates'],
         "M12.2 five-category sample catalog, isolated cleanup, declarative assertions, aggregate runner, or support boundary is incomplete",
     )
     checks.append(
@@ -2131,52 +1855,25 @@ def main() -> int:
     }
     compatibility_source = compatibility_source_path.read_text(encoding="utf-8")
     compatibility_tests = compatibility_tests_path.read_text(encoding="utf-8")
-    compatibility_guide = compatibility_guide_path.read_text(encoding="utf-8")
     require(
-        compatibility_policy["schemaVersion"]
-        == "unifiedscript.compatibility-policy/v0.1"
-        and len(compatibility_families) == 19
-        and compatibility_families["unreal-reflection"]["currentVersion"]
-        == "unifiedscript.unreal-reflection/v0.5"
-        and compatibility_families["unreal-api-contract"]["currentVersion"]
-        == "unifiedscript.unreal-api-contract/v0.2"
-        and compatibility_families["compiled-program-chunk"]["upgradeStrategy"]
-        == "rebuild"
-        and compatibility_families["generated-bindings"]["upgradeStrategy"]
-        == "regenerate"
-        and compatibility_families["unreal-api-generated-surface-lock"][
-            "currentVersion"
-        ]
-        == "unifiedscript.unreal-api-generated-surface-lock/v0.1"
-        and compatibility_families["unreal-api-generated-surface-lock"][
-            "upgradeStrategy"
-        ]
-        == "regenerate"
-        and compatibility_families["unreal-data-plane-extension"]["currentVersion"]
-        == "unifiedscript.unreal-data-plane-extension/v0.1"
-        and compatibility_families["unreal-data-plane-extension"]["upgradeStrategy"]
-        == "regenerate"
-        and compatibility_families["unreal-data-plane-extension-catalog"]["currentVersion"]
-        == "unifiedscript.unreal-data-plane-extension-catalog/v0.1"
-        and compatibility_families["unreal-data-plane-extension-catalog"]["upgradeStrategy"]
-        == "regenerate"
-        and compatibility_families["unreal-abi-set"]["components"]
-        == {
-            "bootstrap": 2,
-            "callFrame": 3,
-            "event": 4,
-            "fastMember": 2,
-            "gameplayData": 4,
-            "sharedData": 4,
-        }
-        and 'args[0] is "upgrade-plan" or "upgrade-apply"' in cli_source
-        and "FinareUpgradeDisposition" in compatibility_source
-        and "RewriteMigrationsReadLegacyAndEmitCanonicalCurrentDocuments"
-        in compatibility_tests
-        and "UpgradeApplyIsAtomicWhenPlanRequiresRegenerationOrIsBlocked"
-        in compatibility_tests
-        and "JSON remains the reviewable authoring" in compatibility_guide
-        and "compatibility-policy.v0.1.json" in sdk_package,
+        compatibility_policy['schemaVersion'] == 'unifiedscript.compatibility-policy/v0.1' and
+        len(compatibility_families) == 19 and
+        compatibility_families['unreal-reflection']['currentVersion'] == 'unifiedscript.unreal-reflection/v0.5' and
+        compatibility_families['unreal-api-contract']['currentVersion'] == 'unifiedscript.unreal-api-contract/v0.2' and
+        compatibility_families['compiled-program-chunk']['upgradeStrategy'] == 'rebuild' and
+        compatibility_families['generated-bindings']['upgradeStrategy'] == 'regenerate' and
+        compatibility_families['unreal-api-generated-surface-lock']['currentVersion'] == 'unifiedscript.unreal-api-generated-surface-lock/v0.1' and
+        compatibility_families['unreal-api-generated-surface-lock']['upgradeStrategy'] == 'regenerate' and
+        compatibility_families['unreal-data-plane-extension']['currentVersion'] == 'unifiedscript.unreal-data-plane-extension/v0.1' and
+        compatibility_families['unreal-data-plane-extension']['upgradeStrategy'] == 'regenerate' and
+        compatibility_families['unreal-data-plane-extension-catalog']['currentVersion'] == 'unifiedscript.unreal-data-plane-extension-catalog/v0.1' and
+        compatibility_families['unreal-data-plane-extension-catalog']['upgradeStrategy'] == 'regenerate' and
+        compatibility_families['unreal-abi-set']['components'] == {'bootstrap': 2, 'callFrame': 3, 'event': 4, 'fastMember': 2, 'gameplayData': 4, 'sharedData': 4} and
+        'args[0] is "upgrade-plan" or "upgrade-apply"' in cli_source and
+        'FinareUpgradeDisposition' in compatibility_source and
+        'RewriteMigrationsReadLegacyAndEmitCanonicalCurrentDocuments' in compatibility_tests and
+        'UpgradeApplyIsAtomicWhenPlanRequiresRegenerationOrIsBlocked' in compatibility_tests and
+        'compatibility-policy.v0.1.json' in sdk_package,
         "Versioned compatibility policy, deterministic migration, SDK payload, or guide is missing",
     )
     checks.append("versioned artifacts plan deterministic rewrite, regeneration, and rebuild upgrades")
@@ -2190,7 +1887,6 @@ def main() -> int:
     ci_workflow = ci_workflow_path.read_text(encoding="utf-8")
     ci_lane = ci_lane_path.read_text(encoding="utf-8")
     deterministic_gate = deterministic_gate_path.read_text(encoding="utf-8")
-    ci_guide = ci_guide_path.read_text(encoding="utf-8")
     ci_lanes = {
         "managed-tests",
         "deterministic-generation",
@@ -2200,45 +1896,42 @@ def main() -> int:
         "workload-performance",
         "sdk-installation",
     }
+    from ci_policy import LANES as planned_ci_lanes
+
     require(
-        ci_workflow_path.is_file()
-        and ci_lane_path.is_file()
-        and deterministic_gate_path.is_file()
-        and all(f"'{lane}'" in ci_lane for lane in ci_lanes)
-        and all(f"- {lane}" in ci_workflow for lane in ci_lanes - {
-            "managed-tests", "deterministic-generation"
-        })
-        and "-Lane managed-tests" in ci_workflow
-        and "-Lane deterministic-generation" in ci_workflow
-        and "-RequireCleanTree" in ci_workflow
-        and "runs-on: [self-hosted, Windows, X64, ue-5.8.1]" in ci_workflow
-        and "github.event_name != 'pull_request'" in ci_workflow
-        and "actions/checkout@v7" in ci_workflow
-        and "actions/setup-dotnet@v6" in ci_workflow
-        and "actions/setup-python@v7" in ci_workflow
-        and "actions/upload-artifact@v7" in ci_workflow
-        and "unifiedscript.ci-lane/v0.1" in ci_lane
-        and "'-c', 'Debug'" in ci_lane
-        and "sourceDirty" in ci_lane
-        and "CI lane output directory must be empty" in ci_lane
-        and "run-complete-workload-suite.ps1" in ci_lane
-        and "-RequireComplete" in ci_lane
-        and "New-CleanGitCheckoutSnapshot" in ci_lane
-        and "Restore-CleanGitCheckoutSnapshot" in ci_lane
-        and "comparison-checkout-snapshot" in ci_lane
-        and "status -ne 'qualified'" in ci_lane
-        and "run-unreal-compatibility-matrix.ps1" in ci_lane
-        and "[switch]$RequireComplete" in (
-            ROOT / "comparison" / "run-complete-workload-suite.ps1"
-        ).read_text(encoding="utf-8")
-        and "**/*.json" in ci_workflow
-        and "**/*.zip" not in ci_workflow
-        and "unifiedscript.deterministic-generation-gate/v0.1"
-        in deterministic_gate
-        and "matchesSecondRun" in deterministic_gate
-        and "matchesCheckedIn" in deterministic_gate
-        and "seven independent release-candidate lanes" in ci_guide
-        and "2.327.1" in ci_guide,
+        ci_workflow_path.is_file() and
+        ci_lane_path.is_file() and
+        deterministic_gate_path.is_file() and
+        all((f"'{lane}'" in ci_lane for lane in ci_lanes)) and
+        set(planned_ci_lanes) == ci_lanes and
+        '-Lane managed-tests' in ci_workflow and
+        '-Lane deterministic-generation' in ci_workflow and
+        '-RequireCleanTree' in ci_workflow and
+        'runs-on: [self-hosted, Windows, X64, ue-5.8.1]' in ci_workflow and
+        'needs.plan.outputs.trusted' in ci_workflow and
+        'name: CI acceptance' in ci_workflow and
+        'tools/ci_policy.py verify' in ci_workflow and
+        'actions/checkout@v7' in ci_workflow and
+        'actions/setup-dotnet@v6' in ci_workflow and
+        'actions/setup-python@v7' in ci_workflow and
+        'actions/upload-artifact@v7' in ci_workflow and
+        'unifiedscript.ci-lane/v0.1' in ci_lane and
+        "'-c', 'Debug'" in ci_lane and
+        'sourceDirty' in ci_lane and
+        'CI lane output directory must be empty' in ci_lane and
+        'run-complete-workload-suite.ps1' in ci_lane and
+        '-RequireComplete' in ci_lane and
+        'New-CleanGitCheckoutSnapshot' in ci_lane and
+        'Restore-CleanGitCheckoutSnapshot' in ci_lane and
+        'comparison-checkout-snapshot' in ci_lane and
+        "status -ne 'qualified'" in ci_lane and
+        'run-unreal-compatibility-matrix.ps1' in ci_lane and
+        '[switch]$RequireComplete' in (ROOT / 'comparison' / 'run-complete-workload-suite.ps1').read_text(encoding='utf-8') and
+        '**/*.json' in ci_workflow and
+        '**/*.zip' not in ci_workflow and
+        'unifiedscript.deterministic-generation-gate/v0.1' in deterministic_gate and
+        'matchesSecondRun' in deterministic_gate and
+        'matchesCheckedIn' in deterministic_gate,
         "Clean CI lane matrix, deterministic gate, workflow isolation, or runner guide is missing",
     )
     checks.append("seven clean CI lanes isolate managed, generated, UE, package, performance, and SDK gates")
@@ -2247,16 +1940,13 @@ def main() -> int:
     from harness import load_manifest
 
     harness_manifest = load_manifest(ROOT)
-    harness_guide = (ROOT / "docs" / "HARNESS.md").read_text(encoding="utf-8")
     require(
-        (ROOT / "tools" / "tests" / "test_harness.py").is_file()
-        and "tools/harness.py run" in ci_workflow
-        and "--profile quick" in ci_workflow
-        and "artifacts/harness/runs/ci-quick/**/*.json" in ci_workflow
-        and "sourceChangedDuringRun" in (ROOT / "tools" / "harness.py").read_text(encoding="utf-8")
-        and "matches-source" in harness_guide
-        and "RELEASE_READINESS.md" in harness_guide
-        and "script-class" in harness_manifest["profiles"],
+        (ROOT / 'tools' / 'tests' / 'test_harness.py').is_file() and
+        'tools/harness.py run' in ci_workflow and
+        '--profile quick' in ci_workflow and
+        'artifacts/harness/runs/ci-quick/**/*.json' in ci_workflow and
+        'sourceChangedDuringRun' in (ROOT / 'tools' / 'harness.py').read_text(encoding='utf-8') and
+        'script-class' in harness_manifest['profiles'],
         "Engineering Harness manifest, behavior tests, evidence rules, or CI entry is missing",
     )
     checks.append("engineering Harness reuses gates with explicit scope and source-bound evidence")
@@ -2282,65 +1972,40 @@ def main() -> int:
         diagnostics_policy = json.load(handle)
     diagnostics_source = diagnostics_source_path.read_text(encoding="utf-8")
     diagnostics_tests = diagnostics_tests_path.read_text(encoding="utf-8")
-    diagnostics_guide = diagnostics_guide_path.read_text(encoding="utf-8")
     cli_project = cli_project_path.read_text(encoding="utf-8")
     require(
-        diagnostics_policy["schemaVersion"]
-        == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 33
-        and len(set(diagnostics_policy["allowedSchemas"])) == 33
-        and diagnostics_policy["maximumReportCount"] == 256
-        and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
-        and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
-        and "unifiedscript.ci-lane/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.unreal-release-gate/v0.2"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.compiled-chunk-load-profile/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.compiled-chunk-process-profile/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.readytorun-experiment/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.generation-prewarm-trial/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.generation-prewarm-experiment/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.editor-diagnostics/v0.1"
-        in diagnostics_policy["allowedSchemas"]
-        and "unifiedscript.editor-diagnostics/v0.2"
-        in diagnostics_policy["allowedSchemas"]
-        and all(
-            source_schema not in diagnostics_policy["allowedSchemas"]
-            for source_schema in {
-                "unifiedscript.hir/v0.9",
-                "unifiedscript.authoring-surface/v0.1",
-                "unifiedscript.unreal-reflection/v0.5",
-            }
-        )
-        and {"schemaVersion", "status", "phase", "metric", "sha256"}.issubset(
-            set(diagnostics_policy["safeStringPropertyNames"])
-        )
-        and {"source", "sourceText", "token", "message", "stackTrace"}.issubset(
-            set(diagnostics_policy["sensitivePropertyNames"])
-        )
-        and 'args[0] == "diagnostics-bundle"' in cli_source
-        and "finare.diagnostics-policy.json" in cli_project
-        and "unifiedscript.diagnostics-bundle/v0.1" in diagnostics_source
-        and '"safe-default"' in diagnostics_source
-        and "EnumerateFilesWithoutFollowingReparsePoints" in diagnostics_source
-        and "TryReadBounded" in diagnostics_source
-        and '"<redacted-string>"' in diagnostics_source
-        and "ArchiveTimestamp" in diagnostics_source
-        and 'reports/{envelopes.Count + 1:D4}-report.json' in diagnostics_source
-        and "SafeDefaultBundleIsDeterministicAllowlistedBoundedAndRedacted"
-        in diagnostics_tests
-        and "ordinary but proprietary" in diagnostics_tests
-        and "CliUsesBundledPolicyAndWritesTheSameArchiveTwice" in diagnostics_tests
-        and "diagnostics-policy.v0.1.json" in sdk_package
-        and "docs/DIAGNOSTICS_BUNDLES.md" in release_document_paths
-        and "redacted by default" in diagnostics_guide
-        and "v0.1 has no flag" in diagnostics_guide,
+        diagnostics_policy['schemaVersion'] == 'unifiedscript.diagnostics-policy/v0.1' and
+        len(diagnostics_policy['allowedSchemas']) == 33 and
+        len(set(diagnostics_policy['allowedSchemas'])) == 33 and
+        diagnostics_policy['maximumReportCount'] == 256 and
+        diagnostics_policy['maximumReportBytes'] == 16 * 1024 * 1024 and
+        diagnostics_policy['maximumBundleBytes'] == 64 * 1024 * 1024 and
+        'unifiedscript.ci-lane/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.unreal-release-gate/v0.2' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.compiled-chunk-load-profile/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.compiled-chunk-process-profile/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.readytorun-experiment/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.generation-prewarm-trial/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.generation-prewarm-experiment/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.editor-diagnostics/v0.1' in diagnostics_policy['allowedSchemas'] and
+        'unifiedscript.editor-diagnostics/v0.2' in diagnostics_policy['allowedSchemas'] and
+        all((source_schema not in diagnostics_policy['allowedSchemas'] for source_schema in {'unifiedscript.hir/v0.9', 'unifiedscript.authoring-surface/v0.1', 'unifiedscript.unreal-reflection/v0.5'})) and
+        {'schemaVersion', 'status', 'phase', 'metric', 'sha256'}.issubset(set(diagnostics_policy['safeStringPropertyNames'])) and
+        {'source', 'sourceText', 'token', 'message', 'stackTrace'}.issubset(set(diagnostics_policy['sensitivePropertyNames'])) and
+        'args[0] == "diagnostics-bundle"' in cli_source and
+        'finare.diagnostics-policy.json' in cli_project and
+        'unifiedscript.diagnostics-bundle/v0.1' in diagnostics_source and
+        '"safe-default"' in diagnostics_source and
+        'EnumerateFilesWithoutFollowingReparsePoints' in diagnostics_source and
+        'TryReadBounded' in diagnostics_source and
+        '"<redacted-string>"' in diagnostics_source and
+        'ArchiveTimestamp' in diagnostics_source and
+        'reports/{envelopes.Count + 1:D4}-report.json' in diagnostics_source and
+        'SafeDefaultBundleIsDeterministicAllowlistedBoundedAndRedacted' in diagnostics_tests and
+        'ordinary but proprietary' in diagnostics_tests and
+        'CliUsesBundledPolicyAndWritesTheSameArchiveTwice' in diagnostics_tests and
+        'diagnostics-policy.v0.1.json' in sdk_package and
+        'docs/DIAGNOSTICS_BUNDLES.md' in release_document_paths,
         "Privacy-safe diagnostics policy, bounded collector, deterministic archive, SDK payload, or guide is missing",
     )
     checks.append(
@@ -2390,7 +2055,6 @@ def main() -> int:
     ]
     scaffold = scaffold_path.read_text(encoding="utf-8")
     authoring_start = authoring_start_path.read_text(encoding="utf-8")
-    first_script_guide = first_script_guide_path.read_text(encoding="utf-8")
     first_script_template = required_templates[4].read_text(encoding="utf-8")
     with project_template_catalog_path.open("r", encoding="utf-8") as handle:
         project_template_catalog = json.load(handle)
@@ -2398,7 +2062,6 @@ def main() -> int:
         api_browser_sample = json.load(handle)
     project_template_runner = project_template_runner_path.read_text(encoding="utf-8")
     api_browser_source = api_browser_source_path.read_text(encoding="utf-8")
-    api_browser_guide = api_browser_guide_path.read_text(encoding="utf-8")
     api_browser_server = api_browser_server_path.read_text(encoding="utf-8")
     cli_program = cli_program_path.read_text(encoding="utf-8")
     workbench_index = workbench_index_path.read_text(encoding="utf-8")
@@ -2441,36 +2104,24 @@ def main() -> int:
         / "FinareEditorModule.cpp"
     ).read_text(encoding="utf-8")
     require(
-        scaffold_path.is_file()
-        and authoring_start_path.is_file()
-        and all(path.is_file() for path in required_templates)
-        and "unifiedscript.project-scaffold-report/v0.2" in scaffold
-        and "unifiedscript.project-template-catalog/v0.1" in scaffold
-        and "setup-unreal-project.ps1" in scaffold
-        and "--identity" in authoring_start
-        and "--publish-initial" in authoring_start
-        and "debug-serve" in authoring_start
-        and "--api-browser" in authoring_start
-        and "Authoring\\Workbench" in authoring_start
-        and "using System;" in first_script_template
-        and '[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]'
-        in first_script_template
-        and "[Visual]" in first_script_template
-        and "editor play" in first_script_guide.lower()
-        and "packaged play" in first_script_guide.lower()
-        and not any(
-            fixture_name in plugin_implementation
-            for fixture_name in (
-                "BlockBreaker",
-                "Finare.Unreal.Demo",
-                "DamagePolicy",
-                "DemoSurfacePath",
-                "HandleLoadDemo",
-            )
-        )
-        and "FinareSmoke" not in runtime_module
-        and "FinareSmoke" in host_module
-        and ".InitialSurfacePath(" not in editor_module,
+        scaffold_path.is_file() and
+        authoring_start_path.is_file() and
+        all((path.is_file() for path in required_templates)) and
+        'unifiedscript.project-scaffold-report/v0.2' in scaffold and
+        'unifiedscript.project-template-catalog/v0.1' in scaffold and
+        'setup-unreal-project.ps1' in scaffold and
+        '--identity' in authoring_start and
+        '--publish-initial' in authoring_start and
+        'debug-serve' in authoring_start and
+        '--api-browser' in authoring_start and
+        'Authoring\\Workbench' in authoring_start and
+        'using System;' in first_script_template and
+        '[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]' in first_script_template and
+        '[Visual]' in first_script_template and
+        not any((fixture_name in plugin_implementation for fixture_name in ('BlockBreaker', 'Finare.Unreal.Demo', 'DamagePolicy', 'DemoSurfacePath', 'HandleLoadDemo'))) and
+        'FinareSmoke' not in runtime_module and
+        'FinareSmoke' in host_module and
+        '.InitialSurfacePath(' not in editor_module,
         "Project-agnostic first-script templates or fixture isolation is missing",
     )
     checks.append("generic first-script scaffold isolates fixtures from the plugin")
@@ -2480,65 +2131,37 @@ def main() -> int:
     ]
     browser_summary = api_browser_sample["summary"]
     require(
-        project_template_catalog["schemaVersion"]
-        == "unifiedscript.project-template-catalog/v0.1"
-        and project_template_catalog["productVersion"]
-        == product_release["productVersion"]
-        and project_template_catalog["defaultTemplate"] == "minimal"
-        and project_template_ids
-        == ["minimal", "visual-gameplay", "data-plane"]
-        and len(set(project_template_ids)) == len(project_template_ids)
-        and all(
-            template["capabilities"]
-            and template["nonClaims"]
-            and not Path(template["scriptTemplate"]).is_absolute()
-            and ".." not in Path(template["scriptTemplate"]).parts
-            and (template_root / template["scriptTemplate"]).is_file()
-            for template in project_template_catalog["templates"]
-        )
-        and "unifiedscript.project-template-acceptance/v0.1"
-        in project_template_runner
-        and "new-finare-project.ps1" in project_template_runner
-        and "-SkipOnboarding" in project_template_runner
-        and api_browser_sample["schemaVersion"]
-        == "unifiedscript.unreal-api-browser/v0.1"
-        and api_browser_sample["sources"]
-        == {
-            "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
-            "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
-            "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
-            "inputSha256": api_browser_sample["sources"]["inputSha256"],
-        }
-        and len(api_browser_sample["sources"]["inputSha256"]) == 64
-        and browser_summary["typeCount"] == len(api_browser_sample["types"])
-        and browser_summary["nodeCount"]
-        == sum(len(type_entry["members"]) for type_entry in api_browser_sample["types"])
-        and browser_summary["diagnosticCount"]
-        == len(api_browser_sample["diagnostics"])
-        and "UnrealApiContractJson.Serialize" in api_browser_source
-        and "UnrealApiNodeCatalogGenerator.Serialize" in api_browser_source
-        and "UnrealBindingCoverageJson.Serialize" in api_browser_source
-        and "SHA256.HashData" in api_browser_source
-        and 'case "--browser-out"' in cli_program
-        and "UnrealApiBrowserGenerator.Generate" in cli_program
-        and 'path != "/api/unreal/browser"' in api_browser_server
-        and 'context.Request.HttpMethod != "GET"' in api_browser_server
-        and 'id="apiBrowserButton"' in workbench_index
-        and 'id="apiBrowserDrawer"' in workbench_index
-        and "validateApiBrowser" in workbench_script
-        and "dataPlaneOperation: 'DATA PLANE'" in workbench_script
-        and "BrowserOutput" in onboarding_script
-        and "Assert-GeneratedFileMatches -Expected $resolved.browserOutput"
-        in onboarding_script
-        and "docs/PROJECT_TEMPLATES_AND_API_BROWSER.md"
-        in release_document_paths
-        and "project-template-and-api-browser"
-        in product_release["acceptance"]["requiredGates"]
-        and "GET /api/unreal/browser" in api_browser_guide
-        and "reviewed starting points" in product_release_notes
-        and "- [x] provide project templates and an API/diagnostic browser"
-        in roadmap_document
-        and "M12.2 template/browser evidence" in roadmap_document,
+        project_template_catalog['schemaVersion'] == 'unifiedscript.project-template-catalog/v0.1' and
+        project_template_catalog['productVersion'] == product_release['productVersion'] and
+        project_template_catalog['defaultTemplate'] == 'minimal' and
+        project_template_ids == ['minimal', 'visual-gameplay', 'data-plane'] and
+        len(set(project_template_ids)) == len(project_template_ids) and
+        all((template['capabilities'] and template['nonClaims'] and (not Path(template['scriptTemplate']).is_absolute()) and ('..' not in Path(template['scriptTemplate']).parts) and (template_root / template['scriptTemplate']).is_file() for template in project_template_catalog['templates'])) and
+        'unifiedscript.project-template-acceptance/v0.1' in project_template_runner and
+        'new-finare-project.ps1' in project_template_runner and
+        '-SkipOnboarding' in project_template_runner and
+        api_browser_sample['schemaVersion'] == 'unifiedscript.unreal-api-browser/v0.1' and
+        api_browser_sample['sources'] == {'contractSchemaVersion': 'unifiedscript.unreal-api-contract/v0.2', 'nodeCatalogSchemaVersion': 'unifiedscript.unreal-api-node-catalog/v0.2', 'coverageSchemaVersion': 'unifiedscript.unreal-binding-coverage/v0.2', 'inputSha256': api_browser_sample['sources']['inputSha256']} and
+        len(api_browser_sample['sources']['inputSha256']) == 64 and
+        browser_summary['typeCount'] == len(api_browser_sample['types']) and
+        browser_summary['nodeCount'] == sum((len(type_entry['members']) for type_entry in api_browser_sample['types'])) and
+        browser_summary['diagnosticCount'] == len(api_browser_sample['diagnostics']) and
+        'UnrealApiContractJson.Serialize' in api_browser_source and
+        'UnrealApiNodeCatalogGenerator.Serialize' in api_browser_source and
+        'UnrealBindingCoverageJson.Serialize' in api_browser_source and
+        'SHA256.HashData' in api_browser_source and
+        'case "--browser-out"' in cli_program and
+        'UnrealApiBrowserGenerator.Generate' in cli_program and
+        'path != "/api/unreal/browser"' in api_browser_server and
+        'context.Request.HttpMethod != "GET"' in api_browser_server and
+        'id="apiBrowserButton"' in workbench_index and
+        'id="apiBrowserDrawer"' in workbench_index and
+        'validateApiBrowser' in workbench_script and
+        "dataPlaneOperation: 'DATA PLANE'" in workbench_script and
+        'BrowserOutput' in onboarding_script and
+        'Assert-GeneratedFileMatches -Expected $resolved.browserOutput' in onboarding_script and
+        'docs/PROJECT_TEMPLATES_AND_API_BROWSER.md' in release_document_paths and
+        'project-template-and-api-browser' in product_release['acceptance']['requiredGates'],
         "Versioned project templates or the Contract-owned API/diagnostic browser is incomplete",
     )
     checks.append(
@@ -2551,37 +2174,34 @@ def main() -> int:
     alpha_acceptance_doc_path = ROOT / "docs" / "ALPHA_ACCEPTANCE.md"
     release_gate_path = ROOT / "tools" / "package-unreal-release.ps1"
     alpha_acceptance = alpha_acceptance_path.read_text(encoding="utf-8")
-    alpha_acceptance_doc = alpha_acceptance_doc_path.read_text(encoding="utf-8")
     release_gate = release_gate_path.read_text(encoding="utf-8")
     require(
-        alpha_acceptance_path.is_file()
-        and alpha_acceptance_doc_path.is_file()
-        and "unifiedscript.alpha-acceptance/v0.1" in alpha_acceptance
-        and "managed-debug-fixture" in alpha_acceptance
-        and "ProjectLoadingDemo.csproj" in alpha_acceptance
-        and "02-repository-validator.log" not in alpha_acceptance
-        and "Restore-AcceptanceConfigs" in alpha_acceptance
-        and "DefaultEngine.ini" in alpha_acceptance
-        and "managed-tests" in alpha_acceptance
-        and "repository-validator" in alpha_acceptance
-        and "unreal-onboarding" in alpha_acceptance
-        and "package-smoke" in alpha_acceptance
-        and "managed-tests.trx" in alpha_acceptance
-        and "onboarding-report.json" in alpha_acceptance
-        and "release-gate.json" in alpha_acceptance
-        and "USACC2001" in alpha_acceptance
-        and "retry =" in alpha_acceptance
-        and "alpha-acceptance.md" in alpha_acceptance
-        and "SkipPackageSmoke" in alpha_acceptance
-        and "OutputDirectory" in release_gate
-        and "Find-ReleaseFileWithRetry" in release_gate
-        and "TimeoutSeconds = 15" in release_gate
-        and "Convert-ToExtendedLengthPath" in release_gate
-        and "[IO.Directory]::EnumerateFiles" in release_gate
-        and "Where-Object Name -EQ $Filter" in release_gate
-        and "automation = [ordered]@{" in onboarding_script
-        and "Failure still produces both top-level reports"
-        in alpha_acceptance_doc,
+        alpha_acceptance_path.is_file() and
+        alpha_acceptance_doc_path.is_file() and
+        'unifiedscript.alpha-acceptance/v0.1' in alpha_acceptance and
+        'managed-debug-fixture' in alpha_acceptance and
+        'ProjectLoadingDemo.csproj' in alpha_acceptance and
+        '02-repository-validator.log' not in alpha_acceptance and
+        'Restore-AcceptanceConfigs' in alpha_acceptance and
+        'DefaultEngine.ini' in alpha_acceptance and
+        'managed-tests' in alpha_acceptance and
+        'repository-validator' in alpha_acceptance and
+        'unreal-onboarding' in alpha_acceptance and
+        'package-smoke' in alpha_acceptance and
+        'managed-tests.trx' in alpha_acceptance and
+        'onboarding-report.json' in alpha_acceptance and
+        'release-gate.json' in alpha_acceptance and
+        'USACC2001' in alpha_acceptance and
+        'retry =' in alpha_acceptance and
+        'alpha-acceptance.md' in alpha_acceptance and
+        'SkipPackageSmoke' in alpha_acceptance and
+        'OutputDirectory' in release_gate and
+        'Find-ReleaseFileWithRetry' in release_gate and
+        'TimeoutSeconds = 15' in release_gate and
+        'Convert-ToExtendedLengthPath' in release_gate and
+        '[IO.Directory]::EnumerateFiles' in release_gate and
+        'Where-Object Name -EQ $Filter' in release_gate and
+        'automation = [ordered]@{' in onboarding_script,
         "Single-command alpha acceptance reporting or failure UX is missing",
     )
     checks.append("one alpha gate reports generation, tests, UE, Automation, and package smoke")
@@ -2868,6 +2488,10 @@ def main() -> int:
     debug_server_source = (
         ROOT / "src" / "Finare.Cli" / "CoreClrDebugHttpServer.cs"
     ).read_text(encoding="utf-8")
+    debug_server_source += "\n" + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "src" / "Finare.Cli").glob("Authoring*.cs"))
+    )
     require(
         'args[0] == "debug-serve"' in cli_source
         and "CoreClrDebugHttpServer" in cli_source
@@ -4059,9 +3683,6 @@ def main() -> int:
     unreal_data_plane_extension_helper = (
         unreal_data_plane_extension_helper_path.read_text(encoding="utf-8")
     )
-    unreal_data_plane_extension_doc = (
-        unreal_data_plane_extension_doc_path.read_text(encoding="utf-8")
-    )
     unreal_data_plane_profile_demo = unreal_data_plane_profile_demo_path.read_text(
         encoding="utf-8"
     )
@@ -4084,7 +3705,6 @@ def main() -> int:
         encoding="utf-8"
     )
     unreal_runtime_build = unreal_runtime_build_path.read_text(encoding="utf-8")
-    unreal_runtime_module = unreal_runtime_module_path.read_text(encoding="utf-8")
     with unreal_coreclr_runtime_config_path.open("r", encoding="utf-8") as handle:
         unreal_coreclr_runtime_config = json.load(handle)
     unreal_managed_bridge = unreal_managed_bridge_path.read_text(encoding="utf-8")
@@ -4142,12 +3762,6 @@ def main() -> int:
     unreal_gameplay_data_abi_v4_test = (
         unreal_gameplay_data_abi_v4_test_path.read_text(encoding="utf-8")
     )
-    unreal_shared_data_abi_v4_test = (
-        unreal_shared_data_abi_v4_test_path.read_text(encoding="utf-8")
-    )
-    unreal_gameplay_data_doc = unreal_gameplay_data_doc_path.read_text(
-        encoding="utf-8"
-    )
     unreal_async_service_header = unreal_async_service_header_path.read_text(
         encoding="utf-8"
     )
@@ -4159,9 +3773,6 @@ def main() -> int:
     )
     unreal_async_service_abi_v5_test = (
         unreal_async_service_abi_v5_test_path.read_text(encoding="utf-8")
-    )
-    unreal_async_service_doc = unreal_async_service_doc_path.read_text(
-        encoding="utf-8"
     )
     unreal_generation_invocation_bridge = (
         unreal_generation_invocation_bridge_path.read_text(encoding="utf-8")
@@ -4204,7 +3815,6 @@ def main() -> int:
     )
     with unreal_benchmark_thresholds_path.open("r", encoding="utf-8") as handle:
         unreal_benchmark_thresholds = json.load(handle)
-    unreal_performance_doc = unreal_performance_doc_path.read_text(encoding="utf-8")
     unreal_actor_demo_source = unreal_actor_demo_source_path.read_text(encoding="utf-8")
     unreal_lifecycle_stress_demo_source = (
         unreal_lifecycle_stress_demo_source_path.read_text(encoding="utf-8")
@@ -4266,11 +3876,7 @@ def main() -> int:
     unreal_demo_helper = unreal_demo_helper_path.read_text(encoding="utf-8")
     unreal_authoring_helper = unreal_authoring_helper_path.read_text(encoding="utf-8")
     unreal_release_helper = unreal_release_helper_path.read_text(encoding="utf-8")
-    unreal_release_doc = unreal_release_doc_path.read_text(encoding="utf-8")
     unreal_compatibility_helper = unreal_compatibility_helper_path.read_text(
-        encoding="utf-8"
-    )
-    unreal_compatibility_doc = unreal_compatibility_doc_path.read_text(
         encoding="utf-8"
     )
     unreal_test_project = unreal_test_project_path.read_text(encoding="utf-8")
@@ -4745,32 +4351,26 @@ def main() -> int:
     )
     checks.append("one versioned schema generates native and managed data-plane layouts")
     require(
-        "FFinareGameplayDataTransportV4" in unreal_gameplay_data_header
-        and "sizeof(FFinareCommandV4) == 224" in unreal_data_plane_native_layout
-        and "sizeof(FFinareTraceResultV4) == 168"
-        in unreal_data_plane_native_layout
-        and "sizeof(FFinareOverlapRequestV1) == 160"
-        in unreal_data_plane_native_layout
-        and "sizeof(FFinareOverlapResultV1) == 48"
-        in unreal_data_plane_native_layout
-        and "ExecuteCommittedCommands" in unreal_gameplay_data_source
-        and "LineTraceSingleByChannel" in unreal_gameplay_data_source
-        and "SweepSingleByChannel" in unreal_gameplay_data_source
-        and "OverlapMultiByChannel" in unreal_gameplay_data_source
-        and "GameplayDataTransport" in unreal_native_transport_header
-        and "Finare_GetGameplayDataTransportV4"
-        in unreal_native_transport_source
-        and "OnWorldPreActorTick" in unreal_world_host_source
-        and "OnWorldPostActorTick" in unreal_world_host_source
-        and "UnrealCommandBatch" in unreal_gameplay_data_abi_v4
-        and "UnrealGameplayEventSnapshot" in unreal_gameplay_data_abi_v4
-        and "UnrealTraceBatch" in unreal_gameplay_data_abi_v4
-        and "UnrealOverlapBatch" in unreal_gameplay_data_abi_v4
-        and "LayoutMatchesNativeGameplayDataContract"
-        in unreal_gameplay_data_abi_v4_test
-        and "CommandEventAndBatchTrace" in unreal_native_transport_test
-        and "Gameplay Data ABI v4" in unreal_demo_source
-        and "World phase scheduler" in unreal_gameplay_data_doc,
+        'FFinareGameplayDataTransportV4' in unreal_gameplay_data_header and
+        'sizeof(FFinareCommandV4) == 224' in unreal_data_plane_native_layout and
+        'sizeof(FFinareTraceResultV4) == 168' in unreal_data_plane_native_layout and
+        'sizeof(FFinareOverlapRequestV1) == 160' in unreal_data_plane_native_layout and
+        'sizeof(FFinareOverlapResultV1) == 48' in unreal_data_plane_native_layout and
+        'ExecuteCommittedCommands' in unreal_gameplay_data_source and
+        'LineTraceSingleByChannel' in unreal_gameplay_data_source and
+        'SweepSingleByChannel' in unreal_gameplay_data_source and
+        'OverlapMultiByChannel' in unreal_gameplay_data_source and
+        'GameplayDataTransport' in unreal_native_transport_header and
+        'Finare_GetGameplayDataTransportV4' in unreal_native_transport_source and
+        'OnWorldPreActorTick' in unreal_world_host_source and
+        'OnWorldPostActorTick' in unreal_world_host_source and
+        'UnrealCommandBatch' in unreal_gameplay_data_abi_v4 and
+        'UnrealGameplayEventSnapshot' in unreal_gameplay_data_abi_v4 and
+        'UnrealTraceBatch' in unreal_gameplay_data_abi_v4 and
+        'UnrealOverlapBatch' in unreal_gameplay_data_abi_v4 and
+        'LayoutMatchesNativeGameplayDataContract' in unreal_gameplay_data_abi_v4_test and
+        'CommandEventAndBatchTrace' in unreal_native_transport_test and
+        'Gameplay Data ABI v4' in unreal_demo_source,
         "World phase, command/event buffer, or Batch Trace contract is missing",
     )
     checks.append("UE gameplay data plane batches World commands, events, traces, and overlaps")
@@ -4826,62 +4426,41 @@ def main() -> int:
     )
     checks.append("UE data-plane routing is backed by matched live-CoreCLR profiling")
     require(
-        any(
-            item["name"] == "GeneratedDataViewV1"
-            and item["expectedSize"] == 64
-            for item in unreal_data_plane_schema["structs"]
-        )
-        and any(
-            item["name"] == "FixedValueCollectionSnapshotV1"
-            and item["expectedSize"] == 104
-            for item in unreal_data_plane_schema["structs"]
-        )
-        and any(
-            item["name"] == "BufferedGameplayEventV1"
-            and item["expectedSize"] == 48
-            for item in unreal_data_plane_schema["structs"]
-        )
-        and "PublishGeneratedSnapshot" in unreal_shared_data_header
-        and "AcquireGeneratedSnapshot" in unreal_shared_data_source
-        and "QueueGeneratedEvents" in unreal_gameplay_data_header
-        and "PublishPendingGeneratedEvents" in unreal_gameplay_data_source
-        and "PublishGeneratedSnapshotRows" in unreal_world_host_header
-        and "QueueGeneratedEventRows" in unreal_world_host_header
-        and "GeneratedSnapshotChannels" in unreal_native_transport_source
-        and "GeneratedEventChannels" in unreal_native_transport_source
-        and "ChannelsExtendedTransportTableSize = 104"
-        in unreal_shared_data_abi_v4
-        and "ChannelsExtendedTransportTableSize = 200"
-        in unreal_gameplay_data_abi_v4
-        and "AcquireGeneratedSnapshot<T>" in unreal_shared_data_abi_v4
-        and "AcquireGeneratedEvents<T>" in unreal_shared_data_abi_v4
-        and "UnrealGeneratedDataSnapshot<T>" in unreal_shared_data_abi_v4
-        and "ReadsGeneratedSnapshotAndBufferedEventsWithoutCopying"
-        in unreal_gameplay_data_abi_v4_test
-        and "Generated event visibility is one-frame and overflow is observable"
-        in unreal_native_transport_test
-        and "Generated snapshot publication rejects the schema entry bound"
-        in unreal_native_transport_test
-        and "Generated snapshot and event channels" in unreal_gameplay_data_doc,
+        any((item['name'] == 'GeneratedDataViewV1' and item['expectedSize'] == 64 for item in unreal_data_plane_schema['structs'])) and
+        any((item['name'] == 'FixedValueCollectionSnapshotV1' and item['expectedSize'] == 104 for item in unreal_data_plane_schema['structs'])) and
+        any((item['name'] == 'BufferedGameplayEventV1' and item['expectedSize'] == 48 for item in unreal_data_plane_schema['structs'])) and
+        'PublishGeneratedSnapshot' in unreal_shared_data_header and
+        'AcquireGeneratedSnapshot' in unreal_shared_data_source and
+        'QueueGeneratedEvents' in unreal_gameplay_data_header and
+        'PublishPendingGeneratedEvents' in unreal_gameplay_data_source and
+        'PublishGeneratedSnapshotRows' in unreal_world_host_header and
+        'QueueGeneratedEventRows' in unreal_world_host_header and
+        'GeneratedSnapshotChannels' in unreal_native_transport_source and
+        'GeneratedEventChannels' in unreal_native_transport_source and
+        'ChannelsExtendedTransportTableSize = 104' in unreal_shared_data_abi_v4 and
+        'ChannelsExtendedTransportTableSize = 200' in unreal_gameplay_data_abi_v4 and
+        'AcquireGeneratedSnapshot<T>' in unreal_shared_data_abi_v4 and
+        'AcquireGeneratedEvents<T>' in unreal_shared_data_abi_v4 and
+        'UnrealGeneratedDataSnapshot<T>' in unreal_shared_data_abi_v4 and
+        'ReadsGeneratedSnapshotAndBufferedEventsWithoutCopying' in unreal_gameplay_data_abi_v4_test and
+        'Generated event visibility is one-frame and overflow is observable' in unreal_native_transport_test and
+        'Generated snapshot publication rejects the schema entry bound' in unreal_native_transport_test,
         "M10.2 generated snapshot/event channels or their lifecycle gates are missing",
     )
     checks.append(
         "generated snapshot and event channels are schema-owned, bounded, World-safe, and zero-copy"
     )
     require(
-        "FFinareAsyncTransportV5" in unreal_async_service_header
-        and "GenerationOwnership" in unreal_async_service_header
-        and "RequestAsyncLoad" in unreal_async_service_source
-        and "CancelOwner" in unreal_async_service_source
-        and "AsyncTransport" in unreal_native_transport_header
-        and "Finare_GetAsyncTransportV5" in unreal_native_transport_source
-        and "UnrealAsyncScope" in unreal_async_service_abi_v5
-        and "LoadObjectAsync" in unreal_async_service_abi_v5
-        and "ScopeCompletesDelayAndAssetLoadThenCancelsItsGeneration"
-        in unreal_async_service_abi_v5_test
-        and "AsyncService.DelayLoadCancelAndLifecycle"
-        in unreal_native_transport_test
-        and "generation-owned" in unreal_async_service_doc,
+        'FFinareAsyncTransportV5' in unreal_async_service_header and
+        'GenerationOwnership' in unreal_async_service_header and
+        'RequestAsyncLoad' in unreal_async_service_source and
+        'CancelOwner' in unreal_async_service_source and
+        'AsyncTransport' in unreal_native_transport_header and
+        'Finare_GetAsyncTransportV5' in unreal_native_transport_source and
+        'UnrealAsyncScope' in unreal_async_service_abi_v5 and
+        'LoadObjectAsync' in unreal_async_service_abi_v5 and
+        'ScopeCompletesDelayAndAssetLoadThenCancelsItsGeneration' in unreal_async_service_abi_v5_test and
+        'AsyncService.DelayLoadCancelAndLifecycle' in unreal_native_transport_test,
         "ABI v5 async services, cancellation, or generation lifecycle gate is missing",
     )
     checks.append("UE async services are World-scoped, timeout-aware, and generation-owned")
@@ -4907,31 +4486,27 @@ def main() -> int:
     )
     checks.append("UE lifecycle stress covers deletion, travel, PIE, multi-World, and reload")
     require(
-        unreal_benchmark_thresholds["schemaVersion"]
-        == "unifiedscript.unreal-benchmark-thresholds/v0.2"
-        and unreal_benchmark_thresholds["scenario"] == "generated-int32-add"
-        and unreal_benchmark_thresholds["minimumWarmupIterations"] >= 4096
-        and unreal_benchmark_thresholds["minimumIterations"] >= 100000
-        and unreal_benchmark_thresholds["minimumSampleCount"] >= 5
-        and unreal_benchmark_thresholds["maxFinareAllocatedBytes"] == 0
-        and unreal_benchmark_thresholds["maxFinareToPuertsRatio"] <= 0.95
-        and "SampleCount = 5" in unreal_benchmark_demo_source
-        and "Benchmark:v3" in unreal_benchmark_demo_source
-        and "GC.GetTotalPauseDuration" in unreal_benchmark_demo_source
-        and "Array.Sort(samples)" in unreal_benchmark_demo_source
-        and "unifiedscript.unreal-benchmark/v0.3" in unreal_world_host_test
-        and "memoryHighWaterBytes" in unreal_world_host_test
-        and "startupMilliseconds" in unreal_world_host_test
-        and "NativeSamples.Sort()" in unreal_world_host_test
-        and "machineFingerprint" in unreal_benchmark_helper
-        and "$puerts.configuration -ne $nativeResult.configuration"
-        in unreal_benchmark_helper
-        and "$puerts.engineMinor -ne" in unreal_benchmark_helper
-        and "$puerts.sampleCount -ne" in unreal_benchmark_helper
-        and "SuiteMetricsPath" in unreal_benchmark_helper
-        and "gcPauseMilliseconds" in unreal_benchmark_helper
-        and "-RequirePuerts" in unreal_performance_doc
-        and "no performance claim" in unreal_performance_doc,
+        unreal_benchmark_thresholds['schemaVersion'] == 'unifiedscript.unreal-benchmark-thresholds/v0.2' and
+        unreal_benchmark_thresholds['scenario'] == 'generated-int32-add' and
+        unreal_benchmark_thresholds['minimumWarmupIterations'] >= 4096 and
+        unreal_benchmark_thresholds['minimumIterations'] >= 100000 and
+        unreal_benchmark_thresholds['minimumSampleCount'] >= 5 and
+        unreal_benchmark_thresholds['maxFinareAllocatedBytes'] == 0 and
+        unreal_benchmark_thresholds['maxFinareToPuertsRatio'] <= 0.95 and
+        'SampleCount = 5' in unreal_benchmark_demo_source and
+        'Benchmark:v3' in unreal_benchmark_demo_source and
+        'GC.GetTotalPauseDuration' in unreal_benchmark_demo_source and
+        'Array.Sort(samples)' in unreal_benchmark_demo_source and
+        'unifiedscript.unreal-benchmark/v0.3' in unreal_world_host_test and
+        'memoryHighWaterBytes' in unreal_world_host_test and
+        'startupMilliseconds' in unreal_world_host_test and
+        'NativeSamples.Sort()' in unreal_world_host_test and
+        'machineFingerprint' in unreal_benchmark_helper and
+        '$puerts.configuration -ne $nativeResult.configuration' in unreal_benchmark_helper and
+        '$puerts.engineMinor -ne' in unreal_benchmark_helper and
+        '$puerts.sampleCount -ne' in unreal_benchmark_helper and
+        'SuiteMetricsPath' in unreal_benchmark_helper and
+        'gcPauseMilliseconds' in unreal_benchmark_helper,
         "Reproducible Unreal/Puerts performance comparison gate is incomplete",
     )
     checks.append("UE performance gate uses median samples and matched Puerts environments")
@@ -5014,7 +4589,6 @@ def main() -> int:
     puerts_inventory_builder = puerts_inventory_builder_path.read_text(
         encoding="utf-8"
     )
-    roadmap = roadmap_path.read_text(encoding="utf-8")
     facade_coverage = [
         entry
         for entry in blockbreaker_coverage["entries"]
@@ -5037,44 +4611,36 @@ def main() -> int:
         "itemCount": 74,
     }
     require(
-        blockbreaker_inventory["schemaVersion"]
-        == "unifiedscript.puerts-project-inventory/v0.1"
-        and blockbreaker_inventory["summary"] == expected_inventory_summary
-        and len(blockbreaker_inventory["items"]) == 74
-        and blockbreaker_coverage["schemaVersion"]
-        == "unifiedscript.puerts-migration-coverage/v0.1"
-        and blockbreaker_coverage["inventoryFingerprint"]
-        == blockbreaker_inventory["sourceFingerprint"]
-        and len(blockbreaker_coverage["entries"]) == 74
-        and blockbreaker_report["schemaVersion"]
-        == "unifiedscript.puerts-migration-report/v0.1"
-        and blockbreaker_report["inventoryFingerprint"]
-        == blockbreaker_inventory["sourceFingerprint"]
-        and blockbreaker_report["fingerprintMatches"]
-        and blockbreaker_report["passed"]
-        and blockbreaker_report["inventoryItemCount"] == 74
-        and blockbreaker_report["coveredItemCount"] == 74
-        and blockbreaker_report["uncoveredItemCount"] == 0
-        and blockbreaker_report["staleEntryCount"] == 0
-        and len(facade_coverage) == 1
-        and facade_coverage[0]["route"] == "verification-only"
-        and facade_coverage[0]["notes"].strip()
-        and "UnrealPuertsMigrationInventoryBuilder" in puerts_inventory_builder
-        and "JsonUnmappedMemberHandling.Disallow" in puerts_inventory_builder
-        and "requires an explicit boundary explanation" in puerts_inventory_builder
-        and 'args[0] == "ue-puerts-inventory"' in cli_source
-        and "--fail-on-uncovered" in cli_source
-        and "Plugins\\Puerts" in blockbreaker_audit
-        and "shared assets changed during migration" in blockbreaker_audit
-        and "generated binding coverage is incomplete" in blockbreaker_audit
-        and "scriptAssets.Count -ne 2" in blockbreaker_audit
-        and "audit-blockbreaker-migration.ps1" in blockbreaker_gameplay_runner
-        and "audit-blockbreaker-migration.ps1" in blockbreaker_smoke_runner
-        and "audit-blockbreaker-migration.ps1" in blockbreaker_package_runner
-        and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
-        and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
-        and "- [x] inventory all Puerts scripts" in roadmap
-        and "### M8.3 — Asset, state, event, and API authoring" in roadmap,
+        blockbreaker_inventory['schemaVersion'] == 'unifiedscript.puerts-project-inventory/v0.1' and
+        blockbreaker_inventory['summary'] == expected_inventory_summary and
+        len(blockbreaker_inventory['items']) == 74 and
+        blockbreaker_coverage['schemaVersion'] == 'unifiedscript.puerts-migration-coverage/v0.1' and
+        blockbreaker_coverage['inventoryFingerprint'] == blockbreaker_inventory['sourceFingerprint'] and
+        len(blockbreaker_coverage['entries']) == 74 and
+        blockbreaker_report['schemaVersion'] == 'unifiedscript.puerts-migration-report/v0.1' and
+        blockbreaker_report['inventoryFingerprint'] == blockbreaker_inventory['sourceFingerprint'] and
+        blockbreaker_report['fingerprintMatches'] and
+        blockbreaker_report['passed'] and
+        blockbreaker_report['inventoryItemCount'] == 74 and
+        blockbreaker_report['coveredItemCount'] == 74 and
+        blockbreaker_report['uncoveredItemCount'] == 0 and
+        blockbreaker_report['staleEntryCount'] == 0 and
+        len(facade_coverage) == 1 and
+        facade_coverage[0]['route'] == 'verification-only' and
+        facade_coverage[0]['notes'].strip() and
+        'UnrealPuertsMigrationInventoryBuilder' in puerts_inventory_builder and
+        'JsonUnmappedMemberHandling.Disallow' in puerts_inventory_builder and
+        'requires an explicit boundary explanation' in puerts_inventory_builder and
+        'args[0] == "ue-puerts-inventory"' in cli_source and
+        '--fail-on-uncovered' in cli_source and
+        'Plugins\\Puerts' in blockbreaker_audit and
+        'shared assets changed during migration' in blockbreaker_audit and
+        'generated binding coverage is incomplete' in blockbreaker_audit and
+        'scriptAssets.Count -ne 2' in blockbreaker_audit and
+        'audit-blockbreaker-migration.ps1' in blockbreaker_gameplay_runner and
+        'audit-blockbreaker-migration.ps1' in blockbreaker_smoke_runner and
+        'audit-blockbreaker-migration.ps1' in blockbreaker_package_runner and
+        'puertsOrTypeScriptPackageFiles' in blockbreaker_package_runner,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -5098,39 +4664,28 @@ def main() -> int:
     puerts_project_scanner_test = puerts_project_scanner_test_path.read_text(
         encoding="utf-8"
     )
-    puerts_migration_document = puerts_migration_document_path.read_text(
-        encoding="utf-8"
-    )
     require(
-        "unifiedscript.puerts-project-scan/v0.1" in puerts_project_scanner
-        and "DefaultSourceScriptRoots" in puerts_project_scanner
-        and "DefaultDeployedScriptRoots" in puerts_project_scanner
-        and "MaximumFileCount = 50_000" in puerts_project_scanner
-        and '"module"' in puerts_project_scanner
-        and '"unrealApi"' in puerts_project_scanner
-        and '"puertsApi"' in puerts_project_scanner
-        and '"lifecycleHook"' in puerts_project_scanner
-        and '"assetReference"' in puerts_project_scanner
-        and '"delegatePattern"' in puerts_project_scanner
-        and '"asyncPattern"' in puerts_project_scanner
-        and '"unsupportedDynamicBehavior"' in puerts_project_scanner
-        and '"scanLimit"' in puerts_project_scanner
-        and 'args[0] == "ue-puerts-scan"' in cli_source
-        and "--script-root" in cli_source
-        and "--native-root" in cli_source
-        and "--fail-on-blockers" in cli_source
-        and "ScansCustomRootsAndClassifiesMigrationRisksDeterministically"
-        in puerts_project_scanner_test
-        and "AutoDiscoveryPrefersAuthoredSourcesOverDeployedJavaScript"
-        in puerts_project_scanner_test
-        and "ReportsIncompleteBoundedScanInsteadOfSilentlyDroppingSources"
-        in puerts_project_scanner_test
-        and "CliWritesScanAndCanFailAutomationOnBlockers"
-        in puerts_project_scanner_test
-        and "blind source translation" in puerts_migration_document
-        and "exactly four authored TypeScript files" in puerts_migration_document
-        and "- [x] scan a Puerts project into an inventory" in roadmap
-        and "- [x] support incremental coexistence during migration" in roadmap,
+        'unifiedscript.puerts-project-scan/v0.1' in puerts_project_scanner and
+        'DefaultSourceScriptRoots' in puerts_project_scanner and
+        'DefaultDeployedScriptRoots' in puerts_project_scanner and
+        'MaximumFileCount = 50_000' in puerts_project_scanner and
+        '"module"' in puerts_project_scanner and
+        '"unrealApi"' in puerts_project_scanner and
+        '"puertsApi"' in puerts_project_scanner and
+        '"lifecycleHook"' in puerts_project_scanner and
+        '"assetReference"' in puerts_project_scanner and
+        '"delegatePattern"' in puerts_project_scanner and
+        '"asyncPattern"' in puerts_project_scanner and
+        '"unsupportedDynamicBehavior"' in puerts_project_scanner and
+        '"scanLimit"' in puerts_project_scanner and
+        'args[0] == "ue-puerts-scan"' in cli_source and
+        '--script-root' in cli_source and
+        '--native-root' in cli_source and
+        '--fail-on-blockers' in cli_source and
+        'ScansCustomRootsAndClassifiesMigrationRisksDeterministically' in puerts_project_scanner_test and
+        'AutoDiscoveryPrefersAuthoredSourcesOverDeployedJavaScript' in puerts_project_scanner_test and
+        'ReportsIncompleteBoundedScanInsteadOfSilentlyDroppingSources' in puerts_project_scanner_test and
+        'CliWritesScanAndCanFailAutomationOnBlockers' in puerts_project_scanner_test,
         "M12.1 generalized Puerts source ownership, risk scan, CLI, tests, or documentation is incomplete",
     )
     checks.append(
@@ -5167,47 +4722,33 @@ def main() -> int:
         encoding="utf-8"
     )
     require(
-        "unifiedscript.puerts-migration-plan/v0.1" in puerts_migration_planner
-        and "unifiedscript.puerts-api-coverage/v0.1" in puerts_migration_planner
-        and "unifiedscript.puerts-contract-requests/v0.1" in puerts_migration_planner
-        and "unifiedscript.puerts-verification-harness/v0.1"
-        in puerts_migration_planner
-        and "unifiedscript.puerts-migration-package/v0.1"
-        in puerts_migration_planner
-        and 'CreateFile("migration-plan.json"' in puerts_migration_planner
-        and 'CreateFile("api-coverage.json"' in puerts_migration_planner
-        and 'CreateFile("contract-requests.json"' in puerts_migration_planner
-        and 'CreateFile("MigrationStubs.cs"' in puerts_migration_planner
-        and '"covered-adapter"' in puerts_migration_planner
-        and '"covered-route"' in puerts_migration_planner
-        and '"data-plane"' in puerts_migration_planner
-        and '"world-service"' in puerts_migration_planner
-        and '"resource-loader"' in puerts_migration_planner
-        and "exactly-one-runtime-owns-each-world-lifecycle"
-        in puerts_migration_planner
-        and "PlanBlocked" in puerts_migration_planner
-        and "unifiedscript.puerts-verification-report/v0.1"
-        in puerts_verification_harness
-        and '"blocked-plan"' in puerts_verification_harness
-        and '"duplicate-case"' in puerts_verification_harness
-        and '"observable-mismatch"' in puerts_verification_harness
-        and 'args[0] == "ue-puerts-plan"' in cli_source
-        and 'args[0] == "ue-puerts-verify"' in cli_source
-        and "--fail-on-mismatch" in cli_source
-        and "GeneratesDeterministicPlanCoverageRequestsStubsAndHarness"
-        in puerts_migration_planner_test
-        and "VerificationRequiresMatchedPassedEvidenceAndExactObservables"
-        in puerts_migration_planner_test
-        and "CliWritesPackageAndRunsSideBySideVerification"
-        in puerts_migration_planner_test
-        and "BlockedScanStillWritesDiagnosablePackageBeforeFailingGate"
-        in puerts_migration_planner_test
-        and "ten deterministic files" in puerts_migration_document
-        and "Both evidence templates intentionally fail this gate"
-        in puerts_migration_document
-        and "- [x] generate a migration plan, API coverage report"
-        in roadmap
-        and "22 of 38" in roadmap,
+        'unifiedscript.puerts-migration-plan/v0.1' in puerts_migration_planner and
+        'unifiedscript.puerts-api-coverage/v0.1' in puerts_migration_planner and
+        'unifiedscript.puerts-contract-requests/v0.1' in puerts_migration_planner and
+        'unifiedscript.puerts-verification-harness/v0.1' in puerts_migration_planner and
+        'unifiedscript.puerts-migration-package/v0.1' in puerts_migration_planner and
+        'CreateFile("migration-plan.json"' in puerts_migration_planner and
+        'CreateFile("api-coverage.json"' in puerts_migration_planner and
+        'CreateFile("contract-requests.json"' in puerts_migration_planner and
+        'CreateFile("MigrationStubs.cs"' in puerts_migration_planner and
+        '"covered-adapter"' in puerts_migration_planner and
+        '"covered-route"' in puerts_migration_planner and
+        '"data-plane"' in puerts_migration_planner and
+        '"world-service"' in puerts_migration_planner and
+        '"resource-loader"' in puerts_migration_planner and
+        'exactly-one-runtime-owns-each-world-lifecycle' in puerts_migration_planner and
+        'PlanBlocked' in puerts_migration_planner and
+        'unifiedscript.puerts-verification-report/v0.1' in puerts_verification_harness and
+        '"blocked-plan"' in puerts_verification_harness and
+        '"duplicate-case"' in puerts_verification_harness and
+        '"observable-mismatch"' in puerts_verification_harness and
+        'args[0] == "ue-puerts-plan"' in cli_source and
+        'args[0] == "ue-puerts-verify"' in cli_source and
+        '--fail-on-mismatch' in cli_source and
+        'GeneratesDeterministicPlanCoverageRequestsStubsAndHarness' in puerts_migration_planner_test and
+        'VerificationRequiresMatchedPassedEvidenceAndExactObservables' in puerts_migration_planner_test and
+        'CliWritesPackageAndRunsSideBySideVerification' in puerts_migration_planner_test and
+        'BlockedScanStillWritesDiagnosablePackageBeforeFailingGate' in puerts_migration_planner_test,
         "M12.1 migration plan, coverage, Contract requests, stubs, verification harness, CLI, tests, or documentation is incomplete",
     )
     checks.append(
@@ -5254,29 +4795,24 @@ def main() -> int:
     runtime_component_header = runtime_component_header_path.read_text(encoding="utf-8")
     runtime_ownership_test = runtime_ownership_test_path.read_text(encoding="utf-8")
     require(
-        "unifiedscript.puerts-coexistence/v0.1" in puerts_coexistence
-        and "exactly-one-runtime-owns-each-world-lifecycle" in puerts_coexistence
-        and 'CreateFile("coexistence-manifest.json"' in puerts_coexistence
-        and 'CreateFile("PuertsOwnership.generated.ts"' in puerts_coexistence
-        and "claimPuertsLifecycle" in puerts_coexistence
-        and "releasePuertsLifecycle" in puerts_coexistence
-        and 'args[0] == "ue-puerts-coexist"' in cli_source
-        and "--unified" in cli_source
-        and "CliWritesPromotedRoutesAndBlockedPlanStillFailsAfterOutput"
-        in puerts_coexistence_test
-        and "EFinareRuntimeOwner" in runtime_world_header
-        and "ClaimGameplayLifecycle" in runtime_world_header
-        and "ReleaseGameplayLifecycle" in runtime_world_header
-        and "BuildGameplayLifecycleOwnershipReport" in runtime_world_header
-        and "ClaimGameplayLifecycle" in runtime_world_library_header
-        and "ReleaseGameplayLifecycle" in runtime_world_library_header
-        and "LifecycleOwnershipKey" in runtime_component_header
-        and "Reload cannot change lifecycle ownership" in runtime_component_source
-        and "Finare.Unreal.Coexistence.RuntimeOwnership" in runtime_ownership_test
-        and "For each Puerts-owned concrete script instance" in puerts_migration_document
-        and "manifest and generated guard do not rewrite" in puerts_migration_document
-        and "- [x] support incremental coexistence during migration" in roadmap
-        and "M12.1 is complete" in roadmap,
+        'unifiedscript.puerts-coexistence/v0.1' in puerts_coexistence and
+        'exactly-one-runtime-owns-each-world-lifecycle' in puerts_coexistence and
+        'CreateFile("coexistence-manifest.json"' in puerts_coexistence and
+        'CreateFile("PuertsOwnership.generated.ts"' in puerts_coexistence and
+        'claimPuertsLifecycle' in puerts_coexistence and
+        'releasePuertsLifecycle' in puerts_coexistence and
+        'args[0] == "ue-puerts-coexist"' in cli_source and
+        '--unified' in cli_source and
+        'CliWritesPromotedRoutesAndBlockedPlanStillFailsAfterOutput' in puerts_coexistence_test and
+        'EFinareRuntimeOwner' in runtime_world_header and
+        'ClaimGameplayLifecycle' in runtime_world_header and
+        'ReleaseGameplayLifecycle' in runtime_world_header and
+        'BuildGameplayLifecycleOwnershipReport' in runtime_world_header and
+        'ClaimGameplayLifecycle' in runtime_world_library_header and
+        'ReleaseGameplayLifecycle' in runtime_world_library_header and
+        'LifecycleOwnershipKey' in runtime_component_header and
+        'Reload cannot change lifecycle ownership' in runtime_component_source and
+        'Finare.Unreal.Coexistence.RuntimeOwnership' in runtime_ownership_test,
         "M12.1 coexistence manifest, shared World arbiter, tests, or lifecycle documentation is incomplete",
     )
     checks.append(
@@ -5296,7 +4832,7 @@ def main() -> int:
         ROOT / "comparison" / "verify-blockbreaker-roundtrip.ps1"
     )
     roundtrip_runtime_path = (
-        ROOT / "src" / "Finare.Runtime" / "RoundTripEquivalence.cs"
+        ROOT / "src" / "Finare.Compilation" / "RoundTripEquivalence.cs"
     )
     roundtrip_test_path = (
         ROOT / "tests" / "Finare.Tests" / "RoundTripEquivalenceTests.cs"
@@ -5330,8 +4866,6 @@ def main() -> int:
     roundtrip_runtime = roundtrip_runtime_path.read_text(encoding="utf-8")
     roundtrip_test = roundtrip_test_path.read_text(encoding="utf-8")
     authoring_http_test = authoring_http_test_path.read_text(encoding="utf-8")
-    roundtrip_doc = roundtrip_doc_path.read_text(encoding="utf-8")
-    comparison_readme = comparison_readme_path.read_text(encoding="utf-8")
     roundtrip_methods = {
         script["method"] for script in roundtrip_manifest["scripts"]
     }
@@ -5341,49 +4875,31 @@ def main() -> int:
         for method in document["methods"]
     }
     require(
-        roundtrip_manifest["schemaVersion"]
-        == "unifiedscript.blockbreaker-round-trip/v0.1"
-        and len(roundtrip_manifest["baselineCommit"]) == 40
-        and roundtrip_manifest["projectPath"].endswith(".csproj")
-        and {script["id"] for script in roundtrip_manifest["scripts"]}
-        == {"player", "rifle"}
-        and roundtrip_methods == requirement_methods
-        and all(
-            document["schemaVersion"]
-            == "unifiedscript.round-trip-requirements/v0.1"
-            and len(document["methods"]) == 1
-            and len(document["methods"][0]["cases"]) >= 3
-            for document in roundtrip_requirements
-        )
-        and roundtrip_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
-        and len(roundtrip_patch["operations"]) == 2
-        and all(
-            operation["operation"] == "replaceLiteral"
-            for operation in roundtrip_patch["operations"]
-        )
-        and 'args[0] == "verify-roundtrip"' in cli_source
-        and '"apply-project-patch" or "apply-project-plan"' in cli_source
-        and "RoundTripEquivalenceVerifier" in roundtrip_runtime
-        and "CreateSemanticDigest" in roundtrip_runtime
-        and "CreateIlDigest" in roundtrip_runtime
-        and "EquivalentVisualAndCodeProgramsMatchIdentitySemanticsIlAssetsAndResults"
-        in roundtrip_test
-        and "apply-project-patch" in roundtrip_runner
-        and "verify-roundtrip" in roundtrip_runner
-        and "gameplayEquivalent" in roundtrip_runner
-        and "scriptAssetsEquivalent" in roundtrip_runner
-        and "packagedBuildEquivalent" in roundtrip_runner
-        and "declaredUntrackedOutputs" in roundtrip_runner
-        and "stage-maximum-stale" in authoring_http_test
-        and "group-external-conflict" in authoring_http_test
-        and '"UAW1005"' in authoring_http_test
-        and 'Assert.Equal("UAW1002", error.Error.Code)' in authoring_http_test
-        and "BLOCKBREAKER_ROUND_TRIP.md" in comparison_readme
-        and "verify-blockbreaker-roundtrip.ps1" in roundtrip_doc
-        and "- [x] author representative BlockBreaker behavior visually" in roadmap
-        and "- [x] run semantic, IL, gameplay-result, asset, and packaged-build equivalence"
-        in roadmap
-        and "- [x] add conflict and merge tests for external edits" in roadmap,
+        roundtrip_manifest['schemaVersion'] == 'unifiedscript.blockbreaker-round-trip/v0.1' and
+        len(roundtrip_manifest['baselineCommit']) == 40 and
+        roundtrip_manifest['projectPath'].endswith('.csproj') and
+        {script['id'] for script in roundtrip_manifest['scripts']} == {'player', 'rifle'} and
+        roundtrip_methods == requirement_methods and
+        all((document['schemaVersion'] == 'unifiedscript.round-trip-requirements/v0.1' and len(document['methods']) == 1 and (len(document['methods'][0]['cases']) >= 3) for document in roundtrip_requirements)) and
+        roundtrip_patch['schemaVersion'] == 'unifiedscript.patch/v0.28' and
+        len(roundtrip_patch['operations']) == 2 and
+        all((operation['operation'] == 'replaceLiteral' for operation in roundtrip_patch['operations'])) and
+        'args[0] == "verify-roundtrip"' in cli_source and
+        '"apply-project-patch" or "apply-project-plan"' in cli_source and
+        'RoundTripEquivalenceVerifier' in roundtrip_runtime and
+        'CreateSemanticDigest' in roundtrip_runtime and
+        'CreateIlDigest' in roundtrip_runtime and
+        'EquivalentVisualAndCodeProgramsMatchIdentitySemanticsIlAssetsAndResults' in roundtrip_test and
+        'apply-project-patch' in roundtrip_runner and
+        'verify-roundtrip' in roundtrip_runner and
+        'gameplayEquivalent' in roundtrip_runner and
+        'scriptAssetsEquivalent' in roundtrip_runner and
+        'packagedBuildEquivalent' in roundtrip_runner and
+        'declaredUntrackedOutputs' in roundtrip_runner and
+        'stage-maximum-stale' in authoring_http_test and
+        'group-external-conflict' in authoring_http_test and
+        '"UAW1005"' in authoring_http_test and
+        'Assert.Equal("UAW1002", error.Error.Code)' in authoring_http_test,
         "M8.4 whole-game Visual/C# round-trip proof or conflict gates are incomplete",
     )
     checks.append("M8.4 BlockBreaker Visual/C# round trip passes full equivalence and conflict gates")
@@ -5420,23 +4936,18 @@ def main() -> int:
     graph_json_source = graph_json_path.read_text(encoding="utf-8")
     semantic_pipeline_test = semantic_pipeline_test_path.read_text(encoding="utf-8")
     graph_json_test = graph_json_test_path.read_text(encoding="utf-8")
-    nullability_doc = nullability_doc_path.read_text(encoding="utf-8")
     require(
-        'CurrentSchemaVersion = "unifiedscript.semantics/v0.6"'
-        in semantic_model_source
-        and "UnifiedNullFlowState" in semantic_model_source
-        and "NullFlowState" in semantic_model_source
-        and "typeInfo.ConvertedNullability.FlowState" in semantic_binder_source
-        and "GetInitialNullFlowState" in semantic_binder_source
-        and 'properties["typeNullability"]' in graph_projector_source
-        and 'properties["nullFlowState"]' in graph_projector_source
-        and "ValidateNullabilityProperties" in graph_json_source
-        and "AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse"
-        in semantic_pipeline_test
-        and "Serialize_RejectsInvalidNullFlowMetadata" in graph_json_test
-        and "unifiedscript.semantics/v0.6" in nullability_doc
-        and "unifiedscript.bound-method/v0.4" in roundtrip_runtime
-        and "- [x] flow-sensitive nullability state" in roadmap,
+        'CurrentSchemaVersion = "unifiedscript.semantics/v0.6"' in semantic_model_source and
+        'UnifiedNullFlowState' in semantic_model_source and
+        'NullFlowState' in semantic_model_source and
+        'typeInfo.ConvertedNullability.FlowState' in semantic_binder_source and
+        'GetInitialNullFlowState' in semantic_binder_source and
+        'properties["typeNullability"]' in graph_projector_source and
+        'properties["nullFlowState"]' in graph_projector_source and
+        'ValidateNullabilityProperties' in graph_json_source and
+        'AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse' in semantic_pipeline_test and
+        'Serialize_RejectsInvalidNullFlowMetadata' in graph_json_test and
+        'unifiedscript.bound-method/v0.4' in roundtrip_runtime,
         "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
     )
     checks.append("M8.5 nullability follows Roslyn flow state through Semantics and Graph")
@@ -5464,34 +4975,25 @@ def main() -> int:
     ]:
         require(path.is_file(), f"Missing M8.5 foreach artifact: {path}")
     hir_nodes_source = hir_nodes_path.read_text(encoding="utf-8")
-    profile_validator_source = profile_validator_path.read_text(encoding="utf-8")
     source_patch_source = source_patch_path.read_text(encoding="utf-8")
     source_patch_test = source_patch_test_path.read_text(encoding="utf-8")
     profile_test = profile_test_path.read_text(encoding="utf-8")
-    foreach_doc = foreach_doc_path.read_text(encoding="utf-8")
     require(
-        'CurrentSchemaVersion = "unifiedscript.hir/v0.9"'
-        in (ROOT / "src" / "Finare.Core" / "HirDocument.cs").read_text(encoding="utf-8")
-        and "HirForEachIterationKind" in hir_nodes_source
-        and "RefReadOnly" in hir_nodes_source
-        and "BorrowedSequence" in semantic_model_source
-        and "ForEachDisposalKind" in semantic_model_source
-        and "TryGetBorrowedSequenceElementType" in semantic_binder_source
-        and "GetForEachDisposalKind" in semantic_binder_source
-        and '"conditionalFinally"' in graph_projector_source
-        and '"borrowedReadOnly"' in graph_projector_source
-        and "isConditionalDisposalForEach" in graph_json_source
-        and "UnifiedTypeKind.BorrowedSequence" in source_patch_source
-        and "AnalyzeAndProject_PreservesBorrowedRefReadonlySpanWithoutCleanup"
-        in semantic_pipeline_test
-        and "AnalyzeAndProject_PreservesPatternEnumeratorConditionalDisposal"
-        in semantic_pipeline_test
-        and "Apply_ReplacesBorrowedRefReadonlyForEachCollectionWithoutLosingAliasMode"
-        in source_patch_test
-        and "Validate_AllowsRefReadonlyForEachButRejectsMutableRefAndAwaitVariants"
-        in profile_test
-        and "disposal: conditionalFinally" in foreach_doc
-        and "ref readonly" in foreach_doc,
+        'CurrentSchemaVersion = "unifiedscript.hir/v0.9"' in (ROOT / 'src' / 'Finare.Core' / 'HirDocument.cs').read_text(encoding='utf-8') and
+        'HirForEachIterationKind' in hir_nodes_source and
+        'RefReadOnly' in hir_nodes_source and
+        'BorrowedSequence' in semantic_model_source and
+        'ForEachDisposalKind' in semantic_model_source and
+        'TryGetBorrowedSequenceElementType' in semantic_binder_source and
+        'GetForEachDisposalKind' in semantic_binder_source and
+        '"conditionalFinally"' in graph_projector_source and
+        '"borrowedReadOnly"' in graph_projector_source and
+        'isConditionalDisposalForEach' in graph_json_source and
+        'UnifiedTypeKind.BorrowedSequence' in source_patch_source and
+        'AnalyzeAndProject_PreservesBorrowedRefReadonlySpanWithoutCleanup' in semantic_pipeline_test and
+        'AnalyzeAndProject_PreservesPatternEnumeratorConditionalDisposal' in semantic_pipeline_test and
+        'Apply_ReplacesBorrowedRefReadonlyForEachCollectionWithoutLosingAliasMode' in source_patch_test and
+        'Validate_AllowsRefReadonlyForEachButRejectsMutableRefAndAwaitVariants' in profile_test,
         "M8.5 borrowed/ref-readonly or conditional-disposal foreach contract is incomplete",
     )
     checks.append("M8.5 foreach preserves borrowed refs and exact conditional disposal")
@@ -5499,22 +5001,18 @@ def main() -> int:
         ROOT / "src" / "Finare.Graph" / "GraphControlFlowAnalyzer.cs"
     ).read_text(encoding="utf-8")
     require(
-        "AsyncEnumerable" in semantic_model_source
-        and "AsyncEnumerator" in semantic_model_source
-        and "TryGetAsyncEnumerableElementType" in semantic_binder_source
-        and '"asyncEnumerator"' in graph_projector_source
-        and '"moveNextAsync"' in graph_projector_source
-        and '"asyncEnumeratorDispose"' in graph_projector_source
-        and '"disposeAsyncMethodId"' in graph_projector_source
-        and "isAsyncEnumeratorForEach" in graph_json_source
-        and '"asyncEnumeratorDispose"' in graph_cfg_source
-        and "UnifiedTypeKind.AsyncEnumerable" in source_patch_source
-        and "Apply_ReplacesAsyncForEachCollectionAndPreservesAwaitProtocol"
-        in source_patch_test
-        and "AnalyzeAndProject_PreservesAsyncEnumeratorAndAwaitedCleanup"
-        in semantic_pipeline_test
-        and "await foreach" in foreach_doc
-        and "DisposeAsync" in foreach_doc,
+        'AsyncEnumerable' in semantic_model_source and
+        'AsyncEnumerator' in semantic_model_source and
+        'TryGetAsyncEnumerableElementType' in semantic_binder_source and
+        '"asyncEnumerator"' in graph_projector_source and
+        '"moveNextAsync"' in graph_projector_source and
+        '"asyncEnumeratorDispose"' in graph_projector_source and
+        '"disposeAsyncMethodId"' in graph_projector_source and
+        'isAsyncEnumeratorForEach' in graph_json_source and
+        '"asyncEnumeratorDispose"' in graph_cfg_source and
+        'UnifiedTypeKind.AsyncEnumerable' in source_patch_source and
+        'Apply_ReplacesAsyncForEachCollectionAndPreservesAwaitProtocol' in source_patch_test and
+        'AnalyzeAndProject_PreservesAsyncEnumeratorAndAwaitedCleanup' in semantic_pipeline_test,
         "M8.5 async foreach semantic, Graph, CFG, edit, test, or documentation contract is incomplete",
     )
     checks.append("M8.5 await foreach preserves async move-next and disposal cleanup")
@@ -5555,28 +5053,24 @@ def main() -> int:
     )
     checks.append("UE loads CoreCLR through hostfxr before managed World entry points")
     require(
-        'RuntimeDependencies.Add("$(PluginDir)/Binaries/Managed/..."'
-        in unreal_runtime_build
-        and 'RuntimeDependencies.Add("$(PluginDir)/Resources/Managed/..."'
-        in unreal_runtime_build
-        and 'StageBundledDotNetDirectory("host/fxr")' in unreal_runtime_build
-        and 'StageBundledDotNetDirectory("shared/Microsoft.NETCore.App")'
-        in unreal_runtime_build
-        and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
-        and "FinareSmoke" in host_module
-        and "FinareSmokeResult=" in host_module
-        and "Managed Start/Tick/Stop succeeded" in host_module
-        and "BuildCookRun" in unreal_release_helper
-        and "Development', 'Shipping" in unreal_release_helper
-        and "-SkipZenStore" in unreal_release_helper
-        and "hostfxr.dll" in unreal_release_helper
-        and "hostpolicy.dll" in unreal_release_helper
-        and "coreclr.dll" in unreal_release_helper
-        and "System.Private.CoreLib.dll" in unreal_release_helper
-        and "poisonedExternalDotNetRoots" in unreal_release_helper
-        and "ExpectedEngineVersion = '5.8.1'" in unreal_release_helper
-        and "unifiedscript.unreal-release-gate/v0.2" in unreal_release_helper
-        and "self-contained" in unreal_release_doc,
+        'RuntimeDependencies.Add("$(PluginDir)/Binaries/Managed/..."' in unreal_runtime_build and
+        'RuntimeDependencies.Add("$(PluginDir)/Resources/Managed/..."' in unreal_runtime_build and
+        'StageBundledDotNetDirectory("host/fxr")' in unreal_runtime_build and
+        'StageBundledDotNetDirectory("shared/Microsoft.NETCore.App")' in unreal_runtime_build and
+        'Binaries/ThirdParty/DotNet/10.0' in unreal_coreclr_host_source and
+        'FinareSmoke' in host_module and
+        'FinareSmokeResult=' in host_module and
+        'Managed Start/Tick/Stop succeeded' in host_module and
+        'BuildCookRun' in unreal_release_helper and
+        "Development', 'Shipping" in unreal_release_helper and
+        '-SkipZenStore' in unreal_release_helper and
+        'hostfxr.dll' in unreal_release_helper and
+        'hostpolicy.dll' in unreal_release_helper and
+        'coreclr.dll' in unreal_release_helper and
+        'System.Private.CoreLib.dll' in unreal_release_helper and
+        'poisonedExternalDotNetRoots' in unreal_release_helper and
+        "ExpectedEngineVersion = '5.8.1'" in unreal_release_helper and
+        'unifiedscript.unreal-release-gate/v0.2' in unreal_release_helper,
         "Win64 self-contained staging, packaged smoke, or release gate is missing",
     )
     checks.append("Win64 packages stage CoreCLR and run managed lifecycle smoke in Development/Shipping")
@@ -5584,31 +5078,25 @@ def main() -> int:
         ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.unreal-compatibility-matrix/v0.1"
-        in unreal_compatibility_helper
-        and "editor-development-build" in unreal_compatibility_helper
-        and "editor-automation" in unreal_compatibility_helper
-        and "source-development-shipping-package" in unreal_compatibility_helper
-        and "clean-project-sdk-install" in unreal_compatibility_helper
-        and "clean-project-managed-chunk" in unreal_compatibility_helper
-        and "clean-project-development-package" in unreal_compatibility_helper
-        and "@('Development', 'Shipping')" in unreal_compatibility_helper
-        and "package-finare-sdk.ps1" in unreal_compatibility_helper
-        and "archiveSha256 -ne" in unreal_compatibility_helper
-        and "git -C $repoRoot archive" in unreal_compatibility_helper
-        and "compatibilityScratchRoot" in unreal_compatibility_helper
-        and "sdk-install-report.json" in unreal_compatibility_helper
-        and "DOTNET_ROOT" in unreal_release_helper
-        and "FINARE_DOTNET_ROOT" in unreal_release_helper
-        and "not-declared" in unreal_compatibility_helper
-        and "four declared UE 5.8.1 Win64 rows" in unreal_compatibility_doc
-        and "171 payload files" in unreal_compatibility_doc
-        and re.search(
-            r"-c Release `\n\s+--no-build `\n\s+-- `",
-            unreal_chunk_stage,
-        )
-        and 'SkipUnchangedFiles="true"' not in unreal_managed_project
-        and 'SkipUnchangedFiles="true"' not in unreal_demo_project,
+        'unifiedscript.unreal-compatibility-matrix/v0.1' in unreal_compatibility_helper and
+        'editor-development-build' in unreal_compatibility_helper and
+        'editor-automation' in unreal_compatibility_helper and
+        'source-development-shipping-package' in unreal_compatibility_helper and
+        'clean-project-sdk-install' in unreal_compatibility_helper and
+        'clean-project-managed-chunk' in unreal_compatibility_helper and
+        'clean-project-development-package' in unreal_compatibility_helper and
+        "@('Development', 'Shipping')" in unreal_compatibility_helper and
+        'package-finare-sdk.ps1' in unreal_compatibility_helper and
+        'archiveSha256 -ne' in unreal_compatibility_helper and
+        'git -C $repoRoot archive' in unreal_compatibility_helper and
+        'compatibilityScratchRoot' in unreal_compatibility_helper and
+        'sdk-install-report.json' in unreal_compatibility_helper and
+        'DOTNET_ROOT' in unreal_release_helper and
+        'FINARE_DOTNET_ROOT' in unreal_release_helper and
+        'not-declared' in unreal_compatibility_helper and
+        re.search('-c Release `\\n\\s+--no-build `\\n\\s+-- `', unreal_chunk_stage) and
+        'SkipUnchangedFiles="true"' not in unreal_managed_project and
+        'SkipUnchangedFiles="true"' not in unreal_demo_project,
         "M11.2 exact-engine, package, SDK-consumer, or staging-determinism matrix is incomplete",
     )
     checks.append(
@@ -5733,43 +5221,30 @@ def main() -> int:
     )
     checks.append("UE Script Assets resolve managed entry points with transactional type reload")
     require(
-        "FInstancedPropertyBag ScriptState" in unreal_component
-        and "FixedLayout" in unreal_component
-        and "RefreshScriptState" in unreal_component
-        and "GetScriptStateInt32" in unreal_component
-        and "ScriptStateOverrideIds" in unreal_component
-        and "ResetScriptStateOverride" in unreal_component
-        and "ResetAllScriptStateOverrides" in unreal_component
-        and "MaterializedStateOverrideCount" in unreal_component
-        and "MaterializeJson" in unreal_declaration_materializer_header
-        and "FFinareStateMigrationReport"
-        in unreal_declaration_materializer_header
-        and "MigrateToNewBagInstanceWithOverrides"
-        in unreal_declaration_materializer_source
-        and "ParseSemanticId" in unreal_declaration_materializer_source
-        and "Finare.Unreal.Declaration.Materialization"
-        in unreal_declaration_materializer_test
-        and "Stable semantic ID preserves override across rename"
-        in unreal_declaration_materializer_test
-        and "Untouched instance adopts the new C# default"
-        in unreal_declaration_materializer_test
-        and "Incompatible override falls back to the new default"
-        in unreal_declaration_materializer_test
-        and "Reload_PreservesInstanceOverrideIdentityAcrossGraphAndSourceEdits"
-        in managed_reload_domain_test
-        and unreal_demo_declaration["schemaVersion"]
-        == "unifiedscript.script-asset/v0.3"
-        and unreal_demo_declaration_asset["states"][0]["name"]
-        == "InitialValue"
-        and "[ScriptAsset(\"Unreal/Demo\")]" in unreal_demo_source
-        and "GetScriptStateInt32" in unreal_demo_source
-        and "DeclarationState=37" in unreal_world_host_test
-        and "Reset restores the current declaration default"
-        in unreal_world_host_test
-        and "Dropped override is observable after asset replacement"
-        in unreal_world_host_test
-        and "- [x] preserve instance overrides and compatible semantic identities"
-        in roadmap,
+        'FInstancedPropertyBag ScriptState' in unreal_component and
+        'FixedLayout' in unreal_component and
+        'RefreshScriptState' in unreal_component and
+        'GetScriptStateInt32' in unreal_component and
+        'ScriptStateOverrideIds' in unreal_component and
+        'ResetScriptStateOverride' in unreal_component and
+        'ResetAllScriptStateOverrides' in unreal_component and
+        'MaterializedStateOverrideCount' in unreal_component and
+        'MaterializeJson' in unreal_declaration_materializer_header and
+        'FFinareStateMigrationReport' in unreal_declaration_materializer_header and
+        'MigrateToNewBagInstanceWithOverrides' in unreal_declaration_materializer_source and
+        'ParseSemanticId' in unreal_declaration_materializer_source and
+        'Finare.Unreal.Declaration.Materialization' in unreal_declaration_materializer_test and
+        'Stable semantic ID preserves override across rename' in unreal_declaration_materializer_test and
+        'Untouched instance adopts the new C# default' in unreal_declaration_materializer_test and
+        'Incompatible override falls back to the new default' in unreal_declaration_materializer_test and
+        'Reload_PreservesInstanceOverrideIdentityAcrossGraphAndSourceEdits' in managed_reload_domain_test and
+        unreal_demo_declaration['schemaVersion'] == 'unifiedscript.script-asset/v0.3' and
+        unreal_demo_declaration_asset['states'][0]['name'] == 'InitialValue' and
+        '[ScriptAsset("Unreal/Demo")]' in unreal_demo_source and
+        'GetScriptStateInt32' in unreal_demo_source and
+        'DeclarationState=37' in unreal_world_host_test and
+        'Reset restores the current declaration default' in unreal_world_host_test and
+        'Dropped override is observable after asset replacement' in unreal_world_host_test,
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
@@ -6003,76 +5478,60 @@ def main() -> int:
     checks.append(
         "UE Slate keeps author-facing cards compact and exact compiler/API facts on demand"
     )
-    native_debug_doc = (
-        ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.debug-session/v0.2" in unreal_debug_workbench_source
-        and "unifiedscript.debug-evaluation/v0.1" in unreal_debug_workbench_source
-        and "BuildStartRequest" in unreal_debug_workbench_header
-        and "expectedSourceCompilationId" in unreal_debug_workbench_source
-        and "expectedSemanticConfigurationId" in unreal_debug_workbench_source
-        and "/api/debug/wait" in unreal_debug_workbench_source
-        and "/api/debug/pause" in unreal_debug_workbench_source
-        and "/api/debug/step-in" in unreal_debug_workbench_source
-        and "/api/debug/step-over" in unreal_debug_workbench_source
-        and "/api/debug/step-out" in unreal_debug_workbench_source
-        and "/api/debug/evaluate" in unreal_debug_workbench_source
-        and "SFinareDebugPanel" in unreal_authoring_widget
-        and "HandleBreakpointToggleRequested" in unreal_authoring_widget
-        and "HandleDebugNodeFocused" in unreal_authoring_widget
-        and "CALL STACK" in unreal_debug_panel
-        and "LOCALS / PARAMETERS" in unreal_debug_panel
-        and "READ-ONLY WATCH" in unreal_debug_panel
-        and "DispatchWait" in unreal_debug_panel
-        and "DebugTargetId" in unreal_ed_graph_header
-        and "DebugBreakpointState" in unreal_ed_graph_header
-        and "Native debugger parses a paused v0.2 session" in unreal_authoring_test
-        and "Slate can toggle a graph/source semantic breakpoint" in unreal_authoring_test
-        and "Attach Semantic" in native_debug_doc
-        and "live World semantic completion" in roadmap,
+        'unifiedscript.debug-session/v0.2' in unreal_debug_workbench_source and
+        'unifiedscript.debug-evaluation/v0.1' in unreal_debug_workbench_source and
+        'BuildStartRequest' in unreal_debug_workbench_header and
+        'expectedSourceCompilationId' in unreal_debug_workbench_source and
+        'expectedSemanticConfigurationId' in unreal_debug_workbench_source and
+        '/api/debug/wait' in unreal_debug_workbench_source and
+        '/api/debug/pause' in unreal_debug_workbench_source and
+        '/api/debug/step-in' in unreal_debug_workbench_source and
+        '/api/debug/step-over' in unreal_debug_workbench_source and
+        '/api/debug/step-out' in unreal_debug_workbench_source and
+        '/api/debug/evaluate' in unreal_debug_workbench_source and
+        'SFinareDebugPanel' in unreal_authoring_widget and
+        'HandleBreakpointToggleRequested' in unreal_authoring_widget and
+        'HandleDebugNodeFocused' in unreal_authoring_widget and
+        'CALL STACK' in unreal_debug_panel and
+        'LOCALS / PARAMETERS' in unreal_debug_panel and
+        'READ-ONLY WATCH' in unreal_debug_panel and
+        'DispatchWait' in unreal_debug_panel and
+        'DebugTargetId' in unreal_ed_graph_header and
+        'DebugBreakpointState' in unreal_ed_graph_header and
+        'Native debugger parses a paused v0.2 session' in unreal_authoring_test and
+        'Slate can toggle a graph/source semantic breakpoint' in unreal_authoring_test,
         "Native Slate debugger protocol, controls, semantic navigation, or safety boundary is incomplete",
     )
     checks.append(
         "UE Slate consumes guarded debug v0.2 controls, stack, per-frame locals, and watch"
     )
-    runtime_diagnostic_doc = (
-        ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md"
-    ).read_text(encoding="utf-8")
     runtime_diagnostic_test = (
         ROOT / "tests" / "Finare.Tests" / "UnrealRuntimeDiagnosticTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.runtime-diagnostic/v0.1" in unreal_runtime_diagnostic_managed
-        and "SourceFrames" in unreal_runtime_diagnostic_managed
-        and "UnrealInvocationException" in unreal_runtime_diagnostic_managed
-        and "MemberPath" in unreal_runtime_diagnostic_managed
-        and "runtime-diagnostic/v0.1" in unreal_runtime_diagnostic_source
-        and "TryParseBoundaryError" in unreal_runtime_diagnostic_source
-        and "GetRuntimeDebugContext" in runtime_component_source
-        and "PauseAtDebugFrameBoundary" in runtime_component_source
-        and "StepOneDebugFrame" in runtime_component_source
-        and "ContinueFromDebugFrameBoundary" in runtime_component_source
-        and "LIVE UE WORLD" in unreal_debug_panel
-        and "Pause World Script" in unreal_debug_panel
-        and "Focus Node" in unreal_debug_panel
-        and "ResolveRuntimeDiagnosticNode" in unreal_debug_workbench_source
-        and "Runtime PDB coordinates resolve to the exact semantic graph node"
-        in unreal_authoring_test
-        and "World frame step enters managed OnTick once" in unreal_world_host_test
-        and "Managed boundary failure is parsed as runtime-diagnostic/v0.1"
-        in unreal_world_host_test
-        and "GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations"
-        in unreal_native_adapter_test
-        and "NativeBridgeFailureCarriesExactInvocationSiteAndStableJson"
-        in runtime_diagnostic_test
-        and "$(AssemblyName).pdb" in unreal_demo_project
-        and "Live bridge failure retains the generated member path"
-        in unreal_world_host_test
-        and "World frame step enters managed OnTick when automatic tick is disabled"
-        in unreal_world_host_test
-        and "frame-boundary control" in runtime_diagnostic_doc
-        and "- [x] map exceptions and native bridge failures" in roadmap,
+        'unifiedscript.runtime-diagnostic/v0.1' in unreal_runtime_diagnostic_managed and
+        'SourceFrames' in unreal_runtime_diagnostic_managed and
+        'UnrealInvocationException' in unreal_runtime_diagnostic_managed and
+        'MemberPath' in unreal_runtime_diagnostic_managed and
+        'runtime-diagnostic/v0.1' in unreal_runtime_diagnostic_source and
+        'TryParseBoundaryError' in unreal_runtime_diagnostic_source and
+        'GetRuntimeDebugContext' in runtime_component_source and
+        'PauseAtDebugFrameBoundary' in runtime_component_source and
+        'StepOneDebugFrame' in runtime_component_source and
+        'ContinueFromDebugFrameBoundary' in runtime_component_source and
+        'LIVE UE WORLD' in unreal_debug_panel and
+        'Pause World Script' in unreal_debug_panel and
+        'Focus Node' in unreal_debug_panel and
+        'ResolveRuntimeDiagnosticNode' in unreal_debug_workbench_source and
+        'Runtime PDB coordinates resolve to the exact semantic graph node' in unreal_authoring_test and
+        'World frame step enters managed OnTick once' in unreal_world_host_test and
+        'Managed boundary failure is parsed as runtime-diagnostic/v0.1' in unreal_world_host_test and
+        'GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations' in unreal_native_adapter_test and
+        'NativeBridgeFailureCarriesExactInvocationSiteAndStableJson' in runtime_diagnostic_test and
+        '$(AssemblyName).pdb' in unreal_demo_project and
+        'Live bridge failure retains the generated member path' in unreal_world_host_test and
+        'World frame step enters managed OnTick when automatic tick is disabled' in unreal_world_host_test,
         "Live UE World context, frame-boundary control, or structured runtime failure mapping is incomplete",
     )
     checks.append(
@@ -6112,145 +5571,110 @@ def main() -> int:
         demo_identity = json.load(handle)
     demo_source_digest = hashlib.sha256(unreal_demo_source_path.read_bytes()).hexdigest()
     require(
-        '"/api/debug/publish-live-world"' in debug_server_source
-        and "CSharpDebugInstrumentation" in debug_server_source
-        and "unifiedscript.live-world-debug-publish/v0.1" in debug_server_source
-        and "new Thread" in unreal_world_debug_session
-        and "Volatile.Read(ref completed)" in unreal_world_debug_session
-        and "checked(++nextFrameId)" in unreal_world_debug_session
-        and "LiveWorldProbe_PreservesWorkerStackAndStepsWithoutBlockingCaller"
-        in unreal_world_debug_session_test
-        and "typeof(global::Finare.Runtime.CoreClrDebugProbe).Assembly"
-        in unreal_world_managed_entry
-        and "WrittenBytes > RequiredBytes" in unreal_coreclr_host_source
-        and "PumpGameThreadCalls" in unreal_native_transport_source
-        and "BeginManagedScriptDebugTick" in runtime_component_source
-        and "HandleAttachSemanticWorld" in unreal_debug_panel
-        and "EvaluateLiveSemanticWatch" in unreal_debug_panel
-        and "SegmentCount > 16" in unreal_debug_panel
-        and "Native debugger parses the instrumented live World publication"
-        in unreal_authoring_test
-        and "FFinareWorldSemanticDebugTest" in unreal_world_host_test
-        and "Worker-originated generated bridge calls return through the Game Thread"
-        in unreal_world_host_test
-        and "Reloaded generation reaches the migrated semantic breakpoint"
-        in unreal_world_host_test
-        and "stale-live-world-source" in authoring_http_test
-        and "Finare.Runtime" in authoring_http_test
-        and "RuntimeSemanticDebugDemoScript" in semantic_debug_fixture
-        and "CoreClrDebugProbe.Hit" in semantic_debug_fixture
-        and demo_identity["sourcePath"]
-        == "samples/Unreal/Finare.Unreal.Demo/DemoScript.cs"
-        and demo_identity["sourceDigest"] == f"sha256:{demo_source_digest}"
-        and "- [x] bind semantic breakpoints to current managed generations"
-        in roadmap
-        and "M9.1 is\ncomplete" in roadmap,
+        '"/api/debug/publish-live-world"' in debug_server_source and
+        'CSharpDebugInstrumentation' in debug_server_source and
+        'unifiedscript.live-world-debug-publish/v0.1' in debug_server_source and
+        'new Thread' in unreal_world_debug_session and
+        'Volatile.Read(ref completed)' in unreal_world_debug_session and
+        'checked(++nextFrameId)' in unreal_world_debug_session and
+        'LiveWorldProbe_PreservesWorkerStackAndStepsWithoutBlockingCaller' in unreal_world_debug_session_test and
+        'typeof(global::Finare.Runtime.CoreClrDebugProbe).Assembly' in unreal_world_managed_entry and
+        'WrittenBytes > RequiredBytes' in unreal_coreclr_host_source and
+        'PumpGameThreadCalls' in unreal_native_transport_source and
+        'BeginManagedScriptDebugTick' in runtime_component_source and
+        'HandleAttachSemanticWorld' in unreal_debug_panel and
+        'EvaluateLiveSemanticWatch' in unreal_debug_panel and
+        'SegmentCount > 16' in unreal_debug_panel and
+        'Native debugger parses the instrumented live World publication' in unreal_authoring_test and
+        'FFinareWorldSemanticDebugTest' in unreal_world_host_test and
+        'Worker-originated generated bridge calls return through the Game Thread' in unreal_world_host_test and
+        'Reloaded generation reaches the migrated semantic breakpoint' in unreal_world_host_test and
+        'stale-live-world-source' in authoring_http_test and
+        'Finare.Runtime' in authoring_http_test and
+        'RuntimeSemanticDebugDemoScript' in semantic_debug_fixture and
+        'CoreClrDebugProbe.Hit' in semantic_debug_fixture and
+        demo_identity['sourcePath'] == 'samples/Unreal/Finare.Unreal.Demo/DemoScript.cs' and
+        demo_identity['sourceDigest'] == f'sha256:{demo_source_digest}',
         "Live UE World semantic suspension, bridge return, or generation binding is incomplete",
     )
     checks.append(
         "UE Slate controls live World semantic stacks without blocking the GameThread"
     )
-    hot_reload_reliability_doc = (
-        ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.reload-transaction/v0.1" in debug_server_source
-        and '"compile"' in debug_server_source
-        and '"artifactPublication"' in debug_server_source
-        and '"workbenchGenerationSwap"' in debug_server_source
-        and "oldGenerationStop" in unreal_world_managed_entry
-        and "candidateStart" in unreal_world_managed_entry
-        and "eventRebinding" in unreal_world_managed_entry
-        and "generationSwap" in unreal_world_managed_entry
-        and "oldContextRetirement" in unreal_world_managed_entry
-        and "stateMigration" in runtime_component_source
-        and "stateRollback" in runtime_component_source
-        and "oldContextCollection" in runtime_component_source
-        and "retiredLoadContextsAlive" in runtime_component_source
-        and "worldFromGeneration" in runtime_component_source
-        and "unifiedscript.unreal-lifecycle-stress/v0.4"
-        in unreal_lifecycle_stress_test
-        and "FailedReloadCycles" in unreal_lifecycle_stress_test
-        and "GetEventSubscriptionCount" in unreal_lifecycle_stress_test
-        and "staleDebugSessions" in unreal_lifecycle_stress_test
-        and "failedReloadCycles" in unreal_lifecycle_stress_helper
-        and "unifiedscript.unreal-lifecycle-stress-report/v0.3"
-        in unreal_lifecycle_stress_helper
-        and "eventSubscriptionsDelta" in unreal_lifecycle_stress_helper
-        and "staleDebugSessions" in unreal_lifecycle_stress_helper
-        and "ParseReloadTransaction" in unreal_authoring_workbench_source
-        and "ObservedTransaction.ToDisplayString()" in unreal_authoring_widget
-        and "ObservedTransaction.ToDisplayString()" in unreal_debug_panel
-        and "16 successful reloads" in hot_reload_reliability_doc
-        and "16 intentionally failed reloads" in hot_reload_reliability_doc
-        and "- [x] make compile, artifact publication" in roadmap
-        and "M9.2 is\ncomplete" in roadmap,
+        'unifiedscript.reload-transaction/v0.1' in debug_server_source and
+        '"compile"' in debug_server_source and
+        '"artifactPublication"' in debug_server_source and
+        '"workbenchGenerationSwap"' in debug_server_source and
+        'oldGenerationStop' in unreal_world_managed_entry and
+        'candidateStart' in unreal_world_managed_entry and
+        'eventRebinding' in unreal_world_managed_entry and
+        'generationSwap' in unreal_world_managed_entry and
+        'oldContextRetirement' in unreal_world_managed_entry and
+        'stateMigration' in runtime_component_source and
+        'stateRollback' in runtime_component_source and
+        'oldContextCollection' in runtime_component_source and
+        'retiredLoadContextsAlive' in runtime_component_source and
+        'worldFromGeneration' in runtime_component_source and
+        'unifiedscript.unreal-lifecycle-stress/v0.4' in unreal_lifecycle_stress_test and
+        'FailedReloadCycles' in unreal_lifecycle_stress_test and
+        'GetEventSubscriptionCount' in unreal_lifecycle_stress_test and
+        'staleDebugSessions' in unreal_lifecycle_stress_test and
+        'failedReloadCycles' in unreal_lifecycle_stress_helper and
+        'unifiedscript.unreal-lifecycle-stress-report/v0.3' in unreal_lifecycle_stress_helper and
+        'eventSubscriptionsDelta' in unreal_lifecycle_stress_helper and
+        'staleDebugSessions' in unreal_lifecycle_stress_helper and
+        'ParseReloadTransaction' in unreal_authoring_workbench_source and
+        'ObservedTransaction.ToDisplayString()' in unreal_authoring_widget and
+        'ObservedTransaction.ToDisplayString()' in unreal_debug_panel,
         "Observable hot-reload phases, rollback, leak soak, or Slate diagnostics are incomplete",
     )
     checks.append(
         "UE hot reload is one observable rollback-safe transaction with zero-leak soak"
     )
-    reliability_soak_doc = (ROOT / "docs" / "RELIABILITY_SOAK.md").read_text(
-        encoding="utf-8"
-    )
     coreclr_debug_coordinator = (
         ROOT / "src" / "Finare.Runtime" / "CoreClrDebugCoordinator.cs"
     ).read_text(encoding="utf-8")
     require(
-        unreal_reliability_soak_helper_path.is_file()
-        and "unifiedscript.unreal-reliability-soak/v0.2"
-        in unreal_reliability_soak_helper
-        and "DedicatedServer" in unreal_lifecycle_stress_helper
-        and "-server" in unreal_lifecycle_stress_helper
-        and "boundedCapacity" in unreal_lifecycle_stress_helper
-        and "memoryBudget" in unreal_lifecycle_stress_helper
-        and "ServerContext" in unreal_lifecycle_stress_test
-        and "ObjectChurnCycles" in unreal_lifecycle_stress_test
-        and "CommandSaturationCycles" in unreal_lifecycle_stress_test
-        and "MaximumInFlightRequestCount = 4096" in unreal_async_service_header
-        and "MaximumPayloadByteCount = 1024 * 1024" in unreal_async_service_header
-        and "GCapacityRejectionCount" in unreal_async_service_source
-        and "MaximumPendingWorkerDispatchCount = 1024"
-        in unreal_native_transport_header
-        and "GRejectedWorkerDispatchCount" in unreal_native_transport_source
-        and "Channel.CreateBounded<CoreClrDebugPause>" in coreclr_debug_coordinator
-        and "dedicated-server **process mode**" in reliability_soak_doc
-        and "131,072 commands" in reliability_soak_doc
-        and "- [x] run long PIE, travel, multi-World, dedicated-server"
-        in roadmap,
+        unreal_reliability_soak_helper_path.is_file() and
+        'unifiedscript.unreal-reliability-soak/v0.2' in unreal_reliability_soak_helper and
+        'DedicatedServer' in unreal_lifecycle_stress_helper and
+        '-server' in unreal_lifecycle_stress_helper and
+        'boundedCapacity' in unreal_lifecycle_stress_helper and
+        'memoryBudget' in unreal_lifecycle_stress_helper and
+        'ServerContext' in unreal_lifecycle_stress_test and
+        'ObjectChurnCycles' in unreal_lifecycle_stress_test and
+        'CommandSaturationCycles' in unreal_lifecycle_stress_test and
+        'MaximumInFlightRequestCount = 4096' in unreal_async_service_header and
+        'MaximumPayloadByteCount = 1024 * 1024' in unreal_async_service_header and
+        'GCapacityRejectionCount' in unreal_async_service_source and
+        'MaximumPendingWorkerDispatchCount = 1024' in unreal_native_transport_header and
+        'GRejectedWorkerDispatchCount' in unreal_native_transport_source and
+        'Channel.CreateBounded<CoreClrDebugPause>' in coreclr_debug_coordinator,
         "M11.1 two-lane reliability soak or bounded runtime queues are incomplete",
     )
     checks.append(
         "M11.1 soaks editor and server-mode Worlds against explicit memory and queue bounds"
     )
     require(
-        "FFinareRuntimeBreadcrumbSnapshot"
-        in unreal_runtime_diagnostic_header
-        and "MaximumEntryCount = 64" in unreal_runtime_diagnostic_header
-        and "MaximumCrashContextEntryCount = 8"
-        in unreal_runtime_diagnostic_header
-        and "unifiedscript.runtime-breadcrumbs/v0.1"
-        in unreal_runtime_diagnostic_source
-        and "GBreadcrumbs.RemoveAt(0" in unreal_runtime_diagnostic_source
-        and "FGenericCrashContext::SetGameData"
-        in unreal_runtime_diagnostic_source
-        and "RecordDiagnostic(LastRuntimeDiagnostic)" in runtime_component_source
-        and "WorldShutdown.WorkerDispatchSuspended" in unreal_world_host_source
-        and "WorldShutdown.ManagedWorldDestroyed" in unreal_world_host_source
-        and "WorldShutdown.NativeContextDetached" in unreal_world_host_source
-        and "WorldShutdown.ServicesStopped" in unreal_world_host_source
-        and "WorldShutdown.HandlesInvalidated" in unreal_world_host_source
-        and "WorldShutdown.Complete" in unreal_world_host_source
-        and "healthy sibling continues managed Tick" in unreal_world_host_test
-        and "HasDeterministicShutdownSequence" in unreal_lifecycle_stress_test
-        and "shutdownSequenceFailures" in unreal_lifecycle_stress_test
-        and "MaximumEntryCount + 6" in unreal_runtime_breadcrumb_test
-        and "CrashContext" in unreal_runtime_breadcrumb_test
-        and "deterministicShutdown" in unreal_lifecycle_stress_helper
-        and "last 64 detached managed" in runtime_diagnostic_doc
-        and "All 152 World shutdowns" in reliability_soak_doc
-        and "- [x] enforce bounded memory/queues, deterministic shutdown"
-        in roadmap,
+        'FFinareRuntimeBreadcrumbSnapshot' in unreal_runtime_diagnostic_header and
+        'MaximumEntryCount = 64' in unreal_runtime_diagnostic_header and
+        'MaximumCrashContextEntryCount = 8' in unreal_runtime_diagnostic_header and
+        'unifiedscript.runtime-breadcrumbs/v0.1' in unreal_runtime_diagnostic_source and
+        'GBreadcrumbs.RemoveAt(0' in unreal_runtime_diagnostic_source and
+        'FGenericCrashContext::SetGameData' in unreal_runtime_diagnostic_source and
+        'RecordDiagnostic(LastRuntimeDiagnostic)' in runtime_component_source and
+        'WorldShutdown.WorkerDispatchSuspended' in unreal_world_host_source and
+        'WorldShutdown.ManagedWorldDestroyed' in unreal_world_host_source and
+        'WorldShutdown.NativeContextDetached' in unreal_world_host_source and
+        'WorldShutdown.ServicesStopped' in unreal_world_host_source and
+        'WorldShutdown.HandlesInvalidated' in unreal_world_host_source and
+        'WorldShutdown.Complete' in unreal_world_host_source and
+        'healthy sibling continues managed Tick' in unreal_world_host_test and
+        'HasDeterministicShutdownSequence' in unreal_lifecycle_stress_test and
+        'shutdownSequenceFailures' in unreal_lifecycle_stress_test and
+        'MaximumEntryCount + 6' in unreal_runtime_breadcrumb_test and
+        'CrashContext' in unreal_runtime_breadcrumb_test and
+        'deterministicShutdown' in unreal_lifecycle_stress_helper,
         "M11.1 deterministic shutdown, failure isolation, or crash breadcrumbs are incomplete",
     )
     checks.append(
@@ -6259,9 +5683,6 @@ def main() -> int:
     unreal_scale_runner = (
         ROOT / "tools" / "run-unreal-scale-gate.ps1"
     ).read_text(encoding="utf-8")
-    large_project_scale_doc = (
-        ROOT / "docs" / "LARGE_PROJECT_SCALE.md"
-    ).read_text(encoding="utf-8")
     csharp_semantic_ids = (
         ROOT / "src" / "Finare.CSharp" / "CSharpSemanticIds.cs"
     ).read_text(encoding="utf-8")
@@ -6269,32 +5690,23 @@ def main() -> int:
         ROOT / "tests" / "Finare.Tests" / "CSharpProgramEmitterTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.unreal-scale-gate/v0.1" in unreal_scale_runner
-        and "[int]$TypeCount = 256" in unreal_scale_runner
-        and "[int]$MembersPerType = 16" in unreal_scale_runner
-        and "[int]$ScriptCount = 256" in unreal_scale_runner
-        and "$contractDeterministic" in unreal_scale_runner
-        and "$contractManagedChanged" in unreal_scale_runner
-        and "$contractNativeStable" in unreal_scale_runner
-        and "$scriptChunkChanged" in unreal_scale_runner
-        and "Scripts=1, Created=0, Updated=1" in unreal_scale_runner
-        and "$cleanupPass" in unreal_scale_runner
-        and "DocumentationCommentId.CreateDeclarationId" in csharp_semantic_ids
-        and "Emit_SupportsMultipleScriptAssetsWithIdenticalMethodShapes"
-        in csharp_program_emitter_tests
-        and "256 reflected Unreal types" in large_project_scale_doc
-        and "4,096 accepted" in large_project_scale_doc
-        and "updated exactly one" in large_project_scale_doc
-        and "- [x] test large contracts and script sets" in roadmap
-        and "## M12 — Migration ecosystem and Finare 1.0" in roadmap,
+        'unifiedscript.unreal-scale-gate/v0.1' in unreal_scale_runner and
+        '[int]$TypeCount = 256' in unreal_scale_runner and
+        '[int]$MembersPerType = 16' in unreal_scale_runner and
+        '[int]$ScriptCount = 256' in unreal_scale_runner and
+        '$contractDeterministic' in unreal_scale_runner and
+        '$contractManagedChanged' in unreal_scale_runner and
+        '$contractNativeStable' in unreal_scale_runner and
+        '$scriptChunkChanged' in unreal_scale_runner and
+        'Scripts=1, Created=0, Updated=1' in unreal_scale_runner and
+        '$cleanupPass' in unreal_scale_runner and
+        'DocumentationCommentId.CreateDeclarationId' in csharp_semantic_ids and
+        'Emit_SupportsMultipleScriptAssetsWithIdenticalMethodShapes' in csharp_program_emitter_tests,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
         "M11.1 gates 4096 Contract members and 256 compiled scripts through localized UE churn"
     )
-    gameplay_profiler_doc = (
-        ROOT / "docs" / "GAMEPLAY_PROFILER.md"
-    ).read_text(encoding="utf-8")
     gameplay_profiler_source = (
         ROOT
         / "src"
@@ -6320,29 +5732,22 @@ def main() -> int:
         / "FinareGameplayProfilerTests.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.gameplay-profile/v0.3" in gameplay_profiler_source
-        and "DefaultFrameCapacity = 120" in gameplay_profiler_source
-        and "BuildWorldPhases" in gameplay_profiler_source
-        and "BuildPressure" in gameplay_profiler_source
-        and 'new("reflectionFallback"' in gameplay_profiler_source
-        and "probeObserver?.Hit" in unreal_world_debug_session
-        and "NativePreActorTickNanoseconds" in unreal_gameplay_data_source
-        and "NativePostActorTickNanoseconds" in unreal_gameplay_data_source
-        and "unifiedscript.gameplay-profile/v0.3"
-        in unreal_debug_workbench_source
-        and '"Focus Hot Node"' in unreal_debug_panel
-        and '"Save JSON"' in unreal_debug_panel
-        and "GameplayProfilerDemoScript" in gameplay_profiler_fixture
-        and "BeginTraceBatch" in gameplay_profiler_fixture
-        and "BeginOverlapBatch" in gameplay_profiler_fixture
-        and "Finare.Unreal.Profiler.FullAttribution"
-        in gameplay_profiler_native_test
-        and "Semantic source and graph nodes share the gameplay timeline"
-        in gameplay_profiler_native_test
-        and "Saved/Finare/Profiles" in gameplay_profiler_doc
-        and "performance baseline" in gameplay_profiler_doc
-        and "- [x] attribute time and count to scripts" in roadmap
-        and "M9.3 is\ncomplete" in roadmap,
+        'unifiedscript.gameplay-profile/v0.3' in gameplay_profiler_source and
+        'DefaultFrameCapacity = 120' in gameplay_profiler_source and
+        'BuildWorldPhases' in gameplay_profiler_source and
+        'BuildPressure' in gameplay_profiler_source and
+        'new("reflectionFallback"' in gameplay_profiler_source and
+        'probeObserver?.Hit' in unreal_world_debug_session and
+        'NativePreActorTickNanoseconds' in unreal_gameplay_data_source and
+        'NativePostActorTickNanoseconds' in unreal_gameplay_data_source and
+        'unifiedscript.gameplay-profile/v0.3' in unreal_debug_workbench_source and
+        '"Focus Hot Node"' in unreal_debug_panel and
+        '"Save JSON"' in unreal_debug_panel and
+        'GameplayProfilerDemoScript' in gameplay_profiler_fixture and
+        'BeginTraceBatch' in gameplay_profiler_fixture and
+        'BeginOverlapBatch' in gameplay_profiler_fixture and
+        'Finare.Unreal.Profiler.FullAttribution' in gameplay_profiler_native_test and
+        'Semantic source and graph nodes share the gameplay timeline' in gameplay_profiler_native_test,
         "Gameplay profiler attribution, bounded trace, Slate workflow, or live World proof is incomplete",
     )
     checks.append(
@@ -6357,7 +5762,7 @@ def main() -> int:
     remote_debug_transport_source = (
         ROOT
         / "src"
-        / "Finare.Runtime"
+        / "Finare.Compilation"
         / "CoreClrDebugRemoteTransport.cs"
     ).read_text(encoding="utf-8")
     remote_debug_test = (
@@ -6378,9 +5783,6 @@ def main() -> int:
         / "Finare.Tests"
         / "UnrealGameplayDiagnosisTests.cs"
     ).read_text(encoding="utf-8")
-    remote_debug_doc = (
-        ROOT / "docs" / "REMOTE_DEBUG_FRAMING.md"
-    ).read_text(encoding="utf-8")
     gameplay_diagnosis_report_path = (
         ROOT
         / "samples"
@@ -6391,38 +5793,22 @@ def main() -> int:
     with gameplay_diagnosis_report_path.open("r", encoding="utf-8") as handle:
         gameplay_diagnosis_report = json.load(handle)
     require(
-        "unifiedscript.debug-frame/v0.1" in remote_debug_frame_source
-        and 'Magic = 0x42445355' in remote_debug_frame_source
-        and "MaximumPayloadBytes = 1024 * 1024" in remote_debug_frame_source
-        and "CoreClrDebugRemoteTransport" in remote_debug_transport_source
-        and "maximumConnections = 32" in remote_debug_transport_source
-        and "LongPollConnectionDoesNotBlockIndependentPauseAndContinueRequests"
-        in remote_debug_test
-        and 'args[0] == "debug-frame-serve"' in cli_source
-        and "unifiedscript.debug-frame-server/v0.1" in cli_source
-        and "24-byte little-endian header" in remote_debug_doc
-        and "unifiedscript.gameplay-diagnosis/v0.1" in gameplay_diagnosis_source
-        and "GetBoundaryCosts" in gameplay_diagnosis_source
-        and "LiveDebugValueAndProfileDeltaLocateDefectAndRegressionWithoutLogs"
-        in gameplay_diagnosis_test
-        and 'args[0] == "ue-profile-diagnose"' in cli_source
-        and gameplay_diagnosis_report["schemaVersion"]
-        == "unifiedscript.gameplay-diagnosis/v0.1"
-        and gameplay_diagnosis_report["acceptanceSatisfied"] is True
-        and {
-            finding["kind"] for finding in gameplay_diagnosis_report["findings"]
-        }
-        == {"gameplayDefect", "performanceRegression"}
-        and all(
-            finding["nodeId"].startswith("us_")
-            and finding["sourceSpan"]["filePath"].endswith(
-                "GameplayDiagnosisFixture.cs"
-            )
-            and finding["runtimeBoundary"]
-            in {"reflectionFallback", "batchTrace"}
-            for finding in gameplay_diagnosis_report["findings"]
-        )
-        and "- [x] add bounded versioned remote debug framing" in roadmap,
+        'unifiedscript.debug-frame/v0.1' in remote_debug_frame_source and
+        'Magic = 0x42445355' in remote_debug_frame_source and
+        'MaximumPayloadBytes = 1024 * 1024' in remote_debug_frame_source and
+        'CoreClrDebugRemoteTransport' in remote_debug_transport_source and
+        'maximumConnections = 32' in remote_debug_transport_source and
+        'LongPollConnectionDoesNotBlockIndependentPauseAndContinueRequests' in remote_debug_test and
+        'args[0] == "debug-frame-serve"' in cli_source and
+        'unifiedscript.debug-frame-server/v0.1' in cli_source and
+        'unifiedscript.gameplay-diagnosis/v0.1' in gameplay_diagnosis_source and
+        'GetBoundaryCosts' in gameplay_diagnosis_source and
+        'LiveDebugValueAndProfileDeltaLocateDefectAndRegressionWithoutLogs' in gameplay_diagnosis_test and
+        'args[0] == "ue-profile-diagnose"' in cli_source and
+        gameplay_diagnosis_report['schemaVersion'] == 'unifiedscript.gameplay-diagnosis/v0.1' and
+        gameplay_diagnosis_report['acceptanceSatisfied'] is True and
+        {finding['kind'] for finding in gameplay_diagnosis_report['findings']} == {'gameplayDefect', 'performanceRegression'} and
+        all((finding['nodeId'].startswith('us_') and finding['sourceSpan']['filePath'].endswith('GameplayDiagnosisFixture.cs') and (finding['runtimeBoundary'] in {'reflectionFallback', 'batchTrace'}) for finding in gameplay_diagnosis_report['findings'])),
         "Bounded process debug framing or source/node/boundary diagnosis proof is incomplete",
     )
     checks.append(
@@ -6458,9 +5844,6 @@ def main() -> int:
         / "Unreal"
         / "Finare.Unreal.Demo"
         / "RepresentativeWorkloadBenchmarkScript.cs"
-    ).read_text(encoding="utf-8")
-    performance_suite_doc = (
-        ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md"
     ).read_text(encoding="utf-8")
     performance_capture_writer = (
         ROOT / "comparison" / "write-workload-capture.ps1"
@@ -6517,85 +5900,48 @@ def main() -> int:
     }
     suite_workloads = performance_suite_manifest["workloads"]
     require(
-        performance_suite_manifest["schemaVersion"]
-        == "unifiedscript.performance-workload-suite/v0.1"
-        and performance_suite_manifest["trialCount"] == 3
-        and performance_suite_manifest["build"]["engineVersion"] == "5.8.1"
-        and performance_suite_manifest["build"]["rhi"] == "NullRHI"
-        and len(suite_workloads) == 9
-        and {workload["category"] for workload in suite_workloads}
-        == expected_workload_categories
-        and {
-            metric
-            for workload in suite_workloads
-            for metric in workload["requiredMetrics"]
-        }
-        == expected_performance_metrics
-        and abs(sum(workload["weight"] for workload in suite_workloads) - 1.0)
-        < 0.000001
-        and all(
-            re.fullmatch(r"sha256:[0-9a-f]{64}", workload["inputDigest"])
-            and re.fullmatch(r"sha256:[0-9a-f]{64}", workload["assetDigest"])
-            for workload in suite_workloads
-        )
-        and "unifiedscript.performance-engine-result/v0.1"
-        in performance_suite_source
-        and "unifiedscript.performance-raw-measurement/v0.1"
-        in performance_suite_source
-        and "unifiedscript.performance-trial-capture/v0.1"
-        in performance_suite_source
-        and "CreateAlternatingSchedule" in performance_suite_source
-        and "CreateCapture" in performance_suite_source
-        and "AssembleResult" in performance_suite_source
-        and "ComputeMachineFingerprint" in performance_suite_source
-        and "environment differs" in performance_suite_source
-        and "CheckedInManifestCoversM10WorkloadsMetricsAndAlternatingOrder"
-        in performance_suite_test
-        and "ComparisonRejectsAValidButDifferentMachineFingerprint"
-        in performance_suite_test
-        and "RawMeasurementIsNormalizedAgainstManifestAndScheduledSlot"
-        in performance_suite_test
-        and "IndependentTrialCapturesAssembleOnlyOneRuntimeAndEnvironment"
-        in performance_suite_test
-        and 'args[0] == "ue-workload-capture"' in cli_source
-        and 'args[0] == "ue-workload-assemble"' in cli_source
-        and 'args[0] == "ue-workload-compare"' in cli_source
-        and "Get-CimInstance Win32_Processor" in performance_capture_writer
-        and "Engine\\Build\\Build.version" in performance_capture_writer
-        and "executionOrdinal" in performance_capture_writer
-        and "SuiteTrial" in performance_pair_runner
-        and "Get-RuntimeSourceIdentity" in performance_pair_runner
-        and "unifiedscript.runtime-source-identity/v0.1"
-        in performance_runtime_identity
-        and "Get-FileHash" in performance_runtime_identity
-        and "Get-PluginVersion" in performance_pair_runner
-        and "ReportOnly" in performance_pair_runner
-        and "if ($unifiedFirst)" in performance_pair_runner
-        and "unifiedscript\\captures" in performance_pair_runner
-        and "puerts\\captures" in performance_pair_runner
-        and "AllowLosingComparison" in performance_pair_runner
-        and "Test-CurrentPair" in performance_complete_runner
-        and "run-representative-workload-comparison.ps1"
-        in performance_complete_runner
-        and "run-gameplay-comparison.ps1" in performance_complete_runner
-        and "ue-workload-assemble" in performance_complete_runner
-        and "ue-workload-compare" in performance_complete_runner
-        and "GetAllocatedBytesForCurrentThread" in performance_suite_doc
-        and "V8 used heap" in performance_suite_doc
-        and "null ratio" in performance_suite_doc
-        and "54 slots" in performance_suite_doc
-        and "all 27 captures" in performance_suite_doc
-        and "all 54 execution ordinals" in performance_suite_doc
-        and "mixed results close M10.1" in performance_suite_doc
-        and "## M12 — Migration ecosystem and Finare 1.0" in roadmap
-        and "- [x] use profiler evidence to promote only high-volume stable data"
-        in roadmap
-        and "- [x] preserve World ownership, generation checks, bounds"
-        in roadmap
-        and "- [x] make schemas generated, extensible, measurable, and debuggable"
-        in roadmap
-        and "- [x] capture median, p95/p99 frame time" in roadmap
-        and "- [x] alternate engines and trials" in roadmap,
+        performance_suite_manifest['schemaVersion'] == 'unifiedscript.performance-workload-suite/v0.1' and
+        performance_suite_manifest['trialCount'] == 3 and
+        performance_suite_manifest['build']['engineVersion'] == '5.8.1' and
+        performance_suite_manifest['build']['rhi'] == 'NullRHI' and
+        len(suite_workloads) == 9 and
+        {workload['category'] for workload in suite_workloads} == expected_workload_categories and
+        {metric for workload in suite_workloads for metric in workload['requiredMetrics']} == expected_performance_metrics and
+        abs(sum((workload['weight'] for workload in suite_workloads)) - 1.0) < 1e-06 and
+        all((re.fullmatch('sha256:[0-9a-f]{64}', workload['inputDigest']) and re.fullmatch('sha256:[0-9a-f]{64}', workload['assetDigest']) for workload in suite_workloads)) and
+        'unifiedscript.performance-engine-result/v0.1' in performance_suite_source and
+        'unifiedscript.performance-raw-measurement/v0.1' in performance_suite_source and
+        'unifiedscript.performance-trial-capture/v0.1' in performance_suite_source and
+        'CreateAlternatingSchedule' in performance_suite_source and
+        'CreateCapture' in performance_suite_source and
+        'AssembleResult' in performance_suite_source and
+        'ComputeMachineFingerprint' in performance_suite_source and
+        'environment differs' in performance_suite_source and
+        'CheckedInManifestCoversM10WorkloadsMetricsAndAlternatingOrder' in performance_suite_test and
+        'ComparisonRejectsAValidButDifferentMachineFingerprint' in performance_suite_test and
+        'RawMeasurementIsNormalizedAgainstManifestAndScheduledSlot' in performance_suite_test and
+        'IndependentTrialCapturesAssembleOnlyOneRuntimeAndEnvironment' in performance_suite_test and
+        'args[0] == "ue-workload-capture"' in cli_source and
+        'args[0] == "ue-workload-assemble"' in cli_source and
+        'args[0] == "ue-workload-compare"' in cli_source and
+        'Get-CimInstance Win32_Processor' in performance_capture_writer and
+        'Engine\\Build\\Build.version' in performance_capture_writer and
+        'executionOrdinal' in performance_capture_writer and
+        'SuiteTrial' in performance_pair_runner and
+        'Get-RuntimeSourceIdentity' in performance_pair_runner and
+        'unifiedscript.runtime-source-identity/v0.1' in performance_runtime_identity and
+        'Get-FileHash' in performance_runtime_identity and
+        'Get-PluginVersion' in performance_pair_runner and
+        'ReportOnly' in performance_pair_runner and
+        'if ($unifiedFirst)' in performance_pair_runner and
+        'unifiedscript\\captures' in performance_pair_runner and
+        'puerts\\captures' in performance_pair_runner and
+        'AllowLosingComparison' in performance_pair_runner and
+        'Test-CurrentPair' in performance_complete_runner and
+        'run-representative-workload-comparison.ps1' in performance_complete_runner and
+        'run-gameplay-comparison.ps1' in performance_complete_runner and
+        'ue-workload-assemble' in performance_complete_runner and
+        'ue-workload-compare' in performance_complete_runner,
         "M10.1 workload manifest, metrics, alternating schedule, or strict comparison is incomplete",
     )
     checks.append(
@@ -6610,94 +5956,56 @@ def main() -> int:
         for workload in performance_suite_manifest["workloads"]
     }
     require(
-        performance_suite_manifest["suiteVersion"] == "1.0.0"
-        and performance_current_manifest["suiteVersion"] == "1.1.0"
-        and set(current_workloads) == set(frozen_workloads)
-        and current_workloads["struct-container-transfer"]["version"] == "1.1.0"
-        and current_workloads["delegate-storm"]["version"] == "1.1.0"
-        and current_workloads["delegate-storm"]["measuredIterations"] == 65536
-        and all(
-            current_workloads[workload_id]["inputDigest"]
-            == frozen_workloads[workload_id]["inputDigest"]
-            for workload_id in current_workloads
-            if workload_id
-            not in {"struct-container-transfer", "delegate-storm"}
-        )
-        and performance_budget_manifest["schemaVersion"]
-        == "unifiedscript.performance-budgets/v0.1"
-        and performance_budget_manifest["suiteVersion"] == "1.1.0"
-        and performance_budget_manifest["referenceSuiteVersion"] == "1.0.0"
-        and performance_budget_manifest["aggregation"]
-        == "weighted-arithmetic-normalized"
-        and performance_budget_manifest["maximumWeightedRatio"] <= 0.95
-        and len(performance_budget_manifest["weightedMetrics"]) == 8
-        and {
-            item["workloadId"]
-            for item in performance_budget_manifest["excludedWorkloads"]
-        }
-        == {"hot-reload"}
-        and all(
-            gate["rationale"] and gate["maximum"] >= 0
-            for gate in performance_budget_manifest["regressionGates"]
-        )
-        and any(
-            gate["id"] == "generated-container-allocation"
-            and gate["maximum"] == 0
-            for gate in performance_budget_manifest["regressionGates"]
-        )
-        and any(
-            gate["id"] == "generated-event-allocation"
-            and gate["maximum"] == 0
-            for gate in performance_budget_manifest["regressionGates"]
-        )
-        and "WeightedArithmeticNormalized" in performance_budget_source
-        and "BroadClaimQualified" in performance_budget_source
-        and "RegressionGatesPassed" in performance_budget_source
-        and "cover the complete suite" in performance_budget_source
-        and "WeightedVerdictPublishesWinsAndLossesWithoutMovingThresholds"
-        in performance_budget_test
-        and "CheckedInM10Point3SuitePreservesFrozenWorkloadsAndReviewsBudgets"
-        in performance_budget_test
-        and 'args[0] == "ue-workload-budget"' in cli_source
-        and "ue-workload-budget" in performance_complete_runner
-        and "performance-budgets.v1.1.0.json" in performance_complete_runner
-        and "artifacts\\comparison\\suite\\v1.1.0"
-        in performance_complete_runner
-        and "AcquireGeneratedSnapshot" in representative_workload_demo
-        and "AcquireGeneratedEvents" in representative_workload_demo
-        and "allocatedBytes -ne 0" in (
-            ROOT / "tools" / "run-unreal-representative-workload.ps1"
-        ).read_text(encoding="utf-8")
-        and "- [x] keep zero steady-state managed allocation" in roadmap
-        and "- [x] prevent regressions in the existing ABI" in roadmap
-        and "- [x] require the weighted matched gameplay suite" in roadmap
-        and "weighted result is 0.555769" in roadmap,
+        performance_suite_manifest['suiteVersion'] == '1.0.0' and
+        performance_current_manifest['suiteVersion'] == '1.1.0' and
+        set(current_workloads) == set(frozen_workloads) and
+        current_workloads['struct-container-transfer']['version'] == '1.1.0' and
+        current_workloads['delegate-storm']['version'] == '1.1.0' and
+        current_workloads['delegate-storm']['measuredIterations'] == 65536 and
+        all((current_workloads[workload_id]['inputDigest'] == frozen_workloads[workload_id]['inputDigest'] for workload_id in current_workloads if workload_id not in {'struct-container-transfer', 'delegate-storm'})) and
+        performance_budget_manifest['schemaVersion'] == 'unifiedscript.performance-budgets/v0.1' and
+        performance_budget_manifest['suiteVersion'] == '1.1.0' and
+        performance_budget_manifest['referenceSuiteVersion'] == '1.0.0' and
+        performance_budget_manifest['aggregation'] == 'weighted-arithmetic-normalized' and
+        performance_budget_manifest['maximumWeightedRatio'] <= 0.95 and
+        len(performance_budget_manifest['weightedMetrics']) == 8 and
+        {item['workloadId'] for item in performance_budget_manifest['excludedWorkloads']} == {'hot-reload'} and
+        all((gate['rationale'] and gate['maximum'] >= 0 for gate in performance_budget_manifest['regressionGates'])) and
+        any((gate['id'] == 'generated-container-allocation' and gate['maximum'] == 0 for gate in performance_budget_manifest['regressionGates'])) and
+        any((gate['id'] == 'generated-event-allocation' and gate['maximum'] == 0 for gate in performance_budget_manifest['regressionGates'])) and
+        'WeightedArithmeticNormalized' in performance_budget_source and
+        'BroadClaimQualified' in performance_budget_source and
+        'RegressionGatesPassed' in performance_budget_source and
+        'cover the complete suite' in performance_budget_source and
+        'WeightedVerdictPublishesWinsAndLossesWithoutMovingThresholds' in performance_budget_test and
+        'CheckedInM10Point3SuitePreservesFrozenWorkloadsAndReviewsBudgets' in performance_budget_test and
+        'args[0] == "ue-workload-budget"' in cli_source and
+        'ue-workload-budget' in performance_complete_runner and
+        'performance-budgets.v1.1.0.json' in performance_complete_runner and
+        'artifacts\\comparison\\suite\\v1.1.0' in performance_complete_runner and
+        'AcquireGeneratedSnapshot' in representative_workload_demo and
+        'AcquireGeneratedEvents' in representative_workload_demo and
+        'allocatedBytes -ne 0' in (ROOT / 'tools' / 'run-unreal-representative-workload.ps1').read_text(encoding='utf-8'),
         "M10.3 versioned generated workloads, reviewed budgets, or honest verdict are incomplete",
     )
     checks.append(
         "M10.3 generated workloads preserve v1.0 evidence and publish reviewed weighted verdicts"
     )
-    authoring_diagnostics_doc = (
-        ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.authoring-preview/v0.3" in debug_server_source
-        and "X-Finare-Preview-Token" in debug_server_source
-        and "TakePreparedPreview" in debug_server_source
-        and "preparedPreviews" in debug_server_source
-        and "CreateRollbackResponse" in debug_server_source
-        and "AuthoringQuickFixResponse" in debug_server_source
-        and "BuildPreviewUrl" in unreal_authoring_workbench_source
-        and "ParsePreviewResponse" in unreal_authoring_workbench_source
-        and "FFinareAuthoringErrorResult" in unreal_authoring_workbench_header
-        and "ShowDiffPreview" in unreal_authoring_widget
-        and "ROLLBACK CONFIRMED" in unreal_authoring_widget
-        and "HandleWorkspaceRefreshResponse" in unreal_authoring_widget
-        and "Workbench parses exact before/after preview" in unreal_authoring_test
-        and "Failure explicitly confirms unchanged rollback" in unreal_authoring_test
-        and "mismatched preview token" in authoring_diagnostics_doc
-        and "- [x] provide compiler/contract diagnostics" in roadmap
-        and "### M8.3 — Asset, state, event, and API authoring" in roadmap,
+        'unifiedscript.authoring-preview/v0.3' in debug_server_source and
+        'X-Finare-Preview-Token' in debug_server_source and
+        'TakePreparedPreview' in debug_server_source and
+        'preparedPreviews' in debug_server_source and
+        'CreateRollbackResponse' in debug_server_source and
+        'AuthoringQuickFixResponse' in debug_server_source and
+        'BuildPreviewUrl' in unreal_authoring_workbench_source and
+        'ParsePreviewResponse' in unreal_authoring_workbench_source and
+        'FFinareAuthoringErrorResult' in unreal_authoring_workbench_header and
+        'ShowDiffPreview' in unreal_authoring_widget and
+        'ROLLBACK CONFIRMED' in unreal_authoring_widget and
+        'HandleWorkspaceRefreshResponse' in unreal_authoring_widget and
+        'Workbench parses exact before/after preview' in unreal_authoring_test and
+        'Failure explicitly confirms unchanged rollback' in unreal_authoring_test,
         "Native prepared Diff, structured diagnostics, safe fixes, or rollback receipt is incomplete",
     )
     checks.append(
@@ -6709,9 +6017,6 @@ def main() -> int:
     semantic_review_tests = (
         ROOT / "tests" / "Finare.Tests" / "SemanticGraphReviewTests.cs"
     ).read_text(encoding="utf-8")
-    semantic_review_document = (
-        ROOT / "docs" / "SEMANTIC_DIFF_AND_MERGE.md"
-    ).read_text(encoding="utf-8")
     workbench_index = (
         ROOT / "prototype" / "visual-editor" / "index.html"
     ).read_text(encoding="utf-8")
@@ -6719,32 +6024,23 @@ def main() -> int:
         ROOT / "prototype" / "visual-editor" / "app.js"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.semantic-graph-diff/v0.1" in semantic_review_source
-        and "unifiedscript.semantic-graph-merge/v0.1" in semantic_review_source
-        and "CanonicalFunction" in semantic_review_source
-        and "function-level auto-merge was refused" in semantic_review_source
-        and 'args[0] == "semantic-diff"' in cli_source
-        and 'args[0] == "semantic-merge"' in cli_source
-        and "new SemanticGraphDiffer().Compare" in debug_server_source
-        and "SemanticDiffSchema" in unreal_authoring_workbench_source
-        and "SemanticChanges" in unreal_authoring_workbench_header
-        and "SEMANTIC REVIEW" in unreal_authoring_widget
-        and 'id="semanticReviewDialog"' in workbench_index
-        and "reviewAndCommitAuthoring" in workbench_script
-        and "X-Finare-Preview-Token" in workbench_script
-        and "MergeCombinesDisjointFunctionChangesDeterministically"
-        in semantic_review_tests
-        and "SemanticMergeCliWritesCleanGraphOrConflictReportAtomically"
-        in semantic_review_tests
-        and "auto-merge inside one function" in semantic_review_document
-        and "docs/SEMANTIC_DIFF_AND_MERGE.md" in release_document_paths
-        and "semantic-diff-merge"
-        in product_release["acceptance"]["requiredGates"]
-        and "- [x] make semantic graph/C# diffs reviewable and mergeable"
-        in roadmap_document
-        and "M12.3 semantic review evidence" in roadmap_document
-        and "The cursor advances to M12.3's typed AI semantic patch proposals."
-        in roadmap_document,
+        'unifiedscript.semantic-graph-diff/v0.1' in semantic_review_source and
+        'unifiedscript.semantic-graph-merge/v0.1' in semantic_review_source and
+        'CanonicalFunction' in semantic_review_source and
+        'function-level auto-merge was refused' in semantic_review_source and
+        'args[0] == "semantic-diff"' in cli_source and
+        'args[0] == "semantic-merge"' in cli_source and
+        'new SemanticGraphDiffer().Compare' in debug_server_source and
+        'SemanticDiffSchema' in unreal_authoring_workbench_source and
+        'SemanticChanges' in unreal_authoring_workbench_header and
+        'SEMANTIC REVIEW' in unreal_authoring_widget and
+        'id="semanticReviewDialog"' in workbench_index and
+        'reviewAndCommitAuthoring' in workbench_script and
+        'X-Finare-Preview-Token' in workbench_script and
+        'MergeCombinesDisjointFunctionChangesDeterministically' in semantic_review_tests and
+        'SemanticMergeCliWritesCleanGraphOrConflictReportAtomically' in semantic_review_tests and
+        'docs/SEMANTIC_DIFF_AND_MERGE.md' in release_document_paths and
+        'semantic-diff-merge' in product_release['acceptance']['requiredGates'],
         "M12.3 stable-ID semantic diff, conservative merge, dual Workbench review, or release gate is incomplete",
     )
     checks.append(
@@ -6756,34 +6052,23 @@ def main() -> int:
     ai_proposal_tests = (
         ROOT / "tests" / "Finare.Tests" / "AiSemanticPatchProposalTests.cs"
     ).read_text(encoding="utf-8")
-    ai_proposal_document = (
-        ROOT / "docs" / "AI_SEMANTIC_PROPOSALS.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.ai-semantic-patch-proposal/v0.1" in ai_proposal_source
-        and "unifiedscript.ai-semantic-patch-proposal-draft/v0.1"
-        in ai_proposal_source
-        and "JsonUnmappedMemberHandling.Disallow" in ai_proposal_source
-        and "AppendIdentityPart" in ai_proposal_source
-        and 'args[0] == "ai-proposal-pack"' in cli_source
-        and "/api/authoring/ai-semantic-proposal/draft" in debug_server_source
-        and "/api/authoring/preview/ai-semantic-proposal" in debug_server_source
-        and "BoundPayloadId" in debug_server_source
-        and "showAiProposalPreview" in workbench_script
-        and "applyAiSemanticProposal" in workbench_script
-        and "BuildAiSemanticProposalUrl" in unreal_authoring_workbench_source
-        and "AiPreviewSchema" in unreal_authoring_workbench_source
-        and "DraftCreatesDeterministicStrictProposal" in ai_proposal_tests
-        and "CliPacksTheSameTypedPlanDeterministically" in ai_proposal_tests
-        and "proposalId" in ai_proposal_document
-        and "UAW1012" in ai_proposal_document
-        and "docs/AI_SEMANTIC_PROPOSALS.md" in release_document_paths
-        and "ai-semantic-proposals"
-        in product_release["acceptance"]["requiredGates"]
-        and "- [x] let AI tools propose typed semantic patch plans"
-        in roadmap_document
-        and "The cursor advances to M12.3's integrated graph/source debugging and profiling."
-        in roadmap_document,
+        'unifiedscript.ai-semantic-patch-proposal/v0.1' in ai_proposal_source and
+        'unifiedscript.ai-semantic-patch-proposal-draft/v0.1' in ai_proposal_source and
+        'JsonUnmappedMemberHandling.Disallow' in ai_proposal_source and
+        'AppendIdentityPart' in ai_proposal_source and
+        'args[0] == "ai-proposal-pack"' in cli_source and
+        '/api/authoring/ai-semantic-proposal/draft' in debug_server_source and
+        '/api/authoring/preview/ai-semantic-proposal' in debug_server_source and
+        'BoundPayloadId' in debug_server_source and
+        'showAiProposalPreview' in workbench_script and
+        'applyAiSemanticProposal' in workbench_script and
+        'BuildAiSemanticProposalUrl' in unreal_authoring_workbench_source and
+        'AiPreviewSchema' in unreal_authoring_workbench_source and
+        'DraftCreatesDeterministicStrictProposal' in ai_proposal_tests and
+        'CliPacksTheSameTypedPlanDeterministically' in ai_proposal_tests and
+        'docs/AI_SEMANTIC_PROPOSALS.md' in release_document_paths and
+        'ai-semantic-proposals' in product_release['acceptance']['requiredGates'],
         "M12.3 typed AI proposal identity, compiler/transaction binding, dual review, or release gate is incomplete",
     )
     checks.append(
@@ -6795,85 +6080,53 @@ def main() -> int:
     authoring_insight_tests = (
         ROOT / "tests" / "Finare.Tests" / "UnrealAuthoringInsightTests.cs"
     ).read_text(encoding="utf-8")
-    authoring_insight_document = (
-        ROOT / "docs" / "INTEGRATED_RUNTIME_INSIGHTS.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.authoring-insight/v0.1" in authoring_insight_source
-        and "unifiedscript.authoring-insight-request/v0.1"
-        in authoring_insight_source
-        and "managedCode" in authoring_insight_source
-        and "RuntimeRoutes" in authoring_insight_source
-        and "/api/unreal/authoring-insight" in debug_server_source
-        and 'id="insightDrawer"' in workbench_index
-        and "importGameplayProfile" in workbench_script
-        and "focusInsightNode" in workbench_script
-        and "SEMANTIC HOTSPOTS" in unreal_debug_panel
-        and "RebuildProfileNodeView" in unreal_debug_panel
-        and "SnapshotJoinsSemanticSourceCostAndGeneratedApiRoutes"
-        in authoring_insight_tests
-        and "SnapshotKeepsStaleRuntimeNodeVisibleAsUnresolved"
-        in authoring_insight_tests
-        and "route-level" in authoring_insight_document
-        and "docs/INTEGRATED_RUNTIME_INSIGHTS.md" in release_document_paths
-        and "integrated-runtime-insights"
-        in product_release["acceptance"]["requiredGates"]
-        and "- [x] integrate graph/source debugging and profiling"
-        in roadmap_document
-        and "M12.3 integrated runtime insight evidence"
-        in roadmap_document,
+        'unifiedscript.authoring-insight/v0.1' in authoring_insight_source and
+        'unifiedscript.authoring-insight-request/v0.1' in authoring_insight_source and
+        'managedCode' in authoring_insight_source and
+        'RuntimeRoutes' in authoring_insight_source and
+        '/api/unreal/authoring-insight' in debug_server_source and
+        'id="insightDrawer"' in workbench_index and
+        'importGameplayProfile' in workbench_script and
+        'focusInsightNode' in workbench_script and
+        'SEMANTIC HOTSPOTS' in unreal_debug_panel and
+        'RebuildProfileNodeView' in unreal_debug_panel and
+        'SnapshotJoinsSemanticSourceCostAndGeneratedApiRoutes' in authoring_insight_tests and
+        'SnapshotKeepsStaleRuntimeNodeVisibleAsUnresolved' in authoring_insight_tests and
+        'docs/INTEGRATED_RUNTIME_INSIGHTS.md' in release_document_paths and
+        'integrated-runtime-insights' in product_release['acceptance']['requiredGates'],
         "M12.3 integrated Graph/source profile join, dual Workbench UX, or route honesty is incomplete",
     )
     checks.append(
         "M12.3 joins semantic Graph/source hotspots with measured Unreal boundary and generated route context"
     )
     require(
-        unreal_data_plane_extension_schema["schemaVersion"]
-        == "unifiedscript.unreal-data-plane-extension/v0.1"
-        and unreal_data_plane_extension_schema["requiredAbiVersion"] == 4
-        and unreal_data_plane_extension_schema["requiredLayoutCompatibilityId"]
-        == unreal_data_plane_schema["compatibilityId"]
-        and unreal_data_plane_extension_catalog["schemaVersion"]
-        == "unifiedscript.unreal-data-plane-extension-catalog/v0.1"
-        and unreal_data_plane_extension_catalog["schemaFingerprint"]
-        == "0xBB23EDDB69B7FD0C"
-        and len(unreal_data_plane_extension_catalog["channels"]) == 2
-        and "class UnrealDataPlaneExtensionGenerator"
-        in unreal_data_plane_extension_generator
-        and "JsonUnmappedMemberHandling.Disallow"
-        in unreal_data_plane_extension_generator
-        and "UnrealDataPlaneExtensionChannel<T>"
-        in unreal_data_plane_extension_managed
-        and 'args[0] == "ue-data-plane-extension"' in cli_source
-        and "BlockBreakerDataPlaneExtension"
-        in unreal_data_plane_extension_generated_managed
-        and "FBlockBreakerTargetSnapshotV1) == 88)"
-        in unreal_data_plane_extension_generated_native
-        and "FFinareDataPlaneExtensionRegistry"
-        in unreal_data_plane_extension_registry_header
-        and "ValidateRows" in unreal_data_plane_extension_registry_source
-        and "DataPlaneExtensionRegistry.Reset()" in unreal_world_host_source
-        and "RegisterGeneratedDataPlaneExtension" in unreal_world_host_header
-        and "AcquireGeneratedSnapshot(" in unreal_data_plane_profile_demo
-        and "BlockBreakerDataPlaneExtension.TargetSnapshots"
-        in unreal_data_plane_profile_demo
-        and "ExtensionFingerprint" in unreal_world_host_test
-        and "BlockBreakerExtensionGeneratesTypedManagedNativeAndCatalogOutputs"
-        in unreal_data_plane_extension_generator_test
-        and "GeneratedExtensionRegistry" in unreal_data_plane_extension_registry_test
-        and "Generated data-plane extension artifact is stale"
-        in unreal_data_plane_extension_helper
-        and "BlockBreaker.data-plane-extension.catalog.json"
-        in deterministic_gate
-        and "generate-unreal-data-plane-extension.ps1" in sdk_package
-        and "project-owned workload schema" in unreal_data_plane_extension_doc
-        and "docs/DATA_PLANE_EXTENSIONS.md" in release_document_paths
-        and "generated-data-plane-extensions"
-        in product_release["acceptance"]["requiredGates"]
-        and "- [x] keep the generated data-plane architecture open"
-        in roadmap_document
-        and "M12.3 generated data-plane extension evidence"
-        in roadmap_document,
+        unreal_data_plane_extension_schema['schemaVersion'] == 'unifiedscript.unreal-data-plane-extension/v0.1' and
+        unreal_data_plane_extension_schema['requiredAbiVersion'] == 4 and
+        unreal_data_plane_extension_schema['requiredLayoutCompatibilityId'] == unreal_data_plane_schema['compatibilityId'] and
+        unreal_data_plane_extension_catalog['schemaVersion'] == 'unifiedscript.unreal-data-plane-extension-catalog/v0.1' and
+        unreal_data_plane_extension_catalog['schemaFingerprint'] == '0xBB23EDDB69B7FD0C' and
+        len(unreal_data_plane_extension_catalog['channels']) == 2 and
+        'class UnrealDataPlaneExtensionGenerator' in unreal_data_plane_extension_generator and
+        'JsonUnmappedMemberHandling.Disallow' in unreal_data_plane_extension_generator and
+        'UnrealDataPlaneExtensionChannel<T>' in unreal_data_plane_extension_managed and
+        'args[0] == "ue-data-plane-extension"' in cli_source and
+        'BlockBreakerDataPlaneExtension' in unreal_data_plane_extension_generated_managed and
+        'FBlockBreakerTargetSnapshotV1) == 88)' in unreal_data_plane_extension_generated_native and
+        'FFinareDataPlaneExtensionRegistry' in unreal_data_plane_extension_registry_header and
+        'ValidateRows' in unreal_data_plane_extension_registry_source and
+        'DataPlaneExtensionRegistry.Reset()' in unreal_world_host_source and
+        'RegisterGeneratedDataPlaneExtension' in unreal_world_host_header and
+        'AcquireGeneratedSnapshot(' in unreal_data_plane_profile_demo and
+        'BlockBreakerDataPlaneExtension.TargetSnapshots' in unreal_data_plane_profile_demo and
+        'ExtensionFingerprint' in unreal_world_host_test and
+        'BlockBreakerExtensionGeneratesTypedManagedNativeAndCatalogOutputs' in unreal_data_plane_extension_generator_test and
+        'GeneratedExtensionRegistry' in unreal_data_plane_extension_registry_test and
+        'Generated data-plane extension artifact is stale' in unreal_data_plane_extension_helper and
+        'BlockBreaker.data-plane-extension.catalog.json' in deterministic_gate and
+        'generate-unreal-data-plane-extension.ps1' in sdk_package and
+        'docs/DATA_PLANE_EXTENSIONS.md' in release_document_paths and
+        'generated-data-plane-extensions' in product_release['acceptance']['requiredGates'],
         "M12.3 generated workload schema, typed descriptors, World registry, profiling, or release gate is incomplete",
     )
     checks.append(
@@ -6883,60 +6136,52 @@ def main() -> int:
         ROOT / "src" / "Finare.CSharp" / "CSharpIdentityReconciler.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FFinareAuthoringWorkbench" in unreal_authoring_workbench_header
-        and "unifiedscript.authoring-workspace/v0.5"
-        in unreal_authoring_workbench_source
-        and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
-        and "/api/authoring/undo" in unreal_authoring_workbench_source
-        and "/api/authoring/redo" in unreal_authoring_workbench_source
-        and "/api/authoring/group/begin" in unreal_authoring_workbench_source
-        and "/api/authoring/group/commit" in unreal_authoring_workbench_source
-        and "/api/authoring/group/cancel" in unreal_authoring_workbench_source
-        and "FHttpModule::Get().CreateRequest" in unreal_authoring_widget
-        and "X-Finare-Baseline-Revision" in unreal_authoring_widget
-        and "X-Finare-Transaction-Id" in unreal_authoring_widget
-        and "X-Finare-Group-Id" in unreal_authoring_widget
-        and "HandleUndoAuthoringTransaction" in unreal_authoring_widget
-        and "HandleRedoAuthoringTransaction" in unreal_authoring_widget
-        and "HandleBeginAuthoringGroup" in unreal_authoring_widget
-        and "HandleCommitAuthoringGroup" in unreal_authoring_widget
-        and "HandleCancelAuthoringGroup" in unreal_authoring_widget
-        and "Apply & Reload" in unreal_authoring_widget
-        and "ReloadMatchingComponents" in unreal_authoring_widget
-        and "Component->PrepareScriptReloadWithTransaction(" in unreal_authoring_widget
-        and "Component->CommitPreparedScriptReload()" in unreal_authoring_widget
-        and "Component->FinalizePreparedScriptReload()" in unreal_authoring_widget
-        and "AuthoringServerUrl" in unreal_script_asset_header
-        and "AuthoringArtifactOutputs" in debug_server_source
-        and "persistedSources" in debug_server_source
-        and "ScriptAssetJson.Serialize(scriptAssets)" in debug_server_source
-        and "AuthoringSurfaceJson.Serialize(surface)" in debug_server_source
-        and "emitter.Emit(snapshot.Request)" in debug_server_source
-        and 'case "--source"' in cli_source
-        and 'case "--managed-out"' in cli_source
-        and 'case "--history"' in cli_source
-        and "isInitialBaseline" in identity_reconciler_source
-        and "run-unreal-authoring.ps1" in (
-            ROOT / "README.md"
-        ).read_text(encoding="utf-8")
-        and "--surface-out" in unreal_authoring_helper
-        and "--managed-out" in unreal_authoring_helper
-        and "--history" in unreal_authoring_helper,
+        'FFinareAuthoringWorkbench' in unreal_authoring_workbench_header and
+        'unifiedscript.authoring-workspace/v0.5' in unreal_authoring_workbench_source and
+        '/api/authoring/semantic-patch' in unreal_authoring_workbench_source and
+        '/api/authoring/undo' in unreal_authoring_workbench_source and
+        '/api/authoring/redo' in unreal_authoring_workbench_source and
+        '/api/authoring/group/begin' in unreal_authoring_workbench_source and
+        '/api/authoring/group/commit' in unreal_authoring_workbench_source and
+        '/api/authoring/group/cancel' in unreal_authoring_workbench_source and
+        'FHttpModule::Get().CreateRequest' in unreal_authoring_widget and
+        'X-Finare-Baseline-Revision' in unreal_authoring_widget and
+        'X-Finare-Transaction-Id' in unreal_authoring_widget and
+        'X-Finare-Group-Id' in unreal_authoring_widget and
+        'HandleUndoAuthoringTransaction' in unreal_authoring_widget and
+        'HandleRedoAuthoringTransaction' in unreal_authoring_widget and
+        'HandleBeginAuthoringGroup' in unreal_authoring_widget and
+        'HandleCommitAuthoringGroup' in unreal_authoring_widget and
+        'HandleCancelAuthoringGroup' in unreal_authoring_widget and
+        'Apply & Reload' in unreal_authoring_widget and
+        'ReloadMatchingComponents' in unreal_authoring_widget and
+        'Component->PrepareScriptReloadWithTransaction(' in unreal_authoring_widget and
+        'Component->CommitPreparedScriptReload()' in unreal_authoring_widget and
+        'Component->FinalizePreparedScriptReload()' in unreal_authoring_widget and
+        'AuthoringServerUrl' in unreal_script_asset_header and
+        'AuthoringArtifactOutputs' in debug_server_source and
+        'persistedSources' in debug_server_source and
+        'ScriptAssetJson.Serialize(scriptAssets)' in debug_server_source and
+        'AuthoringSurfaceJson.Serialize(surface)' in debug_server_source and
+        'emitter.Emit(snapshot.Request)' in debug_server_source and
+        'case "--source"' in cli_source and
+        'case "--managed-out"' in cli_source and
+        'case "--history"' in cli_source and
+        'isInitialBaseline' in identity_reconciler_source and
+        '--surface-out' in unreal_authoring_helper and
+        '--managed-out' in unreal_authoring_helper and
+        '--history' in unreal_authoring_helper,
         "Transactional Slate Workbench apply or managed artifact publication is missing",
     )
     checks.append("UE Slate applies patches transactionally and reloads matching components")
     require(
-        "FString SourceText;" in unreal_authoring_workbench_header
-        and 'TEXT("sourceText")' in unreal_authoring_workbench_source
-        and "WorkbenchSourceText = MoveTemp(Workspace.SourceText)"
-        in unreal_authoring_widget
-        and "SNew(SWidgetSwitcher)" in unreal_authoring_widget
-        and "EFinareAuthoringViewMode::Code" in unreal_authoring_widget
-        and "Workspace v0.5 rejects a response without its canonical source snapshot"
-        in unreal_authoring_test
-        and "Assert.Equal(Source, baseline.SourceText)" in authoring_http_test
-        and "[x] **M13.2E-1 — canonical snapshot dual projection:**"
-        in roadmap_document,
+        'FString SourceText;' in unreal_authoring_workbench_header and
+        'TEXT("sourceText")' in unreal_authoring_workbench_source and
+        'WorkbenchSourceText = MoveTemp(Workspace.SourceText)' in unreal_authoring_widget and
+        'SNew(SWidgetSwitcher)' in unreal_authoring_widget and
+        'EFinareAuthoringViewMode::Code' in unreal_authoring_widget and
+        'Workspace v0.5 rejects a response without its canonical source snapshot' in unreal_authoring_test and
+        'Assert.Equal(Source, baseline.SourceText)' in authoring_http_test,
         "M13.2E-1 canonical SourceText transport, Graph/C# switch, or exact-snapshot regressions are incomplete",
     )
     checks.append(
@@ -6949,30 +6194,23 @@ def main() -> int:
         ROOT / "tests" / "Finare.Tests" / "CSharpAuthoringWorkspaceTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.csharp-source-text-patch/v0.1" in source_text_patch_source
-        and "MaximumSourceCharacters = 512 * 1024" in source_text_patch_source
-        and "BaselineContentDigest" in source_text_patch_source
-        and "JsonUnmappedMemberHandling.Disallow" in source_text_patch_source
-        and "Prepare(CSharpSourceTextPatchDocument patch)" in authoring_workspace_source
-        and "CSharpSourceTextPatchDiagnosticCodes.BaselineMismatch"
-        in authoring_workspace_source
-        and '"/api/authoring/preview/source-text"' in debug_server_source
-        and '"/api/authoring/source-text"' in debug_server_source
-        and "transaction.PreviewToken is null" in debug_server_source
-        and "BuildSourceTextPatch" in unreal_authoring_workbench_source
-        and 'TEXT("/api/authoring/preview/source-text")'
-        in unreal_authoring_workbench_source
-        and "HandleApplyCodeSource" in unreal_authoring_widget
-        and "HandleRevertCodeSource" in unreal_authoring_widget
-        and "bCodeEditDirty" in unreal_authoring_widget
-        and "SourceTextMutationPreservesStableIdentitiesAndUnchangedComments"
-        in authoring_workspace_test
-        and "SourceTextEndpointRequiresAndCommitsTheExactPreviewCandidate"
-        in authoring_http_test
-        and "C# source transaction hashes the exact UTF-8 baseline"
-        in unreal_authoring_test
-        and "[x] **M13.2E-2 — restricted transactional C# editing:**"
-        in roadmap_document,
+        'unifiedscript.csharp-source-text-patch/v0.1' in source_text_patch_source and
+        'MaximumSourceCharacters = 512 * 1024' in source_text_patch_source and
+        'BaselineContentDigest' in source_text_patch_source and
+        'JsonUnmappedMemberHandling.Disallow' in source_text_patch_source and
+        'Prepare(CSharpSourceTextPatchDocument patch)' in authoring_workspace_source and
+        'CSharpSourceTextPatchDiagnosticCodes.BaselineMismatch' in authoring_workspace_source and
+        '"/api/authoring/preview/source-text"' in debug_server_source and
+        '"/api/authoring/source-text"' in debug_server_source and
+        'transaction.PreviewToken is null' in debug_server_source and
+        'BuildSourceTextPatch' in unreal_authoring_workbench_source and
+        'TEXT("/api/authoring/preview/source-text")' in unreal_authoring_workbench_source and
+        'HandleApplyCodeSource' in unreal_authoring_widget and
+        'HandleRevertCodeSource' in unreal_authoring_widget and
+        'bCodeEditDirty' in unreal_authoring_widget and
+        'SourceTextMutationPreservesStableIdentitiesAndUnchangedComments' in authoring_workspace_test and
+        'SourceTextEndpointRequiresAndCommitsTheExactPreviewCandidate' in authoring_http_test and
+        'C# source transaction hashes the exact UTF-8 baseline' in unreal_authoring_test,
         "M13.2E-2 bounded C# edit buffer, exact preview-token commit, or regression proof is incomplete",
     )
     checks.append(
@@ -6982,31 +6220,27 @@ def main() -> int:
         ROOT / "src" / "Finare.CSharp" / "CSharpGraphRoundTripInspector.cs"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.csharp-graph-round-trip/v0.1"
-        in csharp_graph_round_trip_source
-        and "VerifyLayoutPreservation" in csharp_graph_round_trip_source
-        and "PreservedSourceComments" in csharp_graph_round_trip_source
-        and "New graph node" in csharp_graph_round_trip_source
-        and "GraphLayoutPath" in debug_server_source
-        and "PrepareGraphLayout" in debug_server_source
-        and "ValidateGraphLayoutBaseline" in debug_server_source
-        and '"UAW1015"' in debug_server_source
-        and '"UAW1016"' in debug_server_source
-        and "graphLayout.CandidateText" in debug_server_source
-        and 'case "--layout-out"' in cli_source
-        and "--layout-out" in authoring_start_path.read_text(encoding="utf-8")
-        and "--layout-out" in unreal_authoring_helper
-        and "FFinareAuthoringRoundTripResult"
-        in unreal_authoring_workbench_header
-        and "RoundTripSchema" in unreal_authoring_workbench_source
-        and "ROUND-TRIP GUARD" in unreal_authoring_widget
-        and "!PersistCurrentLayout(true)" in unreal_authoring_widget
-        and "RetainedOrphans" in unreal_graph_layout_store
-        and "txn-graph-round-trip" in authoring_http_test
-        and "UAW1015" in authoring_http_test
-        and "Preview retains graph-comment evidence" in unreal_authoring_test
-        and "[x] **M13.2E-3 — identity/comment round-trip:**"
-        in roadmap_document,
+        'unifiedscript.csharp-graph-round-trip/v0.1' in csharp_graph_round_trip_source and
+        'VerifyLayoutPreservation' in csharp_graph_round_trip_source and
+        'PreservedSourceComments' in csharp_graph_round_trip_source and
+        'New graph node' in csharp_graph_round_trip_source and
+        'GraphLayoutPath' in debug_server_source and
+        'PrepareGraphLayout' in debug_server_source and
+        'ValidateGraphLayoutBaseline' in debug_server_source and
+        '"UAW1015"' in debug_server_source and
+        '"UAW1016"' in debug_server_source and
+        'graphLayout.CandidateText' in debug_server_source and
+        'case "--layout-out"' in cli_source and
+        '--layout-out' in authoring_start_path.read_text(encoding='utf-8') and
+        '--layout-out' in unreal_authoring_helper and
+        'FFinareAuthoringRoundTripResult' in unreal_authoring_workbench_header and
+        'RoundTripSchema' in unreal_authoring_workbench_source and
+        'ROUND-TRIP GUARD' in unreal_authoring_widget and
+        '!PersistCurrentLayout(true)' in unreal_authoring_widget and
+        'RetainedOrphans' in unreal_graph_layout_store and
+        'txn-graph-round-trip' in authoring_http_test and
+        'UAW1015' in authoring_http_test and
+        'Preview retains graph-comment evidence' in unreal_authoring_test,
         "M13.2E-3 transactional layout, visible preservation receipt, or bidirectional round-trip proof is incomplete",
     )
     checks.append(
@@ -7018,52 +6252,21 @@ def main() -> int:
     product_guidance_tests = (
         ROOT / "tests" / "Finare.Tests" / "ProductGuidanceTests.cs"
     ).read_text(encoding="utf-8")
-    first_project_guide = (
-        ROOT / "docs" / "UNREAL_FIRST_PROJECT.md"
-    ).read_text(encoding="utf-8")
-    gameplay_recipes = (
-        ROOT / "docs" / "UNREAL_GAMEPLAY_RECIPES.md"
-    ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.product-guidance/v0.1" in product_guidance_source
-        and "first-project" in product_guidance_source
-        and "recipes" in product_guidance_source
-        and 'args[0] == "guide"' in cli_source
-        and "guide <index|first-project|recipes>" in cli_source
-        and "guide first-project" in first_project_guide
-        and "adopt $project --sdk-root $sdk --preview" in first_project_guide
-        and "setup-unreal-project.ps1" in first_project_guide
-        and "start-finare-authoring.ps1" in first_project_guide
-        and "no internal generator ordering or repository path was required"
-        in first_project_guide
-        and all(
-            heading in gameplay_recipes
-            for heading in (
-                "## Actor behavior",
-                "## Component behavior",
-                "## Blueprint event",
-                "## Asset load",
-                "## Spawn Actor",
-                "## Trace and FHitResult",
-                "## UI bridge",
-                "## Async work",
-                "## Packaging",
-            )
-        )
-        and "Unreal API Browser" in gameplay_recipes
-        and "Build, Restart & Continue" in gameplay_recipes
-        and "docs/UNREAL_FIRST_PROJECT.md" in release_document_paths
-        and "docs/UNREAL_GAMEPLAY_RECIPES.md" in release_document_paths
-        and "Documentation\\UNREAL_FIRST_PROJECT.md" in sdk_package
-        and "Documentation\\UNREAL_GAMEPLAY_RECIPES.md" in sdk_package
-        and "projectLocalGuidance" in packaged_adoption
-        and "UNREAL_FIRST_PROJECT.md" in packaged_adoption
-        and "UNREAL_GAMEPLAY_RECIPES.md" in packaged_adoption
-        and "CatalogResolvesPackagedAndProjectLocalDocumentation"
-        in product_guidance_tests
-        and "PackagedGuidanceOwnsTheGoldenPathAndEveryGameplayRecipe"
-        in product_guidance_tests
-        and "[x] **M13.2F — product guidance:**" in roadmap_document,
+        'unifiedscript.product-guidance/v0.1' in product_guidance_source and
+        'first-project' in product_guidance_source and
+        'recipes' in product_guidance_source and
+        'args[0] == "guide"' in cli_source and
+        'guide <index|first-project|recipes>' in cli_source and
+        'docs/UNREAL_FIRST_PROJECT.md' in release_document_paths and
+        'docs/UNREAL_GAMEPLAY_RECIPES.md' in release_document_paths and
+        'Documentation\\UNREAL_FIRST_PROJECT.md' in sdk_package and
+        'Documentation\\UNREAL_GAMEPLAY_RECIPES.md' in sdk_package and
+        'projectLocalGuidance' in packaged_adoption and
+        'UNREAL_FIRST_PROJECT.md' in packaged_adoption and
+        'UNREAL_GAMEPLAY_RECIPES.md' in packaged_adoption and
+        'CatalogResolvesPackagedAndProjectLocalDocumentation' in product_guidance_tests and
+        'PackagedGuidanceOwnsTheGoldenPathAndEveryGameplayRecipe' in product_guidance_tests,
         "M13.2F packaged first-project golden path, gameplay recipes, guide resolver, or contract proof is incomplete",
     )
     checks.append(
@@ -7074,9 +6277,6 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     usability_tests = (
         ROOT / "tests" / "Finare.Tests" / "UnrealUsabilityRegressionTests.cs"
-    ).read_text(encoding="utf-8")
-    usability_document = (
-        ROOT / "docs" / "UNREAL_USABILITY.md"
     ).read_text(encoding="utf-8")
     usability_budget_path = (
         ROOT / "benchmarks" / "unreal" / "usability-budgets.v0.1.json"
@@ -7089,33 +6289,24 @@ def main() -> int:
     first_play_budget = usability_scenarios["adopt-to-first-play"]
     reload_budget = usability_scenarios["edit-to-reload"]
     require(
-        usability_budget["schemaVersion"]
-        == "unifiedscript.unreal-usability-budgets/v0.1"
-        and set(usability_scenarios)
-        == {"adopt-to-first-play", "edit-to-reload"}
-        and first_play_budget["maximumDeliberateActions"] == 8
-        and first_play_budget["maximumRestartActions"] == 1
-        and first_play_budget["maximumWallClockMs"] == 720000
-        and reload_budget["maximumDeliberateActions"] == 3
-        and reload_budget["maximumRestartActions"] == 0
-        and reload_budget["maximumWallClockMs"] == 15000
-        and reload_budget["requiredExecutedStages"]
-        == ["managed-gameplay-build", "compiled-chunks"]
-        and "unifiedscript.unreal-usability-regression/v0.1" in usability_source
-        and "conservative enclosing packaged onboarding" in usability_source
-        and "--fail-on-regression" in cli_source
-        and 'args[0] == "ue-usability-budget"' in cli_source
-        and "usability-budgets.v0.1.json" in sdk_package
-        and "Documentation\\UNREAL_USABILITY.md" in sdk_package
-        and "docs/UNREAL_USABILITY.md" in release_document_paths
-        and "UNREAL_USABILITY.md" in product_documentation
-        and "This gate does not require an interactive Editor session"
-        in usability_document
-        and "CheckedInBudgetsProduceDeterministicPassingWorkflowReport"
-        in usability_tests
-        and "RegressionsAreReportedAndFailingCliStillWritesReceipt"
-        in usability_tests
-        and "[x] **M13.2G — usability regression gate:**" in roadmap_document,
+        usability_budget['schemaVersion'] == 'unifiedscript.unreal-usability-budgets/v0.1' and
+        set(usability_scenarios) == {'adopt-to-first-play', 'edit-to-reload'} and
+        first_play_budget['maximumDeliberateActions'] == 8 and
+        first_play_budget['maximumRestartActions'] == 1 and
+        first_play_budget['maximumWallClockMs'] == 720000 and
+        reload_budget['maximumDeliberateActions'] == 3 and
+        reload_budget['maximumRestartActions'] == 0 and
+        reload_budget['maximumWallClockMs'] == 15000 and
+        reload_budget['requiredExecutedStages'] == ['managed-gameplay-build', 'compiled-chunks'] and
+        'unifiedscript.unreal-usability-regression/v0.1' in usability_source and
+        'conservative enclosing packaged onboarding' in usability_source and
+        '--fail-on-regression' in cli_source and
+        'args[0] == "ue-usability-budget"' in cli_source and
+        'usability-budgets.v0.1.json' in sdk_package and
+        'Documentation\\UNREAL_USABILITY.md' in sdk_package and
+        'docs/UNREAL_USABILITY.md' in release_document_paths and
+        'CheckedInBudgetsProduceDeterministicPassingWorkflowReport' in usability_tests and
+        'RegressionsAreReportedAndFailingCliStillWritesReceipt' in usability_tests,
         "M13.2G versioned action/time budgets, CMD report gate, SDK payload, or failure proof is incomplete",
     )
     checks.append(
@@ -7209,35 +6400,30 @@ def main() -> int:
         ROOT / "src" / "Finare.Unreal" / "UnrealScriptObjectModel.cs"
     ).read_text(encoding="utf-8")
     require(
-        "Object," in script_class_asset_header
-        and "BlueprintFunctionLibrary," in script_class_asset_header
-        and "TObjectPtr<UFinareAsset> ScriptAsset" in script_class_blueprint_header
-        and "class FINARERUNTIME_API UFinareObject" in script_class_bases_header
-        and "UFinareBlueprintFunctionLibrary" in script_class_bases_header
-        and "UFinareObjectClassFactory" in script_class_factory_header
-        and "UFinareBlueprintFunctionLibraryClassFactory" in script_class_factory_header
-        and 'TEXT("actor")' in script_class_factory_source
-        and 'TEXT("actorComponent")' in script_class_factory_source
-        and 'TEXT("object")' in script_class_factory_source
-        and 'TEXT("blueprintFunctionLibrary")' in script_class_factory_source
-        and "UnrealActorComponentScript" in script_class_factory_source
-        and "public static class" in script_class_factory_source
-        and "Context.ScriptAsset->ScriptClassKind != EFinareClassKind::Actor"
-        in script_class_asset_operations
-        and "OutJson.Reset();" in script_class_asset_operations
-        and "GetBlueprintScriptAsset" in script_class_asset_operations
-        and "Create Finare Class (Object)" in script_class_editor_module
-        and "Create Finare Class (Blueprint Function Library)"
-        in script_class_editor_module
-        and "UnrealScriptClassKind" in managed_script_class_model
-        and "UnrealScriptClassAttribute" in managed_script_class_model
-        and "class UnrealActorComponentScript" in managed_script_object_model
-        and "EFinareClassKind::Object" in script_class_factory_tests
-        and "EFinareClassKind::BlueprintFunctionLibrary"
-        in script_class_factory_tests
-        and "Script Class pins the exact reviewed native target contract"
-        in script_class_factory_tests
-        and "[x] **M13.3A — four-kind proxy identity:**" in roadmap_document,
+        'Object,' in script_class_asset_header and
+        'BlueprintFunctionLibrary,' in script_class_asset_header and
+        'TObjectPtr<UFinareAsset> ScriptAsset' in script_class_blueprint_header and
+        'class FINARERUNTIME_API UFinareObject' in script_class_bases_header and
+        'UFinareBlueprintFunctionLibrary' in script_class_bases_header and
+        'UFinareObjectClassFactory' in script_class_factory_header and
+        'UFinareBlueprintFunctionLibraryClassFactory' in script_class_factory_header and
+        'TEXT("actor")' in script_class_factory_source and
+        'TEXT("actorComponent")' in script_class_factory_source and
+        'TEXT("object")' in script_class_factory_source and
+        'TEXT("blueprintFunctionLibrary")' in script_class_factory_source and
+        'UnrealActorComponentScript' in script_class_factory_source and
+        'public static class' in script_class_factory_source and
+        'Context.ScriptAsset->ScriptClassKind != EFinareClassKind::Actor' in script_class_asset_operations and
+        'OutJson.Reset();' in script_class_asset_operations and
+        'GetBlueprintScriptAsset' in script_class_asset_operations and
+        'Create Finare Class (Object)' in script_class_editor_module and
+        'Create Finare Class (Blueprint Function Library)' in script_class_editor_module and
+        'UnrealScriptClassKind' in managed_script_class_model and
+        'UnrealScriptClassAttribute' in managed_script_class_model and
+        'class UnrealActorComponentScript' in managed_script_object_model and
+        'EFinareClassKind::Object' in script_class_factory_tests and
+        'EFinareClassKind::BlueprintFunctionLibrary' in script_class_factory_tests and
+        'Script Class pins the exact reviewed native target contract' in script_class_factory_tests,
         "M13.3A four-kind proxy identity, managed contract, menu, sidecar, or regression proof is incomplete",
     )
     checks.append(
@@ -7297,51 +6483,28 @@ def main() -> int:
         / "UnrealScriptObjectModelTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "FFinareBlueprintClassSyncResult"
-        in blueprint_class_materializer_header
-        and "UnifiedScript.ManagedState" in blueprint_class_materializer_source
-        and "UnifiedScript.StateId" in blueprint_class_materializer_source
-        and "UnifiedScript.DeclarationDefault"
-        in blueprint_class_materializer_source
-        and "Variable.VarGuid = Planned.Declaration.Id"
-        in blueprint_class_materializer_source
-        and "PreservedDefaultOverrideCount"
-        in blueprint_class_materializer_source
-        and all(
-            metadata_name in blueprint_class_materializer_source
-            for metadata_name in (
-                "System.Boolean",
-                "System.Byte",
-                "System.Int32",
-                "System.Int64",
-                "System.Single",
-                "System.Double",
-                "System.String",
-            )
-        )
-        and "BlueprintStateMaterialization"
-        in blueprint_class_materializer_tests
-        and "Blueprint override survives source rename/default change"
-        in blueprint_class_materializer_tests
-        and "A managed state cannot claim a user-owned Blueprint name"
-        in blueprint_class_materializer_tests
-        and "Finare class proxies validated:" in sync_classes_commandlet
-        and "Finare class proxies synchronized:"
-        in sync_classes_commandlet
-        and "-run=FinareSyncClasses" in onboarding_script
-        and "script-class-materialization.log" in onboarding_script
-        and "GeneratedClassPath" in managed_script_class_model
-        and "UnrealScriptStateSynchronizer.Open" in managed_script_object_model
-        and "context.Host" in managed_state_synchronizer
-        and "context.Target" in managed_state_synchronizer
-        and "ConditionalWeakTable<Type, StateContract>" in managed_state_synchronizer
-        and "reviewed Blueprint state matrix" in managed_state_synchronizer
-        and "UnsupportedScriptStateFailsBeforeManagedLifecycleStarts"
-        in managed_state_tests
-        and "Every retired collectible script context is reclaimed"
-        in unreal_lifecycle_stress_test
-        and "[x] **M13.3B-1 — reflected state/default vertical:**"
-        in roadmap_document,
+        'FFinareBlueprintClassSyncResult' in blueprint_class_materializer_header and
+        'UnifiedScript.ManagedState' in blueprint_class_materializer_source and
+        'UnifiedScript.StateId' in blueprint_class_materializer_source and
+        'UnifiedScript.DeclarationDefault' in blueprint_class_materializer_source and
+        'Variable.VarGuid = Planned.Declaration.Id' in blueprint_class_materializer_source and
+        'PreservedDefaultOverrideCount' in blueprint_class_materializer_source and
+        all((metadata_name in blueprint_class_materializer_source for metadata_name in ('System.Boolean', 'System.Byte', 'System.Int32', 'System.Int64', 'System.Single', 'System.Double', 'System.String'))) and
+        'BlueprintStateMaterialization' in blueprint_class_materializer_tests and
+        'Blueprint override survives source rename/default change' in blueprint_class_materializer_tests and
+        'A managed state cannot claim a user-owned Blueprint name' in blueprint_class_materializer_tests and
+        'Finare class proxies validated:' in sync_classes_commandlet and
+        'Finare class proxies synchronized:' in sync_classes_commandlet and
+        '-run=FinareSyncClasses' in onboarding_script and
+        'script-class-materialization.log' in onboarding_script and
+        'GeneratedClassPath' in managed_script_class_model and
+        'UnrealScriptStateSynchronizer.Open' in managed_script_object_model and
+        'context.Host' in managed_state_synchronizer and
+        'context.Target' in managed_state_synchronizer and
+        'ConditionalWeakTable<Type, StateContract>' in managed_state_synchronizer and
+        'reviewed Blueprint state matrix' in managed_state_synchronizer and
+        'UnsupportedScriptStateFailsBeforeManagedLifecycleStarts' in managed_state_tests and
+        'Every retired collectible script context is reclaimed' in unreal_lifecycle_stress_test,
         "M13.3B-1 Blueprint reflection, state identity, default preservation, commandlet, or managed synchronization is incomplete",
     )
     checks.append(
@@ -7390,20 +6553,17 @@ def main() -> int:
         / "UnrealManagedFunctionDispatchTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "class UnrealManagedFunctionDispatcher" in managed_function_abi
-        and "MaximumArgumentCount = 4" in managed_function_abi
-        and "Expression.Lambda<InvokeFunction>" in managed_function_abi
-        and "InvokeScriptFunction" in managed_world_entry
-        and "FFinareManagedFunctionValueV1" in native_function_abi
-        and "execDispatchManagedFunction" in native_blueprint_header
-        and 'TEXT("USF_%s")' in blueprint_class_materializer_source
-        and "BlueprintManagedFunctionDispatch" in blueprint_class_materializer_tests
-        and "RewirePreview" in blueprint_class_materializer_tests
-        and "RegisterCompilerForBP" in editor_module_source
-        and "ScalarDispatchUsesFixedAbiWithoutReflectionInvokeOrBoxing"
-        in managed_function_tests
-        and "[x] **M13.3B-2a — instance scalar call vertical:**"
-        in roadmap_document,
+        'class UnrealManagedFunctionDispatcher' in managed_function_abi and
+        'MaximumArgumentCount = 4' in managed_function_abi and
+        'Expression.Lambda<InvokeFunction>' in managed_function_abi and
+        'InvokeScriptFunction' in managed_world_entry and
+        'FFinareManagedFunctionValueV1' in native_function_abi and
+        'execDispatchManagedFunction' in native_blueprint_header and
+        'TEXT("USF_%s")' in blueprint_class_materializer_source and
+        'BlueprintManagedFunctionDispatch' in blueprint_class_materializer_tests and
+        'RewirePreview' in blueprint_class_materializer_tests and
+        'RegisterCompilerForBP' in editor_module_source and
+        'ScalarDispatchUsesFixedAbiWithoutReflectionInvokeOrBoxing' in managed_function_tests,
         "M13.3B-2a Blueprint function identity, scalar ABI, compiled managed dispatch, product GeneratedClass, or live ProcessEvent proof is incomplete",
     )
     checks.append(
@@ -7426,33 +6586,25 @@ def main() -> int:
         / "CSharpScriptAssetLowererTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "class UnrealManagedFunctionDispatcherV2" in managed_function_abi
-        and "UnrealNativeCallFrameV3" in managed_function_abi
-        and "BindingFlags.FlattenHierarchy" in managed_function_abi
-        and "InvokeScriptFunctionV2" in managed_world_entry
-        and "ManagedStaticLibrary" in managed_world_entry
-        and "_staticLibraries" in managed_world_entry
-        and "BlueprintFunctionLibrary" in blueprint_class_materializer_source
-        and "Binding.AbiVersion = 3" in blueprint_class_materializer_source
-        and "Binding.bStatic = Planned.Declaration.bIsStatic"
-        in blueprint_class_materializer_source
-        and "KismetWorldContextName" in native_blueprint_source
-        and "ResolveRuntimeConfiguration" in native_blueprint_source
-        and "BlueprintManagedStaticFunctionDispatch"
-        in blueprint_class_materializer_tests
-        and "Static String/ObjectHandle/FVector call reaches CoreCLR"
-        in blueprint_class_materializer_tests
-        and "Static ObjectHandle return resolves through the World registry"
-        in blueprint_class_materializer_tests
-        and "Static FVector return stays inline in the native value cell"
-        in blueprint_class_materializer_tests
-        and "PublicVisualBaseMethodsLowerIntoTheDerivedScriptClass" in lowerer_tests
-        and "IdentityBelongsToProjectSource" in cli_source
-        and "--identity $identityPath" in unreal_chunk_stage
-        and "EmitProject_ReconcilesPortableIdentityPathAgainstPhysicalSource"
-        in project_loader_test
-        and "[x] **M13.3B-2b-1 — static/common-value call vertical:**"
-        in roadmap_document,
+        'class UnrealManagedFunctionDispatcherV2' in managed_function_abi and
+        'UnrealNativeCallFrameV3' in managed_function_abi and
+        'BindingFlags.FlattenHierarchy' in managed_function_abi and
+        'InvokeScriptFunctionV2' in managed_world_entry and
+        'ManagedStaticLibrary' in managed_world_entry and
+        '_staticLibraries' in managed_world_entry and
+        'BlueprintFunctionLibrary' in blueprint_class_materializer_source and
+        'Binding.AbiVersion = 3' in blueprint_class_materializer_source and
+        'Binding.bStatic = Planned.Declaration.bIsStatic' in blueprint_class_materializer_source and
+        'KismetWorldContextName' in native_blueprint_source and
+        'ResolveRuntimeConfiguration' in native_blueprint_source and
+        'BlueprintManagedStaticFunctionDispatch' in blueprint_class_materializer_tests and
+        'Static String/ObjectHandle/FVector call reaches CoreCLR' in blueprint_class_materializer_tests and
+        'Static ObjectHandle return resolves through the World registry' in blueprint_class_materializer_tests and
+        'Static FVector return stays inline in the native value cell' in blueprint_class_materializer_tests and
+        'PublicVisualBaseMethodsLowerIntoTheDerivedScriptClass' in lowerer_tests and
+        'IdentityBelongsToProjectSource' in cli_source and
+        '--identity $identityPath' in unreal_chunk_stage and
+        'EmitProject_ReconcilesPortableIdentityPathAgainstPhysicalSource' in project_loader_test,
         "M13.3B-2b-1 static library ownership, common gameplay values, inherited declarations, stable identity emission, or live ProcessEvent proof is incomplete",
     )
     checks.append(
@@ -7473,23 +6625,20 @@ def main() -> int:
         / "FinareHostModule.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "UnrealEnumAttribute" in unreal_core_types
-        and "IUnrealEnumValue" in unreal_core_types
-        and "ScriptFunctionValueTypeDeclaration" in script_asset_model
-        and "ReturnUnrealType" in script_asset_model
-        and "MakeRuntimeValueTypeBinding" in blueprint_class_materializer_source
-        and "StructFields" in native_blueprint_header
-        and "EchoHitResult" in blueprint_class_materializer_tests
-        and "Persistent FunctionLibrary restores native managed dispatch"
-        in blueprint_class_materializer_tests
-        and "PostLoadDefaultObject" in native_blueprint_header
-        and "PostLoadDefaultObject" in native_blueprint_source
-        and "$compiledDeclaration" in onboarding_script
-        and "compiledDeclarations" in onboarding_script
-        and "FinareScriptClassSmoke" in native_host_source
-        and "FINARE_SCRIPT_CLASS_PACKAGED_SMOKE" in native_host_source
-        and "[x] **M13.3B-2b-2 — enum/UStruct persistence closure:**"
-        in roadmap_document,
+        'UnrealEnumAttribute' in unreal_core_types and
+        'IUnrealEnumValue' in unreal_core_types and
+        'ScriptFunctionValueTypeDeclaration' in script_asset_model and
+        'ReturnUnrealType' in script_asset_model and
+        'MakeRuntimeValueTypeBinding' in blueprint_class_materializer_source and
+        'StructFields' in native_blueprint_header and
+        'EchoHitResult' in blueprint_class_materializer_tests and
+        'Persistent FunctionLibrary restores native managed dispatch' in blueprint_class_materializer_tests and
+        'PostLoadDefaultObject' in native_blueprint_header and
+        'PostLoadDefaultObject' in native_blueprint_source and
+        '$compiledDeclaration' in onboarding_script and
+        'compiledDeclarations' in onboarding_script and
+        'FinareScriptClassSmoke' in native_host_source and
+        'FINARE_SCRIPT_CLASS_PACKAGED_SMOKE' in native_host_source,
         "M13.3B-2b-2 typed enum/UStruct dispatch, persistent reload, Declaration IR staging, or packaged smoke proof is incomplete",
     )
     checks.append(
@@ -7567,57 +6716,46 @@ def main() -> int:
         / "InProcessUnrealNativeInvocationTransportTests.cs"
     ).read_text(encoding="utf-8")
     require(
-        "Finare.Unreal.UnrealName" in script_asset_lowerer
-        and "Finare.Unreal.UnrealText" in script_asset_lowerer
-        and "Finare.Unreal.UnrealObjectHandle" in script_asset_lowerer
-        and "Finare.Unreal.UnrealClassHandle" in script_asset_lowerer
-        and "Finare.Unreal.UnrealVector" in script_asset_lowerer
-        and "ushort minorVersion = normalized.Assets.Any" in compiled_program_chunk_source
-        and "reader.MinorVersion >= 1" in compiled_program_chunk_source
-        and "EPropertyBagPropertyType::Name" in declaration_materializer_source
-        and "EPropertyBagPropertyType::Text" in declaration_materializer_source
-        and "TBaseStructure<FVector>::Get()" in declaration_materializer_source
-        and "UEdGraphSchema_K2::PC_Name" in blueprint_class_materializer_source
-        and "UEdGraphSchema_K2::PC_Text" in blueprint_class_materializer_source
-        and "FName default reaches the generated CDO"
-        in blueprint_class_materializer_tests
-        and "FVector default reaches the generated CDO"
-        in blueprint_class_materializer_tests
-        and "StateBinding<UnrealVector>.CreateTyped" in managed_state_synchronizer
-        and "public UnrealName StateTag" in script_class_factory_tests
-        and "ReadUInt64Payload" in managed_native_transport_source
-        and "ReadVectorPayload" in managed_native_transport_source
-        and "LegacyValueSliceCarriesObjectClassAndVectorPayloads"
-        in managed_native_transport_tests
-        and "UObject handle write succeeds through legacy ABI"
-        in native_transport_tests
-        and "WriteUInt64LittleEndian" in native_transport_source
-        and "[x] **M13.3C-1b — remaining Blueprint-visible property shapes:**"
-        in roadmap_document,
+        'Finare.Unreal.UnrealName' in script_asset_lowerer and
+        'Finare.Unreal.UnrealText' in script_asset_lowerer and
+        'Finare.Unreal.UnrealObjectHandle' in script_asset_lowerer and
+        'Finare.Unreal.UnrealClassHandle' in script_asset_lowerer and
+        'Finare.Unreal.UnrealVector' in script_asset_lowerer and
+        'ushort minorVersion = normalized.Assets.Any' in compiled_program_chunk_source and
+        'reader.MinorVersion >= 1' in compiled_program_chunk_source and
+        'EPropertyBagPropertyType::Name' in declaration_materializer_source and
+        'EPropertyBagPropertyType::Text' in declaration_materializer_source and
+        'TBaseStructure<FVector>::Get()' in declaration_materializer_source and
+        'UEdGraphSchema_K2::PC_Name' in blueprint_class_materializer_source and
+        'UEdGraphSchema_K2::PC_Text' in blueprint_class_materializer_source and
+        'FName default reaches the generated CDO' in blueprint_class_materializer_tests and
+        'FVector default reaches the generated CDO' in blueprint_class_materializer_tests and
+        'StateBinding<UnrealVector>.CreateTyped' in managed_state_synchronizer and
+        'public UnrealName StateTag' in script_class_factory_tests and
+        'ReadUInt64Payload' in managed_native_transport_source and
+        'ReadVectorPayload' in managed_native_transport_source and
+        'LegacyValueSliceCarriesObjectClassAndVectorPayloads' in managed_native_transport_tests and
+        'UObject handle write succeeds through legacy ABI' in native_transport_tests and
+        'WriteUInt64LittleEndian' in native_transport_source,
         "M13.3C-1b common Unreal state lowering, declaration chunk, Blueprint property, managed synchronization, legacy transport, or roadmap closure is incomplete",
     )
     checks.append(
         "M13.3C-1b materializes common Unreal state through Blueprint and managed runtime"
     )
     require(
-        "HirParameterDirection" in hir_nodes_source
-        and "ScriptParameterDirection" in script_asset_model
-        and "HirParameterDirection.Output" in script_asset_lowerer
-        and "HirParameterDirection.InputOutput" in script_asset_lowerer
-        and "ParameterNames" in native_blueprint_header
-        and "ParameterDirections" in native_blueprint_header
-        and "IndexOfByKey(Parameter->GetFName())" in native_blueprint_source
-        and "Stack.OutParms" in native_blueprint_source
-        and "Binding.AbiVersion = 3" in blueprint_class_materializer_source
-        and "Common function binding retains stable source parameter order"
-        in blueprint_class_materializer_tests
-        and "Static FName/FText/UClass/FRotator/FTransform call reaches CoreCLR"
-        in blueprint_class_materializer_tests
-        and "V2DispatchesCommonValuesAndMultipleOutRefResults"
-        in managed_function_tests
-        and "ResolveCommonValues" in unreal_demo_source
-        and "[x] **M13.3C-1c-a — common value and `ref`/`out` function vertical:**"
-        in roadmap_document,
+        'HirParameterDirection' in hir_nodes_source and
+        'ScriptParameterDirection' in script_asset_model and
+        'HirParameterDirection.Output' in script_asset_lowerer and
+        'HirParameterDirection.InputOutput' in script_asset_lowerer and
+        'ParameterNames' in native_blueprint_header and
+        'ParameterDirections' in native_blueprint_header and
+        'IndexOfByKey(Parameter->GetFName())' in native_blueprint_source and
+        'Stack.OutParms' in native_blueprint_source and
+        'Binding.AbiVersion = 3' in blueprint_class_materializer_source and
+        'Common function binding retains stable source parameter order' in blueprint_class_materializer_tests and
+        'Static FName/FText/UClass/FRotator/FTransform call reaches CoreCLR' in blueprint_class_materializer_tests and
+        'V2DispatchesCommonValuesAndMultipleOutRefResults' in managed_function_tests and
+        'ResolveCommonValues' in unreal_demo_source,
         "M13.3C-1c-a common Blueprint function values, stable parameter order, ref/out ABI, live dispatch, or roadmap closure is incomplete",
     )
     checks.append(
@@ -7635,9 +6773,6 @@ def main() -> int:
     visual_profile_test = (
         ROOT / "tests" / "Finare.Tests" / "VisualProfileInspectorTests.cs"
     ).read_text(encoding="utf-8")
-    visual_profile_doc = (
-        ROOT / "docs" / "VISUAL_CSHARP_PROFILE.md"
-    ).read_text(encoding="utf-8")
     semantic_diagnostic_codes = (
         ROOT / "src" / "Finare.CSharp" / "SemanticDiagnosticCodes.cs"
     ).read_text(encoding="utf-8")
@@ -7645,30 +6780,27 @@ def main() -> int:
         ROOT / "src" / "Finare.Authoring" / "AuthoringSurfaceJson.cs"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.visual-csharp-profile/v0.3" in visual_profile_model
-        and "unifiedscript.visual-csharp-profile-report/v0.1" in visual_profile_model
-        and "OpaqueCodeBoundaryContract" in visual_profile_model
-        and "NormalizeAndValidate" in visual_profile_json
-        and "VisualMethodRepresentation.OpaqueCode" in visual_profile_inspector
-        and "OpaqueCodeBoundaryNotSupported = \"UVS2009\"" in semantic_diagnostic_codes
-        and 'properties["calleeBodyRepresentation"]' in graph_projector_source
-        and 'properties["authoringBoundary"]' in graph_projector_source
-        and "ValidateInvocationBoundaryProperties" in graph_json_source
-        and "ValidateInvocationBoundary" in authoring_surface_json
-        and "PipelineProjectsOpaqueHelperAsOneSourceOnlyCallNode" in visual_profile_test
-        and ".profile.json" in cli_source
-        and "VisualProfileReport Profile" in debug_server_source
-        and "validateVisualProfile" in prototype_source
-        and "OPAQUE CODE BOUNDARY" in prototype_source
-        and "FFinareVisualProfileResult" in unreal_authoring_workbench_header
-        and "source-only" in unreal_authoring_widget
-        and "Source-only C#" in unreal_graph_presentation
-        and 'TEXT("authoringBoundary")' in unreal_graph_presentation
-        and "Source-only call tooltip retains exact non-editable contract"
-        in unreal_authoring_test
-        and "unifiedscript.authoring-workspace/v0.5" in unreal_authoring_workbench_source
-        and "calleeBodyRepresentation = opaqueCode" in visual_profile_doc
-        and "- [x] publish the supported Visual C# profile" in roadmap,
+        'unifiedscript.visual-csharp-profile/v0.3' in visual_profile_model and
+        'unifiedscript.visual-csharp-profile-report/v0.1' in visual_profile_model and
+        'OpaqueCodeBoundaryContract' in visual_profile_model and
+        'NormalizeAndValidate' in visual_profile_json and
+        'VisualMethodRepresentation.OpaqueCode' in visual_profile_inspector and
+        'OpaqueCodeBoundaryNotSupported = "UVS2009"' in semantic_diagnostic_codes and
+        'properties["calleeBodyRepresentation"]' in graph_projector_source and
+        'properties["authoringBoundary"]' in graph_projector_source and
+        'ValidateInvocationBoundaryProperties' in graph_json_source and
+        'ValidateInvocationBoundary' in authoring_surface_json and
+        'PipelineProjectsOpaqueHelperAsOneSourceOnlyCallNode' in visual_profile_test and
+        '.profile.json' in cli_source and
+        'VisualProfileReport Profile' in debug_server_source and
+        'validateVisualProfile' in prototype_source and
+        'OPAQUE CODE BOUNDARY' in prototype_source and
+        'FFinareVisualProfileResult' in unreal_authoring_workbench_header and
+        'source-only' in unreal_authoring_widget and
+        'Source-only C#' in unreal_graph_presentation and
+        'TEXT("authoringBoundary")' in unreal_graph_presentation and
+        'Source-only call tooltip retains exact non-editable contract' in unreal_authoring_test and
+        'unifiedscript.authoring-workspace/v0.5' in unreal_authoring_workbench_source,
         "M8.5 Visual C# profile, opaque boundary, diagnostic, or authoring projection is incomplete",
     )
     checks.append("M8.5 publishes one versioned Visual C# and source-only opaque boundary")
@@ -9054,6 +8186,7 @@ def main() -> int:
     )
     checks.append("sample and test sources exist")
 
+    print("[scope] Repository structure and checked contracts only; gameplay is not executed.")
     for check in checks:
         print(f"[ok] {check}")
     print(f"Validated {len(checks)} repository invariants.")

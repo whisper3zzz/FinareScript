@@ -6,6 +6,7 @@ using GeneratedInterop = Finare.Unreal.Generated.FinareInteropFixture;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class NativeUnrealInvocationBridgeTests
 {
     private const string AllocationProbeChildVariable = "FINARE_NATIVE_ALLOCATION_PROBE_CHILD";

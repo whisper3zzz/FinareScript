@@ -27,10 +27,12 @@ or a test-only health producer for the production event route.
 
 ## Decisions and remaining work
 
-Finish the C-4 class-editing integration before accepting this pilot. Preparation
-can identify environment issues while that implementation runs. Install the
-current Finare SDK into the copy, discover the selected Lyra/engine APIs, and
-implement the slice using generated bindings and ordinary Script Classes.
+The health/HUD Editor sequence has passed within the scope recorded below while
+C-4 class composition remains in progress. Continue affected installed-workflow
+regressions alongside class work; complete the remaining same-project asset/async
+failure coverage separately. Do not reopen the passed health sequence merely
+because C-4 is unfinished, or treat that sequence as complete M13.4 acceptance.
+The current product order is maintained in [the roadmap](../ROADMAP.md).
 
 `ULyraHealthComponent` exposes `FindHealthComponent`, health getters and dynamic
 health/death events. Its attribute source is `ULyraHealthSet` through

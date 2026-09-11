@@ -3,6 +3,7 @@ using Finare.CSharp;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Graph")]
 public sealed class VisualProfileValidatorTests
 {
     [Fact]

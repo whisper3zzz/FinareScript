@@ -3,6 +3,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Delivery")]
 public sealed class UnrealUsabilityRegressionTests
 {
     [Fact]

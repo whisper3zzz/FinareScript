@@ -5,6 +5,7 @@ using Finare.Core;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class CSharpTypeReferencePlannerTests
 {
     [Fact]

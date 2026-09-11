@@ -7,6 +7,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class MultiDocumentSemanticPipelineTests
 {
     private const string ApiSource = """

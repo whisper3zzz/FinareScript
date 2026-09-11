@@ -5,6 +5,7 @@ using Core = Finare.Core;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Runtime")]
 public sealed class CoreClrExecutionHostTests
 {
     private const string Source = """

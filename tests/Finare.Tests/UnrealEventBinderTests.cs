@@ -2,6 +2,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealEventBinderTests
 {
     private const string EventPath = "/Script/Fixture.FixtureComponent:OnChanged";

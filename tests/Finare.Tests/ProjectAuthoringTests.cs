@@ -11,6 +11,8 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
+[Collection("Authoring HTTP servers")]
 public sealed class ProjectAuthoringTests
 {
     [Fact]
@@ -111,10 +113,6 @@ public sealed class ProjectAuthoringTests
               </ItemGroup>
             </Project>
             """);
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
         try
         {
             ProjectAuthoringInput input = ProjectAuthoringInput.Load(
@@ -122,6 +120,10 @@ public sealed class ProjectAuthoringTests
             CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(input.Request);
             Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
             string bindingLogical = input.SourceFiles.Single(pair => pair.Value == binding).Key;
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
             using var server = new CoreClrDebugHttpServer(
                 input.Request, input.SourcePath, input.IdentityPath, directory, port,
                 sourceFiles: input.SourceFiles,
@@ -202,10 +204,6 @@ public sealed class ProjectAuthoringTests
         File.WriteAllText(bindingIdentity, IdentitySidecarJson.Serialize(
             IdentitySidecarDocument.CreateEmpty(bindingLogical)) + "\n");
 
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
         try
         {
             ProjectAuthoringInput input = ProjectAuthoringInput.Load(
@@ -219,6 +217,10 @@ public sealed class ProjectAuthoringTests
             Assert.Equal(bindingLogical, bindingLogicalPath);
             Assert.DoesNotContain(bindingLogicalPath, input.ReadOnlySources);
             Assert.Contains(helperLogicalPath, input.ReadOnlySources);
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
 
             using var server = new CoreClrDebugHttpServer(
                 input.Request,
@@ -432,10 +434,6 @@ public sealed class ProjectAuthoringTests
               <ItemGroup><Reference Include="Finare.Core"><HintPath>{System.Security.SecurityElement.Escape(typeof(VisualAttribute).Assembly.Location)}</HintPath></Reference></ItemGroup>
             </Project>
             """);
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
         try
         {
             ProjectAuthoringInput input = ProjectAuthoringInput.Load(project, primary);
@@ -445,6 +443,10 @@ public sealed class ProjectAuthoringTests
             Assert.False(input.Request.IncludeDefaultReferences);
             Assert.Throws<ArgumentException>(() => ProjectAuthoringInput.Load(project, project,
                 options: new CSharpProjectLoadOptions(Restore: false, Build: false)));
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
 
             Action? afterRefreshRead = null;
             using var server = new CoreClrDebugHttpServer(input.Request, input.SourcePath, input.IdentityPath,

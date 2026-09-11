@@ -3,6 +3,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed class UnrealCallbackTests
 {
     [UnrealCallbackType("/Script/Fixture.Compute__DelegateSignature")]

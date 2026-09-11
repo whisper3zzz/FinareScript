@@ -7,6 +7,7 @@ using Finare.Runtime;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class FunctionIdentityPipelineTests
 {
     private const string Path = "Game/FunctionIdentity.cs";

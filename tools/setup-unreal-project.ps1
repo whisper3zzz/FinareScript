@@ -64,10 +64,32 @@ $script:RunDirectory = $null
 $script:StartedAtUtc = [DateTime]::UtcNow
 $script:AutomationSuccessCount = 0
 $script:AutomationFailureCount = 0
+$script:AutomationCriticalFailureCount = 0
 $script:BuildGraphContext = $null
 $script:BuildGraphReport = $null
 $script:RestartRequiredStage = $null
 $script:RestartRequiredReason = $null
+
+function Get-FinareAutomationEvidence([string]$Text) {
+    # UE writes the same completion to its engine log and redirected stdout.
+    # Count test identities once; a later success must not erase an earlier fail.
+    $passed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $failed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($result in [regex]::Matches($Text,
+            'Test Completed\. Result=\{(?<result>[^}]+)\} Name=\{[^}]*\} Path=\{(?<path>[^}]+)\}')) {
+        if ($result.Groups['result'].Value -eq 'Success') {
+            [void]$passed.Add($result.Groups['path'].Value)
+        } else {
+            [void]$failed.Add($result.Groups['path'].Value)
+        }
+    }
+    [pscustomobject]@{
+        passed = $passed.Count
+        failed = $failed.Count
+        criticalFailures = [regex]::Matches($Text,
+            '(?im)Ensure condition failed:|Fatal error:|Assertion failed:|Old World.*not cleaned up').Count
+    }
+}
 
 function Throw-OnboardingError {
     param(
@@ -2237,21 +2259,21 @@ try {
                 if (Test-Path -LiteralPath $automationStdout) {
                     Get-Content -LiteralPath $automationStdout -Raw
                 }) -join [Environment]::NewLine
-            $successCount = [regex]::Matches(
-                $automationText,
-                'Test Completed\. Result=\{Success\}').Count
-            $failureCount = [regex]::Matches(
-                $automationText,
-                'Test Completed\. Result=\{(Fail|Failed|Error)\}').Count
+            $automationEvidence = Get-FinareAutomationEvidence $automationText
+            $successCount = $automationEvidence.passed
+            $failureCount = $automationEvidence.failed
             $script:AutomationSuccessCount = $successCount
             $script:AutomationFailureCount = $failureCount
+            $criticalFailureCount = $automationEvidence.criticalFailures
+            $script:AutomationCriticalFailureCount = $criticalFailureCount
             if ($failureCount -ne 0 -or
+                $criticalFailureCount -ne 0 -or
                 $successCount -lt $resolved.minimumAutomationTests) {
                 Throw-OnboardingError `
                     -Code 'USONB2602' `
                     -Message (
                         "Automation acceptance failed: Success=$successCount, " +
-                        "Failure=$failureCount, Required=$($resolved.minimumAutomationTests). " +
+                        "Failure=$failureCount, Critical=$criticalFailureCount, Required=$($resolved.minimumAutomationTests). " +
                         "Log=$automationLog")
             }
         }
@@ -2302,6 +2324,7 @@ try {
             required = $resolved.minimumAutomationTests
             passed = $script:AutomationSuccessCount
             failed = $script:AutomationFailureCount
+            criticalFailures = $script:AutomationCriticalFailureCount
         }
     }
     Write-OnboardingReport -Status 'passed' -Context $outputContext

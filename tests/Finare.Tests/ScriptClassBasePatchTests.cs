@@ -4,6 +4,7 @@ using Finare.Unreal;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class ScriptClassBasePatchTests
 {
     private const string AttributePath = "Game/PartialBase.Attributes.cs";

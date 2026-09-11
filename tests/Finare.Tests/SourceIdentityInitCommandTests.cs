@@ -4,6 +4,7 @@ using Finare.Core;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class SourceIdentityInitCommandTests
 {
     [Fact]

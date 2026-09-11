@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Roslyn compilation orchestration and CoreCLR debug loading.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finare.CSharp/Finare.CSharp.csproj" />
+    <ProjectReference Include="../Finare.Runtime/Finare.Runtime.csproj" />
+  </ItemGroup>
+</Project>

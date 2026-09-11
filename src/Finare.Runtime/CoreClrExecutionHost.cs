@@ -6,20 +6,6 @@ namespace Finare.Runtime;
 
 public sealed class CoreClrExecutionHost
 {
-    private readonly CSharpProgramEmitter emitter = new();
-
-    public CoreClrExecutionSession CompileAndLoad(CSharpCompilationRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        CSharpProgramEmitResult emitted = emitter.Emit(request);
-        if (!emitted.Succeeded || emitted.Image is null)
-        {
-            throw new ExecutionCompilationException(emitted.Diagnostics);
-        }
-
-        return Load(emitted.Image, request.RuntimeReferencePaths);
-    }
-
     public CoreClrExecutionSession Load(
         CSharpProgramImage image,
         IEnumerable<string>? referencePaths = null)

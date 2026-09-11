@@ -5,6 +5,7 @@ using Finare.Graph;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Graph")]
 public sealed class SemanticGraphReviewTests
 {
     private const string Source = """

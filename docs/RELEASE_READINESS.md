@@ -1,5 +1,9 @@
 # Finare 1.0 release readiness
 
+The frozen result below accepts its named source revision. Development after
+that revision must be evaluated for the behavior being changed; the product
+version alone does not make the frozen result a current-source release verdict.
+
 `tools/run-finare-release-readiness.ps1` is the final local acceptance
 boundary for `1.0.0-rc.1`. It reads `release/finare.release.json`, requires
 an exact provider for every declared `requiredGate`, executes all providers from

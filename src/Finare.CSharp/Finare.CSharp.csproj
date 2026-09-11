@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
     <ProjectReference Include="../Finare.Graph/Finare.Graph.csproj" />
+    <ProjectReference Include="../Finare.ProgramModel/Finare.ProgramModel.csproj" />
     <ProjectReference Include="../Finare.Semantics/Finare.Semantics.csproj" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>

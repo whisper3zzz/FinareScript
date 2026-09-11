@@ -7,6 +7,7 @@ using GeneratedComponent = Finare.Unreal.Generated.FinareComponent;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Unreal")]
 public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDisposable
 {
     [ThreadStatic]

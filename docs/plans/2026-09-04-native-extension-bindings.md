@@ -1,13 +1,21 @@
 # 2026-09-04 — Native extension bindings
 
-Status: in-progress
+Status: planned
+
+The selected capability breadth checkpoint is delivered. Broader native-binding
+follow-ups remain planned and are selected only for a concrete consumer; this
+document is not a second active implementation queue. Current boundaries are in
+[CAPABILITIES.md](../CAPABILITIES.md), with execution order in
+[ROADMAP.md](../ROADMAP.md). The detailed batches below retain their original
+scope and verification evidence.
 
 ## Outcome and scope
 
 Make public, non-reflected native APIs usable through the same contract-driven
 C#, C++ and visual-node generation as reflected APIs. This is M13.5 capability
-work. M13.5 capability breadth precedes the remaining M13.3 Script Class work
-and M13.4 external pilot. After a usable native-binding batch, reassess the
+work. The selected M13.5 breadth checkpoint has completed and M13.3 Script Class
+work has resumed; the Lyra external pilot has its own recorded Editor result.
+After a newly selected native-binding batch, reassess the
 cross-family gaps in [the roadmap](../ROADMAP.md#puerts-comparison-and-capability-breadth-target);
 do not require every native signature, inheritance case or callback form before
 addressing another missing common capability.

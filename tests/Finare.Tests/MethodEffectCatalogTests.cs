@@ -3,6 +3,7 @@ using Finare.Semantics;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Compiler")]
 public sealed class MethodEffectCatalogTests
 {
     [Fact]

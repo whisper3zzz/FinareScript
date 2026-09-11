@@ -6,6 +6,7 @@ using Finare.Graph;
 
 namespace Finare.Tests;
 
+[Trait("Category", "Authoring")]
 public sealed class AuthoringOwnershipTests
 {
     [Fact]
