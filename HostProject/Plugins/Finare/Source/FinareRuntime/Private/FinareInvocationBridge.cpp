@@ -73,7 +73,8 @@ bool ResolveMemberIdentity(
     const FString& MemberPath,
     UClass*& OutTargetClass,
     FName& OutMemberName,
-    FFinareInvocationResult& OutResult)
+    FFinareInvocationResult& OutResult,
+    bool bAllowStaticFunctionContext = false)
 {
     int32 SeparatorIndex = INDEX_NONE;
     if (!MemberPath.FindLastChar(TEXT(':'), SeparatorIndex) ||
@@ -189,7 +190,16 @@ bool ResolveMemberIdentity(
         OutMemberName = InterfaceMemberName;
         return true;
     }
-    if (!Target->IsA(TargetClass))
+    // A static Blueprint function is invoked with a valid world-bound context
+    // object, which need not be an instance of the declaring function-library
+    // class. This exception is intentionally opt-in for Invoke only: this
+    // resolver is also used by property access and event binding, where a
+    // same-named static function must never weaken the exact owner check.
+    const UFunction* RequestedFunction = TargetClass->FindFunctionByName(FName(*MemberName));
+    const bool bStaticFunction = bAllowStaticFunctionContext &&
+        RequestedFunction != nullptr &&
+        RequestedFunction->HasAnyFunctionFlags(FUNC_Static);
+    if (!bStaticFunction && !Target->IsA(TargetClass))
     {
         Fail(
             OutResult,
@@ -1518,7 +1528,13 @@ bool FFinareInvocationBridge::Invoke(
 
     UClass* TargetClass = nullptr;
     FName FunctionName;
-    if (!ResolveMemberIdentity(Object, FunctionPath, TargetClass, FunctionName, OutResult))
+    if (!ResolveMemberIdentity(
+            Object,
+            FunctionPath,
+            TargetClass,
+            FunctionName,
+            OutResult,
+            true))
     {
         return false;
     }
@@ -1550,13 +1566,13 @@ bool FFinareInvocationBridge::Invoke(
             FString::Printf(TEXT("Function '%s' was not found."), *FunctionPath));
         return false;
     }
-    if (Function->HasAnyFunctionFlags(FUNC_Static) ||
-        !Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+    const bool bStaticFunction = Function->HasAnyFunctionFlags(FUNC_Static);
+    if (!Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
     {
         Fail(
             OutResult,
             EFinareInvocationError::FunctionNotCallable,
-            FString::Printf(TEXT("Function '%s' is not an instance Blueprint call."), *FunctionPath));
+            FString::Printf(TEXT("Function '%s' is not a Blueprint-callable or pure function."), *FunctionPath));
         return false;
     }
 
@@ -1636,7 +1652,21 @@ bool FFinareInvocationBridge::Invoke(
         }
     }
 
-    Object->ProcessEvent(Function, ParameterMemory);
+    UObject* ProcessTarget = Object;
+    if (bStaticFunction)
+    {
+        UClass* DeclaringClass = Function->GetOuterUClass();
+        ProcessTarget = DeclaringClass != nullptr ? DeclaringClass->GetDefaultObject() : nullptr;
+        if (ProcessTarget == nullptr)
+        {
+            Fail(
+                OutResult,
+                EFinareInvocationError::FunctionNotCallable,
+                FString::Printf(TEXT("Static function '%s' has no declaring class default object."), *FunctionPath));
+            return false;
+        }
+    }
+    ProcessTarget->ProcessEvent(Function, ParameterMemory);
     if (ReturnProperty != nullptr)
     {
         if (!ReadValue(Registry, ReturnProperty, ParameterMemory, OutReturnValue, OutResult))

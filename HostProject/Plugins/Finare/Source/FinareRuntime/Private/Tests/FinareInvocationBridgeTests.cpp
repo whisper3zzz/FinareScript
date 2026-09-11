@@ -8,6 +8,7 @@
 #include "Misc/AutomationTest.h"
 #include "FinareComponent.h"
 #include "FinareInteropFixture.h"
+#include "FinareWorldLibrary.h"
 #include "UObject/UObjectGlobals.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -95,6 +96,155 @@ bool FFinareStableMemberLocatorValidationTest::RunTest(const FString& Parameters
 
     World->RemoveFromRoot();
     World->DestroyWorld(false);
+    return !HasAnyErrors();
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FFinareInvocationBridgeStaticReflectionTest,
+    "Finare.Unreal.InvocationBridge.StaticReflection",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FFinareInvocationBridgeStaticReflectionTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    UWorld* OtherWorld = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Static reflection fixture world exists"), World);
+    TestNotNull(TEXT("Static reflection foreign world exists"), OtherWorld);
+    if (World == nullptr || OtherWorld == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    OtherWorld->AddToRoot();
+
+    {
+        FFinareObjectRegistry Registry(World);
+        FFinareInvocationBridge Bridge(Registry);
+        UFinareComponent* Context = NewObject<UFinareComponent>(World);
+        FFinareObjectHandleResult HandleResult;
+        const FFinareObjectHandle ContextHandle = Registry.RegisterObject(Context, HandleResult);
+        TestTrue(TEXT("Static reflection context registration succeeds"), HandleResult.IsSuccess());
+
+        const TArray<FFinareValue> Arguments = {
+            FFinareValue::FromObjectHandle(ContextHandle),
+        };
+        FFinareValue Value;
+        FFinareInvocationResult Result;
+        const FString FunctionPath =
+            TEXT("/Script/FinareRuntime.FinareWorldLibrary:GetWorldTimeSeconds");
+
+        TestTrue(
+            TEXT("Static Blueprint function accepts a valid non-library context object"),
+            Bridge.Invoke(ContextHandle, FunctionPath, Arguments, Value, Result));
+        float WorldTime = 0.0f;
+        TestTrue(TEXT("Static reflection result is a float"), Value.TryGetFloat32(WorldTime));
+        TestTrue(TEXT("Static reflection result is a valid world time"), WorldTime >= 0.0f);
+        TestEqual(TEXT("Static reflection invocation succeeds"), Result.Error, EFinareInvocationError::None);
+
+        const TArray<FFinareValue> ObjectArguments = {
+            FFinareValue::FromObjectHandle(ContextHandle),
+            FFinareValue::FromString(UFinareWorldLibrary::StaticClass()->GetPathName()),
+        };
+        TestTrue(
+            TEXT("Static reflection can return an object handle"),
+            Bridge.Invoke(
+                ContextHandle,
+                TEXT("/Script/FinareRuntime.FinareWorldLibrary:LoadObjectByPath"),
+                ObjectArguments,
+                Value,
+                Result));
+        FFinareObjectHandle ReturnedHandle;
+        TestTrue(
+            TEXT("Static object return decodes as a registered object handle"),
+            Value.TryGetObjectHandle(ReturnedHandle));
+        FFinareObjectHandleResult ReturnedHandleResult;
+        TestTrue(
+            TEXT("Static object return resolves to the requested class object"),
+            Registry.ResolveObject(ReturnedHandle, ReturnedHandleResult) ==
+                UFinareWorldLibrary::StaticClass());
+
+        UFinareComponent* GarbageContext = NewObject<UFinareComponent>(World);
+        FFinareObjectHandleResult GarbageHandleResult;
+        const FFinareObjectHandle StaleHandle =
+            Registry.RegisterObject(GarbageContext, GarbageHandleResult);
+        TestTrue(TEXT("Garbage context registration succeeds"), GarbageHandleResult.IsSuccess());
+        FFinareObjectHandleResult StaleReleaseResult;
+        TestTrue(
+            TEXT("Static reflection stale context release succeeds"),
+            Registry.ReleaseObject(StaleHandle, StaleReleaseResult));
+        FFinareInvocationResult StaleResult;
+        TestFalse(
+            TEXT("Static reflection rejects a garbage context handle"),
+            Bridge.Invoke(
+                StaleHandle,
+                FunctionPath,
+                Arguments,
+                Value,
+                StaleResult));
+        TestTrue(
+            TEXT("Garbage static context reports a handle failure"),
+            StaleResult.Error == EFinareInvocationError::ObjectHandleFailure);
+
+        UFinareComponent* ForeignContext = NewObject<UFinareComponent>(OtherWorld);
+        FFinareObjectHandleResult ForeignContextResult;
+        const FFinareObjectHandle ForeignContextHandle =
+            Registry.RegisterObject(ForeignContext, ForeignContextResult);
+        TestTrue(
+            TEXT("Cross-world static context registration is rejected"),
+            ForeignContextHandle.IsNull() &&
+                ForeignContextResult.Error == EFinareObjectHandleError::WorldMismatch);
+
+        // The static-function exception is scoped to Invoke. Property access
+        // and delegate binding must still reject a foreign declaring class,
+        // even when the member name resolves to that same static function.
+        TestFalse(
+            TEXT("Property access does not treat a foreign static function as an owner"),
+            Bridge.ReadProperty(
+                ContextHandle,
+                FunctionPath,
+                Value,
+                Result));
+        TestTrue(
+            TEXT("Foreign static property lookup reports a target mismatch"),
+            Result.Error == EFinareInvocationError::TargetTypeMismatch);
+
+        UObject* EventSource = nullptr;
+        const FMulticastDelegateProperty* EventProperty = nullptr;
+        TestFalse(
+            TEXT("Event binding does not treat a foreign static function as an owner"),
+            Bridge.ResolveMulticastDelegate(
+                ContextHandle,
+                FunctionPath,
+                EventSource,
+                EventProperty,
+                Result));
+        TestTrue(
+            TEXT("Foreign static event lookup reports a target mismatch"),
+            Result.Error == EFinareInvocationError::TargetTypeMismatch);
+
+        UFinareInteropFixture* ForeignInstance = NewObject<UFinareInteropFixture>(World);
+        FFinareObjectHandleResult ForeignHandleResult;
+        const FFinareObjectHandle ForeignHandle =
+            Registry.RegisterObject(ForeignInstance, ForeignHandleResult);
+        TestTrue(TEXT("Foreign instance registration succeeds"), ForeignHandleResult.IsSuccess());
+        const TArray<FFinareValue> NoArguments;
+        TestFalse(
+            TEXT("Instance invocation still requires the declaring class"),
+            Bridge.Invoke(
+                ForeignHandle,
+                TEXT("/Script/FinareRuntime.FinareComponent:Add"),
+                NoArguments,
+                Value,
+                Result));
+        TestTrue(
+            TEXT("Foreign instance invocation reports a target mismatch"),
+            Result.Error == EFinareInvocationError::TargetTypeMismatch);
+    }
+
+    World->RemoveFromRoot();
+    OtherWorld->RemoveFromRoot();
+    World->DestroyWorld(false);
+    OtherWorld->DestroyWorld(false);
     return !HasAnyErrors();
 }
 
