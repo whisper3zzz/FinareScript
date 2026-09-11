@@ -114,7 +114,17 @@ public sealed record VisualMethodProfile(
     VisualMethodRepresentation Representation,
     bool GraphEditable,
     string AuthoringBoundary,
-    IReadOnlyList<UnifiedDiagnostic> Diagnostics);
+    IReadOnlyList<UnifiedDiagnostic> Diagnostics)
+{
+    /// <summary>
+    /// Non-fatal graph capability findings for an implicit Unreal entry that
+    /// is exposed as source-only.  They are kept separate from fatal Visual
+    /// profile diagnostics so the opaque boundary remains valid.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<UnifiedDiagnostic>? CapabilityDiagnostics { get; init; }
+}
 
 public sealed record VisualProfileReport(
     string SchemaVersion,

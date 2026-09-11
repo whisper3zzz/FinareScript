@@ -1,9 +1,10 @@
 # Capabilities and limits
 
-Reviewed against development revision `2139c7f` on 2026-09-11. This page
-summarizes implemented behavior and its recorded verification boundaries.
-It does not report a new test run. Use [ROADMAP.md](ROADMAP.md) for priorities
-and [TESTING.md](TESTING.md) for current verification commands.
+This page summarizes current source capabilities and the scope of recorded
+verification. The native acceptance inventory was reviewed against development
+revision `2139c7f` on 2026-09-11; later compiler changes do not renew that native
+acceptance. Use [ROADMAP.md](ROADMAP.md) for priorities and
+[TESTING.md](TESTING.md) for current verification commands.
 
 ## Platform and release identity
 
@@ -22,7 +23,7 @@ the others. Historical reports live outside Git under their documented paths.
 | Workflow | Implemented and recorded | Remaining boundary |
 | --- | --- | --- |
 | Adopt an existing project | SDK adoption, ownership/conflict handling, Doctor, project-local setup and first Play; native and Blueprint-only fixtures | Broader engine, module and project layouts still need consumer evidence |
-| Edit C# and Graph | Shared semantic identity, bounded graph patches, source updates, review/history and preserved layout | Only the published Visual C# profile is editable; helper bodies can be source-only |
+| Edit C# and Graph | Shared semantic identity, bounded graph patches, source updates, review/history and preserved layout; source-only C# helpers and UE entry bodies | Only the published Visual C# profile is graph-editable; explicit `[Visual]` methods must satisfy it, while UE entry bodies can remain source-only |
 | Daily build and reload | Project-backed authoring, external source refresh, native Build & Reload and retained old generations on rejected changes | Native/schema changes may require restart; physical interaction is not implied by CMD tests |
 | Asset identity | Reviewed Rename/Duplicate/Delete and recovery; inherited active instances and partial-source identities covered by later fixtures | Arbitrary user asset layouts are not established |
 | Lyra health/HUD | Installed generated calls and subscriptions, real GAS damage/heal, reload, respawn, stop/restart and teardown in two Editor copies | Same-project asset/async failure coverage remains open; final packaged gameplay and audio are unverified |

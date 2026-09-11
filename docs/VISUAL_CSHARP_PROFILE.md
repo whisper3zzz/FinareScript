@@ -3,12 +3,18 @@
 Finare publishes `unifiedscript.visual-csharp-profile/v0.3` as the
 machine-readable contract for code that can be edited both as C# and as a
 visual graph. `unifiedscript.visual-csharp-profile-report/v0.1` classifies every
-method in a type that contains at least one `[Visual]` method.
+method in a type that contains an explicit `[Visual]` method or a recognized
+UE entry method.
 
 ## Authoring contract
 
 - A `[Visual]` method is `visualGraph`: its body must pass the profile validator
   and may be edited from either C# or the Authoring Surface.
+- A UE entry attribute such as `[UnrealBlueprintEvent]` establishes a callable
+  declaration without requiring a graph-editable implementation. Compatible
+  bodies retain their graph projection. Bodies that exceed graph syntax or
+  semantic capabilities become `opaqueCode` with a `sourceOnly` boundary.
+  Adding `[Visual]` explicitly requires graph support and prevents this fallback.
 - An unmarked method in the same type is `opaqueCode` with a `sourceOnly`
   boundary. A call to it appears as one graph node, but its body is never
   expanded or edited by the graph.
@@ -22,9 +28,47 @@ method in a type that contains at least one `[Visual]` method.
   source-only opaque-call boundary above.
 - A method that cannot satisfy the visual profile should normally move the
   unsupported logic into an unmarked helper and keep a graph-safe signature.
-  Profile diagnostics include this action directly.
+  This is useful when the caller must remain explicitly `[Visual]`; a UE entry
+  without that promise can keep the implementation in its own source body.
 
-For example:
+Source-only entry bodies are compiled from the original C# by Roslyn. Their
+callable declarations, identities and UE routes remain available, but their
+body has no editable graph or graph statement breakpoints. The authoring
+surface identifies the source-only implementation. This boundary does not
+relax Blueprint signatures, RPC rules, reflected state or other UE contracts,
+and never suppresses actual C# compilation errors.
+
+For example, an entry can use a lambda and exception handling directly:
+
+```csharp
+[UnrealBlueprintEvent]
+public int Calculate(int value)
+{
+    Func<int, int> twice = x => x * 2;
+    try
+    {
+        return twice(value) + 1;
+    }
+    catch (Exception)
+    {
+        return -1;
+    }
+}
+```
+
+This entry remains callable and appears as a read-only source implementation.
+An explicit `[Visual]` caller can still edit its call arguments when the
+entry's signature satisfies the opaque-call contract. Adding `[Visual]` to
+`Calculate` instead requires a graph-compatible body and produces errors for
+the lambda and exception handling.
+
+The CLI resolves exported source-only methods with `execute --method` (or
+`--method-id`). Instance methods also require
+`--receiver <asset-id-or-qualified-type>`. The synchronous execution-result
+contract still rejects async entry points; source-only compilation does not
+add an asynchronous host contract.
+
+A graph method can also call an ordinary source-only helper:
 
 ```csharp
 [Visual]

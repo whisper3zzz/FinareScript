@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Finare.CSharp;
 using Finare.Runtime;
+using Finare.Unreal;
 using Core = Finare.Core;
 
 namespace Finare.Tests;
@@ -71,6 +72,207 @@ public sealed class CoreClrExecutionHostTests
         Assert.Null(result.Fault);
         Assert.Equal(session.Hir.Id, result.SourceCompilationId);
         Assert.Equal(session.Semantics.ConfigurationId, result.SemanticConfigurationId);
+    }
+
+    [Fact]
+    public void Execute_InvokesOpaqueExportedEntryFromRealMethodDefinition()
+    {
+        const string source = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Tests.Execution;
+
+            public sealed class OpaqueEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+
+                [Visual]
+                public int CallCalculate(int value)
+                {
+                    return Calculate(value);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        CSharpCompilationRequest request = new(
+            "OpaqueEntry",
+            [new CSharpSourceDocument("Tests/Execution/OpaqueEntry.cs", source)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(request);
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        using CoreClrExecutionSession session = new CoreClrExecutionHost().Load(
+            emitted.Image!,
+            request.RuntimeReferencePaths);
+
+        Core.SemanticId methodId = session.ResolveExportedMethodId(
+            "Tests.Execution.OpaqueEntry.Calculate");
+        CSharpMethodSourceMap sourceMap = Assert.Single(
+            session.SourceMap.Methods,
+            method => method.MethodId == methodId);
+        Assert.NotEqual(0, sourceMap.MetadataToken);
+        Assert.NotEmpty(sourceMap.SequencePoints);
+        Assert.Empty(sourceMap.Nodes);
+        Core.ScriptAssetDeclaration asset = Assert.Single(session.ScriptAssets.Assets);
+
+        ExecutionResult result = session.Execute(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("41")],
+            new ScriptAssetReceiver(asset.Id)));
+
+        Assert.Equal(ExecutionOutcome.Returned, result.Outcome);
+        Assert.Equal("42", result.ReturnValue!.Json);
+
+        Core.SemanticId callerId = session.ResolveVisualMethodId(
+            "Tests.Execution.OpaqueEntry.CallCalculate");
+        ExecutionResult graphCallerResult = session.Execute(new ExecutionInvocation(
+            callerId,
+            [new ExecutionArgument("41")],
+            new ScriptAssetReceiver(asset.Id)));
+
+        Assert.Equal(ExecutionOutcome.Returned, graphCallerResult.Outcome);
+        Assert.Equal("42", graphCallerResult.ReturnValue!.Json);
+    }
+
+    [Fact]
+    public void Execute_RoutesInheritedOpaqueFunctionDeclaredAcrossPartialBase()
+    {
+        const string basePart1 = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/PartialOpaqueBase")]
+            public partial class PartialOpaqueBase : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> twice = item => item * 2;
+                    return twice(value) + 1;
+                }
+            }
+            """;
+        const string basePart2 = """
+            namespace Tests.Execution;
+
+            public partial class PartialOpaqueBase
+            {
+                public int Marker { get; set; } = 4;
+            }
+            """;
+        const string leafSource = """
+            using Finare;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/PartialOpaqueLeaf")]
+            public sealed class PartialOpaqueLeaf : PartialOpaqueBase
+            {
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        var request = new CSharpCompilationRequest(
+            "PartialOpaqueInheritance",
+            [
+                new CSharpSourceDocument("Tests/Execution/PartialOpaqueBase.Part1.cs", basePart1),
+                new CSharpSourceDocument("Tests/Execution/PartialOpaqueBase.Part2.cs", basePart2),
+                new CSharpSourceDocument("Tests/Execution/PartialOpaqueLeaf.cs", leafSource),
+            ],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+
+        using CoreClrExecutionSession session = new CoreClrExecutionHost().CompileAndLoad(request);
+        Core.ScriptAssetDeclaration baseAsset = Assert.Single(
+            session.ScriptAssets.Assets,
+            static asset => asset.QualifiedName == "Tests.Execution.PartialOpaqueBase");
+        Core.ScriptAssetDeclaration leafAsset = Assert.Single(
+            session.ScriptAssets.Assets,
+            static asset => asset.QualifiedName == "Tests.Execution.PartialOpaqueLeaf");
+        Core.ScriptFunctionDeclaration baseFunction = Assert.Single(
+            baseAsset.Functions,
+            static function => function.Name == "Calculate");
+        Core.ScriptFunctionDeclaration leafFunction = Assert.Single(
+            leafAsset.Functions,
+            static function => function.Name == "Calculate");
+        Assert.Equal(baseFunction.Id, leafFunction.Id);
+        Assert.Equal(
+            Core.ScriptFunctionBodyRepresentation.OpaqueCode,
+            baseFunction.BodyRepresentation);
+        Assert.Equal(
+            Core.ScriptFunctionBodyRepresentation.OpaqueCode,
+            leafFunction.BodyRepresentation);
+
+        Core.SemanticId methodId = session.ResolveExportedMethodId(
+            "Tests.Execution.PartialOpaqueBase.Calculate");
+        CSharpMethodSourceMap sourceMap = Assert.Single(
+            session.SourceMap.Methods,
+            method => method.MethodId == methodId);
+        Assert.NotEqual(0, sourceMap.MetadataToken);
+        Assert.NotEmpty(sourceMap.SequencePoints);
+        Assert.Empty(sourceMap.Nodes);
+        ExecutionResult result = session.Execute(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("7")],
+            new ScriptAssetReceiver(leafAsset.Id)));
+
+        Assert.Equal(ExecutionOutcome.Returned, result.Outcome);
+        Assert.Equal("15", result.ReturnValue!.Json);
+    }
+
+    [Fact]
+    public void Execute_RejectsOpaqueAsyncVoidEntryBeforeInvocation()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Tests.Execution;
+
+            public sealed class AsyncOpaqueEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public async void Fire()
+                {
+                    Func<int, int> identity = value => value;
+                    await Task.Yield();
+                    _ = identity(1);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        CSharpCompilationRequest request = new(
+            "AsyncOpaqueEntry",
+            [new CSharpSourceDocument("Tests/Execution/AsyncOpaqueEntry.cs", source)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(request);
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        using CoreClrExecutionSession session = new CoreClrExecutionHost().Load(
+            emitted.Image!,
+            request.RuntimeReferencePaths);
+
+        Core.SemanticId methodId = session.ResolveExportedMethodId(
+            "Tests.Execution.AsyncOpaqueEntry.Fire");
+        Core.ScriptAssetDeclaration asset = Assert.Single(session.ScriptAssets.Assets);
+        ExecutionInvocationException exception = Assert.Throws<ExecutionInvocationException>(() =>
+            session.Execute(new ExecutionInvocation(
+                methodId,
+                [],
+                new ScriptAssetReceiver(asset.Id))));
+
+        Assert.Equal("UVR1004", exception.Code);
     }
 
     [Fact]

@@ -81,6 +81,15 @@ continue to cover the transport mapping; native application still requires its
 Editor checks. See [CI acceptance](CI.md#meaning-of-ci-acceptance) for which
 layers are required by a change and how missing evidence is reported.
 
+Source-only entry regressions must execute an emitted assembly or compiled
+chunk and assert the result. A passing profile inspection alone does not prove
+the method was compiled, exported or dispatched. Cover mixed visual/source-only
+calls, declaration identity across body representation changes, inherited UE
+routes, and rejection of graph body edits. Negative cases must keep explicit
+`[Visual]` violations, invalid C# and invalid UE declarations fatal. Source-only
+method maps may contain real PDB sequence points, but must not invent graph
+statement maps or graph breakpoint capabilities.
+
 Inspect the current class inventory without starting .NET or UE:
 
 ```powershell

@@ -3,6 +3,7 @@ using Finare.Authoring;
 using Finare.Core;
 using Finare.CSharp;
 using Finare.Graph;
+using Finare.Unreal;
 
 namespace Finare.Tests;
 
@@ -254,6 +255,57 @@ public sealed class AuthoringSurfaceProjectorTests
         Assert.Equal("string", invocation.Ports.Single(port => port.Direction == GraphPortDirection.Output).TypeDisplayName);
         Assert.Equal(AuthoringSurfaceJson.Serialize(surface),
             AuthoringSurfaceJson.Serialize(AuthoringSurfaceJson.Deserialize(AuthoringSurfaceJson.Serialize(surface))));
+    }
+
+    [Fact]
+    public void ProjectShowsImplicitOpaqueEntriesAsReadOnlySourceOnlyActions()
+    {
+        const string source = """
+            using System;
+            using Finare.Unreal;
+
+            namespace Tests.Authoring;
+
+            public sealed class SourceOnlyEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SourceOnlyEntry",
+                [new CSharpSourceDocument("Tests/Authoring/SourceOnlyEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(
+            analysis.Hir!,
+            analysis.Semantics!,
+            analysis.DeclarationReferences);
+        AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
+            analysis.ScriptAssets!,
+            graph);
+        AuthoringFunctionSurface function = Assert.Single(Assert.Single(surface.Assets).Functions);
+        AuthoringActionSurface action = Assert.Single(function.Actions);
+
+        Assert.Equal("sourceOnly", action.GraphKind);
+        Assert.Equal("sourceOnly", action.Properties["authoringBoundary"]);
+        Assert.Equal("opaqueCode", action.Properties["calleeBodyRepresentation"]);
+        Assert.Equal("false", action.Properties["calleeBodyEditable"]);
+        Assert.Empty(action.Ports);
+        Assert.Empty(action.EditCapabilities);
+        Assert.Null(action.DebugTargetId);
+        Assert.Empty(function.Edges);
+        Assert.Empty(function.Regions.Single().DirectStatementIds);
+        string json = AuthoringSurfaceJson.Serialize(surface);
+        Assert.Equal(json, AuthoringSurfaceJson.Serialize(AuthoringSurfaceJson.Deserialize(json)));
     }
 
     private static (CSharpAnalysisResult Analysis, GraphDocument Graph) Analyze()

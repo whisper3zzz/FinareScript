@@ -4,6 +4,7 @@ using Finare.Core.Hir;
 using Finare.CSharp;
 using Finare.Graph;
 using Finare.Runtime;
+using Finare.Unreal;
 
 namespace Finare.Tests;
 
@@ -177,6 +178,253 @@ public sealed class FunctionIdentityPipelineTests
         Assert.All(
             Assert.Single(upgraded.IdentitySidecars).Entries.Where(static entry => entry.Kind == "function"),
             entry => Assert.Contains(asset.Functions, function => function.Id == entry.Id));
+    }
+
+    [Fact]
+    public void PersistentFunctionAndParameterIdsSurviveGraphToOpaqueAndBack()
+    {
+        const string graphSource = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class FunctionIdentityEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    return value + 1;
+                }
+            }
+            """;
+        const string opaqueSource = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class FunctionIdentityEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        IdentitySidecarDocument empty = IdentitySidecarDocument.CreateEmpty(Path);
+        CSharpCompilationRequest graphRequest = new(
+            "FunctionIdentityEntry",
+            [new CSharpSourceDocument(Path, graphSource, empty)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpAnalysisResult graph = Analyze(graphRequest);
+        IdentitySidecarDocument initialSidecar = Assert.Single(graph.IdentitySidecars);
+        ScriptFunctionDeclaration graphFunction = Assert.Single(
+            Assert.Single(graph.ScriptAssets!.Assets).Functions);
+        SemanticId graphParameterId = Assert.Single(graphFunction.Parameters).Id;
+        Assert.Single(graph.Hir!.Types.SelectMany(static type => type.Methods));
+
+        CSharpAnalysisResult opaque = Analyze(new CSharpCompilationRequest(
+            "FunctionIdentityEntry",
+            [new CSharpSourceDocument(Path, opaqueSource, initialSidecar)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]));
+        ScriptFunctionDeclaration opaqueFunction = Assert.Single(
+            Assert.Single(opaque.ScriptAssets!.Assets).Functions);
+        Assert.Equal(graphFunction.Id, opaqueFunction.Id);
+        Assert.Equal(graphParameterId, Assert.Single(opaqueFunction.Parameters).Id);
+        Assert.Equal(
+            graphFunction.Id,
+            Assert.Single(opaque.MethodProjections).Id);
+        Assert.Equal(
+            graphFunction.Id,
+            Assert.Single(opaque.Profile!.Methods).Id);
+        Assert.Equal(
+            ScriptFunctionBodyRepresentation.OpaqueCode,
+            opaqueFunction.BodyRepresentation);
+        Assert.Empty(opaque.Hir!.Types.SelectMany(static type => type.Methods));
+
+        CSharpAnalysisResult restored = Analyze(new CSharpCompilationRequest(
+            "FunctionIdentityEntry",
+            [new CSharpSourceDocument(Path, graphSource, Assert.Single(opaque.IdentitySidecars))],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]));
+        ScriptFunctionDeclaration restoredFunction = Assert.Single(
+            Assert.Single(restored.ScriptAssets!.Assets).Functions);
+        Assert.Equal(graphFunction.Id, restoredFunction.Id);
+        Assert.Equal(graphParameterId, Assert.Single(restoredFunction.Parameters).Id);
+        Assert.Equal(
+            graphFunction.Id,
+            Assert.Single(restored.Hir!.Types.SelectMany(static type => type.Methods)).Id);
+    }
+
+    [Fact]
+    public void RefOutFunctionIdsRemainStableAcrossGraphOpaqueGraphWithNonBootstrapSidecar()
+    {
+        const string path = "Game/RefOutIdentity.cs";
+        const string graphSource = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class RefOutIdentityEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(ref int value, out int doubled)
+                {
+                    doubled = value + 1;
+                    return doubled;
+                }
+            }
+            """;
+        const string opaqueSource = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class RefOutIdentityEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(ref int value, out int doubled)
+                {
+                    Func<int, int> twice = item => item * 2;
+                    doubled = twice(value);
+                    return doubled;
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        IdentitySidecarDocument empty = IdentitySidecarDocument.CreateEmpty(path);
+        CSharpAnalysisResult bootstrap = Analyze(new CSharpCompilationRequest(
+            "RefOutIdentity",
+            [new CSharpSourceDocument(path, graphSource, empty)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]));
+        IdentitySidecarDocument bootstrapSidecar = Assert.Single(bootstrap.IdentitySidecars);
+        IdentityEntry bootstrapFunction = Assert.Single(
+            bootstrapSidecar.Entries,
+            static entry => entry.Kind == "function");
+        IdentityEntry[] bootstrapParameters = bootstrapSidecar.Entries
+            .Where(static entry => entry.Kind == "parameter")
+            .OrderBy(static entry => entry.Anchor.Start)
+            .ToArray();
+        Assert.Equal(2, bootstrapParameters.Length);
+        SemanticId functionId = SemanticId.FromKey("ref-out/non-bootstrap/function");
+        SemanticId[] parameterIds = [
+            SemanticId.FromKey("ref-out/non-bootstrap/parameter/value"),
+            SemanticId.FromKey("ref-out/non-bootstrap/parameter/doubled"),
+        ];
+        Dictionary<SemanticId, SemanticId> replacements = new()
+        {
+            [bootstrapFunction.Id] = functionId,
+            [bootstrapParameters[0].Id] = parameterIds[0],
+            [bootstrapParameters[1].Id] = parameterIds[1],
+        };
+        IdentitySidecarDocument nonBootstrapSidecar = bootstrapSidecar with
+        {
+            Entries = bootstrapSidecar.Entries
+                .Select(entry => replacements.TryGetValue(entry.Id, out SemanticId replacement)
+                    ? entry with { Id = replacement }
+                    : entry)
+                .ToArray(),
+        };
+
+        CSharpCompilationRequest graphRequest = new(
+            "RefOutIdentity",
+            [new CSharpSourceDocument(path, graphSource, nonBootstrapSidecar)],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpAnalysisResult graph = Analyze(graphRequest);
+        ScriptFunctionDeclaration graphFunction = Assert.Single(
+            Assert.Single(graph.ScriptAssets!.Assets).Functions);
+        Assert.Equal(functionId, graphFunction.Id);
+        Assert.Equal(parameterIds, graphFunction.Parameters.Select(static parameter => parameter.Id));
+        Assert.Equal(functionId, Assert.Single(graph.Hir!.Types.SelectMany(static type => type.Methods)).Id);
+        Assert.Equal(functionId, Assert.Single(graph.Profile.Methods).Id);
+        Assert.Equal(
+            functionId,
+            Assert.Single(
+                graph.IdentitySidecars.SelectMany(static sidecar => sidecar.Entries),
+                static entry => entry.Kind == "function").Id);
+        Assert.Equal(
+            graph.ScriptAssets!.Assets[0].Id,
+            graph.DeclarationOwners[functionId]);
+
+        CSharpCompilationRequest opaqueRequest = new(
+            "RefOutIdentity",
+            [new CSharpSourceDocument(
+                path,
+                opaqueSource,
+                Assert.Single(graph.IdentitySidecars))],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpAnalysisResult opaque = Analyze(opaqueRequest);
+        ScriptAssetDeclaration opaqueAsset = Assert.Single(opaque.ScriptAssets!.Assets);
+        ScriptFunctionDeclaration opaqueFunction = Assert.Single(opaqueAsset.Functions);
+        Assert.Equal(functionId, opaqueFunction.Id);
+        Assert.Equal(parameterIds, opaqueFunction.Parameters.Select(static parameter => parameter.Id));
+        Assert.Equal(
+            [ScriptParameterDirection.InputOutput, ScriptParameterDirection.Output],
+            opaqueFunction.Parameters.Select(static parameter => parameter.Direction));
+        Assert.Equal(functionId, Assert.Single(opaque.MethodProjections).Id);
+        Assert.Equal(functionId, Assert.Single(opaque.Profile.Methods).Id);
+        Assert.Equal(
+            parameterIds.OrderBy(static id => id.Value),
+            opaque.IdentitySidecars
+                .SelectMany(static sidecar => sidecar.Entries)
+                .Where(static entry => entry.Kind == "parameter")
+                .Select(static entry => entry.Id)
+                .OrderBy(static id => id.Value));
+        Assert.Equal(opaqueAsset.Id, opaque.DeclarationOwners[functionId]);
+        Assert.Empty(opaque.Hir!.Types.SelectMany(static type => type.Methods));
+
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(opaqueRequest);
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        CSharpProgramImage opaqueImage = Assert.IsType<CSharpProgramImage>(emitted.Image);
+        CSharpMethodSourceMap opaqueMap = Assert.Single(
+            opaqueImage.SourceMap.Methods,
+            method => method.MethodId == functionId);
+        Assert.NotEqual(0, opaqueMap.MetadataToken);
+        Assert.NotEmpty(opaqueMap.SequencePoints);
+        Assert.Empty(opaqueMap.Nodes);
+
+        CSharpCompilationRequest restoredRequest = new(
+            "RefOutIdentity",
+            [new CSharpSourceDocument(
+                path,
+                graphSource,
+                Assert.Single(opaque.IdentitySidecars))],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpAnalysisResult restored = Analyze(restoredRequest);
+        ScriptFunctionDeclaration restoredFunction = Assert.Single(
+            Assert.Single(restored.ScriptAssets!.Assets).Functions);
+        Assert.Equal(functionId, restoredFunction.Id);
+        Assert.Equal(parameterIds, restoredFunction.Parameters.Select(static parameter => parameter.Id));
+        Assert.Equal(functionId, Assert.Single(restored.Profile.Methods).Id);
+        Assert.Equal(functionId, Assert.Single(
+            restored.Hir!.Types.SelectMany(static type => type.Methods)).Id);
+        Assert.Equal(
+            restored.ScriptAssets!.Assets[0].Id,
+            restored.DeclarationOwners[functionId]);
+
+        CSharpProgramEmitResult restoredEmit = new CSharpProgramEmitter().Emit(restoredRequest);
+        Assert.True(restoredEmit.Succeeded, string.Join(Environment.NewLine, restoredEmit.Diagnostics));
+        CSharpMethodSourceMap restoredMap = Assert.Single(
+            Assert.IsType<CSharpProgramImage>(restoredEmit.Image).SourceMap.Methods,
+            method => method.MethodId == functionId);
+        Assert.NotEqual(0, restoredMap.MetadataToken);
+        Assert.NotEmpty(restoredMap.Nodes);
     }
 
     private static void AssertUnifiedFunctionIds(CSharpAnalysisResult analysis)

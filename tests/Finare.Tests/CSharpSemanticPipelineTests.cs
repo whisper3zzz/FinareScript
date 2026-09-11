@@ -65,6 +65,421 @@ public sealed class CSharpSemanticPipelineTests
     }
 
     [Fact]
+    public void Analyze_PreservesImplicitUnrealEntryAsSourceOnlyWhenBodyIsNotGraphCompatible()
+    {
+        const string source = """
+            using System;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class SourceOnlyEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SourceOnlyEntry",
+                [new CSharpSourceDocument("Game/SourceOnlyEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Empty(result.Hir!.Types.SelectMany(static type => type.Methods));
+        CSharpMethodProjection projection = Assert.Single(result.MethodProjections);
+        Assert.True(projection.IsImplicitEntry);
+        Assert.False(projection.IsGraphEditable);
+        Assert.Equal(MethodBodyRepresentation.OpaqueCode, projection.BodyRepresentation);
+        ScriptFunctionDeclaration function = Assert.Single(
+            Assert.Single(result.ScriptAssets!.Assets).Functions);
+        Assert.Equal(ScriptFunctionBodyRepresentation.OpaqueCode, function.BodyRepresentation);
+        Assert.Contains(
+            function.CapabilityDiagnostics!,
+            diagnostic => diagnostic.Code == VisualProfileDiagnosticCodes.LambdaNotSupported);
+    }
+
+    [Fact]
+    public void Analyze_AllowsGraphUnsafeParameterShapesOnImplicitEntriesAsSourceOnly()
+    {
+        const string source = """
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class DefaultedEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value = 41)
+                {
+                    return value;
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "DefaultedEntry",
+                [new CSharpSourceDocument("Game/DefaultedEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        CSharpMethodProjection projection = Assert.Single(result.MethodProjections);
+        Assert.Equal(MethodBodyRepresentation.OpaqueCode, projection.BodyRepresentation);
+        Assert.Contains(
+            projection.CapabilityDiagnostics,
+            diagnostic => diagnostic.Code == VisualProfileDiagnosticCodes.DefaultParameterValueNotSupported);
+    }
+
+    [Fact]
+    public void Analyze_RejectsGenericImplicitUnrealEntriesAsDeclarationErrors()
+    {
+        const string source = """
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class GenericEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate<T>(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "GenericEntry",
+                [new CSharpSourceDocument("Game/GenericEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedFunctionSignature);
+    }
+
+    [Fact]
+    public void Analyze_RejectsUnsupportedOpaqueExportValueShapes()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            [UnrealScriptClass(UnrealScriptClassKind.Actor)]
+            public sealed class UnsupportedEntry : UnrealActorScript
+            {
+                [UnrealBlueprintEvent]
+                public object Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+
+                [UnrealRpc(UnrealRpcTarget.Server)]
+                public void Send(IReadOnlyList<object> values)
+                {
+                    Func<int, int> identity = item => item;
+                    _ = identity(values.Count);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealActorScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "UnsupportedEntry",
+                [new CSharpSourceDocument("Game/UnsupportedEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.False(result.Succeeded);
+        Assert.True(
+            result.Diagnostics.Count(diagnostic =>
+                diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedFunctionSignature) >= 2,
+            string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Message.Contains("return type", StringComparison.Ordinal));
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Message.Contains("parameter type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Analyze_FallsBackToSourceOnlyForImplicitEntryWithGraphUnsafeLocal()
+    {
+        const string source = """
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class SemanticFallbackEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    UnsupportedLocal local;
+                    return value;
+                }
+            }
+
+            public sealed class UnsupportedLocal
+            {
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SemanticFallbackEntry",
+                [new CSharpSourceDocument("Game/SemanticFallbackEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Empty(result.Hir!.Types.SelectMany(static type => type.Methods));
+        Assert.Equal(MethodBodyRepresentation.OpaqueCode, Assert.Single(result.MethodProjections).BodyRepresentation);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.GraphUnsafeSignature &&
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Analyze_FallsBackToSourceOnlyForImplicitEntryWithEffectfulConditionalBranch()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class SemanticConditionalEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(bool enabled, int value)
+                {
+                    return enabled ? Mutate(value) : value;
+                }
+
+                private static int Mutate(int value)
+                {
+                    return value + 1;
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "SemanticConditionalEntry",
+                [new CSharpSourceDocument("Game/SemanticConditionalEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Empty(result.Hir!.Types.SelectMany(static type => type.Methods));
+        Assert.Equal(MethodBodyRepresentation.OpaqueCode, Assert.Single(result.MethodProjections).BodyRepresentation);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ConditionalBranchEffectsNotSupported &&
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Analyze_PreservesGraphCallersAroundSourceOnlyImplicitEntry()
+    {
+        const string source = """
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class CascadingFallbackEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Inner(int value)
+                {
+                    UnsupportedLocal local;
+                    return value;
+                }
+
+                [UnrealBlueprintEvent]
+                public int Middle(int value)
+                {
+                    return Inner(value);
+                }
+
+                [UnrealBlueprintEvent]
+                public int Outer(int value)
+                {
+                    return Middle(value);
+                }
+            }
+
+            public sealed class UnsupportedLocal
+            {
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "CascadingFallbackEntry",
+                [new CSharpSourceDocument("Game/CascadingFallbackEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(2, result.Hir!.Types.SelectMany(static type => type.Methods).Count());
+        Assert.Equal(
+            MethodBodyRepresentation.OpaqueCode,
+            Assert.Single(result.MethodProjections, static projection => projection.Name == "Inner")
+                .BodyRepresentation);
+        Assert.All(
+            result.MethodProjections.Where(static projection => projection.Name is "Middle" or "Outer"),
+            static projection => Assert.Equal(MethodBodyRepresentation.VisualGraph, projection.BodyRepresentation));
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == SemanticDiagnosticCodes.GraphUnsafeSignature &&
+            diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticDiagnosticCodes.OpaqueCodeBoundaryNotSupported);
+    }
+
+    [Fact]
+    public void Analyze_RebindsImplicitCallerAfterOpaqueBoundaryAndRetainsExportError()
+    {
+        const string source = """
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class CascadingBoundaryEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public object Inner(int value)
+                {
+                    UnsupportedLocal local;
+                    return value;
+                }
+
+                [UnrealBlueprintEvent]
+                public int Middle(int value)
+                {
+                    return (int)Inner(value);
+                }
+
+                [UnrealBlueprintEvent]
+                public int Outer(int value)
+                {
+                    return Middle(value);
+                }
+            }
+
+            public sealed class UnsupportedLocal
+            {
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "CascadingBoundaryEntry",
+                [new CSharpSourceDocument("Game/CascadingBoundaryEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            MethodBodyRepresentation.OpaqueCode,
+            Assert.Single(result.MethodProjections, static projection => projection.Name == "Inner")
+                .BodyRepresentation);
+        Assert.Equal(
+            MethodBodyRepresentation.OpaqueCode,
+            Assert.Single(result.MethodProjections, static projection => projection.Name == "Middle")
+                .BodyRepresentation);
+        Assert.Equal(
+            MethodBodyRepresentation.VisualGraph,
+            Assert.Single(result.MethodProjections, static projection => projection.Name == "Outer")
+                .BodyRepresentation);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == SemanticDiagnosticCodes.GraphUnsafeSignature &&
+            diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == SemanticDiagnosticCodes.OpaqueCodeBoundaryNotSupported &&
+            diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedFunctionSignature &&
+            diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Analyze_RejectsExplicitVisualCallerWhenCalleeBecomesOpaque()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class ExplicitCallerEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public object Inner(int value)
+                {
+                    UnsupportedLocal local;
+                    return value;
+                }
+
+                [Visual]
+                public int VisualCaller(int value)
+                {
+                    return (int)Inner(value);
+                }
+            }
+
+            public sealed class UnsupportedLocal
+            {
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "ExplicitCallerEntry",
+                [new CSharpSourceDocument("Game/ExplicitCallerEntry.cs", source)],
+                [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.OpaqueCodeBoundaryNotSupported &&
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.GraphUnsafeSignature &&
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
     public void Project_UsesDataOnlyForPureCallsAndControlForImpureCalls()
     {
         CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(Source, "Calculator.cs");

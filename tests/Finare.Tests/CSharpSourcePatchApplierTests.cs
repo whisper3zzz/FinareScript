@@ -3,6 +3,7 @@ using Finare.Core;
 using Finare.Core.Hir;
 using Finare.Graph;
 using Finare.Semantics;
+using Finare.Unreal;
 
 namespace Finare.Tests;
 
@@ -400,6 +401,99 @@ public sealed class CSharpSourcePatchApplierTests
         Assert.Contains(
             result.Diagnostics,
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ConfigurationMismatch);
+    }
+
+    [Fact]
+    public void Apply_RejectsCurrentBaselinePatchAgainstSourceOnlyMethod()
+    {
+        const string source = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class SourceOnlyPatchEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> twice = item => item * 2;
+                    return twice(value) + 1;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentUnrealRequest(source, "Game/SourceOnlyPatchEntry.cs");
+        CSharpMethodProjection projection = Assert.Single(original.MethodProjections);
+        Assert.Equal(MethodBodyRepresentation.OpaqueCode, projection.BodyRepresentation);
+
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceLiteralPatchOperation(projection.Id, projection.Id.Value, "42")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TargetNotFound);
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.BaselineMismatch);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_PatchesGraphCallerAndLeavesOpaqueMethodSourceUnchanged()
+    {
+        const string source = """
+            using System;
+            using Finare;
+            using Finare.Unreal;
+
+            namespace Game;
+
+            public sealed class MixedPatchEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> twice = item => item * 2;
+                    return twice(value) + 1;
+                }
+
+                [Visual]
+                public int CallCalculate(int value)
+                {
+                    return Calculate(value + 1);
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentUnrealRequest(source, "Game/MixedPatchEntry.cs");
+        HirMethodDeclaration caller = original.Hir!.Types
+            .SelectMany(static type => type.Methods)
+            .Single(static method => method.Name == "CallCalculate");
+        HirLiteralExpression literal = Assert.Single(
+            caller.DescendantsAndSelf().OfType<HirLiteralExpression>());
+        Assert.Equal("1", literal.ValueText);
+
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceLiteralPatchOperation(literal.Id, literal.ValueText, "2")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        string expectedSource = source.Replace(
+            "return Calculate(value + 1);",
+            "return Calculate(value + 2);",
+            StringComparison.Ordinal);
+        Assert.Equal(expectedSource, patchedSource);
     }
 
     [Fact]
@@ -6767,6 +6861,27 @@ public sealed class CSharpSourcePatchApplierTests
         var request = new CSharpCompilationRequest(
             "Finare.Analysis",
             [new CSharpSourceDocument(path, source, Assert.Single(initialized.IdentitySidecars))]);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        return (request, analysis);
+    }
+
+    private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis)
+        CreatePersistentUnrealRequest(string source, string path)
+    {
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        var initializingRequest = new CSharpCompilationRequest(
+            "Finare.Analysis",
+            [new CSharpSourceDocument(path, source, IdentitySidecarDocument.CreateEmpty(path))],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
+        CSharpAnalysisResult initialized = new CSharpSemanticPipeline().Analyze(initializingRequest);
+        Assert.True(initialized.Succeeded, string.Join(Environment.NewLine, initialized.Diagnostics));
+        var request = new CSharpCompilationRequest(
+            "Finare.Analysis",
+            [new CSharpSourceDocument(path, source, Assert.Single(initialized.IdentitySidecars))],
+            [unrealAssembly],
+            runtimeReferencePaths: [unrealAssembly]);
         CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
         Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
         return (request, analysis);

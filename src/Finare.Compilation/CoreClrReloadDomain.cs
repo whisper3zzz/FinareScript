@@ -159,6 +159,17 @@ public sealed class CoreClrReloadDomain : IDisposable
         }
     }
 
+    public SemanticId ResolveExportedMethodId(string qualifiedMethodName)
+    {
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            CoreClrExecutionSession current = session ?? throw new InvalidOperationException(
+                "The reload domain has no active CoreCLR program generation.");
+            return current.ResolveExportedMethodId(qualifiedMethodName);
+        }
+    }
+
     public void Dispose()
     {
         lock (gate)

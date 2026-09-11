@@ -54,7 +54,8 @@ internal sealed class CSharpScriptAssetLowerer
         IReadOnlyList<SyntaxTree> syntaxTrees,
         HirCompilationUnit hir,
         BoundCompilation semantics,
-        IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities)
+        IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections = null)
     {
         ArgumentNullException.ThrowIfNull(compilation);
         ArgumentNullException.ThrowIfNull(syntaxTrees);
@@ -74,6 +75,8 @@ internal sealed class CSharpScriptAssetLowerer
                 StringComparer.Ordinal);
         var semanticTypes = semantics.Types.ToDictionary(static type => type.Id);
         var semanticMethods = semantics.Methods.ToDictionary(static method => method.Id);
+        IReadOnlyDictionary<SemanticId, IMethodSymbol> sourceMethodSymbols =
+            BuildExportedMethodSymbols(compilation, syntaxTrees, methodProjections ?? []);
         var declarations = new List<ScriptAssetDeclaration>();
         var declarationReferences = new Dictionary<SemanticId, SemanticId>();
         var declarationOwnerNames = new Dictionary<SemanticId, string>();
@@ -96,9 +99,15 @@ internal sealed class CSharpScriptAssetLowerer
                 AttributeData? assetAttribute = FindAttribute(typeSymbol, ScriptAssetAttributeName);
                 bool hasExposedMember = typeSymbol.GetMembers()
                     .Any(static member => FindAttribute(member, ExposeAttributeName) is not null);
+                bool hasExportedMethod = methodProjections?.Any(projection =>
+                    string.Equals(
+                        projection.ContainingTypeName,
+                        GetMetadataName(typeSymbol),
+                        StringComparison.Ordinal)) == true;
                 hirTypes.TryGetValue(qualifiedName, out IReadOnlyList<HirTypeDeclaration>? hirTypeShards);
                 HirTypeDeclaration? firstHirType = hirTypeShards?.FirstOrDefault();
-                if (assetAttribute is null && hirTypeShards is null && !hasExposedMember)
+                if (assetAttribute is null && hirTypeShards is null && !hasExposedMember &&
+                    !hasExportedMethod)
                 {
                     continue;
                 }
@@ -133,7 +142,9 @@ internal sealed class CSharpScriptAssetLowerer
                     semanticTypes,
                     semanticMethods,
                     declarationOwnerNames,
-                    diagnostics);
+                    diagnostics,
+                    methodProjections ?? [],
+                    sourceMethodSymbols);
                 IReadOnlyList<ScriptLifecycleHookDeclaration> lifecycleHooks =
                     LowerLifecycleHooks(typeSymbol);
                 ScriptClassBindingDeclaration? classBinding = null;
@@ -610,6 +621,82 @@ internal sealed class CSharpScriptAssetLowerer
         return states;
     }
 
+    private static IReadOnlyDictionary<SemanticId, IMethodSymbol> BuildExportedMethodSymbols(
+        CSharpCompilation compilation,
+        IReadOnlyList<SyntaxTree> syntaxTrees,
+        IReadOnlyList<CSharpMethodProjection> methodProjections)
+    {
+        var symbols = new Dictionary<SemanticId, IMethodSymbol>();
+        var reconciledIds = new Dictionary<SemanticId, SemanticId>();
+        foreach (CSharpMethodProjection projection in methodProjections)
+        {
+            reconciledIds.TryAdd(
+                CSharpSemanticIds.ForSymbol("method", projection.QualifiedName),
+                projection.Id);
+        }
+        foreach (SyntaxTree syntaxTree in syntaxTrees)
+        {
+            SemanticModel model = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: false);
+            foreach (TypeDeclarationSyntax type in syntaxTree.GetRoot()
+                         .DescendantNodes()
+                         .OfType<TypeDeclarationSyntax>())
+            {
+                string typeName = VisualProfileInspector.GetQualifiedTypeName(type);
+                foreach (MethodDeclarationSyntax method in type.Members
+                             .OfType<MethodDeclarationSyntax>()
+                             .Where(VisualProfileValidator.IsVisualMethod))
+                {
+                    if (model.GetDeclaredSymbol(method) is IMethodSymbol symbol)
+                    {
+                        SemanticId rawId = CSharpSemanticIds.ForSymbol(
+                            "method",
+                            VisualProfileInspector.GetMethodSignature(typeName, method));
+                        SemanticId id = reconciledIds.GetValueOrDefault(rawId, rawId);
+                        symbols.TryAdd(id, symbol.OriginalDefinition);
+                    }
+                }
+            }
+        }
+        return symbols;
+    }
+
+    private sealed record FunctionParameter(
+        SemanticId Id,
+        string Name,
+        string TypeName,
+        HirParameterDirection Direction);
+
+    private sealed record FunctionBindingContext(
+        SemanticId Id,
+        string Name,
+        SourceSpan Span,
+        bool IsStatic,
+        bool IsPublic,
+        IReadOnlyList<HirAttribute>? Attributes);
+
+    private sealed record FunctionCandidate(
+        SemanticId Id,
+        string Name,
+        SourceSpan Span,
+        string ReturnTypeMetadataName,
+        bool IsStatic,
+        bool IsPublic,
+        IReadOnlyList<FunctionParameter> Parameters,
+        IReadOnlyList<HirAttribute>? Attributes,
+        MethodBodyRepresentation BodyRepresentation,
+        IReadOnlyList<UnifiedDiagnostic> CapabilityDiagnostics,
+        string OwnerName,
+        IMethodSymbol? MethodSymbol)
+    {
+        public FunctionBindingContext BindingContext => new(
+            Id,
+            Name,
+            Span,
+            IsStatic,
+            IsPublic,
+            Attributes);
+    }
+
     private static IReadOnlyList<ScriptFunctionDeclaration> LowerFunctions(
         CSharpCompilation compilation,
         INamedTypeSymbol typeSymbol,
@@ -619,10 +706,11 @@ internal sealed class CSharpScriptAssetLowerer
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IDictionary<SemanticId, string> declarationOwnerNames,
-        ICollection<UnifiedDiagnostic> diagnostics)
+        ICollection<UnifiedDiagnostic> diagnostics,
+        IReadOnlyList<CSharpMethodProjection> methodProjections,
+        IReadOnlyDictionary<SemanticId, IMethodSymbol> sourceMethodSymbols)
     {
-        var declarations = new List<HirMethodDeclaration>(initialCapacity);
-        var declarationOwnerNamesByMethod = new Dictionary<SemanticId, string>();
+        var declarations = new List<FunctionCandidate>(initialCapacity + methodProjections.Count);
         var shadowedNames = new HashSet<string>(StringComparer.Ordinal);
         INamedTypeSymbol? currentSymbol = typeSymbol;
         bool inherited = false;
@@ -636,9 +724,62 @@ internal sealed class CSharpScriptAssetLowerer
                     if (!inherited ||
                         (method.IsPublic && !method.IsStatic && !shadowedNames.Contains(method.Name)))
                     {
-                        declarations.Add(method);
-                        declarationOwnerNamesByMethod[method.Id] = currentName;
+                        MethodDescriptor descriptor = methods[method.Id];
+                        IMethodSymbol? methodSymbol = FindMethodSymbol(
+                            typeSymbol,
+                            method,
+                            descriptor.Parameters.Select(parameter => types[parameter.TypeId].MetadataName).ToArray());
+                        declarations.Add(new FunctionCandidate(
+                            method.Id,
+                            method.Name,
+                            method.Span,
+                            types[descriptor.ReturnTypeId].MetadataName,
+                            method.IsStatic,
+                            method.IsPublic,
+                            method.Parameters.Select((parameter, index) => new FunctionParameter(
+                                parameter.Id,
+                                parameter.Name,
+                                types[descriptor.Parameters[index].TypeId].MetadataName,
+                                parameter.Direction)).ToArray(),
+                            method.Attributes,
+                            MethodBodyRepresentation.VisualGraph,
+                            [],
+                            currentName,
+                            methodSymbol));
                     }
+                }
+            }
+
+            foreach (CSharpMethodProjection projection in methodProjections
+                         .Where(projection => string.Equals(
+                             projection.ContainingTypeName,
+                             currentName,
+                             StringComparison.Ordinal))
+                         .Where(projection => !projection.IsGraphEditable))
+            {
+                if (!inherited ||
+                    (projection.IsPublic && !projection.IsStatic && !shadowedNames.Contains(projection.Name)))
+                {
+                    IMethodSymbol? methodSymbol = sourceMethodSymbols.GetValueOrDefault(projection.Id);
+                    declarations.Add(new FunctionCandidate(
+                        projection.Id,
+                        projection.Name,
+                        projection.Span,
+                        methodSymbol?.ReturnType.ToDisplayString(TypeMetadataFormat) ?? projection.ReturnType,
+                        projection.IsStatic,
+                        projection.IsPublic,
+                        projection.Parameters.Select((parameter, index) => new FunctionParameter(
+                            parameter.Id,
+                            parameter.Name,
+                            methodSymbol is not null && index < methodSymbol.Parameters.Length
+                                ? methodSymbol.Parameters[index].Type.ToDisplayString(TypeMetadataFormat)
+                                : parameter.TypeName,
+                            parameter.Direction)).ToArray(),
+                        projection.Attributes,
+                        projection.BodyRepresentation,
+                        projection.CapabilityDiagnostics,
+                        currentName,
+                        methodSymbol));
                 }
             }
 
@@ -652,26 +793,59 @@ internal sealed class CSharpScriptAssetLowerer
 
         var functions = new List<ScriptFunctionDeclaration>(declarations.Count);
         var blueprintOverrideRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (HirMethodDeclaration method in declarations)
+        foreach (FunctionCandidate candidate in declarations)
         {
-            MethodDescriptor descriptor = methods[method.Id];
-            string[] parameterTypeNames = descriptor.Parameters
-                .Select(parameter => types[parameter.TypeId].MetadataName)
+            string[] parameterTypeNames = candidate.Parameters
+                .Select(static parameter => parameter.TypeName)
                 .ToArray();
-            IMethodSymbol? methodSymbol = FindMethodSymbol(
-                typeSymbol,
-                method,
-                parameterTypeNames);
+            IMethodSymbol? methodSymbol = candidate.MethodSymbol;
+            if (candidate.BodyRepresentation == MethodBodyRepresentation.OpaqueCode &&
+                methodSymbol is not null &&
+                methods.TryGetValue(candidate.Id, out MethodDescriptor? opaqueDescriptor))
+            {
+                TypeDescriptor opaqueReturnType = types[opaqueDescriptor.ReturnTypeId];
+                if (!opaqueReturnType.IsGraphSafe)
+                {
+                    diagnostics.Add(new UnifiedDiagnostic(
+                        DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Blueprint-callable source-only function '{projectionQualifiedName}.{candidate.Name}' has an unsupported return type '{opaqueReturnType.DisplayName}'.",
+                        candidate.Span,
+                        candidate.Id));
+                    continue;
+                }
+
+                bool hasUnsupportedOpaqueParameter = false;
+                foreach (ParameterDescriptor parameter in opaqueDescriptor.Parameters)
+                {
+                    TypeDescriptor opaqueParameterType = types[parameter.TypeId];
+                    if (!opaqueParameterType.IsGraphSafe)
+                    {
+                        diagnostics.Add(new UnifiedDiagnostic(
+                            DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                            UnifiedDiagnosticSeverity.Error,
+                            $"Blueprint-callable source-only function '{projectionQualifiedName}.{candidate.Name}' has an unsupported parameter type '{opaqueParameterType.DisplayName}' for '{parameter.Name}'.",
+                            candidate.Span,
+                            candidate.Id));
+                        hasUnsupportedOpaqueParameter = true;
+                    }
+                }
+
+                if (hasUnsupportedOpaqueParameter)
+                {
+                    continue;
+                }
+            }
             if (methodSymbol is { ReturnsByRef: true } or { ReturnsByRefReadonly: true } ||
                 methodSymbol?.Parameters.Any(static parameter => parameter.RefKind == RefKind.In) == true)
             {
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Blueprint-callable function '{projectionQualifiedName}.{method.Name}' cannot use " +
+                    $"Blueprint-callable function '{projectionQualifiedName}.{candidate.Name}' cannot use " +
                     "a ref return or C# in parameter. Use a value return and input, out, or ref parameters.",
-                    method.Span,
-                    method.Id));
+                    candidate.Span,
+                    candidate.Id));
                 continue;
             }
             string? unsupportedShapeReason = null;
@@ -706,13 +880,13 @@ internal sealed class CSharpScriptAssetLowerer
                 diagnostics.Add(new UnifiedDiagnostic(
                     DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
                     UnifiedDiagnosticSeverity.Error,
-                    $"Blueprint-callable function '{projectionQualifiedName}.{method.Name}' has an unsupported " +
+                    $"Blueprint-callable function '{projectionQualifiedName}.{candidate.Name}' has an unsupported " +
                     $"container value shape: {unsupportedShapeReason}",
-                    method.Span,
-                    method.Id));
+                    candidate.Span,
+                    candidate.Id));
                 continue;
             }
-            ScriptParameterDeclaration[] parameters = method.Parameters
+            ScriptParameterDeclaration[] parameters = candidate.Parameters
                 .Select((parameter, index) => new ScriptParameterDeclaration(
                     parameter.Id,
                     parameter.Name,
@@ -728,25 +902,25 @@ internal sealed class CSharpScriptAssetLowerer
                         _ => ScriptParameterDirection.Input,
                     }))
                 .ToArray();
-            string signature = $"{projectionQualifiedName}.{method.Name}({string.Join(',',
+            string signature = $"{projectionQualifiedName}.{candidate.Name}({string.Join(',',
                 parameterTypeNames.Select((parameterType, index) =>
-                    method.Parameters[index].Direction switch
+                    candidate.Parameters[index].Direction switch
                     {
                         HirParameterDirection.Output => $"out {parameterType}",
                         HirParameterDirection.InputOutput => $"ref {parameterType}",
                         _ => parameterType,
                     }))})";
             IReadOnlyList<ScriptInputActionBindingDeclaration> inputActions =
-                LowerInputActions(method, methodSymbol, parameterTypeNames, diagnostics);
+                LowerInputActions(candidate.BindingContext, methodSymbol, parameterTypeNames, diagnostics);
             IReadOnlyList<ScriptDelegateBindingDeclaration> delegateBindings =
-                LowerDelegateBindings(method, methodSymbol, diagnostics);
+                LowerDelegateBindings(candidate.BindingContext, methodSymbol, diagnostics);
             IReadOnlyList<ScriptInterfaceFunctionDeclaration> interfaceFunctions =
-                LowerInterfaceFunctions(method, methodSymbol, diagnostics);
+                LowerInterfaceFunctions(candidate.BindingContext, methodSymbol, diagnostics);
             AttributeData? blueprintEventAttribute = methodSymbol is null
                 ? null
                 : FindAttribute(methodSymbol, UnrealBlueprintEventAttributeName);
             bool blueprintEvent = blueprintEventAttribute is not null ||
-                method.Attributes?.Any(static attribute =>
+                candidate.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealBlueprintEvent") == true;
             AttributeData? blueprintOverrideAttribute = methodSymbol is null
                 ? null
@@ -774,7 +948,7 @@ internal sealed class CSharpScriptAssetLowerer
                 {
                     blueprintEventSuperMode = ScriptBlueprintEventSuperMode.Explicit;
                 }
-                if (!method.IsPublic || method.IsStatic ||
+                if (!candidate.IsPublic || candidate.IsStatic ||
                     !ScriptAssetJson.IsValidBlueprintOverrideClassPath(declaringClassPath) ||
                     !ScriptAssetJson.IsValidBlueprintOverrideFunctionName(functionName) ||
                     superModeValue != 1)
@@ -782,9 +956,9 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics.Add(new UnifiedDiagnostic(
                         DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                         UnifiedDiagnosticSeverity.Error,
-                        $"Blueprint override '{projectionQualifiedName}.{method.Name}' requires a public instance method, an exact declaring class path, a valid Unreal function identifier, and only SuperMode=Explicit.",
-                        method.Span,
-                        method.Id));
+                        $"Blueprint override '{projectionQualifiedName}.{candidate.Name}' requires a public instance method, an exact declaring class path, a valid Unreal function identifier, and only SuperMode=Explicit.",
+                        candidate.Span,
+                        candidate.Id));
                 }
                 else if (blueprintEvent || inputActions.Count != 0 || delegateBindings.Count != 0 ||
                     interfaceFunctions.Count != 0 || rpcAttribute is not null || notifyAttribute is not null)
@@ -792,9 +966,9 @@ internal sealed class CSharpScriptAssetLowerer
                     diagnostics.Add(new UnifiedDiagnostic(
                         DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                         UnifiedDiagnosticSeverity.Error,
-                        $"Blueprint override '{projectionQualifiedName}.{method.Name}' cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
-                        method.Span,
-                        method.Id));
+                        $"Blueprint override '{projectionQualifiedName}.{candidate.Name}' cannot be combined with BlueprintEvent, InputAction, Delegate, Interface, Rpc, or RepNotify bindings.",
+                        candidate.Span,
+                        candidate.Id));
                 }
                 else
                 {
@@ -804,9 +978,9 @@ internal sealed class CSharpScriptAssetLowerer
                         diagnostics.Add(new UnifiedDiagnostic(
                             DeclarationDiagnosticCodes.InvalidBlueprintOverride,
                             UnifiedDiagnosticSeverity.Error,
-                            $"Script asset '{projectionQualifiedName}' declares duplicate Blueprint override route '{declaringClassPath}:{functionName}' (case-insensitive) on method '{projectionQualifiedName}.{method.Name}'.",
-                            method.Span,
-                            method.Id));
+                            $"Script asset '{projectionQualifiedName}' declares duplicate Blueprint override route '{declaringClassPath}:{functionName}' (case-insensitive) on method '{projectionQualifiedName}.{candidate.Name}'.",
+                            candidate.Span,
+                            candidate.Id));
                     }
                     else
                     {
@@ -822,13 +996,13 @@ internal sealed class CSharpScriptAssetLowerer
             }
             if (notifyAttribute is not null && string.IsNullOrWhiteSpace(repNotifyProperty))
                 diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
-                    UnifiedDiagnosticSeverity.Error, "RepNotify requires an exact replicated property name.", method.Span, method.Id));
+                    UnifiedDiagnosticSeverity.Error, "RepNotify requires an exact replicated property name.", candidate.Span, candidate.Id));
             if (rpcAttribute is not null || notifyAttribute is not null)
             {
                 AttributeData? scriptClass = FindAttribute(typeSymbol, UnrealScriptClassAttributeName);
                 if (scriptClass?.ConstructorArguments[0].Value is not int kind || kind is not (1 or 2))
                     diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
-                        UnifiedDiagnosticSeverity.Error, "RPC and RepNotify require an Actor or ActorComponent Script Class.", method.Span, method.Id));
+                        UnifiedDiagnosticSeverity.Error, "RPC and RepNotify require an Actor or ActorComponent Script Class.", candidate.Span, candidate.Id));
             }
             if (rpc is not null && (parameters.Length > 4 || parameters.Any(p =>
                 p.UnrealType?.Kind is ScriptFunctionValueTypeKind.Array or ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map ||
@@ -838,21 +1012,21 @@ internal sealed class CSharpScriptAssetLowerer
                 diagnostics.Add(new UnifiedDiagnostic(DeclarationDiagnosticCodes.InvalidNetworkingContract,
                     UnifiedDiagnosticSeverity.Error,
                     "RPC sends currently support 0-4 input values: scalars, strings/names/text, enums, object/class handles, Vector/Rotator/Transform. Collections, Soft References and complex structures are not supported RPC payloads yet.",
-                    method.Span, method.Id));
+                    candidate.Span, candidate.Id));
             functions.Add(new ScriptFunctionDeclaration(
-                method.Id,
-                method.Name,
+                candidate.Id,
+                candidate.Name,
                 signature,
-                types[descriptor.ReturnTypeId].MetadataName,
-                method.IsStatic,
-                method.IsPublic,
-                delegateBindings.Count != 0 || method.Attributes?.Any(static attribute =>
+                candidate.ReturnTypeMetadataName,
+                candidate.IsStatic,
+                candidate.IsPublic,
+                delegateBindings.Count != 0 || candidate.Attributes?.Any(static attribute =>
                     attribute.Name == "UnrealEvent") == true,
                 parameters,
                 LowerFunctionValueType(
                     compilation,
                     methodSymbol?.ReturnType ?? compilation.GetTypeByMetadataName(
-                        types[descriptor.ReturnTypeId].MetadataName)),
+                        candidate.ReturnTypeMetadataName)),
                 blueprintEvent
                     ? new ScriptBlueprintEventDeclaration(
                         blueprintEventSuperMode,
@@ -862,14 +1036,20 @@ internal sealed class CSharpScriptAssetLowerer
                 delegateBindings,
                 interfaceFunctions,
                 rpc,
-                repNotifyProperty));
+                repNotifyProperty,
+                candidate.BodyRepresentation == MethodBodyRepresentation.OpaqueCode
+                    ? ScriptFunctionBodyRepresentation.OpaqueCode
+                    : ScriptFunctionBodyRepresentation.VisualGraph,
+                candidate.CapabilityDiagnostics.Count == 0
+                    ? null
+                    : candidate.CapabilityDiagnostics));
             RecordDeclarationOwner(
                 declarationOwnerNames,
-                method.Id,
+                candidate.Id,
                 methodSymbol is null
-                    ? declarationOwnerNamesByMethod[method.Id]
+                    ? candidate.OwnerName
                     : GetMetadataName(methodSymbol.ContainingType),
-                method.Span,
+                candidate.Span,
                 diagnostics);
         }
 
@@ -902,7 +1082,7 @@ internal sealed class CSharpScriptAssetLowerer
     }
 
     private static IReadOnlyList<ScriptInputActionBindingDeclaration> LowerInputActions(
-        HirMethodDeclaration method,
+        FunctionBindingContext method,
         IMethodSymbol? methodSymbol,
         IReadOnlyList<string> parameterTypeNames,
         ICollection<UnifiedDiagnostic> diagnostics)
@@ -984,7 +1164,7 @@ internal sealed class CSharpScriptAssetLowerer
     }
 
     private static IReadOnlyList<ScriptDelegateBindingDeclaration> LowerDelegateBindings(
-        HirMethodDeclaration method,
+        FunctionBindingContext method,
         IMethodSymbol? methodSymbol,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
@@ -1043,7 +1223,7 @@ internal sealed class CSharpScriptAssetLowerer
     }
 
     private static IReadOnlyList<ScriptInterfaceFunctionDeclaration> LowerInterfaceFunctions(
-        HirMethodDeclaration method,
+        FunctionBindingContext method,
         IMethodSymbol? methodSymbol,
         ICollection<UnifiedDiagnostic> diagnostics)
     {

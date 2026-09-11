@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Finare.Core;
 using Finare.Core.Hir;
+using Finare.Semantics;
 
 namespace Finare.CSharp;
 
@@ -32,14 +33,47 @@ public sealed class CSharpToHirLowerer
             .ToList();
         diagnostics.AddRange(profileValidator.Validate(syntaxTree));
 
-        if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
+        TypeDeclarationSyntax[] syntaxTypes = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .ToArray();
+        var visualMethodCandidates = syntaxTypes
+            .SelectMany(type => type.Members
+                .OfType<MethodDeclarationSyntax>()
+                .Where(VisualProfileValidator.IsVisualMethod)
+                .Select(method => (Type: type, Method: method,
+                    Projection: CreateMethodProjection(method, filePath, type))))
+            .ToArray();
+        CSharpMethodProjection[] methodProjections = visualMethodCandidates
+            .Select(static candidate => candidate.Projection)
+            .ToArray();
+        foreach (var candidate in visualMethodCandidates
+                     .Where(static candidate => candidate.Projection.IsImplicitEntry))
         {
-            return new CSharpLoweringResult(null, diagnostics);
+            CSharpMethodProjection projection = candidate.Projection;
+            if (projection.CapabilityDiagnostics.Count > 0)
+            {
+                diagnostics.AddRange(projection.CapabilityDiagnostics);
+            }
+            diagnostics.AddRange(profileValidator.ValidateEntryDeclaration(
+                candidate.Method,
+                candidate.Type));
         }
 
+        if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
+        {
+            return new CSharpLoweringResult(null, diagnostics)
+            {
+                MethodProjections = methodProjections,
+            };
+        }
+
+        HashSet<SemanticId> graphMethodIds = methodProjections
+            .Where(static projection => projection.IsGraphEditable)
+            .Select(static projection => projection.Id)
+            .ToHashSet();
         IReadOnlyList<HirTypeDeclaration> types = root.DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
-            .Select(type => LowerType(type, filePath))
+            .Select(type => LowerType(type, filePath, graphMethodIds))
             .Where(static type => type.Methods.Count > 0)
             .ToArray();
 
@@ -47,10 +81,69 @@ public sealed class CSharpToHirLowerer
             CSharpSemanticIds.ForSymbol("compilation", NormalizePath(filePath)),
             RoslynSourceSpan.FromNode(root, filePath),
             types);
-        return new CSharpLoweringResult(unit, diagnostics);
+        return new CSharpLoweringResult(unit, diagnostics)
+        {
+            MethodProjections = methodProjections,
+        };
     }
 
-    private static HirTypeDeclaration LowerType(TypeDeclarationSyntax type, string filePath)
+    private CSharpMethodProjection CreateMethodProjection(
+        MethodDeclarationSyntax method,
+        string filePath,
+        TypeDeclarationSyntax type)
+    {
+        string qualifiedTypeName = VisualProfileInspector.GetQualifiedTypeName(type);
+        string qualifiedName = VisualProfileInspector.GetMethodSignature(qualifiedTypeName, method);
+        SemanticId methodId = CSharpSemanticIds.ForSymbol("method", qualifiedName);
+        bool isExplicitVisual = VisualProfileValidator.IsExplicitVisualMethod(method);
+        bool isImplicitEntry = VisualProfileValidator.IsImplicitVisualEntry(method);
+        IReadOnlyList<UnifiedDiagnostic> capabilityDiagnostics = isImplicitEntry
+            ? profileValidator.ValidateGraphCapabilities(method)
+                .Select(VisualProfileValidator.AsSourceOnlyCapabilityWarning)
+                .ToArray()
+            : [];
+        MethodBodyRepresentation bodyRepresentation = isExplicitVisual ||
+            capabilityDiagnostics.Count == 0
+                ? MethodBodyRepresentation.VisualGraph
+                : MethodBodyRepresentation.OpaqueCode;
+        CSharpMethodParameterProjection[] parameters = method.ParameterList.Parameters
+            .Select(parameter => new CSharpMethodParameterProjection(
+                CSharpSemanticIds.ForNode(
+                    filePath,
+                    qualifiedName,
+                    parameter,
+                    $"parameter:{parameter.Identifier.ValueText}"),
+                RoslynSourceSpan.FromNode(parameter, filePath),
+                parameter.Identifier.ValueText,
+                parameter.Type?.ToString() ?? "unknown",
+                parameter.Modifiers.Any(SyntaxKind.OutKeyword)
+                    ? HirParameterDirection.Output
+                    : parameter.Modifiers.Any(SyntaxKind.RefKeyword)
+                        ? HirParameterDirection.InputOutput
+                        : HirParameterDirection.Input))
+            .ToArray();
+        return new CSharpMethodProjection(
+            methodId,
+            qualifiedTypeName,
+            qualifiedName,
+            method.Identifier.ValueText,
+            RoslynSourceSpan.FromNode(method, filePath),
+            method.ReturnType.ToString(),
+            isExplicitVisual,
+            isImplicitEntry,
+            method.Modifiers.Any(SyntaxKind.PublicKeyword),
+            method.Modifiers.Any(SyntaxKind.StaticKeyword),
+            method.Modifiers.Any(SyntaxKind.AsyncKeyword),
+            parameters,
+            LowerAttributes(method),
+            bodyRepresentation,
+            capabilityDiagnostics);
+    }
+
+    private static HirTypeDeclaration LowerType(
+        TypeDeclarationSyntax type,
+        string filePath,
+        IReadOnlySet<SemanticId> graphMethodIds)
     {
         string @namespace = GetNamespace(type);
         string nestedName = GetNestedTypeName(type);
@@ -58,6 +151,9 @@ public sealed class CSharpToHirLowerer
         IReadOnlyList<HirMethodDeclaration> methods = type.Members
             .OfType<MethodDeclarationSyntax>()
             .Where(VisualProfileValidator.IsVisualMethod)
+            .Where(method => graphMethodIds.Contains(CSharpSemanticIds.ForSymbol(
+                "method",
+                VisualProfileInspector.GetMethodSignature(qualifiedName, method))))
             .Select(method => LowerMethod(method, filePath, qualifiedName))
             .ToArray();
 

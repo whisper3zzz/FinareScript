@@ -22,12 +22,10 @@ public sealed class VisualProfileValidator
 
         foreach (MethodDeclarationSyntax method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
         {
-            if (!IsVisualMethod(method))
+            if (IsExplicitVisualMethod(method))
             {
-                continue;
+                diagnostics.AddRange(ValidateMethod(method));
             }
-
-            diagnostics.AddRange(ValidateMethod(method));
         }
 
         return diagnostics;
@@ -40,16 +38,117 @@ public sealed class VisualProfileValidator
             ? "<memory>"
             : method.SyntaxTree.FilePath;
         var diagnostics = new List<UnifiedDiagnostic>();
-        if (!IsVisualMethod(method))
+        if (!IsExplicitVisualMethod(method))
         {
             return diagnostics;
         }
 
-        ValidateMethodDeclaration(method, filePath, diagnostics);
+        ValidateMethodDeclaration(method, filePath, diagnostics, requireBlockBody: true);
         ValidateBlueprintOverrideDeclaration(method, filePath, diagnostics);
         new VisualMethodWalker(filePath, diagnostics).Visit(method);
         return diagnostics;
     }
+
+    /// <summary>
+    /// Validates declaration rules that apply to an Unreal entry regardless
+    /// of whether its body is graph-editable. Block-body and executable graph
+    /// rules are intentionally left to the capability check.
+    /// </summary>
+    public IReadOnlyList<UnifiedDiagnostic> ValidateEntryDeclaration(
+        MethodDeclarationSyntax method,
+        TypeDeclarationSyntax? containingType = null)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        string filePath = string.IsNullOrEmpty(method.SyntaxTree.FilePath)
+            ? "<memory>"
+            : method.SyntaxTree.FilePath;
+        var diagnostics = new List<UnifiedDiagnostic>();
+        // These are declaration failures rather than graph capability
+        // limits: Roslyn may compile the body, but the emitted method cannot
+        // be addressed by the exported Unreal function contract.
+        if (method.TypeParameterList is not null ||
+            containingType?.TypeParameterList is not null)
+        {
+            AddDeclaration(
+                diagnostics,
+                DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                "Exported Unreal entries cannot be generic or be declared on an open generic type.",
+                method,
+                filePath);
+        }
+
+        if (method.Modifiers.Any(SyntaxKind.AbstractKeyword) ||
+            method.Modifiers.Any(SyntaxKind.ExternKeyword))
+        {
+            AddDeclaration(
+                diagnostics,
+                DeclarationDiagnosticCodes.UnsupportedFunctionSignature,
+                "Exported Unreal entries must have an emitted implementation; abstract and extern methods are not invokable.",
+                method,
+                filePath);
+        }
+
+        // Signature and body shape are separate contracts.  The visual
+        // profile validator owns graph capability diagnostics; Unreal's
+        // declaration lowerer owns ABI/signature diagnostics.  In
+        // particular, default values, unsafe modifiers, and ref returns can
+        // be valid C# for an opaque entry and must not be rejected here.
+        ValidateBlueprintOverrideDeclaration(method, filePath, diagnostics);
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Checks only the graph capability of a method body.  This is used for
+    /// implicit Unreal entry points: a capability failure makes the method
+    /// source-only, while declaration and Roslyn diagnostics remain fatal.
+    /// </summary>
+    public IReadOnlyList<UnifiedDiagnostic> ValidateGraphCapabilities(
+        MethodDeclarationSyntax method)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        string filePath = string.IsNullOrEmpty(method.SyntaxTree.FilePath)
+            ? "<memory>"
+            : method.SyntaxTree.FilePath;
+        var diagnostics = new List<UnifiedDiagnostic>();
+        // The same declaration shapes that are rejected for an explicit
+        // Visual method are capability limits for an implicit entry.  Keep
+        // the diagnostic code/span, but let the caller classify these as a
+        // source-only fallback. Generic methods are handled as fatal export
+        // declaration errors by ValidateEntryDeclaration.
+        var declarationCapabilities = new List<UnifiedDiagnostic>();
+        ValidateMethodDeclaration(method, filePath, declarationCapabilities, requireBlockBody: true);
+        diagnostics.AddRange(declarationCapabilities.Where(static diagnostic =>
+            diagnostic.Code != VisualProfileDiagnosticCodes.GenericVisualMethodNotSupported));
+        new VisualMethodWalker(filePath, diagnostics).Visit(method);
+        return diagnostics;
+    }
+
+    internal static UnifiedDiagnostic AsSourceOnlyCapabilityWarning(
+        UnifiedDiagnostic diagnostic)
+    {
+        const string oldHint = " Keep this implementation source-only by removing [Visual], then call it through an opaque node with graph-safe parameters and return type.";
+        string message = diagnostic.Message;
+        int hintStart = message.IndexOf(oldHint, StringComparison.Ordinal);
+        if (hintStart >= 0)
+        {
+            message = message[..hintStart];
+        }
+
+        return diagnostic with
+        {
+            Severity = UnifiedDiagnosticSeverity.Warning,
+            Message = message.TrimEnd() +
+                " Compiled as source-only; graph body editing is unavailable.",
+        };
+    }
+
+    public static bool IsExplicitVisualMethod(MethodDeclarationSyntax method) =>
+        method.AttributeLists
+            .SelectMany(static list => list.Attributes)
+            .Any(static attribute => IsExplicitVisualAttributeName(attribute.Name));
+
+    public static bool IsImplicitVisualEntry(MethodDeclarationSyntax method) =>
+        IsVisualMethod(method) && !IsExplicitVisualMethod(method);
 
     public static bool IsVisualMethod(MethodDeclarationSyntax method) =>
         method.AttributeLists
@@ -72,6 +171,19 @@ public sealed class VisualProfileValidator
             "UnrealInputAction" or "UnrealInputActionAttribute" or
             "UnrealInterfaceFunction" or "UnrealInterfaceFunctionAttribute" or
             "UnrealRpc" or "UnrealRpcAttribute" or "UnrealRepNotify" or "UnrealRepNotifyAttribute";
+    }
+
+    private static bool IsExplicitVisualAttributeName(NameSyntax name)
+    {
+        string shortName = name switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax alias => alias.Name.Identifier.ValueText,
+            _ => name.ToString().Split('.').Last(),
+        };
+
+        return shortName is "Visual" or "VisualAttribute";
     }
 
     private static void ValidateBlueprintOverrideDeclaration(
@@ -142,9 +254,10 @@ public sealed class VisualProfileValidator
     private static void ValidateMethodDeclaration(
         MethodDeclarationSyntax method,
         string filePath,
-        ICollection<UnifiedDiagnostic> diagnostics)
+        ICollection<UnifiedDiagnostic> diagnostics,
+        bool requireBlockBody)
     {
-        if (method.Body is null)
+        if (requireBlockBody && method.Body is null)
         {
             Add(
                 diagnostics,
@@ -226,6 +339,18 @@ public sealed class VisualProfileValidator
             SupportsOpaqueEscape(code) ? message + OpaqueEscapeHint : message,
             RoslynSourceSpan.FromNode(node, filePath)));
     }
+
+    private static void AddDeclaration(
+        ICollection<UnifiedDiagnostic> diagnostics,
+        string code,
+        string message,
+        SyntaxNode node,
+        string filePath) =>
+        diagnostics.Add(new UnifiedDiagnostic(
+            code,
+            UnifiedDiagnosticSeverity.Error,
+            message,
+            RoslynSourceSpan.FromNode(node, filePath)));
 
     private static bool SupportsOpaqueEscape(string code) => code is not (
         VisualProfileDiagnosticCodes.LoopControlTargetRequired or

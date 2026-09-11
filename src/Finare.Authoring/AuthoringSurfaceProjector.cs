@@ -37,6 +37,18 @@ public sealed class AuthoringSurfaceProjector
             var functions = new List<AuthoringFunctionSurface>();
             foreach (ScriptFunctionDeclaration declaration in asset.Functions)
             {
+                if (declaration.BodyRepresentation == ScriptFunctionBodyRepresentation.OpaqueCode)
+                {
+                    if (graphFunctions.ContainsKey(declaration.Id))
+                    {
+                        throw new InvalidOperationException(
+                            $"Source-only script function '{declaration.QualifiedName}' cannot have an executable Graph projection.");
+                    }
+
+                    functions.Add(ProjectSourceOnlyFunction(declaration, asset.Span));
+                    continue;
+                }
+
                 if (!graphFunctions.TryGetValue(declaration.Id, out GraphFunction? function))
                 {
                     throw new InvalidOperationException(
@@ -67,6 +79,75 @@ public sealed class AuthoringSurfaceProjector
                     .Select(static pair => new AuthoringDeclarationOwner(pair.Key, pair.Value))
                     .ToArray(),
         });
+    }
+
+    private static AuthoringFunctionSurface ProjectSourceOnlyFunction(
+        ScriptFunctionDeclaration declaration,
+        SourceSpan assetSpan)
+    {
+        SemanticId regionId = SemanticId.FromKey($"authoring-source-only-region|{declaration.Id.Value}");
+        SemanticId actionId = SemanticId.FromKey($"authoring-source-only-action|{declaration.Id.Value}");
+        var properties = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["authoringBoundary"] = "sourceOnly",
+            ["calleeBodyRepresentation"] = "opaqueCode",
+            ["calleeBodyEditable"] = "false",
+            ["methodId"] = declaration.Id.Value,
+            ["method"] = declaration.QualifiedName,
+        };
+        if (declaration.CapabilityDiagnostics is { Count: > 0 } capabilityDiagnostics)
+        {
+            properties["capabilityCodes"] = string.Join(
+                '|',
+                capabilityDiagnostics
+                    .Select(static diagnostic => diagnostic.Code)
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal));
+        }
+
+        var action = new AuthoringActionSurface(
+            actionId,
+            "sourceOnly",
+            AuthoringActionCategory.Entry,
+            $"{declaration.Name} (source-only)",
+            $"{FormatSignature(declaration)}\nCompiled C# implementation; graph body editing is unavailable.",
+            assetSpan,
+            regionId,
+            DebugTargetId: null,
+            DeclarationReferenceIds: [],
+            EditCapabilities: [],
+            Ports: [],
+            Properties: properties);
+        var region = new AuthoringRegionSurface(
+            regionId,
+            GraphRegionKind.Function,
+            ParentRegionId: null,
+            SourceNodeId: actionId,
+            assetSpan,
+            IsImplicit: true,
+            AnchorActionId: null,
+            DirectStatementIds: [],
+            DirectActionIds: [actionId],
+            ChildRegionIds: []);
+        AuthoringParameterSurface[] parameters = declaration.Parameters
+            .Select(parameter => new AuthoringParameterSurface(
+                parameter.Id,
+                parameter.Name,
+                parameter.TypeMetadataName,
+                TypeId: null,
+                TypeDisplayName: null))
+            .ToArray();
+        return new AuthoringFunctionSurface(
+            declaration.Id,
+            declaration.Name,
+            declaration.QualifiedName,
+            declaration.ReturnTypeMetadataName,
+            declaration.IsStatic,
+            parameters,
+            regionId,
+            [region],
+            [action],
+            []);
     }
 
     private static AuthoringFunctionSurface ProjectFunction(

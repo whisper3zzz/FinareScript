@@ -33,23 +33,45 @@ public sealed class VisualProfileInspector
                 string typeName = GetQualifiedTypeName(type);
                 foreach (MethodDeclarationSyntax method in typeMethods)
                 {
-                    bool isVisual = VisualProfileValidator.IsVisualMethod(method);
-                    IReadOnlyList<UnifiedDiagnostic> diagnostics = isVisual
+                    bool isEntry = VisualProfileValidator.IsVisualMethod(method);
+                    bool isExplicitVisual = VisualProfileValidator.IsExplicitVisualMethod(method);
+                    bool isImplicitEntry = VisualProfileValidator.IsImplicitVisualEntry(method);
+                    IReadOnlyList<UnifiedDiagnostic> diagnostics = isExplicitVisual
                         ? validator.ValidateMethod(method)
                         : [];
+                    IReadOnlyList<UnifiedDiagnostic> capabilityDiagnostics = isImplicitEntry
+                        ? validator.ValidateGraphCapabilities(method)
+                            .Select(VisualProfileValidator.AsSourceOnlyCapabilityWarning)
+                            .ToArray()
+                        : [];
+                    bool graphEditable = isExplicitVisual
+                        ? diagnostics.All(static diagnostic =>
+                            diagnostic.Severity != UnifiedDiagnosticSeverity.Error)
+                        : isImplicitEntry && capabilityDiagnostics.Count == 0;
+                    // An explicit [Visual] declaration remains a visual
+                    // profile entry even when its diagnostics make it
+                    // non-editable. This keeps the fatal contract visible to
+                    // profile consumers instead of mislabelling it opaque.
+                    VisualMethodRepresentation representation = isExplicitVisual || graphEditable
+                        ? VisualMethodRepresentation.VisualGraph
+                        : VisualMethodRepresentation.OpaqueCode;
                     string signature = GetMethodSignature(typeName, method);
                     methods.Add(new VisualMethodProfile(
                         CSharpSemanticIds.ForSymbol("method", signature),
                         method.Identifier.ValueText,
                         signature,
                         RoslynSourceSpan.FromNode(method, filePath),
-                        isVisual
-                            ? VisualMethodRepresentation.VisualGraph
-                            : VisualMethodRepresentation.OpaqueCode,
-                        isVisual && diagnostics.All(static diagnostic =>
-                            diagnostic.Severity != UnifiedDiagnosticSeverity.Error),
-                        isVisual ? "visualGraph" : "sourceOnly",
-                        diagnostics));
+                        representation,
+                        graphEditable,
+                        representation == VisualMethodRepresentation.VisualGraph
+                            ? "visualGraph"
+                            : "sourceOnly",
+                        diagnostics)
+                    {
+                        CapabilityDiagnostics = capabilityDiagnostics.Count == 0
+                            ? null
+                            : capabilityDiagnostics,
+                    });
                 }
             }
         }

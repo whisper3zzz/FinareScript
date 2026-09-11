@@ -88,7 +88,8 @@ public sealed class CSharpProgramEmitter
             sourceMapPortableExecutable.ToArray(),
             sourceMapPortablePdb.ToArray(),
             analysis.Hir,
-            analysis.Semantics);
+            analysis.Semantics,
+            analysis.MethodProjections);
         return new CSharpProgramEmitResult(
             new CSharpProgramImage(
                 request.AssemblyName,

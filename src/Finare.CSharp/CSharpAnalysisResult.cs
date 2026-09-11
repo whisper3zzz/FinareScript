@@ -9,6 +9,8 @@ public sealed record CSharpAnalysisResult(
     BoundCompilation? Semantics,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics)
 {
+    public IReadOnlyList<CSharpMethodProjection> MethodProjections { get; init; } = [];
+
     public IReadOnlyList<IdentitySidecarDocument> IdentitySidecars { get; init; } = [];
 
     public ScriptAssetDocument? ScriptAssets { get; init; }

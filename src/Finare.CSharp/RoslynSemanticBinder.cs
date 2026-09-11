@@ -41,6 +41,7 @@ public sealed class RoslynSemanticBinder
     private readonly Dictionary<ISymbol, SemanticId> declaredSymbols = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<string, BindingContext> contexts = new(StringComparer.Ordinal);
     private readonly MethodEffectCatalog effectCatalog;
+    private IReadOnlySet<SemanticId> graphMethodIds = new HashSet<SemanticId>();
 
     public RoslynSemanticBinder(MethodEffectCatalog? effectCatalog = null)
     {
@@ -60,13 +61,19 @@ public sealed class RoslynSemanticBinder
         CSharpCompilation compilation,
         IReadOnlyList<SyntaxTree> syntaxTrees,
         HirCompilationUnit hir,
-        SemanticId configurationId)
+        SemanticId configurationId,
+        IReadOnlySet<SemanticId>? graphMethodIds = null,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections = null)
     {
         ArgumentNullException.ThrowIfNull(compilation);
         ArgumentNullException.ThrowIfNull(syntaxTrees);
         ArgumentNullException.ThrowIfNull(hir);
 
         Reset();
+        this.graphMethodIds = graphMethodIds ?? hir.Types
+            .SelectMany(static type => type.Methods)
+            .Select(static method => method.Id)
+            .ToHashSet();
         foreach (SyntaxTree syntaxTree in syntaxTrees)
         {
             string path = string.IsNullOrEmpty(syntaxTree.FilePath) ? "<memory>" : syntaxTree.FilePath;
@@ -85,6 +92,7 @@ public sealed class RoslynSemanticBinder
 
         RegisterTypeDeclarations(hir);
         RegisterMethodAndValueDeclarations(hir, diagnostics);
+        RegisterExportedSourceMethods(compilation, syntaxTrees, methodProjections);
         BindExpressions(hir, diagnostics);
         ValidateForEachStatements(hir, diagnostics);
         ValidateConditionalExpressions(hir, diagnostics);
@@ -115,6 +123,61 @@ public sealed class RoslynSemanticBinder
         forEachLoops.Clear();
         declaredSymbols.Clear();
         contexts.Clear();
+        graphMethodIds = new HashSet<SemanticId>();
+    }
+
+    /// <summary>
+    /// Registers exported Unreal methods that are intentionally absent from
+    /// HIR. Their emitted C# implementation remains available to the
+    /// declaration and chunk pipelines, while graph binding only considers
+    /// the IDs present in <paramref name="graphMethodIds"/>.
+    /// </summary>
+    private void RegisterExportedSourceMethods(
+        CSharpCompilation compilation,
+        IReadOnlyList<SyntaxTree> syntaxTrees,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections)
+    {
+        var reconciledIds = new Dictionary<SemanticId, SemanticId>();
+        foreach (CSharpMethodProjection projection in methodProjections ?? [])
+        {
+            reconciledIds.TryAdd(
+                CSharpSemanticIds.ForSymbol("method", projection.QualifiedName),
+                projection.Id);
+        }
+        foreach (SyntaxTree syntaxTree in syntaxTrees)
+        {
+            SemanticModel model = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: false);
+            foreach (TypeDeclarationSyntax type in syntaxTree.GetRoot()
+                         .DescendantNodes()
+                         .OfType<TypeDeclarationSyntax>())
+            {
+                string typeName = VisualProfileInspector.GetQualifiedTypeName(type);
+                foreach (MethodDeclarationSyntax method in type.Members
+                             .OfType<MethodDeclarationSyntax>()
+                             .Where(VisualProfileValidator.IsVisualMethod))
+                {
+                    IMethodSymbol? symbol = model.GetDeclaredSymbol(method);
+                    if (symbol is null)
+                    {
+                        continue;
+                    }
+
+                    SemanticId rawId = CSharpSemanticIds.ForSymbol(
+                        "method",
+                        VisualProfileInspector.GetMethodSignature(typeName, method));
+                    SemanticId id = reconciledIds.GetValueOrDefault(rawId, rawId);
+                    if (declaredSymbols.ContainsKey(symbol))
+                    {
+                        // HIR/identity reconciliation has already assigned
+                        // the authoritative ID for this declaration.
+                        continue;
+                    }
+
+                    declaredSymbols[symbol] = id;
+                    _ = GetMethodDescriptor(symbol, id);
+                }
+            }
+        }
     }
 
     private void RegisterTypeDeclarations(HirCompilationUnit hir)
@@ -195,6 +258,12 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: local.Id,
                         NullFlowState: GetInitialNullFlowState(localSymbol.Type));
+                    ValidateGraphSafeLocalType(
+                        localType.Id,
+                        $"local '{local.Name}'",
+                        localSyntax.Declaration.Type,
+                        context.FilePath,
+                        diagnostics);
                 }
 
                 foreach (HirForVariableDeclarator local in method.Body
@@ -212,6 +281,12 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: local.Id,
                         NullFlowState: GetInitialNullFlowState(localSymbol.Type));
+                    ValidateGraphSafeLocalType(
+                        localType.Id,
+                        $"local '{local.Name}'",
+                        declarator,
+                        context.FilePath,
+                        diagnostics);
                 }
 
                 foreach (HirForEachStatement forEach in method.Body
@@ -230,6 +305,12 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: forEach.Variable.Id,
                         NullFlowState: GetInitialNullFlowState(localSymbol.Type));
+                    ValidateGraphSafeLocalType(
+                        localType.Id,
+                        $"local '{forEach.Variable.Name}'",
+                        forEachSyntax.Type,
+                        context.FilePath,
+                        diagnostics);
                 }
 
                 foreach (HirPatternVariable patternVariable in method.Body
@@ -249,6 +330,12 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: patternVariable.Id,
                         NullFlowState: GetInitialNullFlowState(localSymbol.Type));
+                    ValidateGraphSafeLocalType(
+                        localType.Id,
+                        $"local '{patternVariable.Name}'",
+                        designation,
+                        context.FilePath,
+                        diagnostics);
                 }
             }
         }
@@ -789,6 +876,25 @@ public sealed class RoslynSemanticBinder
             RoslynSourceSpan.FromNode(syntax, sourcePath)));
     }
 
+    private void ValidateGraphSafeLocalType(
+        SemanticId typeId,
+        string role,
+        SyntaxNode syntax,
+        string sourcePath,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        // Span values are intentionally a supported borrowed local even
+        // though its descriptor is not a graph-safe value at an exported ABI
+        // boundary. Its dedicated foreach binder handles the lifetime and
+        // ref-readonly semantics.
+        if (types[typeId].IsGraphSafe || types[typeId].Kind == UnifiedTypeKind.BorrowedSequence)
+        {
+            return;
+        }
+
+        ValidateGraphSafeType(typeId, role, syntax, sourcePath, diagnostics);
+    }
+
     private TypeDescriptor GetTypeDescriptor(ITypeSymbol type, SemanticId? preferredId = null)
     {
         string canonicalName = GetTypeCanonicalName(type);
@@ -865,7 +971,7 @@ public sealed class RoslynSemanticBinder
         return descriptor;
     }
 
-    private static MethodBodyRepresentation GetMethodBodyRepresentation(IMethodSymbol method)
+    private MethodBodyRepresentation GetMethodBodyRepresentation(IMethodSymbol method)
     {
         SyntaxNode[] declarations = method.DeclaringSyntaxReferences
             .Select(static reference => reference.GetSyntax())
@@ -875,11 +981,13 @@ public sealed class RoslynSemanticBinder
             return MethodBodyRepresentation.ExternalApi;
         }
 
-        return declarations
-            .OfType<MethodDeclarationSyntax>()
-            .Any(VisualProfileValidator.IsVisualMethod)
-                ? MethodBodyRepresentation.VisualGraph
-                : MethodBodyRepresentation.OpaqueCode;
+        if (declaredSymbols.TryGetValue(method.OriginalDefinition, out SemanticId id) &&
+            graphMethodIds.Contains(id))
+        {
+            return MethodBodyRepresentation.VisualGraph;
+        }
+
+        return MethodBodyRepresentation.OpaqueCode;
     }
 
     private SemanticId GetSymbolId(ISymbol symbol)

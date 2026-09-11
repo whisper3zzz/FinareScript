@@ -86,6 +86,56 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void Compiler_SourceOnlyEntryUsesDefaultAndExplicitTypeSelectionAndExecutesAfterRoundTrip()
+    {
+        const string source = """
+            using System;
+            using Finare.Unreal;
+
+            namespace Tests.Chunks;
+
+            public sealed class SourceOnlyChunkEntry : UnrealObjectScript
+            {
+                [UnrealBlueprintEvent]
+                public int Calculate(int value)
+                {
+                    Func<int, int> addOne = item => item + 1;
+                    return addOne(value);
+                }
+            }
+            """;
+        string unrealAssembly = typeof(UnrealObjectScript).Assembly.Location;
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(
+            new CSharpCompilationRequest(
+                "Finare.SourceOnlyChunkTests",
+                [new CSharpSourceDocument("SourceOnlyChunkEntry.cs", source)],
+                referencePaths: [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        CSharpProgramImage image = Assert.IsType<CSharpProgramImage>(emitted.Image);
+        const string entryType = "Tests.Chunks.SourceOnlyChunkEntry";
+
+        CSharpProgramChunkEmitResult defaultChunk = new CSharpProgramChunkCompiler().Compile(
+            image,
+            new CSharpProgramChunkOptions(RuntimeReferencePaths: [unrealAssembly]));
+        Assert.Equal([entryType], defaultChunk.RuntimeManifest.EntryTypeNames);
+
+        CSharpProgramChunkEmitResult explicitChunk = new CSharpProgramChunkCompiler().Compile(
+            image,
+            new CSharpProgramChunkOptions(
+                RuntimeReferencePaths: [unrealAssembly],
+                EntryTypeNames: [entryType]));
+        Assert.Equal([entryType], explicitChunk.RuntimeManifest.EntryTypeNames);
+
+        using CoreClrCompiledChunkSession session = new CoreClrCompiledChunkHost().Load(
+            explicitChunk.Content,
+            [unrealAssembly]);
+        object instance = session.CreateEntryInstance(entryType);
+        object? value = instance.GetType().GetMethod("Calculate")!.Invoke(instance, [41]);
+        Assert.Equal(42, value);
+    }
+
+    [Fact]
     public void Compiler_CanStripPortablePdbFromRuntimeDeliveryChunk()
     {
         CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(

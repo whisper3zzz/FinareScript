@@ -2,9 +2,10 @@
 
 ## Purpose
 
-Finare provides one gameplay language with two authoring projections:
-restricted C# text and a structured visual graph. Both projections must preserve
-semantic identity and ultimately execute the same compiled method body.
+Finare uses C# for gameplay and offers a structured visual graph for bodies
+that satisfy the visual profile. Source-only bodies execute through Roslyn's
+compiled assembly. Graph-editable bodies preserve semantic identity across
+both authoring surfaces and execute that same compiled method body.
 
 The language system was developed outside Unreal Engine first. This keeps
 Roslyn, HIR, graph projection, and deterministic serialization fast to build
@@ -20,16 +21,23 @@ runtime semantics and does not create a new parser in the first phase.
 
 ### Visual C# is an explicit profile
 
-Only methods marked `[Visual]` promise lossless visual projection. Unsupported
-syntax is diagnosed before lowering. Unmarked C# methods are source-only and
-their graph-safe calls project as one non-editable opaque node under the
-versioned contract in
+Methods explicitly marked `[Visual]` promise lossless visual projection;
+unsupported graph syntax or semantics remain errors for those methods.
+UE entry attributes define callable declarations independently of graph body
+support. Compatible entry bodies retain their graph projection; entries that
+exceed graph capabilities remain source-only. Roslyn compilation errors and
+UE declaration restrictions still reject the program. Ordinary unmarked C#
+helpers are source-only, and their graph-safe calls project as one opaque node
+whose implementation is edited in source, under the versioned contract in
 [`VISUAL_CSHARP_PROFILE.md`](VISUAL_CSHARP_PROFILE.md).
 
 ### Declaration IR and HIR are the shared semantic contracts
 
 Declaration IR owns the asset path, type-level state, defaults, exposure policy,
-and Visual signatures. HIR owns executable Visual method bodies. The graph is
+and callable signatures. A source method catalog records callable methods
+independently of graph body support; declaration lowering and source mapping
+must not infer that a method is absent just because it has no HIR body.
+HIR owns executable Visual method bodies. The graph is
 projected from HIR, not from IL. Future graph edits will apply
 semantic patches to HIR and then construct localized Roslyn syntax changes.
 
@@ -54,12 +62,14 @@ rules are specified in
 ```mermaid
 flowchart LR
     Source["C# source"] --> Roslyn["Roslyn syntax tree"]
-    Roslyn --> Validator["Visual Profile Validator"]
-    Validator --> HIR["Unified HIR"]
+    Roslyn --> Validator["Visual capability classification"]
+    Validator --> Catalog["Source method catalog + body capabilities"]
+    Catalog --> HIR["Graph-editable method bodies"]
     Sidecar[".usids sidecar"] --> Reconcile["Identity Reconciler"]
     HIR --> Reconcile
     Reconcile --> StableHIR["Identity-stable HIR"]
     Roslyn --> Declaration["Script Asset / Declaration IR"]
+    Catalog --> Declaration
     Reconcile --> Declaration
     Declaration --> AssetJson["Declaration JSON"]
     StableHIR --> Binder["Roslyn Semantic Binder"]
@@ -72,9 +82,11 @@ flowchart LR
     Authoring --> Surface["Authoring Surface v0.5 ownership + pins + edges"]
     Surface --> Presentation["Lossless Graph Presentation policy"]
     Presentation --> Workbench["Browser / native UE GraphEditor"]
-    Projector --> EmitGate["Execution Graph/CFG gate"]
-    EmitGate --> Emitter["Deterministic PE + portable PDB"]
+    Projector --> EmitGate["Validate represented graph bodies"]
+    Roslyn --> Emitter["Roslyn compiles original C# to PE + PDB"]
+    EmitGate --> Emitter
     Emitter --> SourceMap["Semantic ID -> MethodDef + IL/PDB source map"]
+    Catalog --> SourceMap
     Emitter --> Runtime["Collectible CoreCLR session"]
     SourceMap --> Runtime
     Runtime --> Reload["Image cache + reload generation"]
@@ -82,7 +94,7 @@ flowchart LR
     Reload --> Breakpoints
     Hit["Generation + token + IL hit"] --> Breakpoints
     Breakpoints --> Resolution["Semantic breakpoint/node resolution"]
-    Invocation["Semantic method ID + JSON arguments"] --> Runtime
+    Invocation["Exported method ID + JSON arguments"] --> Runtime
     Runtime --> Result["Typed return or structured fault"]
     Graph --> LayoutSync["Layout Synchronizer"]
     Layout[".usgraph sidecar"] --> LayoutSync

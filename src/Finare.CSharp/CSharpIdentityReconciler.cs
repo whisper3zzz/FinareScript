@@ -36,6 +36,19 @@ public sealed class CSharpIdentityReconciler
         SyntaxTree syntaxTree,
         HirCompilationUnit compilation,
         CSharpCompilation? semanticCompilation)
+        => Reconcile(
+            source,
+            syntaxTree,
+            compilation,
+            semanticCompilation,
+            methodProjections: null);
+
+    public IdentityReconciliationResult Reconcile(
+        CSharpSourceDocument source,
+        SyntaxTree syntaxTree,
+        HirCompilationUnit compilation,
+        CSharpCompilation? semanticCompilation,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(syntaxTree);
@@ -47,7 +60,8 @@ public sealed class CSharpIdentityReconciler
             source,
             syntaxTree,
             compilation,
-            semanticCompilation);
+            semanticCompilation,
+            methodProjections);
         var oldEntries = previous.Entries.ToDictionary(static entry => entry.Id);
         var tombstoneIds = previous.Tombstones.Select(static tombstone => tombstone.Id).ToHashSet();
         var usedOldIds = new HashSet<SemanticId>();
@@ -59,7 +73,10 @@ public sealed class CSharpIdentityReconciler
         ApplyPins(source.IdentityPins, candidates, oldEntries, tombstoneIds, usedOldIds, assignedIds, diagnostics);
         if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
-            return new IdentityReconciliationResult(compilation, previous, diagnostics);
+            return new IdentityReconciliationResult(compilation, previous, diagnostics)
+            {
+                MethodProjections = methodProjections ?? [],
+            };
         }
 
         MatchExact(candidates, previous.Entries, usedOldIds, assignedIds);
@@ -119,6 +136,18 @@ public sealed class CSharpIdentityReconciler
                 .ToDictionary(
                     static candidate => candidate.Node.Id,
                     candidate => rewriteMap[candidate.Node.Id]),
+            MethodProjections = (methodProjections ?? [])
+                .Select(projection => projection with
+                {
+                    Id = rewriteMap.GetValueOrDefault(projection.Id, projection.Id),
+                    Parameters = projection.Parameters
+                        .Select(parameter => parameter with
+                        {
+                            Id = rewriteMap.GetValueOrDefault(parameter.Id, parameter.Id),
+                        })
+                        .ToArray(),
+                })
+                .ToArray(),
         };
     }
 
@@ -310,7 +339,8 @@ public sealed class CSharpIdentityReconciler
         CSharpSourceDocument source,
         SyntaxTree syntaxTree,
         HirCompilationUnit compilation,
-        CSharpCompilation? semanticCompilation)
+        CSharpCompilation? semanticCompilation,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections)
     {
         SourceText sourceText = syntaxTree.GetText();
         SemanticModel? semanticModel = semanticCompilation?.GetSemanticModel(
@@ -368,6 +398,48 @@ public sealed class CSharpIdentityReconciler
                 }
 
                 Visit(method.Body, owner, "body", methodParent);
+            }
+        }
+
+        // Opaque exported methods deliberately have no executable HIR body.
+        // Represent only their declaration and parameters in the identity
+        // candidate stream, using the same owner/shape keys as the old HIR
+        // function and parameter candidates. This lets a method keep its
+        // .usids identity when its body crosses the graph/source-only
+        // boundary without inventing an empty body that consumers could run.
+        foreach (CSharpMethodProjection projection in methodProjections ?? [])
+        {
+            if (projection.IsGraphEditable)
+            {
+                continue;
+            }
+
+            // Match the historical HIR owner key. Method signatures used by
+            // Roslyn include ref/in/out directions, while the original HIR
+            // identity owner intentionally keyed only on parameter types.
+            string owner = $"{projection.ContainingTypeName}.{projection.Name}(" +
+                string.Join(',', projection.Parameters.Select(static parameter => parameter.TypeName)) + ")";
+            string methodParent = GetDigest($"method|{owner}");
+            Add(
+                new MethodProjectionIdentityNode(
+                    projection.Id,
+                    projection.Span,
+                    projection.Name,
+                    projection.ReturnType),
+                owner,
+                "function",
+                methodParent);
+            foreach (CSharpMethodParameterProjection parameter in projection.Parameters)
+            {
+                Add(
+                    new ParameterProjectionIdentityNode(
+                        parameter.Id,
+                        parameter.Span,
+                        parameter.Name,
+                        parameter.TypeName),
+                    owner,
+                    "parameter",
+                    methodParent);
             }
         }
 
@@ -639,6 +711,9 @@ public sealed class CSharpIdentityReconciler
 
     private static string GetShapeKey(HirNode node) => node switch
     {
+        MethodProjectionIdentityNode => "HirMethodDeclaration",
+        ParameterProjectionIdentityNode parameter =>
+            $"parameter|{parameter.Name}|{parameter.TypeName}",
         HirStateDeclaration state => $"state|{state.TypeName}",
         HirParameter parameter => $"parameter|{parameter.Name}|{parameter.TypeName}",
         HirBlockStatement => "block",
@@ -693,6 +768,8 @@ public sealed class CSharpIdentityReconciler
 
     private static string GetKind(HirNode node) => node switch
     {
+        MethodProjectionIdentityNode => "function",
+        ParameterProjectionIdentityNode => "parameter",
         HirStateDeclaration => "state",
         HirMethodDeclaration => "function",
         HirParameter => "parameter",
@@ -858,4 +935,16 @@ public sealed class CSharpIdentityReconciler
             ContextAfter,
             generation);
     }
+
+    private sealed record MethodProjectionIdentityNode(
+        SemanticId Id,
+        SourceSpan Span,
+        string Name,
+        string ReturnType) : HirNode(Id, Span);
+
+    private sealed record ParameterProjectionIdentityNode(
+        SemanticId Id,
+        SourceSpan Span,
+        string Name,
+        string TypeName) : HirNode(Id, Span);
 }

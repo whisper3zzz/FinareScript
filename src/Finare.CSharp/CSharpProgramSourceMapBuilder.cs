@@ -15,7 +15,8 @@ internal sealed class CSharpProgramSourceMapBuilder
         byte[] portableExecutable,
         byte[] portablePdb,
         HirCompilationUnit hir,
-        BoundCompilation semantics)
+        BoundCompilation semantics,
+        IReadOnlyList<CSharpMethodProjection>? methodProjections = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
         ArgumentNullException.ThrowIfNull(portableExecutable);
@@ -88,6 +89,68 @@ internal sealed class CSharpProgramSourceMapBuilder
             }
         }
 
+        // Catalog entries that deliberately have no HIR body still have a
+        // real Roslyn method and PDB sequence points. Keep their method map
+        // for invocation/source navigation, but leave graph node maps empty.
+        foreach (CSharpMethodProjection projection in methodProjections ?? [])
+        {
+            if (projection.IsGraphEditable || methods.Any(method => method.MethodId == projection.Id))
+            {
+                continue;
+            }
+
+            if (!emittedTypes.TryGetValue(
+                    projection.ContainingTypeName,
+                    out TypeDefinitionHandle[]? typeHandles))
+            {
+                throw new InvalidOperationException(
+                    $"Emitted source-only type '{projection.ContainingTypeName}' was not found for source mapping.");
+            }
+            if (typeHandles.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Emitted source-only type '{projection.ContainingTypeName}' did not resolve uniquely for source mapping.");
+            }
+
+            MethodDescriptor descriptor = semantics.Methods.SingleOrDefault(method => method.Id == projection.Id) ??
+                throw new InvalidOperationException(
+                    $"Source-only method '{projection.QualifiedName}' has no semantic descriptor.");
+            string[] parameterTypes = descriptor.Parameters
+                .Select(parameter => NormalizeExpectedTypeName(
+                    semantics.Types.Single(type => type.Id == parameter.TypeId)))
+                .ToArray();
+            string returnType = NormalizeExpectedTypeName(
+                semantics.Types.Single(type => type.Id == descriptor.ReturnTypeId));
+            TypeDefinition emittedType = metadata.GetTypeDefinition(typeHandles[0]);
+            MethodDefinitionHandle[] nameAndArityMatches = emittedType.GetMethods()
+                .Where(handle => IsNameAndArityMatch(
+                    metadata,
+                    handle,
+                    projection.Name,
+                    parameterTypes.Length,
+                    typeProvider))
+                .ToArray();
+            MethodDefinitionHandle[] exactMatches = nameAndArityMatches
+                .Where(handle => IsMethodMatch(
+                    metadata,
+                    handle,
+                    parameterTypes,
+                    returnType,
+                    typeProvider))
+                .ToArray();
+            MethodDefinitionHandle[] matches = exactMatches.Length == 0 &&
+                nameAndArityMatches.Length == 1
+                    ? nameAndArityMatches
+                    : exactMatches;
+            if (matches.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Emitted source-only method '{projection.QualifiedName}' did not resolve uniquely for source mapping.");
+            }
+
+            methods.Add(BuildMethodMap(pdb, matches[0], projection, descriptor));
+        }
+
         return CSharpProgramSourceMapJson.NormalizeAndValidate(new CSharpProgramSourceMap(
             CSharpProgramSourceMap.CurrentSchemaVersion,
             assemblyName,
@@ -135,6 +198,33 @@ internal sealed class CSharpProgramSourceMapBuilder
             sequencePoints.Length == 0 ? null : sequencePoints[0].IlOffset,
             sequencePoints,
             nodes);
+    }
+
+    private static CSharpMethodSourceMap BuildMethodMap(
+        MetadataReader pdb,
+        MethodDefinitionHandle methodHandle,
+        CSharpMethodProjection projection,
+        MethodDescriptor descriptor)
+    {
+        int rowNumber = MetadataTokens.GetRowNumber(methodHandle);
+        MethodDebugInformation debugInformation = pdb.GetMethodDebugInformation(
+            MetadataTokens.MethodDebugInformationHandle(rowNumber));
+        CSharpSequencePoint[] sequencePoints = debugInformation
+            .GetSequencePoints()
+            .Where(static point => !point.IsHidden)
+            .Select(point => CreateSequencePoint(pdb, debugInformation, point))
+            .GroupBy(static point => point.IlOffset)
+            .Select(static group => group.First())
+            .OrderBy(static point => point.IlOffset)
+            .ToArray();
+
+        return new CSharpMethodSourceMap(
+            projection.Id,
+            descriptor.MetadataName,
+            MetadataTokens.GetToken(methodHandle),
+            sequencePoints.Length == 0 ? null : sequencePoints[0].IlOffset,
+            sequencePoints,
+            []);
     }
 
     private static CSharpSequencePoint CreateSequencePoint(

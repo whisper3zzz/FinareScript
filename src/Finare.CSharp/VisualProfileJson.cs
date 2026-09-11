@@ -44,14 +44,19 @@ public static class VisualProfileJson
 
             bool hasErrors = method.Diagnostics.Any(static diagnostic =>
                 diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+            bool hasCapabilityErrors = method.CapabilityDiagnostics?.Any(static diagnostic =>
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Error) == true;
             bool validVisual = method.Representation == VisualMethodRepresentation.VisualGraph &&
                 method.AuthoringBoundary == "visualGraph" && method.GraphEditable == !hasErrors;
             bool validOpaque = method.Representation == VisualMethodRepresentation.OpaqueCode &&
                 method.AuthoringBoundary == "sourceOnly" && !method.GraphEditable &&
-                method.Diagnostics.Count == 0;
+                method.Diagnostics.Count == 0 && !hasCapabilityErrors;
             if (!(validVisual || validOpaque) || method.Diagnostics.Any(static diagnostic =>
                     string.IsNullOrWhiteSpace(diagnostic.Code) ||
-                    string.IsNullOrWhiteSpace(diagnostic.Message)))
+                    string.IsNullOrWhiteSpace(diagnostic.Message)) ||
+                method.CapabilityDiagnostics?.Any(static diagnostic =>
+                    string.IsNullOrWhiteSpace(diagnostic.Code) ||
+                    string.IsNullOrWhiteSpace(diagnostic.Message)) == true)
             {
                 throw new JsonException(
                     $"Visual C# profile method '{method.QualifiedName}' has inconsistent representation metadata.");
@@ -68,6 +73,12 @@ public static class VisualProfileJson
                 .Select(static method => method with
                 {
                     Diagnostics = method.Diagnostics
+                        .OrderBy(static diagnostic => diagnostic.Span.FilePath, StringComparer.Ordinal)
+                        .ThenBy(static diagnostic => diagnostic.Span.Start.Line)
+                        .ThenBy(static diagnostic => diagnostic.Span.Start.Column)
+                        .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
+                        .ToArray(),
+                    CapabilityDiagnostics = method.CapabilityDiagnostics?
                         .OrderBy(static diagnostic => diagnostic.Span.FilePath, StringComparer.Ordinal)
                         .ThenBy(static diagnostic => diagnostic.Span.Start.Line)
                         .ThenBy(static diagnostic => diagnostic.Span.Start.Column)

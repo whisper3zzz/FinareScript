@@ -657,6 +657,19 @@ public static class ScriptAssetJson
             throw new JsonException($"Duplicate script function ID '{function.Id}'.");
         }
 
+        if (!Enum.IsDefined(function.BodyRepresentation) ||
+            function.BodyRepresentation == ScriptFunctionBodyRepresentation.VisualGraph &&
+            function.CapabilityDiagnostics?.Count > 0 ||
+            function.CapabilityDiagnostics?.Any(static diagnostic =>
+                diagnostic is null || string.IsNullOrWhiteSpace(diagnostic.Code) ||
+                string.IsNullOrWhiteSpace(diagnostic.Message) ||
+                !Enum.IsDefined(diagnostic.Severity) ||
+                diagnostic.Severity == UnifiedDiagnosticSeverity.Error) == true)
+        {
+            throw new JsonException(
+                $"Script function '{function.QualifiedName}' has invalid graph capability metadata.");
+        }
+
         if (function.Rpc is not null || function.RepNotifyProperty is not null)
         {
             if (!function.IsPublic || function.IsStatic || function.IsEvent ||

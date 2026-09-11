@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using Finare.Core;
 using Finare.Core.Hir;
@@ -44,6 +45,37 @@ public sealed class CoreClrExecutionSession : IDisposable
         lock (gate)
         {
             return ResolveVisualMethodIdCore(qualifiedMethodName);
+        }
+    }
+
+    /// <summary>
+    /// Resolves any exported Script Asset function, including source-only
+    /// entries. The existing visual resolver intentionally remains HIR-only
+    /// so graph/debug callers cannot accidentally target opaque code.
+    /// </summary>
+    public SemanticId ResolveExportedMethodId(string qualifiedMethodName)
+    {
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(loadContext is null, this);
+            ArgumentException.ThrowIfNullOrWhiteSpace(qualifiedMethodName);
+            ScriptFunctionDeclaration[] matches = image.ScriptAssets.Assets
+                .SelectMany(static asset => asset.Functions)
+                .Where(function => string.Equals(function.QualifiedName, qualifiedMethodName, StringComparison.Ordinal) ||
+                    function.QualifiedName.StartsWith(qualifiedMethodName + "(", StringComparison.Ordinal))
+                .GroupBy(static function => function.Id)
+                .Select(static group => group.First())
+                .ToArray();
+            return matches.Length switch
+            {
+                1 => matches[0].Id,
+                0 => throw new ExecutionInvocationException(
+                    "UVR1001",
+                    $"Exported method '{qualifiedMethodName}' does not exist in the loaded program."),
+                _ => throw new ExecutionInvocationException(
+                    "UVR1002",
+                    $"Exported method selector '{qualifiedMethodName}' is ambiguous; use its semantic ID."),
+            };
         }
     }
 
@@ -94,26 +126,42 @@ public sealed class CoreClrExecutionSession : IDisposable
     {
         ArgumentNullException.ThrowIfNull(invocation);
         Assembly loadedAssembly = assembly ?? throw new ObjectDisposedException(GetType().FullName);
-        (HirTypeDeclaration hirType, HirMethodDeclaration hirMethod) = FindHirMethod(
+        (HirTypeDeclaration? hirType, HirMethodDeclaration? hirMethod) = FindHirMethodOrNull(
             invocation.MethodId);
-        if (!hirMethod.IsVisual)
+        ScriptAssetDeclaration? asset = FindAssetForFunction(invocation.MethodId, invocation.Receiver);
+        ScriptFunctionDeclaration? declaration = asset?.Functions.SingleOrDefault(function =>
+            function.Id == invocation.MethodId) ?? image.ScriptAssets.Assets
+                .SelectMany(static candidate => candidate.Functions)
+                .FirstOrDefault(function => function.Id == invocation.MethodId);
+        if (hirMethod is null && declaration is null)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1001",
+                $"Exported method ID '{invocation.MethodId}' does not exist in the loaded program.");
+        }
+
+        if (hirMethod is not null && !hirMethod.IsVisual)
         {
             throw new ExecutionInvocationException(
                 "UVR1003",
-                $"Method '{hirType.QualifiedName}.{hirMethod.Name}' is not a Visual entry point.");
+                $"Method '{hirType!.QualifiedName}.{hirMethod.Name}' is not a Visual entry point.");
         }
 
-        MethodDescriptor descriptor = image.Semantics.Methods.Single(method =>
-            method.Id == invocation.MethodId);
-        if (descriptor.IsStatic != hirMethod.IsStatic)
+        MethodDescriptor descriptor = image.Semantics.Methods.SingleOrDefault(method =>
+            method.Id == invocation.MethodId) ?? throw new ExecutionInvocationException(
+                "UVR1001",
+                $"Exported method ID '{invocation.MethodId}' has no semantic descriptor.");
+        bool isStatic = hirMethod?.IsStatic ?? declaration!.IsStatic;
+        if (descriptor.IsStatic != isStatic)
         {
             throw new ExecutionInvocationException(
                 "UVR1004",
                 "The bound and lowered method disagree about whether a receiver is required.");
         }
 
-        if (hirMethod.IsAsync || image.Semantics.Types.Single(type =>
-                type.Id == descriptor.ReturnTypeId).Kind == UnifiedTypeKind.TaskLike)
+        bool isAsync = hirMethod?.IsAsync == true || image.Semantics.Types.Single(type =>
+                type.Id == descriptor.ReturnTypeId).Kind == UnifiedTypeKind.TaskLike;
+        if (isAsync)
         {
             throw new ExecutionInvocationException(
                 "UVR1004",
@@ -125,23 +173,32 @@ public sealed class CoreClrExecutionSession : IDisposable
             .Select(parameter => image.Semantics.Types.Single(type =>
                 type.Id == parameter.TypeId).MetadataName)
             .ToArray();
-        MethodInfo method = ResolveMethod(
-            loadedAssembly,
-            hirType,
-            hirMethod,
-            descriptor,
-            parameterTypeNames);
+        MethodInfo method = hirMethod is not null
+            ? ResolveMethod(loadedAssembly, hirType!, hirMethod, descriptor, parameterTypeNames)
+            : ResolveExportedMethod(loadedAssembly, invocation.MethodId, descriptor, declaration);
+        if (method.GetCustomAttribute<AsyncStateMachineAttribute>() is not null ||
+            method.GetCustomAttribute<AsyncIteratorStateMachineAttribute>() is not null)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1004",
+                "Execution-result v0.1 is synchronous; async exported entry points require a later suspension-aware host contract.");
+        }
         object? receiver = ResolveReceiver(
             loadedAssembly,
-            hirType,
-            hirMethod,
-            invocation.Receiver);
+            method.DeclaringType ?? throw new ExecutionInvocationException(
+                "UVR1007",
+                $"Emitted method '{descriptor.MetadataName}' has no declaring type."),
+            isStatic,
+            invocation.MethodId,
+            declaration?.QualifiedName ?? descriptor.MetadataName,
+            invocation.Receiver,
+            asset);
         ParameterInfo[] parameters = method.GetParameters();
         if (parameters.Length != invocation.Arguments.Count)
         {
             throw new ExecutionInvocationException(
                 "UVR1005",
-                $"Method '{hirType.QualifiedName}.{hirMethod.Name}' requires {parameters.Length} " +
+                $"Method '{declaration?.QualifiedName ?? descriptor.MetadataName}' requires {parameters.Length} " +
                 $"arguments, but {invocation.Arguments.Count} were supplied.");
         }
 
@@ -178,11 +235,14 @@ public sealed class CoreClrExecutionSession : IDisposable
 
     private object? ResolveReceiver(
         Assembly assembly,
-        HirTypeDeclaration hirType,
-        HirMethodDeclaration hirMethod,
-        ScriptAssetReceiver? requestedReceiver)
+        Type declaringRuntimeType,
+        bool isStatic,
+        SemanticId methodId,
+        string methodDisplayName,
+        ScriptAssetReceiver? requestedReceiver,
+        ScriptAssetDeclaration? receiverAsset)
     {
-        if (hirMethod.IsStatic)
+        if (isStatic)
         {
             if (requestedReceiver is not null)
             {
@@ -198,38 +258,39 @@ public sealed class CoreClrExecutionSession : IDisposable
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Script Asset method '{hirType.QualifiedName}.{hirMethod.Name}' requires receiver asset.");
+                $"Script Asset method '{methodDisplayName}' requires receiver asset.");
         }
 
-        ScriptAssetDeclaration? asset = image.ScriptAssets.Assets.SingleOrDefault(candidate =>
-            candidate.Id == requestedReceiver.AssetId);
-        if (asset is null)
+        if (receiverAsset is null)
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
                 $"Receiver Script Asset '{requestedReceiver.AssetId}' is unknown.");
         }
 
-        if (!asset.Functions.Any(candidate => candidate.Id == hirMethod.Id))
+        if (receiverAsset.Id != requestedReceiver.AssetId)
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Visual method '{hirType.QualifiedName}.{hirMethod.Name}' is not projected by receiver asset '{asset.Id}'.");
+                $"Receiver Script Asset '{requestedReceiver.AssetId}' is unknown.");
         }
 
-        Type declaringRuntimeType = assembly.GetType(hirType.QualifiedName, throwOnError: false) ??
+        if (!receiverAsset.Functions.Any(candidate => candidate.Id == methodId))
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Exported method '{methodDisplayName}' is not projected by receiver asset '{receiverAsset.Id}'.");
+        }
+
+        Type runtimeType = assembly.GetType(receiverAsset.QualifiedName, throwOnError: false) ??
             throw new ExecutionInvocationException(
                 "UVR1007",
-                $"Emitted declaring type '{hirType.QualifiedName}' was not found in the CoreCLR image.");
-        Type runtimeType = assembly.GetType(asset.QualifiedName, throwOnError: false) ??
-            throw new ExecutionInvocationException(
-                "UVR1007",
-                $"Emitted receiver type '{asset.QualifiedName}' was not found in the CoreCLR image.");
+                $"Emitted receiver type '{receiverAsset.QualifiedName}' was not found in the CoreCLR image.");
         if (!declaringRuntimeType.IsAssignableFrom(runtimeType))
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Receiver asset '{asset.Id}' type '{asset.QualifiedName}' is unrelated to declaring type '{hirType.QualifiedName}'.");
+                    $"Receiver asset '{receiverAsset.Id}' type '{receiverAsset.QualifiedName}' is unrelated to declaring type '{declaringRuntimeType.FullName}'.");
         }
 
         object receiver;
@@ -238,16 +299,16 @@ public sealed class CoreClrExecutionSession : IDisposable
             receiver = Activator.CreateInstance(runtimeType) ??
                 throw new ExecutionInvocationException(
                     "UVR1008",
-                    $"Script Asset '{asset.QualifiedName}' could not be constructed.");
+                    $"Script Asset '{receiverAsset.QualifiedName}' could not be constructed.");
         }
         catch (Exception exception) when (exception is MissingMethodException or MemberAccessException)
         {
             throw new ExecutionInvocationException(
                 "UVR1008",
-                $"Script Asset '{asset.QualifiedName}' requires an accessible parameterless constructor.");
+                $"Script Asset '{receiverAsset.QualifiedName}' requires an accessible parameterless constructor.");
         }
 
-        IReadOnlyDictionary<SemanticId, ScriptStateDeclaration> states = asset.States
+        IReadOnlyDictionary<SemanticId, ScriptStateDeclaration> states = receiverAsset.States
             .ToDictionary(static state => state.Id);
         foreach (ScriptStateOverride stateOverride in requestedReceiver.StateOverrides)
         {
@@ -255,7 +316,7 @@ public sealed class CoreClrExecutionSession : IDisposable
             {
                 throw new ExecutionInvocationException(
                     "UVR1008",
-                    $"State '{stateOverride.StateId}' does not belong to Script Asset '{asset.Id}'.");
+                    $"State '{stateOverride.StateId}' does not belong to Script Asset '{receiverAsset.Id}'.");
             }
 
             PropertyInfo? property = null;
@@ -282,18 +343,18 @@ public sealed class CoreClrExecutionSession : IDisposable
                 {
                     throw new ExecutionInvocationException(
                         "UVR1008",
-                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{asset.Id}'.");
+                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{receiverAsset.Id}'.");
                 }
 
                 PropertyInfo candidate = matches[0];
-                bool isStatic = candidate.GetMethod?.IsStatic == true ||
+                bool propertyIsStatic = candidate.GetMethod?.IsStatic == true ||
                     candidate.SetMethod?.IsStatic == true;
                 bool ownsAllProperties = current.GetCustomAttribute<ScriptAssetAttribute>(inherit: false) is not null;
-                bool isCandidate = !isStatic &&
+                bool isCandidate = !propertyIsStatic &&
                     (ownsAllProperties || candidate.GetCustomAttribute<ExposeAttribute>(inherit: false) is not null);
                 if (!isCandidate)
                 {
-                    if (!isStatic && property is null)
+                    if (!propertyIsStatic && property is null)
                     {
                         sawNonCandidateHider = true;
                     }
@@ -304,7 +365,7 @@ public sealed class CoreClrExecutionSession : IDisposable
                 {
                     throw new ExecutionInvocationException(
                         "UVR1008",
-                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{asset.Id}'.");
+                        $"Runtime state property '{state.Name}' is ambiguous in the inheritance hierarchy for Script Asset '{receiverAsset.Id}'.");
                 }
 
                 property = candidate;
@@ -314,7 +375,7 @@ public sealed class CoreClrExecutionSession : IDisposable
             {
                 throw new ExecutionInvocationException(
                     "UVR1008",
-                    $"Runtime state property '{state.Name}' was not found on Script Asset '{asset.Id}'.");
+                    $"Runtime state property '{state.Name}' was not found on Script Asset '{receiverAsset.Id}'.");
             }
 
             string runtimeTypeName = ExecutionValueCodec.GetMetadataName(property.PropertyType);
@@ -356,7 +417,85 @@ public sealed class CoreClrExecutionSession : IDisposable
             UnrealScriptClassAttributeFullName,
             StringComparison.Ordinal));
 
-    private (HirTypeDeclaration Type, HirMethodDeclaration Method) FindHirMethod(
+    private ScriptAssetDeclaration? FindAssetForFunction(
+        SemanticId methodId,
+        ScriptAssetReceiver? requestedReceiver)
+    {
+        if (requestedReceiver is not null)
+        {
+            return image.ScriptAssets.Assets.SingleOrDefault(asset =>
+                asset.Id == requestedReceiver.AssetId);
+        }
+
+        ScriptAssetDeclaration[] matches = image.ScriptAssets.Assets
+            .Where(asset => asset.Functions.Any(function => function.Id == methodId))
+            .ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private MethodInfo ResolveExportedMethod(
+        Assembly loadedAssembly,
+        SemanticId methodId,
+        MethodDescriptor descriptor,
+        ScriptFunctionDeclaration? declaration)
+    {
+        CSharpMethodSourceMap sourceMap = image.SourceMap.Methods.SingleOrDefault(method =>
+            method.MethodId == methodId) ?? throw new ExecutionInvocationException(
+                "UVR1007",
+                $"Exported method '{methodId}' has no source-map method metadata.");
+        try
+        {
+            MethodBase? resolved = loadedAssembly.ManifestModule.ResolveMethod(sourceMap.MetadataToken);
+            if (resolved is MethodInfo method)
+            {
+                string expectedDeclaringType = image.Semantics.Types.Single(type =>
+                    type.Id == descriptor.ContainingTypeId).MetadataName;
+                string actualDeclaringType = method.DeclaringType is null
+                    ? string.Empty
+                    : ExecutionValueCodec.GetMetadataName(method.DeclaringType);
+                bool parameterSignatureMatches = method.GetParameters().Length == descriptor.Parameters.Count &&
+                    method.GetParameters()
+                        .Select(static parameter => ExecutionValueCodec.GetMetadataName(parameter.ParameterType))
+                        .Zip(
+                            descriptor.Parameters.Select(parameter => image.Semantics.Types.Single(type =>
+                                type.Id == parameter.TypeId).MetadataName),
+                            static (runtimeName, declaredName) =>
+                                MetadataTypesMatch(runtimeName, declaredName))
+                        .All(static match => match);
+                bool signatureMatches =
+                    (declaration is null || string.Equals(
+                        method.Name,
+                        declaration.Name,
+                        StringComparison.Ordinal)) &&
+                    method.IsStatic == descriptor.IsStatic &&
+                    string.Equals(actualDeclaringType, expectedDeclaringType, StringComparison.Ordinal) &&
+                    parameterSignatureMatches &&
+                    MetadataTypesMatch(
+                        ExecutionValueCodec.GetMetadataName(method.ReturnType),
+                        image.Semantics.Types.Single(type => type.Id == descriptor.ReturnTypeId).MetadataName);
+                if (!signatureMatches)
+                {
+                    throw new ExecutionInvocationException(
+                        "UVR1007",
+                        $"Exported method '{sourceMap.MetadataName}' does not match its semantic/source-map declaration.");
+                }
+
+                return method;
+            }
+        }
+        catch (ArgumentException exception)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1007",
+                $"Exported method '{sourceMap.MetadataName}' could not be resolved from metadata token: {exception.Message}");
+        }
+
+        throw new ExecutionInvocationException(
+            "UVR1007",
+            $"Exported method '{sourceMap.MetadataName}' is not an invokable method.");
+    }
+
+    private (HirTypeDeclaration? Type, HirMethodDeclaration? Method) FindHirMethodOrNull(
         SemanticId methodId)
     {
         foreach (HirTypeDeclaration type in image.Hir.Types)
@@ -369,9 +508,7 @@ public sealed class CoreClrExecutionSession : IDisposable
             }
         }
 
-        throw new ExecutionInvocationException(
-            "UVR1001",
-            $"Visual method ID '{methodId}' does not exist in the loaded program.");
+        return (null, null);
     }
 
     private static MethodInfo ResolveMethod(

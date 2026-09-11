@@ -324,6 +324,14 @@ public static class AuthoringSurfaceJson
 
             ValidateEdits(action);
             ValidateInvocationBoundary(action);
+            if (action.Properties.TryGetValue("authoringBoundary", out string? boundary) &&
+                boundary == "sourceOnly" && action.GraphKind == "sourceOnly" &&
+                (action.DebugTargetId is not null || action.EditCapabilities.Count != 0 ||
+                 action.Ports.Count != 0))
+            {
+                throw new JsonException(
+                    $"Source-only authoring action '{action.Id}' cannot expose edits, ports, or a debug target.");
+            }
             var portKeys = new HashSet<(string Name, GraphPortDirection Direction)>();
             foreach (AuthoringPortSurface? port in action.Ports)
             {
@@ -391,6 +399,16 @@ public static class AuthoringSurfaceJson
             {
                 throw new JsonException(
                     $"Authoring region '{region.Id}' has duplicate or empty members.");
+            }
+
+            if (region.DirectStatementIds.Count != 0 &&
+                region.DirectActionIds.Any(id => actions.TryGetValue(id, out AuthoringActionSurface? action) &&
+                    action.GraphKind == "sourceOnly" &&
+                    action.Properties.TryGetValue("authoringBoundary", out string? boundary) &&
+                    boundary == "sourceOnly"))
+            {
+                throw new JsonException(
+                    $"Source-only authoring region '{region.Id}' cannot contain direct statements.");
             }
 
             foreach (SemanticId actionId in region.DirectActionIds)
@@ -504,16 +522,25 @@ public static class AuthoringSurfaceJson
             out string? editable);
         if (!hasRepresentation && !hasBoundary && !hasEditable)
         {
+            if (action.GraphKind == "sourceOnly")
+            {
+                throw new JsonException(
+                    $"Source-only authoring action '{action.Id}' is missing boundary metadata.");
+            }
+
             return;
         }
 
+        bool knownBoundary = (representation, boundary, editable) is
+            ("visualGraph", "visualGraph", "true") or
+            ("opaqueCode", "sourceOnly", "false") or
+            ("externalApi", "externalApi", "false");
         bool valid = hasRepresentation && hasBoundary && hasEditable &&
             action.Properties.ContainsKey("methodId") &&
             action.Properties.ContainsKey("method") &&
-            (representation, boundary, editable) is
-                ("visualGraph", "visualGraph", "true") or
-                ("opaqueCode", "sourceOnly", "false") or
-                ("externalApi", "externalApi", "false");
+            knownBoundary &&
+            (action.GraphKind != "sourceOnly" ||
+                (representation, boundary, editable) == ("opaqueCode", "sourceOnly", "false"));
         if (!valid)
         {
             throw new JsonException(

@@ -159,6 +159,17 @@ public sealed record ScriptLifecycleHookDeclaration(
     string ManagedName,
     SourceSpan Span);
 
+/// <summary>
+/// Describes whether an exported function has an executable visual graph
+/// projection. Opaque functions remain ordinary emitted C# methods; this
+/// value only controls graph authoring capabilities.
+/// </summary>
+public enum ScriptFunctionBodyRepresentation
+{
+    VisualGraph,
+    OpaqueCode,
+}
+
 public sealed record ScriptFunctionDeclaration(
     SemanticId Id,
     string Name,
@@ -176,7 +187,11 @@ public sealed record ScriptFunctionDeclaration(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ScriptRpcDeclaration? Rpc = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? RepNotifyProperty = null);
+    string? RepNotifyProperty = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    ScriptFunctionBodyRepresentation BodyRepresentation = ScriptFunctionBodyRepresentation.VisualGraph,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<UnifiedDiagnostic>? CapabilityDiagnostics = null);
 
 /// <summary>
 /// Engine-neutral declaration of the native class shape selected by a Script

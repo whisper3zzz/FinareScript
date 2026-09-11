@@ -2448,9 +2448,12 @@ internal static class Program
         {
             using CoreClrExecutionSession session = new CoreClrExecutionHost().CompileAndLoad(request);
             SemanticId methodId = options.MethodId ??
-                session.ResolveVisualMethodId(options.QualifiedMethodName!);
+                session.ResolveExportedMethodId(options.QualifiedMethodName!);
             ExecutionArgument[] arguments = ParseExecutionArguments(options.ArgumentsJson);
-            ExecutionResult result = session.Execute(new ExecutionInvocation(methodId, arguments));
+            ScriptAssetReceiver? receiver = options.Receiver is null
+                ? null
+                : ResolveExecutionReceiver(session, options.Receiver);
+            ExecutionResult result = session.Execute(new ExecutionInvocation(methodId, arguments, receiver));
             Console.WriteLine(ExecutionJson.Serialize(result));
             return result.Outcome == ExecutionOutcome.Returned ? 0 : 3;
         }
@@ -2469,6 +2472,26 @@ internal static class Program
             Console.Error.WriteLine($"error {exception.Code}: {exception.Message}");
             return 3;
         }
+    }
+
+    private static ScriptAssetReceiver ResolveExecutionReceiver(
+        CoreClrExecutionSession session,
+        string selector)
+    {
+        ScriptAssetDeclaration[] matches = session.ScriptAssets.Assets
+            .Where(asset => string.Equals(asset.Id.Value, selector, StringComparison.Ordinal) ||
+                string.Equals(asset.QualifiedName, selector, StringComparison.Ordinal))
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => new ScriptAssetReceiver(matches[0].Id),
+            0 => throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Script Asset receiver '{selector}' does not exist in the loaded program."),
+            _ => throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Script Asset receiver selector '{selector}' is ambiguous; use its semantic ID."),
+        };
     }
 
     private static int RunDebugServe(IReadOnlyList<string> args)
@@ -5214,6 +5237,7 @@ internal static class Program
         string? effectCatalogPath = null;
         string? assemblyName = null;
         string? identityPath = null;
+        string? receiver = null;
         var referencePaths = new List<string>();
         int index = 2;
         while (index < args.Count)
@@ -5249,6 +5273,9 @@ internal static class Program
                 case "--identity" when identityPath is null:
                     identityPath = value;
                     break;
+                case "--receiver" when receiver is null:
+                    receiver = value;
+                    break;
                 default:
                     return false;
             }
@@ -5267,7 +5294,8 @@ internal static class Program
             effectCatalogPath,
             assemblyName ?? "Finare.Execution",
             referencePaths,
-            identityPath);
+            identityPath,
+            receiver);
         return true;
     }
 
@@ -6644,8 +6672,9 @@ internal static class Program
         "  --out-asset <file>      Revalidated Declaration IR output.\n" +
         "  --identity <file.usids> Use a persistent identity sidecar; may repeat for *-files commands.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
-        "  --method <name>         Fully qualified Visual method required by execute.\n" +
+        "  --method <name>         Fully qualified exported method required by execute.\n" +
         "  --method-id <us_...>    Exact semantic method ID alternative for overloaded methods.\n" +
+        "  --receiver <asset-id-or-type>  Select an instance Script Asset receiver for execute.\n" +
         "  --args <json-array>     Execute arguments; defaults to an empty array.\n" +
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --root <directory>      Static visual workbench root required by debug-serve.\n" +
@@ -6712,7 +6741,8 @@ internal static class Program
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,
-        string? IdentityPath);
+        string? IdentityPath,
+        string? Receiver);
 
     private sealed record DebugServeOptions(
         string InputPath,
