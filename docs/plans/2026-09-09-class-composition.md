@@ -34,14 +34,19 @@ external-write rollback, parent history replay, positive-but-mismatched preview
 revisions, contradictory declarations and completed-transaction rejection.
 `ParentChange.Primitive` and `OperationJournal` pass in their `-2.log` files in
 the same directory. These tests do not cover a real World rejecting a no-op
-parent publication, or a real Slate HTTP cancellation/retry exchange.
+parent publication.
 
 The subsequent Slate recovery edits retain a separate reservation state so
 HTTP failure cannot let a new edit overwrite the pending transaction. Cancel
 ACKs must identify the exact cancelled transaction and preview; malformed,
 foreign or already-adopted replies retain recovery state. These final client
-edits pass the Editor build in `editor-async-adoption-build-1.log` under the same
-artifact directory; real client-path validation remains required. Base-class
+edits now pass `native-cancel-client-build-5.log` and the actual Slate production
+response/dispatch/retry test in `c4-native-cancel-client-5.log` (one successful
+Automation test, exit 0). An injected transport drives local Apply rejection,
+failed HTTP completion, malformed/foreign/adopted ACKs, single-flight retries,
+blocked Submit/Refresh, and uncertain prepare recovery. Failed request startup
+uses the same handler in production and the test transport. This establishes
+the client state paths; it is not a physical toolbar interaction test. Base-class
 selection UI, partial source-owner publication,
 ordinary Actor composition outside the current carrier family, component-family
 proof and affected cooked execution remain unfinished. This is a publication

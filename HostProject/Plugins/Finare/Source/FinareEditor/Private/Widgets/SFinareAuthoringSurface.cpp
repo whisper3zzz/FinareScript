@@ -2304,6 +2304,22 @@ void SFinareAuthoringSurface::Construct(const FArguments& InArgs)
                 .Padding(8.0f, 0.0f, 0.0f, 0.0f)
                 [
                     SNew(SButton)
+                    .Text(LOCTEXT("RetryNativePublicationPrepare", "Retry native prepare"))
+                    .Visibility_Lambda([this]()
+                    {
+                        return bNativePublicationPrepareRecoveryPending &&
+                            bNativePublicationReservationPending &&
+                            !bPatchRequestPending
+                            ? EVisibility::Visible
+                            : EVisibility::Collapsed;
+                    })
+                    .OnClicked(this, &SFinareAuthoringSurface::HandleRetryNativePublicationPrepare)
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(8.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
                     .Text(LOCTEXT("RetryNativePublicationCancel", "Retry native cancel"))
                     .Visibility_Lambda([this]()
                     {
@@ -4827,8 +4843,7 @@ void SFinareAuthoringSurface::DispatchNativePublicationPrepare(const FString& Pr
     const FString Url = FFinareAuthoringWorkbench::BuildNativePrepareUrl(ServerUrl);
     if (Url.IsEmpty())
     {
-        HandleNativePublicationCancel(false, 0, FString(),
-            TEXT("The selected Script Asset has no native publication server URL."));
+        HandleNativePublicationPrepareResponse(false, 0, FString());
         return;
     }
     const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
@@ -4849,6 +4864,37 @@ void SFinareAuthoringSurface::DispatchNativePublicationPrepare(const FString& Pr
     Request->SetHeader(TEXT("X-Finare-Preview-Token"), PreviewToken);
     Request->SetContentAsString(TEXT("{}"));
     const TWeakPtr<SFinareAuthoringSurface> WeakThis = SharedThis(this);
+#if WITH_DEV_AUTOMATION_TESTS
+    if (NativePublicationTestTransport.IsSet())
+    {
+        bPatchRequestPending = true;
+        SetStatus(
+            FString::Printf(TEXT("Preparing native publication for %s ..."),
+                *PendingAuthoringTransaction->Activity),
+            false);
+        const bool bStarted = NativePublicationTestTransport.GetValue()(
+            TEXT("POST"),
+            Url,
+            PendingAuthoringTransaction->TransactionId,
+            PreviewToken,
+            TEXT("{}"),
+            [WeakThis](bool bSucceeded, int32 ResponseCode, FString ResponseJson)
+            {
+                if (const TSharedPtr<SFinareAuthoringSurface> Pinned = WeakThis.Pin())
+                {
+                    Pinned->HandleNativePublicationPrepareResponse(
+                        bSucceeded,
+                        ResponseCode,
+                        MoveTemp(ResponseJson));
+                }
+            });
+        if (!bStarted)
+        {
+            HandleNativePublicationPrepareResponse(false, 0, FString());
+        }
+        return;
+    }
+#endif
     Request->OnProcessRequestComplete().BindLambda(
         [WeakThis](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
         {
@@ -4867,10 +4913,27 @@ void SFinareAuthoringSurface::DispatchNativePublicationPrepare(const FString& Pr
         false);
     if (!Request->ProcessRequest())
     {
-        bPatchRequestPending = false;
-        HandleNativePublicationCancel(false, 0, FString(),
-            TEXT("The native publication prepare request could not be started."));
+        HandleNativePublicationPrepareResponse(false, 0, FString());
     }
+}
+
+FReply SFinareAuthoringSurface::HandleRetryNativePublicationPrepare()
+{
+    if (!PendingAuthoringTransaction.IsSet() ||
+        !PendingAuthoringPreview.IsSet() ||
+        !bNativePublicationReservationPending ||
+        !bNativePublicationPrepareRecoveryPending)
+    {
+        SetStatus(TEXT("There is no native publication prepare recovery to retry."), true);
+        return FReply::Handled();
+    }
+    if (bPatchRequestPending)
+    {
+        SetStatus(TEXT("The native publication recovery request is still in flight."), true);
+        return FReply::Handled();
+    }
+    DispatchNativePublicationPrepare(PendingAuthoringPreview->PreviewToken);
+    return FReply::Handled();
 }
 
 void SFinareAuthoringSurface::HandleNativePublicationPrepareResponse(
@@ -4880,11 +4943,14 @@ void SFinareAuthoringSurface::HandleNativePublicationPrepareResponse(
 {
     if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
     {
-        HandleNativePublicationCancel(
-            bRequestSucceeded,
-            StatusCode,
-            MoveTemp(ResponseJson),
-            TEXT("The native publication prepare request failed; no UE or source mutation was committed."));
+        PendingNativePublication.Reset();
+        bPatchRequestPending = false;
+        bNativePublicationReservationPending = true;
+        bNativePublicationPrepareRecoveryPending = true;
+        bNativePublicationCancelRecoveryPending = false;
+        SetStatus(
+            TEXT("The native publication prepare response was uncertain; keep the reservation and retry native prepare."),
+            true);
         return;
     }
     FFinareNativePublicationPrepareResult Prepare;
@@ -4915,6 +4981,19 @@ void SFinareAuthoringSurface::HandleNativePublicationPrepareResponse(
         {
             PendingNativePublication = Prepare;
             bNativePublicationReservationPending = true;
+            bNativePublicationPrepareRecoveryPending = false;
+        }
+        else
+        {
+            PendingNativePublication.Reset();
+            bPatchRequestPending = false;
+            bNativePublicationReservationPending = true;
+            bNativePublicationPrepareRecoveryPending = true;
+            bNativePublicationCancelRecoveryPending = false;
+            SetStatus(
+                TEXT("The native publication prepare response was malformed or foreign; keep the reservation and retry native prepare."),
+                true);
+            return;
         }
         // The server reservation is real even though this response was not
         // accepted.  A local success-shaped cancel response is not an ACK;
@@ -4925,6 +5004,7 @@ void SFinareAuthoringSurface::HandleNativePublicationPrepareResponse(
     }
     PendingNativePublication = Prepare;
     bNativePublicationReservationPending = true;
+    bNativePublicationPrepareRecoveryPending = false;
     bNativePublicationCancelRecoveryPending = false;
     if (!ApplyNativePublication(Prepare, Error))
     {
@@ -5153,6 +5233,42 @@ void SFinareAuthoringSurface::DispatchNativePublicationCancel(const FString& Err
     }
     Request->SetContentAsString(TEXT("{}"));
     const TWeakPtr<SFinareAuthoringSurface> WeakThis = SharedThis(this);
+#if WITH_DEV_AUTOMATION_TESTS
+    if (NativePublicationTestTransport.IsSet())
+    {
+        bPatchRequestPending = true;
+        SetStatus(TEXT("Cancelling native publication ..."), false);
+        const bool bStarted = NativePublicationTestTransport.GetValue()(
+            TEXT("POST"),
+            Url,
+            PendingAuthoringTransaction->TransactionId,
+            PendingAuthoringPreview.IsSet()
+                ? PendingAuthoringPreview->PreviewToken
+                : FString(),
+            TEXT("{}"),
+            [WeakThis, ErrorMessage](bool bSucceeded, int32 ResponseCode, FString ResponseJson)
+            {
+                if (const TSharedPtr<SFinareAuthoringSurface> Pinned = WeakThis.Pin())
+                {
+                    Pinned->HandleNativePublicationCancel(
+                        bSucceeded,
+                        ResponseCode,
+                        MoveTemp(ResponseJson),
+                        ErrorMessage);
+                }
+            });
+        if (!bStarted)
+        {
+            bPatchRequestPending = false;
+            HandleNativePublicationCancel(
+                false,
+                0,
+                FString(),
+                ErrorMessage);
+        }
+        return;
+    }
+#endif
     Request->OnProcessRequestComplete().BindLambda(
         [WeakThis, ErrorMessage](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
         {
@@ -5165,6 +5281,8 @@ void SFinareAuthoringSurface::DispatchNativePublicationCancel(const FString& Err
                     ErrorMessage);
             }
         });
+    bPatchRequestPending = true;
+    SetStatus(TEXT("Cancelling native publication ..."), false);
     if (!Request->ProcessRequest())
     {
         HandleNativePublicationCancel(false, 0, FString(), ErrorMessage);
@@ -5239,6 +5357,7 @@ void SFinareAuthoringSurface::HandleNativePublicationCancelResponse(
     PendingNativePublicationContext.Reset();
     PendingNativePublicationContextCaptureError.Reset();
     bNativePublicationReservationPending = false;
+    bNativePublicationPrepareRecoveryPending = false;
     bNativePublicationCancelRecoveryPending = false;
     const FString Activity = PendingAuthoringTransaction.IsSet()
         ? PendingAuthoringTransaction->Activity
@@ -5259,6 +5378,7 @@ void SFinareAuthoringSurface::HandleNativePublicationCancel(
     if (!PendingAuthoringTransaction.IsSet())
     {
         bNativePublicationReservationPending = false;
+        bNativePublicationPrepareRecoveryPending = false;
         bNativePublicationCancelRecoveryPending = false;
         bPatchRequestPending = false;
         SetStatus(MoveTemp(ErrorMessage), true);
@@ -5327,6 +5447,7 @@ void SFinareAuthoringSurface::HandlePatchResponse(
     PendingNativePublicationContext.Reset();
     PendingNativePublicationContextCaptureError.Reset();
     bNativePublicationReservationPending = false;
+    bNativePublicationPrepareRecoveryPending = false;
     bNativePublicationCancelRecoveryPending = false;
     PendingAuthoringTransaction.Reset();
     bHasAuthoringFailure = false;
@@ -5465,6 +5586,7 @@ void SFinareAuthoringSurface::HandleAuthoringFailure(
         PendingNativePublicationContext.Reset();
         PendingNativePublicationContextCaptureError.Reset();
         bNativePublicationReservationPending = false;
+        bNativePublicationPrepareRecoveryPending = false;
         bNativePublicationCancelRecoveryPending = false;
     }
     FFinareAuthoringErrorResult Failure;

@@ -156,6 +156,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
     friend class FFinareProjectRefreshCommand;
     friend class FFinareInheritedAuthoringSurfaceTest;
+    friend class FFinareNativePublicationCancellationTest;
 #endif
 
     FReply HandleLoad();
@@ -254,6 +255,7 @@ private:
     void DispatchAuthoringPreview();
     void DispatchAuthoringRequest(const FString& PreviewToken);
     void DispatchNativePublicationPrepare(const FString& PreviewToken);
+    FReply HandleRetryNativePublicationPrepare();
     void HandleNativePublicationPrepareResponse(
         bool bRequestSucceeded,
         int32 StatusCode,
@@ -273,6 +275,19 @@ private:
     void DispatchNativePublicationFinish();
     FReply HandleRetryNativePublicationFinish();
     FReply HandleRetryNativePublicationCancel();
+#if WITH_DEV_AUTOMATION_TESTS
+    using FNativePublicationTestCompletion = TFunction<void(
+        bool,
+        int32,
+        FString)>;
+    using FNativePublicationTestTransport = TFunction<bool(
+        const FString&,
+        const FString&,
+        const FString&,
+        const FString&,
+        const FString&,
+        FNativePublicationTestCompletion)>;
+#endif
     bool ApplyNativePublication(
         const FFinareNativePublicationPrepareResult& Prepare,
         FString& OutError);
@@ -412,7 +427,11 @@ private:
     // its HTTP request is no longer in flight. Keep submissions blocked until
     // a verified finish or cancel acknowledgement releases it.
     bool bNativePublicationReservationPending = false;
+    bool bNativePublicationPrepareRecoveryPending = false;
     bool bNativePublicationCancelRecoveryPending = false;
+#if WITH_DEV_AUTOMATION_TESTS
+    TOptional<FNativePublicationTestTransport> NativePublicationTestTransport;
+#endif
     FString StatusMessage;
     TOptional<FFinarePendingAuthoringTransaction> PendingAuthoringTransaction;
     TOptional<FFinareAuthoringPreviewResult> PendingAuthoringPreview;
