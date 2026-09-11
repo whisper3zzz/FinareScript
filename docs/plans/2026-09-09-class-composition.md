@@ -51,11 +51,21 @@ Automation test, exit 0). An injected transport drives local Apply rejection,
 failed HTTP completion, malformed/foreign/adopted ACKs, single-flight retries,
 blocked Submit/Refresh, and uncertain prepare recovery. Failed request startup
 uses the same handler in production and the test transport. This establishes
-the client state paths; it is not a physical toolbar interaction test. Base-class
-selection UI, partial source-owner publication,
+the client state paths; it is not a physical toolbar interaction test. Partial source-owner publication,
 ordinary Actor composition outside the current carrier family, component-family
 proof and affected cooked execution remain unfinished. This is a publication
 checkpoint, not C-4 completion.
+
+The native inspector now exposes base-path edit/clear for Actor and
+ActorComponent Script Classes through declaration-patch v0.4, keeping static
+libraries hidden. It reuses exact class-path validation, including plugin mount
+points. Editor build `c4-base-ui-editor-build3-console.log` and the independent
+`AuthoringSurface.ClassBasePatch` Automation in `c4-base-patch-1.log` pass.
+These cover the patch producer's schema, class kinds, plugin paths, invalid
+paths and JSON-null clearing. They do not prove ordinary Actor composition.
+The broader Workbench test still assumes a one-asset Demo Surface, while the
+checked-in fixture contains 19 assets; its pre-existing fixture failure is
+retained in `c4-base-ui-workbench-1.log` and has not been repaired by this slice.
 
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
 native consumers. The `updateClassBase` declaration patch edits that explicit
@@ -319,6 +329,16 @@ and generated owner, and preserve unrelated user components. Ordinary function
 dispatch needs the same exact-owner selection as overrides. Initial RepNotify
 queuing occurs before activation, so configured ownership must remain available
 without requiring an already active managed generation.
+
+Use the active ScriptAsset while a component is running; changing its configured
+asset must not redirect calls away from the still-active generation. Before
+activation, resolve only the configured ScriptAsset/ScriptAssetPath and match
+the exact generated owner and stable ClassId for initial RepNotify queuing.
+Ordinary function ABI v1/v2, overrides and automatic input/delegate binding
+must agree on that ownership. Multiple matches are an error, not a first-match
+fallback. A same-parent native publication can still reinstance components;
+its real-World verification must show that stopped behaviors stay stopped
+through publication and rollback before an explicit restart.
 
 `FinareClassFactory` writes `requiredTargetClass` into the deployment manifest
 as well as the ScriptAsset. Composition must update that manifest entry in the

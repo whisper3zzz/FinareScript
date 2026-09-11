@@ -2569,6 +2569,122 @@ bool FFinareAuthoringReloadBatchPreflightTest::RunTest(
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FFinareAuthoringSurfaceClassBasePatchTest,
+    "Finare.Unreal.Editor.AuthoringSurface.ClassBasePatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FFinareAuthoringSurfaceClassBasePatchTest::RunTest(const FString& Parameters)
+{
+    FFinareAuthoringSurfaceDocument Document;
+    Document.SchemaVersion = TEXT("unifiedscript.authoring-surface/v0.5");
+    Document.SourceCompilationId = TEXT("us_11111111111111111111111111111111");
+    Document.SemanticConfigurationId = TEXT("us_22222222222222222222222222222222");
+    FFinareAuthoringAsset Asset;
+    Asset.Id = TEXT("us_33333333333333333333333333333333");
+    Asset.QualifiedName = TEXT("Finare.Unreal.Demo.VisualActor");
+    Asset.AssetPath = TEXT("Unreal/VisualActor");
+    Document.Assets.Add(Asset);
+
+    const FFinareAuthoringAsset& SelectedAsset = Document.Assets[0];
+    FFinareClassBindingDeclaration CurrentBinding;
+    CurrentBinding.Kind = TEXT("Actor");
+    CurrentBinding.BaseClassPath = TEXT("/Script/Engine.Actor");
+    CurrentBinding.GeneratedClassPath = TEXT("/Game/FinareDemo.VisualActor_C");
+    FString Error;
+    FString BasePatchJson;
+    TestTrue(TEXT("Actor Script Asset can build an exact native base-class patch"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            CurrentBinding,
+            TEXT("/Script/Engine.Pawn"),
+            BasePatchJson,
+            Error));
+    TestTrue(TEXT("Native base patch carries class-binding and explicit replacement preconditions"),
+        BasePatchJson.Contains(TEXT("unifiedscript.declaration-patch/v0.4")) &&
+            BasePatchJson.Contains(TEXT("updateClassBase")) &&
+            BasePatchJson.Contains(TEXT("expectedClassBinding")) &&
+            BasePatchJson.Contains(TEXT("/Script/Engine.Actor")) &&
+            BasePatchJson.Contains(TEXT("/Script/Engine.Pawn")));
+
+    FString PluginClassPatchJson;
+    TestTrue(TEXT("Plugin class paths accepted by the shared exact class-binding validator"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            CurrentBinding,
+            TEXT("/PluginMount/Blueprints/Base.Base_C"),
+            PluginClassPatchJson,
+            Error));
+    FString BadClassPathError;
+    TestFalse(TEXT("Malformed plugin class paths are rejected by the shared validator"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            CurrentBinding,
+            TEXT("/PluginMount/Blueprints/Base"),
+            PluginClassPatchJson,
+            BadClassPathError));
+
+    FFinareClassBindingDeclaration ComponentBinding = CurrentBinding;
+    ComponentBinding.Kind = TEXT("ActorComponent");
+    FString ComponentPatchJson;
+    TestTrue(TEXT("ActorComponent Script Assets can change their native base"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            ComponentBinding,
+            TEXT("/Script/Engine.SceneComponent"),
+            ComponentPatchJson,
+            Error));
+
+    FString ClearPatchJson;
+    TestTrue(TEXT("Actor Script Assets can clear their explicit native base"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            CurrentBinding,
+            TEXT(""),
+            ClearPatchJson,
+            Error));
+    TSharedPtr<FJsonObject> ClearRoot;
+    const TSharedRef<TJsonReader<>> ClearReader = TJsonReaderFactory<>::Create(ClearPatchJson);
+    const bool bClearParsed = FJsonSerializer::Deserialize(ClearReader, ClearRoot) && ClearRoot.IsValid();
+    TestTrue(TEXT("Clearing the native base emits valid JSON"), bClearParsed);
+    const TArray<TSharedPtr<FJsonValue>>* ClearOperations = nullptr;
+    const bool bHasClearOperation = bClearParsed &&
+        ClearRoot->TryGetArrayField(TEXT("operations"), ClearOperations) &&
+        ClearOperations != nullptr && ClearOperations->Num() == 1;
+    TestTrue(TEXT("Clearing the native base emits one declaration operation"), bHasClearOperation);
+    if (bHasClearOperation)
+    {
+        const TSharedPtr<FJsonObject> Operation = (*ClearOperations)[0]->AsObject();
+        const TSharedPtr<FJsonValue> Replacement = Operation.IsValid()
+            ? Operation->TryGetField(TEXT("replacementBaseClassPath"))
+            : nullptr;
+        const bool bHasNullReplacement = Replacement.IsValid() &&
+            Replacement->Type == EJson::Null;
+        TestTrue(TEXT("Clearing the native base encodes replacementBaseClassPath as JSON null"),
+            bHasNullReplacement);
+    }
+
+    FFinareClassBindingDeclaration StaticLibraryBinding = CurrentBinding;
+    StaticLibraryBinding.Kind = TEXT("BlueprintFunctionLibrary");
+    FString StaticLibraryError;
+    TestFalse(TEXT("Static library Script Assets cannot select a native base class"),
+        FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            SelectedAsset,
+            StaticLibraryBinding,
+            TEXT("/Script/Engine.Pawn"),
+            BasePatchJson,
+            StaticLibraryError));
+    TestTrue(TEXT("Static library base rejection explains the carrier restriction"),
+        StaticLibraryError.Contains(TEXT("Actor")) || StaticLibraryError.Contains(TEXT("ActorComponent")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FFinareAuthoringSurfaceStructDefaultTest,
     "Finare.Unreal.Editor.AuthoringSurface.StructDefaultPrecondition",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

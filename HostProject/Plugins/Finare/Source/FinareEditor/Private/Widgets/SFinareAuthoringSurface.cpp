@@ -4022,6 +4022,36 @@ FReply SFinareAuthoringSurface::HandleUpdateScriptAssetPath(
     return FReply::Handled();
 }
 
+FReply SFinareAuthoringSurface::HandleUpdateScriptClassBase(
+    FString AssetId,
+    FFinareClassBindingDeclaration ExpectedClassBinding,
+    TSharedPtr<SEditableTextBox> BaseClassEditor)
+{
+    const FFinareAuthoringAsset* Asset = FindAsset(AssetId);
+    if (Asset == nullptr || !BaseClassEditor.IsValid())
+    {
+        SetStatus(TEXT("The selected Script Class is no longer available."), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+            Document,
+            *Asset,
+            ExpectedClassBinding,
+            BaseClassEditor->GetText().ToString().TrimStartAndEnd(),
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Changing native base class for %s"), *Asset->QualifiedName));
+    return FReply::Handled();
+}
+
 FReply SFinareAuthoringSurface::HandleRemoveScriptAsset(FString AssetId)
 {
     const FFinareAuthoringAsset* Asset = FindAsset(AssetId);
@@ -5542,6 +5572,7 @@ void SFinareAuthoringSurface::AdoptWorkspace(
 {
     WorkbenchSourcePath = MoveTemp(Workspace.SourcePath);
     WorkbenchSourceText = MoveTemp(Workspace.SourceText);
+    WorkbenchScriptAssetsJson = MoveTemp(Workspace.ScriptAssetsJson);
     CodeEditBuffer = WorkbenchSourceText;
     bHasCanonicalSourceSnapshot = true;
     bCodeEditDirty = false;
@@ -5569,6 +5600,38 @@ void SFinareAuthoringSurface::AdoptWorkspace(
         LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
     }
     RebuildTree();
+}
+
+bool SFinareAuthoringSurface::FindClassBinding(
+    const FString& AssetId,
+    FFinareClassBindingDeclaration& OutBinding) const
+{
+    OutBinding = FFinareClassBindingDeclaration();
+    if (WorkbenchScriptAssetsJson.IsEmpty() || AssetId.IsEmpty())
+        return false;
+    TSharedPtr<FJsonObject> Root;
+    if (!FJsonSerializer::Deserialize(
+            TJsonReaderFactory<>::Create(WorkbenchScriptAssetsJson), Root) ||
+        !Root.IsValid())
+        return false;
+    const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+    if (!Root->TryGetArrayField(TEXT("assets"), Assets) || Assets == nullptr)
+        return false;
+    for (const TSharedPtr<FJsonValue>& Value : *Assets)
+    {
+        const TSharedPtr<FJsonObject> Asset = Value.IsValid() ? Value->AsObject() : nullptr;
+        FString CurrentId;
+        if (!Asset.IsValid() || !Asset->TryGetStringField(TEXT("id"), CurrentId) ||
+            CurrentId != AssetId)
+            continue;
+        TOptional<FFinareClassBindingDeclaration> Binding;
+        FString Error;
+        if (!FFinareClassBindingDeclaration::ReadJson(Asset, Binding, Error) || !Binding.IsSet())
+            return false;
+        OutBinding = Binding.GetValue();
+        return true;
+    }
+    return false;
 }
 
 void SFinareAuthoringSurface::HandleAuthoringFailure(
@@ -9063,6 +9126,70 @@ void SFinareAuthoringSurface::RebuildInspector(
                                 &SFinareAuthoringSurface::HandleRemoveScriptAsset,
                                 Asset->Id)
                         ]
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+                    [
+                        ([&]() -> TSharedRef<SWidget>
+                        {
+                            FFinareClassBindingDeclaration Binding;
+                            const bool bEditableBinding = FindClassBinding(Asset->Id, Binding) &&
+                                (Binding.Kind == TEXT("Actor") || Binding.Kind == TEXT("ActorComponent"));
+                            if (!bEditableBinding)
+                            {
+                                return SNew(SWidgetSwitcher)
+                                    .Visibility(EVisibility::Collapsed);
+                            }
+                            TSharedPtr<SEditableTextBox> BaseClassEditor;
+                            const FString CurrentBase = Binding.BaseClassPath.IsSet()
+                                ? Binding.BaseClassPath.GetValue()
+                                : FString();
+                            return SNew(SBorder)
+                                .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+                                .Padding(8.0f)
+                                [
+                                    SNew(SVerticalBox)
+                                    + SVerticalBox::Slot().AutoHeight()
+                                    [
+                                        UE::Finare::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                                            TEXT("NATIVE BASE CLASS (/Script/... or /Game/..._C)"))
+                                    ]
+                                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+                                    [
+                                        SNew(SHorizontalBox)
+                                        + SHorizontalBox::Slot().FillWidth(1.0f)
+                                        [
+                                            SAssignNew(BaseClassEditor, SEditableTextBox)
+                                            .Text(FText::FromString(CurrentBase))
+                                            .HintText(LOCTEXT("NativeBaseClassHint", "/Script/Engine.Actor"))
+                                        ]
+                                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                                        [
+                                            SNew(SButton)
+                                            .Text(LOCTEXT("ApplyNativeBaseClass", "Preview Base"))
+                                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                                            .OnClicked(
+                                                this,
+                                                &SFinareAuthoringSurface::HandleUpdateScriptClassBase,
+                                                Asset->Id,
+                                                Binding,
+                                                BaseClassEditor)
+                                        ]
+                                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                                        [
+                                            SNew(SButton)
+                                            .Text(LOCTEXT("ClearNativeBaseClass", "Clear"))
+                                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                                            .OnClicked_Lambda(
+                                                [this, AssetId = Asset->Id, Binding, BaseClassEditor]() mutable
+                                                {
+                                                    BaseClassEditor->SetText(FText::GetEmpty());
+                                                    return HandleUpdateScriptClassBase(
+                                                        AssetId, Binding, BaseClassEditor);
+                                                })
+                                        ]
+                                    ]
+                                ];
+                        }())
                     ]
                 ]
             ];

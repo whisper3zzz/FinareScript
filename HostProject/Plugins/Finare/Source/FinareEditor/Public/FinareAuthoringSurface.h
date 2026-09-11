@@ -11,6 +11,8 @@
 
 #include "CoreMinimal.h"
 
+struct FFinareClassBindingDeclaration;
+
 struct FFinareAuthoringSpan
 {
     FString FilePath;
@@ -338,6 +340,15 @@ public:
         const FFinareAuthoringSurfaceDocument& Document,
         const FFinareAuthoringAsset& Asset,
         const FString& AssetPath,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Changes or clears the exact native base-class declaration of one selected Script Asset. */
+    static bool BuildScriptClassBasePatch(
+        const FFinareAuthoringSurfaceDocument& Document,
+        const FFinareAuthoringAsset& Asset,
+        const FFinareClassBindingDeclaration& ExpectedClassBinding,
+        const FString& ReplacementBaseClassPath,
         FString& OutPatchJson,
         FString& OutError);
 

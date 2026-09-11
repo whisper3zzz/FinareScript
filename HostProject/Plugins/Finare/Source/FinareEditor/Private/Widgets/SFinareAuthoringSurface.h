@@ -232,6 +232,10 @@ private:
     FReply HandleCommitAuthoringGroup();
     FReply HandleCancelAuthoringGroup();
     FReply HandleCreateScriptAsset();
+    FReply HandleUpdateScriptClassBase(
+        FString AssetId,
+        FFinareClassBindingDeclaration ExpectedClassBinding,
+        TSharedPtr<SEditableTextBox> BaseClassEditor);
     FReply HandleUpdateScriptAssetPath(
         FString AssetId,
         TSharedPtr<SEditableTextBox> PathEditor);
@@ -315,6 +319,9 @@ private:
         int32 StatusCode,
         FString ResponseJson);
     void AdoptWorkspace(FFinareAuthoringWorkspaceResult Workspace);
+    bool FindClassBinding(
+        const FString& AssetId,
+        FFinareClassBindingDeclaration& OutBinding) const;
     void ReloadMatchingComponents(
         const FString& ReloadTransactionJson,
         int32& OutMatched,
@@ -408,6 +415,7 @@ private:
     FString LoadedLayoutPath;
     FString WorkbenchSourcePath;
     FString WorkbenchSourceText;
+    FString WorkbenchScriptAssetsJson;
     FString CodeEditBuffer;
     FDateTime LoadedSurfaceTimestamp;
     bool bAutoReload = true;

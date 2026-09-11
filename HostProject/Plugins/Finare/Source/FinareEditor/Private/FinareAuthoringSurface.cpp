@@ -9,6 +9,8 @@
  */
 #include "FinareAuthoringSurface.h"
 
+#include "FinareClassBinding.h"
+
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -1312,6 +1314,18 @@ TSharedRef<FJsonObject> MakeDeclarationPatchRoot(
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.declaration-patch/v0.3"));
+    Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
+    Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
+    Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
+    return Root;
+}
+
+TSharedRef<FJsonObject> MakeClassBindingDeclarationPatchRoot(
+    const FFinareAuthoringSurfaceDocument& Document,
+    const TSharedRef<FJsonObject>& Operation)
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.declaration-patch/v0.4"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -3355,6 +3369,79 @@ bool FFinareAuthoringSurfaceReader::BuildScriptAssetPathUpdatePatch(
         OutPatchJson,
         OutError,
         TEXT("the Script Asset path patch"));
+}
+
+bool FFinareAuthoringSurfaceReader::BuildScriptClassBasePatch(
+    const FFinareAuthoringSurfaceDocument& Document,
+    const FFinareAuthoringAsset& Asset,
+    const FFinareClassBindingDeclaration& ExpectedClassBinding,
+    const FString& ReplacementBaseClassPath,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::Finare::AuthoringSurface::Private;
+    using namespace UE::Finare::AuthoringSurface::Editing::Private;
+    FString BindingError;
+    if (!ExpectedClassBinding.Validate(BindingError) ||
+        (ExpectedClassBinding.Kind != TEXT("Actor") &&
+            ExpectedClassBinding.Kind != TEXT("ActorComponent")))
+    {
+        OutError = BindingError.IsEmpty()
+            ? TEXT("Only Actor and ActorComponent Script Classes may select a native base class.")
+            : BindingError;
+        return false;
+    }
+    if (!IsSemanticId(Asset.Id) || Asset.QualifiedName.IsEmpty() || Asset.AssetPath.IsEmpty())
+    {
+        OutError = TEXT("Changing a Script Class base requires an exact current Script Asset.");
+        return false;
+    }
+    FFinareClassBindingDeclaration ReplacementClassBinding = ExpectedClassBinding;
+    if (ReplacementBaseClassPath.IsEmpty())
+        ReplacementClassBinding.BaseClassPath.Reset();
+    else
+        ReplacementClassBinding.BaseClassPath = ReplacementBaseClassPath;
+    if (!ReplacementClassBinding.Validate(BindingError))
+    {
+        OutError = BindingError;
+        return false;
+    }
+    const bool bExpectedHasBase = ExpectedClassBinding.BaseClassPath.IsSet();
+    if ((!bExpectedHasBase && ReplacementBaseClassPath.IsEmpty()) ||
+        (bExpectedHasBase && ExpectedClassBinding.BaseClassPath.GetValue() == ReplacementBaseClassPath))
+    {
+        OutError = TEXT("The Script Class base patch must change the explicit base-class value.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> ExpectedAsset = MakeShared<FJsonObject>();
+    ExpectedAsset->SetStringField(TEXT("qualifiedName"), Asset.QualifiedName);
+    ExpectedAsset->SetStringField(TEXT("assetPath"), Asset.AssetPath);
+    const TSharedRef<FJsonObject> ExpectedBinding = MakeShared<FJsonObject>();
+    ExpectedBinding->SetStringField(TEXT("kind"), ExpectedClassBinding.Kind);
+    if (ExpectedClassBinding.BaseClassPath.IsSet())
+        ExpectedBinding->SetStringField(TEXT("baseClassPath"), ExpectedClassBinding.BaseClassPath.GetValue());
+    else
+        ExpectedBinding->SetField(TEXT("baseClassPath"), MakeShared<FJsonValueNull>());
+    if (ExpectedClassBinding.GeneratedClassPath.IsSet())
+        ExpectedBinding->SetStringField(TEXT("generatedClassPath"), ExpectedClassBinding.GeneratedClassPath.GetValue());
+    else
+        ExpectedBinding->SetField(TEXT("generatedClassPath"), MakeShared<FJsonValueNull>());
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("updateClassBase"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(TEXT("expected"), ExpectedAsset);
+    Operation->SetObjectField(TEXT("expectedClassBinding"), ExpectedBinding);
+    if (ReplacementBaseClassPath.IsEmpty())
+        Operation->SetField(TEXT("replacementBaseClassPath"), MakeShared<FJsonValueNull>());
+    else
+        Operation->SetStringField(TEXT("replacementBaseClassPath"), ReplacementBaseClassPath);
+    return SerializeRoot(
+        MakeClassBindingDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the Script Class base patch"));
 }
 
 bool FFinareAuthoringSurfaceReader::BuildScriptAssetRemovalPatch(
