@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: native onboarding passed; actual FirstPlay exposed missing authoring artifacts
+Status: original health/HUD runtime passed; installed Finare FirstPlay and migration in progress
 
 ## Outcome and scope
 
@@ -96,8 +96,35 @@ also references an authoring Surface which `emit` does not yet produce or stage.
 The receipt above therefore proves native onboarding, not a runnable starter
 script. Fix the product templates and emission/staging path, then repeat the
 installed workflow; do not repair the pilot by copying missing outputs manually.
-Evidence: `artifacts/finare-usability/lyra-first-play.json` and
-`lyra-first-play-engine.log`.
+Evidence: `artifacts/finare-usability/lyra-first-play-engine.log`.
+
+Revisions `87dd614` and `8fc7654` fix complete FirstPlay artifact emission and
+SDK ownership across sequential upgrades. The SDK at `f18233a` installed with
+23 updates, 272 unchanged files and no conflicts; full onboarding passed in
+`Saved/Finare/Onboarding/20260911-130347/onboarding-report.json`. An intentional
+missing-Surface ValidateOnly check correctly rejected the absent output with
+USONB1201; its failed report is negative coverage, and the output was restored.
+
+Actual Play exposed a separate gate failure: PowerShell 7 onboarding and the
+Editor's Windows PowerShell 5.1 child produced different native-source hashes
+for the same 659 files because their culture-based punctuation ordering differs.
+Revision `a594aa9` uses explicit ordinal ordering for BuildGraph paths, records,
+keys and dependencies. Both shell tests and the cross-shell fixture passed;
+the installed SDK must still be upgraded and onboarded once with the new
+fingerprint algorithm before actual FirstPlay can be accepted. The rejected
+run is retained as `lyra-first-play-engine-2.log` and
+`lyra-first-play-false-restart.json` under the artifact directory.
+
+The original GAS-backed health/HUD behavior passed in actual PIE on
+`/ShooterMaps/Maps/L_Expanse`: native health and the original W_Healthbar numeric
+target both followed 100 -> 80 -> 90 through Lyra's DamageSelf/HealSelf effects.
+The test waits for the actual spawn damage-immunity tag to clear before damage;
+it does not change health or bypass immunity. PIE teardown removed the World.
+Evidence: `artifacts/finare-usability/lyra-health-baseline.json` and
+`lyra-health-baseline-engine-9.log` (Editor exit 0). Finare was disabled for
+this original-behavior reference, so this is not migrated gameplay acceptance.
+The independent copy has an Editor-only validation plugin to request PIE in a
+hidden viewport; it contains no gameplay calls or health facade.
 
 The selected health/HUD APIs and W_Healthbar Blueprint also export through the
 installed SDK into `artifacts/finare-usability/lyra-health-pilot.reflection.json`.
