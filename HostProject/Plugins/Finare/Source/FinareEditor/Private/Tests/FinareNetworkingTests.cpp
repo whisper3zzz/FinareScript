@@ -18,6 +18,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
@@ -53,6 +54,8 @@ struct FScenario
           ClassName(bInComponent ? TEXT("BP_NetworkingComponentDemo") : TEXT("BP_NetworkingDemo")),
           PackageName(TEXT("/Game/UnifiedScriptTests/") + ClassName) {}
     bool ValidateInitialNotifyLifetime();
+    bool ValidateExactOwnerRouting();
+    bool ValidateExactComponentOwnerRouting();
     ~FScenario()
     {
         if (bStartedPIE && GEditor)
@@ -129,8 +132,13 @@ struct FScenario
             FindObject<UFinareAsset>(nullptr, *(PackageName + TEXT(".NetworkingScript"))) != nullptr ||
             FPackageName::DoesPackageExist(PackageName))) return false;
         FString Declaration;
-        const FString DeclarationPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() /
-            TEXT("../artifacts/ue/compiled-chunks/release/UnifiedScript.Unreal.Demo.asset.json"));
+        const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Finare"));
+        const FString DemoDirectory = Plugin.IsValid()
+            ? FPaths::Combine(Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo"))
+            : FString();
+        const FString DeclarationPath = FPaths::Combine(
+            DemoDirectory,
+            TEXT("Finare.Unreal.Demo.asset.json"));
         if (!Test.TestTrue(TEXT("Load declarations emitted from the actual C# sample"),
             FFileHelper::LoadFileToString(Declaration, *DeclarationPath))) return false;
         UPackage* Package = CreatePackage(*PackageName);
@@ -458,6 +466,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFinareConnectedComponentNetworkingTest,
     "Finare.Unreal.Networking.ConnectedComponent",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFinareExactOwnerRoutingTest,
+    "Finare.Unreal.Networking.ExactOwnerRouting",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFinareExactComponentOwnerRoutingTest,
+    "Finare.Unreal.Networking.ExactComponentOwnerRouting",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 static bool RunNetworkingScenario(FAutomationTestBase& Test, bool bComponent)
 {
     using namespace UE::Finare::Networking::Tests;
@@ -498,6 +514,364 @@ bool FFinareConnectedNetworkingTest::RunTest(const FString& Parameters)
 bool FFinareConnectedComponentNetworkingTest::RunTest(const FString& Parameters)
 {
     return RunNetworkingScenario(*this, true);
+}
+
+bool FFinareExactOwnerRoutingTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::Finare::Networking::Tests;
+    FScenario Scenario(*this, false);
+    return Scenario.Build() && Scenario.ValidateExactOwnerRouting() && !HasAnyErrors();
+}
+
+bool FFinareExactComponentOwnerRoutingTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::Finare::Networking::Tests;
+    FScenario Scenario(*this, true);
+    return Scenario.Build() && Scenario.ValidateExactComponentOwnerRouting() && !HasAnyErrors();
+}
+
+bool UE::Finare::Networking::Tests::FScenario::ValidateExactOwnerRouting()
+{
+    if (!Test.TestFalse(TEXT("Actor exact-owner test uses the Actor fixture"), bComponent))
+    {
+        return false;
+    }
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!Test.TestNotNull(TEXT("Create exact-owner World"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    World->InitializeActorsForPlay(FURL());
+
+    AFinareActor* Actor = nullptr;
+    AFinareActor* PreStartActor = nullptr;
+    UFinareComponent* Matching = nullptr;
+    UFinareComponent* Ambiguous = nullptr;
+    UFinareBlueprintGeneratedClass* GeneratedClass =
+        Cast<UFinareBlueprintGeneratedClass>(Blueprint->GeneratedClass);
+    UFinareComponent* CDOComponent = GeneratedClass != nullptr
+        ? Component(GeneratedClass->GetDefaultObject())
+        : nullptr;
+    const bool bOriginalStartAutomatically = CDOComponent != nullptr
+        ? CDOComponent->bStartAutomatically
+        : true;
+    ON_SCOPE_EXIT
+    {
+        if (Ambiguous != nullptr)
+        {
+            Ambiguous->EndPlay(EEndPlayReason::Destroyed);
+            Ambiguous->DestroyComponent();
+            Ambiguous = nullptr;
+        }
+        if (Matching != nullptr)
+        {
+            Matching->EndPlay(EEndPlayReason::Destroyed);
+            Matching->DestroyComponent();
+            Matching = nullptr;
+        }
+        if (PreStartActor != nullptr && !PreStartActor->IsActorBeingDestroyed())
+        {
+            PreStartActor->StopManagedBehavior();
+            PreStartActor->Destroy();
+            PreStartActor = nullptr;
+        }
+        if (Actor != nullptr && !Actor->IsActorBeingDestroyed())
+        {
+            Actor->Destroy();
+            Actor = nullptr;
+        }
+        if (CDOComponent != nullptr)
+        {
+            CDOComponent->bStartAutomatically = bOriginalStartAutomatically;
+        }
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+    };
+
+    if (!Test.TestNotNull(TEXT("Exact-owner fixture generated class exists"), GeneratedClass) ||
+        !Test.TestNotNull(TEXT("Exact-owner fixture Script Asset exists"), Blueprint->ScriptAsset.Get()) ||
+        !Test.TestNotNull(TEXT("Exact-owner CDO component exists"), CDOComponent))
+    {
+        return false;
+    }
+    UFinareAsset* ScriptAsset = Blueprint->ScriptAsset;
+    CDOComponent->bStartAutomatically = false;
+    Actor = World->SpawnActor<AFinareActor>(Blueprint->GeneratedClass);
+    UFinareComponent* Canonical = Actor != nullptr ? Component(Actor) : nullptr;
+    if (!Test.TestNotNull(TEXT("Exact-owner Actor spawns"), Actor) ||
+        !Test.TestNotNull(TEXT("Exact-owner canonical component exists"), Canonical))
+    {
+        return false;
+    }
+    Canonical->ScriptAsset = ScriptAsset;
+    Canonical->bStartAutomatically = false;
+
+    auto CreateExtraComponent = [&](const TCHAR* Name, FName OwnershipKey)
+    {
+        UFinareComponent* Extra = NewObject<UFinareComponent>(
+            Actor,
+            UFinareComponent::StaticClass(),
+            FName(Name));
+        if (Extra != nullptr)
+        {
+            Actor->AddInstanceComponent(Extra);
+            Extra->ScriptAsset = ScriptAsset;
+            Extra->bStartAutomatically = false;
+            Extra->bTickAutomatically = false;
+            Extra->LifecycleOwnershipKey = OwnershipKey;
+            Extra->RegisterComponent();
+            Extra->BeginPlay();
+        }
+        return Extra;
+    };
+
+    Matching = CreateExtraComponent(
+        TEXT("ExactOwnerMatchingComponent"),
+        FName(TEXT("ExactOwnerMatching")));
+    if (!Test.TestNotNull(TEXT("Exact-owner later component exists"), Matching) ||
+        !Test.TestTrue(TEXT("Exact-owner later component starts"), Matching->StartScript()))
+    {
+        return false;
+    }
+    Test.TestTrue(
+        TEXT("Earlier cold component has the configured generated identity"),
+        Canonical->OwnsConfiguredManagedOverride(GeneratedClass));
+
+    UFunction* Initialize = Function(TEXT("InitializeScore"));
+    if (!Test.TestNotNull(TEXT("Exact-owner InitializeScore exists"), Initialize))
+    {
+        return false;
+    }
+    FFinareManagedFunctionBinding* InitializeBinding =
+        GeneratedClass->ManagedFunctionBindings.Find(Initialize->GetFName());
+    if (!Test.TestNotNull(TEXT("Exact-owner InitializeScore binding exists"), InitializeBinding))
+    {
+        return false;
+    }
+    const int32 OriginalAbi = InitializeBinding->AbiVersion;
+    const FIntProperty* ValueProperty = FindFProperty<FIntProperty>(Initialize, TEXT("value"));
+    if (!Test.TestNotNull(TEXT("Exact-owner InitializeScore value pin exists"), ValueProperty))
+    {
+        return false;
+    }
+    auto InvokeInitialize = [&](int32 Value)
+    {
+        FStructOnScope Parameters(Initialize);
+        ValueProperty->SetPropertyValue_InContainer(Parameters.GetStructMemory(), Value);
+        Actor->ProcessEvent(Initialize, Parameters.GetStructMemory());
+    };
+
+    InvokeInitialize(17);
+    Test.TestEqual(
+        TEXT("Ordinary generated ABI v2 dispatch (native call frame v3) reaches the later active owner"),
+        Value(Actor, TEXT("Score")),
+        17);
+
+    UFinareAsset* SwappedAsset = NewObject<UFinareAsset>(
+        Blueprint->GetOutermost(),
+        TEXT("ConfiguredSwapNetworkingAsset"));
+    SwappedAsset->ScriptClassId = FGuid::NewGuid();
+    SwappedAsset->ScriptClassKind = EFinareClassKind::Actor;
+    SwappedAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
+    Matching->ScriptAsset = SwappedAsset;
+    Test.TestFalse(
+        TEXT("Configured swap no longer claims the active generated identity"),
+        Matching->OwnsConfiguredManagedOverride(GeneratedClass));
+    InvokeInitialize(23);
+    Test.TestEqual(
+        TEXT("Configured asset swap keeps dispatch on the active generation"),
+        Value(Actor, TEXT("Score")),
+        23);
+
+    InitializeBinding->AbiVersion = 1;
+    InvokeInitialize(29);
+    InitializeBinding->AbiVersion = OriginalAbi;
+    Test.TestEqual(
+        TEXT("Ordinary generated ABI v1 call reaches the active owner"),
+        Value(Actor, TEXT("Score")),
+        29);
+
+    UFunction* Notify = Function(TEXT("ScoreChanged"));
+    const FIntProperty* PreviousProperty =
+        FindFProperty<FIntProperty>(Notify, TEXT("previous"));
+    if (!Test.TestNotNull(TEXT("Exact-owner RepNotify function exists"), Notify) ||
+        !Test.TestNotNull(TEXT("Exact-owner RepNotify previous pin exists"), PreviousProperty))
+    {
+        return false;
+    }
+    Ambiguous = CreateExtraComponent(
+        TEXT("ExactOwnerAmbiguousComponent"),
+        FName(TEXT("ExactOwnerAmbiguous")));
+    if (!Test.TestNotNull(TEXT("Second active owner exists"), Ambiguous) ||
+        !Test.TestTrue(TEXT("Second active owner starts"), Ambiguous->StartScript()))
+    {
+        return false;
+    }
+    const int32 BeforeAmbiguous = Value(Actor, TEXT("Score"));
+    Test.AddExpectedError(
+        TEXT("has no exact managed owner"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    InvokeInitialize(31);
+    Test.TestEqual(
+        TEXT("Multiple active owners reject the ordinary generated call"),
+        Value(Actor, TEXT("Score")),
+        BeforeAmbiguous);
+    const int32 BeforeActiveAmbiguousNotify = Value(Actor, TEXT("Notifications"));
+    FStructOnScope ActiveNotifyParameters(Notify);
+    PreviousProperty->SetPropertyValue_InContainer(
+        ActiveNotifyParameters.GetStructMemory(),
+        29);
+    Test.AddExpectedError(
+        TEXT("has no exact managed owner"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    Actor->ProcessEvent(Notify, ActiveNotifyParameters.GetStructMemory());
+    Test.TestEqual(
+        TEXT("Active ambiguity does not fall through to configured RepNotify"),
+        Value(Actor, TEXT("Notifications")),
+        BeforeActiveAmbiguousNotify);
+
+    Ambiguous->EndPlay(EEndPlayReason::Destroyed);
+    Ambiguous->DestroyComponent();
+    Ambiguous = nullptr;
+    Matching->StopScript();
+    Matching->ScriptAsset = ScriptAsset;
+    const int32 BeforePreStartAmbiguous = Value(Actor, TEXT("Notifications"));
+    FStructOnScope NotifyParameters(Notify);
+    PreviousProperty->SetPropertyValue_InContainer(
+        NotifyParameters.GetStructMemory(),
+        29);
+    Test.AddExpectedError(
+        TEXT("has no exact managed owner"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    Actor->ProcessEvent(Notify, NotifyParameters.GetStructMemory());
+    Test.TestEqual(
+        TEXT("Multiple configured pre-start owners reject RepNotify"),
+        Value(Actor, TEXT("Notifications")),
+        BeforePreStartAmbiguous);
+
+    CDOComponent->bStartAutomatically = true;
+    PreStartActor = World->SpawnActor<AFinareActor>(Blueprint->GeneratedClass);
+    UFinareComponent* PreStartComponent =
+        PreStartActor != nullptr ? Component(PreStartActor) : nullptr;
+    if (!Test.TestNotNull(TEXT("Unique pre-start Actor spawns"), PreStartActor) ||
+        !Test.TestNotNull(TEXT("Unique pre-start component exists"), PreStartComponent))
+    {
+        return false;
+    }
+    PreStartComponent->ScriptAsset = nullptr;
+    PreStartComponent->ScriptAssetPath = ScriptAsset->GetPathName();
+    PreStartComponent->bStartAutomatically = true;
+    Test.TestFalse(TEXT("Unique pre-start component is not running yet"), PreStartComponent->bScriptRunning);
+    const int32 BeforeQueuedNotify = Value(PreStartActor, TEXT("Notifications"));
+    FStructOnScope WrongTargetParameters(Notify);
+    PreviousProperty->SetPropertyValue_InContainer(
+        WrongTargetParameters.GetStructMemory(),
+        37);
+    Test.TestFalse(
+        TEXT("Queue rejects a notify target different from the configured Actor receiver"),
+        PreStartComponent->QueueInitialRepNotify(
+            Actor,
+            Notify,
+            WrongTargetParameters.GetStructMemory()));
+    FStructOnScope CorrectTargetParameters(Notify);
+    PreviousProperty->SetPropertyValue_InContainer(
+        CorrectTargetParameters.GetStructMemory(),
+        41);
+    PreStartActor->ProcessEvent(Notify, CorrectTargetParameters.GetStructMemory());
+    Test.TestEqual(
+        TEXT("Unique ScriptAssetPath RepNotify remains queued before start"),
+        Value(PreStartActor, TEXT("Notifications")),
+        BeforeQueuedNotify);
+    Test.TestTrue(
+        TEXT("Unique ScriptAssetPath owner starts and replays exactly once"),
+        PreStartActor->StartManagedBehavior());
+    Test.TestEqual(
+        TEXT("Unique pre-start RepNotify delivers once after real start"),
+        Value(PreStartActor, TEXT("Notifications")),
+        1);
+    Test.TestEqual(
+        TEXT("Unique pre-start RepNotify preserves its previous value"),
+        Value(PreStartActor, TEXT("PreviousScore")),
+        41);
+    return !Test.HasAnyErrors();
+}
+
+bool UE::Finare::Networking::Tests::FScenario::ValidateExactComponentOwnerRouting()
+{
+    if (!Test.TestTrue(TEXT("Component exact-owner test uses the component fixture"), bComponent))
+    {
+        return false;
+    }
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!Test.TestNotNull(TEXT("Create exact-component World"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    World->InitializeActorsForPlay(FURL());
+    AActor* Actor = World->SpawnActor<AActor>();
+    UFinareComponent* ScriptComponent = Actor != nullptr
+        ? NewObject<UFinareComponent>(Actor, Blueprint->GeneratedClass, TEXT("ExactComponentOwner"))
+        : nullptr;
+    ON_SCOPE_EXIT
+    {
+        if (ScriptComponent != nullptr)
+        {
+            ScriptComponent->EndPlay(EEndPlayReason::Destroyed);
+            ScriptComponent->DestroyComponent();
+            ScriptComponent = nullptr;
+        }
+        if (Actor != nullptr && !Actor->IsActorBeingDestroyed())
+        {
+            Actor->Destroy();
+            Actor = nullptr;
+        }
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+    };
+    if (!Test.TestNotNull(TEXT("Exact-component Actor exists"), Actor) ||
+        !Test.TestNotNull(TEXT("Exact-component generated receiver exists"), ScriptComponent))
+    {
+        return false;
+    }
+    Actor->AddInstanceComponent(ScriptComponent);
+    ScriptComponent->ScriptAsset = Blueprint->ScriptAsset;
+    ScriptComponent->bStartAutomatically = false;
+    ScriptComponent->bTickAutomatically = false;
+    ScriptComponent->LifecycleOwnershipKey = FName(TEXT("ExactComponentOwner"));
+    ScriptComponent->RegisterComponent();
+    ScriptComponent->BeginPlay();
+    if (!Test.TestTrue(TEXT("Exact-component receiver starts"), ScriptComponent->StartScript()))
+    {
+        return false;
+    }
+    UFunction* Initialize = Function(TEXT("InitializeScore"));
+    if (!Test.TestNotNull(TEXT("Exact-component InitializeScore exists"), Initialize))
+    {
+        return false;
+    }
+    const FIntProperty* ValueProperty = FindFProperty<FIntProperty>(Initialize, TEXT("value"));
+    if (!Test.TestNotNull(TEXT("Exact-component value pin exists"), ValueProperty))
+    {
+        return false;
+    }
+    FStructOnScope Parameters(Initialize);
+    ValueProperty->SetPropertyValue_InContainer(Parameters.GetStructMemory(), 37);
+    ScriptComponent->ProcessEvent(Initialize, Parameters.GetStructMemory());
+    Test.TestEqual(
+        TEXT("ActorComponent receiver dispatches through itself"),
+        Value(ScriptComponent, TEXT("Score")),
+        37);
+    Test.TestEqual(
+        TEXT("ActorComponent parent receiver is itself"),
+        ScriptComponent->GetParentInvocationReceiver(),
+        static_cast<UObject*>(ScriptComponent));
+    return !Test.HasAnyErrors();
 }
 
 bool UE::Finare::Networking::Tests::FScenario::ValidateInitialNotifyLifetime()

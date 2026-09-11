@@ -85,9 +85,20 @@ bool HasDirectActorComponentLifecycleOverride(
 
     UClass* ExpectedClass =
         ScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
+    if (ExpectedClass == nullptr ||
+        !ExpectedClass->GetPathName().Equals(
+            ScriptAsset->GeneratedClassPath.ToString(),
+            ESearchCase::CaseSensitive))
+    {
+        return false;
+    }
     const UFinareBlueprintGeneratedClass* GeneratedClass =
         Cast<UFinareBlueprintGeneratedClass>(ExpectedClass);
-    if (GeneratedClass == nullptr || !Receiver->IsA(ExpectedClass))
+    if (GeneratedClass == nullptr ||
+        GeneratedClass->ManagedScriptAsset == nullptr ||
+        !ScriptAsset->ScriptClassId.IsValid() ||
+        GeneratedClass->ManagedScriptAsset->ScriptClassId != ScriptAsset->ScriptClassId ||
+        !Receiver->IsA(ExpectedClass))
     {
         return false;
     }
@@ -121,6 +132,34 @@ bool HasDirectActorComponentLifecycleOverride(
         LocalFunction->GetOuter() == GeneratedClass &&
         LocalFunction->HasAnyFunctionFlags(FUNC_BlueprintEvent) &&
         !LocalFunction->HasAnyFunctionFlags(FUNC_Static | FUNC_Net);
+}
+
+const UFinareBlueprintGeneratedClass* GetExactGeneratedClassForAsset(
+    const UFinareAsset* ScriptAsset)
+{
+    if (ScriptAsset == nullptr ||
+        !ScriptAsset->ScriptClassId.IsValid() ||
+        !ScriptAsset->GeneratedClassPath.IsValid())
+    {
+        return nullptr;
+    }
+    UClass* ExpectedClass = ScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
+    if (ExpectedClass == nullptr ||
+        !ExpectedClass->GetPathName().Equals(
+            ScriptAsset->GeneratedClassPath.ToString(),
+            ESearchCase::CaseSensitive))
+    {
+        return nullptr;
+    }
+    const UFinareBlueprintGeneratedClass* GeneratedClass =
+        Cast<UFinareBlueprintGeneratedClass>(ExpectedClass);
+    if (GeneratedClass == nullptr ||
+        GeneratedClass->ManagedScriptAsset == nullptr ||
+        GeneratedClass->ManagedScriptAsset->ScriptClassId != ScriptAsset->ScriptClassId)
+    {
+        return nullptr;
+    }
+    return GeneratedClass;
 }
 
 FString GetAbsoluteProjectDir()
@@ -928,6 +967,22 @@ bool UFinareComponent::QueueInitialRepNotify(UObject* Target, UFunction* Functio
     const auto* Class = Cast<UFinareBlueprintGeneratedClass>(Function->GetOuter());
     const auto* Binding = Class ? Class->ManagedFunctionBindings.Find(Function->GetFName()) : nullptr;
     if (!Binding || Binding->RepNotifyProperty.IsNone()) return false;
+    if (!OwnsConfiguredManagedOverride(Class)) return false;
+    const UFinareAsset* ConfiguredAsset = ScriptAsset.Get();
+    if (ConfiguredAsset == nullptr && !ScriptAssetPath.IsEmpty())
+    {
+        const FSoftObjectPath AssetReference(ScriptAssetPath);
+        ConfiguredAsset = Cast<UFinareAsset>(
+            AssetReference.IsValid() ? AssetReference.TryLoad() : nullptr);
+    }
+    const UObject* ExpectedTarget =
+        ConfiguredAsset != nullptr &&
+            ConfiguredAsset->ScriptClassKind == EFinareClassKind::ActorComponent
+            ? static_cast<const UObject*>(this)
+            : GetOwner() != nullptr
+                ? static_cast<const UObject*>(GetOwner())
+                : static_cast<const UObject*>(this);
+    if (Target != ExpectedTarget) return false;
     // Multiple pre-start updates retain the first old value; hydration will
     // expose the newest replicated state, matching UE's coalesced notification.
     if (InitialRepNotifies.ContainsByPredicate([&](const auto& N) { return N->Function == Function; })) return true;
@@ -2798,28 +2853,19 @@ UObject* UFinareComponent::GetScriptTarget()
 const UFinareBlueprintGeneratedClass*
 UFinareComponent::GetActiveManagedGeneratedClass() const
 {
-    if (!bScriptRunning || ActiveScriptAsset == nullptr ||
-        !ActiveScriptAsset->GeneratedClassPath.IsValid())
+    if (!bScriptRunning)
     {
         return nullptr;
     }
-    UClass* ExpectedClass =
-        ActiveScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
-    if (ExpectedClass == nullptr)
-    {
+    const UFinareBlueprintGeneratedClass* GeneratedClass =
+        UE::Finare::Component::Private::GetExactGeneratedClassForAsset(
+            ActiveScriptAsset);
+    if (GeneratedClass == nullptr)
         return nullptr;
-    }
     UObject* Receiver = GetParentInvocationReceiver();
-    for (UClass* Candidate = Receiver != nullptr ? Receiver->GetClass() : nullptr;
-         Candidate != nullptr;
-         Candidate = Candidate->GetSuperClass())
-    {
-        if (Candidate == ExpectedClass)
-        {
-            return Cast<UFinareBlueprintGeneratedClass>(Candidate);
-        }
-    }
-    return nullptr;
+    return Receiver != nullptr && Receiver->IsA(GeneratedClass)
+        ? GeneratedClass
+        : nullptr;
 }
 
 UObject* UFinareComponent::GetParentInvocationReceiver() const
@@ -2843,6 +2889,33 @@ bool UFinareComponent::OwnsActiveManagedOverride(
         GetActiveManagedGeneratedClass() == GeneratedClass;
 }
 
+bool UFinareComponent::OwnsConfiguredManagedOverride(
+    const UFinareBlueprintGeneratedClass* GeneratedClass) const
+{
+    if (bScriptRunning || GeneratedClass == nullptr)
+        return false;
+
+    const UFinareAsset* ConfiguredAsset = ScriptAsset.Get();
+    if (ConfiguredAsset == nullptr && !ScriptAssetPath.IsEmpty())
+    {
+        const FSoftObjectPath AssetReference(ScriptAssetPath);
+        ConfiguredAsset = Cast<UFinareAsset>(
+            AssetReference.IsValid() ? AssetReference.TryLoad() : nullptr);
+    }
+    const UFinareBlueprintGeneratedClass* ConfiguredClass =
+        UE::Finare::Component::Private::GetExactGeneratedClassForAsset(ConfiguredAsset);
+    if (ConfiguredClass != GeneratedClass)
+        return false;
+
+    const UObject* Receiver =
+        ConfiguredAsset->ScriptClassKind == EFinareClassKind::ActorComponent
+            ? this
+            : GetOwner() != nullptr
+                ? static_cast<const UObject*>(GetOwner())
+                : static_cast<const UObject*>(this);
+    return Receiver != nullptr && Receiver->IsA(GeneratedClass);
+}
+
 bool UFinareComponent::BindManagedInputActions(FString& OutError)
 {
     check(IsInGameThread());
@@ -2854,23 +2927,8 @@ bool UFinareComponent::BindManagedInputActions(FString& OutError)
         return false;
     }
 
-    const UFinareBlueprintGeneratedClass* GeneratedClass = nullptr;
-    for (const UClass* Candidate = GetClass();
-         Candidate != nullptr && GeneratedClass == nullptr;
-         Candidate = Candidate->GetSuperClass())
-    {
-        GeneratedClass = Cast<UFinareBlueprintGeneratedClass>(Candidate);
-    }
-    if (GeneratedClass == nullptr)
-    {
-        const AActor* Owner = GetOwner();
-        for (const UClass* Candidate = Owner != nullptr ? Owner->GetClass() : nullptr;
-             Candidate != nullptr && GeneratedClass == nullptr;
-             Candidate = Candidate->GetSuperClass())
-        {
-            GeneratedClass = Cast<UFinareBlueprintGeneratedClass>(Candidate);
-        }
-    }
+    const UFinareBlueprintGeneratedClass* GeneratedClass =
+        GetActiveManagedGeneratedClass();
     if (GeneratedClass == nullptr ||
         GeneratedClass->ManagedInputActionBindings.IsEmpty())
     {

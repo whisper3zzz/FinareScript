@@ -79,6 +79,27 @@ artifact baseline, so the next edit can publish normally. Six
 prepare/finish, cancellation, Undo/Redo, stable IDs and external sidecar conflicts.
 This verifies the managed participant, not physical Editor UI interaction.
 
+Runtime generated-function dispatch now selects the unique active component by
+the function's declaring generated class, canonical class path and persistent
+ClassId. Changing a running component's configured asset leaves calls with its
+active generation. Ordinary ABI v1/v2 calls and Blueprint overrides share that
+selection; active ambiguity cannot fall through to a cold configured component.
+Only initial RepNotify may use a unique configured owner, including
+ScriptAssetPath, and its queued target must be that owner's receiver. Enhanced
+Input now uses the active generated owner instead of the nearest generated
+ancestor. ActorComponent receivers remain the component itself.
+
+Editor build `c4-owner-build4.log` and eight focused Automation tests pass:
+Actor/ActorComponent exact-owner dispatch, parent ownership, connected Actor and
+component networking, component lifecycle, managed function dispatch with
+Enhanced Input, and component parent invocation. Logs use the `c4-owner-` prefix
+under `artifacts/finare-usability/`; the last three share
+`c4-owner-input-lifecycle.log`. The first build's invalid test helper and the
+first Actor run's stale pre-rename declaration path remain in their failed logs.
+The networking fixture now reads the installed plugin's current emitted Demo
+declaration. This establishes routing and its existing lifecycle/input consumers;
+same-parent live publication and SCS composition remain open.
+
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
 native consumers. The `updateClassBase` declaration patch edits that explicit
 attribute argument. A native parent transaction now handles existing carrier

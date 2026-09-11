@@ -22,6 +22,13 @@ constexpr int32 MaximumManagedFunctionArenaBytes = 64 * 1024;
 const FName WorldContextObjectName(TEXT("WorldContextObject"));
 const FName KismetWorldContextName(TEXT("__WorldContext"));
 
+enum class EManagedComponentResolution : uint8
+{
+    None,
+    Unique,
+    Ambiguous,
+};
+
 bool PackValue(
     const FProperty& Property,
     const void* Container,
@@ -127,37 +134,27 @@ bool UnpackReturnValue(
     return false;
 }
 
-UFinareComponent* ResolveComponent(UObject* Context)
-{
-    if (UFinareComponent* Component = Cast<UFinareComponent>(Context))
-    {
-        return Component;
-    }
-    if (AActor* Actor = Cast<AActor>(Context))
-    {
-        return Actor->FindComponentByClass<UFinareComponent>();
-    }
-    return nullptr;
-}
-
-UFinareComponent* ResolveOverrideComponent(
+UFinareComponent* ResolveComponent(
     UObject* Context,
     const UFinareBlueprintGeneratedClass* GeneratedClass,
-    FString& OutError)
+    FString& OutError,
+    EManagedComponentResolution& OutResolution)
 {
+    OutResolution = EManagedComponentResolution::None;
     if (UFinareComponent* Component = Cast<UFinareComponent>(Context))
     {
         if (Component->OwnsActiveManagedOverride(GeneratedClass))
         {
+            OutResolution = EManagedComponentResolution::Unique;
             return Component;
         }
-        OutError = TEXT("The Blueprint override context is not owned by its active Script Component.");
+        OutError = TEXT("The managed function context is not owned by its active Script Component.");
         return nullptr;
     }
     AActor* Actor = Cast<AActor>(Context);
     if (Actor == nullptr)
     {
-        OutError = TEXT("The Blueprint override context is neither an Actor nor a Script Component.");
+        OutError = TEXT("The managed function context is neither an Actor nor a Script Component.");
         return nullptr;
     }
     TArray<UFinareComponent*> Matches;
@@ -168,8 +165,48 @@ UFinareComponent* ResolveOverrideComponent(
     });
     if (Matches.Num() != 1)
     {
+        OutResolution = Matches.Num() > 1
+            ? EManagedComponentResolution::Ambiguous
+            : EManagedComponentResolution::None;
         OutError = FString::Printf(
-            TEXT("The Blueprint override context has %d active Script Components for its generated owner; exact ownership is required."),
+            TEXT("The managed function context has %d active Script Components for its generated owner; exact ownership is required."),
+            Matches.Num());
+        return nullptr;
+    }
+    OutResolution = EManagedComponentResolution::Unique;
+    return Matches[0];
+}
+
+UFinareComponent* ResolveConfiguredComponent(
+    UObject* Context,
+    const UFinareBlueprintGeneratedClass* GeneratedClass,
+    FString& OutError)
+{
+    if (UFinareComponent* Component = Cast<UFinareComponent>(Context))
+    {
+        if (Component->OwnsConfiguredManagedOverride(GeneratedClass))
+        {
+            return Component;
+        }
+        OutError = TEXT("The pre-start managed function context is not owned by its configured Script Component.");
+        return nullptr;
+    }
+    AActor* Actor = Cast<AActor>(Context);
+    if (Actor == nullptr)
+    {
+        OutError = TEXT("The pre-start managed function context is neither an Actor nor a Script Component.");
+        return nullptr;
+    }
+    TArray<UFinareComponent*> Matches;
+    Actor->GetComponents<UFinareComponent>(Matches);
+    Matches.RemoveAll([&](UFinareComponent* Component)
+    {
+        return Component == nullptr || !Component->OwnsConfiguredManagedOverride(GeneratedClass);
+    });
+    if (Matches.Num() != 1)
+    {
+        OutError = FString::Printf(
+            TEXT("The pre-start managed function context has %d configured Script Components for its generated owner; exact ownership is required."),
             Matches.Num());
         return nullptr;
     }
@@ -2193,6 +2230,7 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
     {
         UFinareComponent* Component = nullptr;
         UFinareWorldSubsystem* Host = nullptr;
+        bool bConfiguredPreStartOwner = false;
         if (Binding->bStatic)
         {
             const FObjectPropertyBase* WorldContextProperty =
@@ -2205,27 +2243,36 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
         }
         else
         {
-            if (Binding->BlueprintOverrideDeclaringTypePath.IsEmpty())
+            FString OwnershipError;
+            EManagedComponentResolution ActiveResolution =
+                EManagedComponentResolution::None;
+            Component = ResolveComponent(
+                Context,
+                GeneratedClass,
+                OwnershipError,
+                ActiveResolution);
+            // RepNotify functions can be delivered before StartScript. That
+            // one path is allowed to resolve the configured owner, while all
+            // ordinary dispatch remains active-owner-only.
+            if (Component == nullptr &&
+                ActiveResolution == EManagedComponentResolution::None &&
+                !Binding->RepNotifyProperty.IsNone())
             {
-                Component = ResolveComponent(Context);
-            }
-            else
-            {
-                FString OwnershipError;
-                Component = ResolveOverrideComponent(
+                Component = ResolveConfiguredComponent(
                     Context,
                     GeneratedClass,
                     OwnershipError);
-                if (Component == nullptr)
-                {
-                    UE_LOG(
-                        LogTemp,
-                        Error,
-                        TEXT("Finare override function '%s' has no exact managed owner: %s"),
-                        *Function->GetPathName(),
-                        *OwnershipError);
-                    return;
-                }
+                bConfiguredPreStartOwner = Component != nullptr;
+            }
+            if (Component == nullptr)
+            {
+                UE_LOG(
+                    LogTemp,
+                    Error,
+                    TEXT("Finare function '%s' has no exact managed owner: %s"),
+                    *Function->GetPathName(),
+                    *OwnershipError);
+                return;
             }
             Host = Component != nullptr
                 ? ResolveWorldHost(Component)
@@ -2241,8 +2288,23 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
             return;
         }
 
-        if (Component && !Binding->RepNotifyProperty.IsNone() &&
-            Component->QueueInitialRepNotify(Context, Function, ParameterContainer)) return;
+        if (Component && !Binding->RepNotifyProperty.IsNone())
+        {
+            if (Component->QueueInitialRepNotify(
+                    Context,
+                    Function,
+                    ParameterContainer))
+            {
+                return;
+            }
+            // A configured owner is eligible only for the pre-start queue.
+            // If the queue rejects this callback, do not invoke managed code
+            // on a component that has not started its generation.
+            if (bConfiguredPreStartOwner)
+            {
+                return;
+            }
+        }
 
         TArray<FFinareNativeValueV3, TInlineAllocator<4>> ArgumentsV2;
         TArray<const FProperty*, TInlineAllocator<4>> ManagedParameters;
@@ -2534,14 +2596,22 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
         }
     }
 
-    UFinareComponent* Component = ResolveComponent(Context);
+    FString OwnershipError;
+    EManagedComponentResolution ActiveResolution =
+        EManagedComponentResolution::None;
+    UFinareComponent* Component = ResolveComponent(
+        Context,
+        GeneratedClass,
+        OwnershipError,
+        ActiveResolution);
     if (Component == nullptr)
     {
         UE_LOG(
             LogTemp,
             Error,
-            TEXT("Finare function '%s' has no managed component host."),
-            *Function->GetPathName());
+            TEXT("Finare function '%s' has no exact managed owner: %s"),
+            *Function->GetPathName(),
+            *OwnershipError);
         return;
     }
     FFinareManagedFunctionValueV1 Result;

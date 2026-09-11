@@ -1579,11 +1579,11 @@ bool FFinareBlueprintParentInvocationOwnershipTest::RunTest(const FString& Param
         return false;
     }
 
-    // Leave the actor's canonical component present but cold. A first-match
-    // FindComponentByClass resolver would select it instead of the later
-    // active owner below.
+    // Leave the actor's canonical component present but cold. It still points
+    // at the configured generated owner, so a configured-owner lookup must
+    // not steal a running call from the later active owner below.
     CanonicalComponent->bStartAutomatically = false;
-    CanonicalComponent->ScriptAsset = nullptr;
+    CanonicalComponent->ScriptAsset = ScriptAsset;
     MatchingComponent = NewObject<UFinareComponent>(
         Actor,
         UFinareComponent::StaticClass(),
@@ -1604,6 +1604,9 @@ bool FFinareBlueprintParentInvocationOwnershipTest::RunTest(const FString& Param
     {
         return false;
     }
+    TestTrue(
+        TEXT("Cold configured component still has the exact generated identity"),
+        CanonicalComponent->OwnsConfiguredManagedOverride(GeneratedClass));
 
     const FProperty* NativeInput = FindFProperty<FProperty>(Evaluate, TEXT("NativeInput"));
     const FProperty* NativeAccumulator = FindFProperty<FProperty>(Evaluate, TEXT("NativeAccumulator"));

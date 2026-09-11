@@ -246,6 +246,9 @@ public:
     /** Exact active managed class/receiver used by the Blueprint parent bridge. */
     const UFinareBlueprintGeneratedClass* GetActiveManagedGeneratedClass() const;
     UObject* GetParentInvocationReceiver() const;
+    /** Exact configured owner used only by pre-start identity-bearing callbacks. */
+    bool OwnsConfiguredManagedOverride(
+        const UFinareBlueprintGeneratedClass* GeneratedClass) const;
     bool OwnsActiveManagedOverride(
         const UFinareBlueprintGeneratedClass* GeneratedClass) const;
 
