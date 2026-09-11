@@ -653,17 +653,18 @@ the broadly usable capabilities compose in practice.
   The selected slice is Lyra's GAS health changes driving the health HUD,
   including pawn replacement and subscription cleanup. Its unmodified-copy
   Editor build, installed SDK onboarding, ordinary class creation and Blueprint
-  migration pass in two independent copies. Migrated damage/heal match the
-  original numeric and material HUD consumers; retained event references,
-  reload presentation and cooked acceptance remain pending. See the
+  migration pass in two independent copies. The complete migrated health/HUD
+  Editor sequence now passes in both, including retained event references,
+  reload, respawn, stop/restart and World teardown. Further Cook/package
+  validation is deferred at the user's request. See the
   [pilot scope](plans/2026-09-11-lyra-pilot.md).
-- [ ] Install through the shipped SDK workflow, inventory the slice's actual
+- [x] Install through the shipped SDK workflow, inventory the slice's actual
   Puerts/Blueprint/C++ boundaries and migrate its required behavior using generated
   APIs. Classify unsupported dependencies before promising full migration.
 - [ ] Exercise real UI/event/data binding and asset/Soft Reference/async loading,
   plus at least one system-heavy domain required by the project: GAS, Animation,
   AI/Navigation or networking. Do not require all four merely to start validation.
-- [ ] Compare the original and migrated observable behavior, then reproduce the
+- [x] Compare the original and migrated observable behavior, then reproduce the
   documented workflow on a second checkout. If the original uses Puerts, run a
   matched dual-runtime comparison; otherwise do not invent a Puerts baseline.
 
