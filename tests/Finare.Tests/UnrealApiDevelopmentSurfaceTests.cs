@@ -298,6 +298,64 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
+    public void ScannerIgnoresFrameworkWrapperMembersAndCollectsConditionalAndReflectedHandleMembers()
+    {
+        UnrealReflectionManifest reflection = AddReflectedHandleType(LoadReflection());
+        UnrealApiContract contract = CreateContract();
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            "WrapperMemberProject",
+            [Source(
+                "Gameplay/WrapperMembers.cs",
+                """
+                using UnrealApi = Finare.Tests.AutoSurface;
+                using Finare.Unreal;
+
+                namespace Finare.Tests.AutoSurface;
+
+                public sealed class FixtureDerived : UnrealObject
+                {
+                    public FixtureDerived(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
+                        : base(handle, bridge) { }
+                }
+
+                public sealed class FixtureHandle : UnrealObject
+                {
+                    public FixtureHandle(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
+                        : base(handle, bridge) { }
+
+                    public new int Handle => 0;
+                }
+
+                public sealed class WrapperMembers
+                {
+                    public void Run(UnrealApi.FixtureDerived target, UnrealApi.FixtureHandle own)
+                    {
+                        _ = target.Handle;
+                        _ = target?.Spawn();
+                        _ = own.Handle;
+                    }
+                }
+                """)],
+            reflection,
+            contract);
+
+        Assert.Equal(["Handle", "Spawn"], requests.Requests
+            .Select(static request => request.MemberName)
+            .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(requests.Requests,
+            static request => request.SuggestedTypePath ==
+                "/Script/BindingMatrix.FixtureDerived" &&
+                request.MemberName == "Handle");
+        UnrealApiDependencyRequest conditional = Assert.Single(requests.Requests,
+            static request => request.MemberName == "Spawn");
+        Assert.Equal("Gameplay/WrapperMembers.cs", Assert.Single(conditional.Locations).SourcePath);
+        Assert.Equal(
+            "/Script/BindingMatrix.FixtureHandle",
+            Assert.Single(requests.Requests,
+                static request => request.MemberName == "Handle").SuggestedTypePath);
+    }
+
+    [Fact]
     public void SourceTypeHintsAreDeterministicAndRejectCSharpTypeCollisions()
     {
         UnrealApiContract contract = CreateContract();
@@ -882,6 +940,42 @@ public sealed class UnrealApiDevelopmentSurfaceTests
                 manifest.Engine,
                 manifest.Modules,
                 [.. manifest.Types, version])));
+    }
+
+    private static UnrealReflectionManifest AddReflectedHandleType(
+        UnrealReflectionManifest manifest)
+    {
+        UnrealReflectedType template = manifest.Types.Single(
+            static type => type.Path == "/Script/BindingMatrix.FixtureDerived");
+        const string path = "/Script/BindingMatrix.FixtureHandle";
+        UnrealReflectedProperty handle = new(
+            path + ":Handle",
+            "Handle",
+            new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+            new UnrealPropertyAccess(Readable: true, Writable: false, EditorVisible: true));
+        UnrealReflectedType reflected = template with
+        {
+            Path = path,
+            Name = "FixtureHandle",
+            NativeName = "UFixtureHandle",
+            Properties = [
+                .. template.Properties.Select(property => property with {
+                    Path = path + ":" + property.Name,
+                }),
+                handle,
+            ],
+            Functions = [.. template.Functions.Select(function => function with {
+                Path = path + ":" + function.Path[(function.Path.LastIndexOf(':') + 1)..],
+            })],
+            Delegates = [.. template.Delegates.Select(delegateProperty => delegateProperty with {
+                Path = path + ":" + delegateProperty.Name,
+            })],
+        };
+        return UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(
+            UnrealReflectionManifest.Create(
+                manifest.Engine,
+                manifest.Modules,
+                [.. manifest.Types, reflected])));
     }
 
     private static UnrealReflectionManifest AddBlueprintGeneratedClass(

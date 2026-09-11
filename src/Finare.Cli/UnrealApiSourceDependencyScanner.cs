@@ -257,6 +257,10 @@ public sealed class UnrealApiSourceDependencyScanner
             {
                 continue;
             }
+            if (IsFrameworkWrapperMember(access.Name, semanticModel))
+            {
+                continue;
+            }
             string memberName = ResolveMemberSelector(
                 access,
                 sourceMemberName,
@@ -278,6 +282,81 @@ public sealed class UnrealApiSourceDependencyScanner
                 sourceMemberName,
                 location));
         }
+
+        foreach (MemberBindingExpressionSyntax binding in root.DescendantNodes()
+                     .OfType<MemberBindingExpressionSyntax>())
+        {
+            ConditionalAccessExpressionSyntax? conditionalAccess = binding.Ancestors()
+                .OfType<ConditionalAccessExpressionSyntax>()
+                .FirstOrDefault();
+            if (conditionalAccess is null ||
+                !TryResolveReceiver(
+                    conditionalAccess.Expression,
+                    binding.SpanStart,
+                    bindings,
+                    semanticModel,
+                    globalImports,
+                    managedNamespace,
+                    typeTargets,
+                    out ReflectedTypeTarget[]? targets))
+            {
+                continue;
+            }
+
+            string sourceMemberName = binding.Name.Identifier.ValueText;
+            if (string.IsNullOrWhiteSpace(sourceMemberName) ||
+                IsFrameworkWrapperMember(binding.Name, semanticModel))
+            {
+                continue;
+            }
+            string memberName = ResolveMemberSelector(
+                binding,
+                sourceMemberName,
+                targets!,
+                semanticModel);
+            FileLinePositionSpan lineSpan = tree.GetLineSpan(binding.Name.Span);
+            var location = new UnrealApiSourceSpan(
+                source.LogicalPath,
+                lineSpan.StartLinePosition.Line + 1,
+                lineSpan.StartLinePosition.Character + 1,
+                lineSpan.EndLinePosition.Line + 1,
+                lineSpan.EndLinePosition.Character + 1);
+            ReflectedTypeTarget first = targets![0];
+            occurrences.Add(new RequestOccurrence(
+                first.TypeName,
+                targets.Length == 1 ? first.TypePath : null,
+                first.ManagedTypeName,
+                memberName,
+                sourceMemberName,
+                location));
+        }
+    }
+
+    private static bool IsFrameworkWrapperMember(
+        SimpleNameSyntax member,
+        SemanticModel semanticModel)
+    {
+        ISymbol? symbol = semanticModel.GetSymbolInfo(member).Symbol;
+        if (symbol is null)
+        {
+            return false;
+        }
+
+        INamedTypeSymbol? declaringType = symbol.ContainingType;
+        if (declaringType?.ContainingAssembly?.Identity.Name !=
+            typeof(UnrealObject).Assembly.GetName().Name)
+        {
+            return false;
+        }
+
+        for (INamedTypeSymbol? type = declaringType; type is not null; type = type.BaseType)
+        {
+            if (type.ToDisplayString() == "Finare.Unreal.UnrealObject")
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static bool TryResolveReceiver(
@@ -651,7 +730,7 @@ public sealed class UnrealApiSourceDependencyScanner
     }
 
     private static string ResolveMemberSelector(
-        MemberAccessExpressionSyntax access,
+        ExpressionSyntax access,
         string memberName,
         IReadOnlyList<ReflectedTypeTarget> targets,
         SemanticModel semanticModel)
