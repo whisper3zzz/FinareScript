@@ -152,9 +152,9 @@ try {
     if (Test-Path -LiteralPath $root) {
         $tempDirectory = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
         $resolvedRoot = [IO.Path]::GetFullPath($root)
-        $tempPrefix = $tempDirectory.TrimEnd('\\', '/') +
+        $tempPrefix = $tempDirectory.TrimEnd('\', '/') +
             [IO.Path]::DirectorySeparatorChar
-        $rootName = [IO.Path]::GetFileName($resolvedRoot.TrimEnd('\\', '/'))
+        $rootName = [IO.Path]::GetFileName($resolvedRoot.TrimEnd('\', '/'))
         if (-not $resolvedRoot.StartsWith(
                 $tempPrefix, [StringComparison]::OrdinalIgnoreCase) -or
             -not $rootName.StartsWith(
