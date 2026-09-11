@@ -161,16 +161,41 @@ public static class UnrealApiContractJson
 
     private static bool IsMemberSelector(string? value)
     {
-        if (IsIdentifier(value))
-        {
-            return true;
-        }
-        if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsWhiteSpace))
+        if (string.IsNullOrWhiteSpace(value) ||
+            !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+            value.Any(char.IsControl))
         {
             return false;
         }
+
         int open = value.IndexOf('(');
-        return open > 0 && value.EndsWith(')') && IsIdentifier(value[..open]);
+        if (open < 0)
+        {
+            return !value.Any(static character =>
+                char.IsControl(character) || character is ':' or '(' or ')');
+        }
+
+        if (open == 0 || !value.EndsWith(')'))
+        {
+            return false;
+        }
+
+        string parameters = value[(open + 1)..^1];
+        if (
+            value.IndexOf('(', open + 1) >= 0 ||
+            parameters.Any(static character =>
+                character is '(' or ')' || char.IsWhiteSpace(character)))
+        {
+            return false;
+        }
+
+        // Overload selectors are generated as Name(NativeType,...).  Keep the
+        // original signature support while allowing UE Blueprint names such as
+        // "Health Changed" in the name portion.
+        string name = value[..open];
+        return !string.IsNullOrWhiteSpace(name) &&
+            string.Equals(name, name.Trim(), StringComparison.Ordinal) &&
+            !name.Any(static character => character is ':' or '(' or ')');
     }
 
     private static UnrealBindingCoverageBaseline? NormalizeBaseline(
