@@ -50,6 +50,11 @@ public sealed class CSharpProgramEmitterTests
             CSharpProgramSourceMapJson.Serialize(secondImage.SourceMap));
         Assert.Equal(firstImage.Hir.Id, firstImage.Semantics.SourceCompilationId);
         Assert.Equal(firstImage.Hir.Id, firstImage.ScriptAssets.SourceCompilationId);
+        Assert.Equal(firstImage.Hir.Id, firstImage.Graph!.SourceCompilationId);
+        Assert.Equal(
+            firstImage.Graph!.SourceCompilationId,
+            secondImage.Graph!.SourceCompilationId);
+        Assert.Equal(firstImage.DeclarationOwners, secondImage.DeclarationOwners);
         Assert.Equal(
             Core.ScriptAssetJson.Serialize(firstImage.ScriptAssets),
             Core.ScriptAssetJson.Serialize(secondImage.ScriptAssets));

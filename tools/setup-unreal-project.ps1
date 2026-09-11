@@ -1311,6 +1311,12 @@ try {
                  $resolved.nodeCatalogOutput,
                  $resolved.browserOutput,
                  $resolved.coverageOutput)
+             foreach ($chunk in $resolved.managedChunks) {
+                 $validatePrerequisites += @(
+                     $chunk.stagePath,
+                     [IO.Path]::ChangeExtension($chunk.stagePath, '.asset.json'),
+                     [IO.Path]::ChangeExtension($chunk.stagePath, '.surface.json'))
+             }
              if ($resolved.developmentSurfaceEnabled) {
                  $validatePrerequisites += @(
                      $resolved.developmentSurfaceTypeHints,
@@ -1476,6 +1482,7 @@ try {
         $managedChunkOutputs = @($resolved.managedChunks | ForEach-Object {
             $_.stagePath
             [IO.Path]::ChangeExtension($_.stagePath, '.asset.json')
+            [IO.Path]::ChangeExtension($_.stagePath, '.surface.json')
         })
         $editorTargetReceipt = Join-Path $projectDirectory `
             "Binaries\$($resolved.platform)\$($resolved.editorTarget).target"
@@ -1788,6 +1795,13 @@ try {
                         -Path $compiledDeclaration `
                         -Label 'Compiled managed Declaration IR' `
                         -Code 'USONB2303'
+                    $compiledSurface = [IO.Path]::ChangeExtension(
+                        $compiledChunk,
+                        '.surface.json')
+                    Assert-RequiredPath `
+                        -Path $compiledSurface `
+                        -Label 'Compiled managed authoring surface' `
+                        -Code 'USONB2303'
                     Invoke-LoggedCommand `
                         -FilePath $resolved.dotnet `
                         -Arguments @($cliAssembly, 'chunk-inspect', $compiledChunk) `
@@ -1843,6 +1857,31 @@ try {
                         if (Test-Path -LiteralPath $temporaryDeclarationStagePath) {
                             Remove-Item `
                                 -LiteralPath $temporaryDeclarationStagePath `
+                                -Force
+                        }
+                    }
+
+                    $surfaceStagePath = [IO.Path]::ChangeExtension(
+                        $chunk.stagePath,
+                        '.surface.json')
+                    $temporarySurfaceStagePath = Join-Path `
+                        $stageDirectory `
+                        (".{0}.{1}.tmp" -f
+                            ([IO.Path]::GetFileName($surfaceStagePath)),
+                            [Guid]::NewGuid().ToString('N'))
+                    try {
+                        Copy-Item `
+                            -LiteralPath $compiledSurface `
+                            -Destination $temporarySurfaceStagePath `
+                            -Force
+                        Move-Item `
+                            -LiteralPath $temporarySurfaceStagePath `
+                            -Destination $surfaceStagePath `
+                            -Force
+                    } finally {
+                        if (Test-Path -LiteralPath $temporarySurfaceStagePath) {
+                            Remove-Item `
+                                -LiteralPath $temporarySurfaceStagePath `
                                 -Force
                         }
                     }
@@ -2156,6 +2195,12 @@ try {
                 editorReceipt = @($editorTargetReceipt)
                 deployment = @($deploymentOutputs)
                 chunks = @($resolved.managedChunks.stagePath)
+                declarations = @($resolved.managedChunks | ForEach-Object {
+                    [IO.Path]::ChangeExtension($_.stagePath, '.asset.json')
+                })
+                surfaces = @($resolved.managedChunks | ForEach-Object {
+                    [IO.Path]::ChangeExtension($_.stagePath, '.surface.json')
+                })
             }) `
             -Dependencies $startupDependencies `
             -EditorAttachedPolicy 'defer' `
@@ -2246,6 +2291,9 @@ try {
         compiledChunks = @($resolved.managedChunks.stagePath)
         compiledDeclarations = @($resolved.managedChunks | ForEach-Object {
             [IO.Path]::ChangeExtension($_.stagePath, '.asset.json')
+        })
+        compiledSurfaces = @($resolved.managedChunks | ForEach-Object {
+            [IO.Path]::ChangeExtension($_.stagePath, '.surface.json')
         })
         buildGraph = $script:BuildGraphReport
         runDirectory = $script:RunDirectory

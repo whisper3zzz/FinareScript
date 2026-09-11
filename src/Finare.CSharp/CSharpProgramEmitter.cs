@@ -15,7 +15,15 @@ public sealed record CSharpProgramImage(
     HirCompilationUnit Hir,
     BoundCompilation Semantics,
     ScriptAssetDocument ScriptAssets,
-    IReadOnlyList<IdentitySidecarDocument> IdentitySidecars);
+    IReadOnlyList<IdentitySidecarDocument> IdentitySidecars)
+{
+    // These init properties keep the original positional API intact while
+    // carrying the exact graph/owner maps produced by this analysis.
+    public GraphDocument? Graph { get; init; }
+
+    public IReadOnlyDictionary<SemanticId, SemanticId> DeclarationOwners { get; init; } =
+        new Dictionary<SemanticId, SemanticId>();
+}
 
 public sealed record CSharpProgramEmitResult(
     CSharpProgramImage? Image,
@@ -44,11 +52,10 @@ public sealed class CSharpProgramEmitter
             return new CSharpProgramEmitResult(null, analysis.Diagnostics);
         }
 
-        _ = new HirGraphProjector().Project(
+        GraphDocument graph = new HirGraphProjector().Project(
             analysis.Hir,
             analysis.Semantics,
             analysis.DeclarationReferences);
-
         using var sourceMapPortableExecutable = new MemoryStream();
         using var sourceMapPortablePdb = new MemoryStream();
         EmitResult sourceMapEmit = compilationHost.Create(request).Emit(
@@ -109,7 +116,11 @@ public sealed class CSharpProgramEmitter
                 analysis.Hir,
                 analysis.Semantics,
                 analysis.ScriptAssets,
-                analysis.IdentitySidecars),
+                analysis.IdentitySidecars)
+            {
+                Graph = graph,
+                DeclarationOwners = analysis.DeclarationOwners,
+            },
             diagnostics);
     }
 }

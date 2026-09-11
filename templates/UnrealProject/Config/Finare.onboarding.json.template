@@ -48,7 +48,7 @@
     "chunks": [
       {
         "project": "../Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.csproj",
-        "stagePath": "../Plugins/Finare/Binaries/Managed/__ASSEMBLY_NAME__.uschunk"
+        "stagePath": "../Plugins/Finare/Binaries/Managed/Scripts/__ASSEMBLY_NAME__.uschunk"
       }
     ]
   },

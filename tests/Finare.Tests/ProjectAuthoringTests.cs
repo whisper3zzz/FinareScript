@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Finare.Authoring;
 using Finare.Cli;
 using Finare.Core;
 using Finare.CSharp;
@@ -107,6 +108,14 @@ public sealed class ProjectAuthoringTests
                 // A normal project emit must pick up the exact identities saved by Graph.
                 string emitted = Path.Combine(directory, "ordinary-build");
                 Assert.Equal(0, Program.Main(["emit", project, "--out", emitted, "--no-build", "--no-restore"]));
+                AuthoringSurfaceDocument emittedSurface = AuthoringSurfaceJson.Deserialize(
+                    await File.ReadAllTextAsync(Path.Combine(emitted, "Playground.surface.json")));
+                Assert.Equal(edited.ScriptAssets.SourceCompilationId, emittedSurface.SourceCompilationId);
+                AuthoringAssetSurface emittedAsset = Assert.Single(emittedSurface.Assets);
+                Assert.Equal(edited.ScriptAssets.Assets.Single().Id, emittedAsset.Id);
+                Assert.All(
+                    emittedSurface.DeclarationOwners,
+                    owner => Assert.Equal(emittedAsset.Id, owner.OwnerAssetId));
                 using (CoreClrCompiledChunkSession normal = new CoreClrCompiledChunkHost().Load(
                     File.ReadAllBytes(Path.Combine(emitted, "Playground.uschunk")), [typeof(VisualAttribute).Assembly.Location]))
                     Assert.Equal(edited.ScriptAssets.SourceCompilationId, normal.Declarations.SourceCompilationId);

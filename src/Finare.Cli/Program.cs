@@ -2070,7 +2070,7 @@ internal static class Program
             Console.Error.WriteLine(FormatDiagnostic(diagnostic));
         }
 
-        if (!result.Succeeded || result.Image is null)
+        if (!result.Succeeded || result.Image is null || result.Image.Graph is null)
         {
             Console.Error.WriteLine(
                 "Emission failed; PE, PDB, source-map, and declaration artifacts were not emitted.");
@@ -2084,7 +2084,13 @@ internal static class Program
         string pdbPath = Path.Combine(outputDirectory, $"{baseName}.pdb");
         string sourceMapPath = Path.Combine(outputDirectory, $"{baseName}.sourcemap.json");
         string assetPath = Path.Combine(outputDirectory, $"{baseName}.asset.json");
+        string surfacePath = Path.Combine(outputDirectory, $"{baseName}.surface.json");
         string chunkPath = Path.Combine(outputDirectory, $"{baseName}.uschunk");
+        string authoringSurfaceJson = AuthoringSurfaceJson.Serialize(
+            new AuthoringSurfaceProjector().Project(
+                result.Image.ScriptAssets,
+                result.Image.Graph,
+                result.Image.DeclarationOwners));
         CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
             result.Image,
             new CSharpProgramChunkOptions(
@@ -2103,6 +2109,9 @@ internal static class Program
             new OutputFile(
                 assetPath,
                 ScriptAssetJson.Serialize(result.Image.ScriptAssets) + "\n"),
+            new OutputFile(
+                surfacePath,
+                authoringSurfaceJson + "\n"),
             new OutputFile(chunkPath, chunk.Content),
         };
         foreach (IdentitySidecarDocument sidecar in result.Image.IdentitySidecars)
