@@ -2,6 +2,11 @@
 
 Status: in-progress
 
+Current verification scope is Editor-only at the user's request. Implement and
+verify the remaining authoring/runtime behavior in Editor; defer additional
+Cook/package checks and do not interpret Editor evidence as final cooked
+milestone acceptance.
+
 ## Outcome and scope
 
 M13.3C-4 adds explicit base-class changes and component composition to the

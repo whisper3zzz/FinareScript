@@ -326,6 +326,43 @@ the exact Blueprint-generated-class identity first. Verify subscribe, fire,
 unsubscribe on reload, Actor deletion, and level travel; a retired generation
 must never receive the event.
 
+### Keeping an event object after its callback
+
+Object handles supplied by native events are borrowed for that callback. If a
+script needs to use one later, retain it through its generation's `Bridge`:
+
+```csharp
+private UnrealObjectReference? _observedActor;
+
+private void RememberActor(UnrealObjectHandle actor)
+{
+    UnrealObjectReference? next = actor.IsWellFormed
+        ? UnrealObjectReference.Retain(Bridge, actor)
+        : null;
+    _observedActor?.Dispose();
+    _observedActor = next;
+}
+
+protected override void OnEndPlay()
+{
+    _observedActor?.Dispose();
+    _observedActor = null;
+}
+```
+
+Use `_observedActor.Handle` with the generated wrapper. The lease keeps the
+registry entry registered; it does not keep the UObject alive. UObject deletion
+or World teardown still makes native access fail with an invalid/stale handle.
+Retain and release on the game thread. Each generation owns its leases and
+releases any remaining ones at stop/reload; early `Dispose` releases only that
+lease. A disposed lease or generation rejects further `Handle` access. Older
+native transports without the optional reference extension report
+`NotSupportedException` when retaining.
+
+Leases and private fields do not persist across reload. Store state that must
+survive generation replacement in the normal Script Class's exposed native
+properties, then restore subscriptions and transient wrappers from that state.
+
 ## Enhanced Input and native interface
 
 Bind Enhanced Input with the exact `UInputAction` object path produced by the

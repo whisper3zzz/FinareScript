@@ -319,6 +319,160 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
         }
     }
 
+    [Fact]
+    public void AbiV4EventClosureUsesGenerationOwnerAndPersistsStateAcrossReload()
+    {
+        var registrations = new List<EventRegistration>();
+        ulong nextSubscriptionId = 0;
+        UnrealNativeSubscribeEventV4 subscribe =
+            (_, source, eventId, _, _, callback, userData) =>
+            {
+                var registration = new EventRegistration(
+                    ++nextSubscriptionId,
+                    source,
+                    eventId,
+                    callback,
+                    userData);
+                registrations.Add(registration);
+                return registration.SubscriptionId;
+            };
+        UnrealNativeUnsubscribeEventV4 unsubscribe = (_, subscriptionId) =>
+        {
+            EventRegistration? registration = registrations.Find(
+                candidate => candidate.SubscriptionId == subscriptionId);
+            if (registration is null)
+            {
+                return 0;
+            }
+            registration.Unsubscribed = true;
+            return 1;
+        };
+
+        nint eventTablePointer = nint.Zero;
+        nint tablePointer = nint.Zero;
+        nint asyncTablePointer = nint.Zero;
+        try
+        {
+            UnrealNativeAsyncSubmitV5 asyncSubmit = static (nint _, in UnrealAsyncRequestV5 _) => 1;
+            UnrealNativeAsyncPumpOwnerV5 asyncPump = static (
+                nint _, ulong _, uint _, float _) => 1;
+            UnrealNativeAsyncCancelV5 asyncCancel = static (
+                nint _, ulong _, uint _, ulong _) => 1;
+            UnrealNativeAsyncPollV5 asyncPoll = static (
+                nint _, ulong _, uint _, out UnrealAsyncCompletionViewV5 view) =>
+            {
+                view = new UnrealAsyncCompletionViewV5
+                {
+                    AbiVersion = UnrealAsyncServiceAbiV5.Version,
+                    StructSize = UnrealAsyncServiceAbiV5.CompletionViewSize,
+                    WorldHostId = 992,
+                };
+                return 1;
+            };
+            UnrealNativeAsyncCancelOwnerV5 asyncCancelOwner = static (
+                nint _, ulong _, uint _) => 0;
+            var asyncTable = new UnrealAsyncTransportTableV5
+            {
+                AbiVersion = UnrealAsyncServiceAbiV5.Version,
+                TableSize = UnrealAsyncServiceAbiV5.TransportTableSize,
+                RequestSize = UnrealAsyncServiceAbiV5.RequestSize,
+                CompletionSize = UnrealAsyncServiceAbiV5.CompletionSize,
+                CompletionViewSize = UnrealAsyncServiceAbiV5.CompletionViewSize,
+                Capabilities = UnrealAsyncServiceAbiV5.RequiredCapabilities,
+                RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                SubmitRequest = Marshal.GetFunctionPointerForDelegate(asyncSubmit),
+                PumpOwner = Marshal.GetFunctionPointerForDelegate(asyncPump),
+                CancelRequest = Marshal.GetFunctionPointerForDelegate(asyncCancel),
+                PollCompletions = Marshal.GetFunctionPointerForDelegate(asyncPoll),
+                CancelOwner = Marshal.GetFunctionPointerForDelegate(asyncCancelOwner),
+            };
+            asyncTablePointer = Marshal.AllocHGlobal(Marshal.SizeOf<UnrealAsyncTransportTableV5>());
+            Marshal.StructureToPtr(asyncTable, asyncTablePointer, false);
+
+            var eventTable = new UnrealNativeEventTransportTableV4
+            {
+                AbiVersion = UnrealNativeEventAbiV4.Version,
+                TableSize = UnrealNativeEventAbiV4.TransportTableSize,
+                FrameSize = UnrealNativeEventAbiV4.FrameSize,
+                ValueSize = UnrealNativeAbiV3.ValueSize,
+                RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                Subscribe = Marshal.GetFunctionPointerForDelegate(subscribe),
+                Unsubscribe = Marshal.GetFunctionPointerForDelegate(unsubscribe),
+            };
+            eventTablePointer = Marshal.AllocHGlobal(
+                Marshal.SizeOf<UnrealNativeEventTransportTableV4>());
+            Marshal.StructureToPtr(eventTable, eventTablePointer, false);
+
+            var table = new TestTableV2AsyncServices
+            {
+                AbiVersion = 2,
+                TableSize = checked((uint)Marshal.SizeOf<TestTableV2AsyncServices>()),
+                ValueSize = checked((uint)Marshal.SizeOf<TestValue>()),
+                ReadProperty = Marshal.GetFunctionPointerForDelegate(_read),
+                WriteProperty = Marshal.GetFunctionPointerForDelegate(_write),
+                Invoke = Marshal.GetFunctionPointerForDelegate(_invoke),
+                RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                ReadPropertyById = Marshal.GetFunctionPointerForDelegate(_fastRead),
+                WritePropertyById = Marshal.GetFunctionPointerForDelegate(_fastWrite),
+                InvokeById = Marshal.GetFunctionPointerForDelegate(_fastInvoke),
+                EventTransport = eventTablePointer,
+                AsyncTransport = asyncTablePointer,
+            };
+            tablePointer = Marshal.AllocHGlobal(Marshal.SizeOf<TestTableV2AsyncServices>());
+            Marshal.StructureToPtr(table, tablePointer, false);
+
+            using var transport = new InProcessUnrealNativeInvocationTransport(
+                new nint(0x1234),
+                tablePointer);
+            var bridge = new NativeUnrealInvocationBridge(transport);
+            string assemblyPath = typeof(AbiV4StatefulEventScript).Assembly.Location;
+            string typeName = typeof(AbiV4StatefulEventScript).FullName!;
+            using var instance = UnrealWorldManagedEntryPoint.ManagedScriptInstance.Create(
+                worldId: 992,
+                instanceId: 7,
+                bridge,
+                UnrealObjectHandle.Create(1, 992),
+                UnrealObjectHandle.Create(2, 992),
+                assemblyPath,
+                typeName);
+
+            instance.Start();
+            EventRegistration first = Assert.Single(registrations);
+            Dispatch(first);
+            instance.Tick(0.016f);
+            Assert.Equal(1, _eventStateValue);
+
+            Assert.Equal(2, instance.Reload(assemblyPath, typeName));
+            Assert.True(first.Unsubscribed);
+            EventRegistration second = Assert.Single(
+                registrations,
+                registration => registration.SubscriptionId != first.SubscriptionId);
+            Dispatch(second);
+            instance.Tick(0.016f);
+            Assert.Equal(2, _eventStateValue);
+        }
+        finally
+        {
+            if (tablePointer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(tablePointer);
+            }
+            if (eventTablePointer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(eventTablePointer);
+            }
+            if (asyncTablePointer != nint.Zero)
+            {
+                Marshal.FreeHGlobal(asyncTablePointer);
+            }
+            GC.KeepAlive(subscribe);
+            GC.KeepAlive(unsubscribe);
+        }
+    }
+
     private static unsafe string? ReadLastError(
         delegate* unmanaged[Cdecl]<ulong, nint, int, int> getLastError,
         ulong worldId)
@@ -427,6 +581,30 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
 
         public void OnStop()
         {
+        }
+    }
+
+    [ScriptAsset("Tests/StatefulEvent")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = "/Game/Tests/BP_StatefulEvent.BP_StatefulEvent_C")]
+    private sealed class AbiV4StatefulEventScript : UnrealActorScript
+    {
+        [Expose]
+        public int Count { get; set; }
+
+        private IUnrealEventSubscription? _subscription;
+
+        protected override void OnBeginPlay()
+        {
+            var wrapper = new AbiV4EventWrapper(TargetHandle, Bridge);
+            _subscription = wrapper.SubscribeChanged(() => ++Count);
+        }
+
+        protected override void OnEndPlay()
+        {
+            _subscription?.Dispose();
+            _subscription = null;
         }
     }
 }

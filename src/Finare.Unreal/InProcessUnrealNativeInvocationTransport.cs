@@ -238,6 +238,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
       IUnrealGeneratedDataTransport,
       IUnrealGameplayTransportProfiler,
       IUnrealAsyncServiceTransport,
+      IUnrealOwnedEventBridge,
       IDisposable
 {
     private const uint MinimumAbiVersion = 1;
@@ -736,6 +737,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             table.ReleaseContext);
         LoadNativeObjects(tablePointer, table);
         LoadCallbacks(tablePointer, table);
+        LoadObjectReferences(tablePointer, table);
         if (retainContext(_context) == 0)
         {
             throw new InvalidOperationException(
@@ -1157,6 +1159,20 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         UnrealObjectHandle source,
         UnrealEventDescriptor descriptor,
         Delegate handler)
+        => SubscribeCore(source, descriptor, handler, owner: null);
+
+    IUnrealEventSubscription IUnrealOwnedEventBridge.Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler,
+        UnrealObjectScript owner)
+        => SubscribeCore(source, descriptor, handler, owner);
+
+    private IUnrealEventSubscription SubscribeCore(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler,
+        UnrealObjectScript? owner)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(handler);
@@ -1184,7 +1200,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     "The native Unreal transport does not advertise reflected event ABI v4.");
             }
 
-            var box = new EventCallbackBox(this, descriptor, handler);
+            var box = new EventCallbackBox(this, descriptor, handler, owner);
             GCHandle callbackHandle = GCHandle.Alloc(box);
             try
             {
@@ -1564,6 +1580,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
             }
             CloseCallbackScopes();
             CloseNativeObjectScopes();
+            CloseObjectReferenceScopes();
             if (_unsubscribeEvent is not null)
             {
                 foreach (NativeEventSubscription subscription in _eventSubscriptions.ToArray())
@@ -1735,18 +1752,42 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                         $"Native Unreal event parameter '{box.Descriptor.Parameters[index].Name}' could not be decoded.");
                 }
             }
-            box.Handler.DynamicInvoke(arguments);
+            UnrealObjectScript? objectScript = box.OwnerScript ??
+                box.Handler.Target as UnrealObjectScript;
+            bool beganGeneratedCall = false;
+            try
+            {
+                if (objectScript is not null)
+                {
+                    objectScript.BeginGeneratedFunctionCall();
+                    beganGeneratedCall = true;
+                }
+                box.Handler.DynamicInvoke(arguments);
+            }
+            catch (Exception exception)
+            {
+                RecordDispatchException(box, exception);
+            }
+            finally
+            {
+                if (beganGeneratedCall)
+                {
+                    try
+                    {
+                        objectScript!.EndGeneratedFunctionCall();
+                    }
+                    catch (Exception exception)
+                    {
+                        RecordDispatchException(box, exception);
+                    }
+                }
+            }
         }
         catch (Exception exception)
         {
             if (box is not null)
             {
-                Volatile.Write(
-                    ref box.LastDispatchException,
-                    exception is System.Reflection.TargetInvocationException invocation &&
-                    invocation.InnerException is not null
-                        ? invocation.InnerException
-                        : exception);
+                RecordDispatchException(box, exception);
             }
         }
         finally
@@ -1760,6 +1801,15 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                     ref box.Owner._profileEventTicks);
             }
         }
+    }
+
+    private static void RecordDispatchException(EventCallbackBox box, Exception exception)
+    {
+        Exception normalized = exception is System.Reflection.TargetInvocationException invocation &&
+            invocation.InnerException is not null
+                ? invocation.InnerException
+                : exception;
+        Volatile.Write(ref box.LastDispatchException, normalized);
     }
 
     private static UnrealInvocationResponse Capture(Action<nint> invoke)
@@ -2149,13 +2199,16 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
     private sealed class EventCallbackBox(
         InProcessUnrealNativeInvocationTransport owner,
         UnrealEventDescriptor descriptor,
-        Delegate handler)
+        Delegate handler,
+        UnrealObjectScript? ownerScript)
     {
         public InProcessUnrealNativeInvocationTransport Owner { get; } = owner;
 
         public UnrealEventDescriptor Descriptor { get; } = descriptor;
 
         public Delegate Handler { get; } = handler;
+
+        public UnrealObjectScript? OwnerScript { get; } = ownerScript;
 
         public Exception? LastDispatchException;
     }

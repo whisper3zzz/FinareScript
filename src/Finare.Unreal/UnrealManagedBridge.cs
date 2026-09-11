@@ -262,6 +262,20 @@ public interface IUnrealEventBridge
         Delegate handler);
 }
 
+/// <summary>
+/// Internal generation-aware event route. The owner is carried separately
+/// from the delegate because generated scripts may subscribe with a closure;
+/// relying on Delegate.Target would then lose the state synchronization owner.
+/// </summary>
+internal interface IUnrealOwnedEventBridge
+{
+    IUnrealEventSubscription Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler,
+        UnrealObjectScript owner);
+}
+
 public interface IUnrealEventSubscription : IDisposable
 {
     ulong SubscriptionId { get; }

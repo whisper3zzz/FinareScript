@@ -32,6 +32,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
     private bool _running;
     private bool _initializing;
     private bool _destroying;
+    private int _generatedFunctionCallDepth;
 
     public UnrealScriptContext Context { get; private set; }
 
@@ -66,6 +67,8 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             throw new ArgumentException("A live World-owned Unreal script context is required.", nameof(context));
         }
 
+        UnrealGenerationInvocationBridge? generationBridge =
+            context.Bridge as UnrealGenerationInvocationBridge;
         Context = context;
         _lifetime = new CancellationTokenSource();
         _asyncScope = new UnrealAsyncScope(
@@ -75,26 +78,54 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             _lifetime.Token);
         _running = true;
         _initializing = true;
+        _generatedFunctionCallDepth = 0;
         _parentContracts = new Dictionary<string, UnrealBlueprintOverrideInvocationContract>(
             StringComparer.Ordinal);
         try
         {
+            generationBridge?.BindScript(this);
             _stateSession = UnrealScriptStateSynchronizer.Open(this, context);
-            _stateSession?.Hydrate();
-            OnInitialized();
-            _stateSession?.Flush();
+            BeginManagedStateBoundary();
+            bool initialized = false;
+            try
+            {
+                OnInitialized();
+                initialized = true;
+            }
+            finally
+            {
+                EndManagedStateBoundary(initialized);
+            }
             _initializing = false;
         }
         catch
         {
-            _lifetime.Cancel();
-            _asyncScope.Dispose();
+            generationBridge?.UnbindScript(this);
+            try
+            {
+                _lifetime?.Cancel();
+            }
+            catch
+            {
+                // Preserve the initialization failure while still releasing
+                // every generation-owned resource below.
+            }
+            try
+            {
+                _asyncScope?.Dispose();
+            }
+            catch
+            {
+                // Preserve the initialization failure while still releasing
+                // every generation-owned resource below.
+            }
             _asyncScope = null;
             _stateSession = null;
             _parentContracts = null;
-            _lifetime.Dispose();
+            _lifetime?.Dispose();
             _lifetime = null;
             _running = false;
+            _generatedFunctionCallDepth = 0;
             _initializing = false;
             Context = default;
             throw;
@@ -107,10 +138,21 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
-        _asyncScope!.Advance(deltaSeconds);
-        _stateSession?.Hydrate();
-        OnUpdate(deltaSeconds);
-        _stateSession?.Flush();
+        // Async service V5 may complete a zero-delay request synchronously.
+        // Enter the state boundary before Advance so its continuation observes
+        // the current reflected state and its writes are retained by this tick.
+        BeginManagedStateBoundary();
+        bool tickSucceeded = false;
+        try
+        {
+            _asyncScope!.Advance(deltaSeconds);
+            OnUpdate(deltaSeconds);
+            tickSucceeded = true;
+        }
+        finally
+        {
+            EndManagedStateBoundary(tickSucceeded);
+        }
     }
 
     void IUnrealManagedEventSink.OnUnrealEvent(UnrealScriptEvent scriptEvent)
@@ -124,9 +166,17 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new ArgumentException("A managed Unreal event contains an invalid object handle.", nameof(scriptEvent));
         }
-        _stateSession?.Hydrate();
-        OnUnrealEvent(scriptEvent);
-        _stateSession?.Flush();
+        BeginManagedStateBoundary();
+        bool eventSucceeded = false;
+        try
+        {
+            OnUnrealEvent(scriptEvent);
+            eventSucceeded = true;
+        }
+        finally
+        {
+            EndManagedStateBoundary(eventSucceeded);
+        }
     }
 
     internal void BeginGeneratedFunctionCall()
@@ -135,7 +185,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
-        _stateSession?.Hydrate();
+        BeginManagedStateBoundary();
     }
 
     internal void EndGeneratedFunctionCall()
@@ -144,7 +194,15 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
-        _stateSession?.Flush();
+        if (_generatedFunctionCallDepth <= 0)
+        {
+            throw new InvalidOperationException("No generated function call is active.");
+        }
+        _generatedFunctionCallDepth--;
+        if (_generatedFunctionCallDepth == 0)
+        {
+            _stateSession?.Flush();
+        }
     }
 
     void IUnrealManagedScript.OnStop()
@@ -156,17 +214,73 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
 
         CancellationTokenSource lifetime = _lifetime!;
         _destroying = true;
-        lifetime.Cancel();
-        _asyncScope!.Dispose();
+        UnrealGenerationInvocationBridge? generationBridge =
+            Context.Bridge as UnrealGenerationInvocationBridge;
+        bool stateBoundaryEntered = false;
+        bool cancellationAttempted = false;
+        bool bodySucceeded = false;
+        ExceptionDispatchInfo? teardownFailure = null;
         try
         {
-            _stateSession?.Hydrate();
-            OnDestroyed();
-            _stateSession?.Flush();
+            BeginManagedStateBoundary();
+            stateBoundaryEntered = true;
+            try
+            {
+                cancellationAttempted = true;
+                lifetime.Cancel();
+                _asyncScope!.Dispose();
+                OnDestroyed();
+                bodySucceeded = true;
+            }
+            catch (Exception exception)
+            {
+                teardownFailure = ExceptionDispatchInfo.Capture(exception);
+            }
+        }
+        catch (Exception exception)
+        {
+            teardownFailure = ExceptionDispatchInfo.Capture(exception);
         }
         finally
         {
+            if (stateBoundaryEntered)
+            {
+                try
+                {
+                    EndManagedStateBoundary(bodySucceeded);
+                }
+                catch (Exception exception)
+                {
+                    teardownFailure ??= ExceptionDispatchInfo.Capture(exception);
+                }
+                finally
+                {
+                    stateBoundaryEntered = false;
+                }
+            }
+            if (!cancellationAttempted)
+            {
+                try
+                {
+                    cancellationAttempted = true;
+                    lifetime.Cancel();
+                }
+                catch (Exception exception)
+                {
+                    teardownFailure ??= ExceptionDispatchInfo.Capture(exception);
+                }
+            }
+            try
+            {
+                _asyncScope?.Dispose();
+            }
+            catch (Exception exception)
+            {
+                teardownFailure ??= ExceptionDispatchInfo.Capture(exception);
+            }
+            generationBridge?.UnbindScript(this);
             _running = false;
+            _generatedFunctionCallDepth = 0;
             _asyncScope = null;
             _stateSession = null;
             _parentContracts = null;
@@ -175,6 +289,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             _destroying = false;
             lifetime.Dispose();
         }
+        teardownFailure?.Throw();
     }
 
     protected virtual void OnInitialized()
@@ -391,6 +506,13 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         _stateSession?.Flush();
         UnrealOutputInvocationResult result = default!;
         ExceptionDispatchInfo? invocationFailure = null;
+        int suspendedDepth = _generatedFunctionCallDepth;
+        // The native parent body may synchronously re-enter this managed
+        // script. The outer state was flushed above, so let that re-entry open
+        // a fresh boundary and hydrate the parent's native writes before it
+        // changes state. Restore the caller's nesting depth after native
+        // control returns so the outer boundary still owns the final flush.
+        _generatedFunctionCallDepth = 0;
         try
         {
             result = parentBridge.InvokeParentWithOutputs(
@@ -403,6 +525,10 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         catch (Exception exception)
         {
             invocationFailure = ExceptionDispatchInfo.Capture(exception);
+        }
+        finally
+        {
+            _generatedFunctionCallDepth = suspendedDepth;
         }
 
         try
@@ -503,6 +629,28 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
     private UnrealScriptContext RequireRunning() => _running
         ? Context
         : throw new InvalidOperationException("The Unreal script is not running.");
+
+    private void BeginManagedStateBoundary()
+    {
+        if (_generatedFunctionCallDepth == 0)
+        {
+            _stateSession?.Hydrate();
+        }
+        _generatedFunctionCallDepth++;
+    }
+
+    private void EndManagedStateBoundary(bool flush)
+    {
+        if (_generatedFunctionCallDepth <= 0)
+        {
+            throw new InvalidOperationException("No managed state boundary is active.");
+        }
+        _generatedFunctionCallDepth--;
+        if (flush && _generatedFunctionCallDepth == 0)
+        {
+            _stateSession?.Flush();
+        }
+    }
 
 }
 

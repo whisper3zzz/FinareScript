@@ -9,6 +9,7 @@ internal sealed class UnrealGenerationInvocationBridge :
     IUnrealInvocationBridge,
     IUnrealNativeBindingBridge,
     IUnrealNativeObjectProvider,
+    IUnrealOwnedObjectReferenceScopeFactory,
     IUnrealCallbackProvider,
     IUnrealFastInvocationBridge,
     IUnrealTypedInvocationBridge,
@@ -25,7 +26,9 @@ internal sealed class UnrealGenerationInvocationBridge :
     private bool _disposed;
     private readonly object _nativeObjectGate = new();
     private UnrealNativeObjectScope? _nativeObjects;
+    private UnrealObjectReferenceScope? _objectReferences;
     private UnrealCallbackScope? _callbacks;
+    private UnrealObjectScript? _ownerScript;
 
     public UnrealCallbackScope Callbacks
     {
@@ -55,8 +58,42 @@ internal sealed class UnrealGenerationInvocationBridge :
         }
     }
 
+    UnrealObjectReferenceScope IUnrealObjectReferenceScopeFactory.GetObjectReferenceScope()
+    {
+        lock (_nativeObjectGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _objectReferences ??= LiveInner is IUnrealObjectReferenceScopeFactory factory
+                ? factory.GetObjectReferenceScope()
+                : throw new NotSupportedException(
+                    "The World bridge does not support generation-owned UObject references.");
+        }
+    }
+
     public UnrealGenerationInvocationBridge(IUnrealInvocationBridge inner) =>
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+
+    internal void BindScript(UnrealObjectScript script)
+    {
+        lock (_nativeObjectGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_ownerScript is not null && !ReferenceEquals(_ownerScript, script))
+            {
+                throw new InvalidOperationException(
+                    "A generation bridge cannot be shared by multiple managed scripts.");
+            }
+            _ownerScript = script;
+        }
+    }
+
+    internal void UnbindScript(UnrealObjectScript script)
+    {
+        lock (_nativeObjectGate)
+        {
+            if (ReferenceEquals(_ownerScript, script)) _ownerScript = null;
+        }
+    }
 
     public bool SupportsFastInvocation =>
         !_disposed && _inner is IUnrealFastInvocationBridge bridge &&
@@ -171,8 +208,10 @@ internal sealed class UnrealGenerationInvocationBridge :
             throw new NotSupportedException(
                 "The World bridge does not support reflected delegate subscriptions.");
         }
-        IUnrealEventSubscription subscription =
-            eventBridge.Subscribe(source, descriptor, handler);
+        IUnrealEventSubscription subscription = _inner is IUnrealOwnedEventBridge owned &&
+            _ownerScript is { } owner
+            ? owned.Subscribe(source, descriptor, handler, owner)
+            : eventBridge.Subscribe(source, descriptor, handler);
         _subscriptions.Add(subscription);
         return subscription;
     }
@@ -240,6 +279,8 @@ internal sealed class UnrealGenerationInvocationBridge :
             // A worker-thread native release is rejected and must remain retryable.
             _callbacks?.Dispose();
             _nativeObjects?.Dispose();
+            _objectReferences?.Dispose();
+            _ownerScript = null;
             _disposed = true;
         }
         ClearSubscriptions();

@@ -157,6 +157,48 @@ public sealed class UnrealBlueprintParentInvocationTests
     }
 
     [Fact]
+    public void ParentInvocationReentryHydratesParentStateAndReturnsNestedWrites()
+    {
+        var bridge = new StateParentBridge();
+        UnrealObjectHandle host = UnrealObjectHandle.Create(3, 8);
+        UnrealObjectHandle target = UnrealObjectHandle.Create(4, 8);
+        bridge.Set(target, StateParentCallScript.StatePath + ":Value", 4);
+        var script = new StateParentCallScript();
+        bridge.ParentReentry = () =>
+        {
+            script.BeginGeneratedFunctionCall();
+            try
+            {
+                script.ReenterFromNative();
+            }
+            finally
+            {
+                script.EndGeneratedFunctionCall();
+            }
+        };
+        IUnrealManagedScript lifecycle = script;
+        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 49, 1));
+
+        bridge.Set(target, StateParentCallScript.StatePath + ":Value", 8);
+        script.BeginGeneratedFunctionCall();
+        try
+        {
+            Assert.Equal(10, script.RunEvaluate(5));
+        }
+        finally
+        {
+            script.EndGeneratedFunctionCall();
+        }
+
+        Assert.Equal(20, script.Value);
+        Assert.Equal(20, bridge.Get<int>(target, StateParentCallScript.StatePath + ":Value"));
+        Assert.Equal(13, bridge.ParentObservedValue);
+        Assert.Equal(new object[] { 4, 13, 19, 20 },
+            bridge.Writes.Select(write => write.Value).ToArray());
+        lifecycle.OnStop();
+    }
+
+    [Fact]
     public void ParentFailureHydratesNativeStateAndPreservesTheOriginalException()
     {
         var bridge = new StateParentBridge
@@ -477,6 +519,8 @@ public sealed class StateParentCallScript : UnrealActorScript
     }
 
     public int RunEvaluate(int input) => Evaluate(input);
+
+    public void ReenterFromNative() => ++Value;
 }
 
 internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParentInvocationBridge
@@ -498,6 +542,8 @@ internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParent
     public bool FailNextHydrateAfterParent { get; set; }
 
     public int ParentObservedValue { get; private set; }
+
+    public Action? ParentReentry { get; set; }
 
     private bool _failNextRead;
 
@@ -545,6 +591,7 @@ internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParent
         var stateKey = (UnrealObjectHandle.Create(4, 8), StateParentCallScript.StatePath + ":Value");
         ParentObservedValue = Get<int>(stateKey.Item1, stateKey.Item2);
         _values[stateKey] = ParentStateValue;
+        ParentReentry?.Invoke();
         if (FailNextHydrateAfterParent)
         {
             _failNextRead = true;

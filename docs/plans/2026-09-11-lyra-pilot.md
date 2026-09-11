@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: migrated damage/heal passed; reload presentation and retained event references remain in progress
+Status: migrated damage/heal passed; event state and reload presentation in progress; Editor validation only
 
 ## Outcome and scope
 
@@ -10,6 +10,14 @@ project is the reference and is not an implementation checkout. Source, Config,
 Content and plugin content were copied; generated caches and native binaries
 were excluded. The available engine is UE 5.8.1, matching Finare's declared
 Win64 target.
+
+The user subsequently limited this iteration to Editor validation. Do not start
+additional Cook, game packaging or packaged-runtime checks. The first Lyra
+Development Build/Cook/Stage/Pak/Archive completed before that instruction and
+its report is retained at
+`artifacts/finare-usability/lyra-cooked-preparation-c086dda/package-report.json`.
+It uses SDK `c086dda`, before the lifecycle fixes, and explicitly records
+`runtimeVerified: false`. Final packaged gameplay acceptance is deferred.
 
 The selected first slice is health changes driving a HUD through Lyra's actual
 GAS-backed health component. Use the shipped SDK's public generated calls,
@@ -46,13 +54,37 @@ establish equivalent behavior for this widget.
 Compare the original and migrated health/UI observations, including a real
 damage/heal transition, reload and teardown. Exercise asset/Soft Reference
 loading and failure cleanup in the same installed workflow. Reproduce the
-documented setup on a second independent checkout and verify the Win64 cooked
-result uses its own staged chunk and host. Lyra does not provide a Puerts
+documented setup on a second independent checkout in Editor. Verification that
+the Win64 cooked result uses its own staged chunk and host is deferred under
+the current Editor-only scope. Lyra does not provide a Puerts
 baseline; this pilot must not advertise a matched Puerts performance result.
 
 ## Relevant verification
 
-The current SDK checkpoint is `f7ebdea`. Its source dependency scanner ignores
+Native scoped UObject handle retention is committed as `f48900d`. Two actual
+ObjectRegistry Automation tests pass in `object-reference-native-final2.log`,
+including multiple leases after real UObject GC and registry invalidation.
+The managed reference counterpart passes 94 focused tests in
+`object-reference-focused-final2.log`: generation scopes are independent even
+when they share a World bridge, borrowed event handles require explicit leases,
+and disposal can be retried after a rejected thread access. This code has not
+yet been installed into Lyra. The preceding `object-reference-native-final.log`
+retains a real failed closed-scope status assertion; its Editor exit code of
+zero was not accepted as a successful test result.
+
+Reflected event handlers also need the Script Class state synchronization
+boundary. Without it, the next Tick hydrates over `[Expose]` changes made by a
+callback. Reload recovery must compare persisted native object identities;
+private fields on a newly created managed generation cannot identify a prior
+Pawn or Widget. The state boundary now includes nested lifecycle/generated/event
+entries, async continuations and native parent reentry, while failed lifecycle
+bodies retain their previous no-flush behavior. The combined managed suite passes
+134 tests, with 13 additional native-bridge contract tests. The sample persists
+Pawn/Widget identities and restores unchanged bindings without a spawn replay.
+Installation of these fixes and the complete Editor gameplay sequence remain
+in progress.
+
+The earlier SDK checkpoint `f7ebdea` fixes source dependency scanning: it ignores
 the inherited framework `UnrealObject.Handle` helper while retaining reflected
 members named Handle and conditional-access calls. Thirteen focused tests pass.
 Actual installed API analysis has 15 requests, three selected additions, twelve

@@ -402,6 +402,7 @@ public sealed class NativeUnrealInvocationBridgeTests
         Assert.Equal(3, (byte)UnrealInvocationValueKind.String);
         Assert.Equal(20, (byte)UnrealInvocationValueKind.Transform);
         Assert.Equal(6, (byte)UnrealObjectHandleError.StaleHandle);
+        Assert.Equal(7, (byte)UnrealObjectHandleError.InvalidScope);
         Assert.Equal(1, (byte)UnrealInvocationError.ObjectHandleFailure);
         Assert.Equal(11, (byte)UnrealInvocationError.ValueTypeMismatch);
         Assert.Equal(13, (byte)UnrealInvocationError.UnsupportedParameter);

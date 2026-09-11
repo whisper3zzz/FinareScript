@@ -21,6 +21,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
     private const string VectorPath = TypePath + ":VectorValue";
     private const string FloatPath = TypePath + ":FloatValue";
     private const string DoublePath = TypePath + ":DoubleValue";
+    private const string EventStateCountPath = "/Game/Tests/BP_StatefulEvent.BP_StatefulEvent_C:Count";
 
     private readonly UnrealNativeReadPropertyV1 _read;
     private readonly UnrealNativeWritePropertyV1 _write;
@@ -42,6 +43,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
     private int _fastCalls;
     private int _callFrameCalls;
     private int _fixedCalls;
+    private int _eventStateValue;
 
     public InProcessUnrealNativeInvocationTransportTests()
     {
@@ -604,6 +606,12 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
                 int32Value: BitConverter.SingleToInt32Bits(_floatValue));
             return;
         }
+        if (memberPath == EventStateCountPath)
+        {
+            InvokeCallback(callback, userData, true, UnrealInvocationValueKind.Int32,
+                int32Value: _eventStateValue);
+            return;
+        }
         if (memberPath == DoublePath)
         {
             var payload = new byte[Math.Max(sizeof(double), _doublePayloadLength)];
@@ -678,6 +686,13 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
             return;
         }
         string memberPath = ReadUtf8(path, pathLength);
+        if (memberPath == EventStateCountPath &&
+            value.Kind == (byte)UnrealInvocationValueKind.Int32)
+        {
+            _eventStateValue = value.Int32Value;
+            InvokeCallback(callback, userData, success: true);
+            return;
+        }
         if (memberPath == FloatPath && value.Kind == (byte)UnrealInvocationValueKind.Float32)
         {
             _floatValue = BitConverter.Int32BitsToSingle(value.Int32Value);

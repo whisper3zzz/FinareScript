@@ -46,6 +46,7 @@ public enum UnrealObjectHandleError : byte
     WorldMismatch = 4,
     InvalidHandle = 5,
     StaleHandle = 6,
+    InvalidScope = 7,
 }
 
 public enum UnrealInvocationError : byte
@@ -360,6 +361,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealNativeBindingBridge,
       IUnrealNativeObjectProvider,
       IUnrealNativeObjectScopeFactory,
+      IUnrealObjectReferenceScopeFactory,
       IUnrealCallbackProvider,
       IUnrealCallbackScopeFactory,
       IUnrealFastInvocationBridge,
@@ -367,6 +369,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealOutputInvocationBridge,
       IUnrealParentInvocationBridge,
       IUnrealEventBridge,
+      IUnrealOwnedEventBridge,
       IUnrealInvocationMetrics,
       IUnrealInvocationProfiler,
       IUnrealWorldDataPlaneProvider,
@@ -435,6 +438,20 @@ public sealed class NativeUnrealInvocationBridge
         _transport is IUnrealNativeObjectTransport native
             ? new UnrealNativeObjectScope(native)
             : throw new NotSupportedException("The installed transport does not support native objects.");
+
+    UnrealObjectReferenceScope IUnrealObjectReferenceScopeFactory.GetObjectReferenceScope()
+    {
+        lock (_nativeObjectGate)
+        {
+            // A World bridge is a scope factory, not the owner of a generation's
+            // lease scope. Every generation must receive a distinct native scope;
+            // otherwise disposing one generation retires leases owned by another.
+            return _transport is IUnrealObjectReferenceTransport references
+                ? new UnrealObjectReferenceScope(references)
+                : throw new NotSupportedException(
+                    "The installed transport does not support UObject reference leases.");
+        }
+    }
 
     public void RequireNativeBindings(IReadOnlyList<string> memberPaths)
     {
@@ -525,6 +542,23 @@ public sealed class NativeUnrealInvocationBridge
                 "The native Unreal transport does not support reflected delegate subscriptions.");
         }
         return eventTransport.Subscribe(source, descriptor, handler);
+    }
+
+    IUnrealEventSubscription IUnrealOwnedEventBridge.Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler,
+        UnrealObjectScript owner)
+    {
+        if (_transport is not IUnrealNativeEventTransport eventTransport ||
+            !eventTransport.SupportsEvents)
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not support reflected delegate subscriptions.");
+        }
+        return _transport is IUnrealOwnedEventBridge owned
+            ? owned.Subscribe(source, descriptor, handler, owner)
+            : eventTransport.Subscribe(source, descriptor, handler);
     }
 
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)

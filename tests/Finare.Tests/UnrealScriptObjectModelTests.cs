@@ -69,6 +69,29 @@ public sealed class UnrealScriptObjectModelTests
     }
 
     [Fact]
+    public void FailedBeginPlayDoesNotFlushStateAndPreservesInitializationFailureDuringCleanup()
+    {
+        var script = new FailingStartStateScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(23, 43);
+        var bridge = new StateBridge();
+        bridge.Set(target, FailingStartStateScript.StatePath + ":Count", 5);
+
+        ExpectedFailureException failure = Assert.Throws<ExpectedFailureException>(() =>
+            lifecycle.OnStart(new UnrealScriptContext(
+                bridge,
+                UnrealObjectHandle.Create(24, 44),
+                target,
+                94,
+                1)));
+
+        Assert.NotNull(failure);
+        Assert.Equal(5, bridge.Get<int>(target, FailingStartStateScript.StatePath + ":Count"));
+        Assert.False(script.IsRunning);
+        Assert.Throws<InvalidOperationException>(() => _ = script.Lifetime);
+    }
+
+    [Fact]
     public void ActorComponentScriptMapsWorldOwnedContextToComponentLifecycle()
     {
         var script = new ProbeActorComponentScript();
@@ -391,6 +414,134 @@ public sealed class UnrealScriptObjectModelTests
         Assert.False(script.IsRunning);
     }
 
+    [Fact]
+    public void NestedLifecycleEventPreservesOuterUnflushedState()
+    {
+        var script = new NestedBoundaryScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(17, 37);
+        var bridge = new StateBridge();
+        bridge.Set(target, NestedBoundaryScript.StatePath + ":Count", 3);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(16, 36),
+            target,
+            90,
+            1));
+        bridge.Writes.Clear();
+
+        lifecycle.OnTick(0.1f);
+
+        Assert.Equal(114, script.Count);
+        Assert.Equal(114, bridge.Get<int>(target, NestedBoundaryScript.StatePath + ":Count"));
+        Assert.Single(bridge.Writes);
+        lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void LifecycleBoundaryRestoresDepthAfterFailure()
+    {
+        var script = new ThrowOnceBoundaryScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(18, 38);
+        var bridge = new StateBridge();
+        bridge.Set(target, ThrowOnceBoundaryScript.StatePath + ":Count", 5);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(19, 39),
+            target,
+            91,
+            1));
+
+        Assert.Throws<ExpectedFailureException>(() => lifecycle.OnTick(0.1f));
+        Assert.Equal(5, bridge.Get<int>(target, ThrowOnceBoundaryScript.StatePath + ":Count"));
+        lifecycle.OnTick(0.1f);
+
+        Assert.Equal(7, script.Count);
+        Assert.Equal(7, bridge.Get<int>(target, ThrowOnceBoundaryScript.StatePath + ":Count"));
+        lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void FailedManagedEventDoesNotFlushState()
+    {
+        var script = new ThrowOnceEventScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(25, 45);
+        var bridge = new StateBridge();
+        bridge.Set(target, ThrowOnceEventScript.StatePath + ":Count", 5);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(26, 46),
+            target,
+            95,
+            1));
+
+        UnrealScriptEvent scriptEvent = new(
+            UnrealScriptEventKind.ActorBeginOverlap,
+            target,
+            default);
+        Assert.Throws<ExpectedFailureException>(() =>
+            ((IUnrealManagedEventSink)script).OnUnrealEvent(scriptEvent));
+        Assert.Equal(5, bridge.Get<int>(target, ThrowOnceEventScript.StatePath + ":Count"));
+
+        ((IUnrealManagedEventSink)script).OnUnrealEvent(scriptEvent);
+        Assert.Equal(6, script.Count);
+        Assert.Equal(6, bridge.Get<int>(target, ThrowOnceEventScript.StatePath + ":Count"));
+        lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void NextTickContinuationHydratesBeforeAsyncAdvanceAndFlushesItsState()
+    {
+        var script = new NextTickStateScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(20, 40);
+        var bridge = new StateBridge();
+        bridge.Set(target, NextTickStateScript.StatePath + ":Count", 1);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(21, 41),
+            target,
+            92,
+            1));
+        bridge.Set(target, NextTickStateScript.StatePath + ":Count", 40);
+
+        lifecycle.OnTick(0.1f);
+
+        Assert.True(script.HasCompletedContinuation());
+        Assert.Equal(47, script.Count);
+        Assert.Equal(47, bridge.Get<int>(target, NextTickStateScript.StatePath + ":Count"));
+        lifecycle.OnStop();
+    }
+
+    [Fact]
+    public void StopCancellationContinuationRunsInsideStateBoundary()
+    {
+        var script = new StopContinuationStateScript();
+        IUnrealManagedScript lifecycle = script;
+        UnrealObjectHandle target = UnrealObjectHandle.Create(22, 42);
+        var bridge = new StateBridge();
+        bridge.Set(target, StopContinuationStateScript.StatePath + ":Count", 1);
+
+        lifecycle.OnStart(new UnrealScriptContext(
+            bridge,
+            UnrealObjectHandle.Create(23, 43),
+            target,
+            93,
+            1));
+        bridge.Set(target, StopContinuationStateScript.StatePath + ":Count", 40);
+
+        lifecycle.OnStop();
+
+        Assert.Equal(48, script.GetLastStoppedCount());
+        Assert.Equal(48, bridge.Get<int>(target, StopContinuationStateScript.StatePath + ":Count"));
+    }
+
     private const string StateActorPath = "/Game/Tests/BP_StateActor.BP_StateActor_C";
     private const string StateComponentPath = "/Game/Tests/BP_StateComponent.BP_StateComponent_C";
     private const string InheritedComponentPath = "/Game/Tests/BP_InheritedComponent.BP_InheritedComponent_C";
@@ -401,6 +552,159 @@ public sealed class UnrealScriptObjectModelTests
     private const string StableRpcPath = "/Game/Tests/BP_StableRpc.BP_StableRpc_C";
     private const string StableInheritedLeafMemberPrefix = "finare-class/us_abcdefabcdefabcdefabcdefabcdefab";
     private const string StableRpcMemberPrefix = "finare-class/us_1234567890abcdef1234567890abcdef";
+
+    [ScriptAsset("Tests/NestedBoundary")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = NestedBoundaryScript.StatePath)]
+    private sealed class NestedBoundaryScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_NestedBoundary.BP_NestedBoundary_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        protected override void OnTick(float deltaSeconds)
+        {
+            Count += 10;
+            ((IUnrealManagedEventSink)this).OnUnrealEvent(new UnrealScriptEvent(
+                UnrealScriptEventKind.ActorBeginOverlap,
+                TargetHandle,
+                default));
+            Count += 100;
+        }
+
+        protected override void OnActorBeginOverlap(UnrealObjectHandle otherActor) => ++Count;
+    }
+
+    [ScriptAsset("Tests/FailingStartState")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = FailingStartStateScript.StatePath)]
+    private sealed class FailingStartStateScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_FailingStartState.BP_FailingStartState_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        protected override void OnBeginPlay()
+        {
+            Lifetime.Register(static () => throw new InvalidOperationException(
+                "start cleanup callback failed"));
+            ++Count;
+            throw new ExpectedFailureException();
+        }
+    }
+
+    [ScriptAsset("Tests/ThrowOnceBoundary")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = ThrowOnceBoundaryScript.StatePath)]
+    private sealed class ThrowOnceBoundaryScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_ThrowOnceBoundary.BP_ThrowOnceBoundary_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        private bool _throw = true;
+
+        protected override void OnTick(float deltaSeconds)
+        {
+            ++Count;
+            if (_throw)
+            {
+                _throw = false;
+                throw new ExpectedFailureException();
+            }
+            ++Count;
+        }
+    }
+
+    [ScriptAsset("Tests/ThrowOnceEvent")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = ThrowOnceEventScript.StatePath)]
+    private sealed class ThrowOnceEventScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_ThrowOnceEvent.BP_ThrowOnceEvent_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        private bool _throw = true;
+
+        protected override void OnActorBeginOverlap(UnrealObjectHandle otherActor)
+        {
+            ++Count;
+            if (_throw)
+            {
+                _throw = false;
+                throw new ExpectedFailureException();
+            }
+        }
+    }
+
+    [ScriptAsset("Tests/NextTickState")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = NextTickStateScript.StatePath)]
+    private sealed class NextTickStateScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_NextTickState.BP_NextTickState_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        private Task? _continuation;
+
+        protected override void OnBeginPlay() => _continuation = AddAfterNextTickAsync();
+
+        public bool HasCompletedContinuation() => _continuation?.IsCompletedSuccessfully == true;
+
+        private async Task AddAfterNextTickAsync()
+        {
+            await NextTickAsync();
+            Count += 7;
+        }
+    }
+
+    [ScriptAsset("Tests/StopContinuationState")]
+    [UnrealScriptClass(
+        UnrealScriptClassKind.Actor,
+        GeneratedClassPath = StopContinuationStateScript.StatePath)]
+    private sealed class StopContinuationStateScript : UnrealActorScript
+    {
+        public const string StatePath = "/Game/Tests/BP_StopContinuationState.BP_StopContinuationState_C";
+
+        [Expose]
+        public int Count { get; set; }
+
+        private int _lastStoppedCount;
+
+        public int GetLastStoppedCount() => _lastStoppedCount;
+
+        protected override void OnBeginPlay() => _ = ObserveCancellationAsync();
+
+        private async Task ObserveCancellationAsync()
+        {
+            try
+            {
+                await DelayAsync(10.0f);
+            }
+            catch (OperationCanceledException)
+            {
+                Count += 7;
+            }
+        }
+
+        protected override void OnEndPlay()
+        {
+            ++Count;
+            _lastStoppedCount = Count;
+        }
+    }
 
     private sealed class ProbeActorScript : UnrealActorScript
     {
