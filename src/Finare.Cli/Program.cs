@@ -2503,6 +2503,7 @@ internal static class Program
         string historyPath = options.HistoryPath ?? options.InputPath + ".ushistory.json";
         CSharpCompilationRequest request;
         Dictionary<string, string> sourceFiles;
+        IReadOnlyDictionary<string, string> identityFiles;
         IReadOnlySet<string>? readOnlySources = null;
         if (options.ProjectPath is null)
         {
@@ -2533,6 +2534,10 @@ internal static class Program
             foreach (string path in additionalSourcePaths.Where(path =>
                 !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase)))
                 sourceFiles.Add(GetLogicalInputPath(path), path);
+            identityFiles = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [logicalPath] = Path.GetFullPath(identityPath),
+            };
             request = new CSharpCompilationRequest(options.AssemblyName, sources,
                 options.ReferencePaths, LoadEffectCatalog(options.EffectCatalogPath));
         }
@@ -2548,6 +2553,7 @@ internal static class Program
                 sourceFiles = new Dictionary<string, string>(project.SourceFiles, StringComparer.Ordinal);
                 identityPath = project.IdentityPath;
                 readOnlySources = project.ReadOnlySources;
+                identityFiles = project.IdentityFiles;
             }
             catch (CSharpProjectLoadException exception)
             {
@@ -2581,7 +2587,8 @@ internal static class Program
                 options.ProjectPath is null ? null : () => ProjectAuthoringInput.Load(
                     options.ProjectPath, fullInputPath, options.IdentityPath,
                     new CSharpProjectLoadOptions(options.Configuration, options.TargetFramework, Restore: false, Build: false),
-                    LoadEffectCatalog(options.EffectCatalogPath)));
+                    LoadEffectCatalog(options.EffectCatalogPath)),
+                identityFiles);
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {

@@ -38,7 +38,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         UnrealApiBrowserDocument? apiBrowser = null,
         IReadOnlySet<string>? readOnlySources = null,
         bool publishInitial = false,
-        Func<ProjectAuthoringInput>? refreshProject = null)
+        Func<ProjectAuthoringInput>? refreshProject = null,
+        IReadOnlyDictionary<string, string>? identityFiles = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
@@ -61,7 +62,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             artifactOutputs ?? new AuthoringArtifactOutputs(),
             sourceFiles,
             readOnlySources,
-            refreshProject);
+            refreshProject,
+            identityFiles);
         this.apiBrowser = apiBrowser;
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
         if (publishInitial)
@@ -759,6 +761,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private string sourceLogicalPath;
         private IReadOnlyDictionary<string, string> sourceFiles;
         private IReadOnlySet<string> readOnlySources;
+        private IReadOnlyDictionary<string, string> identityFiles;
         private readonly Func<ProjectAuthoringInput>? refreshProject;
         private readonly Dictionary<string, string> persistedSources = new(StringComparer.Ordinal);
         private readonly string? identityPath;
@@ -781,6 +784,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private bool waitInProgress;
         private ActiveAuthoringGroup? activeGroup;
         private string? persistedIdentity;
+        private readonly Dictionary<string, string?> persistedIdentities = new(StringComparer.Ordinal);
         private string historyPersistenceState;
         private string? historyPersistenceMessage;
 
@@ -791,7 +795,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             AuthoringArtifactOutputs artifactOutputs,
             IReadOnlyDictionary<string, string>? sourceFiles,
             IReadOnlySet<string>? readOnlySources,
-            Func<ProjectAuthoringInput>? refreshProject)
+            Func<ProjectAuthoringInput>? refreshProject,
+            IReadOnlyDictionary<string, string>? identityFiles)
         {
             ArgumentNullException.ThrowIfNull(request);
             ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -820,6 +825,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 normalizedSourceFiles.Add(logicalPath.Replace('\\', '/'), Path.GetFullPath(physicalPath));
             }
             this.sourceFiles = normalizedSourceFiles;
+            var normalizedIdentityFiles = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach ((string logicalPath, string physicalPath) in identityFiles ??
+                new Dictionary<string, string>())
+            {
+                normalizedIdentityFiles[logicalPath.Replace('\\', '/')] = Path.GetFullPath(physicalPath);
+            }
+            if (this.identityPath is not null)
+                normalizedIdentityFiles[sourceLogicalPath] = this.identityPath;
+            this.identityFiles = normalizedIdentityFiles;
             foreach (CSharpSourceDocument source in request.Sources)
             {
                 if (!this.sourceFiles.TryGetValue(source.LogicalPath, out string? physicalPath))
@@ -842,6 +856,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 : File.Exists(this.identityPath)
                     ? File.ReadAllText(this.identityPath)
                     : null;
+            foreach ((string logicalPath, string path) in this.identityFiles)
+                persistedIdentities[logicalPath] = File.Exists(path) ? File.ReadAllText(path) : null;
             if (this.artifactOutputs.HistoryPath is null)
             {
                 authoring = new CSharpAuthoringWorkspace(request);
@@ -1149,16 +1165,30 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 bool samePaths = SamePaths(sourceFiles, input.SourceFiles) &&
                     authoring.Current.Request.ReferencePaths.SequenceEqual(input.Request.ReferencePaths, StringComparer.OrdinalIgnoreCase) &&
                     authoring.Current.Request.RuntimeReferencePaths.SequenceEqual(input.Request.RuntimeReferencePaths, StringComparer.OrdinalIgnoreCase);
-                if (samePaths && candidate.Request.ConfigurationId == authoring.Current.Request.ConfigurationId &&
+                bool sameIdentityPaths = SamePhysicalPaths(identityFiles, input.IdentityFiles);
+                bool sameIdentity = InputIdentity(
+                        authoring.Current.Request,
+                        sourceFiles,
+                        identityFiles,
+                        readOnlySources) ==
+                    InputIdentity(
+                        input.Request,
+                        input.SourceFiles,
+                        input.IdentityFiles,
+                        input.ReadOnlySources);
+                if (samePaths && sameIdentityPaths && sameIdentity &&
+                    candidate.Request.ConfigurationId == authoring.Current.Request.ConfigurationId &&
                     candidate.Analysis.ScriptAssets!.SourceCompilationId == authoring.Current.Analysis.ScriptAssets!.SourceCompilationId)
                 {
                     // A normal build may rewrite an equivalent sidecar. Adopt its bytes,
                     // but do not publish or invent another runtime generation for a no-op.
                     persistedIdentity = ReadIdentityText();
+                    CapturePersistedIdentityFiles();
                     return Workspace;
                 }
 
-                bool rebase = !samePaths || candidate.Request.ConfigurationId != authoring.Current.Request.ConfigurationId ||
+                bool rebase = !samePaths || !sameIdentityPaths ||
+                    candidate.Request.ConfigurationId != authoring.Current.Request.ConfigurationId ||
                     candidate.Request.Sources.Any(source => source.LogicalPath != primaryLogical &&
                         (!persistedSources.TryGetValue(source.LogicalPath, out string? before) || before != source.Source));
                 CSharpAuthoringWorkspace? rebased = rebase
@@ -1174,7 +1204,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     archive = new AuthoringOutput(Path.Combine(artifactOutputs.HistoryPath + ".retired", digest + ".json"), previousHistory);
                 }
                 var imported = new ImportedProjectInput(input, primaryLogical,
-                    input.Request.Sources.ToDictionary(source => source.LogicalPath, source => source.Source, StringComparer.Ordinal), archive);
+                    input.Request.Sources.ToDictionary(source => source.LogicalPath, source => source.Source, StringComparer.Ordinal),
+                    input.IdentityFiles, archive);
                 PreparedGraphLayout? layout = PrepareGraphLayout(authoring.Current, candidate);
                 long previousGeneration = reload.Generation.Number;
                 long started = Stopwatch.GetTimestamp();
@@ -1219,29 +1250,56 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CSharpCompilationRequest previous = authoring.Current.Request;
             CSharpSourceDocument[] sources = previous.Sources.Select(source => new CSharpSourceDocument(
                 source.LogicalPath, File.ReadAllText(sourceFiles[source.LogicalPath]),
-                source.LogicalPath == sourceLogicalPath && identityPath is not null && File.Exists(identityPath)
-                    ? IdentitySidecarJson.Deserialize(File.ReadAllText(identityPath)) : source.IdentitySidecar,
+                identityFiles.TryGetValue(source.LogicalPath, out string? path) && File.Exists(path)
+                    ? IdentitySidecarJson.Deserialize(File.ReadAllText(path)) : source.IdentitySidecar,
                 source.IdentityPins)).ToArray();
             return new ProjectAuthoringInput(new CSharpCompilationRequest(previous.AssemblyName, sources,
                 previous.ReferencePaths, previous.EffectCatalog, previous.Settings, previous.RuntimeReferencePaths,
-                previous.IncludeDefaultReferences), sourcePath, identityPath ?? sourcePath + ".usids", sourceFiles, readOnlySources);
+                previous.IncludeDefaultReferences), sourcePath, identityPath ?? sourcePath + ".usids", sourceFiles,
+                readOnlySources, identityFiles);
         }
 
         private string? ReadIdentityText() => identityPath is not null && File.Exists(identityPath) ? File.ReadAllText(identityPath) : null;
+
+        private void CapturePersistedIdentityFiles()
+        {
+            foreach ((string logicalPath, string path) in identityFiles)
+                persistedIdentities[logicalPath] = File.Exists(path) ? File.ReadAllText(path) : null;
+        }
 
         private static bool SamePaths(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) =>
             left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out string? path) &&
                 string.Equals(pair.Value, path, StringComparison.OrdinalIgnoreCase));
 
-        private static string InputIdentity(ProjectAuthoringInput input) => string.Join("|",
-            input.Request.ConfigurationId.Value,
-            string.Join("|", input.SourceFiles.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value)),
-            string.Join("|", input.Request.Sources.Select(source => source.LogicalPath + ":" +
+        private static bool SamePhysicalPaths(
+            IReadOnlyDictionary<string, string> left,
+            IReadOnlyDictionary<string, string> right) =>
+            left.Values.Select(Path.GetFullPath).Order(StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(right.Values.Select(Path.GetFullPath).Order(StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+
+        private static string InputIdentity(ProjectAuthoringInput input) => InputIdentity(
+            input.Request, input.SourceFiles, input.IdentityFiles);
+
+        private static string InputIdentity(
+            CSharpCompilationRequest request,
+            IReadOnlyDictionary<string, string> sourceFiles,
+            IReadOnlyDictionary<string, string> identityFiles,
+            IReadOnlySet<string>? excludedSources = null) => string.Join("|",
+            request.ConfigurationId.Value,
+            string.Join("|", sourceFiles.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => pair.Key + "=" + pair.Value)),
+            string.Join("|", identityFiles.Values.Select(Path.GetFullPath)
+                .Order(StringComparer.OrdinalIgnoreCase)),
+            string.Join("|", request.Sources.Where(source => excludedSources is null ||
+                    !excludedSources.Contains(source.LogicalPath)).Select(source => source.LogicalPath + ":" +
                 CSharpSourceTextPatchJson.ComputeContentDigest(source.Source) + ":" +
                 (source.IdentitySidecar is null ? "" : IdentitySidecarJson.Serialize(source.IdentitySidecar)))));
 
         private sealed record ImportedProjectInput(ProjectAuthoringInput Input, string PrimaryLogical,
-            IReadOnlyDictionary<string, string> DiskSources, AuthoringOutput? ArchivedHistory);
+            IReadOnlyDictionary<string, string> DiskSources,
+            IReadOnlyDictionary<string, string> IdentityFiles,
+            AuthoringOutput? ArchivedHistory);
 
         public AuthoringRollbackResponse CreateRollbackResponse(string state)
         {
@@ -2979,6 +3037,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     true,
                     output.CandidateDigest);
             }
+            CapturePersistedIdentityFiles();
             Health = CreateHealth(reload.Generation);
             var reloadTransaction = new ReloadTransactionResponse(
                 "unifiedscript.reload-transaction/v0.1",
@@ -3094,22 +3153,24 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                             SourceSpan.Unknown(logicalPath))]);
                 }
             }
-            string? diskIdentity = identityPath is null || !File.Exists(identityPath)
-                ? null
-                : File.ReadAllText(identityPath);
-            if (!string.Equals(diskIdentity, persistedIdentity, StringComparison.Ordinal))
+            foreach ((string logicalPath, string path) in identityFiles)
             {
-                const string message =
-                    "The identity sidecar changed outside the workbench; reload before saving.";
-                throw new AuthoringProtocolException(
-                    HttpStatusCode.Conflict,
-                    "UAW1002",
-                    message,
-                    [new UnifiedDiagnostic(
+                string? diskIdentity = File.Exists(path) ? File.ReadAllText(path) : null;
+                if (!persistedIdentities.TryGetValue(logicalPath, out string? persisted) ||
+                    !string.Equals(diskIdentity, persisted, StringComparison.Ordinal))
+                {
+                    const string message =
+                        "The identity sidecar changed outside the workbench; reload before saving.";
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
                         "UAW1002",
-                        UnifiedDiagnosticSeverity.Error,
                         message,
-                        SourceSpan.Unknown(sourceLogicalPath))]);
+                        [new UnifiedDiagnostic(
+                            "UAW1002",
+                            UnifiedDiagnosticSeverity.Error,
+                            message,
+                            SourceSpan.Unknown(logicalPath))]);
+                }
             }
             foreach ((string path, FileBaseline baseline) in persistedArtifactBaselines)
             {
@@ -3137,7 +3198,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 artifactOutputs.GraphLayoutPath,
                 artifactOutputs.CompiledChunkPath,
                 identityPath,
-            }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+            }.OfType<string>().Concat(identityFiles.Values)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
 
         private void CaptureArtifactBaselines()
         {
@@ -3204,10 +3266,14 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             if (imported is null) ValidateEditableSources(snapshot);
             IReadOnlyDictionary<string, string> files = imported?.Input.SourceFiles ?? sourceFiles;
             IReadOnlyDictionary<string, string> baseline = imported?.DiskSources ?? persistedSources;
+            IReadOnlyDictionary<string, string> outputIdentityFiles =
+                imported?.Input.IdentityFiles ?? identityFiles;
             var artifactPaths = new[] { artifactOutputs.DeclarationPath, artifactOutputs.SurfacePath,
                 artifactOutputs.ManagedAssemblyPath, artifactOutputs.PortablePdbPath,
-                artifactOutputs.HistoryPath, artifactOutputs.GraphLayoutPath, artifactOutputs.CompiledChunkPath, identityPath };
-            foreach (string path in artifactPaths.OfType<string>())
+                artifactOutputs.HistoryPath, artifactOutputs.GraphLayoutPath, artifactOutputs.CompiledChunkPath }
+                .OfType<string>()
+                .Concat(outputIdentityFiles.Values);
+            foreach (string path in artifactPaths)
                 if (files.Values.Any(source => string.Equals(source, path, StringComparison.OrdinalIgnoreCase)))
                     throw new ArgumentException($"Authoring artifact '{path}' cannot overwrite a compilation source.");
             var outputs = snapshot.Request.Sources
@@ -3217,12 +3283,18 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     Encoding.UTF8.GetBytes(source.Source)))
                 .ToList();
             string? nextIdentity = null;
-            if (identityPath is not null)
+            string primaryLogical = imported?.PrimaryLogical ?? sourceLogicalPath;
+            IReadOnlySet<string> editableReadOnly = imported?.Input.ReadOnlySources ?? readOnlySources;
+            foreach (IdentitySidecarDocument sidecar in snapshot.Analysis.IdentitySidecars)
             {
-                IdentitySidecarDocument sidecar = snapshot.Analysis.IdentitySidecars.Single(item =>
-                    string.Equals(item.SourcePath, imported?.PrimaryLogical ?? sourceLogicalPath, StringComparison.Ordinal));
-                nextIdentity = IdentitySidecarJson.Serialize(sidecar) + "\n";
-                outputs.Add(new AuthoringOutput(identityPath, Encoding.UTF8.GetBytes(nextIdentity)));
+                if (!outputIdentityFiles.TryGetValue(sidecar.SourcePath, out string? sidecarPath) ||
+                    (editableReadOnly.Contains(sidecar.SourcePath) &&
+                     !string.Equals(sidecar.SourcePath, primaryLogical, StringComparison.Ordinal)))
+                    continue;
+                string sidecarText = IdentitySidecarJson.Serialize(sidecar) + "\n";
+                if (string.Equals(sidecar.SourcePath, primaryLogical, StringComparison.Ordinal))
+                    nextIdentity = sidecarText;
+                outputs.Add(new AuthoringOutput(sidecarPath, Encoding.UTF8.GetBytes(sidecarText)));
             }
 
             ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
@@ -3301,13 +3373,22 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             {
                 sourceFiles = imported.Input.SourceFiles;
                 readOnlySources = imported.Input.ReadOnlySources;
+                identityFiles = imported.Input.IdentityFiles;
                 sourceLogicalPath = imported.PrimaryLogical;
                 persistedSources.Clear();
             }
             foreach (CSharpSourceDocument source in snapshot.Request.Sources)
                 persistedSources[source.LogicalPath] = source.Source;
             persistedIdentity = prepared.NextIdentity;
-            CaptureArtifactBaselines(prepared.Outputs);
+            CapturePersistedIdentityFiles();
+            if (imported is null)
+                CaptureArtifactBaselines(prepared.Outputs);
+            else
+                // A project refresh may replace or remove physical sidecars.
+                // Rebuild the full baseline after adopting its identity map so
+                // a retired sidecar is not treated as an external mutation on
+                // the next transaction.
+                CaptureArtifactBaselines();
         }
 
         private static DebugHealthResponse CreateHealth(CoreClrProgramGeneration generation) => new(

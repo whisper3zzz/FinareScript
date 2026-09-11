@@ -51,8 +51,8 @@ Automation test, exit 0). An injected transport drives local Apply rejection,
 failed HTTP completion, malformed/foreign/adopted ACKs, single-flight retries,
 blocked Submit/Refresh, and uncertain prepare recovery. Failed request startup
 uses the same handler in production and the test transport. This establishes
-the client state paths; it is not a physical toolbar interaction test. Partial source-owner publication,
-ordinary Actor composition outside the current carrier family, component-family
+the client state paths; it is not a physical toolbar interaction test. Ordinary
+Actor composition outside the current carrier family, component-family
 proof and affected cooked execution remain unfinished. This is a publication
 checkpoint, not C-4 completion.
 
@@ -66,6 +66,18 @@ paths and JSON-null clearing. They do not prove ordinary Actor composition.
 The broader Workbench test still assumes a one-asset Demo Surface, while the
 checked-in fixture contains 19 assets; its pre-existing fixture failure is
 retained in `c4-base-ui-workbench-1.log` and has not been repaired by this slice.
+
+Project authoring now resolves the selected ScriptAsset symbol and the exact
+partial file owning its class-binding attribute. Multiple ScriptAsset types in
+the selected file reject as ambiguous. Only the primary source and that binding
+owner are editable; their physical identity-sidecar paths participate in
+publication, external-conflict checks, cancellation, history and project refresh.
+The primary source retains its custom sidecar path. A refresh moving the binding
+into a new source without a sidecar creates that sidecar and retires the old
+artifact baseline, so the next edit can publish normally. Six
+`ProjectAuthoringTests` pass, including add/change/clear through native
+prepare/finish, cancellation, Undo/Redo, stable IDs and external sidecar conflicts.
+This verifies the managed participant, not physical Editor UI interaction.
 
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
 native consumers. The `updateClassBase` declaration patch edits that explicit
