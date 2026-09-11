@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: planned
+Status: SDK adopted; native onboarding compatibility fixes in progress
 
 ## Outcome and scope
 
@@ -63,5 +63,22 @@ and export successfully in the copy through a read-only Python commandlet.
 exports identify their actual graph and asset dependencies. No Lyra gameplay,
 configuration or asset was saved by this inspection.
 
-SDK installation, generated API coverage, actual health/HUD behavior, reload,
+The SDK built from committed revision `f3ebe07` passed packaging and installed
+through the packaged `adopt` command in the independent Lyra copy (294 creates,
+one update, no conflicts). The adoption receipt is
+`Saved/Finare/Adoption/transactions/20260911-033829-48d8bf89/transaction.json`.
+The original Lyra project remains untouched. This SDK precedes the uncommitted
+native-publication changes and will need updating before their acceptance.
+
+Initial onboarding stopped at UHT: LyraEditor disallows raw reflected UObject
+pointer members, exposing `FinareInteropFixture.ActorArrayValue` as incompatible.
+Keep Lyra's pointer policy and fix the plugin. Source inspection also identified
+that adoption picks the alphabetically first non-Editor target (`LyraClient`)
+instead of the declared Game target (`LyraGame`). The first-script template
+additionally constructs a Pawn wrapper from its default FinareActor target;
+its `GetController` call requires correction and actual first-Play validation.
+Evidence is in `artifacts/finare-usability/lyra-adopt-f3ebe07.log` and
+`lyra-onboarding-f3ebe07.log`; native onboarding has not passed.
+
+Native onboarding, generated API coverage, actual health/HUD behavior, reload,
 second-checkout reproduction and cooked execution remain to be verified.

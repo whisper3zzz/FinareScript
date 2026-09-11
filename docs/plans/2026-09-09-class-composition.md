@@ -199,6 +199,94 @@ composed behaviors need exact function-owner routing before a second carrier is
 introduced; preserve one owner per behavior rather than relying on component
 enumeration order.
 
+## Native publication integration decision — 2026-09-11
+
+Checkpoint: `f3ebe07` adds prepared debug reloads and the managed suite passes
+1093 tests. `bd3fa0b` adds external publication to the native Blueprint journal;
+Editor build, the extended `ParentChange.Primitive` test and `OperationJournal`
+pass. The new case fails after both an existing and a newly created output have
+been written, and restores package bytes, source bytes, graph/state identities,
+three distinct CDO values and component ownership. Logs are under
+`artifacts/finare-usability/c4-parentchange-external-3-engine.log` and
+`c4-operationjournal-external-engine.log`. Normal Workbench coordination,
+partial-file ownership, durable completion and composition remain unfinished;
+this checkpoint does not close C-4.
+
+The next delivery joins the existing Workbench prepared candidate to the native
+class-operation journal. It does not commit a source edit first and attempt to
+compensate later with ordinary Undo or a separate daily build.
+
+The confirmed preview identifies every changed native class binding and carries
+the analyzed candidate declaration, stable ClassId, generated-owner path and
+baseline binding. A native-publication prepare step reserves that exact
+transaction and prepares the complete source, identity, layout, declaration,
+surface, PE/PDB, chunk and history outputs without writing their destinations.
+It retains the existing project evaluation, references and source ownership;
+an attribute in another partial file must be resolved to its actual editable
+owner rather than changing the primary file or making every project file writable.
+Concurrent authoring mutations are rejected while publication is reserved.
+Preparation also loads the candidate debug program without replacing the
+currently published generation. Cancellation disposes that candidate. Completion
+adopts the already prepared program and history; it must not recompile, rewrite
+the published files or roll source back after the native participant committed.
+Duplicate completion requests are resolved by their exact transaction/token
+identity before ordinary revision or already-used-transaction rejection.
+
+The native participant validates the selected Script Asset/Blueprint and all
+prepared file baselines before mutation. Its synchronous materializer transaction
+captures the external files in the same recovery journal as the UE packages,
+applies the candidate parent and declarations, saves the UE state and publishes
+the prepared file bytes. Any failure restores both sides, including previously
+absent outputs, intentional values/references and the original package dirty
+flags. No HTTP request or asynchronous wait may retain the private
+`GEditor->Trans`/`GUndo` swap. Existing parent rollback remains the implementation
+for native recovery; a second ad hoc Blueprint snapshot scheme is unnecessary.
+
+After native success, Workbench completion adopts the reserved candidate and
+history. Completion is idempotent by transaction identity; a lost response is an
+uncertain acknowledgment, not permission to republish or report rollback. A
+durable native completion/recovery result must distinguish a committed operation
+from an interrupted receipt. The already published history also allows a new
+Workbench to reopen the committed source. A native failure cancels the reserved
+candidate without introducing an authoring Undo/Redo entry. Recovery failures
+retain their receipt and block conflicting publication until resolved.
+
+Normal declaration edits, source edits and history navigation must detect native
+binding changes consistently. Slate routes such previews through the native
+participant and exposes a base-class control. A client without that participant
+must receive an actionable rejection before publishing incompatible source;
+it must not bypass the joint transaction through another HTTP route.
+
+History also needs the native parent actually observed before and after each
+transaction. An omitted `BaseClassPath` means "keep the current parent", so
+restoring that source text alone cannot undo A-to-B reparenting. Persist this
+native history by authoring transaction ID in an editor-owned sidecar included
+in the same journal/publication. Undo/Redo uses the recorded actual parents,
+preserves the original source spelling, and validates its selected owner and
+baseline. Do not guess A from a default class or introduce UE types into Core.
+
+Actor composition follows this publication batch. Moving outside the native
+Finare Actor carrier must create/reconcile the owned script component and
+RequiredTargetClass, preserve user components and inherited overrides, and route
+managed functions by the exact generated owner. Component enumeration order is
+not ownership. Component-family changes and two composed behaviors require their
+own runtime and package proof before C-4 is marked complete.
+
+For an ordinary Actor parent, the owned carrier must use UE's construction-script
+component template and inheritance mechanism; it cannot assume every carrier is
+a native subobject directly under the Actor CDO. Match the selected ScriptAsset
+and generated owner, and preserve unrelated user components. Ordinary function
+dispatch needs the same exact-owner selection as overrides. Initial RepNotify
+queuing occurs before activation, so configured ownership must remain available
+without requiring an already active managed generation.
+
+`FinareClassFactory` writes `requiredTargetClass` into the deployment manifest
+as well as the ScriptAsset. Composition must update that manifest entry in the
+joint publication when changing the requirement; changing only the asset would
+be undone by later synchronization. Keep ActorComponent-family reparent proof
+distinct from supporting arbitrary native ActorComponent base classes, which do
+not automatically acquire the existing managed host lifecycle.
+
 ## Relevant verification
 
 The native parent transaction checkpoint passed the Editor build and six CMD
