@@ -146,6 +146,8 @@ struct alignas(8) FFinareNativeEventTransportV4
     FFinareNativeUnsubscribeEventV4 Unsubscribe = nullptr;
 };
 
+enum class EFinareUObjectReferenceStatus : uint8;
+
 /**
  * Ref-counted lifetime guard between a world host and managed transports.
  *
@@ -238,6 +240,13 @@ public:
         TFunctionRef<bool(FFinareAsyncService&)> Operation);
     /** Native objects are game-thread-only, including explicit disposal. */
     bool ExecuteNativeObjects(TFunctionRef<void(FFinareNativeObjectRegistry&)> Operation);
+    bool OpenUObjectReferenceScope(uint64& OutScope, FFinareObjectHandleResult& OutResult);
+    EFinareUObjectReferenceStatus CloseUObjectReferenceScope(
+        uint64 Scope, FFinareObjectHandleResult& OutResult);
+    EFinareUObjectReferenceStatus RetainUObjectReference(
+        uint64 Scope, uint64 Handle, FFinareObjectHandleResult& OutResult);
+    EFinareUObjectReferenceStatus ReleaseUObjectReference(
+        uint64 Scope, uint64 Handle, FFinareObjectHandleResult& OutResult);
     EFinareCallbackStatus OpenCallbackScope(uint64& OutScope);
     int32 GetCallbackCount() const { check(IsInGameThread()); return CallbackProxies.Num(); }
     EFinareCallbackStatus CloseCallbackScope(uint64 Scope);
@@ -290,6 +299,42 @@ struct FFinareNativeTransportV1
 
 struct FFinareNativeTransportV3;
 
+enum class EFinareUObjectReferenceStatus : uint8
+{
+    Success = 0,
+    Unavailable = 1,
+    WrongThread = 2,
+    InvalidScope = 3,
+    InvalidHandle = 4,
+    StaleHandle = 5,
+    WorldMismatch = 6,
+};
+
+using FFinareOpenUObjectReferenceScope = EFinareUObjectReferenceStatus (*)(
+    void* Context, uint64* OutScope);
+using FFinareCloseUObjectReferenceScope = EFinareUObjectReferenceStatus (*)(
+    void* Context, uint64 Scope);
+using FFinareRetainUObjectReference = EFinareUObjectReferenceStatus (*)(
+    void* Context, uint64 Scope, uint64 Handle);
+using FFinareReleaseUObjectReference = EFinareUObjectReferenceStatus (*)(
+    void* Context, uint64 Scope, uint64 Handle);
+
+/** Optional append-only UObject lease transport. */
+struct alignas(8) FFinareUObjectReferenceTransportV1
+{
+    uint32 AbiVersion = 1;
+    uint32 TableSize = 0;
+    uint32 ValueSize = 0;
+    uint32 Reserved = 0;
+    FFinareNativeRetainContextV1 RetainContext = nullptr;
+    FFinareNativeReleaseContextV1 ReleaseContext = nullptr;
+    FFinareOpenUObjectReferenceScope OpenScope = nullptr;
+    FFinareCloseUObjectReferenceScope CloseScope = nullptr;
+    FFinareRetainUObjectReference Retain = nullptr;
+    FFinareReleaseUObjectReference Release = nullptr;
+};
+
+
 /** ABI v2 preserves the complete v1 prefix and appends stable-ID fast thunks. */
 struct FFinareNativeTransportV2
 {
@@ -318,6 +363,8 @@ struct FFinareNativeTransportV2
     /** Optional non-UObject ownership/dispatch ABI; earlier v2 clients ignore it. */
     const FFinareNativeObjectTransportV1* NativeObjectTransport = nullptr;
     const FFinareCallbackTransport* CallbackTransport = nullptr;
+    /** Optional weak UObject reference leases; older v2 clients ignore it. */
+    const FFinareUObjectReferenceTransportV1* ObjectReferenceTransport = nullptr;
 };
 
 /**
@@ -516,6 +563,8 @@ struct alignas(8) FFinareNativeTransportV3
 static_assert(std::is_standard_layout_v<FFinareNativeValueV1>);
 static_assert(std::is_standard_layout_v<FFinareNativeTransportV1>);
 static_assert(std::is_standard_layout_v<FFinareNativeTransportV2>);
+static_assert(std::is_standard_layout_v<FFinareUObjectReferenceTransportV1>);
+static_assert(sizeof(FFinareUObjectReferenceTransportV1) == 64);
 static_assert(std::is_standard_layout_v<FFinareNativeValueV3>);
 static_assert(std::is_trivially_copyable_v<FFinareNativeValueV3>);
 static_assert(sizeof(FFinareNativeValueV3) == 48);
@@ -565,6 +614,9 @@ static_assert(
 static_assert(
     STRUCT_OFFSET(FFinareNativeTransportV2, NativeObjectTransport) ==
     STRUCT_OFFSET(FFinareNativeTransportV2, AsyncTransport) + sizeof(void*));
+static_assert(
+    STRUCT_OFFSET(FFinareNativeTransportV2, ObjectReferenceTransport) ==
+    STRUCT_OFFSET(FFinareNativeTransportV2, CallbackTransport) + sizeof(void*));
 
 extern "C" FINARERUNTIME_API const FFinareNativeTransportV1*
 Finare_GetNativeTransportV1();
@@ -574,6 +626,9 @@ Finare_GetNativeTransportV2();
 
 extern "C" FINARERUNTIME_API const FFinareNativeTransportV3*
 Finare_GetNativeTransportV3();
+
+extern "C" FINARERUNTIME_API const FFinareUObjectReferenceTransportV1*
+Finare_GetUObjectReferenceTransportV1();
 
 extern "C" FINARERUNTIME_API const FFinareNativeEventTransportV4*
 Finare_GetNativeEventTransportV4();

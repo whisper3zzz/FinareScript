@@ -338,6 +338,110 @@ bool FFinareNativeBridgeContext::ExecuteNativeObjects(
     return true;
 }
 
+namespace
+{
+EFinareUObjectReferenceStatus ToReferenceStatus(
+    const FFinareObjectHandleResult& Result)
+{
+    switch (Result.Error)
+    {
+    case EFinareObjectHandleError::None: return EFinareUObjectReferenceStatus::Success;
+    case EFinareObjectHandleError::NotGameThread: return EFinareUObjectReferenceStatus::WrongThread;
+    case EFinareObjectHandleError::WorldMismatch: return EFinareUObjectReferenceStatus::WorldMismatch;
+    case EFinareObjectHandleError::InvalidHandle: return EFinareUObjectReferenceStatus::InvalidHandle;
+    case EFinareObjectHandleError::StaleHandle: return EFinareUObjectReferenceStatus::StaleHandle;
+    case EFinareObjectHandleError::InvalidScope: return EFinareUObjectReferenceStatus::InvalidScope;
+    default: return EFinareUObjectReferenceStatus::Unavailable;
+    }
+}
+}
+
+bool FFinareNativeBridgeContext::OpenUObjectReferenceScope(
+    uint64& OutScope,
+    FFinareObjectHandleResult& OutResult)
+{
+    OutScope = 0;
+    if (!IsInGameThread())
+    {
+        OutResult.Error = EFinareObjectHandleError::NotGameThread;
+        OutResult.Message = TEXT("UObject reference scopes are game-thread-only.");
+        return false;
+    }
+    FFinareInvocationBridge* Current = FastBridge.load(std::memory_order_acquire);
+    if (Current == nullptr)
+    {
+        OutResult.Error = EFinareObjectHandleError::RegistryWorldUnavailable;
+        OutResult.Message = TEXT("The UObject reference registry is unavailable.");
+        return false;
+    }
+    return Current->GetObjectRegistry().OpenReferenceScope(OutScope, OutResult);
+}
+
+EFinareUObjectReferenceStatus FFinareNativeBridgeContext::CloseUObjectReferenceScope(
+    uint64 Scope,
+    FFinareObjectHandleResult& OutResult)
+{
+    if (!IsInGameThread())
+    {
+        OutResult.Error = EFinareObjectHandleError::NotGameThread;
+        OutResult.Message = TEXT("UObject reference scopes are game-thread-only.");
+        return EFinareUObjectReferenceStatus::WrongThread;
+    }
+    FFinareInvocationBridge* Current = FastBridge.load(std::memory_order_acquire);
+    if (Current == nullptr)
+    {
+        OutResult.Error = EFinareObjectHandleError::RegistryWorldUnavailable;
+        OutResult.Message = TEXT("The UObject reference registry is unavailable.");
+        return EFinareUObjectReferenceStatus::Unavailable;
+    }
+    Current->GetObjectRegistry().CloseReferenceScope(Scope, OutResult);
+    return ToReferenceStatus(OutResult);
+}
+
+EFinareUObjectReferenceStatus FFinareNativeBridgeContext::RetainUObjectReference(
+    uint64 Scope,
+    uint64 Handle,
+    FFinareObjectHandleResult& OutResult)
+{
+    if (!IsInGameThread())
+    {
+        OutResult.Error = EFinareObjectHandleError::NotGameThread;
+        OutResult.Message = TEXT("UObject references are game-thread-only.");
+        return EFinareUObjectReferenceStatus::WrongThread;
+    }
+    FFinareInvocationBridge* Current = FastBridge.load(std::memory_order_acquire);
+    if (Current == nullptr)
+    {
+        OutResult.Error = EFinareObjectHandleError::RegistryWorldUnavailable;
+        OutResult.Message = TEXT("The UObject reference registry is unavailable.");
+        return EFinareUObjectReferenceStatus::Unavailable;
+    }
+    Current->GetObjectRegistry().RetainReference(Scope, {Handle}, OutResult);
+    return ToReferenceStatus(OutResult);
+}
+
+EFinareUObjectReferenceStatus FFinareNativeBridgeContext::ReleaseUObjectReference(
+    uint64 Scope,
+    uint64 Handle,
+    FFinareObjectHandleResult& OutResult)
+{
+    if (!IsInGameThread())
+    {
+        OutResult.Error = EFinareObjectHandleError::NotGameThread;
+        OutResult.Message = TEXT("UObject references are game-thread-only.");
+        return EFinareUObjectReferenceStatus::WrongThread;
+    }
+    FFinareInvocationBridge* Current = FastBridge.load(std::memory_order_acquire);
+    if (Current == nullptr)
+    {
+        OutResult.Error = EFinareObjectHandleError::RegistryWorldUnavailable;
+        OutResult.Message = TEXT("The UObject reference registry is unavailable.");
+        return EFinareUObjectReferenceStatus::Unavailable;
+    }
+    Current->GetObjectRegistry().ReleaseReference(Scope, {Handle}, OutResult);
+    return ToReferenceStatus(OutResult);
+}
+
 void FFinareNativeBridgeContext::PumpGameThreadCalls()
 {
     check(IsInGameThread());
@@ -3517,6 +3621,7 @@ Finare_GetNativeTransportV2()
         Finare_GetAsyncTransportV5(),
         Finare_GetNativeObjectTransportV1(),
         Finare_GetCallbackTransport(),
+        Finare_GetUObjectReferenceTransportV1(),
     };
     return &Transport;
 }

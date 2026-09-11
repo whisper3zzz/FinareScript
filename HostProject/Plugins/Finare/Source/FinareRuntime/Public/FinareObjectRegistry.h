@@ -63,6 +63,7 @@ enum class EFinareObjectHandleError : uint8
     WorldMismatch = 4,
     InvalidHandle = 5,
     StaleHandle = 6,
+    InvalidScope = 7,
 };
 
 struct FINARERUNTIME_API FFinareObjectHandleResult
@@ -101,6 +102,21 @@ public:
         FFinareObjectHandleResult& OutResult);
 
     bool ReleaseObject(
+        FFinareObjectHandle Handle,
+        FFinareObjectHandleResult& OutResult);
+
+    /**
+     * A UObject reference scope is a weak, world-owned lease group. It keeps
+     * the registry slot alive without rooting the UObject itself.
+     */
+    bool OpenReferenceScope(uint64& OutScope, FFinareObjectHandleResult& OutResult);
+    bool CloseReferenceScope(uint64 Scope, FFinareObjectHandleResult& OutResult);
+    bool RetainReference(
+        uint64 Scope,
+        FFinareObjectHandle Handle,
+        FFinareObjectHandleResult& OutResult);
+    bool ReleaseReference(
+        uint64 Scope,
         FFinareObjectHandle Handle,
         FFinareObjectHandleResult& OutResult);
 

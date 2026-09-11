@@ -25,6 +25,19 @@ uint32 AllocateGeneration()
     }
 }
 
+uint64 AllocateReferenceScope()
+{
+    static std::atomic<uint64> NextScope{1};
+    for (;;)
+    {
+        const uint64 Scope = NextScope.fetch_add(1, std::memory_order_relaxed);
+        if (Scope != 0)
+        {
+            return Scope;
+        }
+    }
+}
+
 void Succeed(FFinareObjectHandleResult& OutResult)
 {
     OutResult.Error = EFinareObjectHandleError::None;
@@ -192,6 +205,9 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
         Entry.Object.Reset();
         Entry.ReferenceCount = 0;
         Entry.bActive = false;
+        // Per-scope lease counts remain intact. Managed leases may share a
+        // handle, and each Release must be able to consume its own count after
+        // the registry entry has become stale.
         FreeSlots.Add(SlotIndex);
         --ActiveCount;
     }
@@ -201,6 +217,9 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
         SlotsByObject.Reset();
         FreeSlots.Reset();
         ActiveCount = 0;
+        // Keep each scope's lease counts until its managed leases release or
+        // the scope closes. InvalidateAll makes handles stale; it does not
+        // erase ownership bookkeeping needed for idempotent cleanup.
         for (int32 SlotIndex = 0; SlotIndex < Entries.Num(); ++SlotIndex)
         {
             FEntry& Entry = Entries[SlotIndex];
@@ -221,6 +240,7 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
     TMap<const UObjectBase*, uint32> SlotsByObject;
     mutable FCriticalSection CriticalSection;
     int32 ActiveCount = 0;
+    TMap<uint64, TMap<uint64, uint32>> ReferenceScopes;
     bool bDeleteListenerRegistered = false;
 };
 
@@ -376,6 +396,154 @@ bool FFinareObjectRegistry::ReleaseObject(
         return true;
     }
     Impl->RetireSlotLocked(SlotIndex);
+    Succeed(OutResult);
+    return true;
+}
+
+bool FFinareObjectRegistry::OpenReferenceScope(
+    uint64& OutScope,
+    FFinareObjectHandleResult& OutResult)
+{
+    using namespace UE::Finare::Private;
+    OutScope = 0;
+    if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+    {
+        return false;
+    }
+    FScopeLock Lock(&Impl->CriticalSection);
+    OutScope = AllocateReferenceScope();
+    Impl->ReferenceScopes.Add(OutScope);
+    Succeed(OutResult);
+    return true;
+}
+
+bool FFinareObjectRegistry::CloseReferenceScope(
+    uint64 Scope,
+    FFinareObjectHandleResult& OutResult)
+{
+    using namespace UE::Finare::Private;
+    if (!Impl->ValidateThread(OutResult))
+    {
+        return false;
+    }
+    FScopeLock Lock(&Impl->CriticalSection);
+    TMap<uint64, uint32>* Leases = Impl->ReferenceScopes.Find(Scope);
+    if (Leases == nullptr)
+    {
+        Fail(OutResult, EFinareObjectHandleError::InvalidScope,
+            TEXT("The UObject reference scope is invalid or already closed."));
+        return false;
+    }
+    TArray<TPair<uint64, uint32>> LeasesToRelease;
+    LeasesToRelease.Reserve(Leases->Num());
+    for (const auto& Lease : *Leases)
+    {
+        LeasesToRelease.Add(Lease);
+    }
+    for (const auto& Lease : LeasesToRelease)
+    {
+        FFinareObjectHandle Handle{Lease.Key};
+        uint32 SlotIndex = 0;
+        if (!Impl->DecodeHandleLocked(Handle, SlotIndex, OutResult))
+        {
+            OutResult = {};
+            continue;
+        }
+        FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(SlotIndex)];
+        const uint32 Count = FMath::Min(Lease.Value, Entry.ReferenceCount);
+        Entry.ReferenceCount -= Count;
+        if (Entry.ReferenceCount == 0)
+        {
+            Impl->RetireSlotLocked(SlotIndex);
+        }
+    }
+    Impl->ReferenceScopes.Remove(Scope);
+    Succeed(OutResult);
+    return true;
+}
+
+bool FFinareObjectRegistry::RetainReference(
+    uint64 Scope,
+    FFinareObjectHandle Handle,
+    FFinareObjectHandleResult& OutResult)
+{
+    using namespace UE::Finare::Private;
+    if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+    {
+        return false;
+    }
+    FScopeLock Lock(&Impl->CriticalSection);
+    if (!Impl->ReferenceScopes.Contains(Scope))
+    {
+        Fail(OutResult, EFinareObjectHandleError::InvalidScope,
+            TEXT("The UObject reference scope is invalid or already closed."));
+        return false;
+    }
+    uint32 SlotIndex = 0;
+    if (!Impl->DecodeHandleLocked(Handle, SlotIndex, OutResult))
+    {
+        return false;
+    }
+    UObject* Object = Impl->Entries[static_cast<int32>(SlotIndex)].Object.Get();
+    UWorld* RegistryWorld = Impl->World.Get();
+    if (Object == nullptr || RegistryWorld == nullptr)
+    {
+        Fail(OutResult, EFinareObjectHandleError::StaleHandle,
+            TEXT("The UObject reference is no longer available."));
+        return false;
+    }
+    if (UWorld* ObjectWorld = Object->GetWorld(); ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
+    {
+        Fail(OutResult, EFinareObjectHandleError::WorldMismatch,
+            TEXT("The UObject reference belongs to another world."));
+        return false;
+    }
+    ++Impl->Entries[static_cast<int32>(SlotIndex)].ReferenceCount;
+    ++Impl->ReferenceScopes[Scope].FindOrAdd(Handle.Value);
+    Succeed(OutResult);
+    return true;
+}
+
+bool FFinareObjectRegistry::ReleaseReference(
+    uint64 Scope,
+    FFinareObjectHandle Handle,
+    FFinareObjectHandleResult& OutResult)
+{
+    using namespace UE::Finare::Private;
+    if (!Impl->ValidateThread(OutResult))
+    {
+        return false;
+    }
+    FScopeLock Lock(&Impl->CriticalSection);
+    TMap<uint64, uint32>* Leases = Impl->ReferenceScopes.Find(Scope);
+    if (Leases == nullptr)
+    {
+        Fail(OutResult, EFinareObjectHandleError::InvalidScope,
+            TEXT("The UObject reference scope is invalid or already closed."));
+        return false;
+    }
+    uint32* LeaseCount = Leases->Find(Handle.Value);
+    if (LeaseCount == nullptr)
+    {
+        Fail(OutResult, EFinareObjectHandleError::InvalidHandle,
+            TEXT("The UObject reference lease was already released."));
+        return false;
+    }
+    --*LeaseCount;
+    if (*LeaseCount == 0) Leases->Remove(Handle.Value);
+    uint32 SlotIndex = 0;
+    if (!Impl->DecodeHandleLocked(Handle, SlotIndex, OutResult))
+    {
+        // UObject deletion retires leases eagerly. Releasing such a lease is
+        // idempotent from the managed owner's point of view.
+        OutResult = {};
+        Succeed(OutResult);
+        return true;
+    }
+    FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(SlotIndex)];
+    check(Entry.ReferenceCount > 0);
+    --Entry.ReferenceCount;
+    if (Entry.ReferenceCount == 0) Impl->RetireSlotLocked(SlotIndex);
     Succeed(OutResult);
     return true;
 }
