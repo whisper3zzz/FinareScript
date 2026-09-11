@@ -133,7 +133,7 @@ public:
     TMap<int32, int32> IntMapValue;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Finare|Interop|References")
-    TArray<AActor*> ActorArrayValue;
+    TArray<TObjectPtr<AActor>> ActorArrayValue;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Finare|Interop|References")
     TSet<TSubclassOf<AActor>> ActorClassSetValue;

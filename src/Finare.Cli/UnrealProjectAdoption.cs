@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Win32;
 
 namespace Finare.Cli;
@@ -1503,39 +1506,90 @@ internal static partial class UnrealProjectAdoptionService
         ValidateIdentifier(projectModule, "Project module");
         string projectRoot = Path.GetDirectoryName(projectPath)!;
         string sourceRoot = Path.Combine(projectRoot, "Source");
-        string? editorTargetFile = Directory.Exists(sourceRoot)
-            ? Directory.EnumerateFiles(
-                    sourceRoot,
-                    "*Editor.Target.cs",
-                    SearchOption.AllDirectories)
-                .OrderBy(static path => path, PathComparer)
-                .FirstOrDefault()
-            : null;
         bool requiresProductNativeHost = !hasNativeModule || maintainProductNativeHost;
-        string editorTarget = editorTargetFile is null
-            ? requiresProductNativeHost ? $"{projectName}Editor" : "UnrealEditor"
-            : Path.GetFileName(editorTargetFile)[..^".Target.cs".Length];
-        ValidateIdentifier(editorTarget, "Editor target");
-        string? gameTargetFile = Directory.Exists(sourceRoot)
-            ? Directory.EnumerateFiles(
-                    sourceRoot,
-                    "*.Target.cs",
-                    SearchOption.AllDirectories)
-                .Where(static path => !Path.GetFileName(path).EndsWith(
-                    "Editor.Target.cs",
-                    StringComparison.OrdinalIgnoreCase))
+        string[] targetFiles = Directory.Exists(sourceRoot)
+            ? Directory.EnumerateFiles(sourceRoot, "*.Target.cs", SearchOption.AllDirectories)
                 .OrderBy(static path => path, PathComparer)
-                .FirstOrDefault()
-            : null;
-        string gameTarget = gameTargetFile is null
-            ? requiresProductNativeHost ? projectName : "UnrealGame"
-            : Path.GetFileName(gameTargetFile)[..^".Target.cs".Length];
+                .ToArray()
+            : [];
+        string? editorTarget = FindTargetNameByType(targetFiles, "Editor");
+        if (editorTarget is null && targetFiles.Length != 0)
+        {
+            throw new InvalidDataException(
+                "The project has TargetRules files but none declares TargetType.Editor.");
+        }
+        editorTarget ??= requiresProductNativeHost ? $"{projectName}Editor" : "UnrealEditor";
+        ValidateIdentifier(editorTarget, "Editor target");
+        string? gameTarget = FindTargetNameByType(targetFiles, "Game");
+        if (gameTarget is null && targetFiles.Length != 0)
+        {
+            throw new InvalidDataException(
+                "The project has TargetRules files but none declares TargetType.Game.");
+        }
+        gameTarget ??= requiresProductNativeHost ? projectName : "UnrealGame";
         ValidateIdentifier(gameTarget, "Game target");
         return new ProjectMetadata(
             projectModule,
             editorTarget,
             gameTarget,
             requiresProductNativeHost);
+    }
+
+    private static string? FindTargetNameByType(
+        IReadOnlyList<string> targetFiles,
+        string targetType)
+    {
+        var matches = new List<string>();
+        foreach (string targetFile in targetFiles)
+        {
+            const string targetSuffix = ".Target.cs";
+            string fileName = Path.GetFileName(targetFile);
+            if (!fileName.EndsWith(targetSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            string targetName = fileName[..^targetSuffix.Length];
+            string targetClassName = targetName + "Target";
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(
+                File.ReadAllText(targetFile),
+                path: targetFile);
+            foreach (ClassDeclarationSyntax declaration in tree.GetRoot()
+                         .DescendantNodes()
+                         .OfType<ClassDeclarationSyntax>()
+                         .Where(static declaration =>
+                             !declaration.Ancestors().OfType<ClassDeclarationSyntax>().Any()))
+            {
+                if (declaration.Identifier.Text != targetClassName ||
+                    declaration.BaseList is null || !declaration.BaseList.Types.Any(type =>
+                        string.Equals(type.Type.ToString(), "TargetRules", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+                bool declaresTargetType = declaration.Members
+                    .OfType<ConstructorDeclarationSyntax>()
+                    .Where(constructor => constructor.Identifier.Text == targetClassName)
+                    .SelectMany(static constructor => constructor.Body is null
+                        ? []
+                        : constructor.Body.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+                    .Any(assignment =>
+                        assignment.Left is IdentifierNameSyntax left &&
+                        left.Identifier.Text == "Type" &&
+                        assignment.Right is MemberAccessExpressionSyntax right &&
+                        right.Expression.ToString() == "TargetType" &&
+                        right.Name.Identifier.Text == targetType);
+                if (declaresTargetType)
+                {
+                    matches.Add(targetName);
+                }
+            }
+        }
+        if (matches.Count > 1)
+        {
+            throw new InvalidDataException(
+                $"The project declares multiple TargetRules with TargetType.{targetType}: " +
+                string.Join(", ", matches.OrderBy(static value => value, StringComparer.Ordinal)));
+        }
+        return matches.SingleOrDefault();
     }
 
     private static AdoptionTemplate ReadTemplate(string templateRoot, string templateId)

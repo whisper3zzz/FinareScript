@@ -151,6 +151,45 @@ public sealed class UnrealProjectAdoptionTests
     }
 
     [Fact]
+    public void TargetDiscoveryUsesTargetRulesTypeAndIgnoresClientAndServerFiles()
+    {
+        using var fixture = new AdoptionFixture(nativeProject: true);
+        UnrealProjectAdoptionPlan plan = fixture.CreatePlan();
+        UnrealProjectAdoptionDesiredFile onboarding = Assert.Single(
+            plan.DesiredFiles,
+            file => file.RelativePath == "Config/Finare.onboarding.json");
+        using JsonDocument document = JsonDocument.Parse(onboarding.Content);
+        Assert.Equal(
+            "AdoptGameEditor",
+            document.RootElement.GetProperty("editorTarget").GetString());
+        Assert.Equal(
+            "AdoptGame",
+            document.RootElement.GetProperty("gameTarget").GetString());
+    }
+
+    [Fact]
+    public void FirstScriptTemplateTreatsInstigatorAsOptional()
+    {
+        DirectoryInfo? repository = new(AppContext.BaseDirectory);
+        while (repository is not null &&
+               !File.Exists(Path.Combine(repository.FullName, "Finare.slnx")))
+        {
+            repository = repository.Parent;
+        }
+        Assert.NotNull(repository);
+        string template = File.ReadAllText(Path.Combine(
+            repository!.FullName,
+            "templates",
+            "UnrealProject",
+            "Managed",
+            "FirstScript.cs.template"));
+        Assert.Contains("var actor = new Actor(context.Target, context.Bridge);", template);
+        Assert.Contains("UnrealObjectHandle instigator = actor.GetInstigator();", template);
+        Assert.Contains("if (!instigator.IsNull)", template);
+        Assert.DoesNotContain("new Pawn(context.Target, context.Bridge)", template);
+    }
+
+    [Fact]
     public void UserEditBlocksUpgradeAndRollbackUntilItIsPreserved()
     {
         using var fixture = new AdoptionFixture(nativeProject: true);
@@ -418,10 +457,41 @@ public sealed class UnrealProjectAdoptionTests
             {
                 Write(
                     Path.Combine(ProjectRoot, "Source", "AdoptGameEditor.Target.cs"),
-                    "public class AdoptGameEditorTarget {}\n");
+                    "using UnrealBuildTool;\n" +
+                    "public class AdoptGameEditorTarget : TargetRules\n" +
+                    "{\n" +
+                    "    public AdoptGameEditorTarget(TargetInfo Target) : base(Target)\n" +
+                    "    { Type = TargetType.Editor; }\n" +
+                    "}\n");
                 Write(
                     Path.Combine(ProjectRoot, "Source", "AdoptGame.Target.cs"),
-                    "public class AdoptGameTarget {}\n");
+                    "using UnrealBuildTool;\n" +
+                    "public class AdoptGameTarget : TargetRules\n" +
+                    "{\n" +
+                    "    public AdoptGameTarget(TargetInfo Target) : base(Target)\n" +
+                    "    { Type = TargetType.Game; }\n" +
+                    "}\n");
+                Write(
+                    Path.Combine(ProjectRoot, "Source", "AdoptGameClient.Target.cs"),
+                    "using UnrealBuildTool;\n" +
+                    "public class AdoptGameClientTarget : TargetRules\n" +
+                    "{\n" +
+                    "    public AdoptGameClientTarget(TargetInfo Target) : base(Target)\n" +
+                    "    { Type = TargetType.Client; }\n" +
+                    "    private sealed class AdoptGameTarget : TargetRules\n" +
+                    "    {\n" +
+                    "        public AdoptGameTarget(TargetInfo Target) : base(Target)\n" +
+                    "        { Type = TargetType.Game; }\n" +
+                    "    }\n" +
+                    "}\n");
+                Write(
+                    Path.Combine(ProjectRoot, "Source", "AdoptGameServer.Target.cs"),
+                    "using UnrealBuildTool;\n" +
+                    "public class AdoptGameServerTarget : TargetRules\n" +
+                    "{\n" +
+                    "    public AdoptGameServerTarget(TargetInfo Target) : base(Target)\n" +
+                    "    { Type = TargetType.Server; }\n" +
+                    "}\n");
             }
             CreateSdk();
             CreateEngine();
@@ -585,10 +655,20 @@ public sealed class UnrealProjectAdoptionTests
                 "IMPLEMENT_PRIMARY_GAME_MODULE(__PROJECT_MODULE__)\n");
             Write(
                 Path.Combine(templates, "Source", "Project.Target.cs.template"),
-                "public class __PROJECT_NAME__Target {}\n");
+                "using UnrealBuildTool;\n" +
+                "public class __PROJECT_NAME__Target : TargetRules\n" +
+                "{\n" +
+                "    public __PROJECT_NAME__Target(TargetInfo Target) : base(Target)\n" +
+                "    { Type = TargetType.Game; }\n" +
+                "}\n");
             Write(
                 Path.Combine(templates, "Source", "ProjectEditor.Target.cs.template"),
-                "public class __PROJECT_NAME__EditorTarget {}\n");
+                "using UnrealBuildTool;\n" +
+                "public class __PROJECT_NAME__EditorTarget : TargetRules\n" +
+                "{\n" +
+                "    public __PROJECT_NAME__EditorTarget(TargetInfo Target) : base(Target)\n" +
+                "    { Type = TargetType.Editor; }\n" +
+                "}\n");
 
             Write(
                 Path.Combine(SdkRoot, "Plugins", "Finare", "Finare.uplugin"),
