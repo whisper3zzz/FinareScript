@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: migrated damage/heal passed; event state and reload presentation in progress; Editor validation only
+Status: complete migrated health Editor sequence passed in two independent copies; Editor validation only
 
 ## Outcome and scope
 
@@ -61,14 +61,46 @@ baseline; this pilot must not advertise a matched Puerts performance result.
 
 ## Relevant verification
 
+Revision `0003484` installs the event-state and reference fixes through the SDK.
+Both independent copies upgraded with 29 updated files, one new file and no
+conflicts. Their onboarding receipts are `20260911-173834` and
+`20260911-173940`. The SDK archive hash is
+`61bbef3c499534f48a1167bc1b505c54b27c92d41b353dbbea3bacc179dd684a`.
+
+The first copy passes the complete production health sequence in
+`artifacts/finare-usability/lyra-health-event-state-pie-2/health-pie.json`:
+100 -> damage 80 -> heal 90 -> reload/damage 80 -> respawn 100 -> damage 80 ->
+stop/damage 75 with HUD held at 80 -> restart sync 75 -> damage 70. Native
+health, the original numeric target and all three material targets agree;
+each damage/heal update arrives once. Reload replaces the managed generation,
+respawn retains the original Widget/driver, cached Pawn and health handles
+resolve correctly, and PIE teardown completes without Ensure or GC failure.
+The Editor exits with code zero. Audio is not accepted by this `-NoSound` run;
+the original Lyra respawn Widget logs missing CountdownAudio references.
+
+The second independently created class passes the same full sequence in
+`artifacts/finare-usability/lyra-replay-health-event-state-pie-1/health-pie.json`,
+with Editor exit zero and no Ensure/fatal/GC cleanup failure. Its own ClassId
+and identity sidecars were preserved during the source update. This closes the
+migrated health/HUD Editor slice, including independent reproduction. C-4 class
+composition and same-project asset/async failure coverage remain separate work;
+no further cooked acceptance is claimed.
+
+The preceding `lyra-health-event-state-pie-1` passed gameplay assertions but
+exposed a validation-script reference leak at teardown. Python's global driver
+held the PIE World through `FPyReferenceCollector`, and UE emitted a GC Ensure.
+Its JSON and process exit were insufficient for acceptance. The runner now
+releases that reference before EndPIE and also rejects Ensure/fatal/GC failures
+from the engine log; the `-2` run above includes that correction.
+
 Native scoped UObject handle retention is committed as `f48900d`. Two actual
 ObjectRegistry Automation tests pass in `object-reference-native-final2.log`,
 including multiple leases after real UObject GC and registry invalidation.
 The managed reference counterpart passes 94 focused tests in
 `object-reference-focused-final2.log`: generation scopes are independent even
 when they share a World bridge, borrowed event handles require explicit leases,
-and disposal can be retried after a rejected thread access. This code has not
-yet been installed into Lyra. The preceding `object-reference-native-final.log`
+and disposal can be retried after a rejected thread access. The preceding
+`object-reference-native-final.log`
 retains a real failed closed-scope status assertion; its Editor exit code of
 zero was not accepted as a successful test result.
 
@@ -81,8 +113,7 @@ entries, async continuations and native parent reentry, while failed lifecycle
 bodies retain their previous no-flush behavior. The combined managed suite passes
 134 tests, with 13 additional native-bridge contract tests. The sample persists
 Pawn/Widget identities and restores unchanged bindings without a spawn replay.
-Installation of these fixes and the complete Editor gameplay sequence remain
-in progress.
+The installed Editor evidence for these fixes is recorded above.
 
 The earlier SDK checkpoint `f7ebdea` fixes source dependency scanning: it ignores
 the inherited framework `UnrealObject.Handle` helper while retaining reflected
@@ -105,7 +136,7 @@ allocated (`us_b8602e394c1213cde6be4891e8ed3825`), not copied from the first pil
 Reports are under each copy's `Saved/Finare/LyraPilot` and `Saved/Finare/Onboarding`;
 the second managed onboarding receipt is `20260911-153045`.
 
-Actual migrated PIE is not yet accepted. In
+Before the static-reflection fix, migrated PIE was not accepted. In
 `artifacts/finare-usability/lyra-health-pie-3.json`, production DamageSelf changes
 native health from 100 to 80 while the original HUD remains 100. The persistent
 Widget reference is correct; one component lookup executes, but no health
@@ -132,7 +163,7 @@ the live health graph writes `Health_Updated` into BarBorderMID, BarFillMID and
 BarGlowMID instead. The harness now measures those actual consumers. Evidence:
 `artifacts/finare-usability/lyra-health-static-pie-5/health-pie.json`.
 
-Reload still exposes two real issues. The sample calls the original Pawn-change
+That SDK's reload exposed two real issues. The sample called the original Pawn-change
 presentation function on reload, replaying OnSpawned, whose material tracks set
 Health_Updated to 1. The numeric target changes to 80, but fill/glow remain 1 even
 after twenty seconds (`lyra-health-static-pie-6/health-pie.json`). Restore a
@@ -153,8 +184,9 @@ registration counts. The pilot retains its current Pawn through this public API.
 Revision `ce16fc1` reports latched reflected-event errors through the owning
 generation's existing tick diagnostic path. A later successful event cannot
 erase the failure. Two direct ABI v4 owner/lifetime tests and the 95-test focused
-transport/dispatch suite pass; installing it and observing native component
-diagnostics remain part of the next SDK verification.
+transport/dispatch suite pass. The current SDK installation includes this fix;
+the successful gameplay run does not itself constitute fault-injection coverage
+of the native component's error display.
 
 The checkpoints below retain the earlier failure/fix evidence. Their statements
 about then-pending work describe those revisions, not the current acceptance.

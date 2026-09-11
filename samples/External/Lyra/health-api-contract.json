@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
+  "contractName": "LyraStarterGame.HealthHud",
+  "managedNamespace": "LyraStarterGame.Finare.Health",
+  "nativeHeader": "FinareGeneratedThunks.h",
+  "nativeNamespace": "UE::Finare::Generated::LyraHealth",
+  "types": [
+    {
+      "path": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C",
+      "members": [
+        "Health Changed",
+        "OnPosessedPawnChanged",
+        "InitializeBarVisuals",
+        "ResetAnimatedState",
+        "SetDynamicMaterials",
+        "UpdateHealthbar",
+        "HealthNewValue",
+        "HealthOldValue",
+        "NormalizedHealth"
+      ]
+    },
+    {
+      "path": "/Script/Engine.Controller",
+      "members": [
+        "K2_GetPawn",
+        "OnPossessedPawnChanged"
+      ]
+    },
+    {
+      "path": "/Script/UMG.UserWidget",
+      "members": [
+        "GetOwningPlayerPawn"
+      ]
+    },
+    {
+      "path": "/Script/LyraGame.LyraHealthComponent",
+      "members": [
+        "FindHealthComponent",
+        "GetHealth",
+        "GetHealthNormalized",
+        "GetMaxHealth",
+        "OnHealthChanged",
+        "OnMaxHealthChanged"
+      ]
+    }
+  ],
+  "policy": {
+    "defaultAction": "allow",
+    "rules": [
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:Health Changed",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:OnPosessedPawnChanged",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:InitializeBarVisuals",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:ResetAnimatedState",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:SetDynamicMaterials",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:UpdateHealthbar",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:HealthNewValue",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:HealthOldValue",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Game/UI/Hud/W_Healthbar.W_Healthbar_C:NormalizedHealth",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/UMG.UserWidget:GetOwningPlayerPawn",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:FindHealthComponent",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:GetHealth",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:GetHealthNormalized",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:GetMaxHealth",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:OnHealthChanged",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/LyraGame.LyraHealthComponent:OnMaxHealthChanged",
+        "action": "allow",
+        "route": "reflectionFallback"
+      }
+    ]
+  }
+}

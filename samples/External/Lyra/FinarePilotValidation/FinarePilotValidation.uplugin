@@ -1,0 +1,16 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Finare Pilot Validation",
+  "Description": "Editor-only validation helpers for the Finare Lyra pilot.",
+  "Category": "Editor",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "FinarePilotValidation",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
