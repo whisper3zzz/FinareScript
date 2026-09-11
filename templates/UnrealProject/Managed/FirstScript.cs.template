@@ -6,8 +6,10 @@ using __MANAGED_NAMESPACE__.Generated;
 namespace __MANAGED_NAMESPACE__;
 
 [ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
-public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
+public sealed class __SCRIPT_NAME__ : UnrealActorScript
 {
+    private FinareComponent _component = null!;
+
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Finare")]
     public int StartValue { get; set; } = 1;
 
@@ -23,19 +25,22 @@ public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
         return result;
     }
 
-    public void OnStart(UnrealScriptContext context)
+    protected override void OnBeginPlay()
     {
-        var actor = new Actor(context.Target, context.Bridge);
+        _component = new FinareComponent(HostHandle, Bridge);
+        StartValue = _component.GetScriptStateInt32(nameof(StartValue), StartValue);
+        var actor = new Actor(Context.Target, Context.Bridge);
         _ = actor.GetActorLocation();
         UnrealObjectHandle instigator = actor.GetInstigator();
         if (!instigator.IsNull)
         {
-            _ = new Pawn(instigator, context.Bridge).GetController();
+            _ = new Pawn(instigator, Context.Bridge).GetController();
         }
         StartValue = AddClamped(StartValue, 1);
+        _component.SetScriptStateInt32(nameof(StartValue), StartValue);
     }
 
-    public void OnTick(float deltaSeconds)
+    protected override void OnTick(float deltaSeconds)
     {
         if (deltaSeconds < 0)
         {
@@ -43,7 +48,7 @@ public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
         }
     }
 
-    public void OnStop()
+    protected override void OnEndPlay()
     {
     }
 }
