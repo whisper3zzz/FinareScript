@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: original health/HUD runtime passed; installed Finare FirstPlay and migration in progress
+Status: installed Finare FirstPlay/reload passed; original health/HUD and respawn passed; migration in progress
 
 ## Outcome and scope
 
@@ -126,7 +126,44 @@ this original-behavior reference, so this is not migrated gameplay acceptance.
 The independent copy has an Editor-only validation plugin to request PIE in a
 hidden viewport; it contains no gameplay calls or health facade.
 
+The extended original reference also passed actual death/respawn through
+DamageSelfDestruct. The original health Widget followed the replacement pawn
+without being recreated; native health and HUD followed 100 -> 80 -> 90 ->
+respawn 100 -> 80. The World was destroyed at teardown. Evidence:
+`lyra-health-respawn.json` and `lyra-health-respawn-engine.log` in the same
+artifact directory (Editor exit 0).
+
+Revision `69ab6aa` fixes the starter's hosted-state consumption through generated
+FinareComponent Get/SetScriptStateInt32 calls. It uses UnrealActorScript lifecycle
+hooks, but does not claim generated-class automatic property synchronization for
+an ordinary hosted Script Asset. Its compiled template test executes state
+1 -> 2 -> 3 across recreated managed instances. Revision `db18d9e` completes
+Blueprint function-name selection through API contracts, preserving overloads,
+stable paths/IDs and the existing selector whitespace normalization.
+
+The SDK built at `db18d9e` upgraded the independent copy with 25 updates and no
+conflicts; receipt `20260911-055003-385ea15f`. Full onboarding passed in
+`Saved/Finare/Onboarding/20260911-135017/onboarding-report.json`. Actual FirstPlay
+then passed with Finare enabled: initial native state 1 became 2, generation 1
+reloaded to 2 with state 3, explicit stop succeeded, and PIE World teardown
+completed. The Editor's PS5 daily gate also passed. Evidence:
+`artifacts/finare-usability/lyra-first-play.json` and
+`lyra-first-play-engine-4.log` (Editor exit 0). This proves the installed starter
+workflow; it does not yet prove migrated Lyra gameplay.
+
+The actual health/HUD reflection input now generates the selected 17 members
+through the packaged CLI with zero rejected members, then compiles against the
+SDK runtime assemblies with zero warnings/errors. The contract explicitly
+selects the needed UserWidget parent API as well as W_Healthbar, Controller and
+LyraHealthComponent. This bounds the existing dependency-closure behavior.
+One Controller call uses a native thunk; the other 16 members use the existing
+reflection route, including three event subscriptions. Generated native includes
+only Engine Controller/Pawn headers. Evidence: `lyra-health-selected-contract.json`,
+`lyra-health-selected-generation-2.log`, `lyra-health-selected-compile.log` and
+`lyra-health-selected-bindings/coverage.json` under the artifact directory.
+
 The selected health/HUD APIs and W_Healthbar Blueprint also export through the
 installed SDK into `artifacts/finare-usability/lyra-health-pilot.reflection.json`.
-Generated call/event coverage, actual health/HUD behavior, reload,
-second-checkout reproduction and cooked execution remain to be verified.
+Selected binding generation/compilation and original health/HUD behavior are
+verified. Migrated health/HUD behavior, its reload/cleanup, second-checkout
+reproduction and cooked execution remain to be verified.
