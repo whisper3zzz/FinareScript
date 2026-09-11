@@ -420,6 +420,69 @@ public sealed class ScriptClassBindingTests
             chunk.Content);
     }
 
+    [Fact]
+    public void EmitsNativePublicationWorldFixtureForIndependentManagedOwners()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+
+            [ScriptAsset("Game/C4PublicationOwner")]
+            [UnrealScriptClass(
+                UnrealScriptClassKind.Actor,
+                GeneratedClassPath = "/Game/Temp/C4PublicationOwner.C4PublicationOwner_C")]
+            public sealed class C4PublicationOwner : UnrealActorScript
+            {
+                public int Count { get; set; } = 1;
+
+                protected override void OnBeginPlay() => Count += 100;
+
+                protected override void OnTick(float deltaSeconds) => Count += 1;
+            }
+
+            [ScriptAsset("Game/C4PublicationDescendant")]
+            [UnrealScriptClass(
+                UnrealScriptClassKind.Actor,
+                GeneratedClassPath = "/Game/Temp/C4PublicationDescendant.C4PublicationDescendant_C")]
+            public sealed class C4PublicationDescendant : UnrealActorScript
+            {
+                public int DescCount { get; set; } = 2;
+
+                protected override void OnBeginPlay() => DescCount += 200;
+
+                protected override void OnTick(float deltaSeconds) => DescCount += 2;
+            }
+            """;
+        string unrealAssembly = typeof(UnrealActorScript).Assembly.Location;
+        string coreAssembly = typeof(ScriptAssetAttribute).Assembly.Location;
+        var request = new CSharpCompilationRequest(
+            "C4PublicationWorldFixture",
+            [new CSharpSourceDocument("Game/C4PublicationWorldFixture.cs", source)],
+            referencePaths: [unrealAssembly, coreAssembly],
+            runtimeReferencePaths: [unrealAssembly, coreAssembly]);
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(request);
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        CSharpProgramImage image = Assert.IsType<CSharpProgramImage>(emitted.Image);
+        CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
+            image,
+            new CSharpProgramChunkOptions(
+                RuntimeReferencePaths: [unrealAssembly, coreAssembly],
+                EntryTypeNames: ["C4PublicationOwner", "C4PublicationDescendant"]));
+
+        string directory = Path.Combine(
+            FindRepositoryRoot(),
+            "artifacts",
+            "finare-usability",
+            "c4-publication-world-fixture");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "c4-publication-world-fixture.asset.json"),
+            ScriptAssetJson.Serialize(image.ScriptAssets) + Environment.NewLine);
+        File.WriteAllBytes(
+            Path.Combine(directory, "c4-publication-world-fixture.uschunk"),
+            chunk.Content);
+    }
+
     private static CSharpAnalysisResult Analyze(string source) =>
         new CSharpSemanticPipeline().Analyze(
             source,

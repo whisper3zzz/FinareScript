@@ -7024,24 +7024,18 @@ bool CaptureManagedStateValueSnapshots(
         return true;
     }
 
-    TMap<FGuid, FName> NewNamesByStateId;
+    struct FManagedVariableToSnapshot
+    {
+        FGuid StateId;
+        FName OldPropertyName;
+        FName NewPropertyName;
+        bool bRestoreOnSuccess = true;
+    };
+
+    TMap<FGuid, const FPlannedState*> PlannedStatesById;
     for (const FPlannedState& Planned : Plan.States)
     {
-        NewNamesByStateId.Add(Planned.Declaration.Id, Planned.Declaration.Name);
-    }
-
-    TArray<const FBPVariableDescription*> ManagedVariables;
-    for (const FBPVariableDescription& Variable : Blueprint.NewVariables)
-    {
-        if (IsManagedState(Variable) && Variable.HasMetaData(StateIdKey))
-        {
-            ManagedVariables.Add(&Variable);
-        }
-    }
-    if (ManagedVariables.IsEmpty())
-    {
-        OutError.Reset();
-        return true;
+        PlannedStatesById.Add(Planned.Declaration.Id, &Planned);
     }
 
     TArray<UObject*> Objects;
@@ -7069,35 +7063,93 @@ bool CaptureManagedStateValueSnapshots(
             continue;
         }
 
-        UObject* OldArchetype = Object->GetArchetype();
-        for (const FBPVariableDescription* Variable : ManagedVariables)
+        // GetObjectsOfClass(includeDerived=true) includes live instances and
+        // CDOs for every generated class below the selected owner.  Walk the
+        // object's actual generated-class chain back to the selected owner,
+        // reading each declaration owner's NewVariables.  This includes
+        // inherited selected-owner fields on a descendant object while still
+        // keeping a descendant's own state on its original name.
+        TArray<FManagedVariableToSnapshot> ManagedVariables;
+        TSet<FGuid> SeenStateIds;
+        for (UClass* DeclaringClass = Object->GetClass();
+             DeclaringClass != nullptr;
+             DeclaringClass = DeclaringClass->GetSuperClass())
         {
-            FGuid StateId;
-            if (!ParseSemanticId(Variable->GetMetaData(StateIdKey), StateId))
+            const UBlueprint* DeclaringBlueprint = Cast<UBlueprint>(
+                DeclaringClass->ClassGeneratedBy);
+            if (DeclaringBlueprint == nullptr)
             {
+                if (DeclaringClass == Blueprint.GeneratedClass)
+                {
+                    break;
+                }
                 continue;
             }
+            for (const FBPVariableDescription& Variable : DeclaringBlueprint->NewVariables)
+            {
+                if (!IsManagedState(Variable) || !Variable.HasMetaData(StateIdKey))
+                {
+                    continue;
+                }
+                FGuid StateId;
+                if (!ParseSemanticId(Variable.GetMetaData(StateIdKey), StateId) ||
+                    SeenStateIds.Contains(StateId))
+                {
+                    continue;
+                }
+                SeenStateIds.Add(StateId);
+                FManagedVariableToSnapshot& ManagedVariable = ManagedVariables.AddDefaulted_GetRef();
+                ManagedVariable.StateId = StateId;
+                ManagedVariable.OldPropertyName = Variable.VarName;
+                ManagedVariable.NewPropertyName = Variable.VarName;
+                if (DeclaringBlueprint == &Blueprint)
+                {
+                    if (const FPlannedState* const* Planned = PlannedStatesById.Find(StateId))
+                    {
+                        ManagedVariable.NewPropertyName = (*Planned)->Declaration.Name;
+                        if (Object == Blueprint.GeneratedClass->GetDefaultObject(false))
+                        {
+                            ManagedVariable.bRestoreOnSuccess = (*Planned)->bPreserveDefaultOverride;
+                        }
+                    }
+                    else
+                    {
+                        // A removed selected-owner state is restored for
+                        // rollback but has no success target in the candidate
+                        // class.
+                        ManagedVariable.NewPropertyName = NAME_None;
+                    }
+                }
+            }
+            if (DeclaringClass == Blueprint.GeneratedClass)
+            {
+                break;
+            }
+        }
+        UObject* OldArchetype = Object->GetArchetype();
+        for (const FManagedVariableToSnapshot& Variable : ManagedVariables)
+        {
             FProperty* OldProperty = FindStateProperty(
                 Object->GetClass(),
-                StateId,
-                Variable->VarName);
+                Variable.StateId,
+                Variable.OldPropertyName);
             if (OldProperty == nullptr || OldProperty->HasAnyPropertyFlags(CPF_Transient))
             {
                 OutError = FString::Printf(
                     TEXT("Managed state '%s' lost its reflected property on '%s' before typed preservation."),
-                    *Variable->VarName.ToString(),
+                    *Variable.OldPropertyName.ToString(),
                     *Object->GetPathName());
                 return false;
             }
             FProperty* ArchetypeProperty = OldArchetype != nullptr && OldArchetype != Object
-                ? FindStateProperty(OldArchetype->GetClass(), StateId, Variable->VarName)
+                ? FindStateProperty(OldArchetype->GetClass(), Variable.StateId, Variable.OldPropertyName)
                 : nullptr;
             if (ArchetypeProperty != nullptr &&
                 !ArePropertiesExactlyCompatible(OldProperty, ArchetypeProperty))
             {
                 OutError = FString::Printf(
                     TEXT("Managed state '%s' has an incompatible immediate archetype on '%s'."),
-                    *Variable->VarName.ToString(),
+                    *Variable.OldPropertyName.ToString(),
                     *Object->GetPathName());
                 return false;
             }
@@ -7113,23 +7165,10 @@ bool CaptureManagedStateValueSnapshots(
             Snapshot.OldArchetypeRoot = TStrongObjectPtr<UObject>(OldArchetype);
             Snapshot.ObjectIdentity.Capture(Object);
             Snapshot.bFollowsArchetype = bFollowsArchetype;
-            Snapshot.StateId = StateId;
-            Snapshot.OldPropertyName = Variable->VarName;
-            if (const FName* NewName = NewNamesByStateId.Find(StateId))
-            {
-                Snapshot.NewPropertyName = *NewName;
-                if (Object == Blueprint.GeneratedClass->GetDefaultObject(false))
-                {
-                    if (const FPlannedState* Planned = Plan.States.FindByPredicate(
-                            [&StateId](const FPlannedState& Candidate)
-                            {
-                                return Candidate.Declaration.Id == StateId;
-                            }))
-                    {
-                        Snapshot.bRestoreOnSuccess = Planned->bPreserveDefaultOverride;
-                    }
-                }
-            }
+            Snapshot.StateId = Variable.StateId;
+            Snapshot.OldPropertyName = Variable.OldPropertyName;
+            Snapshot.NewPropertyName = Variable.NewPropertyName;
+            Snapshot.bRestoreOnSuccess = Variable.bRestoreOnSuccess;
             if (bFollowsArchetype)
             {
                 continue;
@@ -7139,7 +7178,7 @@ bool CaptureManagedStateValueSnapshots(
             {
                 OutError = FString::Printf(
                     TEXT("Managed state '%s' on '%s' cannot be represented by a typed preservation snapshot."),
-                    *Variable->VarName.ToString(),
+                    *Variable.OldPropertyName.ToString(),
                     *Object->GetPathName());
                 return false;
             }
@@ -7149,7 +7188,7 @@ bool CaptureManagedStateValueSnapshots(
             {
                 OutError = FString::Printf(
                     TEXT("Managed state '%s' produced an incomplete typed preservation snapshot."),
-                    *Variable->VarName.ToString());
+                    *Variable.OldPropertyName.ToString());
                 return false;
             }
             CopyTypedPropertyValue(
@@ -8217,11 +8256,15 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 
 #if WITH_EDITOR
     TOptional<FFinareAuthoringActivationScope> AuthoringActivationScope;
-    if (ParentPlan.bChanged)
+    if (bTransactional)
     {
         // Hold the authoring owner through preflight, reinstance, and local
         // transaction rollback so reinstanced BeginPlay cannot start a stale
-        // managed generation before the operation has finished.
+        // managed generation before the operation has finished.  Same-parent
+        // publication still recompiles/reinstances the exact owner and its
+        // managed descendants when external outputs are part of the
+        // transaction, so it needs the same lifetime barrier as a parent
+        // change.
         AuthoringActivationScope.Emplace(&Blueprint);
     }
 #endif

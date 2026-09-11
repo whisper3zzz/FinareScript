@@ -38,8 +38,8 @@ coordinator passes in `c4-coordinator-7.log`, including a saved Actor hierarchy,
 external-write rollback, parent history replay, positive-but-mismatched preview
 revisions, contradictory declarations and completed-transaction rejection.
 `ParentChange.Primitive` and `OperationJournal` pass in their `-2.log` files in
-the same directory. These tests do not cover a real World rejecting a no-op
-parent publication.
+the same directory. The later World checkpoint below covers real active and
+stopped instances during same-parent publication.
 
 The subsequent Slate recovery edits retain a separate reservation state so
 HTTP failure cannot let a new edit overwrite the pending transaction. Cancel
@@ -98,12 +98,34 @@ under `artifacts/finare-usability/`; the last three share
 first Actor run's stale pre-rename declaration path remain in their failed logs.
 The networking fixture now reads the installed plugin's current emitted Demo
 declaration. This establishes routing and its existing lifecycle/input consumers;
-same-parent live publication and SCS composition remain open.
+ordinary Actor/SCS composition remains open.
+
+Same-parent publication now holds the authoring activation barrier through
+compilation and rollback. Typed snapshots walk each affected object's generated
+class ancestry, preserving both inherited fields and independently managed
+descendant fields. Only the selected declaration owner applies candidate
+rename/remove/default rules; descendant-owned fields retain their own identity.
+
+The focused emitter test and Editor build pass. The emitted two-owner fixture
+drives real managed instances in separate Worlds.
+`NativePublicationWorlds` verifies rejection while either the selected owner or
+its independently managed descendant is active; after both stop, publication and
+injected external-write rollback preserve stopped state, accumulated values,
+an inherited override, ScriptAsset references and exact component archetypes.
+Explicit restart and Tick succeed after rollback, and teardown restores the
+managed World count. That test, `ParentChange.Primitive` and
+`NativePublicationCoordinator` pass with Editor exit 0 in
+`artifacts/finare-usability/c4-publication-world-worlds.log`,
+`c4-publication-parentchange-primitive.log` and `c4-publication-coordinator.log`.
+Earlier failed runs exposed missing fixture runtime dependencies/class paths
+and the descendant-state loss repaired here; they remain in the backup logs.
+This closes the current publication safety slice, not ordinary Actor composition
+or C-4 as a whole. No additional Cook/package validation was run.
 
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
 native consumers. The `updateClassBase` declaration patch edits that explicit
-attribute argument. A native parent transaction now handles existing carrier
-families; joining it to normal source publication remains separate work.
+attribute argument. Its native transaction now joins normal source publication
+for existing carrier families; ordinary Actor composition remains unfinished.
 
 The first contract carries optional `ClassBinding` data through Declaration IR
 and the compiled runtime declaration: opaque `Kind`, `BaseClassPath` and
@@ -228,59 +250,37 @@ already permits compatible Rename with a stable ClassId. The factory's
 RequiredTargetClass and native behavior component also need reconciliation
 when a parent change leaves the original Finare native root family.
 
-Next connect the native authoring control using the source patch preconditions
+The native authoring control uses the source patch preconditions
 and the existing publication/recovery workflow. Parent changes
 must preserve intentional inherited defaults and references, reject cycles and
 incompatible ownership, and handle dependent Blueprint classes transactionally.
 Parents requiring component composition remain part of C-4; the initial
 declaration transport is not completion of the base-class feature or milestone.
 
-The current Workbench transaction publishes managed source/artifacts/history
-before Slate queues the separate daily Build & Reload. Its successful response
-is therefore not a transaction across source and UE parent changes. The parent
-operation must cover both publication and UE mutation through the existing
-class-operation recovery journal; a later failed daily build cannot be presented
-as an atomic rollback. The native parent transaction now restores authoring,
-compiled parent/bindings and component ownership on failure. Deliberate
-descendant/instance defaults and mixed parent/member rollback values still need
-typed snapshots and their focused tests.
+Parent publication covers source/artifact writes and UE mutation through the
+class-operation recovery journal. A separate daily Build & Reload is not an
+atomic rollback mechanism. The native transaction restores authoring, compiled
+parent/bindings, component ownership and typed descendant/instance values on
+failure; the verified parent-change cases are recorded below.
 The standalone CLI `apply-declaration-patch` entrypoint still constructs a
-single-source request. Native integration must retain the project sources,
-references and identity sidecars already used by the Workbench and C-3 class
-operations; it cannot reduce a partial class to that single-file entrypoint.
-`ProjectAuthoringInput.Load` already retains evaluated project sources,
-references and identity sidecars, but marks every non-primary source read-only.
-The parent control must resolve the class attribute's actual partial owner and
-respect that source's editability. Loading the full project alone does not make
-an attribute in a different partial file writable. The existing Workbench preview
-retains a candidate snapshot behind its preview token; it currently exposes
-source/graph differences, not a prepared native-parent commit boundary.
-`CoreClrDebugHttpServer.CreatePreview` retains the analyzed candidate and
-`TakePreparedPreview` consumes it when committing. Slate's `HandlePatchResponse`
-adopts the already-published workspace before queuing the daily build. Parent
-publication must join that transaction boundary rather than treating a later
-build failure as a successful source edit. Do not leave the private
+single-source request. Native integration instead retains evaluated project
+sources, references and physical identity-sidecar paths. Only the primary source
+and the selected class attribute's actual partial owner are editable. The
+Workbench preview retains its analyzed candidate behind an exact preview token;
+native prepare reserves it and supplies candidate outputs before managed
+generation adoption. Do not leave the private
 `GEditor->Trans`/`GUndo` swap installed while awaiting an asynchronous Workbench
 HTTP response; the current native isolation scope is synchronous.
 
-The native parent preview must use the analyzed candidate declaration bound to
-the Workbench preview token. The current authoring-preview v0.3 response exposes
-source/graph-layout differences, but not that candidate declaration; reading the
-existing declaration file would instead validate the old published program.
-Keep the selected asset identity, baseline revision and transaction identity
-bound to the candidate across native preflight and publication. The ordinary
-`HandlePreviewResponse` path currently dispatches the source commit immediately
-after diff confirmation, so parent edits need an explicit native participant
-before reusing that dispatch path. No parent control exists in the native
-authoring surface yet.
+Native preflight uses that candidate declaration rather than reading the old
+published declaration file. The selected asset, baseline revision and
+transaction identity remain bound to it through publication. The native
+inspector's base edit/clear controls participate in this boundary.
 
 Actor composition must reconcile the factory's `RequiredTargetClass` and its
-native `Finare` component when leaving `AFinareActor`. Ordinary
-managed function dispatch currently finds the first Script Component on an
-Actor, while Blueprint overrides already select an exact active owner. Multiple
-composed behaviors need exact function-owner routing before a second carrier is
-introduced; preserve one owner per behavior rather than relying on component
-enumeration order.
+native `Finare` component when leaving `AFinareActor`. Ordinary managed
+functions and Blueprint overrides now select an exact active owner. Composition
+must preserve one owner per behavior rather than relying on component order.
 
 ## Native publication integration decision — 2026-09-11
 
@@ -291,11 +291,11 @@ pass. The new case fails after both an existing and a newly created output have
 been written, and restores package bytes, source bytes, graph/state identities,
 three distinct CDO values and component ownership. Logs are under
 `artifacts/finare-usability/c4-parentchange-external-3-engine.log` and
-`c4-operationjournal-external-engine.log`. Normal Workbench coordination,
-partial-file ownership, durable completion and composition remain unfinished;
-this checkpoint does not close C-4.
+`c4-operationjournal-external-engine.log`. Subsequent checkpoints above add
+Workbench coordination, partial-file ownership and durable completion.
+Composition remains unfinished; this checkpoint does not close C-4.
 
-The next delivery joins the existing Workbench prepared candidate to the native
+The joint publication joins the existing Workbench prepared candidate to the native
 class-operation journal. It does not commit a source edit first and attempt to
 compensate later with ordinary Undo or a separate daily build.
 

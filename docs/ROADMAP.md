@@ -38,9 +38,15 @@ unrestricted visual editing of all C#, or a promise to win every benchmark.
   collection follow/override values through reparenting, actual package unload
   and reload. External object keys remain searchable in Set/Map, incompatible
   reference-type changes reject before mutation, and reloaded descendants run
-  the saved managed state in two Worlds. Next cover combined parent/declaration
-  edits and connect normal authoring publication, then extend component
-  composition through the existing asset workflow.
+  the saved managed state in two Worlds. Normal authoring now joins prepared
+  source/artifact writes to native publication and recovery, including partial
+  source ownership and native base edit/clear controls. Same-parent publication
+  rejects active owners/managed descendants and preserves their stopped state,
+  inherited fields and independently managed fields through commit and rollback.
+  Exact managed function-owner routing is also implemented. Next complete
+  ordinary Actor/component composition and its default/reference ownership
+  through the existing asset workflow. Current verification is Editor-only;
+  additional Cook/package validation is deferred at the user's request.
   Implementation decisions are in `docs/plans/2026-09-09-class-composition.md`.
 - Latest inheritance checkpoint: **M13.3C-3 complete**.
   The real Actor factory preserves the exact Script Asset, native component
