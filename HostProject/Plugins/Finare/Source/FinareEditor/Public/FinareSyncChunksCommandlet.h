@@ -11,10 +11,10 @@
 UCLASS()
 class FINAREEDITOR_API UFinareSyncChunksCommandlet : public UCommandlet
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    UFinareSyncChunksCommandlet();
+	UFinareSyncChunksCommandlet();
 
-    virtual int32 Main(const FString& Params) override;
+	virtual int32 Main(const FString& Params) override;
 };

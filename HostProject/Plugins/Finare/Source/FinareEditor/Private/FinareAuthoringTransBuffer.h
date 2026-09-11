@@ -14,45 +14,45 @@
 class FAuthoringBlueprintTransaction final : public FTransaction
 {
 public:
-    FAuthoringBlueprintTransaction(
-        const TCHAR* InContext = nullptr,
-        const FText& InTitle = FText(),
-        bool /*bInFlip*/ = false)
-        : FTransaction(InContext, InTitle, true)
-    {
-    }
+	FAuthoringBlueprintTransaction(
+		const TCHAR* InContext = nullptr,
+		const FText& InTitle = FText(),
+		bool /*bInFlip*/  = false)
+		: FTransaction(InContext, InTitle, true)
+	{
+	}
 
-    void BeginExplicitAuthoringCapture();
-    void EndExplicitAuthoringCapture();
+	void BeginExplicitAuthoringCapture();
+	void EndExplicitAuthoringCapture();
 
-    virtual void SaveObject(UObject* Object) override;
-    virtual void SaveArray(
-        UObject* Object,
-        FScriptArray* Array,
-        int32 Index,
-        int32 Count,
-        int32 Oper,
-        int32 ElementSize,
-        uint32 ElementAlignment,
-        STRUCT_DC DefaultConstructor,
-        STRUCT_AR Serializer,
-        STRUCT_DTOR Destructor) override;
-    virtual void StoreUndo(UObject* Object, TUniquePtr<FChange> UndoChange) override;
-    virtual void SnapshotObject(UObject* Object, TArrayView<const FProperty*> Properties) override;
+	virtual void SaveObject(UObject* Object) override;
+	virtual void SaveArray(
+		UObject* Object,
+		FScriptArray* Array,
+		int32 Index,
+		int32 Count,
+		int32 Oper,
+		int32 ElementSize,
+		uint32 ElementAlignment,
+		STRUCT_DC DefaultConstructor,
+		STRUCT_AR Serializer,
+		STRUCT_DTOR Destructor) override;
+	virtual void StoreUndo(UObject* Object, TUniquePtr<FChange> UndoChange) override;
+	virtual void SnapshotObject(UObject* Object, TArrayView<const FProperty*> Properties) override;
 
 private:
-    bool IsAuthoringObjectAllowed(UObject* Object) const;
+	bool IsAuthoringObjectAllowed(UObject* Object) const;
 
-    TSet<FObjectKey> ExplicitAuthoringObjects;
-    bool bExplicitAuthoringCaptureOpen = false;
+	TSet<FObjectKey> ExplicitAuthoringObjects;
+	bool bExplicitAuthoringCaptureOpen = false;
 };
 
 /** Private transaction buffer for Blueprint authoring state recovery. */
 UCLASS(Transient)
 class UFinareAuthoringTransBuffer final : public UTransBuffer
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    virtual int32 Begin(const TCHAR* SessionContext, const FText& Description) override;
+	virtual int32 Begin(const TCHAR* SessionContext, const FText& Description) override;
 };

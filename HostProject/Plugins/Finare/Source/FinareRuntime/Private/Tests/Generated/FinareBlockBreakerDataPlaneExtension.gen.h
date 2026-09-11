@@ -7,78 +7,78 @@
 
 namespace UE::Finare::Extensions::BlockBreaker
 {
-struct alignas(8) FBlockBreakerImpactEventV1
-{
-    uint64 SequenceId = 0;
-    FFinareSharedObjectHandleV4 Source = {};
-    FFinareSharedObjectHandleV4 Target = {};
-    double ImpactX = 0.0;
-    double ImpactY = 0.0;
-    double ImpactZ = 0.0;
-    double ImpulseX = 0.0;
-    double ImpulseY = 0.0;
-    double ImpulseZ = 0.0;
-    double Damage = 0.0;
-    int32 SurfaceType = 0;
-    uint32 Flags = 0;
-};
+	struct alignas(8) FBlockBreakerImpactEventV1
+	{
+		uint64 SequenceId = 0;
+		FFinareSharedObjectHandleV4 Source = {};
+		FFinareSharedObjectHandleV4 Target = {};
+		double ImpactX = 0.0;
+		double ImpactY = 0.0;
+		double ImpactZ = 0.0;
+		double ImpulseX = 0.0;
+		double ImpulseY = 0.0;
+		double ImpulseZ = 0.0;
+		double Damage = 0.0;
+		int32 SurfaceType = 0;
+		uint32 Flags = 0;
+	};
 
-struct alignas(8) FBlockBreakerTargetSnapshotV1
-{
-    FFinareSharedObjectHandleV4 Actor = {};
-    double LocationX = 0.0;
-    double LocationY = 0.0;
-    double LocationZ = 0.0;
-    double VelocityX = 0.0;
-    double VelocityY = 0.0;
-    double VelocityZ = 0.0;
-    double Threat = 0.0;
-    int32 TeamId = 0;
-    uint32 Flags = 0;
-    uint64 FrameNumber = 0;
-};
+	struct alignas(8) FBlockBreakerTargetSnapshotV1
+	{
+		FFinareSharedObjectHandleV4 Actor = {};
+		double LocationX = 0.0;
+		double LocationY = 0.0;
+		double LocationZ = 0.0;
+		double VelocityX = 0.0;
+		double VelocityY = 0.0;
+		double VelocityZ = 0.0;
+		double Threat = 0.0;
+		int32 TeamId = 0;
+		uint32 Flags = 0;
+		uint64 FrameNumber = 0;
+	};
 
-inline constexpr FFinareDataPlaneExtensionChannelDescriptor ImpactEvents =
-{
-    TEXT("ImpactEvents"),
-    0x55534242494D5001ull,
-    104u,
-    4096u,
-    524288ull,
-    EFinareDataPlaneExtensionChannelKind::Event,
-    EFinareDataPlaneExtensionPublicationPhase::Native,
-    TEXT("extension.blockbreaker.impactEvents"),
-};
+	inline constexpr FFinareDataPlaneExtensionChannelDescriptor ImpactEvents =
+	{
+		TEXT("ImpactEvents"),
+		0x55534242494D5001ull,
+		104u,
+		4096u,
+		524288ull,
+		EFinareDataPlaneExtensionChannelKind::Event,
+		EFinareDataPlaneExtensionPublicationPhase::Native,
+		TEXT("extension.blockbreaker.impactEvents"),
+	};
 
-inline constexpr FFinareDataPlaneExtensionChannelDescriptor TargetSnapshots =
-{
-    TEXT("TargetSnapshots"),
-    0x5553424254415201ull,
-    88u,
-    2048u,
-    262144ull,
-    EFinareDataPlaneExtensionChannelKind::Snapshot,
-    EFinareDataPlaneExtensionPublicationPhase::Native,
-    TEXT("extension.blockbreaker.targetSnapshot"),
-};
+	inline constexpr FFinareDataPlaneExtensionChannelDescriptor TargetSnapshots =
+	{
+		TEXT("TargetSnapshots"),
+		0x5553424254415201ull,
+		88u,
+		2048u,
+		262144ull,
+		EFinareDataPlaneExtensionChannelKind::Snapshot,
+		EFinareDataPlaneExtensionPublicationPhase::Native,
+		TEXT("extension.blockbreaker.targetSnapshot"),
+	};
 
-inline constexpr FFinareDataPlaneExtensionChannelDescriptor Channels[] =
-{
-    ImpactEvents,
-    TargetSnapshots,
-};
+	inline constexpr FFinareDataPlaneExtensionChannelDescriptor Channels[] =
+	{
+		ImpactEvents,
+		TargetSnapshots,
+	};
 
-inline constexpr FFinareDataPlaneExtensionDescriptor Descriptor =
-{
-    TEXT("BlockBreaker.SpatialCombat"),
-    0x5553424245585401ull,
-    1u,
-    4u,
-    0x555344504C415901ull,
-    0xBB23EDDB69B7FD0Cull,
-    Channels,
-    UE_ARRAY_COUNT(Channels),
-};
+	inline constexpr FFinareDataPlaneExtensionDescriptor Descriptor =
+	{
+		TEXT("BlockBreaker.SpatialCombat"),
+		0x5553424245585401ull,
+		1u,
+		4u,
+		0x555344504C415901ull,
+		0xBB23EDDB69B7FD0Cull,
+		Channels,
+		UE_ARRAY_COUNT(Channels),
+	};
 }
 
 static_assert(std::is_standard_layout_v<UE::Finare::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>);

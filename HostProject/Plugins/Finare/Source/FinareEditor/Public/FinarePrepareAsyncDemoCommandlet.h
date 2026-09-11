@@ -7,8 +7,9 @@
 UCLASS()
 class FINAREEDITOR_API UFinarePrepareAsyncDemoCommandlet : public UCommandlet
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
+
 public:
-    UFinarePrepareAsyncDemoCommandlet();
-    virtual int32 Main(const FString& Params) override;
+	UFinarePrepareAsyncDemoCommandlet();
+	virtual int32 Main(const FString& Params) override;
 };

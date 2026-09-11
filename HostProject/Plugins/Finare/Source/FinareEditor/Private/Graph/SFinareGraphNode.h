@@ -8,11 +8,14 @@ class UFinareEdGraphNode;
 class SFinareGraphNode final : public SGraphNode
 {
 public:
-    SLATE_BEGIN_ARGS(SFinareGraphNode) {}
-    SLATE_END_ARGS()
+	SLATE_BEGIN_ARGS(SFinareGraphNode)
+		{
+		}
 
-    void Construct(const FArguments& InArgs, UFinareEdGraphNode* InNode);
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs, UFinareEdGraphNode* InNode);
 
 protected:
-    virtual TSharedRef<SWidget> CreateNodeContentArea() override;
+	virtual TSharedRef<SWidget> CreateNodeContentArea() override;
 };

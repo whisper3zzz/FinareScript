@@ -1,12 +1,3 @@
-/**
- * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
- * @Author: whispersong
- * @Date: 2026-08-25 17:47:14
- * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 17:55:12
- * @FilePath: \Plugins\Finare\Source\FinareRuntime\Public\FinareWorldLibrary.h
- * @Description:
- */
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,69 +13,69 @@
  */
 UCLASS()
 class FINARERUNTIME_API UFinareWorldLibrary final
-    : public UBlueprintFunctionLibrary
+	: public UBlueprintFunctionLibrary
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    /** Shared Puerts/Finare arbitration point for one host lifecycle route. */
-    UFUNCTION(BlueprintCallable, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
-    static bool ClaimGameplayLifecycle(
-        UObject* WorldContextObject,
-        UObject* Claimant,
-        UObject* HostObject,
-        FName LifecycleKey,
-        EFinareRuntimeOwner RuntimeOwner,
-        FString& OutError);
+	/** Shared Puerts/Finare arbitration point for one host lifecycle route. */
+	UFUNCTION(BlueprintCallable, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
+	static bool ClaimGameplayLifecycle(
+		UObject* WorldContextObject,
+		UObject* Claimant,
+		UObject* HostObject,
+		FName LifecycleKey,
+		EFinareRuntimeOwner RuntimeOwner,
+		FString& OutError);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
-    static bool ReleaseGameplayLifecycle(
-        UObject* WorldContextObject,
-        UObject* Claimant,
-        UObject* HostObject,
-        FName LifecycleKey,
-        EFinareRuntimeOwner RuntimeOwner,
-        FString& OutError);
+	UFUNCTION(BlueprintCallable, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
+	static bool ReleaseGameplayLifecycle(
+		UObject* WorldContextObject,
+		UObject* Claimant,
+		UObject* HostObject,
+		FName LifecycleKey,
+		EFinareRuntimeOwner RuntimeOwner,
+		FString& OutError);
 
-    UFUNCTION(BlueprintPure, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
-    static FString GetGameplayLifecycleOwnershipReport(UObject* WorldContextObject);
+	UFUNCTION(BlueprintPure, Category="Finare|Coexistence", meta=(WorldContext="WorldContextObject"))
+	static FString GetGameplayLifecycleOwnershipReport(UObject* WorldContextObject);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|Resources", meta=(WorldContext="WorldContextObject"))
-    static UObject* LoadObjectByPath(UObject* WorldContextObject, const FString& ObjectPath);
+	UFUNCTION(BlueprintCallable, Category="Finare|Resources", meta=(WorldContext="WorldContextObject"))
+	static UObject* LoadObjectByPath(UObject* WorldContextObject, const FString& ObjectPath);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|Resources", meta=(WorldContext="WorldContextObject"))
-    static UClass* LoadClassByPath(UObject* WorldContextObject, const FString& ClassPath);
+	UFUNCTION(BlueprintCallable, Category="Finare|Resources", meta=(WorldContext="WorldContextObject"))
+	static UClass* LoadClassByPath(UObject* WorldContextObject, const FString& ClassPath);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
-    static AActor* SpawnActor(
-        UObject* WorldContextObject,
-        UClass* ActorClass,
-        const FTransform& Transform);
+	UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
+	static AActor* SpawnActor(
+		UObject* WorldContextObject,
+		UClass* ActorClass,
+		const FTransform& Transform);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
-    static bool DestroyActor(UObject* WorldContextObject, AActor* Actor);
+	UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
+	static bool DestroyActor(UObject* WorldContextObject, AActor* Actor);
 
-    UFUNCTION(BlueprintPure, Category="Finare|Components", meta=(WorldContext="WorldContextObject"))
-    static UActorComponent* FindComponentByClass(
-        UObject* WorldContextObject,
-        AActor* Actor,
-        UClass* ComponentClass);
+	UFUNCTION(BlueprintPure, Category="Finare|Components", meta=(WorldContext="WorldContextObject"))
+	static UActorComponent* FindComponentByClass(
+		UObject* WorldContextObject,
+		AActor* Actor,
+		UClass* ComponentClass);
 
-    UFUNCTION(BlueprintPure, Category="Finare|Input", meta=(WorldContext="WorldContextObject"))
-    static bool IsInputKeyDown(
-        UObject* WorldContextObject,
-        APlayerController* PlayerController,
-        FName KeyName);
+	UFUNCTION(BlueprintPure, Category="Finare|Input", meta=(WorldContext="WorldContextObject"))
+	static bool IsInputKeyDown(
+		UObject* WorldContextObject,
+		APlayerController* PlayerController,
+		FName KeyName);
 
-    UFUNCTION(BlueprintPure, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
-    static float GetWorldTimeSeconds(UObject* WorldContextObject);
+	UFUNCTION(BlueprintPure, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
+	static float GetWorldTimeSeconds(UObject* WorldContextObject);
 
-    UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
-    static bool LineTraceSingle(
-        UObject* WorldContextObject,
-        const FVector& Start,
-        const FVector& End,
-        AActor* IgnoreActor,
-        FHitResult& OutHit,
-        AActor*& OutHitActor);
+	UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
+	static bool LineTraceSingle(
+		UObject* WorldContextObject,
+		const FVector& Start,
+		const FVector& End,
+		AActor* IgnoreActor,
+		FHitResult& OutHit,
+		AActor*& OutHitActor);
 };

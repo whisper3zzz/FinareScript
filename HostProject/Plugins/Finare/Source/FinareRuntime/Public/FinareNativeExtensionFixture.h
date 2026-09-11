@@ -9,40 +9,56 @@
 UCLASS(BlueprintType)
 class FINARERUNTIME_API UFinareNativeExtensionFixture : public UObject
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    int32 Counter = 7;
-    FFinareByteBuffer Payload;
-    int32 BinaryCalls = 0;
+	int32 Counter = 7;
+	FFinareByteBuffer Payload;
+	int32 BinaryCalls = 0;
 
-    void StoreBytes(const FFinareByteBuffer& Value) { Payload = Value; ++BinaryCalls; }
-    FFinareByteBuffer ReadBytes() { ++BinaryCalls; return Payload; }
-    FFinareByteBuffer TransformBytes(const FFinareByteBuffer& Input,
-        FFinareByteBuffer& InOut, int32& Calls)
-    {
-        ++BinaryCalls;
-        TArray<uint8> Output;
-        Output.SetNumZeroed(Input.Num() + 8192);
-        const auto View = Input.GetView();
-        for (int32 Index = 0; Index < View.Num(); ++Index) Output[Index] = View[Index] ^ 0xA5;
-        InOut = FFinareByteBuffer::TakeOwnership(MoveTemp(Output));
-        Payload = InOut;
-        Calls = BinaryCalls;
-        return InOut;
-    }
+	void StoreBytes(const FFinareByteBuffer& Value)
+	{
+		Payload = Value;
+		++BinaryCalls;
+	}
 
-    void Reset() { Counter = 6; }
+	FFinareByteBuffer ReadBytes()
+	{
+		++BinaryCalls;
+		return Payload;
+	}
 
-    int32 Scale(int32 Value) const { return Counter * Value; }
-    double Scale(double Value) const { return Counter * Value; }
+	FFinareByteBuffer TransformBytes(const FFinareByteBuffer& Input,
+	                                 FFinareByteBuffer& InOut, int32& Calls)
+	{
+		++BinaryCalls;
+		TArray<uint8> Output;
+		Output.SetNumZeroed(Input.Num() + 8192);
+		const auto View = Input.GetView();
+		for (int32 Index = 0; Index < View.Num(); ++Index)
+		{
+			Output[Index] = View[Index] ^ 0xA5;
+		}
+		InOut = FFinareByteBuffer::TakeOwnership(MoveTemp(Output));
+		Payload = InOut;
+		Calls = BinaryCalls;
+		return InOut;
+	}
 
-    static int32 Multiply(int32 Left, int32 Right) { return Left * Right; }
+	void Reset() { Counter = 6; }
 
-    bool Accumulate(const TArray<int32>& Values, int32& Total, FString& Label) const
-    {
-        for (int32 Value : Values) Total += Value;
-        Label = FString::Printf(TEXT("total:%d"), Total);
-        return Values.Num() > 0;
-    }
+	int32 Scale(int32 Value) const { return Counter * Value; }
+	double Scale(double Value) const { return Counter * Value; }
+
+	static int32 Multiply(int32 Left, int32 Right) { return Left * Right; }
+
+	bool Accumulate(const TArray<int32>& Values, int32& Total, FString& Label) const
+	{
+		for (int32 Value : Values)
+		{
+			Total += Value;
+		}
+		Label = FString::Printf(TEXT("total:%d"), Total);
+		return Values.Num() > 0;
+	}
 };

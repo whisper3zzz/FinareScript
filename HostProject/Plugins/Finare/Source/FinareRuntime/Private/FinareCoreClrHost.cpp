@@ -20,2139 +20,2140 @@ using FFinareHostChar = char;
 
 namespace UE::Finare::CoreClr::Private
 {
-using FHostFxrInitialize = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    const FFinareHostChar* RuntimeConfigPath,
-    const void* Parameters,
-    void** HostContext);
-using FHostFxrGetRuntimeDelegate = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    void* HostContext,
-    int32 DelegateType,
-    void** Delegate);
-using FHostFxrClose = int32(FINARE_HOSTFXR_CALLTYPE *)(void* HostContext);
-using FLoadAssemblyAndGetFunctionPointer = int32(
-    FINARE_CORECLR_DELEGATE_CALLTYPE *)(
-    const FFinareHostChar* AssemblyPath,
-    const FFinareHostChar* TypeName,
-    const FFinareHostChar* MethodName,
-    const FFinareHostChar* DelegateTypeName,
-    void* Reserved,
-    void** Delegate);
-using FCreateWorldEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    void* Context,
-    const FFinareNativeTransportV2* Transport);
-using FDestroyWorldEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(uint64 WorldHostId);
-using FGetWorldCountEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)();
-using FCollectRetiredLoadContextsEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)();
-using FCreateScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    uint64 Host,
-    uint64 Target,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength);
-using FCreateScriptWithBlueprintContractEntryPoint = int32(
-    FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    uint64 Host,
-    uint64 Target,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength,
-    const uint8* ContractData,
-    int32 ContractLength);
-using FTickScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    float DeltaSeconds);
-using FConfigureScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const uint8* ConfigurationData,
-    int32 ConfigurationLength);
-using FBeginScriptDebugTickEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    float DeltaSeconds);
-using FGetScriptDebugStateEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    uint8* Buffer,
-    int32 BufferCapacity);
-using FGetScriptReloadStateEntryPoint = FGetScriptDebugStateEntryPoint;
-using FSetScriptProfilerEnabledEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 Enabled);
-using FGetScriptProfilerTraceEntryPoint = FGetScriptDebugStateEntryPoint;
-using FControlScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 Control,
-    const uint8* PauseIdData,
-    int32 PauseIdLength);
-using FDisableScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId);
-using FIsScriptDebugActiveEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId);
-using FDispatchEventEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 EventKind,
-    uint64 Source,
-    uint64 Argument);
-using FInvokeScriptFunctionEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const uint8* FunctionNameData,
-    int32 FunctionNameLength,
-    const FFinareManagedFunctionValueV1* Arguments,
-    int32 ArgumentCount,
-    FFinareManagedFunctionValueV1* OutResult);
-using FInvokeScriptFunctionV2EntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength,
-    const uint8* FunctionNameData,
-    int32 FunctionNameLength,
-    FFinareNativeCallFrameV3* Frame);
-using FReloadScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength);
-using FPrepareScriptReloadEntryPoint = FReloadScriptEntryPoint;
-using FCommitScriptReloadEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 CandidateGeneration);
-using FReloadControlEntryPoint = FCommitScriptReloadEntryPoint;
-using FPrepareStaticLibraryReloadEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength);
-using FStaticLibraryReloadControlEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    const uint8* AssemblyPathData,
-    int32 AssemblyPathLength,
-    const uint8* TypeNameData,
-    int32 TypeNameLength,
-    int32 CandidateGeneration);
-using FDestroyScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64 InstanceId);
-using FGetScriptCountEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId);
-using FGetInvocationMetricsEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint64* OutCallFrameInvocationCount,
-    uint64* OutLegacyInvocationCount);
-using FGetLastErrorEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
-    uint64 WorldHostId,
-    uint8* Buffer,
-    int32 BufferCapacity);
+	using FHostFxrInitialize = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		const FFinareHostChar* RuntimeConfigPath,
+		const void* Parameters,
+		void** HostContext);
+	using FHostFxrGetRuntimeDelegate = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		void* HostContext,
+		int32 DelegateType,
+		void** Delegate);
+	using FHostFxrClose = int32(FINARE_HOSTFXR_CALLTYPE *)(void* HostContext);
+	using FLoadAssemblyAndGetFunctionPointer = int32(
+		FINARE_CORECLR_DELEGATE_CALLTYPE *)(
+		const FFinareHostChar* AssemblyPath,
+		const FFinareHostChar* TypeName,
+		const FFinareHostChar* MethodName,
+		const FFinareHostChar* DelegateTypeName,
+		void* Reserved,
+		void** Delegate);
+	using FCreateWorldEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		void* Context,
+		const FFinareNativeTransportV2* Transport);
+	using FDestroyWorldEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(uint64 WorldHostId);
+	using FGetWorldCountEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)();
+	using FCollectRetiredLoadContextsEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)();
+	using FCreateScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		uint64 Host,
+		uint64 Target,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength);
+	using FCreateScriptWithBlueprintContractEntryPoint = int32(
+		FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		uint64 Host,
+		uint64 Target,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength,
+		const uint8* ContractData,
+		int32 ContractLength);
+	using FTickScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		float DeltaSeconds);
+	using FConfigureScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		const uint8* ConfigurationData,
+		int32 ConfigurationLength);
+	using FBeginScriptDebugTickEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		float DeltaSeconds);
+	using FGetScriptDebugStateEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		uint8* Buffer,
+		int32 BufferCapacity);
+	using FGetScriptReloadStateEntryPoint = FGetScriptDebugStateEntryPoint;
+	using FSetScriptProfilerEnabledEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		int32 Enabled);
+	using FGetScriptProfilerTraceEntryPoint = FGetScriptDebugStateEntryPoint;
+	using FControlScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		int32 Control,
+		const uint8* PauseIdData,
+		int32 PauseIdLength);
+	using FDisableScriptDebugEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId);
+	using FIsScriptDebugActiveEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId);
+	using FDispatchEventEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		int32 EventKind,
+		uint64 Source,
+		uint64 Argument);
+	using FInvokeScriptFunctionEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		const uint8* FunctionNameData,
+		int32 FunctionNameLength,
+		const FFinareManagedFunctionValueV1* Arguments,
+		int32 ArgumentCount,
+		FFinareManagedFunctionValueV1* OutResult);
+	using FInvokeScriptFunctionV2EntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength,
+		const uint8* FunctionNameData,
+		int32 FunctionNameLength,
+		FFinareNativeCallFrameV3* Frame);
+	using FReloadScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength);
+	using FPrepareScriptReloadEntryPoint = FReloadScriptEntryPoint;
+	using FCommitScriptReloadEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId,
+		int32 CandidateGeneration);
+	using FReloadControlEntryPoint = FCommitScriptReloadEntryPoint;
+	using FPrepareStaticLibraryReloadEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength);
+	using FStaticLibraryReloadControlEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		const uint8* AssemblyPathData,
+		int32 AssemblyPathLength,
+		const uint8* TypeNameData,
+		int32 TypeNameLength,
+		int32 CandidateGeneration);
+	using FDestroyScriptEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64 InstanceId);
+	using FGetScriptCountEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId);
+	using FGetInvocationMetricsEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint64* OutCallFrameInvocationCount,
+		uint64* OutLegacyInvocationCount);
+	using FGetLastErrorEntryPoint = int32(FINARE_HOSTFXR_CALLTYPE *)(
+		uint64 WorldHostId,
+		uint8* Buffer,
+		int32 BufferCapacity);
 
-constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
-constexpr int32 MaximumManagedBoundaryErrorBytes = 1024 * 1024;
-constexpr int32 MaximumManagedDebugStateBytes = 4 * 1024 * 1024;
+	constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
+	constexpr int32 MaximumManagedBoundaryErrorBytes = 1024 * 1024;
+	constexpr int32 MaximumManagedDebugStateBytes = 4 * 1024 * 1024;
 
-FString ReadManagedUtf8(
-    FGetLastErrorEntryPoint EntryPoint,
-    int32 MaximumBytes,
-    uint64 WorldHostId)
-{
-    if (EntryPoint == nullptr)
-    {
-        return {};
-    }
-    const int32 RequiredBytes = EntryPoint(WorldHostId, nullptr, 0);
-    if (RequiredBytes <= 0 || RequiredBytes > MaximumBytes)
-    {
-        return {};
-    }
-    TArray<uint8> Buffer;
-    Buffer.SetNumZeroed(RequiredBytes + 1);
-    const int32 WrittenBytes = EntryPoint(
-        WorldHostId,
-        Buffer.GetData(),
-        Buffer.Num());
-    if (WrittenBytes <= 0 || WrittenBytes > RequiredBytes)
-    {
-        return {};
-    }
-    return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
-}
+	FString ReadManagedUtf8(
+		FGetLastErrorEntryPoint EntryPoint,
+		int32 MaximumBytes,
+		uint64 WorldHostId)
+	{
+		if (EntryPoint == nullptr)
+		{
+			return {};
+		}
+		const int32 RequiredBytes = EntryPoint(WorldHostId, nullptr, 0);
+		if (RequiredBytes <= 0 || RequiredBytes > MaximumBytes)
+		{
+			return {};
+		}
+		TArray<uint8> Buffer;
+		Buffer.SetNumZeroed(RequiredBytes + 1);
+		const int32 WrittenBytes = EntryPoint(
+			WorldHostId,
+			Buffer.GetData(),
+			Buffer.Num());
+		if (WrittenBytes <= 0 || WrittenBytes > RequiredBytes)
+		{
+			return {};
+		}
+		return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+	}
 
-FString ReadManagedDebugState(
-    FGetScriptDebugStateEntryPoint EntryPoint,
-    uint64 WorldHostId,
-    uint64 InstanceId)
-{
-    if (EntryPoint == nullptr)
-    {
-        return {};
-    }
-    int32 RequiredBytes = EntryPoint(WorldHostId, InstanceId, nullptr, 0);
-    for (int32 Attempt = 0; Attempt < 4; ++Attempt)
-    {
-        if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedDebugStateBytes)
-        {
-            return {};
-        }
-        TArray<uint8> Buffer;
-        Buffer.SetNumZeroed(RequiredBytes + 1);
-        const int32 WrittenBytes = EntryPoint(
-            WorldHostId,
-            InstanceId,
-            Buffer.GetData(),
-            Buffer.Num());
-        if (WrittenBytes <= 0 || WrittenBytes > MaximumManagedDebugStateBytes)
-        {
-            return {};
-        }
-        if (WrittenBytes > RequiredBytes)
-        {
-            // The worker published a larger snapshot between the size query and
-            // copy. Retry against the newly reported immutable snapshot size.
-            RequiredBytes = WrittenBytes;
-            continue;
-        }
-        return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
-    }
-    return {};
-}
+	FString ReadManagedDebugState(
+		FGetScriptDebugStateEntryPoint EntryPoint,
+		uint64 WorldHostId,
+		uint64 InstanceId)
+	{
+		if (EntryPoint == nullptr)
+		{
+			return {};
+		}
+		int32 RequiredBytes = EntryPoint(WorldHostId, InstanceId, nullptr, 0);
+		for (int32 Attempt = 0; Attempt < 4; ++Attempt)
+		{
+			if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedDebugStateBytes)
+			{
+				return {};
+			}
+			TArray<uint8> Buffer;
+			Buffer.SetNumZeroed(RequiredBytes + 1);
+			const int32 WrittenBytes = EntryPoint(
+				WorldHostId,
+				InstanceId,
+				Buffer.GetData(),
+				Buffer.Num());
+			if (WrittenBytes <= 0 || WrittenBytes > MaximumManagedDebugStateBytes)
+			{
+				return {};
+			}
+			if (WrittenBytes > RequiredBytes)
+			{
+				// The worker published a larger snapshot between the size query and
+				// copy. Retry against the newly reported immutable snapshot size.
+				RequiredBytes = WrittenBytes;
+				continue;
+			}
+			return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+		}
+		return {};
+	}
 
-FString ReadManagedBoundaryError(
-    FGetLastErrorEntryPoint EntryPoint,
-    uint64 WorldHostId)
-{
-    return ReadManagedUtf8(
-        EntryPoint,
-        MaximumManagedBoundaryErrorBytes,
-        WorldHostId);
-}
+	FString ReadManagedBoundaryError(
+		FGetLastErrorEntryPoint EntryPoint,
+		uint64 WorldHostId)
+	{
+		return ReadManagedUtf8(
+			EntryPoint,
+			MaximumManagedBoundaryErrorBytes,
+			WorldHostId);
+	}
 
-FString DescribeManagedFailure(
-    const TCHAR* Operation,
-    int32 Status,
-    FGetLastErrorEntryPoint ErrorEntryPoint,
-    uint64 WorldHostId)
-{
-    const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
-    return Detail.IsEmpty()
-        ? FString::Printf(TEXT("%s failed with status %d."), Operation, Status)
-        : FString::Printf(
-              TEXT("%s failed with status %d.%s%s"),
-              Operation,
-              Status,
-              LINE_TERMINATOR,
-              *Detail);
-}
+	FString DescribeManagedFailure(
+		const TCHAR* Operation,
+		int32 Status,
+		FGetLastErrorEntryPoint ErrorEntryPoint,
+		uint64 WorldHostId)
+	{
+		const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+		return Detail.IsEmpty()
+			       ? FString::Printf(TEXT("%s failed with status %d."), Operation, Status)
+			       : FString::Printf(
+				       TEXT("%s failed with status %d.%s%s"),
+				       Operation,
+				       Status,
+				       LINE_TERMINATOR,
+				       *Detail);
+	}
 
-FString GetHostFxrFileName()
-{
+	FString GetHostFxrFileName()
+	{
 #if PLATFORM_WINDOWS
-    return TEXT("hostfxr.dll");
+		return TEXT("hostfxr.dll");
 #elif PLATFORM_MAC
-    return TEXT("libhostfxr.dylib");
+		return TEXT("libhostfxr.dylib");
 #else
-    return TEXT("libhostfxr.so");
+		return TEXT("libhostfxr.so");
 #endif
-}
+	}
 
-FString GetPlatformDotNetDirectory()
-{
+	FString GetPlatformDotNetDirectory()
+	{
 #if PLATFORM_WINDOWS
-    return TEXT("win-x64");
+		return TEXT("win-x64");
 #elif PLATFORM_MAC && PLATFORM_CPU_ARM_FAMILY
-    return TEXT("mac-arm64");
+		return TEXT("mac-arm64");
 #elif PLATFORM_MAC
-    return TEXT("mac-x64");
+		return TEXT("mac-x64");
 #elif PLATFORM_CPU_ARM_FAMILY
-    return TEXT("linux-arm64");
+		return TEXT("linux-arm64");
 #else
-    return TEXT("linux-x64");
+		return TEXT("linux-x64");
 #endif
-}
+	}
 
-void AddCandidate(TArray<FString>& Candidates, FString Candidate)
-{
-    if (!Candidate.IsEmpty())
-    {
-        FPaths::NormalizeDirectoryName(Candidate);
-        Candidates.AddUnique(MoveTemp(Candidate));
-    }
-}
+	void AddCandidate(TArray<FString>& Candidates, FString Candidate)
+	{
+		if (!Candidate.IsEmpty())
+		{
+			FPaths::NormalizeDirectoryName(Candidate);
+			Candidates.AddUnique(MoveTemp(Candidate));
+		}
+	}
 
-FString FindDotNetRoot()
-{
-    TArray<FString> Candidates;
-    if (const TSharedPtr<IPlugin> Plugin =
-            IPluginManager::Get().FindPlugin(TEXT("Finare"));
-        Plugin.IsValid())
-    {
-        AddCandidate(
-            Candidates,
-            FPaths::Combine(
-                Plugin->GetBaseDir(),
-                TEXT("Binaries/ThirdParty/DotNet/10.0"),
-                GetPlatformDotNetDirectory()));
-    }
-    AddCandidate(
-        Candidates,
-        FPlatformMisc::GetEnvironmentVariable(TEXT("FINARE_DOTNET_ROOT")));
-    AddCandidate(
-        Candidates,
-        FPlatformMisc::GetEnvironmentVariable(TEXT("DOTNET_ROOT")));
-    AddCandidate(
-        Candidates,
-        FPaths::Combine(
-            FPaths::EngineDir(),
-            TEXT("Binaries/ThirdParty/DotNet/10.0"),
-            GetPlatformDotNetDirectory()));
+	FString FindDotNetRoot()
+	{
+		TArray<FString> Candidates;
+		if (const TSharedPtr<IPlugin> Plugin =
+				IPluginManager::Get().FindPlugin(TEXT("Finare"));
+			Plugin.IsValid())
+		{
+			AddCandidate(
+				Candidates,
+				FPaths::Combine(
+					Plugin->GetBaseDir(),
+					TEXT("Binaries/ThirdParty/DotNet/10.0"),
+					GetPlatformDotNetDirectory()));
+		}
+		AddCandidate(
+			Candidates,
+			FPlatformMisc::GetEnvironmentVariable(TEXT("FINARE_DOTNET_ROOT")));
+		AddCandidate(
+			Candidates,
+			FPlatformMisc::GetEnvironmentVariable(TEXT("DOTNET_ROOT")));
+		AddCandidate(
+			Candidates,
+			FPaths::Combine(
+				FPaths::EngineDir(),
+				TEXT("Binaries/ThirdParty/DotNet/10.0"),
+				GetPlatformDotNetDirectory()));
 
-    for (const FString& Candidate : Candidates)
-    {
-        if (IFileManager::Get().DirectoryExists(*FPaths::Combine(Candidate, TEXT("host/fxr"))))
-        {
-            return Candidate;
-        }
-    }
-    return {};
-}
+		for (const FString& Candidate : Candidates)
+		{
+			if (IFileManager::Get().DirectoryExists(*FPaths::Combine(Candidate, TEXT("host/fxr"))))
+			{
+				return Candidate;
+			}
+		}
+		return {};
+	}
 
-FString FindHostFxr(const FString& DotNetRoot)
-{
-    const FString FxrRoot = FPaths::Combine(DotNetRoot, TEXT("host/fxr"));
-    TArray<FString> Versions;
-    IFileManager::Get().FindFiles(Versions, *FPaths::Combine(FxrRoot, TEXT("*")), false, true);
-    Versions.Sort(TGreater<FString>());
-    for (const FString& Version : Versions)
-    {
-        const FString Candidate = FPaths::Combine(
-            FxrRoot,
-            Version,
-            GetHostFxrFileName());
-        if (IFileManager::Get().FileExists(*Candidate))
-        {
-            return Candidate;
-        }
-    }
-    return {};
-}
+	FString FindHostFxr(const FString& DotNetRoot)
+	{
+		const FString FxrRoot = FPaths::Combine(DotNetRoot, TEXT("host/fxr"));
+		TArray<FString> Versions;
+		IFileManager::Get().FindFiles(Versions, *FPaths::Combine(FxrRoot, TEXT("*")), false, true);
+		Versions.Sort(TGreater<FString>());
+		for (const FString& Version : Versions)
+		{
+			const FString Candidate = FPaths::Combine(
+				FxrRoot,
+				Version,
+				GetHostFxrFileName());
+			if (IFileManager::Get().FileExists(*Candidate))
+			{
+				return Candidate;
+			}
+		}
+		return {};
+	}
 
-FString GetRuntimeConfigPath()
-{
-    const TSharedPtr<IPlugin> Plugin =
-        IPluginManager::Get().FindPlugin(TEXT("Finare"));
-    return Plugin.IsValid()
-        ? FPaths::Combine(
-              Plugin->GetBaseDir(),
-              TEXT("Resources/Managed/Finare.Unreal.runtimeconfig.json"))
-        : FString();
-}
+	FString GetRuntimeConfigPath()
+	{
+		const TSharedPtr<IPlugin> Plugin =
+			IPluginManager::Get().FindPlugin(TEXT("Finare"));
+		return Plugin.IsValid()
+			       ? FPaths::Combine(
+				       Plugin->GetBaseDir(),
+				       TEXT("Resources/Managed/Finare.Unreal.runtimeconfig.json"))
+			       : FString();
+	}
 
-FString GetManagedAssemblyPath()
-{
-    const TSharedPtr<IPlugin> Plugin =
-        IPluginManager::Get().FindPlugin(TEXT("Finare"));
-    return Plugin.IsValid()
-        ? FPaths::Combine(
-              Plugin->GetBaseDir(),
-              TEXT("Binaries/Managed/Finare.Unreal.dll"))
-        : FString();
-}
-
+	FString GetManagedAssemblyPath()
+	{
+		const TSharedPtr<IPlugin> Plugin =
+			IPluginManager::Get().FindPlugin(TEXT("Finare"));
+		return Plugin.IsValid()
+			       ? FPaths::Combine(
+				       Plugin->GetBaseDir(),
+				       TEXT("Binaries/Managed/Finare.Unreal.dll"))
+			       : FString();
+	}
 }
 
 FFinareCoreClrHost& FFinareCoreClrHost::Get()
 {
-    static FFinareCoreClrHost Instance;
-    return Instance;
+	static FFinareCoreClrHost Instance;
+	return Instance;
 }
 
 bool FFinareCoreClrHost::Initialize()
 {
-    FScopeLock Lock(&StateLock);
-    if (State == EFinareCoreClrHostState::Ready)
-    {
-        return true;
-    }
-    if (State == EFinareCoreClrHostState::Failed)
-    {
-        return false;
-    }
-    return InitializeLocked();
+	FScopeLock Lock(&StateLock);
+	if (State == EFinareCoreClrHostState::Ready)
+	{
+		return true;
+	}
+	if (State == EFinareCoreClrHostState::Failed)
+	{
+		return false;
+	}
+	return InitializeLocked();
 }
 
 void FFinareCoreClrHost::Shutdown()
 {
-    FScopeLock Lock(&StateLock);
-    if (GetWorldCountEntryPoint != nullptr)
-    {
-        const int32 RemainingWorlds =
-            reinterpret_cast<UE::Finare::CoreClr::Private::FGetWorldCountEntryPoint>(
-                GetWorldCountEntryPoint)();
-        ensureMsgf(
-            RemainingWorlds == 0,
-            TEXT("Finare CoreCLR host stopped with %d managed Worlds."),
-            RemainingWorlds);
-    }
-    CreateWorldEntryPoint = nullptr;
-    DestroyWorldEntryPoint = nullptr;
-    GetWorldCountEntryPoint = nullptr;
-    CollectRetiredLoadContextsEntryPoint = nullptr;
-    CreateScriptEntryPoint = nullptr;
-    CreateScriptWithBlueprintContractEntryPoint = nullptr;
-    TickScriptEntryPoint = nullptr;
-    ConfigureScriptDebugEntryPoint = nullptr;
-    BeginScriptDebugTickEntryPoint = nullptr;
-    GetScriptDebugStateEntryPoint = nullptr;
-    GetScriptReloadStateEntryPoint = nullptr;
-    SetScriptProfilerEnabledEntryPoint = nullptr;
-    GetScriptProfilerTraceEntryPoint = nullptr;
-    ControlScriptDebugEntryPoint = nullptr;
-    DisableScriptDebugEntryPoint = nullptr;
-    IsScriptDebugActiveEntryPoint = nullptr;
-    DispatchEventEntryPoint = nullptr;
-    InvokeScriptFunctionEntryPoint = nullptr;
-    InvokeScriptFunctionV2EntryPoint = nullptr;
-    ReloadScriptEntryPoint = nullptr;
-    PrepareScriptReloadEntryPoint = nullptr;
-    CommitScriptReloadEntryPoint = nullptr;
-    AbortScriptReloadEntryPoint = nullptr;
-    FinalizeScriptReloadEntryPoint = nullptr;
-    PrepareStaticLibraryReloadEntryPoint = nullptr;
-    CommitStaticLibraryReloadEntryPoint = nullptr;
-    AbortStaticLibraryReloadEntryPoint = nullptr;
-    FinalizeStaticLibraryReloadEntryPoint = nullptr;
-    DestroyScriptEntryPoint = nullptr;
-    GetScriptCountEntryPoint = nullptr;
-    GetInvocationMetricsEntryPoint = nullptr;
-    GetLastManagedErrorEntryPoint = nullptr;
-    LoadAssemblyAndGetFunctionPointer = nullptr;
-    if (HostFxrLibrary != nullptr)
-    {
-        FPlatformProcess::FreeDllHandle(HostFxrLibrary);
-        HostFxrLibrary = nullptr;
-    }
-    LoadedHostFxrPath.Reset();
-    LastError.Reset();
-    State = EFinareCoreClrHostState::Stopped;
+	FScopeLock Lock(&StateLock);
+	if (GetWorldCountEntryPoint != nullptr)
+	{
+		const int32 RemainingWorlds =
+			reinterpret_cast<UE::Finare::CoreClr::Private::FGetWorldCountEntryPoint>(
+				GetWorldCountEntryPoint)();
+		ensureMsgf(
+			RemainingWorlds == 0,
+			TEXT("Finare CoreCLR host stopped with %d managed Worlds."),
+			RemainingWorlds);
+	}
+	CreateWorldEntryPoint = nullptr;
+	DestroyWorldEntryPoint = nullptr;
+	GetWorldCountEntryPoint = nullptr;
+	CollectRetiredLoadContextsEntryPoint = nullptr;
+	CreateScriptEntryPoint = nullptr;
+	CreateScriptWithBlueprintContractEntryPoint = nullptr;
+	TickScriptEntryPoint = nullptr;
+	ConfigureScriptDebugEntryPoint = nullptr;
+	BeginScriptDebugTickEntryPoint = nullptr;
+	GetScriptDebugStateEntryPoint = nullptr;
+	GetScriptReloadStateEntryPoint = nullptr;
+	SetScriptProfilerEnabledEntryPoint = nullptr;
+	GetScriptProfilerTraceEntryPoint = nullptr;
+	ControlScriptDebugEntryPoint = nullptr;
+	DisableScriptDebugEntryPoint = nullptr;
+	IsScriptDebugActiveEntryPoint = nullptr;
+	DispatchEventEntryPoint = nullptr;
+	InvokeScriptFunctionEntryPoint = nullptr;
+	InvokeScriptFunctionV2EntryPoint = nullptr;
+	ReloadScriptEntryPoint = nullptr;
+	PrepareScriptReloadEntryPoint = nullptr;
+	CommitScriptReloadEntryPoint = nullptr;
+	AbortScriptReloadEntryPoint = nullptr;
+	FinalizeScriptReloadEntryPoint = nullptr;
+	PrepareStaticLibraryReloadEntryPoint = nullptr;
+	CommitStaticLibraryReloadEntryPoint = nullptr;
+	AbortStaticLibraryReloadEntryPoint = nullptr;
+	FinalizeStaticLibraryReloadEntryPoint = nullptr;
+	DestroyScriptEntryPoint = nullptr;
+	GetScriptCountEntryPoint = nullptr;
+	GetInvocationMetricsEntryPoint = nullptr;
+	GetLastManagedErrorEntryPoint = nullptr;
+	LoadAssemblyAndGetFunctionPointer = nullptr;
+	if (HostFxrLibrary != nullptr)
+	{
+		FPlatformProcess::FreeDllHandle(HostFxrLibrary);
+		HostFxrLibrary = nullptr;
+	}
+	LoadedHostFxrPath.Reset();
+	LastError.Reset();
+	State = EFinareCoreClrHostState::Stopped;
 }
 
 EFinareCoreClrHostState FFinareCoreClrHost::GetState() const
 {
-    FScopeLock Lock(&StateLock);
-    return State;
+	FScopeLock Lock(&StateLock);
+	return State;
 }
 
 bool FFinareCoreClrHost::IsReady() const
 {
-    return GetState() == EFinareCoreClrHostState::Ready;
+	return GetState() == EFinareCoreClrHostState::Ready;
 }
 
 void* FFinareCoreClrHost::GetLoadAssemblyAndGetFunctionPointer() const
 {
-    FScopeLock Lock(&StateLock);
-    return LoadAssemblyAndGetFunctionPointer;
+	FScopeLock Lock(&StateLock);
+	return LoadAssemblyAndGetFunctionPointer;
 }
 
 bool FFinareCoreClrHost::CreateManagedWorld(
-    uint64 WorldHostId,
-    FFinareNativeBridgeContext* Context,
-    const FFinareNativeTransportV2* Transport,
-    FString& OutError)
+	uint64 WorldHostId,
+	FFinareNativeBridgeContext* Context,
+	const FFinareNativeTransportV2* Transport,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    if (State != EFinareCoreClrHostState::Ready ||
-        CreateWorldEntryPoint == nullptr)
-    {
-        OutError = TEXT("The Finare managed World entry point is unavailable.");
-        return false;
-    }
-    const int32 Result = reinterpret_cast<FCreateWorldEntryPoint>(
-        CreateWorldEntryPoint)(WorldHostId, Context, Transport);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed World creation"),
-            Result,
-            reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	if (State != EFinareCoreClrHostState::Ready ||
+		CreateWorldEntryPoint == nullptr)
+	{
+		OutError = TEXT("The Finare managed World entry point is unavailable.");
+		return false;
+	}
+	const int32 Result = reinterpret_cast<FCreateWorldEntryPoint>(
+		CreateWorldEntryPoint)(WorldHostId, Context, Transport);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed World creation"),
+			Result,
+			reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::DestroyManagedWorld(
-    uint64 WorldHostId,
-    FString& OutError)
+	uint64 WorldHostId,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    if (State != EFinareCoreClrHostState::Ready ||
-        DestroyWorldEntryPoint == nullptr)
-    {
-        OutError = TEXT("The Finare managed World entry point is unavailable.");
-        return false;
-    }
-    const int32 Result = reinterpret_cast<FDestroyWorldEntryPoint>(
-        DestroyWorldEntryPoint)(WorldHostId);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed World destruction"),
-            Result,
-            reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	if (State != EFinareCoreClrHostState::Ready ||
+		DestroyWorldEntryPoint == nullptr)
+	{
+		OutError = TEXT("The Finare managed World entry point is unavailable.");
+		return false;
+	}
+	const int32 Result = reinterpret_cast<FDestroyWorldEntryPoint>(
+		DestroyWorldEntryPoint)(WorldHostId);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed World destruction"),
+			Result,
+			reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::CreateManagedScript(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    uint64 Host,
-    uint64 Target,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	uint64 Host,
+	uint64 Target,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FCreateScriptEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            CreateScriptEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed script entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FCreateScriptEntryPoint>(CreateScriptEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
-    {
-        OutError = FString::Printf(
-            TEXT("The managed script assembly does not exist: '%s'."),
-            *AssemblyPath);
-        return false;
-    }
-    if (TypeName.IsEmpty())
-    {
-        OutError = TEXT("The managed script type name is empty.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FCreateScriptEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			CreateScriptEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed script entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FCreateScriptEntryPoint>(CreateScriptEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+	{
+		OutError = FString::Printf(
+			TEXT("The managed script assembly does not exist: '%s'."),
+			*AssemblyPath);
+		return false;
+	}
+	if (TypeName.IsEmpty())
+	{
+		OutError = TEXT("The managed script type name is empty.");
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        Host,
-        Target,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length());
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script creation"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		Host,
+		Target,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length());
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script creation"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::CreateManagedScriptWithBlueprintContract(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    uint64 Host,
-    uint64 Target,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    const FString& BlueprintOverrideContractJson,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	uint64 Host,
+	uint64 Target,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	const FString& BlueprintOverrideContractJson,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FCreateScriptWithBlueprintContractEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            CreateScriptWithBlueprintContractEntryPoint == nullptr)
-        {
-            OutError = TEXT(
-                "The validated managed script entry point is unavailable; stage the updated Finare.Unreal runtime.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FCreateScriptWithBlueprintContractEntryPoint>(
-            CreateScriptWithBlueprintContractEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
-    {
-        OutError = FString::Printf(
-            TEXT("The managed script assembly does not exist: '%s'."),
-            *AssemblyPath);
-        return false;
-    }
-    if (TypeName.IsEmpty())
-    {
-        OutError = TEXT("The managed script type name is empty.");
-        return false;
-    }
-    if (BlueprintOverrideContractJson.IsEmpty())
-    {
-        OutError = TEXT("The validated Blueprint override activation contract is empty.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FCreateScriptWithBlueprintContractEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			CreateScriptWithBlueprintContractEntryPoint == nullptr)
+		{
+			OutError = TEXT(
+				"The validated managed script entry point is unavailable; stage the updated Finare.Unreal runtime.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FCreateScriptWithBlueprintContractEntryPoint>(
+			CreateScriptWithBlueprintContractEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+	{
+		OutError = FString::Printf(
+			TEXT("The managed script assembly does not exist: '%s'."),
+			*AssemblyPath);
+		return false;
+	}
+	if (TypeName.IsEmpty())
+	{
+		OutError = TEXT("The managed script type name is empty.");
+		return false;
+	}
+	if (BlueprintOverrideContractJson.IsEmpty())
+	{
+		OutError = TEXT("The validated Blueprint override activation contract is empty.");
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const FTCHARToUTF8 ContractUtf8(*BlueprintOverrideContractJson);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        Host,
-        Target,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length(),
-        reinterpret_cast<const uint8*>(ContractUtf8.Get()),
-        ContractUtf8.Length());
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Validated managed script creation"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const FTCHARToUTF8 ContractUtf8(*BlueprintOverrideContractJson);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		Host,
+		Target,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length(),
+		reinterpret_cast<const uint8*>(ContractUtf8.Get()),
+		ContractUtf8.Length());
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Validated managed script creation"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::TickManagedScript(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    float DeltaSeconds,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	float DeltaSeconds,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FTickScriptEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            TickScriptEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed tick entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FTickScriptEntryPoint>(TickScriptEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script tick"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FTickScriptEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			TickScriptEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed tick entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FTickScriptEntryPoint>(TickScriptEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script tick"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::ConfigureManagedScriptDebug(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const FString& ConfigurationJson,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	const FString& ConfigurationJson,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FConfigureScriptDebugEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            ConfigureScriptDebugEntryPoint == nullptr)
-        {
-            OutError = TEXT("The live World debug configuration entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FConfigureScriptDebugEntryPoint>(
-            ConfigureScriptDebugEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (ConfigurationJson.IsEmpty())
-    {
-        OutError = TEXT("A live World debug configuration is required.");
-        return false;
-    }
-    const FTCHARToUTF8 ConfigurationUtf8(*ConfigurationJson);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        reinterpret_cast<const uint8*>(ConfigurationUtf8.Get()),
-        ConfigurationUtf8.Length());
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Live World debug configuration"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FConfigureScriptDebugEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			ConfigureScriptDebugEntryPoint == nullptr)
+		{
+			OutError = TEXT("The live World debug configuration entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FConfigureScriptDebugEntryPoint>(
+			ConfigureScriptDebugEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (ConfigurationJson.IsEmpty())
+	{
+		OutError = TEXT("A live World debug configuration is required.");
+		return false;
+	}
+	const FTCHARToUTF8 ConfigurationUtf8(*ConfigurationJson);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		reinterpret_cast<const uint8*>(ConfigurationUtf8.Get()),
+		ConfigurationUtf8.Length());
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Live World debug configuration"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::BeginManagedScriptDebugTick(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    float DeltaSeconds,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	float DeltaSeconds,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FBeginScriptDebugTickEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            BeginScriptDebugTickEntryPoint == nullptr)
-        {
-            OutError = TEXT("The live World debug tick entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FBeginScriptDebugTickEntryPoint>(
-            BeginScriptDebugTickEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Live World debug tick"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FBeginScriptDebugTickEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			BeginScriptDebugTickEntryPoint == nullptr)
+		{
+			OutError = TEXT("The live World debug tick entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FBeginScriptDebugTickEntryPoint>(
+			BeginScriptDebugTickEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Live World debug tick"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::GetManagedScriptDebugState(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    FString& OutJson,
-    FString& OutError) const
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	FString& OutJson,
+	FString& OutError) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FGetScriptDebugStateEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            GetScriptDebugStateEntryPoint == nullptr)
-        {
-            OutJson.Reset();
-            OutError = TEXT("The live World debug state entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FGetScriptDebugStateEntryPoint>(
-            GetScriptDebugStateEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
-    if (OutJson.IsEmpty())
-    {
-        const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
-        OutError = Detail.IsEmpty()
-            ? TEXT("The managed script has no live World debug state.")
-            : FString::Printf(
-                  TEXT("The managed live World debug state could not be read.%s%s"),
-                  LINE_TERMINATOR,
-                  *Detail);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FGetScriptDebugStateEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			GetScriptDebugStateEntryPoint == nullptr)
+		{
+			OutJson.Reset();
+			OutError = TEXT("The live World debug state entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FGetScriptDebugStateEntryPoint>(
+			GetScriptDebugStateEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
+	if (OutJson.IsEmpty())
+	{
+		const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+		OutError = Detail.IsEmpty()
+			           ? TEXT("The managed script has no live World debug state.")
+			           : FString::Printf(
+				           TEXT("The managed live World debug state could not be read.%s%s"),
+				           LINE_TERMINATOR,
+				           *Detail);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::GetManagedScriptReloadState(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    FString& OutJson,
-    FString& OutError) const
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	FString& OutJson,
+	FString& OutError) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FGetScriptReloadStateEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            GetScriptReloadStateEntryPoint == nullptr)
-        {
-            OutJson.Reset();
-            OutError = TEXT("The managed reload transaction entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FGetScriptReloadStateEntryPoint>(
-            GetScriptReloadStateEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
-    if (OutJson.IsEmpty())
-    {
-        const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
-        OutError = Detail.IsEmpty()
-            ? TEXT("The managed script has no reload transaction state.")
-            : FString::Printf(
-                  TEXT("The managed reload transaction state could not be read.%s%s"),
-                  LINE_TERMINATOR,
-                  *Detail);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FGetScriptReloadStateEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			GetScriptReloadStateEntryPoint == nullptr)
+		{
+			OutJson.Reset();
+			OutError = TEXT("The managed reload transaction entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FGetScriptReloadStateEntryPoint>(
+			GetScriptReloadStateEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
+	if (OutJson.IsEmpty())
+	{
+		const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+		OutError = Detail.IsEmpty()
+			           ? TEXT("The managed script has no reload transaction state.")
+			           : FString::Printf(
+				           TEXT("The managed reload transaction state could not be read.%s%s"),
+				           LINE_TERMINATOR,
+				           *Detail);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::SetManagedScriptProfilerEnabled(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    bool bEnabled,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	bool bEnabled,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FSetScriptProfilerEnabledEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            SetScriptProfilerEnabledEntryPoint == nullptr)
-        {
-            OutError = TEXT("The managed gameplay profiler control entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FSetScriptProfilerEnabledEntryPoint>(
-            SetScriptProfilerEnabledEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, bEnabled ? 1 : 0);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed gameplay profiler control"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FSetScriptProfilerEnabledEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			SetScriptProfilerEnabledEntryPoint == nullptr)
+		{
+			OutError = TEXT("The managed gameplay profiler control entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FSetScriptProfilerEnabledEntryPoint>(
+			SetScriptProfilerEnabledEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, bEnabled ? 1 : 0);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed gameplay profiler control"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::GetManagedScriptProfilerTrace(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    FString& OutJson,
-    FString& OutError) const
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	FString& OutJson,
+	FString& OutError) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FGetScriptProfilerTraceEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            GetScriptProfilerTraceEntryPoint == nullptr)
-        {
-            OutJson.Reset();
-            OutError = TEXT("The managed gameplay profiler trace entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FGetScriptProfilerTraceEntryPoint>(
-            GetScriptProfilerTraceEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
-    if (OutJson.IsEmpty())
-    {
-        const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
-        OutError = Detail.IsEmpty()
-            ? TEXT("The managed script has no gameplay profiler trace.")
-            : FString::Printf(
-                  TEXT("The managed gameplay profiler trace could not be read.%s%s"),
-                  LINE_TERMINATOR,
-                  *Detail);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FGetScriptProfilerTraceEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			GetScriptProfilerTraceEntryPoint == nullptr)
+		{
+			OutJson.Reset();
+			OutError = TEXT("The managed gameplay profiler trace entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FGetScriptProfilerTraceEntryPoint>(
+			GetScriptProfilerTraceEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
+	if (OutJson.IsEmpty())
+	{
+		const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+		OutError = Detail.IsEmpty()
+			           ? TEXT("The managed script has no gameplay profiler trace.")
+			           : FString::Printf(
+				           TEXT("The managed gameplay profiler trace could not be read.%s%s"),
+				           LINE_TERMINATOR,
+				           *Detail);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::ControlManagedScriptDebug(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 Control,
-    const FString& PauseId,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	int32 Control,
+	const FString& PauseId,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FControlScriptDebugEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            ControlScriptDebugEntryPoint == nullptr)
-        {
-            OutError = TEXT("The live World debug control entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FControlScriptDebugEntryPoint>(
-            ControlScriptDebugEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const FTCHARToUTF8 PauseIdUtf8(*PauseId);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        Control,
-        reinterpret_cast<const uint8*>(PauseIdUtf8.Get()),
-        PauseIdUtf8.Length());
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Live World debug control"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FControlScriptDebugEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			ControlScriptDebugEntryPoint == nullptr)
+		{
+			OutError = TEXT("The live World debug control entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FControlScriptDebugEntryPoint>(
+			ControlScriptDebugEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const FTCHARToUTF8 PauseIdUtf8(*PauseId);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		Control,
+		reinterpret_cast<const uint8*>(PauseIdUtf8.Get()),
+		PauseIdUtf8.Length());
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Live World debug control"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::DisableManagedScriptDebug(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FDisableScriptDebugEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            DisableScriptDebugEntryPoint == nullptr)
-        {
-            OutError = TEXT("The live World debug detach entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FDisableScriptDebugEntryPoint>(
-            DisableScriptDebugEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Live World debug detach"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FDisableScriptDebugEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			DisableScriptDebugEntryPoint == nullptr)
+		{
+			OutError = TEXT("The live World debug detach entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FDisableScriptDebugEntryPoint>(
+			DisableScriptDebugEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Live World debug detach"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::IsManagedScriptDebugActive(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    bool& bOutActive,
-    FString& OutError) const
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	bool& bOutActive,
+	FString& OutError) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    bOutActive = false;
-    FIsScriptDebugActiveEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            IsScriptDebugActiveEntryPoint == nullptr)
-        {
-            OutError = TEXT("The live World debug activity entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FIsScriptDebugActiveEntryPoint>(
-            IsScriptDebugActiveEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId);
-    if (Result < 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Live World debug activity query"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    bOutActive = Result != 0;
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	bOutActive = false;
+	FIsScriptDebugActiveEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			IsScriptDebugActiveEntryPoint == nullptr)
+		{
+			OutError = TEXT("The live World debug activity entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FIsScriptDebugActiveEntryPoint>(
+			IsScriptDebugActiveEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId);
+	if (Result < 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Live World debug activity query"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	bOutActive = Result != 0;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::DispatchManagedEvent(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 EventKind,
-    uint64 Source,
-    uint64 Argument,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	int32 EventKind,
+	uint64 Source,
+	uint64 Argument,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FDispatchEventEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            DispatchEventEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed event entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FDispatchEventEntryPoint>(DispatchEventEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        EventKind,
-        Source,
-        Argument);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script event dispatch"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FDispatchEventEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			DispatchEventEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed event entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FDispatchEventEntryPoint>(DispatchEventEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		EventKind,
+		Source,
+		Argument);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script event dispatch"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::InvokeManagedScriptFunction(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const FString& FunctionName,
-    TConstArrayView<FFinareManagedFunctionValueV1> Arguments,
-    FFinareManagedFunctionValueV1& OutResult,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	const FString& FunctionName,
+	TConstArrayView<FFinareManagedFunctionValueV1> Arguments,
+	FFinareManagedFunctionValueV1& OutResult,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutResult = {};
-    FInvokeScriptFunctionEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            InvokeScriptFunctionEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed function entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FInvokeScriptFunctionEntryPoint>(
-            InvokeScriptFunctionEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    FString TrimmedName = FunctionName;
-    TrimmedName.TrimStartAndEndInline();
-    if (InstanceId == 0 || TrimmedName.IsEmpty() || Arguments.Num() > 4)
-    {
-        OutError = TEXT("A managed function call requires an instance, name, and at most four arguments.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutResult = {};
+	FInvokeScriptFunctionEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			InvokeScriptFunctionEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed function entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FInvokeScriptFunctionEntryPoint>(
+			InvokeScriptFunctionEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	FString TrimmedName = FunctionName;
+	TrimmedName.TrimStartAndEndInline();
+	if (InstanceId == 0 || TrimmedName.IsEmpty() || Arguments.Num() > 4)
+	{
+		OutError = TEXT("A managed function call requires an instance, name, and at most four arguments.");
+		return false;
+	}
 
-    const FTCHARToUTF8 FunctionNameUtf8(*TrimmedName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        reinterpret_cast<const uint8*>(FunctionNameUtf8.Get()),
-        FunctionNameUtf8.Length(),
-        Arguments.GetData(),
-        Arguments.Num(),
-        &OutResult);
-    if (Result != 0)
-    {
-        OutResult = {};
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script function dispatch"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 FunctionNameUtf8(*TrimmedName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		reinterpret_cast<const uint8*>(FunctionNameUtf8.Get()),
+		FunctionNameUtf8.Length(),
+		Arguments.GetData(),
+		Arguments.Num(),
+		&OutResult);
+	if (Result != 0)
+	{
+		OutResult = {};
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script function dispatch"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::InvokeManagedScriptFunctionV2(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    const FString& FunctionName,
-    FFinareNativeCallFrameV3& Frame,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	const FString& FunctionName,
+	FFinareNativeCallFrameV3& Frame,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FInvokeScriptFunctionV2EntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            InvokeScriptFunctionV2EntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed function ABI v2 entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FInvokeScriptFunctionV2EntryPoint>(
-            InvokeScriptFunctionV2EntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FInvokeScriptFunctionV2EntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			InvokeScriptFunctionV2EntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed function ABI v2 entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FInvokeScriptFunctionV2EntryPoint>(
+			InvokeScriptFunctionV2EntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
 
-    FString TrimmedFunctionName = FunctionName;
-    TrimmedFunctionName.TrimStartAndEndInline();
-    FString TrimmedAssemblyPath = AssemblyPath;
-    TrimmedAssemblyPath.TrimStartAndEndInline();
-    FString TrimmedTypeName = TypeName;
-    TrimmedTypeName.TrimStartAndEndInline();
-    const bool bStaticCall = InstanceId == 0;
-    if (TrimmedFunctionName.IsEmpty() ||
-        (bStaticCall && (TrimmedAssemblyPath.IsEmpty() || TrimmedTypeName.IsEmpty())))
-    {
-        OutError = TEXT("A managed function ABI v2 call requires a name and static calls require an assembly and type.");
-        return false;
-    }
-    if (bStaticCall && !IFileManager::Get().FileExists(*TrimmedAssemblyPath))
-    {
-        OutError = FString::Printf(
-            TEXT("The managed static library does not exist: '%s'."),
-            *TrimmedAssemblyPath);
-        return false;
-    }
+	FString TrimmedFunctionName = FunctionName;
+	TrimmedFunctionName.TrimStartAndEndInline();
+	FString TrimmedAssemblyPath = AssemblyPath;
+	TrimmedAssemblyPath.TrimStartAndEndInline();
+	FString TrimmedTypeName = TypeName;
+	TrimmedTypeName.TrimStartAndEndInline();
+	const bool bStaticCall = InstanceId == 0;
+	if (TrimmedFunctionName.IsEmpty() ||
+		(bStaticCall && (TrimmedAssemblyPath.IsEmpty() || TrimmedTypeName.IsEmpty())))
+	{
+		OutError = TEXT(
+			"A managed function ABI v2 call requires a name and static calls require an assembly and type.");
+		return false;
+	}
+	if (bStaticCall && !IFileManager::Get().FileExists(*TrimmedAssemblyPath))
+	{
+		OutError = FString::Printf(
+			TEXT("The managed static library does not exist: '%s'."),
+			*TrimmedAssemblyPath);
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*TrimmedAssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TrimmedTypeName);
-    const FTCHARToUTF8 FunctionNameUtf8(*TrimmedFunctionName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        bStaticCall
-            ? reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get())
-            : nullptr,
-        bStaticCall ? AssemblyPathUtf8.Length() : 0,
-        bStaticCall
-            ? reinterpret_cast<const uint8*>(TypeNameUtf8.Get())
-            : nullptr,
-        bStaticCall ? TypeNameUtf8.Length() : 0,
-        reinterpret_cast<const uint8*>(FunctionNameUtf8.Get()),
-        FunctionNameUtf8.Length(),
-        &Frame);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            bStaticCall
-                ? TEXT("Managed static library function dispatch")
-                : TEXT("Managed script function ABI v2 dispatch"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*TrimmedAssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TrimmedTypeName);
+	const FTCHARToUTF8 FunctionNameUtf8(*TrimmedFunctionName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		bStaticCall
+			? reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get())
+			: nullptr,
+		bStaticCall ? AssemblyPathUtf8.Length() : 0,
+		bStaticCall
+			? reinterpret_cast<const uint8*>(TypeNameUtf8.Get())
+			: nullptr,
+		bStaticCall ? TypeNameUtf8.Length() : 0,
+		reinterpret_cast<const uint8*>(FunctionNameUtf8.Get()),
+		FunctionNameUtf8.Length(),
+		&Frame);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			bStaticCall
+				? TEXT("Managed static library function dispatch")
+				: TEXT("Managed script function ABI v2 dispatch"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::ReloadManagedScript(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32& OutGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32& OutGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutGeneration = 0;
-    FReloadScriptEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            ReloadScriptEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed reload entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FReloadScriptEntryPoint>(ReloadScriptEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
-    {
-        OutError = FString::Printf(
-            TEXT("The managed script assembly does not exist: '%s'."),
-            *AssemblyPath);
-        return false;
-    }
-    if (TypeName.IsEmpty())
-    {
-        OutError = TEXT("The managed script type name is empty.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutGeneration = 0;
+	FReloadScriptEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			ReloadScriptEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed reload entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FReloadScriptEntryPoint>(ReloadScriptEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+	{
+		OutError = FString::Printf(
+			TEXT("The managed script assembly does not exist: '%s'."),
+			*AssemblyPath);
+		return false;
+	}
+	if (TypeName.IsEmpty())
+	{
+		OutError = TEXT("The managed script type name is empty.");
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length());
-    if (Result <= 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script reload"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutGeneration = Result;
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length());
+	if (Result <= 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script reload"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutGeneration = Result;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::PrepareManagedScriptReload(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32& OutCandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32& OutCandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutCandidateGeneration = 0;
-    FPrepareScriptReloadEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            PrepareScriptReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed prepare-reload entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FPrepareScriptReloadEntryPoint>(
-            PrepareScriptReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
-    {
-        OutError = FString::Printf(
-            TEXT("The managed script assembly does not exist: '%s'."),
-            *AssemblyPath);
-        return false;
-    }
-    if (TypeName.IsEmpty())
-    {
-        OutError = TEXT("The managed script type name is empty.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutCandidateGeneration = 0;
+	FPrepareScriptReloadEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			PrepareScriptReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed prepare-reload entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FPrepareScriptReloadEntryPoint>(
+			PrepareScriptReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+	{
+		OutError = FString::Printf(
+			TEXT("The managed script assembly does not exist: '%s'."),
+			*AssemblyPath);
+		return false;
+	}
+	if (TypeName.IsEmpty())
+	{
+		OutError = TEXT("The managed script type name is empty.");
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length());
-    if (Result <= 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script reload prepare"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutCandidateGeneration = Result;
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		InstanceId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length());
+	if (Result <= 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script reload prepare"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutCandidateGeneration = Result;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::CommitManagedScriptReload(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 CandidateGeneration,
-    int32& OutActiveGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	int32 CandidateGeneration,
+	int32& OutActiveGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutActiveGeneration = 0;
-    FCommitScriptReloadEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            CommitScriptReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed commit-reload entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FCommitScriptReloadEntryPoint>(
-            CommitScriptReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (CandidateGeneration <= 0)
-    {
-        OutError = TEXT("The managed reload candidate generation is invalid.");
-        return false;
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
-    if (Result <= 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script reload commit"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutActiveGeneration = Result;
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutActiveGeneration = 0;
+	FCommitScriptReloadEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			CommitScriptReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed commit-reload entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FCommitScriptReloadEntryPoint>(
+			CommitScriptReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (CandidateGeneration <= 0)
+	{
+		OutError = TEXT("The managed reload candidate generation is invalid.");
+		return false;
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+	if (Result <= 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script reload commit"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutActiveGeneration = Result;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::AbortManagedScriptReload(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 CandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	int32 CandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FReloadControlEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            AbortScriptReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed abort-reload entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
-            AbortScriptReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script reload abort"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FReloadControlEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			AbortScriptReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed abort-reload entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
+			AbortScriptReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script reload abort"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::FinalizeManagedScriptReload(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    int32 CandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	int32 CandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FReloadControlEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            FinalizeScriptReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed finalize-reload entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
-            FinalizeScriptReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script reload finalize"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FReloadControlEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			FinalizeScriptReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed finalize-reload entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FReloadControlEntryPoint>(
+			FinalizeScriptReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId, CandidateGeneration);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script reload finalize"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::PrepareManagedStaticLibraryReload(
-    uint64 WorldHostId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32& OutCandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32& OutCandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutCandidateGeneration = 0;
-    FPrepareStaticLibraryReloadEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            PrepareStaticLibraryReloadEntryPoint == nullptr ||
-            CommitStaticLibraryReloadEntryPoint == nullptr ||
-            AbortStaticLibraryReloadEntryPoint == nullptr ||
-            FinalizeStaticLibraryReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT(
-                "The managed static-library reload prepare entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FPrepareStaticLibraryReloadEntryPoint>(
-            PrepareStaticLibraryReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty())
-    {
-        OutError = TEXT("The managed static-library assembly path is empty.");
-        return false;
-    }
-    if (TypeName.IsEmpty())
-    {
-        OutError = TEXT("The managed static-library type name is empty.");
-        return false;
-    }
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutCandidateGeneration = 0;
+	FPrepareStaticLibraryReloadEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			PrepareStaticLibraryReloadEntryPoint == nullptr ||
+			CommitStaticLibraryReloadEntryPoint == nullptr ||
+			AbortStaticLibraryReloadEntryPoint == nullptr ||
+			FinalizeStaticLibraryReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT(
+				"The managed static-library reload prepare entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FPrepareStaticLibraryReloadEntryPoint>(
+			PrepareStaticLibraryReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty())
+	{
+		OutError = TEXT("The managed static-library assembly path is empty.");
+		return false;
+	}
+	if (TypeName.IsEmpty())
+	{
+		OutError = TEXT("The managed static-library type name is empty.");
+		return false;
+	}
 
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length());
-    if (Result < 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed static-library reload prepare"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutCandidateGeneration = Result;
-    OutError.Reset();
-    return true;
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length());
+	if (Result < 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed static-library reload prepare"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutCandidateGeneration = Result;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::CommitManagedStaticLibraryReload(
-    uint64 WorldHostId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32 CandidateGeneration,
-    int32& OutActiveGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32 CandidateGeneration,
+	int32& OutActiveGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    OutActiveGeneration = 0;
-    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            CommitStaticLibraryReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT(
-                "The managed static-library reload commit entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
-            CommitStaticLibraryReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
-    {
-        OutError = TEXT("The managed static-library reload commit arguments are invalid.");
-        return false;
-    }
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length(),
-        CandidateGeneration);
-    if (Result <= 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed static-library reload commit"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutActiveGeneration = Result;
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	OutActiveGeneration = 0;
+	FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			CommitStaticLibraryReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT(
+				"The managed static-library reload commit entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+			CommitStaticLibraryReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+	{
+		OutError = TEXT("The managed static-library reload commit arguments are invalid.");
+		return false;
+	}
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length(),
+		CandidateGeneration);
+	if (Result <= 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed static-library reload commit"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutActiveGeneration = Result;
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::AbortManagedStaticLibraryReload(
-    uint64 WorldHostId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32 CandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32 CandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            AbortStaticLibraryReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT(
-                "The managed static-library reload abort entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
-            AbortStaticLibraryReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
-    {
-        OutError = TEXT("The managed static-library reload abort arguments are invalid.");
-        return false;
-    }
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length(),
-        CandidateGeneration);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed static-library reload abort"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			AbortStaticLibraryReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT(
+				"The managed static-library reload abort entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+			AbortStaticLibraryReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+	{
+		OutError = TEXT("The managed static-library reload abort arguments are invalid.");
+		return false;
+	}
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length(),
+		CandidateGeneration);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed static-library reload abort"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::FinalizeManagedStaticLibraryReload(
-    uint64 WorldHostId,
-    const FString& AssemblyPath,
-    const FString& TypeName,
-    int32 CandidateGeneration,
-    FString& OutError)
+	uint64 WorldHostId,
+	const FString& AssemblyPath,
+	const FString& TypeName,
+	int32 CandidateGeneration,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            FinalizeStaticLibraryReloadEntryPoint == nullptr)
-        {
-            OutError = TEXT(
-                "The managed static-library reload finalize entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
-            FinalizeStaticLibraryReloadEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
-            GetLastManagedErrorEntryPoint);
-    }
-    if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
-    {
-        OutError = TEXT("The managed static-library reload finalize arguments are invalid.");
-        return false;
-    }
-    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
-    const int32 Result = EntryPoint(
-        WorldHostId,
-        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
-        AssemblyPathUtf8.Length(),
-        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
-        TypeNameUtf8.Length(),
-        CandidateGeneration);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed static-library reload finalize"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FStaticLibraryReloadControlEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			FinalizeStaticLibraryReloadEntryPoint == nullptr)
+		{
+			OutError = TEXT(
+				"The managed static-library reload finalize entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FStaticLibraryReloadControlEntryPoint>(
+			FinalizeStaticLibraryReloadEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+			GetLastManagedErrorEntryPoint);
+	}
+	if (AssemblyPath.IsEmpty() || TypeName.IsEmpty() || CandidateGeneration <= 0)
+	{
+		OutError = TEXT("The managed static-library reload finalize arguments are invalid.");
+		return false;
+	}
+	const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+	const int32 Result = EntryPoint(
+		WorldHostId,
+		reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+		AssemblyPathUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+		TypeNameUtf8.Length(),
+		CandidateGeneration);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed static-library reload finalize"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 bool FFinareCoreClrHost::DestroyManagedScript(
-    uint64 WorldHostId,
-    uint64 InstanceId,
-    FString& OutError)
+	uint64 WorldHostId,
+	uint64 InstanceId,
+	FString& OutError)
 {
-    using namespace UE::Finare::CoreClr::Private;
-    check(IsInGameThread());
-    FDestroyScriptEntryPoint EntryPoint = nullptr;
-    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
-    {
-        FScopeLock Lock(&StateLock);
-        if (State != EFinareCoreClrHostState::Ready ||
-            DestroyScriptEntryPoint == nullptr)
-        {
-            OutError = TEXT("The Finare managed destroy-script entry point is unavailable.");
-            return false;
-        }
-        EntryPoint = reinterpret_cast<FDestroyScriptEntryPoint>(DestroyScriptEntryPoint);
-        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
-    }
-    const int32 Result = EntryPoint(WorldHostId, InstanceId);
-    if (Result != 0)
-    {
-        OutError = DescribeManagedFailure(
-            TEXT("Managed script destruction"),
-            Result,
-            ErrorEntryPoint,
-            WorldHostId);
-        return false;
-    }
-    OutError.Reset();
-    return true;
+	using namespace UE::Finare::CoreClr::Private;
+	check(IsInGameThread());
+	FDestroyScriptEntryPoint EntryPoint = nullptr;
+	FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+	{
+		FScopeLock Lock(&StateLock);
+		if (State != EFinareCoreClrHostState::Ready ||
+			DestroyScriptEntryPoint == nullptr)
+		{
+			OutError = TEXT("The Finare managed destroy-script entry point is unavailable.");
+			return false;
+		}
+		EntryPoint = reinterpret_cast<FDestroyScriptEntryPoint>(DestroyScriptEntryPoint);
+		ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
+	}
+	const int32 Result = EntryPoint(WorldHostId, InstanceId);
+	if (Result != 0)
+	{
+		OutError = DescribeManagedFailure(
+			TEXT("Managed script destruction"),
+			Result,
+			ErrorEntryPoint,
+			WorldHostId);
+		return false;
+	}
+	OutError.Reset();
+	return true;
 }
 
 int32 FFinareCoreClrHost::GetManagedScriptCount(uint64 WorldHostId) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    if (State != EFinareCoreClrHostState::Ready ||
-        GetScriptCountEntryPoint == nullptr)
-    {
-        return 0;
-    }
-    const int32 Result = reinterpret_cast<FGetScriptCountEntryPoint>(
-        GetScriptCountEntryPoint)(WorldHostId);
-    return FMath::Max(Result, 0);
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	if (State != EFinareCoreClrHostState::Ready ||
+		GetScriptCountEntryPoint == nullptr)
+	{
+		return 0;
+	}
+	const int32 Result = reinterpret_cast<FGetScriptCountEntryPoint>(
+		GetScriptCountEntryPoint)(WorldHostId);
+	return FMath::Max(Result, 0);
 }
 
 bool FFinareCoreClrHost::GetManagedInvocationMetrics(
-    uint64 WorldHostId,
-    uint64& OutCallFrameInvocationCount,
-    uint64& OutLegacyInvocationCount) const
+	uint64 WorldHostId,
+	uint64& OutCallFrameInvocationCount,
+	uint64& OutLegacyInvocationCount) const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    OutCallFrameInvocationCount = 0;
-    OutLegacyInvocationCount = 0;
-    if (State != EFinareCoreClrHostState::Ready ||
-        GetInvocationMetricsEntryPoint == nullptr)
-    {
-        return false;
-    }
-    const int32 Result = reinterpret_cast<FGetInvocationMetricsEntryPoint>(
-        GetInvocationMetricsEntryPoint)(
-        WorldHostId,
-        &OutCallFrameInvocationCount,
-        &OutLegacyInvocationCount);
-    return Result == 0;
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	OutCallFrameInvocationCount = 0;
+	OutLegacyInvocationCount = 0;
+	if (State != EFinareCoreClrHostState::Ready ||
+		GetInvocationMetricsEntryPoint == nullptr)
+	{
+		return false;
+	}
+	const int32 Result = reinterpret_cast<FGetInvocationMetricsEntryPoint>(
+		GetInvocationMetricsEntryPoint)(
+		WorldHostId,
+		&OutCallFrameInvocationCount,
+		&OutLegacyInvocationCount);
+	return Result == 0;
 }
 
 int32 FFinareCoreClrHost::GetManagedWorldCount() const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    return State == EFinareCoreClrHostState::Ready &&
-        GetWorldCountEntryPoint != nullptr
-        ? reinterpret_cast<FGetWorldCountEntryPoint>(GetWorldCountEntryPoint)()
-        : 0;
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	return State == EFinareCoreClrHostState::Ready &&
+	       GetWorldCountEntryPoint != nullptr
+		       ? reinterpret_cast<FGetWorldCountEntryPoint>(GetWorldCountEntryPoint)()
+		       : 0;
 }
 
 int32 FFinareCoreClrHost::CollectRetiredManagedLoadContexts() const
 {
-    using namespace UE::Finare::CoreClr::Private;
-    FScopeLock Lock(&StateLock);
-    return State == EFinareCoreClrHostState::Ready &&
-        CollectRetiredLoadContextsEntryPoint != nullptr
-        ? reinterpret_cast<FCollectRetiredLoadContextsEntryPoint>(
-            CollectRetiredLoadContextsEntryPoint)()
-        : 0;
+	using namespace UE::Finare::CoreClr::Private;
+	FScopeLock Lock(&StateLock);
+	return State == EFinareCoreClrHostState::Ready &&
+	       CollectRetiredLoadContextsEntryPoint != nullptr
+		       ? reinterpret_cast<FCollectRetiredLoadContextsEntryPoint>(
+			       CollectRetiredLoadContextsEntryPoint)()
+		       : 0;
 }
 
 FString FFinareCoreClrHost::GetHostFxrPath() const
 {
-    FScopeLock Lock(&StateLock);
-    return LoadedHostFxrPath;
+	FScopeLock Lock(&StateLock);
+	return LoadedHostFxrPath;
 }
 
 FString FFinareCoreClrHost::GetLastError() const
 {
-    FScopeLock Lock(&StateLock);
-    return LastError;
+	FScopeLock Lock(&StateLock);
+	return LastError;
 }
 
 bool FFinareCoreClrHost::InitializeLocked()
 {
-    using namespace UE::Finare::CoreClr::Private;
+	using namespace UE::Finare::CoreClr::Private;
 
-    const FString RuntimeConfigPath = GetRuntimeConfigPath();
-    if (RuntimeConfigPath.IsEmpty() ||
-        !IFileManager::Get().FileExists(*RuntimeConfigPath))
-    {
-        return FailLocked(TEXT("Finare CoreCLR runtimeconfig is missing."));
-    }
+	const FString RuntimeConfigPath = GetRuntimeConfigPath();
+	if (RuntimeConfigPath.IsEmpty() ||
+		!IFileManager::Get().FileExists(*RuntimeConfigPath))
+	{
+		return FailLocked(TEXT("Finare CoreCLR runtimeconfig is missing."));
+	}
 
-    const FString DotNetRoot = FindDotNetRoot();
-    if (DotNetRoot.IsEmpty())
-    {
-        return FailLocked(TEXT("A compatible .NET root could not be found."));
-    }
+	const FString DotNetRoot = FindDotNetRoot();
+	if (DotNetRoot.IsEmpty())
+	{
+		return FailLocked(TEXT("A compatible .NET root could not be found."));
+	}
 
-    LoadedHostFxrPath = FindHostFxr(DotNetRoot);
-    if (LoadedHostFxrPath.IsEmpty())
-    {
-        return FailLocked(TEXT("hostfxr was not found under the selected .NET root."));
-    }
+	LoadedHostFxrPath = FindHostFxr(DotNetRoot);
+	if (LoadedHostFxrPath.IsEmpty())
+	{
+		return FailLocked(TEXT("hostfxr was not found under the selected .NET root."));
+	}
 
-    HostFxrLibrary = FPlatformProcess::GetDllHandle(*LoadedHostFxrPath);
-    if (HostFxrLibrary == nullptr)
-    {
-        return FailLocked(FString::Printf(
-            TEXT("Failed to load hostfxr from '%s'."),
-            *LoadedHostFxrPath));
-    }
+	HostFxrLibrary = FPlatformProcess::GetDllHandle(*LoadedHostFxrPath);
+	if (HostFxrLibrary == nullptr)
+	{
+		return FailLocked(FString::Printf(
+			TEXT("Failed to load hostfxr from '%s'."),
+			*LoadedHostFxrPath));
+	}
 
-    const FHostFxrInitialize InitializeForRuntimeConfig =
-        reinterpret_cast<FHostFxrInitialize>(FPlatformProcess::GetDllExport(
-            HostFxrLibrary,
-            TEXT("hostfxr_initialize_for_runtime_config")));
-    const FHostFxrGetRuntimeDelegate GetRuntimeDelegate =
-        reinterpret_cast<FHostFxrGetRuntimeDelegate>(FPlatformProcess::GetDllExport(
-            HostFxrLibrary,
-            TEXT("hostfxr_get_runtime_delegate")));
-    const FHostFxrClose Close = reinterpret_cast<FHostFxrClose>(
-        FPlatformProcess::GetDllExport(HostFxrLibrary, TEXT("hostfxr_close")));
-    if (InitializeForRuntimeConfig == nullptr ||
-        GetRuntimeDelegate == nullptr ||
-        Close == nullptr)
-    {
-        return FailLocked(TEXT("hostfxr does not expose the required hosting API."));
-    }
+	const FHostFxrInitialize InitializeForRuntimeConfig =
+		reinterpret_cast<FHostFxrInitialize>(FPlatformProcess::GetDllExport(
+			HostFxrLibrary,
+			TEXT("hostfxr_initialize_for_runtime_config")));
+	const FHostFxrGetRuntimeDelegate GetRuntimeDelegate =
+		reinterpret_cast<FHostFxrGetRuntimeDelegate>(FPlatformProcess::GetDllExport(
+			HostFxrLibrary,
+			TEXT("hostfxr_get_runtime_delegate")));
+	const FHostFxrClose Close = reinterpret_cast<FHostFxrClose>(
+		FPlatformProcess::GetDllExport(HostFxrLibrary, TEXT("hostfxr_close")));
+	if (InitializeForRuntimeConfig == nullptr ||
+		GetRuntimeDelegate == nullptr ||
+		Close == nullptr)
+	{
+		return FailLocked(TEXT("hostfxr does not expose the required hosting API."));
+	}
 
-    void* HostContext = nullptr;
+	void* HostContext = nullptr;
 #if PLATFORM_WINDOWS
-    const int32 InitializeResult = InitializeForRuntimeConfig(
-        *RuntimeConfigPath,
-        nullptr,
-        &HostContext);
+	const int32 InitializeResult = InitializeForRuntimeConfig(
+		*RuntimeConfigPath,
+		nullptr,
+		&HostContext);
 #else
-    const FTCHARToUTF8 RuntimeConfigUtf8(*RuntimeConfigPath);
-    const int32 InitializeResult = InitializeForRuntimeConfig(
-        RuntimeConfigUtf8.Get(),
-        nullptr,
-        &HostContext);
+	const FTCHARToUTF8 RuntimeConfigUtf8(*RuntimeConfigPath);
+	const int32 InitializeResult = InitializeForRuntimeConfig(
+		RuntimeConfigUtf8.Get(),
+		nullptr,
+		&HostContext);
 #endif
-    if (InitializeResult < 0 || HostContext == nullptr)
-    {
-        return FailLocked(FString::Printf(
-            TEXT("hostfxr runtime initialization failed with 0x%08X."),
-            static_cast<uint32>(InitializeResult)));
-    }
+	if (InitializeResult < 0 || HostContext == nullptr)
+	{
+		return FailLocked(FString::Printf(
+			TEXT("hostfxr runtime initialization failed with 0x%08X."),
+			static_cast<uint32>(InitializeResult)));
+	}
 
-    void* LoadDelegate = nullptr;
-    const int32 DelegateResult = GetRuntimeDelegate(
-        HostContext,
-        LoadAssemblyAndGetFunctionPointerDelegateType,
-        &LoadDelegate);
-    Close(HostContext);
-    if (DelegateResult < 0 || LoadDelegate == nullptr)
-    {
-        return FailLocked(FString::Printf(
-            TEXT("hostfxr delegate acquisition failed with 0x%08X."),
-            static_cast<uint32>(DelegateResult)));
-    }
+	void* LoadDelegate = nullptr;
+	const int32 DelegateResult = GetRuntimeDelegate(
+		HostContext,
+		LoadAssemblyAndGetFunctionPointerDelegateType,
+		&LoadDelegate);
+	Close(HostContext);
+	if (DelegateResult < 0 || LoadDelegate == nullptr)
+	{
+		return FailLocked(FString::Printf(
+			TEXT("hostfxr delegate acquisition failed with 0x%08X."),
+			static_cast<uint32>(DelegateResult)));
+	}
 
-    LoadAssemblyAndGetFunctionPointer = LoadDelegate;
-    const FString ManagedAssemblyPath = GetManagedAssemblyPath();
-    if (ManagedAssemblyPath.IsEmpty() ||
-        !IFileManager::Get().FileExists(*ManagedAssemblyPath))
-    {
-        return FailLocked(TEXT(
-            "Finare.Unreal.dll is not staged under the plugin Binaries/Managed directory."));
-    }
+	LoadAssemblyAndGetFunctionPointer = LoadDelegate;
+	const FString ManagedAssemblyPath = GetManagedAssemblyPath();
+	if (ManagedAssemblyPath.IsEmpty() ||
+		!IFileManager::Get().FileExists(*ManagedAssemblyPath))
+	{
+		return FailLocked(TEXT(
+			"Finare.Unreal.dll is not staged under the plugin Binaries/Managed directory."));
+	}
 
-    const FLoadAssemblyAndGetFunctionPointer LoadManagedEntry =
-        reinterpret_cast<FLoadAssemblyAndGetFunctionPointer>(LoadDelegate);
-    const FFinareHostChar* UnmanagedCallersOnly =
-        reinterpret_cast<const FFinareHostChar*>(MAX_uint64);
+	const FLoadAssemblyAndGetFunctionPointer LoadManagedEntry =
+		reinterpret_cast<FLoadAssemblyAndGetFunctionPointer>(LoadDelegate);
+	const FFinareHostChar* UnmanagedCallersOnly =
+		reinterpret_cast<const FFinareHostChar*>(MAX_uint64);
 #if PLATFORM_WINDOWS
-    const FFinareHostChar* AssemblyPath = *ManagedAssemblyPath;
-    const FFinareHostChar* TypeName =
-        TEXT("Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal");
-    auto LoadEntryPoint = [&](const FFinareHostChar* MethodName, void** OutEntryPoint)
-    {
-        return LoadManagedEntry(
-            AssemblyPath,
-            TypeName,
-            MethodName,
-            UnmanagedCallersOnly,
-            nullptr,
-            OutEntryPoint);
-    };
+	const FFinareHostChar* AssemblyPath = *ManagedAssemblyPath;
+	const FFinareHostChar* TypeName =
+		TEXT("Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal");
+	auto LoadEntryPoint = [&](const FFinareHostChar* MethodName, void** OutEntryPoint)
+	{
+		return LoadManagedEntry(
+			AssemblyPath,
+			TypeName,
+			MethodName,
+			UnmanagedCallersOnly,
+			nullptr,
+			OutEntryPoint);
+	};
 #else
-    const FTCHARToUTF8 AssemblyPathUtf8(*ManagedAssemblyPath);
-    const FTCHARToUTF8 TypeNameUtf8(
-        TEXT("Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal"));
-    auto LoadEntryPoint = [&](const FFinareHostChar* MethodName, void** OutEntryPoint)
-    {
-        return LoadManagedEntry(
-            AssemblyPathUtf8.Get(),
-            TypeNameUtf8.Get(),
-            MethodName,
-            UnmanagedCallersOnly,
-            nullptr,
-            OutEntryPoint);
-    };
+	const FTCHARToUTF8 AssemblyPathUtf8(*ManagedAssemblyPath);
+	const FTCHARToUTF8 TypeNameUtf8(
+		TEXT("Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal"));
+	auto LoadEntryPoint = [&](const FFinareHostChar* MethodName, void** OutEntryPoint)
+	{
+		return LoadManagedEntry(
+			AssemblyPathUtf8.Get(),
+			TypeNameUtf8.Get(),
+			MethodName,
+			UnmanagedCallersOnly,
+			nullptr,
+			OutEntryPoint);
+	};
 #endif
 
 #if PLATFORM_WINDOWS
-    const int32 CreateResult = LoadEntryPoint(TEXT("CreateWorld"), &CreateWorldEntryPoint);
-    const int32 DestroyResult = LoadEntryPoint(TEXT("DestroyWorld"), &DestroyWorldEntryPoint);
-    const int32 CountResult = LoadEntryPoint(TEXT("GetWorldCount"), &GetWorldCountEntryPoint);
-    const int32 CollectResult = LoadEntryPoint(
-        TEXT("CollectRetiredLoadContexts"),
-        &CollectRetiredLoadContextsEntryPoint);
-    const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
-    LoadEntryPoint(
-        TEXT("CreateScriptWithBlueprintContract"),
-        &CreateScriptWithBlueprintContractEntryPoint);
-    const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
-    const int32 ConfigureDebugResult = LoadEntryPoint(
-        TEXT("ConfigureScriptDebug"), &ConfigureScriptDebugEntryPoint);
-    const int32 BeginDebugTickResult = LoadEntryPoint(
-        TEXT("BeginScriptDebugTick"), &BeginScriptDebugTickEntryPoint);
-    const int32 DebugStateResult = LoadEntryPoint(
-        TEXT("GetScriptDebugState"), &GetScriptDebugStateEntryPoint);
-    const int32 ReloadStateResult = LoadEntryPoint(
-        TEXT("GetScriptReloadState"), &GetScriptReloadStateEntryPoint);
-    const int32 ProfilerControlResult = LoadEntryPoint(
-        TEXT("SetScriptProfilerEnabled"), &SetScriptProfilerEnabledEntryPoint);
-    const int32 ProfilerTraceResult = LoadEntryPoint(
-        TEXT("GetScriptProfilerTrace"), &GetScriptProfilerTraceEntryPoint);
-    const int32 DebugControlResult = LoadEntryPoint(
-        TEXT("ControlScriptDebug"), &ControlScriptDebugEntryPoint);
-    const int32 DisableDebugResult = LoadEntryPoint(
-        TEXT("DisableScriptDebug"), &DisableScriptDebugEntryPoint);
-    const int32 DebugActiveResult = LoadEntryPoint(
-        TEXT("IsScriptDebugActive"), &IsScriptDebugActiveEntryPoint);
-    const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
-    const int32 InvokeFunctionResult = LoadEntryPoint(
-        TEXT("InvokeScriptFunction"), &InvokeScriptFunctionEntryPoint);
-    const int32 InvokeFunctionV2Result = LoadEntryPoint(
-        TEXT("InvokeScriptFunctionV2"), &InvokeScriptFunctionV2EntryPoint);
-    const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
-    const int32 PrepareReloadResult = LoadEntryPoint(
-        TEXT("PrepareScriptReload"), &PrepareScriptReloadEntryPoint);
-    const int32 CommitReloadResult = LoadEntryPoint(
-        TEXT("CommitScriptReload"), &CommitScriptReloadEntryPoint);
-    const int32 AbortReloadResult = LoadEntryPoint(
-        TEXT("AbortScriptReload"), &AbortScriptReloadEntryPoint);
-    const int32 FinalizeReloadResult = LoadEntryPoint(
-        TEXT("FinalizeScriptReload"), &FinalizeScriptReloadEntryPoint);
-    LoadEntryPoint(TEXT("PrepareStaticLibraryReload"), &PrepareStaticLibraryReloadEntryPoint);
-    LoadEntryPoint(TEXT("CommitStaticLibraryReload"), &CommitStaticLibraryReloadEntryPoint);
-    LoadEntryPoint(TEXT("AbortStaticLibraryReload"), &AbortStaticLibraryReloadEntryPoint);
-    LoadEntryPoint(TEXT("FinalizeStaticLibraryReload"), &FinalizeStaticLibraryReloadEntryPoint);
-    const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
-    const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
-    const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
-    const int32 LastErrorResult = LoadEntryPoint(TEXT("GetLastError"), &GetLastManagedErrorEntryPoint);
+	const int32 CreateResult = LoadEntryPoint(TEXT("CreateWorld"), &CreateWorldEntryPoint);
+	const int32 DestroyResult = LoadEntryPoint(TEXT("DestroyWorld"), &DestroyWorldEntryPoint);
+	const int32 CountResult = LoadEntryPoint(TEXT("GetWorldCount"), &GetWorldCountEntryPoint);
+	const int32 CollectResult = LoadEntryPoint(
+		TEXT("CollectRetiredLoadContexts"),
+		&CollectRetiredLoadContextsEntryPoint);
+	const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
+	LoadEntryPoint(
+		TEXT("CreateScriptWithBlueprintContract"),
+		&CreateScriptWithBlueprintContractEntryPoint);
+	const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
+	const int32 ConfigureDebugResult = LoadEntryPoint(
+		TEXT("ConfigureScriptDebug"), &ConfigureScriptDebugEntryPoint);
+	const int32 BeginDebugTickResult = LoadEntryPoint(
+		TEXT("BeginScriptDebugTick"), &BeginScriptDebugTickEntryPoint);
+	const int32 DebugStateResult = LoadEntryPoint(
+		TEXT("GetScriptDebugState"), &GetScriptDebugStateEntryPoint);
+	const int32 ReloadStateResult = LoadEntryPoint(
+		TEXT("GetScriptReloadState"), &GetScriptReloadStateEntryPoint);
+	const int32 ProfilerControlResult = LoadEntryPoint(
+		TEXT("SetScriptProfilerEnabled"), &SetScriptProfilerEnabledEntryPoint);
+	const int32 ProfilerTraceResult = LoadEntryPoint(
+		TEXT("GetScriptProfilerTrace"), &GetScriptProfilerTraceEntryPoint);
+	const int32 DebugControlResult = LoadEntryPoint(
+		TEXT("ControlScriptDebug"), &ControlScriptDebugEntryPoint);
+	const int32 DisableDebugResult = LoadEntryPoint(
+		TEXT("DisableScriptDebug"), &DisableScriptDebugEntryPoint);
+	const int32 DebugActiveResult = LoadEntryPoint(
+		TEXT("IsScriptDebugActive"), &IsScriptDebugActiveEntryPoint);
+	const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
+	const int32 InvokeFunctionResult = LoadEntryPoint(
+		TEXT("InvokeScriptFunction"), &InvokeScriptFunctionEntryPoint);
+	const int32 InvokeFunctionV2Result = LoadEntryPoint(
+		TEXT("InvokeScriptFunctionV2"), &InvokeScriptFunctionV2EntryPoint);
+	const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
+	const int32 PrepareReloadResult = LoadEntryPoint(
+		TEXT("PrepareScriptReload"), &PrepareScriptReloadEntryPoint);
+	const int32 CommitReloadResult = LoadEntryPoint(
+		TEXT("CommitScriptReload"), &CommitScriptReloadEntryPoint);
+	const int32 AbortReloadResult = LoadEntryPoint(
+		TEXT("AbortScriptReload"), &AbortScriptReloadEntryPoint);
+	const int32 FinalizeReloadResult = LoadEntryPoint(
+		TEXT("FinalizeScriptReload"), &FinalizeScriptReloadEntryPoint);
+	LoadEntryPoint(TEXT("PrepareStaticLibraryReload"), &PrepareStaticLibraryReloadEntryPoint);
+	LoadEntryPoint(TEXT("CommitStaticLibraryReload"), &CommitStaticLibraryReloadEntryPoint);
+	LoadEntryPoint(TEXT("AbortStaticLibraryReload"), &AbortStaticLibraryReloadEntryPoint);
+	LoadEntryPoint(TEXT("FinalizeStaticLibraryReload"), &FinalizeStaticLibraryReloadEntryPoint);
+	const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
+	const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
+	const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
+	const int32 LastErrorResult = LoadEntryPoint(TEXT("GetLastError"), &GetLastManagedErrorEntryPoint);
 #else
-    const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
-    const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
-    const int32 CountResult = LoadEntryPoint("GetWorldCount", &GetWorldCountEntryPoint);
-    const int32 CollectResult = LoadEntryPoint(
-        "CollectRetiredLoadContexts",
-        &CollectRetiredLoadContextsEntryPoint);
-    const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
-    LoadEntryPoint(
-        "CreateScriptWithBlueprintContract",
-        &CreateScriptWithBlueprintContractEntryPoint);
-    const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
-    const int32 ConfigureDebugResult = LoadEntryPoint(
-        "ConfigureScriptDebug", &ConfigureScriptDebugEntryPoint);
-    const int32 BeginDebugTickResult = LoadEntryPoint(
-        "BeginScriptDebugTick", &BeginScriptDebugTickEntryPoint);
-    const int32 DebugStateResult = LoadEntryPoint(
-        "GetScriptDebugState", &GetScriptDebugStateEntryPoint);
-    const int32 ReloadStateResult = LoadEntryPoint(
-        "GetScriptReloadState", &GetScriptReloadStateEntryPoint);
-    const int32 ProfilerControlResult = LoadEntryPoint(
-        "SetScriptProfilerEnabled", &SetScriptProfilerEnabledEntryPoint);
-    const int32 ProfilerTraceResult = LoadEntryPoint(
-        "GetScriptProfilerTrace", &GetScriptProfilerTraceEntryPoint);
-    const int32 DebugControlResult = LoadEntryPoint(
-        "ControlScriptDebug", &ControlScriptDebugEntryPoint);
-    const int32 DisableDebugResult = LoadEntryPoint(
-        "DisableScriptDebug", &DisableScriptDebugEntryPoint);
-    const int32 DebugActiveResult = LoadEntryPoint(
-        "IsScriptDebugActive", &IsScriptDebugActiveEntryPoint);
-    const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
-    const int32 InvokeFunctionResult = LoadEntryPoint(
-        "InvokeScriptFunction", &InvokeScriptFunctionEntryPoint);
-    const int32 InvokeFunctionV2Result = LoadEntryPoint(
-        "InvokeScriptFunctionV2", &InvokeScriptFunctionV2EntryPoint);
-    const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
-    const int32 PrepareReloadResult = LoadEntryPoint(
-        "PrepareScriptReload", &PrepareScriptReloadEntryPoint);
-    const int32 CommitReloadResult = LoadEntryPoint(
-        "CommitScriptReload", &CommitScriptReloadEntryPoint);
-    const int32 AbortReloadResult = LoadEntryPoint(
-        "AbortScriptReload", &AbortScriptReloadEntryPoint);
-    const int32 FinalizeReloadResult = LoadEntryPoint(
-        "FinalizeScriptReload", &FinalizeScriptReloadEntryPoint);
-    LoadEntryPoint("PrepareStaticLibraryReload", &PrepareStaticLibraryReloadEntryPoint);
-    LoadEntryPoint("CommitStaticLibraryReload", &CommitStaticLibraryReloadEntryPoint);
-    LoadEntryPoint("AbortStaticLibraryReload", &AbortStaticLibraryReloadEntryPoint);
-    LoadEntryPoint("FinalizeStaticLibraryReload", &FinalizeStaticLibraryReloadEntryPoint);
-    const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
-    const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
-    const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
-    const int32 LastErrorResult = LoadEntryPoint("GetLastError", &GetLastManagedErrorEntryPoint);
+	const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
+	const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
+	const int32 CountResult = LoadEntryPoint("GetWorldCount", &GetWorldCountEntryPoint);
+	const int32 CollectResult = LoadEntryPoint(
+		"CollectRetiredLoadContexts",
+		&CollectRetiredLoadContextsEntryPoint);
+	const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
+	LoadEntryPoint(
+		"CreateScriptWithBlueprintContract",
+		&CreateScriptWithBlueprintContractEntryPoint);
+	const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
+	const int32 ConfigureDebugResult = LoadEntryPoint(
+		"ConfigureScriptDebug", &ConfigureScriptDebugEntryPoint);
+	const int32 BeginDebugTickResult = LoadEntryPoint(
+		"BeginScriptDebugTick", &BeginScriptDebugTickEntryPoint);
+	const int32 DebugStateResult = LoadEntryPoint(
+		"GetScriptDebugState", &GetScriptDebugStateEntryPoint);
+	const int32 ReloadStateResult = LoadEntryPoint(
+		"GetScriptReloadState", &GetScriptReloadStateEntryPoint);
+	const int32 ProfilerControlResult = LoadEntryPoint(
+		"SetScriptProfilerEnabled", &SetScriptProfilerEnabledEntryPoint);
+	const int32 ProfilerTraceResult = LoadEntryPoint(
+		"GetScriptProfilerTrace", &GetScriptProfilerTraceEntryPoint);
+	const int32 DebugControlResult = LoadEntryPoint(
+		"ControlScriptDebug", &ControlScriptDebugEntryPoint);
+	const int32 DisableDebugResult = LoadEntryPoint(
+		"DisableScriptDebug", &DisableScriptDebugEntryPoint);
+	const int32 DebugActiveResult = LoadEntryPoint(
+		"IsScriptDebugActive", &IsScriptDebugActiveEntryPoint);
+	const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
+	const int32 InvokeFunctionResult = LoadEntryPoint(
+		"InvokeScriptFunction", &InvokeScriptFunctionEntryPoint);
+	const int32 InvokeFunctionV2Result = LoadEntryPoint(
+		"InvokeScriptFunctionV2", &InvokeScriptFunctionV2EntryPoint);
+	const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
+	const int32 PrepareReloadResult = LoadEntryPoint(
+		"PrepareScriptReload", &PrepareScriptReloadEntryPoint);
+	const int32 CommitReloadResult = LoadEntryPoint(
+		"CommitScriptReload", &CommitScriptReloadEntryPoint);
+	const int32 AbortReloadResult = LoadEntryPoint(
+		"AbortScriptReload", &AbortScriptReloadEntryPoint);
+	const int32 FinalizeReloadResult = LoadEntryPoint(
+		"FinalizeScriptReload", &FinalizeScriptReloadEntryPoint);
+	LoadEntryPoint("PrepareStaticLibraryReload", &PrepareStaticLibraryReloadEntryPoint);
+	LoadEntryPoint("CommitStaticLibraryReload", &CommitStaticLibraryReloadEntryPoint);
+	LoadEntryPoint("AbortStaticLibraryReload", &AbortStaticLibraryReloadEntryPoint);
+	LoadEntryPoint("FinalizeStaticLibraryReload", &FinalizeStaticLibraryReloadEntryPoint);
+	const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
+	const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
+	const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
+	const int32 LastErrorResult = LoadEntryPoint("GetLastError", &GetLastManagedErrorEntryPoint);
 #endif
-    if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
-        CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
-        InvokeFunctionResult != 0 ||
-        InvokeFunctionV2Result != 0 ||
-        ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
-        ReloadStateResult != 0 || ProfilerControlResult != 0 || ProfilerTraceResult != 0 ||
-        DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
-        ReloadScriptResult != 0 || PrepareReloadResult != 0 ||
-        CommitReloadResult != 0 || AbortReloadResult != 0 ||
-        FinalizeReloadResult != 0 ||
-        DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
-        LastErrorResult != 0 ||
-        CreateWorldEntryPoint == nullptr ||
-        DestroyWorldEntryPoint == nullptr ||
-        GetWorldCountEntryPoint == nullptr ||
-        CollectRetiredLoadContextsEntryPoint == nullptr ||
-        CreateScriptEntryPoint == nullptr ||
-        TickScriptEntryPoint == nullptr ||
-        ConfigureScriptDebugEntryPoint == nullptr ||
-        BeginScriptDebugTickEntryPoint == nullptr ||
-        GetScriptDebugStateEntryPoint == nullptr ||
-        GetScriptReloadStateEntryPoint == nullptr ||
-        SetScriptProfilerEnabledEntryPoint == nullptr ||
-        GetScriptProfilerTraceEntryPoint == nullptr ||
-        ControlScriptDebugEntryPoint == nullptr ||
-        DisableScriptDebugEntryPoint == nullptr ||
-        IsScriptDebugActiveEntryPoint == nullptr ||
-        DispatchEventEntryPoint == nullptr ||
-        InvokeScriptFunctionEntryPoint == nullptr ||
-        InvokeScriptFunctionV2EntryPoint == nullptr ||
-        ReloadScriptEntryPoint == nullptr ||
-        PrepareScriptReloadEntryPoint == nullptr ||
-        CommitScriptReloadEntryPoint == nullptr ||
-        AbortScriptReloadEntryPoint == nullptr ||
-        FinalizeScriptReloadEntryPoint == nullptr ||
-        DestroyScriptEntryPoint == nullptr ||
-        GetScriptCountEntryPoint == nullptr ||
-        GetInvocationMetricsEntryPoint == nullptr ||
-        GetLastManagedErrorEntryPoint == nullptr)
-    {
-        return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) profiler=(0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
-            static_cast<uint32>(CreateResult),
-            static_cast<uint32>(DestroyResult),
-            static_cast<uint32>(CountResult),
-            static_cast<uint32>(CollectResult),
-            static_cast<uint32>(CreateScriptResult),
-            static_cast<uint32>(TickScriptResult),
-            static_cast<uint32>(DispatchEventResult),
-            static_cast<uint32>(InvokeFunctionResult),
-            static_cast<uint32>(ReloadScriptResult),
-            static_cast<uint32>(PrepareReloadResult),
-            static_cast<uint32>(CommitReloadResult),
-            static_cast<uint32>(AbortReloadResult),
-            static_cast<uint32>(FinalizeReloadResult),
-            static_cast<uint32>(DestroyScriptResult),
-            static_cast<uint32>(ScriptCountResult),
-            static_cast<uint32>(ConfigureDebugResult),
-            static_cast<uint32>(BeginDebugTickResult),
-            static_cast<uint32>(DebugStateResult),
-            static_cast<uint32>(ReloadStateResult),
-            static_cast<uint32>(DebugControlResult),
-            static_cast<uint32>(DisableDebugResult),
-            static_cast<uint32>(DebugActiveResult),
-            static_cast<uint32>(ProfilerControlResult),
-            static_cast<uint32>(ProfilerTraceResult),
-            static_cast<uint32>(MetricsResult),
-            static_cast<uint32>(LastErrorResult)));
-    }
+	if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
+		CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
+		InvokeFunctionResult != 0 ||
+		InvokeFunctionV2Result != 0 ||
+		ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
+		ReloadStateResult != 0 || ProfilerControlResult != 0 || ProfilerTraceResult != 0 ||
+		DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
+		ReloadScriptResult != 0 || PrepareReloadResult != 0 ||
+		CommitReloadResult != 0 || AbortReloadResult != 0 ||
+		FinalizeReloadResult != 0 ||
+		DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
+		LastErrorResult != 0 ||
+		CreateWorldEntryPoint == nullptr ||
+		DestroyWorldEntryPoint == nullptr ||
+		GetWorldCountEntryPoint == nullptr ||
+		CollectRetiredLoadContextsEntryPoint == nullptr ||
+		CreateScriptEntryPoint == nullptr ||
+		TickScriptEntryPoint == nullptr ||
+		ConfigureScriptDebugEntryPoint == nullptr ||
+		BeginScriptDebugTickEntryPoint == nullptr ||
+		GetScriptDebugStateEntryPoint == nullptr ||
+		GetScriptReloadStateEntryPoint == nullptr ||
+		SetScriptProfilerEnabledEntryPoint == nullptr ||
+		GetScriptProfilerTraceEntryPoint == nullptr ||
+		ControlScriptDebugEntryPoint == nullptr ||
+		DisableScriptDebugEntryPoint == nullptr ||
+		IsScriptDebugActiveEntryPoint == nullptr ||
+		DispatchEventEntryPoint == nullptr ||
+		InvokeScriptFunctionEntryPoint == nullptr ||
+		InvokeScriptFunctionV2EntryPoint == nullptr ||
+		ReloadScriptEntryPoint == nullptr ||
+		PrepareScriptReloadEntryPoint == nullptr ||
+		CommitScriptReloadEntryPoint == nullptr ||
+		AbortScriptReloadEntryPoint == nullptr ||
+		FinalizeScriptReloadEntryPoint == nullptr ||
+		DestroyScriptEntryPoint == nullptr ||
+		GetScriptCountEntryPoint == nullptr ||
+		GetInvocationMetricsEntryPoint == nullptr ||
+		GetLastManagedErrorEntryPoint == nullptr)
+	{
+		return FailLocked(FString::Printf(
+			TEXT(
+				"Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) profiler=(0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
+			static_cast<uint32>(CreateResult),
+			static_cast<uint32>(DestroyResult),
+			static_cast<uint32>(CountResult),
+			static_cast<uint32>(CollectResult),
+			static_cast<uint32>(CreateScriptResult),
+			static_cast<uint32>(TickScriptResult),
+			static_cast<uint32>(DispatchEventResult),
+			static_cast<uint32>(InvokeFunctionResult),
+			static_cast<uint32>(ReloadScriptResult),
+			static_cast<uint32>(PrepareReloadResult),
+			static_cast<uint32>(CommitReloadResult),
+			static_cast<uint32>(AbortReloadResult),
+			static_cast<uint32>(FinalizeReloadResult),
+			static_cast<uint32>(DestroyScriptResult),
+			static_cast<uint32>(ScriptCountResult),
+			static_cast<uint32>(ConfigureDebugResult),
+			static_cast<uint32>(BeginDebugTickResult),
+			static_cast<uint32>(DebugStateResult),
+			static_cast<uint32>(ReloadStateResult),
+			static_cast<uint32>(DebugControlResult),
+			static_cast<uint32>(DisableDebugResult),
+			static_cast<uint32>(DebugActiveResult),
+			static_cast<uint32>(ProfilerControlResult),
+			static_cast<uint32>(ProfilerTraceResult),
+			static_cast<uint32>(MetricsResult),
+			static_cast<uint32>(LastErrorResult)));
+	}
 
-    LastError.Reset();
-    State = EFinareCoreClrHostState::Ready;
-    UE_LOG(
-        LogTemp,
-        Display,
-        TEXT("Finare loaded CoreCLR through %s"),
-        *LoadedHostFxrPath);
-    return true;
+	LastError.Reset();
+	State = EFinareCoreClrHostState::Ready;
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("Finare loaded CoreCLR through %s"),
+		*LoadedHostFxrPath);
+	return true;
 }
 
 bool FFinareCoreClrHost::FailLocked(FString Message)
 {
-    if (HostFxrLibrary != nullptr)
-    {
-        FPlatformProcess::FreeDllHandle(HostFxrLibrary);
-        HostFxrLibrary = nullptr;
-    }
-    LoadAssemblyAndGetFunctionPointer = nullptr;
-    CreateWorldEntryPoint = nullptr;
-    DestroyWorldEntryPoint = nullptr;
-    GetWorldCountEntryPoint = nullptr;
-    CollectRetiredLoadContextsEntryPoint = nullptr;
-    CreateScriptEntryPoint = nullptr;
-    CreateScriptWithBlueprintContractEntryPoint = nullptr;
-    TickScriptEntryPoint = nullptr;
-    ConfigureScriptDebugEntryPoint = nullptr;
-    BeginScriptDebugTickEntryPoint = nullptr;
-    GetScriptDebugStateEntryPoint = nullptr;
-    GetScriptReloadStateEntryPoint = nullptr;
-    SetScriptProfilerEnabledEntryPoint = nullptr;
-    GetScriptProfilerTraceEntryPoint = nullptr;
-    ControlScriptDebugEntryPoint = nullptr;
-    DisableScriptDebugEntryPoint = nullptr;
-    IsScriptDebugActiveEntryPoint = nullptr;
-    DispatchEventEntryPoint = nullptr;
-    InvokeScriptFunctionEntryPoint = nullptr;
-    InvokeScriptFunctionV2EntryPoint = nullptr;
-    ReloadScriptEntryPoint = nullptr;
-    PrepareScriptReloadEntryPoint = nullptr;
-    CommitScriptReloadEntryPoint = nullptr;
-    AbortScriptReloadEntryPoint = nullptr;
-    FinalizeScriptReloadEntryPoint = nullptr;
-    PrepareStaticLibraryReloadEntryPoint = nullptr;
-    CommitStaticLibraryReloadEntryPoint = nullptr;
-    AbortStaticLibraryReloadEntryPoint = nullptr;
-    FinalizeStaticLibraryReloadEntryPoint = nullptr;
-    DestroyScriptEntryPoint = nullptr;
-    GetScriptCountEntryPoint = nullptr;
-    GetInvocationMetricsEntryPoint = nullptr;
-    GetLastManagedErrorEntryPoint = nullptr;
-    LastError = MoveTemp(Message);
-    State = EFinareCoreClrHostState::Failed;
-    UE_LOG(LogTemp, Error, TEXT("%s"), *LastError);
-    return false;
+	if (HostFxrLibrary != nullptr)
+	{
+		FPlatformProcess::FreeDllHandle(HostFxrLibrary);
+		HostFxrLibrary = nullptr;
+	}
+	LoadAssemblyAndGetFunctionPointer = nullptr;
+	CreateWorldEntryPoint = nullptr;
+	DestroyWorldEntryPoint = nullptr;
+	GetWorldCountEntryPoint = nullptr;
+	CollectRetiredLoadContextsEntryPoint = nullptr;
+	CreateScriptEntryPoint = nullptr;
+	CreateScriptWithBlueprintContractEntryPoint = nullptr;
+	TickScriptEntryPoint = nullptr;
+	ConfigureScriptDebugEntryPoint = nullptr;
+	BeginScriptDebugTickEntryPoint = nullptr;
+	GetScriptDebugStateEntryPoint = nullptr;
+	GetScriptReloadStateEntryPoint = nullptr;
+	SetScriptProfilerEnabledEntryPoint = nullptr;
+	GetScriptProfilerTraceEntryPoint = nullptr;
+	ControlScriptDebugEntryPoint = nullptr;
+	DisableScriptDebugEntryPoint = nullptr;
+	IsScriptDebugActiveEntryPoint = nullptr;
+	DispatchEventEntryPoint = nullptr;
+	InvokeScriptFunctionEntryPoint = nullptr;
+	InvokeScriptFunctionV2EntryPoint = nullptr;
+	ReloadScriptEntryPoint = nullptr;
+	PrepareScriptReloadEntryPoint = nullptr;
+	CommitScriptReloadEntryPoint = nullptr;
+	AbortScriptReloadEntryPoint = nullptr;
+	FinalizeScriptReloadEntryPoint = nullptr;
+	PrepareStaticLibraryReloadEntryPoint = nullptr;
+	CommitStaticLibraryReloadEntryPoint = nullptr;
+	AbortStaticLibraryReloadEntryPoint = nullptr;
+	FinalizeStaticLibraryReloadEntryPoint = nullptr;
+	DestroyScriptEntryPoint = nullptr;
+	GetScriptCountEntryPoint = nullptr;
+	GetInvocationMetricsEntryPoint = nullptr;
+	GetLastManagedErrorEntryPoint = nullptr;
+	LastError = MoveTemp(Message);
+	State = EFinareCoreClrHostState::Failed;
+	UE_LOG(LogTemp, Error, TEXT("%s"), *LastError);
+	return false;
 }
 
 #undef FINARE_HOSTFXR_CALLTYPE

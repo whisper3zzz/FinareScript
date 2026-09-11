@@ -4,10 +4,10 @@
 class FFinareRuntimeModule final : public IModuleInterface
 {
 public:
-    virtual void ShutdownModule() override
-    {
-        FFinareCoreClrHost::Get().Shutdown();
-    }
+	virtual void ShutdownModule() override
+	{
+		FFinareCoreClrHost::Get().Shutdown();
+	}
 };
 
 IMPLEMENT_MODULE(FFinareRuntimeModule, FinareRuntime);

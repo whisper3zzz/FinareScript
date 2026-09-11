@@ -19,18 +19,18 @@ class UActorComponent;
 class FINARERUNTIME_API FFinareAuthoringActivationScope final
 {
 public:
-    explicit FFinareAuthoringActivationScope(UObject* InOwner);
-    ~FFinareAuthoringActivationScope();
+	explicit FFinareAuthoringActivationScope(UObject* InOwner);
+	~FFinareAuthoringActivationScope();
 
-    FFinareAuthoringActivationScope(const FFinareAuthoringActivationScope&) = delete;
-    FFinareAuthoringActivationScope& operator=(const FFinareAuthoringActivationScope&) = delete;
+	FFinareAuthoringActivationScope(const FFinareAuthoringActivationScope&) = delete;
+	FFinareAuthoringActivationScope& operator=(const FFinareAuthoringActivationScope&) = delete;
 
-    static bool IsSuppressedForComponent(const UActorComponent& Component);
+	static bool IsSuppressedForComponent(const UActorComponent& Component);
 
 private:
-    FObjectKey OwnerKey;
-    TStrongObjectPtr<UObject> Owner;
-    bool bRegistered = false;
+	FObjectKey OwnerKey;
+	TStrongObjectPtr<UObject> Owner;
+	bool bRegistered = false;
 };
 
 #endif // WITH_EDITOR

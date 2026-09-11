@@ -4,498 +4,498 @@
 
 namespace UE::Finare::DataPlaneSchema
 {
-inline constexpr uint32 Revision = 4u;
-inline constexpr uint64 CompatibilityId = 0x555344504C415901ull;
-inline constexpr uint64 SchemaFingerprint = 0xADC8F8D40068A6C4ull;
+	inline constexpr uint32 Revision = 4u;
+	inline constexpr uint64 CompatibilityId = 0x555344504C415901ull;
+	inline constexpr uint64 SchemaFingerprint = 0xADC8F8D40068A6C4ull;
 }
 
 namespace UE::Finare::SharedData
 {
-inline constexpr uint32 AbiVersion = 4u;
-inline constexpr uint32 MaximumTransformSnapshotCount = 65536u;
-inline constexpr uint32 MaximumGeneratedSnapshotCount = 65536u;
-inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
-inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
-inline constexpr uint64 FixedValueCollectionSchemaId = 0x5553464958434F01ull;
-inline constexpr uint64 TransformSnapshotSchemaId = 0x55535452414E5334ull;
+	inline constexpr uint32 AbiVersion = 4u;
+	inline constexpr uint32 MaximumTransformSnapshotCount = 65536u;
+	inline constexpr uint32 MaximumGeneratedSnapshotCount = 65536u;
+	inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
+	inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
+	inline constexpr uint64 FixedValueCollectionSchemaId = 0x5553464958434F01ull;
+	inline constexpr uint64 TransformSnapshotSchemaId = 0x55535452414E5334ull;
 }
 
 namespace UE::Finare::GameplayData
 {
-inline constexpr uint32 AbiVersion = 4u;
-inline constexpr uint32 MaximumCommandCount = 65536u;
-inline constexpr uint32 MaximumEventCount = 4096u;
-inline constexpr uint32 MaximumTraceCount = 65536u;
-inline constexpr uint32 MaximumOverlapCount = 65536u;
-inline constexpr uint32 MaximumGeneratedEventCount = 65536u;
-inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
-inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
-inline constexpr uint64 BufferedGameplayEventSchemaId = 0x5553425546455601ull;
-inline constexpr uint64 CommandSchemaId = 0x5553434D44423401ull;
-inline constexpr uint64 EventSchemaId = 0x555345564E543401ull;
-inline constexpr uint64 OverlapRequestSchemaId = 0x55534F5652455101ull;
-inline constexpr uint64 OverlapResultSchemaId = 0x55534F5652455301ull;
-inline constexpr uint64 TraceRequestSchemaId = 0x5553545245513401ull;
-inline constexpr uint64 TraceResultSchemaId = 0x5553545245533401ull;
+	inline constexpr uint32 AbiVersion = 4u;
+	inline constexpr uint32 MaximumCommandCount = 65536u;
+	inline constexpr uint32 MaximumEventCount = 4096u;
+	inline constexpr uint32 MaximumTraceCount = 65536u;
+	inline constexpr uint32 MaximumOverlapCount = 65536u;
+	inline constexpr uint32 MaximumGeneratedEventCount = 65536u;
+	inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
+	inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
+	inline constexpr uint64 BufferedGameplayEventSchemaId = 0x5553425546455601ull;
+	inline constexpr uint64 CommandSchemaId = 0x5553434D44423401ull;
+	inline constexpr uint64 EventSchemaId = 0x555345564E543401ull;
+	inline constexpr uint64 OverlapRequestSchemaId = 0x55534F5652455101ull;
+	inline constexpr uint64 OverlapResultSchemaId = 0x55534F5652455301ull;
+	inline constexpr uint64 TraceRequestSchemaId = 0x5553545245513401ull;
+	inline constexpr uint64 TraceResultSchemaId = 0x5553545245533401ull;
 }
 
 enum class EFinareSharedSnapshotFlagsV4 : uint32
 {
-    None = 0u,
-    BorrowedUntilNextPublish = 1u,
+	None = 0u,
+	BorrowedUntilNextPublish = 1u,
 };
 
 enum class EFinareGeneratedDataFlagsV1 : uint32
 {
-    None = 0u,
-    BorrowedUntilNextPublish = 1u,
-    Snapshot = 2u,
-    Events = 4u,
+	None = 0u,
+	BorrowedUntilNextPublish = 1u,
+	Snapshot = 2u,
+	Events = 4u,
 };
 
 enum class EFinareSharedDataCapabilitiesV4 : uint64
 {
-    None = 0ull,
-    TransformSnapshot = 1ull,
-    DoubleBuffered = 2ull,
-    WorldScopedHandles = 4ull,
-    SchemaGeneratedLayouts = 8ull,
-    CapacityTelemetry = 16ull,
-    GeneratedSnapshotChannels = 32ull,
+	None = 0ull,
+	TransformSnapshot = 1ull,
+	DoubleBuffered = 2ull,
+	WorldScopedHandles = 4ull,
+	SchemaGeneratedLayouts = 8ull,
+	CapacityTelemetry = 16ull,
+	GeneratedSnapshotChannels = 32ull,
 };
 
 enum class EFinareGameplayDataPhaseV4 : uint8
 {
-    Idle = 0,
-    NativePreActorTick = 1,
-    ManagedTick = 2,
-    NativePostActorTick = 3,
-    ShuttingDown = 4,
+	Idle = 0,
+	NativePreActorTick = 1,
+	ManagedTick = 2,
+	NativePostActorTick = 3,
+	ShuttingDown = 4,
 };
 
 enum class EFinareCommandTypeV4 : uint16
 {
-    None = 0,
-    SetActorTransform = 1,
-    SetActorVelocity = 2,
-    ApplyDamage = 3,
-    SpawnActor = 4,
-    DestroyActor = 5,
-    SpawnEmitter = 6,
+	None = 0,
+	SetActorTransform = 1,
+	SetActorVelocity = 2,
+	ApplyDamage = 3,
+	SpawnActor = 4,
+	DestroyActor = 5,
+	SpawnEmitter = 6,
 };
 
 enum class EFinareCommandStatusV4 : uint16
 {
-    Success = 0,
-    InvalidCommand = 1,
-    WorldMismatch = 2,
-    StaleHandle = 3,
-    TypeMismatch = 4,
-    ExecutionFailed = 5,
-    BufferOverflow = 6,
-    WrongPhase = 7,
+	Success = 0,
+	InvalidCommand = 1,
+	WorldMismatch = 2,
+	StaleHandle = 3,
+	TypeMismatch = 4,
+	ExecutionFailed = 5,
+	BufferOverflow = 6,
+	WrongPhase = 7,
 };
 
 enum class EFinareGameplayEventKindV4 : uint16
 {
-    None = 0,
-    CommandCompleted = 1,
-    ActorSpawned = 2,
-    ActorDestroyed = 3,
-    DamageApplied = 4,
-    EffectSpawned = 5,
+	None = 0,
+	CommandCompleted = 1,
+	ActorSpawned = 2,
+	ActorDestroyed = 3,
+	DamageApplied = 4,
+	EffectSpawned = 5,
 };
 
 enum class EFinareTraceShapeV4 : uint8
 {
-    Line = 0,
-    Sphere = 1,
-    Box = 2,
+	Line = 0,
+	Sphere = 1,
+	Box = 2,
 };
 
 enum class EFinareTraceStatusV4 : uint8
 {
-    Success = 0,
-    InvalidRequest = 1,
-    WorldMismatch = 2,
-    StaleHandle = 3,
-    ExecutionFailed = 4,
+	Success = 0,
+	InvalidRequest = 1,
+	WorldMismatch = 2,
+	StaleHandle = 3,
+	ExecutionFailed = 4,
 };
 
 enum class EFinareTraceResultFlagsV4 : uint8
 {
-    None = 0,
-    BlockingHit = 1,
-    StartPenetrating = 2,
+	None = 0,
+	BlockingHit = 1,
+	StartPenetrating = 2,
 };
 
 enum class EFinareOverlapResultFlagsV1 : uint8
 {
-    None = 0,
-    HasOverlap = 1,
+	None = 0,
+	HasOverlap = 1,
 };
 
 enum class EFinareGameplayDataCapabilitiesV4 : uint64
 {
-    None = 0ull,
-    WorldPhaseScheduler = 1ull,
-    CommandBuffer = 2ull,
-    EventBuffer = 4ull,
-    BatchLineTrace = 8ull,
-    BatchSphereTrace = 16ull,
-    BatchBoxTrace = 32ull,
-    SchemaGeneratedLayouts = 64ull,
-    CapacityTelemetry = 128ull,
-    BatchSphereOverlap = 256ull,
-    BatchBoxOverlap = 512ull,
-    GeneratedEventChannels = 1024ull,
+	None = 0ull,
+	WorldPhaseScheduler = 1ull,
+	CommandBuffer = 2ull,
+	EventBuffer = 4ull,
+	BatchLineTrace = 8ull,
+	BatchSphereTrace = 16ull,
+	BatchBoxTrace = 32ull,
+	SchemaGeneratedLayouts = 64ull,
+	CapacityTelemetry = 128ull,
+	BatchSphereOverlap = 256ull,
+	BatchBoxOverlap = 512ull,
+	GeneratedEventChannels = 1024ull,
 };
 
 struct alignas(8) FFinareBufferedGameplayEventV1
 {
-    uint64 SequenceId = 0;
-    uint64 EventId = 0;
-    int32 Value = 0;
-    uint32 Flags = 0;
-    double Weight = 0.0;
-    FFinareSharedObjectHandleV4 Context = {};
+	uint64 SequenceId = 0;
+	uint64 EventId = 0;
+	int32 Value = 0;
+	uint32 Flags = 0;
+	double Weight = 0.0;
+	FFinareSharedObjectHandleV4 Context = {};
 };
 
 struct alignas(8) FFinareCommandV4
 {
-    EFinareCommandTypeV4 Type = EFinareCommandTypeV4::None;
-    uint16 Flags = 0;
-    uint32 Reserved = 0;
-    uint64 SequenceId = 0;
-    FFinareSharedObjectHandleV4 Target = {};
-    FFinareSharedObjectHandleV4 Argument0 = {};
-    FFinareSharedObjectHandleV4 Argument1 = {};
-    FFinareSharedObjectHandleV4 Argument2 = {};
-    double Scalar0 = 0.0;
-    double Scalar1 = 0.0;
-    double Scalar2 = 0.0;
-    double Scalar3 = 0.0;
-    double Vector0X = 0.0;
-    double Vector0Y = 0.0;
-    double Vector0Z = 0.0;
-    double Vector1X = 0.0;
-    double Vector1Y = 0.0;
-    double Vector1Z = 0.0;
-    double RotationX = 0.0;
-    double RotationY = 0.0;
-    double RotationZ = 0.0;
-    double RotationW = 1.0;
-    double Vector2X = 1.0;
-    double Vector2Y = 1.0;
-    double Vector2Z = 1.0;
-    uint64 Payload0 = 0;
+	EFinareCommandTypeV4 Type = EFinareCommandTypeV4::None;
+	uint16 Flags = 0;
+	uint32 Reserved = 0;
+	uint64 SequenceId = 0;
+	FFinareSharedObjectHandleV4 Target = {};
+	FFinareSharedObjectHandleV4 Argument0 = {};
+	FFinareSharedObjectHandleV4 Argument1 = {};
+	FFinareSharedObjectHandleV4 Argument2 = {};
+	double Scalar0 = 0.0;
+	double Scalar1 = 0.0;
+	double Scalar2 = 0.0;
+	double Scalar3 = 0.0;
+	double Vector0X = 0.0;
+	double Vector0Y = 0.0;
+	double Vector0Z = 0.0;
+	double Vector1X = 0.0;
+	double Vector1Y = 0.0;
+	double Vector1Z = 0.0;
+	double RotationX = 0.0;
+	double RotationY = 0.0;
+	double RotationZ = 0.0;
+	double RotationW = 1.0;
+	double Vector2X = 1.0;
+	double Vector2Y = 1.0;
+	double Vector2Z = 1.0;
+	uint64 Payload0 = 0;
 };
 
 struct alignas(8) FFinareCommandBatchViewV4
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 BatchToken = 0;
-    uint64 FirstSequenceId = 0;
-    FFinareCommandV4* Commands = nullptr;
-    uint32 CommandCapacity = 0;
-    uint32 CommandEntrySize = 0;
-    uint32 Flags = 0;
-    uint32 Reserved = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 BatchToken = 0;
+	uint64 FirstSequenceId = 0;
+	FFinareCommandV4* Commands = nullptr;
+	uint32 CommandCapacity = 0;
+	uint32 CommandEntrySize = 0;
+	uint32 Flags = 0;
+	uint32 Reserved = 0;
 };
 
 struct alignas(8) FFinareFixedValueCollectionSnapshotV1
 {
-    uint64 SequenceId = 0;
-    double VectorX = 0.0;
-    double VectorY = 0.0;
-    double VectorZ = 0.0;
-    uint32 ValueCount = 0;
-    uint32 PairCount = 0;
-    int32 Value0 = 0;
-    int32 Value1 = 0;
-    int32 Value2 = 0;
-    int32 Value3 = 0;
-    int32 Value4 = 0;
-    int32 Value5 = 0;
-    int32 Value6 = 0;
-    int32 Value7 = 0;
-    int32 Key0 = 0;
-    int32 Key1 = 0;
-    int32 Key2 = 0;
-    int32 Key3 = 0;
-    int32 MapValue0 = 0;
-    int32 MapValue1 = 0;
-    int32 MapValue2 = 0;
-    int32 MapValue3 = 0;
+	uint64 SequenceId = 0;
+	double VectorX = 0.0;
+	double VectorY = 0.0;
+	double VectorZ = 0.0;
+	uint32 ValueCount = 0;
+	uint32 PairCount = 0;
+	int32 Value0 = 0;
+	int32 Value1 = 0;
+	int32 Value2 = 0;
+	int32 Value3 = 0;
+	int32 Value4 = 0;
+	int32 Value5 = 0;
+	int32 Value6 = 0;
+	int32 Value7 = 0;
+	int32 Key0 = 0;
+	int32 Key1 = 0;
+	int32 Key2 = 0;
+	int32 Key3 = 0;
+	int32 MapValue0 = 0;
+	int32 MapValue1 = 0;
+	int32 MapValue2 = 0;
+	int32 MapValue3 = 0;
 };
 
 struct alignas(8) FFinareGameplayDataTelemetryV1
 {
-    uint32 SchemaRevision = 3;
-    uint32 StructSize = 192;
-    uint64 CompatibilityId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 CommandOverflowCount = 0;
-    uint64 EventOverflowCount = 0;
-    uint64 TraceOverflowCount = 0;
-    uint64 TotalCommittedCommandCount = 0;
-    uint64 TotalExecutedCommandCount = 0;
-    uint64 TotalExecutedTraceCount = 0;
-    uint64 LastCommittedSequenceId = 0;
-    uint64 LastExecutedSequenceId = 0;
-    uint64 LastPublishedEventFrame = 0;
-    uint32 MaximumCommandCount = 0;
-    uint32 MaximumEventCount = 0;
-    uint32 MaximumTraceCount = 0;
-    uint32 Phase = 0;
-    uint64 OverlapOverflowCount = 0;
-    uint64 TotalExecutedOverlapCount = 0;
-    uint32 MaximumOverlapCount = 0;
-    uint64 NativePreActorTickCount = 0;
-    uint64 NativePreActorTickNanoseconds = 0;
-    uint64 ManagedTickCount = 0;
-    uint64 ManagedTickNanoseconds = 0;
-    uint64 NativePostActorTickCount = 0;
-    uint64 NativePostActorTickNanoseconds = 0;
+	uint32 SchemaRevision = 3;
+	uint32 StructSize = 192;
+	uint64 CompatibilityId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 CommandOverflowCount = 0;
+	uint64 EventOverflowCount = 0;
+	uint64 TraceOverflowCount = 0;
+	uint64 TotalCommittedCommandCount = 0;
+	uint64 TotalExecutedCommandCount = 0;
+	uint64 TotalExecutedTraceCount = 0;
+	uint64 LastCommittedSequenceId = 0;
+	uint64 LastExecutedSequenceId = 0;
+	uint64 LastPublishedEventFrame = 0;
+	uint32 MaximumCommandCount = 0;
+	uint32 MaximumEventCount = 0;
+	uint32 MaximumTraceCount = 0;
+	uint32 Phase = 0;
+	uint64 OverlapOverflowCount = 0;
+	uint64 TotalExecutedOverlapCount = 0;
+	uint32 MaximumOverlapCount = 0;
+	uint64 NativePreActorTickCount = 0;
+	uint64 NativePreActorTickNanoseconds = 0;
+	uint64 ManagedTickCount = 0;
+	uint64 ManagedTickNanoseconds = 0;
+	uint64 NativePostActorTickCount = 0;
+	uint64 NativePostActorTickNanoseconds = 0;
 };
 
 struct alignas(8) FFinareGameplayEventV4
 {
-    uint64 SequenceId = 0;
-    EFinareGameplayEventKindV4 Kind = EFinareGameplayEventKindV4::None;
-    EFinareCommandTypeV4 CommandType = EFinareCommandTypeV4::None;
-    EFinareCommandStatusV4 Status = EFinareCommandStatusV4::Success;
-    uint16 Flags = 0;
-    FFinareSharedObjectHandleV4 Source = {};
-    FFinareSharedObjectHandleV4 Argument = {};
-    double Value0 = 0.0;
-    double VectorX = 0.0;
-    double VectorY = 0.0;
-    double VectorZ = 0.0;
-    uint64 FrameNumber = 0;
+	uint64 SequenceId = 0;
+	EFinareGameplayEventKindV4 Kind = EFinareGameplayEventKindV4::None;
+	EFinareCommandTypeV4 CommandType = EFinareCommandTypeV4::None;
+	EFinareCommandStatusV4 Status = EFinareCommandStatusV4::Success;
+	uint16 Flags = 0;
+	FFinareSharedObjectHandleV4 Source = {};
+	FFinareSharedObjectHandleV4 Argument = {};
+	double Value0 = 0.0;
+	double VectorX = 0.0;
+	double VectorY = 0.0;
+	double VectorZ = 0.0;
+	uint64 FrameNumber = 0;
 };
 
 struct alignas(8) FFinareGameplayEventViewV4
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    const FFinareGameplayEventV4* Events = nullptr;
-    uint32 EventCount = 0;
-    uint32 EventCapacity = 0;
-    uint32 EventEntrySize = 0;
-    uint32 Flags = 0;
-    uint64 DroppedEventCount = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	const FFinareGameplayEventV4* Events = nullptr;
+	uint32 EventCount = 0;
+	uint32 EventCapacity = 0;
+	uint32 EventEntrySize = 0;
+	uint32 Flags = 0;
+	uint64 DroppedEventCount = 0;
 };
 
 struct alignas(8) FFinareGeneratedDataViewV1
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 PublicationId = 0;
-    const uint8* Entries = nullptr;
-    uint32 EntryCount = 0;
-    uint32 EntryCapacity = 0;
-    uint32 EntrySize = 0;
-    EFinareGeneratedDataFlagsV1 Flags = EFinareGeneratedDataFlagsV1::None;
-    uint64 DroppedEntryCount = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 PublicationId = 0;
+	const uint8* Entries = nullptr;
+	uint32 EntryCount = 0;
+	uint32 EntryCapacity = 0;
+	uint32 EntrySize = 0;
+	EFinareGeneratedDataFlagsV1 Flags = EFinareGeneratedDataFlagsV1::None;
+	uint64 DroppedEntryCount = 0;
 };
 
 struct alignas(8) FFinareOverlapRequestV1
 {
-    uint64 SequenceId = 0;
-    EFinareTraceShapeV4 Shape = EFinareTraceShapeV4::Line;
-    uint8 IgnoreActorCount = 0;
-    uint16 Flags = 0;
-    uint32 CollisionChannel = 0;
-    FFinareSharedObjectHandleV4 IgnoreActor0 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor1 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor2 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor3 = {};
-    double CenterX = 0.0;
-    double CenterY = 0.0;
-    double CenterZ = 0.0;
-    double ExtentX = 0.0;
-    double ExtentY = 0.0;
-    double ExtentZ = 0.0;
-    double RotationX = 0.0;
-    double RotationY = 0.0;
-    double RotationZ = 0.0;
-    double RotationW = 1.0;
+	uint64 SequenceId = 0;
+	EFinareTraceShapeV4 Shape = EFinareTraceShapeV4::Line;
+	uint8 IgnoreActorCount = 0;
+	uint16 Flags = 0;
+	uint32 CollisionChannel = 0;
+	FFinareSharedObjectHandleV4 IgnoreActor0 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor1 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor2 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor3 = {};
+	double CenterX = 0.0;
+	double CenterY = 0.0;
+	double CenterZ = 0.0;
+	double ExtentX = 0.0;
+	double ExtentY = 0.0;
+	double ExtentZ = 0.0;
+	double RotationX = 0.0;
+	double RotationY = 0.0;
+	double RotationZ = 0.0;
+	double RotationW = 1.0;
 };
 
 struct alignas(8) FFinareOverlapRequestViewV1
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 BatchToken = 0;
-    FFinareOverlapRequestV1* Requests = nullptr;
-    uint32 RequestCapacity = 0;
-    uint32 RequestEntrySize = 0;
-    uint32 Flags = 0;
-    uint32 Reserved = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 BatchToken = 0;
+	FFinareOverlapRequestV1* Requests = nullptr;
+	uint32 RequestCapacity = 0;
+	uint32 RequestEntrySize = 0;
+	uint32 Flags = 0;
+	uint32 Reserved = 0;
 };
 
 struct alignas(8) FFinareOverlapResultV1
 {
-    uint64 SequenceId = 0;
-    EFinareTraceStatusV4 Status = EFinareTraceStatusV4::Success;
-    EFinareOverlapResultFlagsV1 Flags = EFinareOverlapResultFlagsV1::None;
-    uint16 Reserved = 0;
-    FFinareSharedObjectHandleV4 HitActor = {};
-    FFinareSharedObjectHandleV4 HitComponent = {};
+	uint64 SequenceId = 0;
+	EFinareTraceStatusV4 Status = EFinareTraceStatusV4::Success;
+	EFinareOverlapResultFlagsV1 Flags = EFinareOverlapResultFlagsV1::None;
+	uint16 Reserved = 0;
+	FFinareSharedObjectHandleV4 HitActor = {};
+	FFinareSharedObjectHandleV4 HitComponent = {};
 };
 
 struct alignas(8) FFinareOverlapResultViewV1
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 BatchToken = 0;
-    const FFinareOverlapResultV1* Results = nullptr;
-    uint32 ResultCount = 0;
-    uint32 ResultCapacity = 0;
-    uint32 ResultEntrySize = 0;
-    uint32 Flags = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 BatchToken = 0;
+	const FFinareOverlapResultV1* Results = nullptr;
+	uint32 ResultCount = 0;
+	uint32 ResultCapacity = 0;
+	uint32 ResultEntrySize = 0;
+	uint32 Flags = 0;
 };
 
 struct alignas(8) FFinareSharedDataTelemetryV1
 {
-    uint32 SchemaRevision = 2;
-    uint32 StructSize = 56;
-    uint64 CompatibilityId = 0;
-    uint64 WorldHostId = 0;
-    uint64 PublicationGeneration = 0;
-    uint64 TotalPublishedEntryCount = 0;
-    uint64 DroppedSnapshotEntryCount = 0;
-    uint32 PublishedEntryCount = 0;
-    uint32 MaximumEntryCount = 0;
+	uint32 SchemaRevision = 2;
+	uint32 StructSize = 56;
+	uint64 CompatibilityId = 0;
+	uint64 WorldHostId = 0;
+	uint64 PublicationGeneration = 0;
+	uint64 TotalPublishedEntryCount = 0;
+	uint64 DroppedSnapshotEntryCount = 0;
+	uint32 PublishedEntryCount = 0;
+	uint32 MaximumEntryCount = 0;
 };
 
 struct alignas(8) FFinareTransformSnapshotEntryV4
 {
-    FFinareSharedObjectHandleV4 Actor = {};
-    double TranslationX = 0.0;
-    double TranslationY = 0.0;
-    double TranslationZ = 0.0;
-    double RotationX = 0.0;
-    double RotationY = 0.0;
-    double RotationZ = 0.0;
-    double RotationW = 1.0;
-    double ScaleX = 1.0;
-    double ScaleY = 1.0;
-    double ScaleZ = 1.0;
+	FFinareSharedObjectHandleV4 Actor = {};
+	double TranslationX = 0.0;
+	double TranslationY = 0.0;
+	double TranslationZ = 0.0;
+	double RotationX = 0.0;
+	double RotationY = 0.0;
+	double RotationZ = 0.0;
+	double RotationW = 1.0;
+	double ScaleX = 1.0;
+	double ScaleY = 1.0;
+	double ScaleZ = 1.0;
 };
 
 struct alignas(8) FFinareSharedSnapshotViewV4
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 Generation = 0;
-    const FFinareTransformSnapshotEntryV4* Entries = nullptr;
-    uint32 EntryCount = 0;
-    uint32 EntryCapacity = 0;
-    uint32 EntrySize = 0;
-    EFinareSharedSnapshotFlagsV4 Flags = EFinareSharedSnapshotFlagsV4::None;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 Generation = 0;
+	const FFinareTransformSnapshotEntryV4* Entries = nullptr;
+	uint32 EntryCount = 0;
+	uint32 EntryCapacity = 0;
+	uint32 EntrySize = 0;
+	EFinareSharedSnapshotFlagsV4 Flags = EFinareSharedSnapshotFlagsV4::None;
 };
 
 struct alignas(8) FFinareTraceRequestV4
 {
-    uint64 SequenceId = 0;
-    EFinareTraceShapeV4 Shape = EFinareTraceShapeV4::Line;
-    uint8 IgnoreActorCount = 0;
-    uint16 Flags = 0;
-    uint32 CollisionChannel = 0;
-    FFinareSharedObjectHandleV4 IgnoreActor0 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor1 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor2 = {};
-    FFinareSharedObjectHandleV4 IgnoreActor3 = {};
-    double StartX = 0.0;
-    double StartY = 0.0;
-    double StartZ = 0.0;
-    double EndX = 0.0;
-    double EndY = 0.0;
-    double EndZ = 0.0;
-    double ExtentX = 0.0;
-    double ExtentY = 0.0;
-    double ExtentZ = 0.0;
-    double RotationX = 0.0;
-    double RotationY = 0.0;
-    double RotationZ = 0.0;
-    double RotationW = 1.0;
+	uint64 SequenceId = 0;
+	EFinareTraceShapeV4 Shape = EFinareTraceShapeV4::Line;
+	uint8 IgnoreActorCount = 0;
+	uint16 Flags = 0;
+	uint32 CollisionChannel = 0;
+	FFinareSharedObjectHandleV4 IgnoreActor0 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor1 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor2 = {};
+	FFinareSharedObjectHandleV4 IgnoreActor3 = {};
+	double StartX = 0.0;
+	double StartY = 0.0;
+	double StartZ = 0.0;
+	double EndX = 0.0;
+	double EndY = 0.0;
+	double EndZ = 0.0;
+	double ExtentX = 0.0;
+	double ExtentY = 0.0;
+	double ExtentZ = 0.0;
+	double RotationX = 0.0;
+	double RotationY = 0.0;
+	double RotationZ = 0.0;
+	double RotationW = 1.0;
 };
 
 struct alignas(8) FFinareTraceRequestViewV4
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 BatchToken = 0;
-    FFinareTraceRequestV4* Requests = nullptr;
-    uint32 RequestCapacity = 0;
-    uint32 RequestEntrySize = 0;
-    uint32 Flags = 0;
-    uint32 Reserved = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 BatchToken = 0;
+	FFinareTraceRequestV4* Requests = nullptr;
+	uint32 RequestCapacity = 0;
+	uint32 RequestEntrySize = 0;
+	uint32 Flags = 0;
+	uint32 Reserved = 0;
 };
 
 struct alignas(8) FFinareTraceResultV4
 {
-    uint64 SequenceId = 0;
-    EFinareTraceStatusV4 Status = EFinareTraceStatusV4::Success;
-    EFinareTraceResultFlagsV4 Flags = EFinareTraceResultFlagsV4::None;
-    uint16 Reserved = 0;
-    int32 FaceIndex = -1;
-    FFinareSharedObjectHandleV4 HitActor = {};
-    FFinareSharedObjectHandleV4 HitComponent = {};
-    double Distance = 0.0;
-    double Time = 1.0;
-    double LocationX = 0.0;
-    double LocationY = 0.0;
-    double LocationZ = 0.0;
-    double ImpactPointX = 0.0;
-    double ImpactPointY = 0.0;
-    double ImpactPointZ = 0.0;
-    double NormalX = 0.0;
-    double NormalY = 0.0;
-    double NormalZ = 0.0;
-    double ImpactNormalX = 0.0;
-    double ImpactNormalY = 0.0;
-    double ImpactNormalZ = 0.0;
-    int32 Item = -1;
-    int32 ElementIndex = -1;
+	uint64 SequenceId = 0;
+	EFinareTraceStatusV4 Status = EFinareTraceStatusV4::Success;
+	EFinareTraceResultFlagsV4 Flags = EFinareTraceResultFlagsV4::None;
+	uint16 Reserved = 0;
+	int32 FaceIndex = -1;
+	FFinareSharedObjectHandleV4 HitActor = {};
+	FFinareSharedObjectHandleV4 HitComponent = {};
+	double Distance = 0.0;
+	double Time = 1.0;
+	double LocationX = 0.0;
+	double LocationY = 0.0;
+	double LocationZ = 0.0;
+	double ImpactPointX = 0.0;
+	double ImpactPointY = 0.0;
+	double ImpactPointZ = 0.0;
+	double NormalX = 0.0;
+	double NormalY = 0.0;
+	double NormalZ = 0.0;
+	double ImpactNormalX = 0.0;
+	double ImpactNormalY = 0.0;
+	double ImpactNormalZ = 0.0;
+	int32 Item = -1;
+	int32 ElementIndex = -1;
 };
 
 struct alignas(8) FFinareTraceResultViewV4
 {
-    uint32 AbiVersion = 4;
-    uint32 ViewSize = 0;
-    uint64 SchemaId = 0;
-    uint64 WorldHostId = 0;
-    uint64 FrameNumber = 0;
-    uint64 BatchToken = 0;
-    const FFinareTraceResultV4* Results = nullptr;
-    uint32 ResultCount = 0;
-    uint32 ResultCapacity = 0;
-    uint32 ResultEntrySize = 0;
-    uint32 Flags = 0;
+	uint32 AbiVersion = 4;
+	uint32 ViewSize = 0;
+	uint64 SchemaId = 0;
+	uint64 WorldHostId = 0;
+	uint64 FrameNumber = 0;
+	uint64 BatchToken = 0;
+	const FFinareTraceResultV4* Results = nullptr;
+	uint32 ResultCount = 0;
+	uint32 ResultCapacity = 0;
+	uint32 ResultEntrySize = 0;
+	uint32 Flags = 0;
 };
 
 static_assert(std::is_standard_layout_v<FFinareBufferedGameplayEventV1>);
