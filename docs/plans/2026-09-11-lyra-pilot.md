@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: SDK adopted; native onboarding compatibility fixes in progress
+Status: native onboarding passed; actual FirstPlay exposed missing authoring artifacts
 
 ## Outcome and scope
 
@@ -80,5 +80,26 @@ its `GetController` call requires correction and actual first-Play validation.
 Evidence is in `artifacts/finare-usability/lyra-adopt-f3ebe07.log` and
 `lyra-onboarding-f3ebe07.log`; native onboarding has not passed.
 
-Native onboarding, generated API coverage, actual health/HUD behavior, reload,
+Revision `a3a1ab2` fixes the reflected Actor array for Lyra's TObjectPtr policy,
+selects targets by their declared TargetType, and makes the starter script treat
+its Instigator Pawn as optional. The installed SDK upgrade applied 30 updates
+with no conflicts. Full onboarding passed in
+`Saved/Finare/Onboarding/20260911-121007/onboarding-report.json`: Editor and Game
+builds, reflection, binding generation, managed chunk, deployment and three
+project-setup Automation tests. The source fix also passed the three native
+object-reference collection tests in the repository host.
+
+Actual FirstPlay then failed before starting PIE: the deployed Script Asset
+expects its declaration under `Binaries/Managed/Scripts`, while the onboarding
+template stages the chunk and declaration in `Binaries/Managed`. The template
+also references an authoring Surface which `emit` does not yet produce or stage.
+The receipt above therefore proves native onboarding, not a runnable starter
+script. Fix the product templates and emission/staging path, then repeat the
+installed workflow; do not repair the pilot by copying missing outputs manually.
+Evidence: `artifacts/finare-usability/lyra-first-play.json` and
+`lyra-first-play-engine.log`.
+
+The selected health/HUD APIs and W_Healthbar Blueprint also export through the
+installed SDK into `artifacts/finare-usability/lyra-health-pilot.reflection.json`.
+Generated call/event coverage, actual health/HUD behavior, reload,
 second-checkout reproduction and cooked execution remain to be verified.

@@ -289,6 +289,35 @@ not automatically acquire the existing managed host lifecycle.
 
 ## Relevant verification
 
+### Finare-name delivery checkpoint — 2026-09-11
+
+The committed `a3a1ab2` source built and cooked as FinareHost for Development and
+Shipping in the independent `D:/Project/FinareUsabilityGate-20260911` checkout.
+Both packaged CoreCLR/ABI checks passed using their own staged chunk and runtime
+with poisoned external DotNet roots. Evidence:
+`artifacts/finare-usability/release-a3a1ab2/release-gate.json`.
+
+The three existing local Demo assets were migrated in that checkout using an
+exact, temporary native-name redirect configuration. After removing it, a fresh
+process loaded the assets and synchronized the existing Script Class. The class
+ID and five authored graph GUIDs were unchanged; exported CDO and scene text
+matched their original values after the intended widget-class string rename.
+The verified assets were published back only after checking the original file
+digests. Original bytes remain under
+`artifacts/finare-usability/demo-rename-original`; no persistent redirects were
+added to the project.
+
+The Async UI scene was then cooked explicitly in a separate Development demo
+delivery. Its packaged test passed saved-scene loading, viewport ownership,
+cancel, asynchronous mesh spawning, chunk reload and teardown. Evidence:
+`artifacts/finare-usability/demo-delivery-runtime.log`; launcher:
+`artifacts/finare-usability/demo-delivery-a3a1ab2/Windows/StartAsyncDemo.cmd`.
+The general release package above does not include this scene. These results
+cover the renamed existing Demo, not the unfinished C-4 publication/composition
+code or the Lyra gameplay pilot.
+
+### Parent transaction checkpoint
+
 The native parent transaction checkpoint passed the Editor build and six CMD
 tests under `Finare.Unreal.ScriptClass`: `ParentChange.Primitive`,
 `BlueprintStateMaterialization`, `BlueprintInheritedEventMaterialization`,
