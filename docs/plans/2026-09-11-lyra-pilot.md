@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: installed Finare FirstPlay/reload passed; original health/HUD and respawn passed; migration in progress
+Status: installed FirstPlay/reload and original health/HUD passed; normal component loading repair in progress
 
 ## Outcome and scope
 
@@ -51,6 +51,30 @@ result uses its own staged chunk and host. Lyra does not provide a Puerts
 baseline; this pilot must not advertise a matched Puerts performance result.
 
 ## Relevant verification
+
+The ordinary ActorComponent factory created `/Game/FinarePilot/HealthHud` and
+its Script Asset, source and deployment entry in the independent copy. Its
+ClassId is `us_22d5d092487a142d439ae8814ca123b5`. The selected Lyra/UMG API
+contract generates 17 accepted members, with one direct thunk and 16 existing
+reflection routes, and no rejected members. Full installed onboarding passed
+in `Saved/Finare/Onboarding/20260911-140218/onboarding-report.json`. This still
+uses the factory template; the health subscription logic has not been migrated.
+
+Fresh ordinary loading of the generated component then crashed on the async
+loading thread. `FFinareBlueprintCompilerContext::FinishCompilingClass` calls
+the game-thread-only `BindManagedFunctions` during UE skeleton compilation;
+the runtime load hooks already defer that work to the game thread. Evidence:
+`artifacts/finare-usability/lyra-health-class-play-engine-2.log`, Editor exit 3.
+Repair this compiler boundary and repeat actual function/event invocation,
+state reload and World teardown before accepting the normal class workflow.
+Do not disable asynchronous loading to turn this failure into a pass.
+
+Normal factory/configuration edits also expose an SDK upgrade conflict:
+adoption currently treats a customized deployment/configuration template as a
+conflict even when the incoming template has not changed. Preserve project
+customizations when the SDK has no change to that template, while retaining
+conflicts for two-sided template changes and modified product payload files.
+The preview is `artifacts/finare-usability/lyra-upgrade-after-class-preview.log`.
 
 The unmodified-copy `LyraEditor Win64 Development` build passed against UE 5.8.1
 (561 actions, 144.88 seconds). Its output is
