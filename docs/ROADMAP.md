@@ -652,8 +652,11 @@ the broadly usable capabilities compose in practice.
   and verification use the independent copy `D:\Project\FinareLyraPilot-20260911`.
   The selected slice is Lyra's GAS health changes driving the health HUD,
   including pawn replacement and subscription cleanup. Its unmodified-copy
-  Editor build and read-only asset inspection pass; SDK adoption and gameplay
-  comparison remain pending. See the [pilot scope](plans/2026-09-11-lyra-pilot.md).
+  Editor build, installed SDK onboarding, ordinary class creation and Blueprint
+  migration pass in two independent copies. Migrated damage/heal match the
+  original numeric and material HUD consumers; retained event references,
+  reload presentation and cooked acceptance remain pending. See the
+  [pilot scope](plans/2026-09-11-lyra-pilot.md).
 - [ ] Install through the shipped SDK workflow, inventory the slice's actual
   Puerts/Blueprint/C++ boundaries and migrate its required behavior using generated
   APIs. Classify unsupported dependencies before promising full migration.

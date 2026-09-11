@@ -1,6 +1,6 @@
 # 2026-09-11 — Lyra SDK adoption and health HUD pilot
 
-Status: installed normal ActorComponent workflow and original health/HUD passed; health logic migration in progress
+Status: migrated damage/heal passed; reload presentation and retained event references remain in progress
 
 ## Outcome and scope
 
@@ -51,6 +51,81 @@ result uses its own staged chunk and host. Lyra does not provide a Puerts
 baseline; this pilot must not advertise a matched Puerts performance result.
 
 ## Relevant verification
+
+The current SDK checkpoint is `f7ebdea`. Its source dependency scanner ignores
+the inherited framework `UnrealObject.Handle` helper while retaining reflected
+members named Handle and conditional-access calls. Thirteen focused tests pass.
+Actual installed API analysis has 15 requests, three selected additions, twelve
+already covered, and zero open requests. `Health_Changed` resolves to the
+original Blueprint function `Health Changed`; native paths retain their spelling.
+
+The health migration is now implemented in `samples/External/Lyra`: it uses the
+ordinary ActorComponent factory, merges the selected API contract, preserves the
+factory's ClassId, and reconnects the original W_Healthbar using UE's public
+Blueprint graph APIs. Controller/Pawn and health subscriptions move to C#;
+Lyra GAS effects and the widget's existing presentation functions remain the
+producer and consumer. Both widget and generated component compile and save.
+
+The same scripts have been replayed on a second independent source/content copy,
+`D:\Project\FinareLyraPilotReplay-20260911`. Installed onboarding, fresh class
+creation and Blueprint migration pass there. Its ClassId is independently
+allocated (`us_b8602e394c1213cde6be4891e8ed3825`), not copied from the first pilot.
+Reports are under each copy's `Saved/Finare/LyraPilot` and `Saved/Finare/Onboarding`;
+the second managed onboarding receipt is `20260911-153045`.
+
+Actual migrated PIE is not yet accepted. In
+`artifacts/finare-usability/lyra-health-pie-3.json`, production DamageSelf changes
+native health from 100 to 80 while the original HUD remains 100. The persistent
+Widget reference is correct; one component lookup executes, but no health
+subscription succeeds and no health callback arrives. `FindHealthComponent` is a
+generated static call using reflection, while the installed bridge rejects
+static reflection and first requires an instance of its declaring class.
+Reflected event failures remain on the subscription's `LastDispatchException`
+without reaching the owning component's error field, which also exposes an
+error-reporting gap. These failures must be fixed in the
+SDK and revalidated through installation; an Editor exit code of zero for the
+Python run does not turn the failed gameplay report into a pass.
+
+Revision `c086dda` fixes static reflection through the declaring class CDO,
+while keeping instance/property/event owner checks strict. Static reflection
+and primitive invocation Automation pass. The SDK archive hash is
+`a20579128bc5048050e1979fbea3b15abbb2749bdbd696024f25f52964b69f92`.
+Both copies upgraded with 25 updates and no conflicts; installed onboarding
+passes in receipts `20260911-155551` and `20260911-155615`.
+
+Actual migrated damage/heal now pass: native health, the original numeric HUD
+and all three material targets follow 100 -> 80 -> 90 with one managed callback
+per effect. `NormalizedHealth` is an initialization cache in the original Widget;
+the live health graph writes `Health_Updated` into BarBorderMID, BarFillMID and
+BarGlowMID instead. The harness now measures those actual consumers. Evidence:
+`artifacts/finare-usability/lyra-health-static-pie-5/health-pie.json`.
+
+Reload still exposes two real issues. The sample calls the original Pawn-change
+presentation function on reload, replaying OnSpawned, whose material tracks set
+Health_Updated to 1. The numeric target changes to 80, but fill/glow remain 1 even
+after twenty seconds (`lyra-health-static-pie-6/health-pie.json`). Restore a
+subscription and current-health snapshot without replaying a Pawn replacement.
+Also, the native event marshaller releases its temporary object registrations
+at callback exit. A Pawn handle cached by managed code is subsequently stale;
+the engine log records the failed return marshalling of GetCurrentPawnHandle.
+
+The reference-lifetime decision is an explicit generation-owned weak UObject
+handle lease. Preserve borrowed event-argument cleanup and expose a retain/
+dispose operation for references stored beyond a callback. Generation disposal
+releases remaining leases; retaining a handle must not root its UObject or
+prevent destruction/World invalidation. Use a separate optional, size-checked
+transport extension, preserving old ABI tables and keeping non-UObject native
+ownership in its existing domain. Repeated events must not accumulate leaked
+registration counts. The pilot retains its current Pawn through this public API.
+
+Revision `ce16fc1` reports latched reflected-event errors through the owning
+generation's existing tick diagnostic path. A later successful event cannot
+erase the failure. Two direct ABI v4 owner/lifetime tests and the 95-test focused
+transport/dispatch suite pass; installing it and observing native component
+diagnostics remain part of the next SDK verification.
+
+The checkpoints below retain the earlier failure/fix evidence. Their statements
+about then-pending work describe those revisions, not the current acceptance.
 
 The ordinary ActorComponent factory created `/Game/FinarePilot/HealthHud` and
 its Script Asset, source and deployment entry in the independent copy. Its
