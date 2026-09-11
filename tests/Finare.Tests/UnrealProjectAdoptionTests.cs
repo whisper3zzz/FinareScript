@@ -322,6 +322,15 @@ public sealed class UnrealProjectAdoptionTests
             "FirstScript.cs");
         byte[] adoptedSource = File.ReadAllBytes(managedSource);
         File.AppendAllText(managedSource, "// user edit\n", Encoding.UTF8);
+        File.WriteAllText(
+            Path.Combine(
+                fixture.SdkRoot,
+                "Templates",
+                "UnrealProject",
+                "Managed",
+                "FirstScript.cs.template"),
+            "namespace __MANAGED_NAMESPACE__;\npublic sealed class __SCRIPT_NAME__ { }\n// sdk-v2\n",
+            new UTF8Encoding(false));
 
         int preview = Program.Main([
             "adopt",
@@ -364,6 +373,125 @@ public sealed class UnrealProjectAdoptionTests
             "Adoption",
             "current.json")));
         Assert.Equal("keep", File.ReadAllText(Path.Combine(fixture.ProjectRoot, "Config", "DefaultGame.ini")));
+    }
+
+    [Fact]
+    public void ProjectOwnedTemplateCustomizationsSurviveUnchangedSdkUpgradesButConflictWhenTemplateChanges()
+    {
+        using var fixture = new AdoptionFixture(nativeProject: true);
+        UnrealProjectAdoptionApplyResult first = UnrealProjectAdoptionService.Apply(
+            fixture.CreatePlan());
+
+        string onboarding = Path.Combine(
+            fixture.ProjectRoot,
+            "Config",
+            "Finare.onboarding.json");
+        string deployment = Path.Combine(
+            fixture.ProjectRoot,
+            "Deployment",
+            "AdoptGame.finare-deployment.json");
+        string source = Path.Combine(
+            fixture.ProjectRoot,
+            "Managed",
+            "AdoptGame.Finare",
+            "FirstScript.cs");
+        File.WriteAllText(onboarding, "{\"custom\":\"config\"}\n", new UTF8Encoding(false));
+        File.WriteAllText(deployment, "{\"custom\":\"deployment\"}\n", new UTF8Encoding(false));
+        File.AppendAllText(source, "// custom source\n", Encoding.UTF8);
+        byte[] onboardingBytes = File.ReadAllBytes(onboarding);
+        byte[] deploymentBytes = File.ReadAllBytes(deployment);
+        byte[] sourceBytes = File.ReadAllBytes(source);
+
+        // A second SDK transaction changes a plugin payload while its rendered
+        // project templates remain byte-identical.  The customized project
+        // files stay unchanged and are omitted from the new receipt.
+        File.WriteAllText(
+            Path.Combine(fixture.SdkRoot, "Plugins", "Finare", "Resources", "Fixture.txt"),
+            "resource-v2",
+            new UTF8Encoding(false));
+        UnrealProjectAdoptionPlan preservedPlan = fixture.CreatePlan();
+        Assert.Equal(
+            "unchanged",
+            Assert.Single(
+                preservedPlan.Document.Files,
+                file => file.Path == "Config/Finare.onboarding.json").Action);
+        Assert.Equal(
+            "unchanged",
+            Assert.Single(
+                preservedPlan.Document.Files,
+                file => file.Path == "Deployment/AdoptGame.finare-deployment.json").Action);
+        Assert.Equal(
+            "unchanged",
+            Assert.Single(
+                preservedPlan.Document.Files,
+                file => file.Path == "Managed/AdoptGame.Finare/FirstScript.cs").Action);
+        UnrealProjectAdoptionApplyResult second = UnrealProjectAdoptionService.Apply(preservedPlan);
+        Assert.Equal("applied", second.Status);
+        Assert.Equal(onboardingBytes, File.ReadAllBytes(onboarding));
+        Assert.Equal(deploymentBytes, File.ReadAllBytes(deployment));
+        Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+
+        // The newest receipt intentionally omits those unchanged customized
+        // paths.  A later plugin-only upgrade must still resolve ownership
+        // through the nearest receipt that contains each rendered template.
+        File.WriteAllText(
+            Path.Combine(fixture.SdkRoot, "Plugins", "Finare", "Resources", "Fixture.txt"),
+            "resource-v3",
+            new UTF8Encoding(false));
+        UnrealProjectAdoptionPlan thirdPlan = fixture.CreatePlan();
+        Assert.Equal(
+            "unchanged",
+            Assert.Single(
+                thirdPlan.Document.Files,
+                file => file.Path == "Config/Finare.onboarding.json").Action);
+        UnrealProjectAdoptionApplyResult third = UnrealProjectAdoptionService.Apply(thirdPlan);
+        Assert.Equal("applied", third.Status);
+        Assert.Equal(onboardingBytes, File.ReadAllBytes(onboarding));
+        Assert.Equal(deploymentBytes, File.ReadAllBytes(deployment));
+        Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+
+        // A changed incoming template is a real conflict even though the
+        // project has an earlier receipt for the rendered file.
+        File.WriteAllText(
+            Path.Combine(
+                fixture.SdkRoot,
+                "Templates",
+                "UnrealProject",
+                "Deployment",
+                "Project.finare-deployment.json.template"),
+            "{\"schemaVersion\":\"unifiedscript.unreal-script-deployment/v0.1\",\"scripts\":[],\"sdk\":\"v2\"}\n",
+            new UTF8Encoding(false));
+        UnrealProjectAdoptionPlan conflictPlan = fixture.CreatePlan();
+        Assert.Equal(
+            "conflict",
+            Assert.Single(
+                conflictPlan.Document.Files,
+                file => file.Path == "Deployment/AdoptGame.finare-deployment.json").Action);
+        Assert.Throws<InvalidDataException>(() => UnrealProjectAdoptionService.Apply(conflictPlan));
+        Assert.Equal(onboardingBytes, File.ReadAllBytes(onboarding));
+        Assert.Equal(deploymentBytes, File.ReadAllBytes(deployment));
+        Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+
+        // Rolling back either unrelated SDK upgrade must not touch customized
+        // project files that were intentionally absent from both receipts.
+        UnrealProjectAdoptionService.Rollback(fixture.ProjectPath, third.TransactionId);
+        UnrealProjectAdoptionService.Rollback(fixture.ProjectPath, second.TransactionId);
+        Assert.Equal(onboardingBytes, File.ReadAllBytes(onboarding));
+        Assert.Equal(deploymentBytes, File.ReadAllBytes(deployment));
+        Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+        Assert.Equal("resource-v1", File.ReadAllText(Path.Combine(
+            fixture.ProjectRoot,
+            "Plugins",
+            "Finare",
+            "Resources",
+            "Fixture.txt")));
+        Assert.NotEqual(first.TransactionId, second.TransactionId);
+        Assert.NotEqual(second.TransactionId, third.TransactionId);
+        Assert.Throws<InvalidDataException>(() =>
+            UnrealProjectAdoptionService.Rollback(fixture.ProjectPath, first.TransactionId));
+        Assert.Equal(onboardingBytes, File.ReadAllBytes(onboarding));
+        Assert.Equal(deploymentBytes, File.ReadAllBytes(deployment));
+        Assert.Equal(sourceBytes, File.ReadAllBytes(source));
     }
 
     [Fact]

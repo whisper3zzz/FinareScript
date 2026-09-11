@@ -467,6 +467,21 @@ internal static partial class UnrealProjectAdoptionService
                 action = "update";
                 reason = "The Finare plugin entry will be merged while preserving other project fields.";
             }
+            else if (PreserveProjectCustomization(
+                         ownershipHistory,
+                         item.RelativePath,
+                         currentHash,
+                         desiredHash,
+                         item.Kind))
+            {
+                // The project has intentionally diverged from the last SDK
+                // template.  Keep that customization only while the incoming
+                // SDK template is byte-identical to the nearest valid receipt;
+                // do not create a new receipt entry that could claim ownership
+                // of the customized bytes.
+                action = "unchanged";
+                reason = "The project-owned template is customized locally; the SDK template is unchanged, so the current bytes are preserved.";
+            }
             else if (IsOwnedAndUnmodified(ownershipHistory, item.RelativePath, currentHash))
             {
                 action = "update";
@@ -1336,16 +1351,53 @@ internal static partial class UnrealProjectAdoptionService
         {
             return false;
         }
+        UnrealProjectAdoptionTransactionEntry? entry = FindMostRecentOwnershipEntry(
+            ownershipHistory,
+            relativePath);
+        return entry is not null &&
+            string.Equals(entry.DesiredSha256, currentHash, StringComparison.Ordinal);
+    }
+
+    private static bool PreserveProjectCustomization(
+        IReadOnlyList<UnrealProjectAdoptionTransaction> ownershipHistory,
+        string relativePath,
+        string? currentHash,
+        string desiredHash,
+        string kind)
+    {
+        if (currentHash is null ||
+            string.Equals(currentHash, desiredHash, StringComparison.Ordinal) ||
+            !IsProjectOwnedRenderedTemplateKind(kind))
+        {
+            return false;
+        }
+
+        UnrealProjectAdoptionTransactionEntry? entry = FindMostRecentOwnershipEntry(
+            ownershipHistory,
+            relativePath);
+        return entry is not null &&
+            string.Equals(entry.Kind, kind, StringComparison.Ordinal) &&
+            string.Equals(entry.DesiredSha256, desiredHash, StringComparison.Ordinal) &&
+            !string.Equals(currentHash, entry.DesiredSha256, StringComparison.Ordinal);
+    }
+
+    private static bool IsProjectOwnedRenderedTemplateKind(string kind) =>
+        kind is "project-policy" or "managed-source" or "managed-project" or "ide" or "native-host";
+
+    private static UnrealProjectAdoptionTransactionEntry? FindMostRecentOwnershipEntry(
+        IReadOnlyList<UnrealProjectAdoptionTransaction> ownershipHistory,
+        string relativePath)
+    {
         foreach (UnrealProjectAdoptionTransaction transaction in ownershipHistory)
         {
             UnrealProjectAdoptionTransactionEntry? entry = transaction.Files.FirstOrDefault(
                 candidate => string.Equals(candidate.Path, relativePath, PathComparison));
             if (entry is not null)
             {
-                return string.Equals(entry.DesiredSha256, currentHash, StringComparison.Ordinal);
+                return entry;
             }
         }
-        return false;
+        return null;
     }
 
     private static IReadOnlyList<UnrealProjectAdoptionTransaction> ReadTransactionAncestry(
