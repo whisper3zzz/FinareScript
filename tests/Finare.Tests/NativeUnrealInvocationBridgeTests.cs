@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Xml.Linq;
 using Finare.Unreal;
 using GeneratedComponent = Finare.Unreal.Generated.FinareComponent;
 using GeneratedInterop = Finare.Unreal.Generated.FinareInteropFixture;
@@ -6,6 +8,12 @@ namespace Finare.Tests;
 
 public sealed class NativeUnrealInvocationBridgeTests
 {
+    private const string AllocationProbeChildVariable = "FINARE_NATIVE_ALLOCATION_PROBE_CHILD";
+    private const string AllocationProbeTestName =
+        "Finare.Tests.NativeUnrealInvocationBridgeTests.GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations";
+    private const string AllocationProbeFilter =
+        $"FullyQualifiedName={AllocationProbeTestName}";
+
     private static readonly UnrealObjectHandle Handle =
         UnrealObjectHandle.Create(slotIndex: 2, generation: 7);
 
@@ -238,11 +246,23 @@ public sealed class NativeUnrealInvocationBridgeTests
     [Fact]
     public void GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations()
     {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable(AllocationProbeChildVariable),
+                "1",
+                StringComparison.Ordinal))
+        {
+            RunAllocationProbeInIsolatedProcess();
+            return;
+        }
+
         var transport = new CallFrameFixtureTransport();
         var bridge = new NativeUnrealInvocationBridge(transport);
         var component = new GeneratedComponent(Handle, bridge);
         var interop = new GeneratedInterop(Handle, bridge);
 
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
         for (int index = 0; index < 256; index++)
         {
             _ = component.Add(index, 1);
@@ -286,6 +306,94 @@ public sealed class NativeUnrealInvocationBridgeTests
         Assert.Equal(14, doubled);
         Assert.Equal(17, accumulator);
         Assert.Equal(0, transport.LegacyCallCount);
+    }
+
+    private static void RunAllocationProbeInIsolatedProcess()
+    {
+        string assemblyPath = typeof(NativeUnrealInvocationBridgeTests).Assembly.Location;
+        const int timeoutMilliseconds = 60_000;
+        string dotNetPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } hostPath &&
+            File.Exists(hostPath)
+            ? hostPath
+            : "dotnet";
+        string trxPath = Path.Combine(
+            Path.GetTempPath(),
+            $"Finare.NativeUnrealInvocationBridgeTests.{Guid.NewGuid():N}.trx");
+
+        try
+        {
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = dotNetPath,
+                WorkingDirectory = Path.GetDirectoryName(assemblyPath)!,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                ArgumentList =
+                {
+                    "vstest",
+                    assemblyPath,
+                    $"--TestCaseFilter:{AllocationProbeFilter}",
+                    $"--logger:trx;LogFileName={trxPath}",
+                },
+            };
+            startInfo.Environment[AllocationProbeChildVariable] = "1";
+            startInfo.Environment["FinareSkipManagedHostStaging"] = "true";
+
+            using Process process = Process.Start(startInfo) ??
+                throw new InvalidOperationException("Could not start the isolated allocation probe.");
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            bool exited = process.WaitForExit(timeoutMilliseconds);
+            if (!exited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process may have exited between WaitForExit and Kill.
+                }
+
+                string timeoutOutput = outputTask.GetAwaiter().GetResult() + errorTask.GetAwaiter().GetResult();
+                Assert.Fail($"The isolated allocation probe timed out after {timeoutMilliseconds} ms.{Environment.NewLine}{timeoutOutput}");
+            }
+
+            string output = outputTask.GetAwaiter().GetResult() + errorTask.GetAwaiter().GetResult();
+            Assert.True(
+                process.ExitCode == 0,
+                $"The isolated allocation probe failed with exit code {process.ExitCode}.{Environment.NewLine}{output}");
+            Assert.True(File.Exists(trxPath), $"The isolated allocation probe did not produce {trxPath}.{Environment.NewLine}{output}");
+
+            XDocument report = XDocument.Load(trxPath);
+            XElement[] results = report
+                .Descendants()
+                .Where(element => element.Name.LocalName == "UnitTestResult")
+                .ToArray();
+            Assert.Single(results);
+            Assert.Equal(AllocationProbeTestName, results[0].Attribute("testName")?.Value);
+            Assert.Equal("Passed", results[0].Attribute("outcome")?.Value);
+
+            XElement counters = report
+                .Descendants()
+                .Single(element => element.Name.LocalName == "Counters");
+            Assert.Equal("1", counters.Attribute("total")?.Value);
+            Assert.Equal("1", counters.Attribute("passed")?.Value);
+            Assert.Equal("0", counters.Attribute("failed")?.Value);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(trxPath);
+            }
+            catch (IOException)
+            {
+                // Keep the probe result if the test runner still owns the file.
+            }
+        }
     }
 
     [Fact]

@@ -17,6 +17,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
     private Task<ExecutionResult>? executionTask;
     private long generationNumber;
     private long executionNumber;
+    private CoreClrDebugPreparedReload? preparedReload;
     private bool disposed;
 
     public CoreClrDebugAdapter(SemanticId? domainId = null)
@@ -70,6 +71,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             EnsureNotRunning();
+            EnsureNoPreparedReload();
             CSharpProgramEmitResult emitted = emitter.Emit(
                 request,
                 new CSharpDebugInstrumentation(typeof(CoreClrDebugProbe).Assembly.Location));
@@ -122,11 +124,113 @@ public sealed class CoreClrDebugAdapter : IDisposable
         }
     }
 
+    public CoreClrDebugPreparedReload PrepareReload(CSharpCompilationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            EnsureNotRunning();
+            EnsureNoPreparedReload();
+            CSharpProgramEmitResult emitted = emitter.Emit(
+                request,
+                new CSharpDebugInstrumentation(typeof(CoreClrDebugProbe).Assembly.Location));
+            if (!emitted.Succeeded || emitted.Image is null)
+            {
+                throw new ExecutionCompilationException(emitted.Diagnostics);
+            }
+
+            CSharpProgramImage image = emitted.Image;
+            CoreClrExecutionSession nextSession = executionHost.Load(
+                image,
+                request.RuntimeReferencePaths);
+            try
+            {
+                ProgramImageKey imageKey = ProgramImageKey.FromImage(image);
+                long nextNumber = checked(generationNumber + 1);
+                var nextGeneration = new CoreClrProgramGeneration(
+                    DomainId,
+                    nextNumber,
+                    SemanticId.FromKey(
+                        $"coreclr-debug-generation/v0.1|{DomainId}|{nextNumber}|{imageKey}"),
+                    imageKey,
+                    image.Semantics.SourceCompilationId,
+                    image.Semantics.ConfigurationId);
+                BreakpointBindingSnapshot bound = breakpointManager.PreviewBind(
+                    nextGeneration,
+                    image.SourceMap);
+                BreakpointBindingSnapshot nextBindings = RestrictToProbeNodes(bound, image.Hir);
+                CoreClrDebugPreparedReload prepared = new CoreClrDebugPreparedReload(
+                    this,
+                    nextSession,
+                    generation,
+                    sourceMap: image.SourceMap,
+                    new CoreClrDebugReloadResult(
+                        nextGeneration,
+                        nextBindings,
+                        image.IdentitySidecars));
+                preparedReload = prepared;
+                return prepared;
+            }
+            catch
+            {
+                nextSession.Dispose();
+                throw;
+            }
+        }
+    }
+
+    internal void CommitPreparedReload(CoreClrDebugPreparedReload prepared)
+    {
+        lock (gate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (!ReferenceEquals(prepared.Owner, this) || prepared.IsCompleted)
+                throw new InvalidOperationException("The CoreCLR prepared reload is no longer available.");
+            EnsureNotRunning();
+            if (!ReferenceEquals(preparedReload, prepared) ||
+                (prepared.BaselineGeneration is not null &&
+                 (generation is null ||
+                  generation.Number != prepared.BaselineGeneration.Number ||
+                  generation.GenerationId != prepared.BaselineGeneration.GenerationId)))
+            {
+                throw new InvalidOperationException("The CoreCLR prepared reload is stale; prepare a new candidate.");
+            }
+            CoreClrExecutionSession? previous = session;
+            session = prepared.Session;
+            generation = prepared.Result.Generation;
+            generationNumber = generation.Number;
+            BreakpointBindingSnapshot committedBindings = breakpointManager.CommitPreviewBind(
+                prepared.Result.Generation,
+                prepared.SourceMap);
+            debugBindings = RestrictToProbeNodes(committedBindings, prepared.Session.Hir);
+            coordinator = null;
+            executionTask = null;
+            preparedReload = null;
+            prepared.MarkCompleted();
+            previous?.Dispose();
+        }
+    }
+
+    internal void DiscardPreparedReload(CoreClrDebugPreparedReload prepared)
+    {
+        lock (gate)
+        {
+            if (!ReferenceEquals(prepared.Owner, this) || prepared.IsCompleted)
+                return;
+            if (ReferenceEquals(preparedReload, prepared))
+                preparedReload = null;
+            prepared.MarkCompleted();
+            prepared.Session.Dispose();
+        }
+    }
+
     public BreakpointBindingSnapshot SetBreakpoint(SemanticBreakpoint breakpoint)
     {
         lock (gate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            EnsureNoPreparedReload();
             CoreClrExecutionSession current = session ?? throw new InvalidOperationException(
                 "The debug adapter has no active CoreCLR program generation.");
             BreakpointBindingSnapshot bound = breakpointManager.Set(breakpoint) ??
@@ -142,6 +246,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
         lock (gate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            EnsureNoPreparedReload();
             bool removed = breakpointManager.Remove(breakpointId);
             if (removed && session is not null && breakpointManager.CurrentSnapshot is not null)
             {
@@ -173,6 +278,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             EnsureNotRunning();
+            EnsureNoPreparedReload();
             CoreClrExecutionSession currentSession = session ?? throw new InvalidOperationException(
                 "The debug adapter has no active CoreCLR program generation.");
             CoreClrProgramGeneration currentGeneration = generation!;
@@ -309,6 +415,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
     {
         CoreClrDebugCoordinator? activeCoordinator;
         CoreClrExecutionSession? activeSession;
+        CoreClrDebugPreparedReload? pendingReload;
         lock (gate)
         {
             if (disposed)
@@ -318,8 +425,10 @@ public sealed class CoreClrDebugAdapter : IDisposable
 
             activeCoordinator = coordinator;
             activeSession = session;
+            pendingReload = preparedReload;
             coordinator = null;
             session = null;
+            preparedReload = null;
             generation = null;
             debugBindings = null;
             breakpointManager.Unbind();
@@ -328,6 +437,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
 
         activeCoordinator?.Abort();
         activeSession?.Dispose();
+        pendingReload?.Dispose();
     }
 
     private static BreakpointBindingSnapshot RestrictToProbeNodes(
@@ -390,9 +500,48 @@ public sealed class CoreClrDebugAdapter : IDisposable
         }
     }
 
+    private void EnsureNoPreparedReload()
+    {
+        if (preparedReload is { IsCompleted: false })
+        {
+            throw new InvalidOperationException(
+                "A CoreCLR candidate reload is prepared for authoring publication; finish or cancel it before changing debug state.");
+        }
+    }
+
     private static BreakpointProtocolException NoExecution() => new(
         "UDB1005",
         "The debug adapter has no active execution.");
+}
+
+public sealed class CoreClrDebugPreparedReload : IDisposable
+{
+    internal CoreClrDebugPreparedReload(
+        CoreClrDebugAdapter owner,
+        CoreClrExecutionSession session,
+        CoreClrProgramGeneration? baselineGeneration,
+        CSharpProgramSourceMap sourceMap,
+        CoreClrDebugReloadResult result)
+    {
+        Owner = owner;
+        Session = session;
+        BaselineGeneration = baselineGeneration;
+        SourceMap = sourceMap;
+        Result = result;
+    }
+
+    internal CoreClrDebugAdapter Owner { get; }
+    internal CoreClrExecutionSession Session { get; }
+    internal CoreClrProgramGeneration? BaselineGeneration { get; }
+    internal CSharpProgramSourceMap SourceMap { get; }
+    internal bool IsCompleted { get; private set; }
+    public CoreClrDebugReloadResult Result { get; }
+
+    public void Commit() => Owner.CommitPreparedReload(this);
+
+    public void Dispose() => Owner.DiscardPreparedReload(this);
+
+    internal void MarkCompleted() => IsCompleted = true;
 }
 
 public sealed class CoreClrDebugLoopbackTransport : ICoreClrDebugTransport
@@ -409,6 +558,9 @@ public sealed class CoreClrDebugLoopbackTransport : ICoreClrDebugTransport
 
     public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request, Action beforeCommit) =>
         adapter.Reload(request, beforeCommit);
+
+    public CoreClrDebugPreparedReload PrepareReload(CSharpCompilationRequest request) =>
+        adapter.PrepareReload(request);
 
     public BreakpointBindingSnapshot SetBreakpoint(SemanticBreakpoint breakpoint) =>
         adapter.SetBreakpoint(breakpoint);

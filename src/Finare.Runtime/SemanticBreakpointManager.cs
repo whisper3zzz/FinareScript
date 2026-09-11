@@ -98,6 +98,43 @@ public sealed class SemanticBreakpointManager
         }
     }
 
+    public BreakpointBindingSnapshot PreviewBind(
+        CoreClrProgramGeneration programGeneration,
+        CSharpProgramSourceMap programSourceMap)
+    {
+        ArgumentNullException.ThrowIfNull(programGeneration);
+        ArgumentNullException.ThrowIfNull(programSourceMap);
+        if (programGeneration.SourceCompilationId != programSourceMap.SourceCompilationId ||
+            programGeneration.SemanticConfigurationId != programSourceMap.SemanticConfigurationId)
+        {
+            throw new ArgumentException(
+                "The program generation and source map do not describe the same compilation.",
+                nameof(programSourceMap));
+        }
+
+        lock (gate)
+        {
+            return BuildSnapshot(
+                programGeneration,
+                CSharpProgramSourceMapJson.NormalizeAndValidate(programSourceMap));
+        }
+    }
+
+    public BreakpointBindingSnapshot CommitPreviewBind(
+        CoreClrProgramGeneration programGeneration,
+        CSharpProgramSourceMap programSourceMap)
+    {
+        ArgumentNullException.ThrowIfNull(programGeneration);
+        ArgumentNullException.ThrowIfNull(programSourceMap);
+        lock (gate)
+        {
+            generation = programGeneration;
+            sourceMap = CSharpProgramSourceMapJson.NormalizeAndValidate(programSourceMap);
+            snapshot = BuildSnapshot(generation, sourceMap);
+            return snapshot;
+        }
+    }
+
     public BreakpointHitResolution ResolveHit(CoreClrBreakpointHit hit)
     {
         hit = BreakpointProtocolJson.NormalizeAndValidate(hit);
@@ -156,16 +193,23 @@ public sealed class SemanticBreakpointManager
             return;
         }
 
-        var nodeIndex = sourceMap.Methods
+        snapshot = BuildSnapshot(generation, sourceMap);
+    }
+
+    private BreakpointBindingSnapshot BuildSnapshot(
+        CoreClrProgramGeneration programGeneration,
+        CSharpProgramSourceMap programSourceMap)
+    {
+        var nodeIndex = programSourceMap.Methods
             .SelectMany(method => method.Nodes.Select(node => new NodeLocation(method, node)))
             .ToDictionary(static item => item.Node.NodeId);
         SemanticBreakpointBinding[] bindings = breakpoints.Values
             .OrderBy(static breakpoint => breakpoint.BreakpointId.Value, StringComparer.Ordinal)
             .Select(breakpoint => BindBreakpoint(breakpoint, nodeIndex))
             .ToArray();
-        snapshot = BreakpointProtocolJson.NormalizeAndValidate(new BreakpointBindingSnapshot(
+        return BreakpointProtocolJson.NormalizeAndValidate(new BreakpointBindingSnapshot(
             BreakpointBindingSnapshot.CurrentSchemaVersion,
-            generation,
+            programGeneration,
             bindings));
     }
 

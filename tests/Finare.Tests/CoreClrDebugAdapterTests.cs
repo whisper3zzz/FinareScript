@@ -121,6 +121,46 @@ public sealed class CoreClrDebugAdapterTests
     }
 
     [Fact]
+    public void PreparedReloadKeepsDomainGenerationAndBreakpointStateUntilCommit()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirVariableDeclarationStatement result = analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirVariableDeclarationStatement>()
+            .Single(statement => statement.Name == "result");
+        using var adapter = new CoreClrDebugAdapter(SemanticId.FromKey("prepared-reload-test"));
+        CoreClrDebugReloadResult original = adapter.Reload(request);
+        BreakpointBindingSnapshot originalBindings = adapter.SetBreakpoint(
+            new SemanticBreakpoint(SemanticId.FromKey("prepared-result"), result.Id));
+
+        using (CoreClrDebugPreparedReload discarded = adapter.PrepareReload(
+                   CSharpCompilationRequest.Single(Source.Replace("offset = 1", "offset = 2", StringComparison.Ordinal), Path)))
+        {
+            Assert.Equal(original.Generation.DomainId, discarded.Result.Generation.DomainId);
+            Assert.Equal(original.Generation.Number + 1, discarded.Result.Generation.Number);
+            Assert.Equal(original.Generation, adapter.CurrentGeneration);
+            Assert.Equal(originalBindings, adapter.CurrentBreakpoints);
+            Assert.Throws<InvalidOperationException>(() => adapter.SetBreakpoint(
+                new SemanticBreakpoint(SemanticId.FromKey("prepared-result-2"), result.Id)));
+        }
+        Assert.Equal(original.Generation, adapter.CurrentGeneration);
+        Assert.Equal(originalBindings, adapter.CurrentBreakpoints);
+
+        using (CoreClrDebugPreparedReload committed = adapter.PrepareReload(
+                   CSharpCompilationRequest.Single(Source.Replace("offset = 1", "offset = 3", StringComparison.Ordinal), Path)))
+        {
+            committed.Commit();
+            Assert.Equal(original.Generation.DomainId, adapter.CurrentGeneration!.DomainId);
+            Assert.Equal(original.Generation.Number + 1, adapter.CurrentGeneration.Number);
+            BreakpointBindingSnapshot nextBindings = adapter.SetBreakpoint(
+                new SemanticBreakpoint(SemanticId.FromKey("prepared-result-3"), result.Id));
+            Assert.Equal(adapter.CurrentGeneration, nextBindings.Generation);
+            Assert.True(adapter.RemoveBreakpoint(SemanticId.FromKey("prepared-result-3")));
+        }
+    }
+
+    [Fact]
     public async Task Breakpoint_ReallySuspendsCoreClrAndExposesStackAndLocalsThenSteps()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
@@ -190,14 +230,34 @@ public sealed class CoreClrDebugAdapterTests
     {
         using var transport = new CoreClrDebugLoopbackTransport(
             new CoreClrDebugAdapter(SemanticId.FromKey("debug-loopback-test")));
-        CoreClrDebugReloadResult firstReload = transport.Reload(
-            CSharpCompilationRequest.Single(Source, Path));
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirVariableDeclarationStatement offsetDeclaration = analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirVariableDeclarationStatement>()
+            .Single(statement => statement.Name == "offset");
+        CoreClrDebugReloadResult firstReload = transport.Reload(request);
+        SemanticId offsetBreakpointId = SemanticId.FromKey("debug-offset-breakpoint");
+        BreakpointBindingSnapshot initialBindings = transport.SetBreakpoint(
+            new SemanticBreakpoint(offsetBreakpointId, offsetDeclaration.Id));
+        Assert.Equal(BreakpointBindingState.Bound, Assert.Single(initialBindings.Bindings).State);
         SemanticId methodId = transport.ResolveVisualMethodId("Tests.Debug.Rules.Run");
         CoreClrDebugExecution execution = transport.Start(new ExecutionInvocation(
             methodId,
             [new ExecutionArgument("10")]));
-        transport.Pause(firstReload.Generation.GenerationId, execution.ExecutionId);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause breakpointPause = await transport.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+        Assert.Equal(CoreClrDebugPauseReason.Breakpoint, breakpointPause.Reason);
+        Assert.Equal(offsetDeclaration.Id, breakpointPause.NodeId);
+        Assert.True(transport.RemoveBreakpoint(offsetBreakpointId));
+
+        // Queue the explicit pause while the execution is suspended. Continue
+        // then releases the first pause and the next probe deterministically
+        // consumes the request before this tiny method can finish.
+        transport.Pause(firstReload.Generation.GenerationId, execution.ExecutionId);
+        transport.Continue(firstReload.Generation.GenerationId, breakpointPause.PauseId);
         CoreClrDebugPause pause = await transport.WaitForPauseAsync(
             execution.ExecutionId,
             timeout.Token);
