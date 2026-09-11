@@ -17,6 +17,36 @@ remain outside the implementation scope.
 
 ## Decisions and remaining work
 
+The normal-authoring publication coordinator now reserves an analyzed managed
+candidate without swapping its active generation. The native participant joins
+prepared source/artifact writes, parent changes, package saves, native history
+and a durable completion marker in the class-operation journal. Finish adopts
+the reserved managed candidate only after the native participant verifies its
+completion marker; cancellation requires restored external-file baselines and
+no pending native recovery receipt. Commit/Undo/Redo retain exact transaction,
+preview revision, asset and generated-owner identities. An explicit declaration
+parent cannot be replaced by a contradictory history override.
+
+Ten focused managed authoring tests pass in
+`artifacts/finare-usability/c4-managed-authoring-focused-2.log`. The native
+coordinator passes in `c4-coordinator-7.log`, including a saved Actor hierarchy,
+external-write rollback, parent history replay, positive-but-mismatched preview
+revisions, contradictory declarations and completed-transaction rejection.
+`ParentChange.Primitive` and `OperationJournal` pass in their `-2.log` files in
+the same directory. These tests do not cover a real World rejecting a no-op
+parent publication, or a real Slate HTTP cancellation/retry exchange.
+
+The subsequent Slate recovery edits retain a separate reservation state so
+HTTP failure cannot let a new edit overwrite the pending transaction. Cancel
+ACKs must identify the exact cancelled transaction and preview; malformed,
+foreign or already-adopted replies retain recovery state. These final client
+edits pass the Editor build in `editor-async-adoption-build-1.log` under the same
+artifact directory; real client-path validation remains required. Base-class
+selection UI, partial source-owner publication,
+ordinary Actor composition outside the current carrier family, component-family
+proof and affected cooked execution remain unfinished. This is a publication
+checkpoint, not C-4 completion.
+
 `UnrealScriptClassAttribute.BaseClassPath` now reaches the declaration and
 native consumers. The `updateClassBase` declaration patch edits that explicit
 attribute argument. A native parent transaction now handles existing carrier

@@ -1748,6 +1748,446 @@ public sealed class CoreClrAuthoringHttpServerTests
         }
     }
 
+    [Fact]
+    public async Task NativePublicationReservationBlocksAuthoringUntilCancelled()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"finare-native-reservation-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = Path.Combine(directory, "DamagePolicy.usids");
+        string historyPath = Path.Combine(directory, "history.json");
+        string layoutPath = Path.Combine(directory, "layout.json");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                CSharpCompilationRequest.Single(
+                    Source,
+                    logicalPath,
+                    identitySidecar: IdentitySidecarDocument.CreateEmpty(logicalPath)),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath, GraphLayoutPath: layoutPath));
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            string editedSource = baseline.SourceText.Replace(
+                "float scaled = incomingDamage * BaseDamage;",
+                "float scaled = incomingDamage * BaseDamage + 3;",
+                StringComparison.Ordinal);
+            string patchJson = CSharpSourceTextPatchJson.Serialize(
+                CSharpSourceTextPatchDocument.Create(baseline.SourcePath, baseline.SourceText, editedSource));
+            AuthoringPreviewResponse preview = await PreviewAsync(
+                client,
+                "api/authoring/preview/source-text",
+                patchJson,
+                baseline.Revision,
+                "native-reservation",
+                "Native reservation");
+
+            using (HttpRequestMessage prepareRequest = AuthoringRequest(
+                       "api/authoring/native/prepare",
+                       "{}",
+                       baseline.Revision,
+                       "native-reservation",
+                       "Native reservation",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage prepareResponse = await client.SendAsync(prepareRequest))
+            {
+                prepareResponse.EnsureSuccessStatusCode();
+            }
+
+            async Task AssertReservedAsync(string path, string body, string transactionId)
+            {
+                using HttpRequestMessage request = AuthoringRequest(
+                    path,
+                    body,
+                    baseline.Revision,
+                    transactionId,
+                    "Blocked while native publication is reserved");
+                using HttpResponseMessage response = await client.SendAsync(request);
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+                DebugErrorResponse error = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await response.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1022", error.Error.Code);
+                Assert.Contains("native publication is reserved", error.Error.Message, StringComparison.OrdinalIgnoreCase);
+            }
+
+            await AssertReservedAsync("api/authoring/preview/source-text", patchJson, "reserved-source-preview");
+            await AssertReservedAsync("api/authoring/group/begin", "{}", "reserved-group");
+            await AssertReservedAsync("api/authoring/preview/undo", "{}", "reserved-undo");
+            await AssertReservedAsync("api/authoring/refresh", "{}", "reserved-refresh");
+
+            using (HttpRequestMessage cancelRequest = AuthoringRequest(
+                       "api/authoring/native/cancel",
+                       "{}",
+                       baseline.Revision,
+                       "native-reservation",
+                       "Native reservation",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage cancelResponse = await client.SendAsync(cancelRequest))
+            {
+                cancelResponse.EnsureSuccessStatusCode();
+                NativePublicationFinishResponse cancelled = JsonSerializer.Deserialize<NativePublicationFinishResponse>(
+                    await cancelResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("cancelled", cancelled.State);
+                Assert.Null(cancelled.Workspace);
+            }
+
+            using (HttpRequestMessage cancelRetryRequest = AuthoringRequest(
+                       "api/authoring/native/cancel",
+                       "{}",
+                       baseline.Revision,
+                       "native-reservation",
+                       "Native reservation",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage cancelRetryResponse = await client.SendAsync(cancelRetryRequest))
+            {
+                cancelRetryResponse.EnsureSuccessStatusCode();
+                NativePublicationFinishResponse cancelledAgain = JsonSerializer.Deserialize<NativePublicationFinishResponse>(
+                    await cancelRetryResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("cancelled", cancelledAgain.State);
+                Assert.Equal("native-reservation", cancelledAgain.TransactionId);
+            }
+
+            AuthoringPreviewResponse afterCancel = await PreviewAsync(
+                client,
+                "api/authoring/preview/source-text",
+                patchJson,
+                baseline.Revision,
+                "after-native-reservation",
+                "After native reservation");
+            Assert.Equal(baseline.Revision + 1, afterCancel.CandidateRevision);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NativePublicationPreparesBytesAndAdoptsIdempotently()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"finare-native-publication-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = Path.Combine(directory, "DamagePolicy.usids");
+        string historyPath = Path.Combine(directory, "history.json");
+        string layoutPath = Path.Combine(directory, "layout.json");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        var request = new CSharpCompilationRequest(
+            "Finare.NativePublication",
+            [new CSharpSourceDocument(logicalPath, Source, IdentitySidecarDocument.CreateEmpty(logicalPath))]);
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                request,
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath, GraphLayoutPath: layoutPath));
+            using var cancellation = new CancellationTokenSource();
+            _ = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            string editedSource = baseline.SourceText.Replace(
+                "float scaled = incomingDamage * BaseDamage;",
+                "float scaled = incomingDamage * BaseDamage + 2;",
+                StringComparison.Ordinal);
+            string patchJson = CSharpSourceTextPatchJson.Serialize(
+                CSharpSourceTextPatchDocument.Create(baseline.SourcePath, baseline.SourceText, editedSource));
+            AuthoringPreviewResponse preview = await PreviewAsync(
+                client,
+                "api/authoring/preview/source-text",
+                patchJson,
+                baseline.Revision,
+                "native-publication",
+                "Native publication");
+
+            using (HttpRequestMessage prepareRequest = AuthoringRequest(
+                       "api/authoring/native/prepare",
+                       JsonSerializer.Serialize(
+                           new NativePublicationPrepareRequest(preview.PreviewToken),
+                           UnifiedJson.CreateOptions(writeIndented: false)),
+                       baseline.Revision,
+                       "native-publication",
+                       "Native publication",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage prepareResponse = await client.SendAsync(prepareRequest))
+            {
+                prepareResponse.EnsureSuccessStatusCode();
+                NativePublicationPrepareResponse prepared = JsonSerializer.Deserialize<NativePublicationPrepareResponse>(
+                    await prepareResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                Assert.Equal("unifiedscript.native-publication-prepare/v0.1", prepared.SchemaVersion);
+                Assert.Equal(preview.PreviewToken, prepared.PreviewToken);
+                Assert.True(prepared.Outputs.Count > 0);
+                Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+                foreach (NativePublicationOutput output in prepared.Outputs)
+                    await File.WriteAllBytesAsync(output.Path, output.Content);
+
+                using (HttpRequestMessage changedCancelRequest = AuthoringRequest(
+                           "api/authoring/native/cancel",
+                           "{}",
+                           baseline.Revision,
+                           "native-publication",
+                           "Native publication",
+                           previewToken: preview.PreviewToken))
+                using (HttpResponseMessage changedCancelResponse = await client.SendAsync(changedCancelRequest))
+                {
+                    Assert.Equal(HttpStatusCode.Conflict, changedCancelResponse.StatusCode);
+                    DebugErrorResponse changedCancelError = JsonSerializer.Deserialize<DebugErrorResponse>(
+                        await changedCancelResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                    Assert.Equal("UAW1023", changedCancelError.Error.Code);
+                }
+
+                using (HttpRequestMessage changedFailureRequest = AuthoringRequest(
+                           "api/authoring/native/finish",
+                           JsonSerializer.Serialize(
+                               new NativePublicationFinishRequest(preview.PreviewToken, false),
+                               UnifiedJson.CreateOptions(writeIndented: false)),
+                           baseline.Revision,
+                           "native-publication",
+                           "Native publication",
+                           previewToken: preview.PreviewToken))
+                using (HttpResponseMessage changedFailureResponse = await client.SendAsync(changedFailureRequest))
+                {
+                    Assert.Equal(HttpStatusCode.Conflict, changedFailureResponse.StatusCode);
+                    DebugErrorResponse changedFailureError = JsonSerializer.Deserialize<DebugErrorResponse>(
+                        await changedFailureResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                    Assert.Equal("UAW1023", changedFailureError.Error.Code);
+                }
+
+                using HttpRequestMessage foreignFinishRequest = AuthoringRequest(
+                    "api/authoring/native/finish",
+                    JsonSerializer.Serialize(
+                        new NativePublicationFinishRequest(preview.PreviewToken, true),
+                        UnifiedJson.CreateOptions(writeIndented: false)),
+                    baseline.Revision,
+                    "foreign-native-publication",
+                    "Foreign native publication",
+                    previewToken: preview.PreviewToken);
+                using HttpResponseMessage foreignFinishResponse = await client.SendAsync(foreignFinishRequest);
+                Assert.Equal(HttpStatusCode.Conflict, foreignFinishResponse.StatusCode);
+                DebugErrorResponse foreignError = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await foreignFinishResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1021", foreignError.Error.Code);
+            }
+
+            string finishJson = JsonSerializer.Serialize(
+                new NativePublicationFinishRequest(preview.PreviewToken, true),
+                UnifiedJson.CreateOptions(writeIndented: false));
+            using (HttpRequestMessage finishRequest = AuthoringRequest(
+                       "api/authoring/native/finish",
+                       finishJson,
+                       baseline.Revision,
+                       "native-publication",
+                       "Native publication",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage finishResponse = await client.SendAsync(finishRequest))
+            {
+                finishResponse.EnsureSuccessStatusCode();
+                NativePublicationFinishResponse finished = JsonSerializer.Deserialize<NativePublicationFinishResponse>(
+                    await finishResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                Assert.Equal("adopted", finished.State);
+                Assert.Equal(baseline.Revision + 1, finished.Workspace!.Revision);
+            }
+
+            using (HttpRequestMessage retryRequest = AuthoringRequest(
+                       "api/authoring/native/finish",
+                       finishJson,
+                       baseline.Revision,
+                       "native-publication",
+                       "Native publication",
+                       previewToken: preview.PreviewToken))
+            using (HttpResponseMessage retryResponse = await client.SendAsync(retryRequest))
+            {
+                retryResponse.EnsureSuccessStatusCode();
+                NativePublicationFinishResponse retry = JsonSerializer.Deserialize<NativePublicationFinishResponse>(
+                    await retryResponse.Content.ReadAsStringAsync(), UnifiedJson.CreateOptions())!;
+                Assert.Equal("adopted", retry.State);
+                Assert.Equal(baseline.Revision + 1, retry.Workspace!.Revision);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NativePublicationMovesTheRealUndoRedoHistoryCursor()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"finare-native-history-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = Path.Combine(directory, "DamagePolicy.usids");
+        string historyPath = Path.Combine(directory, "history.json");
+        string layoutPath = Path.Combine(directory, "layout.json");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                CSharpCompilationRequest.Single(
+                    Source,
+                    logicalPath,
+                    identitySidecar: IdentitySidecarDocument.CreateEmpty(logicalPath)),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath, GraphLayoutPath: layoutPath));
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            string editedSource = baseline.SourceText.Replace(
+                "float scaled = incomingDamage * BaseDamage;",
+                "float scaled = incomingDamage * BaseDamage + 2;",
+                StringComparison.Ordinal);
+            string patchJson = CSharpSourceTextPatchJson.Serialize(
+                CSharpSourceTextPatchDocument.Create(baseline.SourcePath, baseline.SourceText, editedSource));
+            AuthoringPreviewResponse editPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/source-text",
+                patchJson,
+                baseline.Revision,
+                "native-history-edit",
+                "Native history edit");
+            AuthoringWorkspaceResponse edited = await PublishNativeAsync(
+                editPreview,
+                baseline.Revision,
+                "native-history-edit",
+                "Native history edit");
+            Assert.True(edited.History.CanUndo);
+            Assert.False(edited.History.CanRedo);
+            Assert.Equal(editedSource, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringPreviewResponse undoPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/undo",
+                "{}",
+                edited.Revision,
+                "native-history-undo",
+                "Native history undo");
+            Assert.Contains(
+                "float scaled = incomingDamage * BaseDamage;",
+                undoPreview.Files.Single(file => file.AfterText.Contains(
+                    "namespace Tests.HttpAuthoring;",
+                    StringComparison.Ordinal)).AfterText);
+            AuthoringWorkspaceResponse undone = await PublishNativeAsync(
+                undoPreview,
+                edited.Revision,
+                "native-history-undo",
+                "Native history undo");
+            Assert.True(undone.History.CanRedo);
+            Assert.False(undone.History.CanUndo);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringPreviewResponse redoPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/redo",
+                "{}",
+                undone.Revision,
+                "native-history-redo",
+                "Native history redo");
+            Assert.Contains(
+                "float scaled = incomingDamage * BaseDamage + 2;",
+                redoPreview.Files.Single(file => file.AfterText.Contains(
+                    "namespace Tests.HttpAuthoring;",
+                    StringComparison.Ordinal)).AfterText);
+            AuthoringWorkspaceResponse redone = await PublishNativeAsync(
+                redoPreview,
+                undone.Revision,
+                "native-history-redo",
+                "Native history redo");
+            Assert.True(redone.History.CanUndo);
+            Assert.False(redone.History.CanRedo);
+            Assert.Equal(editedSource, await File.ReadAllTextAsync(sourcePath));
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            async Task<AuthoringWorkspaceResponse> PublishNativeAsync(
+                AuthoringPreviewResponse preview,
+                long revision,
+                string transactionId,
+                string description)
+            {
+                NativePublicationPrepareResponse prepared;
+                using (HttpRequestMessage prepareRequest = AuthoringRequest(
+                           "api/authoring/native/prepare",
+                           "{}",
+                           revision,
+                           transactionId,
+                           description,
+                           previewToken: preview.PreviewToken))
+                using (HttpResponseMessage prepareResponse = await client.SendAsync(prepareRequest))
+                {
+                    prepareResponse.EnsureSuccessStatusCode();
+                    prepared = JsonSerializer.Deserialize<NativePublicationPrepareResponse>(
+                        await prepareResponse.Content.ReadAsStringAsync(),
+                        UnifiedJson.CreateOptions())!;
+                }
+
+                foreach (NativePublicationOutput output in prepared.Outputs)
+                    await File.WriteAllBytesAsync(output.Path, output.Content);
+
+                string finishJson = JsonSerializer.Serialize(
+                    new NativePublicationFinishRequest(preview.PreviewToken, true),
+                    UnifiedJson.CreateOptions(writeIndented: false));
+                using HttpRequestMessage finishRequest = AuthoringRequest(
+                    "api/authoring/native/finish",
+                    finishJson,
+                    revision,
+                    transactionId,
+                    description,
+                    previewToken: preview.PreviewToken);
+                using HttpResponseMessage finishResponse = await client.SendAsync(finishRequest);
+                finishResponse.EnsureSuccessStatusCode();
+                NativePublicationFinishResponse finished = JsonSerializer.Deserialize<NativePublicationFinishResponse>(
+                    await finishResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("adopted", finished.State);
+                return finished.Workspace!;
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
     private static async Task<AuthoringWorkspaceResponse> GetWorkspaceAsync(HttpClient client)
     {
         using HttpResponseMessage response = await client.GetAsync("api/authoring/workspace");

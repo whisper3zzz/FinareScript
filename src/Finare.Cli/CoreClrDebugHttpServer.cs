@@ -310,6 +310,34 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             await WriteJsonAsync(context.Response, await session.RefreshAsync(transaction, cancellationToken), cancellationToken);
             return;
         }
+        if (path == "/api/authoring/native/prepare")
+        {
+            NativePublicationPrepareResponse prepared = await session.PrepareNativePublicationAsync(
+                transaction,
+                cancellationToken);
+            await WriteJsonAsync(context.Response, prepared, cancellationToken);
+            return;
+        }
+        if (path == "/api/authoring/native/finish")
+        {
+            NativePublicationFinishRequest finish = await ReadJsonAsync<NativePublicationFinishRequest>(
+                context.Request,
+                cancellationToken);
+            NativePublicationFinishResponse result = await session.FinishNativePublicationAsync(
+                transaction,
+                finish,
+                cancellationToken);
+            await WriteJsonAsync(context.Response, result, cancellationToken);
+            return;
+        }
+        if (path == "/api/authoring/native/cancel")
+        {
+            NativePublicationFinishResponse result = await session.CancelNativePublicationAsync(
+                transaction,
+                cancellationToken);
+            await WriteJsonAsync(context.Response, result, cancellationToken);
+            return;
+        }
         if (path == "/api/authoring/ai-semantic-proposal/draft")
         {
             string draftJson = await ReadJsonTextAsync(context.Request, cancellationToken);
@@ -725,7 +753,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     private sealed class AuthoringSessionController : IDisposable
     {
         private readonly SemaphoreSlim gate = new(1, 1);
-        private readonly CoreClrDebugLoopbackTransport transport = new();
+        private CoreClrDebugLoopbackTransport transport = new();
         private CSharpAuthoringWorkspace authoring;
         private readonly string sourcePath;
         private string sourceLogicalPath;
@@ -739,6 +767,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly CSharpGraphRoundTripInspector roundTripInspector = new();
         private readonly Dictionary<string, PreparedAuthoringPreview> preparedPreviews =
             new(StringComparer.Ordinal);
+        private readonly Dictionary<string, NativePublicationReservation> nativeReservations =
+            new(StringComparer.Ordinal);
+        private readonly Dictionary<string, NativePublicationFinishResponse> nativePublicationResults =
+            new(StringComparer.Ordinal);
+        private readonly Dictionary<string, FileBaseline> persistedArtifactBaselines =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly List<SemanticId> breakpointIds = [];
         private IReadOnlyList<SemanticBreakpointBinding> bindings = [];
         private CoreClrDebugReloadResult reload;
@@ -837,6 +871,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 }
             }
             reload = transport.Reload(authoring.Current.Request);
+            CaptureArtifactBaselines();
             Health = CreateHealth(reload.Generation);
             Workspace = CreateWorkspace(authoring.Current, reload.Generation);
         }
@@ -849,6 +884,236 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         {
             EnsureFilesUnchanged();
             Persist(authoring.Current, authoring.ExportHistory(), PrepareGraphLayout(authoring.Current, authoring.Current));
+        }
+
+        public async Task<NativePublicationPrepareResponse> PrepareNativePublicationAsync(
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                if (transaction.PreviewToken is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1020",
+                        "Native publication requires the exact accepted authoring preview token.");
+                }
+
+                if (nativePublicationResults.TryGetValue(transaction.PreviewToken, out NativePublicationFinishResponse? adopted))
+                {
+                    if (!string.Equals(adopted.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                        throw new AuthoringProtocolException(HttpStatusCode.Conflict, "UAW1021", "The preview token belongs to another native publication transaction.");
+                    return adopted.Prepare;
+                }
+                if (nativeReservations.TryGetValue(transaction.PreviewToken, out NativePublicationReservation? existing))
+                {
+                    if (!string.Equals(existing.Prepare.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                        throw new AuthoringProtocolException(HttpStatusCode.Conflict, "UAW1021", "The preview token belongs to another native publication transaction.");
+                    return existing.Prepare;
+                }
+                ValidateTransaction(transaction);
+
+                EnsureFilesUnchanged();
+                PreparedAuthoringPreview prepared = RequirePreparedPreview(
+                    authoring.Current,
+                    transaction,
+                    publishesRuntime: true);
+                EnsureNativePublicationIdentityStable(
+                    authoring.Current.Analysis.ScriptAssets!,
+                    prepared.Candidate.Analysis.ScriptAssets!);
+                CSharpAuthoringMutation? preparedMutation = prepared.HistoryMutation is null
+                    ? new CSharpAuthoringMutation(
+                        authoring.Current.Revision,
+                        prepared.Candidate,
+                        prepared.Diagnostics)
+                    : null;
+                CSharpAuthoringHistoryDocument history = prepared.HistoryMutation is not null
+                    ? authoring.PreviewCommit(prepared.HistoryMutation, transaction.TransactionId)
+                    : authoring.PreviewCommit(
+                        preparedMutation!,
+                        transaction.TransactionId,
+                        transaction.Description);
+                PreparedAuthoringOutputs outputs = BuildPreparedOutputs(
+                    prepared.Candidate,
+                    history,
+                    prepared.GraphLayout);
+                CoreClrDebugPreparedReload? candidateReload = null;
+                try
+                {
+                    candidateReload = transport.PrepareReload(prepared.Candidate.Request);
+                    NativePublicationPrepareResponse response = CreateNativePublicationPrepare(
+                        authoring.Current,
+                        prepared,
+                        outputs,
+                        transaction.TransactionId,
+                        transaction.PreviewToken);
+                    EnsureNativePublicationBaselinesUnchanged(response.Outputs);
+                    nativeReservations.Add(
+                        transaction.PreviewToken,
+                        new NativePublicationReservation(
+                            response,
+                            prepared.Candidate,
+                            history,
+                            prepared.GraphLayout,
+                            prepared.HistoryMutation,
+                            candidateReload));
+                    candidateReload = null;
+                    return response;
+                }
+                catch
+                {
+                    candidateReload?.Dispose();
+                    throw;
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<NativePublicationFinishResponse> FinishNativePublicationAsync(
+            AuthoringTransactionContext transaction,
+            NativePublicationFinishRequest finish,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            ArgumentNullException.ThrowIfNull(finish);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                if (transaction.PreviewToken is null ||
+                    !string.Equals(transaction.PreviewToken, finish.PreviewToken, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.BadRequest,
+                        "UAW1008",
+                        "Native publication finish must identify the preview token from its request header.");
+                }
+                if (nativePublicationResults.TryGetValue(transaction.PreviewToken, out NativePublicationFinishResponse? adopted))
+                {
+                    if (!string.Equals(adopted.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                        throw new AuthoringProtocolException(HttpStatusCode.Conflict, "UAW1021", "The preview token belongs to another native publication transaction.");
+                    return adopted;
+                }
+                if (!nativeReservations.TryGetValue(transaction.PreviewToken, out NativePublicationReservation? reservation))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1021",
+                        "The native publication reservation is missing or has already been cancelled.");
+                }
+                if (!string.Equals(reservation.Prepare.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1021",
+                        "The preview token belongs to another native publication transaction.");
+                }
+                ValidateTransaction(transaction, allowNativeReservation: true);
+                if (!finish.Succeeded)
+                {
+                    EnsureNativePublicationCancellationBaseline(reservation.Prepare.Outputs);
+                    nativeReservations.Remove(transaction.PreviewToken);
+                    preparedPreviews.Remove(transaction.PreviewToken);
+                    reservation.CandidateReload.Dispose();
+                    NativePublicationFinishResponse cancelled = new(
+                        "unifiedscript.native-publication-finish/v0.1",
+                        "cancelled",
+                        transaction.TransactionId,
+                        reservation.Prepare,
+                        null,
+                        finish.Error);
+                    nativePublicationResults[transaction.PreviewToken] = cancelled;
+                    return cancelled;
+                }
+
+                EnsureNativePublicationCandidateOutputs(reservation.Prepare.Outputs);
+                AuthoringWorkspaceResponse workspace = AdoptNativePublication(
+                    reservation,
+                    transaction);
+                NativePublicationFinishResponse result = new(
+                    "unifiedscript.native-publication-finish/v0.1",
+                    "adopted",
+                    transaction.TransactionId,
+                    reservation.Prepare,
+                    workspace,
+                    null);
+                nativeReservations.Remove(transaction.PreviewToken);
+                nativePublicationResults[transaction.PreviewToken] = result;
+                return result;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<NativePublicationFinishResponse> CancelNativePublicationAsync(
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                if (transaction.PreviewToken is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.BadRequest,
+                        "UAW1008",
+                        "Native publication cancel must identify the preview token from its request header.");
+                }
+                if (nativePublicationResults.TryGetValue(transaction.PreviewToken, out NativePublicationFinishResponse? completed))
+                {
+                    if (!string.Equals(completed.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                    {
+                        throw new AuthoringProtocolException(
+                            HttpStatusCode.Conflict,
+                            "UAW1021",
+                            "The preview token belongs to another native publication transaction.");
+                    }
+                    return completed;
+                }
+                if (!nativeReservations.TryGetValue(transaction.PreviewToken, out NativePublicationReservation? reservation))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1021",
+                        "The native publication reservation is missing or has already been cancelled.");
+                }
+                if (!string.Equals(reservation.Prepare.TransactionId, transaction.TransactionId, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1021",
+                        "The preview token belongs to another native publication transaction.");
+                }
+                ValidateTransaction(transaction, allowNativeReservation: true);
+                EnsureNativePublicationCancellationBaseline(reservation.Prepare.Outputs);
+                nativeReservations.Remove(transaction.PreviewToken);
+                preparedPreviews.Remove(transaction.PreviewToken);
+                reservation.CandidateReload.Dispose();
+                NativePublicationFinishResponse cancelled = new(
+                    "unifiedscript.native-publication-finish/v0.1",
+                    "cancelled",
+                    transaction.TransactionId,
+                    reservation.Prepare,
+                    null,
+                    "Cancelled by the native participant before authoring adoption.");
+                nativePublicationResults[transaction.PreviewToken] = cancelled;
+                return cancelled;
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public async Task<AuthoringWorkspaceResponse> RefreshAsync(
@@ -878,6 +1143,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "External sources did not compile; the old workspace and runtime remain active. Fix the disk sources and refresh again.", mutation.Diagnostics);
 
                 CSharpAuthoringSnapshot candidate = mutation.Snapshot;
+                EnsureNativeIdentityUsesNativePublication(authoring.Current, candidate);
                 string primaryLogical = input.SourceFiles.Single(pair =>
                     string.Equals(pair.Value, sourcePath, StringComparison.OrdinalIgnoreCase)).Key;
                 bool samePaths = SamePaths(sourceFiles, input.SourceFiles) &&
@@ -1046,6 +1312,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             try
             {
                 EnsureAuthoringAvailable();
+                EnsureNoNativePublicationReservation();
                 ActiveAuthoringGroup group = RequireActiveGroup(transaction);
                 EnsureFilesUnchanged();
                 if (group.StagedOperationCount == 0)
@@ -1094,6 +1361,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             await gate.WaitAsync(cancellationToken);
             try
             {
+                EnsureNoNativePublicationReservation();
                 _ = RequireActiveGroup(transaction);
                 activeGroup = null;
                 preparedPreviews.Clear();
@@ -1609,6 +1877,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             try
             {
                 EnsureAuthoringAvailable();
+                EnsureNoNativePublicationReservation();
                 ActiveAuthoringGroup group = RequireActiveGroup(transaction);
                 EnsureFilesUnchanged();
                 if (group.StagedOperationCount == 0)
@@ -1666,7 +1935,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     mutation.Snapshot,
                     [],
                     transaction,
-                    publishesRuntime: true);
+                    publishesRuntime: true,
+                    historyMutation: mutation);
             }
             finally
             {
@@ -1733,6 +2003,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             // handler can still be unwinding through its gate-protected cleanup after
             // the listener has closed, so disposing the semaphore here would race that
             // cleanup. SemaphoreSlim owns no external handle until WaitHandle is used.
+            foreach (NativePublicationReservation reservation in nativeReservations.Values)
+                reservation.CandidateReload.Dispose();
             transport.Dispose();
         }
 
@@ -1746,6 +2018,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             try
             {
                 EnsureAuthoringAvailable();
+                EnsureNoNativePublicationReservation();
                 if (transaction.GroupId is not null)
                 {
                     ActiveAuthoringGroup group = RequireActiveGroup(
@@ -1813,7 +2086,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CSharpAuthoringSnapshot candidate,
             IReadOnlyList<UnifiedDiagnostic> diagnostics,
             AuthoringTransactionContext transaction,
-            bool publishesRuntime)
+            bool publishesRuntime,
+            CSharpAuthoringHistoryMutation? historyMutation = null)
         {
             ValidateEditableSources(candidate);
             Dictionary<string, string> beforeSources = baseline.Request.Sources.ToDictionary(
@@ -1874,7 +2148,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 publishesRuntime,
                 candidate,
                 diagnostics,
-                graphLayout);
+                graphLayout,
+                historyMutation);
             return new AuthoringPreviewResponse(
                 "unifiedscript.authoring-preview/v0.3",
                 baseline.Revision,
@@ -1886,7 +2161,74 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 new SemanticGraphDiffer().Compare(baseline.Graph, candidate.Graph),
                 roundTrip,
                 files,
-                diagnostics);
+                diagnostics,
+                candidate.Analysis.ScriptAssets,
+                BuildNativeBindingChanges(baseline.Analysis.ScriptAssets!, candidate.Analysis.ScriptAssets!));
+        }
+
+        private static IReadOnlyList<NativePublicationBindingChange> BuildNativeBindingChanges(
+            ScriptAssetDocument beforeAssets,
+            ScriptAssetDocument afterAssets)
+        {
+            Dictionary<string, ScriptAssetDeclaration> beforeByPath = beforeAssets.Assets.ToDictionary(
+                static asset => asset.AssetPath,
+                StringComparer.Ordinal);
+            Dictionary<string, ScriptAssetDeclaration> afterByPath = afterAssets.Assets.ToDictionary(
+                static asset => asset.AssetPath,
+                StringComparer.Ordinal);
+            var bindings = new List<NativePublicationBindingChange>();
+            foreach (string path in beforeByPath.Keys.Concat(afterByPath.Keys).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+            {
+                beforeByPath.TryGetValue(path, out ScriptAssetDeclaration? before);
+                afterByPath.TryGetValue(path, out ScriptAssetDeclaration? after);
+                // A native ClassBinding is keyed by more than its carrier paths.  A
+                // declaration rename or a new semantic asset id changes the native
+                // owner identity even when the selected carrier and parent stay the
+                // same, so it must go through the same coordinated publication.
+                bool hasNativeIdentity = before?.ClassBinding is not null || after?.ClassBinding is not null;
+                if (!hasNativeIdentity ||
+                    (before?.ClassBinding == after?.ClassBinding &&
+                        before?.Id == after?.Id &&
+                        string.Equals(before?.QualifiedName, after?.QualifiedName, StringComparison.Ordinal)))
+                    continue;
+                bindings.Add(new NativePublicationBindingChange(
+                    path,
+                    after?.Id.Value ?? before?.Id.Value ?? string.Empty,
+                    before?.ClassBinding,
+                    after?.ClassBinding));
+            }
+            return bindings;
+        }
+
+        private static void EnsureNativePublicationIdentityStable(
+            ScriptAssetDocument beforeAssets,
+            ScriptAssetDocument afterAssets)
+        {
+            foreach (NativePublicationBindingChange change in
+                BuildNativeBindingChanges(beforeAssets, afterAssets))
+            {
+                ScriptAssetDeclaration? before = beforeAssets.Assets.SingleOrDefault(
+                    asset => string.Equals(asset.AssetPath, change.AssetPath, StringComparison.Ordinal));
+                ScriptAssetDeclaration? after = afterAssets.Assets.SingleOrDefault(
+                    asset => string.Equals(asset.AssetPath, change.AssetPath, StringComparison.Ordinal));
+                if (before is null || after is null || before.ClassBinding is null || after.ClassBinding is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1031",
+                        $"Native Script Asset '{change.AssetPath}' was added or removed. Use the supported Rename/identity operation before native publication.");
+                }
+                if (before.Id != after.Id ||
+                    !string.Equals(before.QualifiedName, after.QualifiedName, StringComparison.Ordinal) ||
+                    !string.Equals(before.ClassBinding.Kind, after.ClassBinding.Kind, StringComparison.Ordinal) ||
+                    !string.Equals(before.ClassBinding.GeneratedClassPath, after.ClassBinding.GeneratedClassPath, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1031",
+                        $"Native Script Asset identity '{change.AssetPath}' changed class ID, qualified name, carrier kind, or generated class path. Use the supported Rename/identity operation; native parent publication cannot change identity.");
+                }
+            }
         }
 
         private static string ComputePreviewToken(
@@ -1994,6 +2336,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     SHA256.HashData(Encoding.UTF8.GetBytes(text)))
                 .ToLowerInvariant();
 
+        private static string ComputeByteDigest(byte[] bytes) =>
+            "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
         private static void ValidateGraphLayoutBaseline(PreparedGraphLayout? graphLayout)
         {
             if (graphLayout is null)
@@ -2068,10 +2413,31 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             AuthoringTransactionContext transaction,
             bool publishesRuntime)
         {
+            PreparedAuthoringPreview prepared = RequirePreparedPreview(
+                baseline,
+                transaction,
+                publishesRuntime);
             if (transaction.PreviewToken is null ||
-                !preparedPreviews.Remove(
+                !preparedPreviews.Remove(transaction.PreviewToken))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1012",
+                    "The candidate no longer matches the confirmed diff preview; no source, artifact, history, or runtime generation was changed.");
+            }
+            return prepared;
+        }
+
+        private PreparedAuthoringPreview RequirePreparedPreview(
+            CSharpAuthoringSnapshot baseline,
+            AuthoringTransactionContext transaction,
+            bool publishesRuntime)
+        {
+            if (transaction.PreviewToken is null ||
+                !preparedPreviews.TryGetValue(
                     transaction.PreviewToken,
                     out PreparedAuthoringPreview? prepared) ||
+                nativeReservations.ContainsKey(transaction.PreviewToken) ||
                 prepared.BaselineRevision != baseline.Revision ||
                 prepared.ClientBaselineRevision != transaction.BaselineRevision ||
                 !string.Equals(
@@ -2084,7 +2450,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     StringComparison.Ordinal) ||
                 !string.Equals(prepared.GroupId, transaction.GroupId, StringComparison.Ordinal) ||
                 prepared.BoundPayloadId != transaction.BoundPayloadId ||
-                prepared.PublishesRuntime != publishesRuntime)
+                    prepared.PublishesRuntime != publishesRuntime)
             {
                 throw new AuthoringProtocolException(
                     HttpStatusCode.Conflict,
@@ -2093,6 +2459,70 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
             ValidateGraphLayoutBaseline(prepared.GraphLayout);
             return prepared;
+        }
+
+        private NativePublicationPrepareResponse CreateNativePublicationPrepare(
+            CSharpAuthoringSnapshot baseline,
+            PreparedAuthoringPreview prepared,
+            PreparedAuthoringOutputs outputs,
+            string transactionId,
+            string? previewToken)
+        {
+            if (string.IsNullOrWhiteSpace(previewToken))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1020",
+                    "Native publication requires the exact accepted authoring preview token.");
+            }
+            ScriptAssetDocument beforeAssets = baseline.Analysis.ScriptAssets!;
+            ScriptAssetDocument afterAssets = prepared.Candidate.Analysis.ScriptAssets!;
+            return new NativePublicationPrepareResponse(
+                "unifiedscript.native-publication-prepare/v0.1",
+                transactionId,
+                previewToken,
+                prepared.BaselineRevision,
+                prepared.Candidate.Revision,
+                prepared.PublishesRuntime,
+                prepared.HistoryMutation?.TransactionId ?? transactionId,
+                prepared.HistoryMutation is null
+                    ? "commit"
+                    : prepared.HistoryMutation.Direction == CSharpAuthoringHistoryDirection.Undo
+                        ? "undo"
+                        : "redo",
+                prepared.Candidate.Analysis.ScriptAssets!,
+                BuildNativeBindingChanges(beforeAssets, afterAssets),
+                outputs.Outputs.Select(CreateNativePublicationOutput).ToArray());
+        }
+
+        private NativePublicationOutput CreateNativePublicationOutput(AuthoringOutput output)
+        {
+            bool exists = File.Exists(output.Path);
+            byte[] baseline = exists ? File.ReadAllBytes(output.Path) : [];
+            return new NativePublicationOutput(
+                output.Path,
+                exists,
+                ComputeByteDigest(baseline),
+                ComputeByteDigest(output.Content),
+                output.Content);
+        }
+
+        private void EnsureNativePublicationBaselinesUnchanged(
+            IReadOnlyList<NativePublicationOutput> outputs)
+        {
+            foreach (NativePublicationOutput output in outputs)
+            {
+                bool exists = File.Exists(output.Path);
+                byte[] current = exists ? File.ReadAllBytes(output.Path) : [];
+                if (exists != output.BaselineExists ||
+                    !string.Equals(ComputeByteDigest(current), output.BaselineDigest, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1002",
+                        $"Authoring output '{output.Path}' changed after native publication prepare; refresh and prepare again.");
+                }
+            }
         }
 
         private async Task<AuthoringWorkspaceResponse> ApplyAsync(
@@ -2105,6 +2535,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             try
             {
                 EnsureAuthoringAvailable();
+                EnsureNoNativePublicationReservation();
                 if (transaction.GroupId is not null)
                 {
                     ActiveAuthoringGroup group = RequireActiveGroup(
@@ -2126,6 +2557,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                             $"Staged authoring operation ID '{transaction.TransactionId}' was already accepted.");
                     }
 
+                    if (transaction.PreviewToken is not null)
+                    {
+                        PreparedAuthoringPreview guardedPreview = RequirePreparedPreview(
+                            group.Draft.Current,
+                            transaction,
+                            publishesRuntime: false);
+                        EnsureNativeIdentityUsesNativePublication(
+                            group.Draft.Current,
+                            guardedPreview.Candidate);
+                    }
+
                     CSharpAuthoringMutation stagedMutation = PrepareMutation(
                         group.Draft,
                         prepare,
@@ -2140,6 +2582,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                             "The staged semantic patch was rejected; the grouped draft was not changed.",
                             stagedMutation.Diagnostics);
                     }
+                    EnsureNativeIdentityUsesNativePublication(
+                        group.Draft.Current,
+                        stagedMutation.Snapshot);
                     group.Draft.Commit(
                         stagedMutation,
                         transaction.TransactionId,
@@ -2155,6 +2600,16 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
                 ValidateTransaction(transaction);
                 EnsureFilesUnchanged();
+                if (transaction.PreviewToken is not null)
+                {
+                    PreparedAuthoringPreview guardedPreview = RequirePreparedPreview(
+                        authoring.Current,
+                        transaction,
+                        publishesRuntime: true);
+                    EnsureNativeIdentityUsesNativePublication(
+                        authoring.Current,
+                        guardedPreview.Candidate);
+                }
                 CSharpAuthoringMutation mutation = PrepareMutation(
                     authoring,
                     prepare,
@@ -2241,8 +2696,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return current;
         }
 
-        private void ValidateTransaction(AuthoringTransactionContext transaction)
+        private void ValidateTransaction(
+            AuthoringTransactionContext transaction,
+            bool allowNativeReservation = false)
         {
+            if (!allowNativeReservation && nativeReservations.Count > 0)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1022",
+                    "A native publication is reserved; cancel or finish it before starting another authoring operation.");
+            }
             if (activeGroup is not null)
             {
                 throw new AuthoringProtocolException(
@@ -2266,6 +2730,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     HttpStatusCode.Conflict,
                     "UAW1006",
                     $"Authoring transaction ID '{transaction.TransactionId}' was already committed.");
+            }
+        }
+
+        private void EnsureNoNativePublicationReservation()
+        {
+            if (nativeReservations.Count > 0)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1022",
+                    "A native publication is reserved; cancel or finish it before starting another authoring operation.");
             }
         }
 
@@ -2313,6 +2788,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             PreparedGraphLayout? graphLayout)
         {
             CSharpAuthoringSnapshot previous = authoring.Current;
+            EnsureNativeIdentityUsesNativePublication(previous, snapshot);
             long fromGeneration = reload.Generation.Number;
             var phases = new List<ReloadTransactionPhaseResponse>();
             long phaseStart = Stopwatch.GetTimestamp();
@@ -2464,6 +2940,123 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return Workspace;
         }
 
+        private AuthoringWorkspaceResponse AdoptNativePublication(
+            NativePublicationReservation reservation,
+            AuthoringTransactionContext transaction)
+        {
+            if (reservation.HistoryMutation is not null)
+            {
+                authoring.Commit(reservation.HistoryMutation, transaction.TransactionId);
+            }
+            else
+            {
+                authoring.Commit(
+                    new CSharpAuthoringMutation(
+                        authoring.Current.Revision,
+                        reservation.Candidate,
+                        []),
+                    transaction.TransactionId,
+                    transaction.Description);
+            }
+
+            reservation.CandidateReload.Commit();
+            reload = reservation.CandidateReload.Result;
+            bindings = reload.Breakpoints.Bindings;
+            preparedPreviews.Clear();
+            if (artifactOutputs.HistoryPath is not null)
+            {
+                historyPersistenceState = "persisted";
+                historyPersistenceMessage = null;
+            }
+            foreach (CSharpSourceDocument source in reservation.Candidate.Request.Sources)
+                persistedSources[source.LogicalPath] = source.Source;
+            IdentitySidecarDocument? sidecar = reservation.Candidate.Analysis.IdentitySidecars.SingleOrDefault(item =>
+                string.Equals(item.SourcePath, sourceLogicalPath, StringComparison.Ordinal));
+            persistedIdentity = sidecar is null ? persistedIdentity : IdentitySidecarJson.Serialize(sidecar) + "\n";
+            foreach (NativePublicationOutput output in reservation.Prepare.Outputs)
+            {
+                persistedArtifactBaselines[Path.GetFullPath(output.Path)] = new FileBaseline(
+                    true,
+                    output.CandidateDigest);
+            }
+            Health = CreateHealth(reload.Generation);
+            var reloadTransaction = new ReloadTransactionResponse(
+                "unifiedscript.reload-transaction/v0.1",
+                transaction.TransactionId,
+                "authoring",
+                "published",
+                reload.Generation.Number - 1,
+                reload.Generation.Number,
+                reload.Generation.Number,
+                [new ReloadTransactionPhaseResponse(
+                    "nativePublicationAdopt",
+                    "succeeded",
+                    0,
+                    "Adopted the preloaded candidate after the native participant committed its journal.")],
+                null);
+            Workspace = CreateWorkspace(authoring.Current, reload.Generation, reloadTransaction);
+            return Workspace;
+        }
+
+        private static void EnsureNativePublicationCandidateOutputs(
+            IReadOnlyList<NativePublicationOutput> outputs)
+        {
+            foreach (NativePublicationOutput output in outputs)
+            {
+                if (!File.Exists(output.Path))
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1022",
+                        $"Native publication did not write prepared output '{output.Path}'.");
+                byte[] current = File.ReadAllBytes(output.Path);
+                if (!string.Equals(ComputeByteDigest(current), output.CandidateDigest, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1022",
+                        $"Native publication output '{output.Path}' does not match the prepared candidate bytes.");
+                }
+            }
+        }
+
+        private static void EnsureNativePublicationCancellationBaseline(
+            IReadOnlyList<NativePublicationOutput> outputs)
+        {
+            foreach (NativePublicationOutput output in outputs)
+            {
+                bool exists = File.Exists(output.Path);
+                byte[] current = exists ? File.ReadAllBytes(output.Path) : [];
+                string digest = ComputeByteDigest(current);
+                if (exists != output.BaselineExists ||
+                    !string.Equals(digest, output.BaselineDigest, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1023",
+                        $"Native publication output '{output.Path}' is no longer at its prepared baseline; finish or recover the native transaction before cancelling.");
+                }
+            }
+        }
+
+        private static void EnsureNativeIdentityUsesNativePublication(
+            CSharpAuthoringSnapshot baseline,
+            CSharpAuthoringSnapshot candidate)
+        {
+            ScriptAssetDocument? beforeAssets = baseline.Analysis.ScriptAssets;
+            ScriptAssetDocument? afterAssets = candidate.Analysis.ScriptAssets;
+            if (beforeAssets is null || afterAssets is null ||
+                BuildNativeBindingChanges(beforeAssets, afterAssets).Count == 0)
+            {
+                return;
+            }
+
+            throw new AuthoringProtocolException(
+                HttpStatusCode.Conflict,
+                "UAW1030",
+                "This authoring operation changes a native Script Asset binding or identity. " +
+                "Prepare native publication for the exact preview before committing source, declaration, history, group, or refresh changes.");
+        }
+
         private static ReloadTransactionPhaseResponse CompleteReloadPhase(
             string name,
             long startedTimestamp,
@@ -2518,7 +3111,79 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         message,
                         SourceSpan.Unknown(sourceLogicalPath))]);
             }
+            foreach ((string path, FileBaseline baseline) in persistedArtifactBaselines)
+            {
+                bool exists = File.Exists(path);
+                byte[] current = exists ? File.ReadAllBytes(path) : [];
+                if (exists != baseline.Exists ||
+                    !string.Equals(ComputeByteDigest(current), baseline.Digest, StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1002",
+                        $"Authoring artifact '{path}' changed outside the workbench; reload before saving.");
+                }
+            }
         }
+
+        private IEnumerable<string> KnownArtifactPaths() =>
+            new[]
+            {
+                artifactOutputs.DeclarationPath,
+                artifactOutputs.SurfacePath,
+                artifactOutputs.ManagedAssemblyPath,
+                artifactOutputs.PortablePdbPath,
+                artifactOutputs.HistoryPath,
+                artifactOutputs.GraphLayoutPath,
+                artifactOutputs.CompiledChunkPath,
+                identityPath,
+            }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+
+        private void CaptureArtifactBaselines()
+        {
+            persistedArtifactBaselines.Clear();
+            foreach (string path in KnownArtifactPaths())
+            {
+                if (IsGraphLayoutPath(path))
+                {
+                    continue;
+                }
+                bool exists = File.Exists(path);
+                // A missing optional artifact has no external bytes to protect yet.
+                // It is captured once a prepared transaction publishes it; graph
+                // layouts still carry their exact preview baseline through
+                // PreparedGraphLayout, so a file created before preview is valid
+                // while a file changed after preview is rejected.
+                if (exists)
+                {
+                    persistedArtifactBaselines[path] = new FileBaseline(
+                        true,
+                        ComputeByteDigest(File.ReadAllBytes(path)));
+                }
+            }
+        }
+
+        private void CaptureArtifactBaselines(IReadOnlyList<AuthoringOutput> outputs)
+        {
+            foreach (AuthoringOutput output in outputs)
+            {
+                string path = Path.GetFullPath(output.Path);
+                if (IsGraphLayoutPath(path))
+                {
+                    continue;
+                }
+                persistedArtifactBaselines[path] = new FileBaseline(
+                    true,
+                    ComputeByteDigest(output.Content));
+            }
+        }
+
+        private bool IsGraphLayoutPath(string path) =>
+            artifactOutputs.GraphLayoutPath is not null &&
+            string.Equals(
+                Path.GetFullPath(path),
+                artifactOutputs.GraphLayoutPath,
+                StringComparison.OrdinalIgnoreCase);
 
         private void ValidateEditableSources(CSharpAuthoringSnapshot snapshot)
         {
@@ -2530,7 +3195,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
         }
 
-        private void Persist(
+        private PreparedAuthoringOutputs BuildPreparedOutputs(
             CSharpAuthoringSnapshot snapshot,
             CSharpAuthoringHistoryDocument history,
             PreparedGraphLayout? graphLayout,
@@ -2557,9 +3222,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 IdentitySidecarDocument sidecar = snapshot.Analysis.IdentitySidecars.Single(item =>
                     string.Equals(item.SourcePath, imported?.PrimaryLogical ?? sourceLogicalPath, StringComparison.Ordinal));
                 nextIdentity = IdentitySidecarJson.Serialize(sidecar) + "\n";
-                outputs.Add(new AuthoringOutput(
-                    identityPath,
-                    Encoding.UTF8.GetBytes(nextIdentity)));
+                outputs.Add(new AuthoringOutput(identityPath, Encoding.UTF8.GetBytes(nextIdentity)));
             }
 
             ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
@@ -2573,18 +3236,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     artifactOutputs.DeclarationPath,
                     Encoding.UTF8.GetBytes(ScriptAssetJson.Serialize(scriptAssets) + "\n")));
             }
-
             if (artifactOutputs.SurfacePath is not null)
             {
                 outputs.Add(new AuthoringOutput(
                     artifactOutputs.SurfacePath,
                     Encoding.UTF8.GetBytes(AuthoringSurfaceJson.Serialize(surface) + "\n")));
             }
-
-            if (graphLayout is not null && !string.Equals(
-                    graphLayout.BaselineText,
-                    graphLayout.CandidateText,
-                    StringComparison.Ordinal))
+            if (graphLayout is not null)
             {
                 outputs.Add(new AuthoringOutput(
                     graphLayout.Path,
@@ -2603,36 +3261,24 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "The candidate managed assembly could not be emitted; no authoring artifact was changed.",
                         emitted.Diagnostics);
                 }
-
                 if (artifactOutputs.ManagedAssemblyPath is not null)
-                {
-                    outputs.Add(new AuthoringOutput(
-                        artifactOutputs.ManagedAssemblyPath,
-                        emitted.Image.PortableExecutable));
-                }
-
+                    outputs.Add(new AuthoringOutput(artifactOutputs.ManagedAssemblyPath, emitted.Image.PortableExecutable));
                 if (artifactOutputs.PortablePdbPath is not null)
-                {
-                    outputs.Add(new AuthoringOutput(
-                        artifactOutputs.PortablePdbPath,
-                        emitted.Image.PortablePdb));
-                }
+                    outputs.Add(new AuthoringOutput(artifactOutputs.PortablePdbPath, emitted.Image.PortablePdb));
                 if (artifactOutputs.CompiledChunkPath is not null)
                 {
                     CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
-                        emitted.Image, new CSharpProgramChunkOptions(
-                            RuntimeReferencePaths: snapshot.Request.RuntimeReferencePaths));
+                        emitted.Image,
+                        new CSharpProgramChunkOptions(RuntimeReferencePaths: snapshot.Request.RuntimeReferencePaths));
                     outputs.Add(new AuthoringOutput(artifactOutputs.CompiledChunkPath, chunk.Content));
                 }
             }
-
             if (artifactOutputs.HistoryPath is not null)
             {
                 outputs.Add(new AuthoringOutput(
                     artifactOutputs.HistoryPath,
                     Encoding.UTF8.GetBytes(CSharpAuthoringHistoryJson.Serialize(history) + "\n")));
             }
-
             if (imported is not null)
             {
                 if (InputIdentity(imported.Input) != InputIdentity(LoadRefreshInput()))
@@ -2640,7 +3286,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "Project inputs changed while refreshing; retry after saving. No external source edit was overwritten.");
                 if (imported.ArchivedHistory is not null) outputs.Add(imported.ArchivedHistory);
             }
-            WriteTransactionally(outputs);
+            return new PreparedAuthoringOutputs(outputs, nextIdentity);
+        }
+
+        private void Persist(
+            CSharpAuthoringSnapshot snapshot,
+            CSharpAuthoringHistoryDocument history,
+            PreparedGraphLayout? graphLayout,
+            ImportedProjectInput? imported = null)
+        {
+            PreparedAuthoringOutputs prepared = BuildPreparedOutputs(snapshot, history, graphLayout, imported);
+            WriteTransactionally(prepared.Outputs);
             if (imported is not null)
             {
                 sourceFiles = imported.Input.SourceFiles;
@@ -2649,10 +3305,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 persistedSources.Clear();
             }
             foreach (CSharpSourceDocument source in snapshot.Request.Sources)
-            {
                 persistedSources[source.LogicalPath] = source.Source;
-            }
-            persistedIdentity = nextIdentity;
+            persistedIdentity = prepared.NextIdentity;
+            CaptureArtifactBaselines(prepared.Outputs);
         }
 
         private static DebugHealthResponse CreateHealth(CoreClrProgramGeneration generation) => new(
@@ -2856,6 +3511,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private sealed record AuthoringOutput(string Path, byte[] Content);
 
+        private sealed record PreparedAuthoringOutputs(
+            IReadOnlyList<AuthoringOutput> Outputs,
+            string? NextIdentity);
+
+        private sealed record FileBaseline(bool Exists, string Digest);
+
         private sealed record PendingAuthoringOutput(
             string Path,
             string TemporaryPath,
@@ -2878,7 +3539,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             bool PublishesRuntime,
             CSharpAuthoringSnapshot Candidate,
             IReadOnlyList<UnifiedDiagnostic> Diagnostics,
-            PreparedGraphLayout? GraphLayout);
+            PreparedGraphLayout? GraphLayout,
+            CSharpAuthoringHistoryMutation? HistoryMutation);
 
         private sealed record PreparedGraphLayout(
             string Path,
@@ -2886,6 +3548,14 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             string BaselineText,
             string CandidateText,
             CSharpGraphRoundTripReport Report);
+
+        private sealed record NativePublicationReservation(
+            NativePublicationPrepareResponse Prepare,
+            CSharpAuthoringSnapshot Candidate,
+            CSharpAuthoringHistoryDocument History,
+            PreparedGraphLayout? GraphLayout,
+            CSharpAuthoringHistoryMutation? HistoryMutation,
+            CoreClrDebugPreparedReload CandidateReload);
     }
 
     private sealed class HttpProtocolException(HttpStatusCode status, string message)
@@ -2991,7 +3661,50 @@ internal sealed record AuthoringPreviewResponse(
     SemanticGraphDiffDocument SemanticDiff,
     CSharpGraphRoundTripReport RoundTrip,
     IReadOnlyList<AuthoringPreviewFile> Files,
-    IReadOnlyList<UnifiedDiagnostic> Diagnostics);
+    IReadOnlyList<UnifiedDiagnostic> Diagnostics,
+    ScriptAssetDocument? ScriptAssets = null,
+    IReadOnlyList<NativePublicationBindingChange>? NativeBindingChanges = null);
+
+internal sealed record NativePublicationPrepareRequest(string PreviewToken);
+
+internal sealed record NativePublicationFinishRequest(
+    string PreviewToken,
+    bool Succeeded,
+    string? Error = null);
+
+internal sealed record NativePublicationOutput(
+    string Path,
+    bool BaselineExists,
+    string BaselineDigest,
+    string CandidateDigest,
+    byte[] Content);
+
+internal sealed record NativePublicationBindingChange(
+    string AssetPath,
+    string AssetId,
+    ScriptClassBindingDeclaration? Before,
+    ScriptClassBindingDeclaration? After);
+
+internal sealed record NativePublicationPrepareResponse(
+    string SchemaVersion,
+    string TransactionId,
+    string PreviewToken,
+    long BaselineRevision,
+    long CandidateRevision,
+    bool PublishesRuntime,
+    string? HistoryEntryTransactionId,
+    string? HistoryDirection,
+    ScriptAssetDocument ScriptAssets,
+    IReadOnlyList<NativePublicationBindingChange> BindingChanges,
+    IReadOnlyList<NativePublicationOutput> Outputs);
+
+internal sealed record NativePublicationFinishResponse(
+    string SchemaVersion,
+    string State,
+    string TransactionId,
+    NativePublicationPrepareResponse Prepare,
+    AuthoringWorkspaceResponse? Workspace,
+    string? Error);
 
 internal sealed record AuthoringAiSemanticProposalPreviewResponse(
     string SchemaVersion,

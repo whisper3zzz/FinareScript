@@ -11,6 +11,10 @@
 
 #include "CoreMinimal.h"
 #include "FinareAuthoringSurface.h"
+#include "FinareClassBinding.h"
+
+class UFinareAsset;
+class UFinareBlueprint;
 
 struct FFinareAuthoringHistoryResult
 {
@@ -157,6 +161,14 @@ struct FFinareAuthoringRoundTripResult
     int64 NewUnplacedNodes = 0;
 };
 
+struct FFinareNativeBindingChange
+{
+    FString AssetPath;
+    FString AssetId;
+    TOptional<FFinareClassBindingDeclaration> Before;
+    TOptional<FFinareClassBindingDeclaration> After;
+};
+
 struct FFinareAuthoringPreviewResult
 {
     int64 BaselineRevision = 0;
@@ -172,6 +184,34 @@ struct FFinareAuthoringPreviewResult
     TArray<FFinareAuthoringSemanticChange> SemanticChanges;
     TArray<FFinareAuthoringPreviewFile> Files;
     TArray<FFinareAuthoringDiagnostic> Diagnostics;
+    FString CandidateScriptAssetsJson;
+    TArray<FFinareNativeBindingChange> NativeBindingChanges;
+};
+
+struct FFinareNativePublicationOutput
+{
+    FString Path;
+    bool bBaselineExists = false;
+    FString BaselineDigest;
+    FString CandidateDigest;
+    TArray<uint8> Content;
+};
+
+struct FFinareNativePublicationPrepareResult
+{
+    FString SchemaVersion;
+    FString TransactionId;
+    FString PreviewToken;
+    int64 BaselineRevision = 0;
+    int64 CandidateRevision = 0;
+    bool bPublishesRuntime = false;
+    FString HistoryEntryTransactionId;
+    FString HistoryDirection;
+    FString ScriptAssetsJson;
+    TArray<FString> BindingAssetPaths;
+    TArray<FString> BindingAssetIds;
+    TArray<FFinareNativeBindingChange> BindingChanges;
+    TArray<FFinareNativePublicationOutput> Outputs;
 };
 
 struct FFinareAuthoringWorkspaceResult
@@ -180,6 +220,7 @@ struct FFinareAuthoringWorkspaceResult
     int64 Generation = 0;
     FString SourcePath;
     FString SourceText;
+    FString ScriptAssetsJson;
     FFinareAuthoringSurfaceDocument Surface;
     FFinareVisualProfileResult Profile;
     FFinareAuthoringHistoryResult History;
@@ -191,6 +232,25 @@ struct FFinareAuthoringWorkspaceResult
 class FINAREEDITOR_API FFinareAuthoringWorkbench
 {
 public:
+    struct FNativePublicationContext
+    {
+        TWeakObjectPtr<UFinareAsset> ScriptAsset;
+        TWeakObjectPtr<UFinareBlueprint> Blueprint;
+        TWeakObjectPtr<UClass> GeneratedClass;
+        FString ScriptAssetObjectPath;
+        FGuid ScriptClassId;
+        FString ScriptTypeName;
+        FString GeneratedClassPath;
+        FString GeneratedOwnerPath;
+        FString NativeParentClassPath;
+        /** Accepted preview revisions captured at the Workbench boundary. */
+        bool bHasExpectedPreviewRevisions = false;
+        int64 ExpectedBaselineRevision = 0;
+        int64 ExpectedCandidateRevision = 0;
+        /** Editor Automation seam; normal Slate callers leave this disabled. */
+        int32 FailAfterExternalPublicationWriteForTesting = INDEX_NONE;
+    };
+
     static FString NormalizeServerUrl(const FString& ServerUrl);
 
     static FString BuildSemanticPatchUrl(const FString& ServerUrl);
@@ -219,6 +279,12 @@ public:
 
     static FString BuildGroupCancelUrl(const FString& ServerUrl);
 
+    static FString BuildNativePrepareUrl(const FString& ServerUrl);
+
+    static FString BuildNativeFinishUrl(const FString& ServerUrl);
+
+    static FString BuildNativeCancelUrl(const FString& ServerUrl);
+
     static bool BuildSourceTextPatch(
         const FString& SourcePath,
         const FString& BaselineSourceText,
@@ -234,6 +300,41 @@ public:
     static bool ParsePreviewResponse(
         const FString& Json,
         FFinareAuthoringPreviewResult& OutPreview,
+        FString& OutError);
+
+    static bool ParseNativePublicationPrepareResponse(
+        const FString& Json,
+        FFinareNativePublicationPrepareResult& OutPrepare,
+        FString& OutError);
+
+    /**
+     * Applies a prepared native candidate and its UE/history sidecars as one
+     * materializer transaction. The surface supplies the exact selected owner
+     * context captured before the preview; this coordinator revalidates it.
+     */
+    static bool ApplyNativePublication(
+        const FNativePublicationContext& Context,
+        const FFinareNativePublicationPrepareResult& Prepare,
+        const FString& ExpectedPreviewToken,
+        FString& OutError);
+
+    /**
+     * Confirms that a failed local materialization returned to the prepared
+     * disk state and that no recovery receipt or committed marker remains.
+     * Only after this proof may the Workbench release the server reservation.
+     */
+    static bool CanCancelNativePublication(
+        const FFinareNativePublicationPrepareResult& Prepare,
+        FString& OutError);
+
+    /**
+     * Resolves the durable completion marker after the shared materializer
+     * journal has closed. A pending receipt always takes precedence over a
+     * marker, so an interrupted transaction cannot be adopted as committed.
+     */
+    static bool ValidateNativeCompletionMarker(
+        const FNativePublicationContext& Context,
+        const FFinareNativePublicationPrepareResult& Prepare,
         FString& OutError);
 
     static bool ParseReloadTransaction(

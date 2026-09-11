@@ -253,6 +253,29 @@ private:
         bool bPublishesRuntime = true);
     void DispatchAuthoringPreview();
     void DispatchAuthoringRequest(const FString& PreviewToken);
+    void DispatchNativePublicationPrepare(const FString& PreviewToken);
+    void HandleNativePublicationPrepareResponse(
+        bool bRequestSucceeded,
+        int32 StatusCode,
+        FString ResponseJson);
+    bool CaptureNativePublicationContext(FString& OutError);
+    void DispatchNativePublicationCancel(const FString& ErrorMessage);
+    void HandleNativePublicationCancelResponse(
+        bool bRequestSucceeded,
+        int32 StatusCode,
+        FString ResponseJson,
+        FString ErrorMessage);
+    void HandleNativePublicationCancel(
+        bool bRequestSucceeded,
+        int32 StatusCode,
+        FString ResponseJson,
+        FString ErrorMessage);
+    void DispatchNativePublicationFinish();
+    FReply HandleRetryNativePublicationFinish();
+    FReply HandleRetryNativePublicationCancel();
+    bool ApplyNativePublication(
+        const FFinareNativePublicationPrepareResult& Prepare,
+        FString& OutError);
     void ConfigureAuthoringRequest(
         const TSharedRef<class IHttpRequest, ESPMode::ThreadSafe>& Request,
         const FString& Url,
@@ -264,7 +287,8 @@ private:
         bool bRequestSucceeded,
         int32 StatusCode,
         const FString& ResponseJson,
-        const FString& NetworkMessage);
+        const FString& NetworkMessage,
+        bool bPreserveNativeReservation = false);
     void RebuildDiagnosticsPanel();
     FReply HandleQuickFix(FString Kind);
     FReply HandleCopyDiagnostic(FFinareAuthoringDiagnostic Diagnostic);
@@ -379,12 +403,22 @@ private:
     bool bPendingGraphFocus = false;
     bool bShowCanvasMinimap = true;
     bool bPendingRequestPublishesRuntime = true;
+    bool bSkipDailyBuildForNativePublication = false;
     bool bHasCanonicalSourceSnapshot = false;
     bool bCodeEditDirty = false;
     bool bStatusError = false;
     bool bHasAuthoringFailure = false;
+    // A prepared native transaction remains an editor reservation even when
+    // its HTTP request is no longer in flight. Keep submissions blocked until
+    // a verified finish or cancel acknowledgement releases it.
+    bool bNativePublicationReservationPending = false;
+    bool bNativePublicationCancelRecoveryPending = false;
     FString StatusMessage;
     TOptional<FFinarePendingAuthoringTransaction> PendingAuthoringTransaction;
+    TOptional<FFinareAuthoringPreviewResult> PendingAuthoringPreview;
+    TOptional<FFinareAuthoringWorkbench::FNativePublicationContext> PendingNativePublicationContext;
+    FString PendingNativePublicationContextCaptureError;
+    TOptional<FFinareNativePublicationPrepareResult> PendingNativePublication;
     FFinareAuthoringErrorResult LastAuthoringFailure;
     FString UndoAuthoringDescription;
     FString RedoAuthoringDescription;

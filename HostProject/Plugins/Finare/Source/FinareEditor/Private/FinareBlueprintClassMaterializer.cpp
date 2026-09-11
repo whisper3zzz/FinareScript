@@ -1765,7 +1765,7 @@ bool BuildParentChangePlan(
         OutPlan.RequestedParent = RequestedParent;
         OutPlan.bChanged = Blueprint.ParentClass != RequestedParent;
     }
-    if (OutPlan.bChanged)
+    auto RejectActiveManagedInstances = [&Blueprint, &OutError]() -> bool
     {
         for (TObjectIterator<UFinareComponent> It; It; ++It)
         {
@@ -1786,6 +1786,11 @@ bool BuildParentChangePlan(
                 return false;
             }
         }
+        return true;
+    };
+    if (OutPlan.bChanged && !RejectActiveManagedInstances())
+    {
+        return false;
     }
     OutError.Reset();
     return true;
@@ -8107,6 +8112,12 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             OutError = TEXT("Native history supplied a parent for a declaration without class binding.");
             return false;
         }
+        if (PlannedClassBinding->BaseClassPath.IsSet() &&
+            PlannedClassBinding->BaseClassPath.GetValue() != Options.ParentClassPathOverride)
+        {
+            OutError = TEXT("Native history parent conflicts with the explicit declaration parent.");
+            return false;
+        }
         PlannedClassBinding->BaseClassPath = Options.ParentClassPathOverride;
     }
     FParentChangePlan ParentPlan;
@@ -8143,6 +8154,12 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
             OutError = TEXT("Native history supplied a parent for a declaration without class binding.");
             return false;
         }
+        if (ClassBinding->BaseClassPath.IsSet() &&
+            ClassBinding->BaseClassPath.GetValue() != Options.ParentClassPathOverride)
+        {
+            OutError = TEXT("Native history parent conflicts with the explicit declaration parent.");
+            return false;
+        }
         ClassBinding->BaseClassPath = Options.ParentClassPathOverride;
     }
     // Rebuild from the fully validated selected asset so malformed or
@@ -8159,6 +8176,34 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
     }
     const bool bHasExternalPublicationFiles = !Options.ExternalPublicationFiles.IsEmpty();
     const bool bTransactional = ParentPlan.bChanged || bHasExternalPublicationFiles;
+
+    // A native publication may carry binding/source outputs even when the
+    // physical UE parent remains unchanged.  It still replaces the managed
+    // authoring generation, so the same exact owner/descendant active-instance
+    // guard applies before any transaction or external output is committed.
+    if (bTransactional && !ParentPlan.bChanged)
+    {
+        for (TObjectIterator<UFinareComponent> It; It; ++It)
+        {
+            UFinareComponent* Component = *It;
+            if (!IsValid(Component) || !Component->bScriptRunning)
+            {
+                continue;
+            }
+            const UFinareBlueprintGeneratedClass* ActiveClass =
+                Component->GetActiveManagedGeneratedClass();
+            if (ActiveClass != nullptr &&
+                (ActiveClass == Blueprint.GeneratedClass.Get() ||
+                 (Blueprint.GeneratedClass != nullptr &&
+                  ActiveClass->IsChildOf(Blueprint.GeneratedClass.Get()))))
+            {
+                OutError = FString::Printf(
+                    TEXT("Cannot publish native changes for Blueprint '%s' while a managed instance is active; stop the affected World first."),
+                    *Blueprint.GetPathName());
+                return false;
+            }
+        }
+    }
 
     if (!Options.JournalTransactionId.IsEmpty())
     {

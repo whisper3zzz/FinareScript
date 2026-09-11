@@ -9,10 +9,19 @@
  */
 #include "FinareAuthoringWorkbench.h"
 
+#include "FinareAsset.h"
+#include "FinareBlueprint.h"
+#include "FinareBlueprintClassMaterializer.h"
+#include "FinareClassOperationJournal.h"
+
 #include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Misc/Base64.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 #include <openssl/sha.h>
 
@@ -30,6 +39,39 @@ constexpr TCHAR SemanticDiffSchema[] = TEXT("unifiedscript.semantic-graph-diff/v
 constexpr TCHAR GraphSchema[] = TEXT("unifiedscript.graph/v0.13");
 constexpr TCHAR SourceTextPatchSchema[] = TEXT("unifiedscript.csharp-source-text-patch/v0.1");
 constexpr int32 MaximumSourceCharacters = 512 * 1024;
+
+FString ComputeSha256Digest(const TArray<uint8>& Bytes)
+{
+    uint8 Digest[SHA256_DIGEST_LENGTH]{};
+    // OpenSSL accepts a zero-length input, but keep the pointer non-null for
+    // platforms whose wrapper still validates the input address.
+    const uint8 EmptyByte = 0;
+    const uint8* Data = Bytes.IsEmpty() ? &EmptyByte : Bytes.GetData();
+    if (SHA256(
+            reinterpret_cast<const unsigned char*>(Data),
+            static_cast<size_t>(Bytes.Num()),
+            Digest) == nullptr)
+    {
+        return FString();
+    }
+    return TEXT("sha256:") + BytesToHex(Digest, SHA256_DIGEST_LENGTH).ToLower();
+}
+
+bool IsValidNativeTransactionId(const FString& Value)
+{
+    if (Value.IsEmpty())
+    {
+        return false;
+    }
+    for (const TCHAR Character : Value)
+    {
+        if (!(FChar::IsAlnum(Character) || Character == TEXT('-') || Character == TEXT('_')))
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 bool ReadPositiveInteger(
     const TSharedPtr<FJsonObject>& Object,
@@ -77,6 +119,54 @@ bool ReadRequiredString(
         return false;
     }
     return true;
+}
+
+bool ReadOptionalClassBinding(
+    const TSharedPtr<FJsonObject>& Object,
+    const TCHAR* Field,
+    TOptional<FFinareClassBindingDeclaration>& OutBinding,
+    FString& OutError)
+{
+    OutBinding.Reset();
+    if (!Object.IsValid())
+    {
+        OutError = FString::Printf(TEXT("Native publication binding field '%s' has no object."), Field);
+        return false;
+    }
+    const TSharedPtr<FJsonValue>* Value = Object->Values.Find(Field);
+    if (Value == nullptr || !Value->IsValid() || (*Value)->IsNull())
+    {
+        return true;
+    }
+    const TSharedPtr<FJsonObject> BindingObject = (*Value)->AsObject();
+    if (!BindingObject.IsValid())
+    {
+        OutError = FString::Printf(TEXT("Native publication binding field '%s' is not an object or null."), Field);
+        return false;
+    }
+    const TSharedRef<FJsonObject> Asset = MakeShared<FJsonObject>();
+    Asset->SetObjectField(TEXT("classBinding"), BindingObject.ToSharedRef());
+    if (!FFinareClassBindingDeclaration::ReadJson(Asset, OutBinding, OutError) || !OutBinding.IsSet())
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = FString::Printf(TEXT("Native publication binding field '%s' is invalid."), Field);
+        }
+        return false;
+    }
+    return true;
+}
+
+bool SerializeJsonObject(
+    const TSharedPtr<FJsonObject>& Object,
+    FString& OutJson)
+{
+    if (!Object.IsValid())
+    {
+        return false;
+    }
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJson);
+    return FJsonSerializer::Serialize(Object.ToSharedRef(), Writer);
 }
 
 bool ReadSpan(
@@ -402,6 +492,30 @@ FString FFinareAuthoringWorkbench::BuildGroupCancelUrl(const FString& ServerUrl)
         : Normalized + TEXT("/api/authoring/group/cancel");
 }
 
+FString FFinareAuthoringWorkbench::BuildNativePrepareUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/native/prepare");
+}
+
+FString FFinareAuthoringWorkbench::BuildNativeFinishUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/native/finish");
+}
+
+FString FFinareAuthoringWorkbench::BuildNativeCancelUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/native/cancel");
+}
+
 bool FFinareAuthoringWorkbench::BuildSourceTextPatch(
     const FString& SourcePath,
     const FString& BaselineSourceText,
@@ -507,6 +621,25 @@ bool FFinareAuthoringWorkbench::ParseWorkspaceResponse(
             Root, TEXT("sourceText"), Candidate.SourceText, OutError))
     {
         return false;
+    }
+
+    const TSharedPtr<FJsonObject>* ScriptAssets = nullptr;
+    if (Root->TryGetObjectField(TEXT("scriptAssets"), ScriptAssets) &&
+        ScriptAssets != nullptr && ScriptAssets->IsValid())
+    {
+        FString ScriptAssetsSchema;
+        const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+        if (!(*ScriptAssets)->TryGetStringField(TEXT("schemaVersion"), ScriptAssetsSchema) ||
+            ScriptAssetsSchema.IsEmpty() ||
+            !(*ScriptAssets)->TryGetArrayField(TEXT("assets"), Assets) ||
+            Assets == nullptr ||
+            !UE::Finare::AuthoringWorkbench::Private::SerializeJsonObject(
+                *ScriptAssets,
+                Candidate.ScriptAssetsJson))
+        {
+            OutError = TEXT("The Workbench response has an invalid ScriptAssets candidate document.");
+            return false;
+        }
     }
 
     const TSharedPtr<FJsonObject>* History = nullptr;
@@ -790,6 +923,52 @@ bool FFinareAuthoringWorkbench::ParsePreviewResponse(
         return false;
     }
 
+    const TSharedPtr<FJsonObject>* ScriptAssets = nullptr;
+    if (Root->TryGetObjectField(TEXT("scriptAssets"), ScriptAssets) &&
+        ScriptAssets != nullptr && ScriptAssets->IsValid())
+    {
+        FString ScriptAssetsSchema;
+        const TArray<TSharedPtr<FJsonValue>>* Assets = nullptr;
+        if (!(*ScriptAssets)->TryGetStringField(TEXT("schemaVersion"), ScriptAssetsSchema) ||
+            ScriptAssetsSchema.IsEmpty() ||
+            !(*ScriptAssets)->TryGetArrayField(TEXT("assets"), Assets) ||
+            Assets == nullptr ||
+            !UE::Finare::AuthoringWorkbench::Private::SerializeJsonObject(
+                *ScriptAssets,
+                Candidate.CandidateScriptAssetsJson))
+        {
+            OutError = TEXT("The authoring preview has an invalid ScriptAssets candidate document.");
+            return false;
+        }
+    }
+    const TArray<TSharedPtr<FJsonValue>>* NativeBindings = nullptr;
+    if (Root->TryGetArrayField(TEXT("nativeBindingChanges"), NativeBindings) &&
+        NativeBindings != nullptr)
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *NativeBindings)
+        {
+            const TSharedPtr<FJsonObject> Change = Value.IsValid() ? Value->AsObject() : nullptr;
+            FFinareNativeBindingChange Binding;
+            if (!UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("assetPath"), Binding.AssetPath, OutError) ||
+                !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("assetId"), Binding.AssetId, OutError) ||
+                !UE::Finare::AuthoringWorkbench::Private::ReadOptionalClassBinding(
+                    Change, TEXT("before"), Binding.Before, OutError) ||
+                !UE::Finare::AuthoringWorkbench::Private::ReadOptionalClassBinding(
+                    Change, TEXT("after"), Binding.After, OutError) ||
+                (!Binding.Before.IsSet() && !Binding.After.IsSet()))
+            {
+                if (OutError.IsEmpty())
+                {
+                    OutError = TEXT("The authoring preview has an empty native binding change.");
+                }
+                return false;
+            }
+            Candidate.NativeBindingChanges.Add(MoveTemp(Binding));
+        }
+    }
+
     const TSharedPtr<FJsonObject>* SemanticDiff = nullptr;
     const TSharedPtr<FJsonObject>* SemanticSummary = nullptr;
     FString SemanticSchema;
@@ -981,6 +1160,734 @@ bool FFinareAuthoringWorkbench::ParsePreviewResponse(
 
     OutPreview = MoveTemp(Candidate);
     OutError.Reset();
+    return true;
+}
+
+bool FFinareAuthoringWorkbench::ParseNativePublicationPrepareResponse(
+    const FString& Json,
+    FFinareNativePublicationPrepareResult& OutPrepare,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("The Workbench returned invalid native publication JSON.");
+        return false;
+    }
+    FFinareNativePublicationPrepareResult Candidate;
+    if (!UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("schemaVersion"), Candidate.SchemaVersion, OutError) ||
+        Candidate.SchemaVersion != TEXT("unifiedscript.native-publication-prepare/v0.1") ||
+        !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("transactionId"), Candidate.TransactionId, OutError) ||
+        !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("previewToken"), Candidate.PreviewToken, OutError) ||
+        !UE::Finare::AuthoringWorkbench::Private::ReadPositiveInteger(
+            Root, TEXT("baselineRevision"), Candidate.BaselineRevision, OutError) ||
+        !UE::Finare::AuthoringWorkbench::Private::ReadPositiveInteger(
+            Root, TEXT("candidateRevision"), Candidate.CandidateRevision, OutError) ||
+        Candidate.CandidateRevision <= Candidate.BaselineRevision ||
+        !Root->TryGetBoolField(TEXT("publishesRuntime"), Candidate.bPublishesRuntime))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The native publication response has invalid transaction metadata.");
+        }
+        return false;
+    }
+    if (Candidate.PreviewToken.Len() != 64)
+    {
+        OutError = TEXT("The native publication response preview token must be a 64-character SHA-256 token.");
+        return false;
+    }
+    for (const TCHAR Character : Candidate.PreviewToken)
+    {
+        if (!FChar::IsHexDigit(Character))
+        {
+            OutError = TEXT("The native publication response preview token is not hexadecimal.");
+            return false;
+        }
+    }
+    Root->TryGetStringField(
+        TEXT("historyEntryTransactionId"),
+        Candidate.HistoryEntryTransactionId);
+    Root->TryGetStringField(TEXT("historyDirection"), Candidate.HistoryDirection);
+    const TSharedPtr<FJsonObject>* ScriptAssets = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* BindingChanges = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* Outputs = nullptr;
+    if (!Root->TryGetObjectField(TEXT("scriptAssets"), ScriptAssets) || ScriptAssets == nullptr ||
+        !ScriptAssets->IsValid() ||
+        !Root->TryGetArrayField(TEXT("bindingChanges"), BindingChanges) || BindingChanges == nullptr ||
+        !Root->TryGetArrayField(TEXT("outputs"), Outputs) || Outputs == nullptr ||
+        !UE::Finare::AuthoringWorkbench::Private::SerializeJsonObject(
+            *ScriptAssets, Candidate.ScriptAssetsJson))
+    {
+        OutError = TEXT("The native publication response has no complete ScriptAssets/output manifest.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& Value : *BindingChanges)
+    {
+        const TSharedPtr<FJsonObject> Change = Value.IsValid() ? Value->AsObject() : nullptr;
+        FFinareNativeBindingChange Binding;
+        if (!UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                Change, TEXT("assetPath"), Binding.AssetPath, OutError) ||
+            !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                Change, TEXT("assetId"), Binding.AssetId, OutError) ||
+            !UE::Finare::AuthoringWorkbench::Private::ReadOptionalClassBinding(
+                Change, TEXT("before"), Binding.Before, OutError) ||
+            !UE::Finare::AuthoringWorkbench::Private::ReadOptionalClassBinding(
+                Change, TEXT("after"), Binding.After, OutError) ||
+            (!Binding.Before.IsSet() && !Binding.After.IsSet()))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The native publication response contains an empty binding change.");
+            }
+            return false;
+        }
+        Candidate.BindingChanges.Add(MoveTemp(Binding));
+    }
+    for (const TSharedPtr<FJsonValue>& Value : *Outputs)
+    {
+        const TSharedPtr<FJsonObject> Output = Value.IsValid() ? Value->AsObject() : nullptr;
+        FFinareNativePublicationOutput CandidateOutput;
+        FString ContentBase64;
+        if (!UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                Output, TEXT("path"), CandidateOutput.Path, OutError) ||
+            !Output->TryGetBoolField(TEXT("baselineExists"), CandidateOutput.bBaselineExists) ||
+            !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                Output, TEXT("baselineDigest"), CandidateOutput.BaselineDigest, OutError) ||
+            !UE::Finare::AuthoringWorkbench::Private::ReadRequiredString(
+                Output, TEXT("candidateDigest"), CandidateOutput.CandidateDigest, OutError) ||
+            !Output->TryGetStringField(TEXT("content"), ContentBase64) ||
+            !FBase64::Decode(ContentBase64, CandidateOutput.Content))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The native publication response contains an invalid output entry.");
+            }
+            return false;
+        }
+        Candidate.Outputs.Add(MoveTemp(CandidateOutput));
+    }
+    if (Candidate.Outputs.IsEmpty())
+    {
+        OutError = TEXT("The native publication response must contain at least one output.");
+        return false;
+    }
+    OutPrepare = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
+bool FFinareAuthoringWorkbench::ApplyNativePublication(
+    const FNativePublicationContext& Context,
+    const FFinareNativePublicationPrepareResult& Prepare,
+    const FString& ExpectedPreviewToken,
+    FString& OutError)
+{
+    OutError.Reset();
+    UFinareAsset* ScriptAsset = Context.ScriptAsset.Get();
+    UFinareBlueprint* Blueprint = Context.Blueprint.Get();
+    UClass* GeneratedClass = Context.GeneratedClass.Get();
+    if (!IsValid(ScriptAsset) || !IsValid(Blueprint) ||
+        !IsValid(GeneratedClass) || ExpectedPreviewToken.IsEmpty() ||
+        Prepare.PreviewToken != ExpectedPreviewToken ||
+        Prepare.TransactionId.IsEmpty() || Prepare.CandidateRevision <= Prepare.BaselineRevision)
+    {
+        OutError = TEXT("Native publication context or preview token is stale; no UE package was changed.");
+        return false;
+    }
+    if (!UE::Finare::AuthoringWorkbench::Private::IsValidNativeTransactionId(Prepare.TransactionId) ||
+        (!Prepare.HistoryEntryTransactionId.IsEmpty() &&
+            !UE::Finare::AuthoringWorkbench::Private::IsValidNativeTransactionId(Prepare.HistoryEntryTransactionId)))
+    {
+        OutError = TEXT("Native publication contains an invalid transaction identity; use the exact durable transaction id.");
+        return false;
+    }
+    if (Context.bHasExpectedPreviewRevisions &&
+        (Prepare.BaselineRevision != Context.ExpectedBaselineRevision ||
+         Prepare.CandidateRevision != Context.ExpectedCandidateRevision))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication revisions do not match the accepted preview (expected %lld -> %lld, received %lld -> %lld)."),
+            Context.ExpectedBaselineRevision,
+            Context.ExpectedCandidateRevision,
+            Prepare.BaselineRevision,
+            Prepare.CandidateRevision);
+        return false;
+    }
+
+    // Check durable completion before comparing the candidate's old parent
+    // against the now-advanced Blueprint.  A fresh retry of a completed
+    // transaction must resolve as already committed, rather than looking like
+    // a stale ordinary prepare and potentially taking another materialize
+    // path.
+    const FString EarlyCompletionMarkerPath = FPaths::Combine(
+        FPaths::ConvertRelativePathToFull(FPaths::Combine(
+            FPaths::ProjectSavedDir(), TEXT("Finare/ClassOperations/NativeHistory"))),
+        Prepare.TransactionId + TEXT(".completed.json"));
+    if (IFileManager::Get().FileExists(*EarlyCompletionMarkerPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion marker '%s' already exists; a completed transaction cannot be materialized again."),
+            *EarlyCompletionMarkerPath);
+        return false;
+    }
+
+    const FString CurrentGeneratedClassPath = ScriptAsset->GeneratedClassPath.ToString();
+    const FString CurrentOwnerPath = Blueprint->GetPathName();
+    const FString CurrentParentPath = Blueprint->ParentClass != nullptr
+        ? Blueprint->ParentClass->GetPathName()
+        : FString();
+    UClass* ResolvedGeneratedClass = ScriptAsset->GeneratedClassPath.TryLoadClass<UObject>();
+    if (ResolvedGeneratedClass != GeneratedClass ||
+        Blueprint->GeneratedClass != GeneratedClass ||
+        Blueprint->ScriptAsset != ScriptAsset ||
+        GeneratedClass->ClassGeneratedBy != Blueprint ||
+        Context.ScriptAssetObjectPath != ScriptAsset->GetPathName() ||
+        Context.ScriptClassId != ScriptAsset->ScriptClassId ||
+        Context.ScriptTypeName != ScriptAsset->ScriptTypeName ||
+        Context.GeneratedClassPath != CurrentGeneratedClassPath ||
+        Context.GeneratedOwnerPath != CurrentOwnerPath ||
+        Context.NativeParentClassPath != CurrentParentPath)
+    {
+        OutError = TEXT("Native publication owner, generated class, and Script Asset no longer match the captured context.");
+        return false;
+    }
+    if (Prepare.BindingChanges.Num() != 1)
+    {
+        OutError = TEXT("Native publication is limited to exactly one selected Script Asset owner.");
+        return false;
+    }
+
+    const FFinareNativeBindingChange& BindingChange = Prepare.BindingChanges[0];
+    const FString ExpectedAssetId = TEXT("us_") +
+        ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower();
+    if (BindingChange.AssetPath != ScriptAsset->DeclarationAssetPath ||
+        BindingChange.AssetId != ExpectedAssetId || !BindingChange.Before.IsSet() ||
+        !BindingChange.After.IsSet() ||
+        BindingChange.Before->Kind != BindingChange.After->Kind ||
+        (BindingChange.Before->GeneratedClassPath.IsSet() &&
+            BindingChange.Before->GeneratedClassPath.GetValue() != Context.GeneratedClassPath) ||
+        (BindingChange.After->GeneratedClassPath.IsSet() &&
+            BindingChange.After->GeneratedClassPath.GetValue() != Context.GeneratedClassPath))
+    {
+        OutError = TEXT("Native publication binding does not identify the selected owner or is an unsupported identity/carrier change.");
+        return false;
+    }
+    if (BindingChange.Before->BaseClassPath.IsSet() &&
+        BindingChange.Before->BaseClassPath.GetValue() != CurrentParentPath)
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication expected current parent '%s', but the loaded Blueprint uses '%s'."),
+            *BindingChange.Before->BaseClassPath.GetValue(),
+            *CurrentParentPath);
+        return false;
+    }
+
+    // The native binding change and the ScriptAssets declaration are two
+    // representations of the same candidate.  Reject a split candidate
+    // before the materializer can use its history override to hide an
+    // explicit source parent.
+    TSharedPtr<FJsonObject> ScriptAssetsRoot;
+    const TSharedRef<TJsonReader<>> ScriptAssetsReader =
+        TJsonReaderFactory<>::Create(Prepare.ScriptAssetsJson);
+    const TArray<TSharedPtr<FJsonValue>>* ScriptAssets = nullptr;
+    TOptional<FFinareClassBindingDeclaration> SelectedClassBinding;
+    bool bFoundSelectedAsset = false;
+    if (!FJsonSerializer::Deserialize(ScriptAssetsReader, ScriptAssetsRoot) ||
+        !ScriptAssetsRoot.IsValid() ||
+        !ScriptAssetsRoot->TryGetArrayField(TEXT("assets"), ScriptAssets) ||
+        ScriptAssets == nullptr)
+    {
+        OutError = TEXT("Native publication ScriptAssets candidate is invalid or has no assets array.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& AssetValue : *ScriptAssets)
+    {
+        const TSharedPtr<FJsonObject> Asset = AssetValue.IsValid()
+            ? AssetValue->AsObject()
+            : nullptr;
+        FString AssetPath;
+        FString AssetId;
+        if (!Asset.IsValid() ||
+            !Asset->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+            !Asset->TryGetStringField(TEXT("id"), AssetId))
+        {
+            continue;
+        }
+        if (AssetPath == BindingChange.AssetPath && AssetId == BindingChange.AssetId)
+        {
+            FString BindingError;
+            if (!FFinareClassBindingDeclaration::ReadJson(
+                    Asset,
+                    SelectedClassBinding,
+                    BindingError))
+            {
+                OutError = TEXT("Native publication selected ScriptAssets classBinding is invalid: ") + BindingError;
+                return false;
+            }
+            bFoundSelectedAsset = true;
+            break;
+        }
+    }
+    if (!bFoundSelectedAsset || !SelectedClassBinding.IsSet() ||
+        SelectedClassBinding->Kind != BindingChange.After->Kind ||
+        (SelectedClassBinding->GeneratedClassPath.IsSet() &&
+            SelectedClassBinding->GeneratedClassPath.GetValue() != Context.GeneratedClassPath))
+    {
+        OutError = TEXT("Native publication ScriptAssets classBinding does not identify the selected owner or generated class.");
+        return false;
+    }
+    if (BindingChange.After->BaseClassPath.IsSet() != SelectedClassBinding->BaseClassPath.IsSet() ||
+        (BindingChange.After->BaseClassPath.IsSet() &&
+            BindingChange.After->BaseClassPath.GetValue() != SelectedClassBinding->BaseClassPath.GetValue()))
+    {
+        OutError = TEXT("Native publication binding and ScriptAssets classBinding disagree about the candidate parent.");
+        return false;
+    }
+
+    FString HistoryId = Prepare.HistoryEntryTransactionId.IsEmpty()
+        ? Prepare.TransactionId
+        : Prepare.HistoryEntryTransactionId;
+    if (HistoryId.IsEmpty())
+    {
+        OutError = TEXT("Native publication has no durable history transaction identity.");
+        return false;
+    }
+    const FString SafeHistoryId = HistoryId;
+    const FString SafeTransactionId = Prepare.TransactionId;
+    const FString HistoryDirectory = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(), TEXT("Finare/ClassOperations/NativeHistory")));
+    const FString NativeHistoryPath = FPaths::Combine(
+        HistoryDirectory, SafeHistoryId + TEXT(".json"));
+    const FString CompletionMarkerPath = FPaths::Combine(
+        HistoryDirectory, SafeTransactionId + TEXT(".completed.json"));
+    const FString GeneratedOwnerPath = Blueprint->GetPathName();
+    const FString ClassId = ExpectedAssetId;
+    FString BeforeParent;
+    FString AfterParent;
+    FString ForcedParentClassPath;
+
+    FString ExistingHistoryJson;
+    const bool bHasExistingHistory = FFileHelper::LoadFileToString(
+        ExistingHistoryJson, *NativeHistoryPath);
+    if (IFileManager::Get().FileExists(*CompletionMarkerPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion marker '%s' already exists; a completed transaction cannot be materialized again."),
+            *CompletionMarkerPath);
+        return false;
+    }
+    if (Prepare.HistoryDirection.Equals(TEXT("commit"), ESearchCase::IgnoreCase))
+    {
+        if (bHasExistingHistory)
+        {
+            OutError = FString::Printf(
+                TEXT("Native publication history or completion marker '%s' already exists; recover the pending transaction before retrying."),
+                *NativeHistoryPath);
+            return false;
+        }
+        BeforeParent = CurrentParentPath;
+        AfterParent = BindingChange.After->BaseClassPath.IsSet()
+            ? BindingChange.After->BaseClassPath.GetValue()
+            : BeforeParent;
+        ForcedParentClassPath = AfterParent;
+    }
+    else
+    {
+        if (!bHasExistingHistory)
+        {
+            OutError = FString::Printf(
+                TEXT("Native history sidecar '%s' is required for %s; undo/redo cannot guess a parent."),
+                *NativeHistoryPath,
+                *Prepare.HistoryDirection);
+            return false;
+        }
+        TSharedPtr<FJsonObject> HistoryObject;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ExistingHistoryJson);
+        FString Schema;
+        FString RecordedTransaction;
+        FString RecordedClassId;
+        FString RecordedOwner;
+        FString RecordedAssetPath;
+        FString ExpectedCurrentParent;
+        if (!FJsonSerializer::Deserialize(Reader, HistoryObject) || !HistoryObject.IsValid() ||
+            !HistoryObject->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+            Schema != TEXT("unifiedscript.native-parent-history/v0.1") ||
+            !HistoryObject->TryGetStringField(TEXT("transactionId"), RecordedTransaction) ||
+            !HistoryObject->TryGetStringField(TEXT("classId"), RecordedClassId) ||
+            !HistoryObject->TryGetStringField(TEXT("generatedOwnerPath"), RecordedOwner) ||
+            !HistoryObject->TryGetStringField(TEXT("assetPath"), RecordedAssetPath) ||
+            !HistoryObject->TryGetStringField(TEXT("beforeParentClassPath"), BeforeParent) ||
+            !HistoryObject->TryGetStringField(TEXT("afterParentClassPath"), AfterParent) ||
+            !HistoryObject->TryGetStringField(TEXT("expectedCurrentParentClassPath"), ExpectedCurrentParent))
+        {
+            OutError = FString::Printf(TEXT("Native history sidecar '%s' is invalid or incomplete."), *NativeHistoryPath);
+            return false;
+        }
+        if (RecordedTransaction != HistoryId || RecordedClassId != ClassId ||
+            RecordedOwner != GeneratedOwnerPath || RecordedAssetPath != BindingChange.AssetPath)
+        {
+            OutError = FString::Printf(TEXT("Native history sidecar '%s' does not belong to the selected owner and transaction."), *NativeHistoryPath);
+            return false;
+        }
+        if (ExpectedCurrentParent != CurrentParentPath)
+        {
+            OutError = FString::Printf(
+                TEXT("Native history sidecar expected current parent '%s', but the loaded Blueprint uses '%s'."),
+                *ExpectedCurrentParent,
+                *CurrentParentPath);
+            return false;
+        }
+        if (Prepare.HistoryDirection.Equals(TEXT("undo"), ESearchCase::IgnoreCase))
+        {
+            ForcedParentClassPath = BeforeParent;
+        }
+        else if (Prepare.HistoryDirection.Equals(TEXT("redo"), ESearchCase::IgnoreCase))
+        {
+            ForcedParentClassPath = AfterParent;
+        }
+        else
+        {
+            OutError = FString::Printf(TEXT("Native history sidecar '%s' was requested with unsupported direction '%s'."), *NativeHistoryPath, *Prepare.HistoryDirection);
+            return false;
+        }
+    }
+
+    if (!ForcedParentClassPath.IsEmpty() && LoadObject<UClass>(nullptr, *ForcedParentClassPath) == nullptr)
+    {
+        OutError = FString::Printf(TEXT("Native parent history resolved missing parent class '%s'."), *ForcedParentClassPath);
+        return false;
+    }
+    if (BindingChange.After->BaseClassPath.IsSet() &&
+        BindingChange.After->BaseClassPath.GetValue() != ForcedParentClassPath)
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication source parent '%s' conflicts with the durable %s parent '%s'."),
+            *BindingChange.After->BaseClassPath.GetValue(),
+            Prepare.HistoryDirection.IsEmpty() ? TEXT("commit") : *Prepare.HistoryDirection,
+            *ForcedParentClassPath);
+        return false;
+    }
+
+    FString NativeHistoryJson;
+    if (bHasExistingHistory)
+    {
+        // Undo/Redo must carry the existing authoring history through the
+        // shared journal.  Replacing it with an empty external file would
+        // make the first successful Undo impossible to Redo.
+        TSharedPtr<FJsonObject> HistoryObject;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ExistingHistoryJson);
+        if (!FJsonSerializer::Deserialize(Reader, HistoryObject) || !HistoryObject.IsValid())
+        {
+            OutError = FString::Printf(TEXT("Native history sidecar '%s' could not be reserialized."), *NativeHistoryPath);
+            return false;
+        }
+        // The sidecar is a durable state record, so its expected parent moves
+        // with each successful Undo/Redo.  The preflight above still checks
+        // the old value against the currently loaded Blueprint.
+        HistoryObject->SetStringField(TEXT("expectedCurrentParentClassPath"), ForcedParentClassPath);
+        HistoryObject->SetStringField(TEXT("direction"), Prepare.HistoryDirection);
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&NativeHistoryJson);
+        if (!FJsonSerializer::Serialize(HistoryObject.ToSharedRef(), Writer))
+        {
+            OutError = FString::Printf(TEXT("Native history sidecar '%s' could not be updated."), *NativeHistoryPath);
+            return false;
+        }
+    }
+    else
+    {
+        TSharedRef<FJsonObject> HistoryObject = MakeShared<FJsonObject>();
+        HistoryObject->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.native-parent-history/v0.1"));
+        HistoryObject->SetStringField(TEXT("transactionId"), HistoryId);
+        HistoryObject->SetStringField(TEXT("classId"), ClassId);
+        HistoryObject->SetStringField(TEXT("generatedOwnerPath"), GeneratedOwnerPath);
+        HistoryObject->SetStringField(TEXT("assetPath"), BindingChange.AssetPath);
+        HistoryObject->SetStringField(TEXT("beforeParentClassPath"), BeforeParent);
+        HistoryObject->SetStringField(TEXT("afterParentClassPath"), AfterParent);
+        HistoryObject->SetStringField(TEXT("expectedCurrentParentClassPath"), AfterParent);
+        HistoryObject->SetStringField(TEXT("direction"), Prepare.HistoryDirection);
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&NativeHistoryJson);
+        if (!FJsonSerializer::Serialize(HistoryObject, Writer))
+        {
+            OutError = TEXT("Could not serialize the native parent history sidecar.");
+            return false;
+        }
+    }
+
+    TArray<FString> OutputPaths;
+    TSet<FString> UniquePaths;
+    FFinareBlueprintClassMaterializerOptions Options;
+    Options.JournalTransactionId = Prepare.TransactionId;
+    Options.FailAfterExternalPublicationWrite = Context.FailAfterExternalPublicationWriteForTesting;
+    Options.bOverrideParentClassPath = !ForcedParentClassPath.IsEmpty();
+    Options.ParentClassPathOverride = ForcedParentClassPath;
+    for (const FFinareNativePublicationOutput& Output : Prepare.Outputs)
+    {
+        FString Path = FPaths::ConvertRelativePathToFull(Output.Path);
+        FPaths::NormalizeFilename(Path);
+        const FString PathKey = Path.ToLower();
+        if (FPaths::IsRelative(Output.Path) || UniquePaths.Contains(PathKey))
+        {
+            OutError = TEXT("Native publication output paths must be absolute and unique.");
+            return false;
+        }
+        const bool bExists = IFileManager::Get().FileExists(*Path);
+        TArray<uint8> BaselineBytes;
+        if (bExists && !FFileHelper::LoadFileToArray(BaselineBytes, *Path))
+        {
+            OutError = FString::Printf(
+                TEXT("Native publication could not read the baseline output '%s'."),
+                *Path);
+            return false;
+        }
+        const FString BaselineDigest =
+            UE::Finare::AuthoringWorkbench::Private::ComputeSha256Digest(BaselineBytes);
+        const FString CandidateDigest =
+            UE::Finare::AuthoringWorkbench::Private::ComputeSha256Digest(Output.Content);
+        if (BaselineDigest.IsEmpty() || CandidateDigest.IsEmpty() ||
+            bExists != Output.bBaselineExists ||
+            !BaselineDigest.Equals(Output.BaselineDigest, ESearchCase::IgnoreCase) ||
+            !CandidateDigest.Equals(Output.CandidateDigest, ESearchCase::IgnoreCase))
+        {
+            OutError = FString::Printf(
+                TEXT("Native publication output baseline or candidate digest changed for '%s'; prepare must be rerun."),
+                *Path);
+            return false;
+        }
+        UniquePaths.Add(PathKey);
+        FFinareExternalPublicationFile& File = Options.ExternalPublicationFiles.AddDefaulted_GetRef();
+        File.Path = Path;
+        File.Content = Output.Content;
+    }
+    const FString HistoryPathKey = NativeHistoryPath.ToLower();
+    const FString CompletionPathKey = CompletionMarkerPath.ToLower();
+    if (UniquePaths.Contains(HistoryPathKey) || UniquePaths.Contains(CompletionPathKey))
+    {
+        OutError = TEXT("Native publication outputs collide with the reserved history or completion marker path.");
+        return false;
+    }
+    FFinareExternalPublicationFile& HistoryFile = Options.ExternalPublicationFiles.AddDefaulted_GetRef();
+    HistoryFile.Path = NativeHistoryPath;
+    FTCHARToUTF8 HistoryUtf8(*NativeHistoryJson);
+    HistoryFile.Content.Append(reinterpret_cast<const uint8*>(HistoryUtf8.Get()), HistoryUtf8.Length());
+
+    TSharedRef<FJsonObject> MarkerObject = MakeShared<FJsonObject>();
+    MarkerObject->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.native-publication-completion/v0.1"));
+    MarkerObject->SetStringField(TEXT("transactionId"), Prepare.TransactionId);
+    MarkerObject->SetStringField(TEXT("previewToken"), Prepare.PreviewToken);
+    MarkerObject->SetStringField(TEXT("classId"), ClassId);
+    MarkerObject->SetStringField(TEXT("generatedOwnerPath"), GeneratedOwnerPath);
+    MarkerObject->SetStringField(TEXT("assetPath"), BindingChange.AssetPath);
+    MarkerObject->SetStringField(TEXT("generatedClassPath"), CurrentGeneratedClassPath);
+    MarkerObject->SetStringField(TEXT("parentClassPath"), ForcedParentClassPath);
+    const FString ExpectedGeneratedSuperClassPath = !ForcedParentClassPath.IsEmpty()
+        ? ForcedParentClassPath
+        : (Blueprint->GeneratedClass != nullptr && Blueprint->GeneratedClass->GetSuperClass() != nullptr
+            ? Blueprint->GeneratedClass->GetSuperClass()->GetPathName()
+            : FString());
+    MarkerObject->SetStringField(TEXT("generatedSuperClassPath"), ExpectedGeneratedSuperClassPath);
+    MarkerObject->SetStringField(TEXT("state"), TEXT("nativeCommittedAwaitingWorkbenchAdoption"));
+    FString MarkerJson;
+    const TSharedRef<TJsonWriter<>> MarkerWriter = TJsonWriterFactory<>::Create(&MarkerJson);
+    if (!FJsonSerializer::Serialize(MarkerObject, MarkerWriter))
+    {
+        OutError = TEXT("Could not serialize the native publication completion marker.");
+        return false;
+    }
+    FFinareExternalPublicationFile& MarkerFile = Options.ExternalPublicationFiles.AddDefaulted_GetRef();
+    MarkerFile.Path = CompletionMarkerPath;
+    FTCHARToUTF8 MarkerUtf8(*MarkerJson);
+    MarkerFile.Content.Append(reinterpret_cast<const uint8*>(MarkerUtf8.Get()), MarkerUtf8.Length());
+
+    FFinareBlueprintClassSyncResult Result;
+    return FFinareBlueprintClassMaterializer::SynchronizeJson(
+        *ScriptAsset,
+        *Blueprint,
+        Prepare.ScriptAssetsJson,
+        false,
+        Result,
+        OutError,
+        Options);
+}
+
+bool FFinareAuthoringWorkbench::CanCancelNativePublication(
+    const FFinareNativePublicationPrepareResult& Prepare,
+    FString& OutError)
+{
+    OutError.Reset();
+    if (!UE::Finare::AuthoringWorkbench::Private::IsValidNativeTransactionId(Prepare.TransactionId))
+    {
+        OutError = TEXT("Native publication rollback cannot be cancelled because its transaction identity is invalid.");
+        return false;
+    }
+
+    const FString HistoryDirectory = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(), TEXT("Finare/ClassOperations/NativeHistory")));
+    const FString PendingReceiptPath = FPaths::Combine(
+        UE::Finare::ClassOperationJournal::GetPendingRoot(),
+        Prepare.TransactionId + TEXT(".json"));
+    if (IFileManager::Get().FileExists(*PendingReceiptPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication rollback is uncertain; recovery receipt '%s' is still pending."),
+            *PendingReceiptPath);
+        return false;
+    }
+
+    const FString CompletionMarkerPath = FPaths::Combine(
+        HistoryDirectory,
+        Prepare.TransactionId + TEXT(".completed.json"));
+    if (IFileManager::Get().FileExists(*CompletionMarkerPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication rollback cannot be cancelled because completion marker '%s' exists."),
+            *CompletionMarkerPath);
+        return false;
+    }
+
+    for (const FFinareNativePublicationOutput& Output : Prepare.Outputs)
+    {
+        if (FPaths::IsRelative(Output.Path))
+        {
+            OutError = TEXT("Native publication rollback cannot verify a relative output path.");
+            return false;
+        }
+        FString Path = FPaths::ConvertRelativePathToFull(Output.Path);
+        FPaths::NormalizeFilename(Path);
+        const bool bExists = IFileManager::Get().FileExists(*Path);
+        if (bExists != Output.bBaselineExists)
+        {
+            OutError = FString::Printf(
+                TEXT("Native publication rollback could not prove baseline existence for '%s'."),
+                *Path);
+            return false;
+        }
+        if (bExists)
+        {
+            TArray<uint8> Bytes;
+            if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+            {
+                OutError = FString::Printf(
+                    TEXT("Native publication rollback could not read baseline output '%s'."),
+                    *Path);
+                return false;
+            }
+            const FString Digest = UE::Finare::AuthoringWorkbench::Private::ComputeSha256Digest(Bytes);
+            if (!Digest.Equals(Output.BaselineDigest, ESearchCase::IgnoreCase))
+            {
+                OutError = FString::Printf(
+                    TEXT("Native publication rollback did not restore baseline output '%s'."),
+                    *Path);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool FFinareAuthoringWorkbench::ValidateNativeCompletionMarker(
+    const FNativePublicationContext& Context,
+    const FFinareNativePublicationPrepareResult& Prepare,
+    FString& OutError)
+{
+    OutError.Reset();
+    UFinareAsset* ScriptAsset = Context.ScriptAsset.Get();
+    UFinareBlueprint* Blueprint = Context.Blueprint.Get();
+    if (!IsValid(ScriptAsset) || !IsValid(Blueprint) || Prepare.TransactionId.IsEmpty() ||
+        Prepare.PreviewToken.IsEmpty())
+    {
+        OutError = TEXT("Native publication completion has no valid captured owner or transaction identity.");
+        return false;
+    }
+
+    const FString PendingReceiptPath = FPaths::Combine(
+        UE::Finare::ClassOperationJournal::GetPendingRoot(),
+        Prepare.TransactionId + TEXT(".json"));
+    if (IFileManager::Get().FileExists(*PendingReceiptPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion is blocked by pending recovery receipt '%s'."),
+            *PendingReceiptPath);
+        return false;
+    }
+
+    if (!UE::Finare::AuthoringWorkbench::Private::IsValidNativeTransactionId(Prepare.TransactionId))
+    {
+        OutError = TEXT("Native publication completion has an invalid transaction identity; the marker path cannot be resolved safely.");
+        return false;
+    }
+    const FString MarkerPath = FPaths::Combine(
+        FPaths::ConvertRelativePathToFull(FPaths::Combine(
+            FPaths::ProjectSavedDir(), TEXT("Finare/ClassOperations/NativeHistory"))),
+        Prepare.TransactionId + TEXT(".completed.json"));
+    FString MarkerJson;
+    if (!FFileHelper::LoadFileToString(MarkerJson, *MarkerPath))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion marker '%s' is missing; keep the reservation for recovery."),
+            *MarkerPath);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Marker;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(MarkerJson);
+    FString Schema;
+    FString TransactionId;
+    FString PreviewToken;
+    FString ClassId;
+    FString GeneratedOwnerPath;
+    FString AssetPath;
+    FString GeneratedClassPath;
+    FString ParentClassPath;
+    FString GeneratedSuperClassPath;
+    FString State;
+    if (!FJsonSerializer::Deserialize(Reader, Marker) || !Marker.IsValid() ||
+        !Marker->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        !Marker->TryGetStringField(TEXT("transactionId"), TransactionId) ||
+        !Marker->TryGetStringField(TEXT("previewToken"), PreviewToken) ||
+        !Marker->TryGetStringField(TEXT("classId"), ClassId) ||
+        !Marker->TryGetStringField(TEXT("generatedOwnerPath"), GeneratedOwnerPath) ||
+        !Marker->TryGetStringField(TEXT("assetPath"), AssetPath) ||
+        !Marker->TryGetStringField(TEXT("generatedClassPath"), GeneratedClassPath) ||
+        !Marker->TryGetStringField(TEXT("parentClassPath"), ParentClassPath) ||
+        !Marker->TryGetStringField(TEXT("generatedSuperClassPath"), GeneratedSuperClassPath) ||
+        !Marker->TryGetStringField(TEXT("state"), State) ||
+        Schema != TEXT("unifiedscript.native-publication-completion/v0.1") ||
+        State != TEXT("nativeCommittedAwaitingWorkbenchAdoption"))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion marker '%s' is invalid or incomplete."),
+            *MarkerPath);
+        return false;
+    }
+    const FString ExpectedClassId = TEXT("us_") +
+        ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower();
+    if (TransactionId != Prepare.TransactionId || PreviewToken != Prepare.PreviewToken ||
+        ClassId != ExpectedClassId || GeneratedOwnerPath != Blueprint->GetPathName() ||
+        AssetPath != ScriptAsset->DeclarationAssetPath ||
+        GeneratedClassPath != ScriptAsset->GeneratedClassPath.ToString() ||
+        Context.ScriptAssetObjectPath != ScriptAsset->GetPathName() ||
+        Context.ScriptClassId != ScriptAsset->ScriptClassId ||
+        Context.ScriptTypeName != ScriptAsset->ScriptTypeName ||
+        Context.GeneratedOwnerPath != Blueprint->GetPathName() ||
+        Context.GeneratedClassPath != ScriptAsset->GeneratedClassPath.ToString() ||
+        ParentClassPath != (Blueprint->ParentClass != nullptr
+            ? Blueprint->ParentClass->GetPathName()
+            : FString()) ||
+        GeneratedSuperClassPath != (Blueprint->GeneratedClass != nullptr &&
+                Blueprint->GeneratedClass->GetSuperClass() != nullptr
+            ? Blueprint->GeneratedClass->GetSuperClass()->GetPathName()
+            : FString()))
+    {
+        OutError = FString::Printf(
+            TEXT("Native publication completion marker '%s' does not match the captured owner or exact transaction token."),
+            *MarkerPath);
+        return false;
+    }
     return true;
 }
 
