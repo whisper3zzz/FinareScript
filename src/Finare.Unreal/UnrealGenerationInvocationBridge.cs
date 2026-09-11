@@ -21,6 +21,7 @@ internal sealed class UnrealGenerationInvocationBridge :
 {
     private readonly IUnrealInvocationBridge _inner;
     private readonly List<IUnrealEventSubscription> _subscriptions = [];
+    private readonly Dictionary<IUnrealEventSubscription, Exception> _reportedEventFailures = [];
     private bool _disposed;
     private readonly object _nativeObjectGate = new();
     private UnrealNativeObjectScope? _nativeObjects;
@@ -191,12 +192,44 @@ internal sealed class UnrealGenerationInvocationBridge :
             }
         }
         _subscriptions.Clear();
+        _reportedEventFailures.Clear();
         if (failures is not null)
         {
             throw new AggregateException(
                 "One or more reflected event subscriptions failed to release.",
                 failures);
         }
+    }
+
+    /// <summary>
+    /// Returns each reflected event failure once for this script generation.
+    /// The transport keeps the failure latched, so a later successful event
+    /// cannot erase a failure before the owning script tick reports it.
+    /// </summary>
+    internal Exception? ConsumePendingEventFailure()
+    {
+        List<Exception>? failures = null;
+        foreach (IUnrealEventSubscription subscription in _subscriptions)
+        {
+            Exception? failure = subscription.LastDispatchException;
+            if (failure is null ||
+                (_reportedEventFailures.TryGetValue(subscription, out Exception? reported) &&
+                    ReferenceEquals(reported, failure)))
+            {
+                continue;
+            }
+            _reportedEventFailures[subscription] = failure;
+            (failures ??= []).Add(failure);
+        }
+
+        return failures switch
+        {
+            null => null,
+            { Count: 1 } => failures[0],
+            _ => new AggregateException(
+                "One or more reflected Unreal event handlers failed.",
+                failures),
+        };
     }
 
     public void Dispose()

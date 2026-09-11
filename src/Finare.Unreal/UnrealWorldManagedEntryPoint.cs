@@ -1213,7 +1213,25 @@ public static class UnrealWorldManagedEntryPoint
                 {
                     return UnrealWorldManagedEntryStatus.ScriptNotFound;
                 }
+                if (script.ConsumePendingEventFailure() is { } pendingEventFailure)
+                {
+                    ReportBoundaryFailure(
+                        _worldId,
+                        instanceId,
+                        nameof(TickScript),
+                        pendingEventFailure);
+                    return UnrealWorldManagedEntryStatus.InternalFailure;
+                }
                 script.Tick(deltaSeconds);
+                if (script.ConsumePendingEventFailure() is { } eventFailure)
+                {
+                    ReportBoundaryFailure(
+                        _worldId,
+                        instanceId,
+                        nameof(TickScript),
+                        eventFailure);
+                    return UnrealWorldManagedEntryStatus.InternalFailure;
+                }
                 return UnrealWorldManagedEntryStatus.Success;
             }
         }
@@ -1713,6 +1731,9 @@ public static class UnrealWorldManagedEntryPoint
                 deltaSeconds);
             _ = current.Prewarm.Start();
         }
+
+        public Exception? ConsumePendingEventFailure() =>
+            _current.Bridge.ConsumePendingEventFailure();
 
         public bool IsProfilerEnabled => _profiler.Enabled;
 

@@ -1736,17 +1736,17 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
                 }
             }
             box.Handler.DynamicInvoke(arguments);
-            box.LastDispatchException = null;
         }
         catch (Exception exception)
         {
             if (box is not null)
             {
-                box.LastDispatchException =
+                Volatile.Write(
+                    ref box.LastDispatchException,
                     exception is System.Reflection.TargetInvocationException invocation &&
                     invocation.InnerException is not null
                         ? invocation.InnerException
-                        : exception;
+                        : exception);
             }
         }
         finally
