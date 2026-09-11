@@ -22,6 +22,51 @@ function Get-FinareBuildGraphNormalizedPath {
     return [IO.Path]::GetFullPath($Path).Replace('\', '/').ToLowerInvariant()
 }
 
+function Get-FinareBuildGraphOrdinalStrings {
+    param(
+        [AllowNull()][object[]]$Values
+    )
+
+    $ordered = [Collections.Generic.List[string]]::new()
+    foreach ($value in @($Values)) {
+        if ($null -ne $value) {
+            [void]$ordered.Add([string]$value)
+        }
+    }
+    $ordered.Sort([StringComparer]::Ordinal)
+    return $ordered.ToArray()
+}
+
+function Get-FinareBuildGraphOrderedPaths {
+    param(
+        [AllowNull()][object[]]$Paths
+    )
+
+    # Windows path identity is case-insensitive, but ordering must not depend
+    # on PS5 NLS versus PS7 ICU collation.
+    $pathByIdentity = [Collections.Generic.Dictionary[string, string]]::new(
+        [StringComparer]::Ordinal)
+    foreach ($candidate in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate)) {
+            continue
+        }
+        $fullPath = [IO.Path]::GetFullPath([string]$candidate)
+        $identity = Get-FinareBuildGraphNormalizedPath -Path $fullPath
+        if (-not $pathByIdentity.ContainsKey($identity)) {
+            $pathByIdentity.Add($identity, $fullPath)
+        }
+    }
+
+    $identities = [Collections.Generic.List[string]]::new()
+    foreach ($identity in $pathByIdentity.Keys) {
+        [void]$identities.Add($identity)
+    }
+    $identities.Sort([StringComparer]::Ordinal)
+    foreach ($identity in $identities) {
+        $pathByIdentity[$identity]
+    }
+}
+
 function Get-FinareBuildGraphRelativePath {
     param(
         [Parameter(Mandatory)][string]$BaseDirectory,
@@ -46,12 +91,7 @@ function Get-FinareBuildGraphPathFingerprint {
 
     $records = [Collections.Generic.List[string]]::new()
     $missing = [Collections.Generic.List[string]]::new()
-    $normalizedPaths = @(
-        $Paths |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { [IO.Path]::GetFullPath($_) } |
-            Sort-Object -Unique
-    )
+    $normalizedPaths = @(Get-FinareBuildGraphOrderedPaths -Paths $Paths)
     foreach ($path in $normalizedPaths) {
         $identity = Get-FinareBuildGraphNormalizedPath -Path $path
         if (Test-Path -LiteralPath $path -PathType Leaf) {
@@ -60,19 +100,23 @@ function Get-FinareBuildGraphPathFingerprint {
             continue
         }
         if (Test-Path -LiteralPath $path -PathType Container) {
-            $files = @(Get-ChildItem -LiteralPath $path -Recurse -File |
-                Sort-Object FullName)
-            if ($files.Count -eq 0) {
-                $records.Add("directory|$identity|empty")
-                continue
-            }
-            foreach ($file in $files) {
+            $fileRecords = [Collections.Generic.List[string]]::new()
+            foreach ($file in @(Get-ChildItem -LiteralPath $path -Recurse -File)) {
                 $relative = (Get-FinareBuildGraphRelativePath `
                     -BaseDirectory $path `
                     -Path $file.FullName).Replace('\', '/').ToLowerInvariant()
                 $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).
                     Hash.ToLowerInvariant()
-                $records.Add("directory-file|$identity|$relative|$hash")
+                [void]$fileRecords.Add(
+                    "directory-file|$identity|$relative|$hash")
+            }
+            $fileRecords.Sort([StringComparer]::Ordinal)
+            if ($fileRecords.Count -eq 0) {
+                $records.Add("directory|$identity|empty")
+                continue
+            }
+            foreach ($fileRecord in $fileRecords) {
+                $records.Add($fileRecord)
             }
             continue
         }
@@ -82,6 +126,8 @@ function Get-FinareBuildGraphPathFingerprint {
     if ($records.Count -eq 0) {
         $records.Add('empty')
     }
+    $records.Sort([StringComparer]::Ordinal)
+    $missing.Sort([StringComparer]::Ordinal)
     return [pscustomobject]@{
         Fingerprint = Get-FinareBuildGraphTextFingerprint `
             -Text ($records -join "`n")
@@ -119,7 +165,7 @@ function Get-FinareBuildGraphNamedFingerprint {
     )
 
     $inputs = [ordered]@{}
-    foreach ($key in @($Values.Keys | Sort-Object)) {
+    foreach ($key in @(Get-FinareBuildGraphOrdinalStrings -Values $Values.Keys)) {
         $value = $Values[$key]
         $inputs[[string]$key] = if ($null -eq $value) {
             'null'
@@ -127,7 +173,7 @@ function Get-FinareBuildGraphNamedFingerprint {
             ConvertTo-Json -InputObject $value -Depth 20 -Compress
         }
     }
-    foreach ($key in @($PathInputs.Keys | Sort-Object)) {
+    foreach ($key in @(Get-FinareBuildGraphOrdinalStrings -Values $PathInputs.Keys)) {
         $paths = @($PathInputs[$key])
         $fingerprint = Get-FinareBuildGraphPathFingerprint -Paths $paths
         $inputs[[string]$key] = $fingerprint.Fingerprint
@@ -209,15 +255,16 @@ function Get-FinareBuildGraphStageDecision {
         -Values $Values `
         -PathInputs $PathInputs
     $dependencyFingerprints = [ordered]@{}
-    foreach ($dependency in $Dependencies) {
+    foreach ($dependency in @(Get-FinareBuildGraphOrdinalStrings -Values $Dependencies)) {
         if (-not $Context.CurrentStages.Contains($dependency)) {
             throw "Build graph stage '$Name' requires unevaluated dependency '$dependency'."
         }
         $dependencyFingerprints[$dependency] =
             $Context.CurrentStages[$dependency].dependencyFingerprint
     }
-    $dependencyRecords = @($dependencyFingerprints.Keys |
-        ForEach-Object { "$_=$($dependencyFingerprints[$_])" })
+    $dependencyRecords = @(
+        Get-FinareBuildGraphOrdinalStrings -Values $dependencyFingerprints.Keys |
+            ForEach-Object { "$_=$($dependencyFingerprints[$_])" })
     $inputFingerprint = Get-FinareBuildGraphTextFingerprint -Text (
         "direct=$($named.Fingerprint)`n" + ($dependencyRecords -join "`n"))
     $outputSnapshot = Get-FinareBuildGraphPathFingerprint -Paths $OutputPaths
@@ -284,9 +331,7 @@ function Get-FinareBuildGraphStageDecision {
         Dependencies = $dependencyFingerprints
         InputFingerprint = $inputFingerprint
         OutputFingerprint = $outputSnapshot.Fingerprint
-        OutputPaths = @($OutputPaths |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { [IO.Path]::GetFullPath($_) })
+        OutputPaths = @(Get-FinareBuildGraphOrderedPaths -Paths $OutputPaths)
         MissingOutputs = @($outputSnapshot.Missing)
     }
 }
