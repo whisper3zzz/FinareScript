@@ -183,6 +183,34 @@ public sealed class UnrealReflectionJsonTests
             }));
     }
 
+    [Fact]
+    public void PreservesBlueprintFunctionNamesWithSpaces()
+    {
+        const string functionName = "Health Changed";
+        UnrealReflectionManifest manifest = UnrealReflectionManifest.Create(
+            new UnrealEngineIdentity(5, 8, 1, "UE5"),
+            ["FixtureRuntime"],
+            [Type("/Script/FixtureRuntime.FixtureObject", "FixtureObject", "FixtureRuntime") with
+            {
+                Functions =
+                [
+                    Function(
+                        "/Script/FixtureRuntime.FixtureObject:Health Changed",
+                        functionName),
+                ],
+            }]);
+
+        string json = UnrealReflectionJson.Serialize(manifest, writeIndented: false);
+        UnrealReflectionManifest roundTripped = UnrealReflectionJson.Deserialize(json);
+
+        UnrealReflectedFunction function = Assert.Single(roundTripped.Types[0].Functions);
+        Assert.Equal(functionName, function.Name);
+        Assert.Equal(
+            "/Script/FixtureRuntime.FixtureObject:Health Changed",
+            function.Path);
+        Assert.Equal(json, UnrealReflectionJson.Serialize(roundTripped, writeIndented: false));
+    }
+
     private static UnrealReflectedType Type(string path, string name, string module) => new(
         path,
         name,

@@ -158,7 +158,7 @@ public static class UnrealReflectionJson
         foreach (UnrealReflectedFunction? function in type.Functions)
         {
             if (function is null ||
-                !IsIdentifier(function.Name) ||
+                !IsUnrealFunctionName(function.Name) ||
                 !IsFunctionPath(function.Path, type.Path, function.Name) ||
                 function.Parameters is null || function.Traits is null ||
                 !Enum.IsDefined(function.Traits.NativeAccess) ||
@@ -408,6 +408,11 @@ public static class UnrealReflectionJson
         (char.IsLetter(value[0]) || value[0] == '_') &&
         value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
 
+    private static bool IsUnrealFunctionName(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+        !value.Any(static character => char.IsControl(character) || character is ':' or '(' or ')');
+
     private static bool IsScriptInterfaceNativeName(string value) =>
         value.StartsWith("TScriptInterface<I", StringComparison.Ordinal) &&
         value.EndsWith('>') &&
@@ -441,7 +446,7 @@ public static class UnrealReflectionJson
         string prefix = $"{ownerPath}:{memberName}";
         return string.Equals(path, prefix, StringComparison.Ordinal) ||
             path.StartsWith(prefix + "(", StringComparison.Ordinal) &&
-            path.EndsWith(')') && !path.Any(char.IsWhiteSpace);
+            path.EndsWith(')') && !path[prefix.Length..].Any(char.IsWhiteSpace);
     }
 
     private static void ValidateMetadata(UnrealBlueprintMetadata? metadata, string context)
