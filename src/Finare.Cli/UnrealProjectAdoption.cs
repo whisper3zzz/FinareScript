@@ -162,8 +162,10 @@ internal static partial class UnrealProjectAdoptionService
 
         AdoptionSdkLayout layout = ResolveSdkLayout(options.SdkRoot);
         UnrealProjectAdoptionTransaction? previous = ReadCurrentTransaction(projectRoot);
-        bool maintainProductNativeHost = previous?.Files.Any(static file =>
-            file.Kind == "native-host") == true;
+        IReadOnlyList<UnrealProjectAdoptionTransaction> ownershipHistory =
+            ReadTransactionAncestry(projectRoot, previous);
+        bool maintainProductNativeHost = ownershipHistory.Any(static transaction =>
+            transaction.Files.Any(static file => file.Kind == "native-host"));
         ProjectMetadata metadata = ReadProjectMetadata(
             projectPath,
             projectName,
@@ -292,20 +294,28 @@ internal static partial class UnrealProjectAdoptionService
             string normalizedInstalledRelative = NormalizeRelative(installedRelative);
             bool isGeneratedSource = IsMutableGeneratedPluginSource(relative);
             string installedPath = ResolveContainedPath(projectRoot, normalizedInstalledRelative);
+            bool configuredGeneratedOutput = isGeneratedSource &&
+                IsConfiguredGeneratedOutputPath(projectRoot, normalizedInstalledRelative);
+            bool hasGeneratedMarkers = configuredGeneratedOutput &&
+                HasGeneratedNativeMarkers(installedPath);
             bool preserveGeneratedSource = isGeneratedSource &&
-                previous?.Files.Any(entry =>
+                ownershipHistory.Any(transaction => transaction.Files.Any(entry =>
                     entry.Kind == "generated-source" &&
                     string.Equals(
                         entry.Path,
                         normalizedInstalledRelative,
-                        PathComparison)) == true &&
-                File.Exists(installedPath);
+                        PathComparison))) &&
+                File.Exists(installedPath) &&
+                (!configuredGeneratedOutput || hasGeneratedMarkers);
             AddDesired(
                 desired,
                 projectRoot,
                 installedRelative,
                 isGeneratedSource ? "generated-source" : "plugin",
-                File.ReadAllBytes(preserveGeneratedSource ? installedPath : sourcePath));
+                File.ReadAllBytes(
+                    preserveGeneratedSource
+                        ? installedPath
+                        : sourcePath));
         }
         foreach (string sourcePath in Directory.EnumerateFiles(layout.RuntimeRoot, "*", SearchOption.TopDirectoryOnly)
                      .OrderBy(static path => path, PathComparer))
@@ -457,7 +467,7 @@ internal static partial class UnrealProjectAdoptionService
                 action = "update";
                 reason = "The Finare plugin entry will be merged while preserving other project fields.";
             }
-            else if (IsOwnedAndUnmodified(previous, item.RelativePath, currentHash))
+            else if (IsOwnedAndUnmodified(ownershipHistory, item.RelativePath, currentHash))
             {
                 action = "update";
                 reason = "The file matches the last adopted version and can be upgraded safely.";
@@ -676,7 +686,6 @@ internal static partial class UnrealProjectAdoptionService
         {
             string target = ResolveContainedPath(projectRoot, entry.Path);
             if (!File.Exists(target) ||
-                entry.Kind != "generated-source" &&
                 !string.Equals(Hash(File.ReadAllBytes(target)), entry.DesiredSha256, StringComparison.Ordinal))
             {
                 throw new InvalidDataException(
@@ -1319,18 +1328,134 @@ internal static partial class UnrealProjectAdoptionService
         files.Count(static file => file.Action == "conflict"));
 
     private static bool IsOwnedAndUnmodified(
-        UnrealProjectAdoptionTransaction? previous,
+        IReadOnlyList<UnrealProjectAdoptionTransaction> ownershipHistory,
         string relativePath,
         string? currentHash)
     {
-        if (previous is null || currentHash is null)
+        if (ownershipHistory.Count == 0 || currentHash is null)
         {
             return false;
         }
-        UnrealProjectAdoptionTransactionEntry? entry = previous.Files.FirstOrDefault(
-            candidate => string.Equals(candidate.Path, relativePath, PathComparison));
-        return entry is not null &&
-            string.Equals(entry.DesiredSha256, currentHash, StringComparison.Ordinal);
+        foreach (UnrealProjectAdoptionTransaction transaction in ownershipHistory)
+        {
+            UnrealProjectAdoptionTransactionEntry? entry = transaction.Files.FirstOrDefault(
+                candidate => string.Equals(candidate.Path, relativePath, PathComparison));
+            if (entry is not null)
+            {
+                return string.Equals(entry.DesiredSha256, currentHash, StringComparison.Ordinal);
+            }
+        }
+        return false;
+    }
+
+    private static IReadOnlyList<UnrealProjectAdoptionTransaction> ReadTransactionAncestry(
+        string projectRoot,
+        UnrealProjectAdoptionTransaction? current)
+    {
+        if (current is null)
+        {
+            return [];
+        }
+        string transactionsRoot = Path.Combine(GetAdoptionRoot(projectRoot), "transactions");
+        var history = new List<UnrealProjectAdoptionTransaction>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        UnrealProjectAdoptionTransaction? cursor = current;
+        while (cursor is not null)
+        {
+            ValidateTransactionId(cursor.TransactionId);
+            if (!visited.Add(cursor.TransactionId))
+            {
+                throw new InvalidDataException(
+                    $"Adoption transaction ancestry contains a cycle at '{cursor.TransactionId}'.");
+            }
+            history.Add(cursor);
+            if (string.IsNullOrWhiteSpace(cursor.PreviousTransactionId))
+            {
+                break;
+            }
+            ValidateTransactionId(cursor.PreviousTransactionId);
+            string transactionPath = Path.Combine(
+                ResolveContainedPath(transactionsRoot, cursor.PreviousTransactionId),
+                "transaction.json");
+            UnrealProjectAdoptionTransaction ancestor = ReadJson<UnrealProjectAdoptionTransaction>(transactionPath);
+            ValidateSchema(ancestor.SchemaVersion, TransactionSchemaVersion, "adoption transaction ancestry");
+            if (ancestor.Status != "applied" ||
+                !string.Equals(ancestor.TransactionId, cursor.PreviousTransactionId, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Adoption transaction ancestry entry '{cursor.PreviousTransactionId}' is inconsistent.");
+            }
+            cursor = ancestor;
+        }
+        return history;
+    }
+
+    private static bool IsConfiguredGeneratedOutputPath(
+        string projectRoot,
+        string relativePath)
+    {
+        string configPath = Path.Combine(projectRoot, "Config", "Finare.onboarding.json");
+        if (!File.Exists(configPath))
+        {
+            return false;
+        }
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(configPath));
+            if (!document.RootElement.TryGetProperty("bindings", out JsonElement bindings) ||
+                !bindings.TryGetProperty("nativeOutput", out JsonElement nativeOutput) ||
+                nativeOutput.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+            string configuredPath = Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(configPath)!,
+                nativeOutput.GetString()!));
+            string configuredRelative = NormalizeRelative(Path.GetRelativePath(projectRoot, configuredPath));
+            if (!string.Equals(configuredRelative, relativePath, PathComparison))
+            {
+                return false;
+            }
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasGeneratedNativeMarkers(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+        try
+        {
+            string[] lines = File.ReadAllLines(path);
+            return lines.Any(static line => line.TrimStart().StartsWith("// <auto-generated", StringComparison.Ordinal)) &&
+                lines.Any(static line => line.Contains("FinareGeneratedThunks.h", StringComparison.Ordinal)) &&
+                lines.Any(static line => line.Contains("namespace UE::Finare::Generated", StringComparison.Ordinal));
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    private static void ValidateTransactionId(string? transactionId)
+    {
+        if (string.IsNullOrWhiteSpace(transactionId) ||
+            transactionId.Any(static character =>
+                !(char.IsLetterOrDigit(character) || character is '-' or '_')))
+        {
+            throw new InvalidDataException(
+                $"Adoption transaction id '{transactionId}' is invalid or escapes its state directory.");
+        }
     }
 
     private static UnrealProjectAdoptionTransaction? ReadCurrentTransaction(string projectRoot)
@@ -1343,6 +1468,7 @@ internal static partial class UnrealProjectAdoptionService
         }
         UnrealProjectAdoptionCurrentState state = ReadJson<UnrealProjectAdoptionCurrentState>(currentPath);
         ValidateSchema(state.SchemaVersion, CurrentStateSchemaVersion, "adoption current state");
+        ValidateTransactionId(state.TransactionId);
         string transactionPath = Path.Combine(
             ResolveContainedPath(Path.Combine(adoptionRoot, "transactions"), state.TransactionId),
             "transaction.json");
