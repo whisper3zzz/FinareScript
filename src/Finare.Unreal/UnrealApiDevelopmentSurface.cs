@@ -394,7 +394,16 @@ public sealed class UnrealApiDevelopmentSurfacePlanner
         int openDecisionCount = decisions.Count(static decision =>
             decision.Status is not ("selected" or "already-selected"));
         bool applied = openDecisionCount == 0;
-        UnrealApiContract effective = applied ? proposal.ProposedContract : normalizedContract;
+        UnrealApiContract effective = normalizedContract;
+        if (applied)
+        {
+            // Discovery contracts are intentionally retained in the review
+            // proposal, but the applied result is the deterministic explicit
+            // selection consumed by every generated output.
+            effective = UnrealApiContractProjector.Project(
+                reflection,
+                proposal.ProposedContract).EffectiveContract;
+        }
         var summary = new UnrealApiDevelopmentSurfaceSummary(
             decisions.Length,
             decisions.Count(static decision => decision.Status == "selected"),

@@ -2,9 +2,9 @@
 
 Finare ships a versioned project-template catalog and a searchable API/
 diagnostic browser. Both are project-owned surfaces: templates create ordinary
-source/configuration files, while the browser is regenerated from the exact
-Unreal API Contract, node catalog, and coverage report used by bindings and the
-editor palette.
+source/configuration files, while the browser is regenerated from the same
+source-resolved UE surface, node catalog, and coverage report used by bindings
+and the editor palette. New projects do not create an API Contract or binding lock.
 
 ## Template catalog
 
@@ -14,7 +14,7 @@ templates:
 
 | ID | Starting point | Product boundary |
 | --- | --- | --- |
-| `minimal` | lifecycle, exposed state, one Visual method | no game-specific API or replication |
+| `minimal` | ordinary C#, lifecycle, exposed state, source-driven bindings | no game-specific API or replication |
 | `visual-gameplay` | structured health/shield/movement policy | no network authority or project Actor bindings |
 | `data-plane` | World-scoped command buffer and batch trace | no project-specific semantics or portable benchmark claim |
 
@@ -82,7 +82,7 @@ not invent a runtime route.
 
 ```powershell
 finare ue-bindings Generated/Game.reflection.json `
-  --contract Contracts/Game.unreal-api-contract.json `
+  --project Managed/Game.Finare/Game.Finare.csproj --namespace Game.Finare.Generated `
   --out Managed/Game.Finare/Generated/Unreal.bindings.generated.cs `
   --native-out Plugins/Finare/Source/Game/Generated/Game.thunks.cpp `
   --nodes-out Generated/Game.api-nodes.json `
@@ -91,13 +91,10 @@ finare ue-bindings Generated/Game.reflection.json `
   --fail-on-rejected
 ```
 
-New adopted projects first run `ue-surface-expand` inside project-local Setup.
-It emits the versioned source request set, development Contract, and
-development-surface decision report. Only a completely safe result becomes the
-effective `--contract` input shown above; an ambiguous, missing, manual, or
-unsupported request keeps the reviewed base Contract unchanged and emits an
-exact source-linked diagnostic. This preserves one identity across all five
-generated consumers without requiring a Contract edit before first Play.
+Setup discovers UE types and resolves source references in memory. Missing,
+ambiguous or unsupported references report their C# locations and prevent partial
+output replacement. C++, C#, nodes, browser and coverage share the same selection.
+No request, Contract, overlay or frozen lock files are created or accepted.
 
 `setup-unreal-project.ps1` regenerates and byte-compares the browser during its
 determinism phase. New scaffold configurations declare `bindings.browserOutput`;

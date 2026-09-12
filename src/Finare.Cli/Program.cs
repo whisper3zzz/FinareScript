@@ -163,16 +163,6 @@ internal static class Program
             return RunUnrealBindings(args);
         }
 
-        if (args.Count > 0 && args[0] == "ue-contract-propose")
-        {
-            return RunUnrealContractProposal(args);
-        }
-
-        if (args.Count > 0 && args[0] == "ue-surface-expand")
-        {
-            return RunUnrealDevelopmentSurface(args);
-        }
-
         if (args.Count > 0 && args[0] == "ue-reflection-hints")
         {
             return RunUnrealReflectionHints(args);
@@ -1064,22 +1054,6 @@ internal static class Program
             return 66;
         }
 
-        if (options.ContractPath is not null && !File.Exists(options.ContractPath))
-        {
-            Console.Error.WriteLine($"Unreal API contract does not exist: {options.ContractPath}");
-            return 66;
-        }
-        if (options.NodeCatalogOutputPath is not null && options.ContractPath is null)
-        {
-            Console.Error.WriteLine("--nodes-out requires --contract so visual nodes share the shipped API allowlist.");
-            return 64;
-        }
-        if (options.BrowserOutputPath is not null && options.ContractPath is null)
-        {
-            Console.Error.WriteLine("--browser-out requires --contract so the browser shares the shipped API allowlist.");
-            return 64;
-        }
-
         string fullManifestPath = Path.GetFullPath(options.ManifestPath);
         string fullOutputPath = Path.GetFullPath(options.OutputPath);
         string? fullNativeOutputPath = options.NativeOutputPath is null
@@ -1088,18 +1062,15 @@ internal static class Program
         string? fullReportPath = options.ReportPath is null
             ? null
             : Path.GetFullPath(options.ReportPath);
-        string? fullContractPath = options.ContractPath is null
-            ? null
-            : Path.GetFullPath(options.ContractPath);
         string? fullNodeCatalogOutputPath = options.NodeCatalogOutputPath is null
             ? null
             : Path.GetFullPath(options.NodeCatalogOutputPath);
         string? fullBrowserOutputPath = options.BrowserOutputPath is null
             ? null
             : Path.GetFullPath(options.BrowserOutputPath);
-        string[] inputPaths = fullContractPath is null
-            ? [fullManifestPath]
-            : [fullManifestPath, fullContractPath];
+        string[] inputPaths = new[] { fullManifestPath }
+            .Concat(options.ProjectPaths.Select(Path.GetFullPath))
+            .Concat(options.NativeExtensionsPath is null ? [] : new[] { Path.GetFullPath(options.NativeExtensionsPath) }).ToArray();
         string[] outputPaths = new[]
         {
             fullOutputPath,
@@ -1110,7 +1081,7 @@ internal static class Program
         }.Where(static path => path is not null).Cast<string>().ToArray();
         if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
         {
-            throw new ArgumentException("Unreal contract generation output paths must be distinct.");
+            throw new ArgumentException("Unreal binding generation output paths must be distinct.");
         }
         foreach (string inputPath in inputPaths)
         {
@@ -1119,25 +1090,93 @@ internal static class Program
                 EnsureDifferentPath(
                     inputPath,
                     outputPath,
-                    "Unreal contract generation cannot overwrite its reflection or contract input.");
+                    "Unreal binding generation cannot overwrite its reflection or project input.");
             }
         }
 
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(
             File.ReadAllText(fullManifestPath));
+        if (options.NativeExtensionsPath is not null)
+            manifest = UnrealNativeExtensions.Apply(manifest, LoadNativeExtensions(options.NativeExtensionsPath));
         UnrealApiContractProjection? projection = null;
         string managedNamespace = options.Namespace;
         string nativeHeader = options.NativeHeader;
         string nativeNamespace = options.NativeNamespace;
-        if (fullContractPath is not null)
+        if (options.ProjectPaths.Count > 0)
         {
-            UnrealApiContract contract = UnrealApiContractJson.Deserialize(
-                File.ReadAllText(fullContractPath));
-            projection = UnrealApiContractProjector.Project(manifest, contract);
+            UnrealApiContract seed = UnrealSourceBindingInput.CreateSeed(
+                managedNamespace, nativeHeader, nativeNamespace);
+            CSharpCompilationRequest source = UnrealSourceBindingInput.Load(
+                options.ProjectPaths, options.Configuration, options.DotNetPath);
+            UnrealApiSourceTypeHintSet typeHints = new UnrealApiSourceTypeHintScanner().Scan(
+                seed.ContractName, source, seed);
+            var rootTypes = new List<UnrealApiContractType>();
+            IReadOnlyDictionary<string, string> typeNames = UnrealBindingGenerator.CreateManagedTypeNames(manifest.Types);
+            var unsupportedStructFields = new UnrealBindingGenerator().Generate(manifest,
+                new UnrealBindingGeneratorOptions(managedNamespace)).Diagnostics
+                .Where(diagnostic => diagnostic.Code == "USUE2002")
+                .Select(diagnostic => diagnostic.MemberPath).ToHashSet(StringComparer.Ordinal);
+            var supportedStructs = new HashSet<string>(StringComparer.Ordinal);
+            bool addedStruct;
+            do
+            {
+                addedStruct = false;
+                foreach (UnrealReflectedType type in manifest.Types.Where(type => type.Kind == UnrealReflectedTypeKind.Struct))
+                    if (type.Properties.Any(property => property.Access.NativeAccess == UnrealNativeAccess.Public &&
+                        UnrealNativeThunkGenerator.IsNativeValueType(property.Type, false, supportedStructs)))
+                        addedStruct |= supportedStructs.Add(type.Path);
+            } while (addedStruct);
+            foreach (UnrealApiSourceTypeHint hint in typeHints.Hints)
+            {
+                UnrealReflectedType[] matches = manifest.Types
+                    .Where(type => typeNames[type.Path].TrimStart('@') == hint.ManagedTypeName).ToArray();
+                // Callback delegate declarations are emitted with their owning function signatures.
+                if (matches.Length == 0 && typeNames.Values.Contains(hint.ManagedTypeName)) continue;
+                if (matches.Length != 1)
+                {
+                    UnrealApiSourceSpan location = hint.Locations[0];
+                    Console.Error.WriteLine($"{location.SourcePath}({location.StartLine}): " +
+                        $"error USAPI3001: UE type '{hint.ManagedTypeName}' requires one reflected match; found {matches.Length}.");
+                    return 65;
+                }
+                rootTypes.Add(new UnrealApiContractType(matches[0].Path,
+                    matches[0].Kind == UnrealReflectedTypeKind.Struct
+                        ? matches[0].Properties.Where(property => !unsupportedStructFields.Contains(property.Path) &&
+                            property.Access.NativeAccess == UnrealNativeAccess.Public &&
+                            UnrealNativeThunkGenerator.IsNativeValueType(property.Type, false, supportedStructs))
+                            .Select(property => property.Name).ToArray() : []));
+            }
+            seed = seed with { Types = rootTypes };
+            UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+                seed.ContractName, source, manifest, seed);
+            UnrealApiDevelopmentSurfaceResult selection =
+                new UnrealApiDevelopmentSurfacePlanner().Plan(manifest, requests, seed);
+            if (!selection.Applied)
+            {
+                foreach (UnrealApiDevelopmentSurfaceDecision decision in selection.Decisions
+                             .Where(decision => decision.Status is not ("selected" or "already-selected")))
+                {
+                    foreach (UnrealApiSourceSpan location in decision.Locations)
+                    {
+                        Console.Error.WriteLine($"{location.SourcePath}({location.StartLine}): " +
+                            $"error {decision.Code}: {decision.Message} [{decision.SourceExpression}]");
+                    }
+                }
+                return 65;
+            }
+            projection = UnrealApiContractProjector.Project(manifest, selection.EffectiveContract);
             manifest = projection.Reflection;
-            managedNamespace = projection.Contract.ManagedNamespace;
-            nativeHeader = projection.Contract.NativeHeader;
-            nativeNamespace = projection.Contract.NativeNamespace;
+        }
+
+        if (projection is null && (fullNodeCatalogOutputPath is not null || fullBrowserOutputPath is not null))
+        {
+            UnrealApiContract selection = UnrealSourceBindingInput.CreateSeed(
+                managedNamespace, nativeHeader, nativeNamespace) with
+            {
+                Discovery = new UnrealApiContractDiscovery([], manifest.Types
+                    .Select(type => new UnrealApiContractTypeRule(type.Path)).ToArray()),
+            };
+            projection = UnrealApiContractProjector.Project(manifest, selection);
         }
 
         UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(
@@ -1229,270 +1268,6 @@ internal static class Program
         return 0;
     }
 
-    private static int RunUnrealContractProposal(IReadOnlyList<string> args)
-    {
-        if (!TryParseUnrealContractProposalArguments(
-                args,
-                out UnrealContractProposalOptions? options))
-        {
-            PrintUsage();
-            return 64;
-        }
-
-        options = options ?? throw new InvalidOperationException(
-            "Argument parsing succeeded without Unreal Contract proposal options.");
-        string[] inputPaths =
-        [
-            Path.GetFullPath(options.ReflectionPath),
-            Path.GetFullPath(options.RequestPath),
-            Path.GetFullPath(options.BaseContractPath),
-        ];
-        foreach (string inputPath in inputPaths)
-        {
-            if (!File.Exists(inputPath))
-            {
-                Console.Error.WriteLine($"Unreal Contract proposal input does not exist: {inputPath}");
-                return 66;
-            }
-        }
-
-        string fullOutputPath = Path.GetFullPath(options.OutputPath);
-        foreach (string inputPath in inputPaths)
-        {
-            EnsureDifferentPath(
-                inputPath,
-                fullOutputPath,
-                "Unreal Contract proposal cannot overwrite an input artifact.");
-        }
-
-        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(
-            File.ReadAllText(inputPaths[0]));
-        UnrealPuertsContractRequestSet requests =
-            UnrealPuertsMigrationPackageJson.DeserializeContractRequests(
-                File.ReadAllText(inputPaths[1]));
-        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
-            File.ReadAllText(inputPaths[2]));
-        UnrealApiContractProposal proposal = new UnrealApiContractProposalGenerator().Generate(
-            reflection,
-            requests,
-            contract);
-        WriteTransactionally(
-        [
-            new OutputFile(fullOutputPath, UnrealApiContractProposalJson.Serialize(proposal)),
-        ]);
-        Console.WriteLine(fullOutputPath);
-        Console.WriteLine(
-            $"requests={proposal.Summary.RequestCount}; " +
-            $"selected={proposal.Summary.SelectedCount}; " +
-            $"already-selected={proposal.Summary.AlreadySelectedCount}; " +
-            $"open={proposal.Summary.OpenDecisionCount}; review-required=true");
-        if (options.FailOnOpenDecisions && proposal.Summary.OpenDecisionCount > 0)
-        {
-            Console.Error.WriteLine(
-                "Unreal API Contract proposal has open decisions. Review the proposal before changing the shipped Contract.");
-            return 65;
-        }
-        return 0;
-    }
-
-    private static int RunUnrealDevelopmentSurface(IReadOnlyList<string> args)
-    {
-        if (!TryParseUnrealDevelopmentSurfaceArguments(
-                args,
-                out UnrealDevelopmentSurfaceOptions? options))
-        {
-            PrintUsage();
-            return 64;
-        }
-
-        options = options ?? throw new InvalidOperationException(
-            "Argument parsing succeeded without Unreal development surface options.");
-        string reflectionPath = Path.GetFullPath(options.ReflectionPath);
-        string baseContractPath = Path.GetFullPath(options.BaseContractPath);
-        string[] projectPaths = options.ProjectPaths.Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        foreach (string inputPath in new[] { reflectionPath, baseContractPath }.Concat(projectPaths))
-        {
-            if (!File.Exists(inputPath))
-            {
-                Console.Error.WriteLine($"Unreal development surface input does not exist: {inputPath}");
-                return 66;
-            }
-        }
-
-        string requestOutputPath = Path.GetFullPath(options.RequestOutputPath);
-        string overlayOutputPath = Path.GetFullPath(options.OverlayOutputPath);
-        string reportOutputPath = Path.GetFullPath(options.ReportOutputPath);
-        string? lockOutputPath = options.LockOutputPath is null
-            ? null
-            : Path.GetFullPath(options.LockOutputPath);
-        string? verifyLockPath = options.VerifyLockPath is null
-            ? null
-            : Path.GetFullPath(options.VerifyLockPath);
-        if (verifyLockPath is not null && !File.Exists(verifyLockPath))
-        {
-            Console.Error.WriteLine($"Unreal generated surface lock does not exist: {verifyLockPath}");
-            return 66;
-        }
-        string[] outputPaths = new[] { requestOutputPath, overlayOutputPath, reportOutputPath }
-            .Concat(lockOutputPath is null ? [] : [lockOutputPath])
-            .ToArray();
-        if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
-        {
-            throw new ArgumentException("Unreal development surface outputs must be distinct.");
-        }
-        foreach (string inputPath in new[] { reflectionPath, baseContractPath }.Concat(projectPaths))
-        {
-            foreach (string outputPath in outputPaths)
-            {
-                EnsureDifferentPath(
-                    inputPath,
-                    outputPath,
-                    "Unreal development surface cannot overwrite an input artifact.");
-            }
-        }
-
-        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(
-            File.ReadAllText(reflectionPath));
-        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
-            File.ReadAllText(baseContractPath));
-        var sources = new List<CSharpSourceDocument>();
-        var loadedRequests = new List<CSharpCompilationRequest>();
-        foreach (string projectPath in projectPaths)
-        {
-            CSharpProjectLoadResult loaded;
-            try
-            {
-                loaded = new CSharpProjectLoader().Load(
-                    projectPath,
-                    options: new CSharpProjectLoadOptions(
-                        options.Configuration,
-                        Restore: true,
-                        Build: false,
-                        DotNetPath: options.DotNetPath));
-            }
-            catch (CSharpProjectLoadException exception)
-            {
-                Console.Error.WriteLine(exception.Message);
-                return 65;
-            }
-            loadedRequests.Add(loaded.Request);
-            string prefix = Path.GetFileNameWithoutExtension(projectPath);
-            sources.AddRange(loaded.Request.Sources.Select(source => new CSharpSourceDocument(
-                $"{prefix}/{source.LogicalPath}",
-                source.Source)));
-        }
-
-        string[] configurationKeys = loadedRequests
-            .Select(static request => request.Settings.ConfigurationKey)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        bool[] defaultReferenceModes = loadedRequests
-            .Select(static request => request.IncludeDefaultReferences)
-            .Distinct()
-            .ToArray();
-        if (configurationKeys.Length != 1 || defaultReferenceModes.Length != 1)
-        {
-            Console.Error.WriteLine(
-                "Managed projects in one Unreal surface expansion must use compatible C# " +
-                "parse/compilation settings and default-reference policy.");
-            return 65;
-        }
-        string[] referencePaths = loadedRequests
-            .SelectMany(static request => request.ReferencePaths)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var scanRequest = new CSharpCompilationRequest(
-            "Finare.ApiSurfaceScan",
-            sources,
-            referencePaths,
-            settings: loadedRequests[0].Settings,
-            runtimeReferencePaths: referencePaths,
-            includeDefaultReferences: defaultReferenceModes[0]);
-
-        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
-            contract.ContractName,
-            scanRequest,
-            reflection,
-            contract);
-        UnrealApiDevelopmentSurfaceResult result =
-            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
-        if (verifyLockPath is not null && !result.Applied)
-        {
-            Console.Error.WriteLine(
-                "USUE3202: generated surface lock cannot be verified while API decisions are open.");
-            return 65;
-        }
-        UnrealApiGeneratedSurfaceLock? surfaceLock = result.Applied &&
-            (lockOutputPath is not null || verifyLockPath is not null)
-                ? UnrealApiGeneratedSurfaceLockJson.Create(
-                    result.ProjectName,
-                    reflection,
-                    result)
-                : null;
-        if (verifyLockPath is not null && surfaceLock is not null)
-        {
-            UnrealApiGeneratedSurfaceLock expected = UnrealApiGeneratedSurfaceLockJson.Deserialize(
-                File.ReadAllText(verifyLockPath));
-            IReadOnlyList<string> differences = UnrealApiGeneratedSurfaceLockJson.Diff(
-                expected,
-                surfaceLock);
-            if (differences.Count > 0)
-            {
-                Console.Error.WriteLine(
-                    "USUE3201: generated surface lock is stale: " +
-                    string.Join(", ", differences));
-                return 65;
-            }
-        }
-        var outputs = new List<OutputFile>
-        {
-            new(requestOutputPath, UnrealApiDependencyRequestJson.Serialize(requests)),
-            new(reportOutputPath, UnrealApiDevelopmentSurfaceJson.Serialize(result)),
-        };
-        if (result.Applied)
-        {
-            outputs.Add(new OutputFile(
-                overlayOutputPath,
-                UnrealApiContractJson.Serialize(result.EffectiveContract)));
-            if (lockOutputPath is not null && surfaceLock is not null)
-            {
-                outputs.Add(new OutputFile(
-                    lockOutputPath,
-                    UnrealApiGeneratedSurfaceLockJson.Serialize(surfaceLock)));
-            }
-        }
-        WriteTransactionally(outputs);
-
-        Console.WriteLine(requestOutputPath);
-        if (result.Applied)
-        {
-            Console.WriteLine(overlayOutputPath);
-        }
-        Console.WriteLine(reportOutputPath);
-        if (lockOutputPath is not null && surfaceLock is not null)
-        {
-            Console.WriteLine(lockOutputPath);
-        }
-        Console.WriteLine(
-            $"requests={result.Summary.RequestCount}; " +
-            $"selected={result.Summary.SelectedCount}; " +
-            $"already-selected={result.Summary.AlreadySelectedCount}; " +
-            $"open={result.Summary.OpenDecisionCount}; " +
-            $"applied={result.Applied.ToString().ToLowerInvariant()}");
-        if (options.FailOnOpenDecisions && !result.Applied)
-        {
-            Console.Error.WriteLine(
-                "Unreal API development surface has open decisions. " +
-                "No overlay Contract was written; inspect the source-linked report.");
-            return 65;
-        }
-        return 0;
-    }
-
     private static int RunUnrealReflectionHints(IReadOnlyList<string> args)
     {
         if (!TryParseUnrealReflectionHintArguments(args, out UnrealReflectionHintOptions? options))
@@ -1503,13 +1278,13 @@ internal static class Program
 
         options = options ?? throw new InvalidOperationException(
             "Argument parsing succeeded without Unreal reflection-hint options.");
-        string baseContractPath = Path.GetFullPath(options.BaseContractPath);
         string outputPath = Path.GetFullPath(options.OutputPath);
         string[] projectPaths = options.ProjectPaths.Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        foreach (string inputPath in new[] { baseContractPath }.Concat(projectPaths))
+        foreach (string inputPath in projectPaths.Concat(options.NativeExtensionsPath is null
+                     ? [] : new[] { Path.GetFullPath(options.NativeExtensionsPath) }))
         {
             if (!File.Exists(inputPath))
             {
@@ -1522,72 +1297,30 @@ internal static class Program
                 "Unreal reflection hints cannot overwrite an input artifact.");
         }
 
-        UnrealApiContract contract = UnrealApiContractJson.Deserialize(
-            File.ReadAllText(baseContractPath));
-        var sources = new List<CSharpSourceDocument>();
-        var loadedRequests = new List<CSharpCompilationRequest>();
-        foreach (string projectPath in projectPaths)
-        {
-            CSharpProjectLoadResult loaded;
-            try
-            {
-                loaded = new CSharpProjectLoader().Load(
-                    projectPath,
-                    options: new CSharpProjectLoadOptions(
-                        options.Configuration,
-                        Restore: true,
-                        Build: false,
-                        DotNetPath: options.DotNetPath));
-            }
-            catch (CSharpProjectLoadException exception)
-            {
-                Console.Error.WriteLine(exception.Message);
-                return 65;
-            }
-            loadedRequests.Add(loaded.Request);
-            string prefix = Path.GetFileNameWithoutExtension(projectPath);
-            sources.AddRange(loaded.Request.Sources.Select(source => new CSharpSourceDocument(
-                $"{prefix}/{source.LogicalPath}",
-                source.Source)));
-        }
-
-        string[] configurationKeys = loadedRequests
-            .Select(static request => request.Settings.ConfigurationKey)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        bool[] defaultReferenceModes = loadedRequests
-            .Select(static request => request.IncludeDefaultReferences)
-            .Distinct()
-            .ToArray();
-        if (configurationKeys.Length != 1 || defaultReferenceModes.Length != 1)
-        {
-            Console.Error.WriteLine(
-                "Managed projects in one Unreal reflection-hint scan must use compatible C# " +
-                "parse/compilation settings and default-reference policy.");
-            return 65;
-        }
-        string[] referencePaths = loadedRequests
-            .SelectMany(static request => request.ReferencePaths)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var scanRequest = new CSharpCompilationRequest(
-            "Finare.ReflectionHintScan",
-            sources,
-            referencePaths,
-            settings: loadedRequests[0].Settings,
-            runtimeReferencePaths: referencePaths,
-            includeDefaultReferences: defaultReferenceModes[0]);
+        UnrealApiContract contract = UnrealSourceBindingInput.CreateSeed(options.Namespace);
+        CSharpCompilationRequest scanRequest = UnrealSourceBindingInput.Load(
+            projectPaths, options.Configuration, options.DotNetPath);
         UnrealApiSourceTypeHintSet hints = new UnrealApiSourceTypeHintScanner().Scan(
             contract.ContractName,
             scanRequest,
             contract);
+        if (options.NativeExtensionsPath is not null)
+        {
+            UnrealNativeExtensionManifest extensions = LoadNativeExtensions(options.NativeExtensionsPath);
+            var nativeNames = extensions.Types.Where(type => type.Kind == UnrealReflectedTypeKind.NativeObject)
+                .Select(type => type.Path[(type.Path.LastIndexOf('.') + 1)..]).ToHashSet(StringComparer.Ordinal);
+            hints = hints with { Hints = hints.Hints.Where(hint => !nativeNames.Contains(hint.ManagedTypeName)).ToArray() };
+        }
         WriteTransactionally(
             [new OutputFile(outputPath, UnrealApiSourceTypeHintJson.Serialize(hints))]);
         Console.WriteLine(outputPath);
         Console.WriteLine($"type-hints={hints.Hints.Count}; source={hints.SourceFingerprint}");
         return 0;
     }
+
+    private static UnrealNativeExtensionManifest LoadNativeExtensions(string path) =>
+        UnrealNativeExtensions.Normalize(JsonSerializer.Deserialize<UnrealNativeExtensionManifest>(
+            File.ReadAllText(path), UnifiedJson.CreateOptions()) ?? throw new JsonException("Native declarations were empty."));
 
     private static int RunUnrealDataPlane(IReadOnlyList<string> args)
     {
@@ -1861,25 +1594,12 @@ internal static class Program
             Console.Error.WriteLine($"Puerts project scan does not exist: {options.ScanPath}");
             return 66;
         }
-        if (options.ContractPath is not null && !File.Exists(options.ContractPath))
-        {
-            Console.Error.WriteLine($"Unreal API Contract does not exist: {options.ContractPath}");
-            return 66;
-        }
-
         string fullScanPath = Path.GetFullPath(options.ScanPath);
-        string? fullContractPath = options.ContractPath is null
-            ? null
-            : Path.GetFullPath(options.ContractPath);
         UnrealPuertsProjectScan scan = UnrealPuertsProjectScanJson.Deserialize(
             File.ReadAllText(fullScanPath));
-        UnrealApiContract? contract = fullContractPath is null
-            ? null
-            : UnrealApiContractJson.Deserialize(File.ReadAllText(fullContractPath));
         UnrealPuertsMigrationPackage package = new UnrealPuertsMigrationPlanner().Generate(
             scan,
-            contract,
-            options.ManagedNamespace);
+            managedNamespace: options.ManagedNamespace);
         string fullOutputDirectory = Path.GetFullPath(options.OutputDirectory);
         OutputFile[] outputs = package.Files.Select(file => new OutputFile(
                 ResolveOutputPath(fullOutputDirectory, file.RelativePath),
@@ -1891,13 +1611,6 @@ internal static class Program
                 fullScanPath,
                 output.Path,
                 "Puerts migration package cannot overwrite its scan input.");
-            if (fullContractPath is not null)
-            {
-                EnsureDifferentPath(
-                    fullContractPath,
-                    output.Path,
-                    "Puerts migration package cannot overwrite its Contract input.");
-            }
         }
         WriteTransactionally(outputs);
         foreach (OutputFile output in outputs)
@@ -4527,9 +4240,12 @@ internal static class Program
         string? bindingNamespace = null;
         string? nativeHeader = null;
         string? nativeNamespace = null;
-        string? contractPath = null;
         string? nodeCatalogOutputPath = null;
         string? browserOutputPath = null;
+        string? nativeExtensionsPath = null;
+        var projectPaths = new List<string>();
+        string configuration = "Release";
+        string? dotNetPath = null;
         bool failOnRejected = false;
         int index = 2;
         while (index < args.Count)
@@ -4548,6 +4264,18 @@ internal static class Program
             string value = args[index++];
             switch (option)
             {
+                case "--project":
+                    projectPaths.Add(value);
+                    break;
+                case "--native-extensions" when nativeExtensionsPath is null:
+                    nativeExtensionsPath = value;
+                    break;
+                case "--configuration":
+                    configuration = value;
+                    break;
+                case "--dotnet" when dotNetPath is null:
+                    dotNetPath = value;
+                    break;
                 case "--out" when outputPath is null:
                     outputPath = value;
                     break;
@@ -4566,9 +4294,6 @@ internal static class Program
                 case "--report" when reportPath is null:
                     reportPath = value;
                     break;
-                case "--contract" when contractPath is null:
-                    contractPath = value;
-                    break;
                 case "--nodes-out" when nodeCatalogOutputPath is null:
                     nodeCatalogOutputPath = value;
                     break;
@@ -4580,7 +4305,7 @@ internal static class Program
             }
         }
 
-        if (outputPath is null)
+        if (outputPath is null || string.IsNullOrWhiteSpace(configuration))
         {
             return false;
         }
@@ -4593,158 +4318,9 @@ internal static class Program
             nativeHeader ?? "FinareGeneratedThunks.h",
             nativeNamespace ?? "UE::Finare::Generated",
             reportPath,
-            contractPath,
             nodeCatalogOutputPath,
             browserOutputPath,
-            failOnRejected);
-        return true;
-    }
-
-    private static bool TryParseUnrealContractProposalArguments(
-        IReadOnlyList<string> args,
-        out UnrealContractProposalOptions? options)
-    {
-        options = null;
-        if (args.Count < 8 || args[0] != "ue-contract-propose" ||
-            args[1].StartsWith("--", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        string reflectionPath = args[1];
-        string? requestPath = null;
-        string? baseContractPath = null;
-        string? outputPath = null;
-        bool failOnOpenDecisions = false;
-        int index = 2;
-        while (index < args.Count)
-        {
-            string option = args[index++];
-            if (option == "--fail-on-open-decisions" && !failOnOpenDecisions)
-            {
-                failOnOpenDecisions = true;
-                continue;
-            }
-            if (index >= args.Count)
-            {
-                return false;
-            }
-            string value = args[index++];
-            switch (option)
-            {
-                case "--requests" when requestPath is null:
-                    requestPath = value;
-                    break;
-                case "--base" when baseContractPath is null:
-                    baseContractPath = value;
-                    break;
-                case "--out" when outputPath is null:
-                    outputPath = value;
-                    break;
-                default:
-                    return false;
-            }
-        }
-        if (requestPath is null || baseContractPath is null || outputPath is null)
-        {
-            return false;
-        }
-        options = new UnrealContractProposalOptions(
-            reflectionPath,
-            requestPath,
-            baseContractPath,
-            outputPath,
-            failOnOpenDecisions);
-        return true;
-    }
-
-    private static bool TryParseUnrealDevelopmentSurfaceArguments(
-        IReadOnlyList<string> args,
-        out UnrealDevelopmentSurfaceOptions? options)
-    {
-        options = null;
-        if (args.Count < 10 || args[0] != "ue-surface-expand" ||
-            args[1].StartsWith("--", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        string reflectionPath = args[1];
-        var projectPaths = new List<string>();
-        string? baseContractPath = null;
-        string? requestOutputPath = null;
-        string? overlayOutputPath = null;
-        string? reportOutputPath = null;
-        string? lockOutputPath = null;
-        string? verifyLockPath = null;
-        string configuration = "Release";
-        string? dotNetPath = null;
-        bool failOnOpenDecisions = false;
-        int index = 2;
-        while (index < args.Count)
-        {
-            string option = args[index++];
-            if (option == "--fail-on-open-decisions" && !failOnOpenDecisions)
-            {
-                failOnOpenDecisions = true;
-                continue;
-            }
-            if (index >= args.Count)
-            {
-                return false;
-            }
-            string value = args[index++];
-            switch (option)
-            {
-                case "--project":
-                    projectPaths.Add(value);
-                    break;
-                case "--base" when baseContractPath is null:
-                    baseContractPath = value;
-                    break;
-                case "--requests-out" when requestOutputPath is null:
-                    requestOutputPath = value;
-                    break;
-                case "--overlay-out" when overlayOutputPath is null:
-                    overlayOutputPath = value;
-                    break;
-                case "--report" when reportOutputPath is null:
-                    reportOutputPath = value;
-                    break;
-                case "--lock-out" when lockOutputPath is null:
-                    lockOutputPath = value;
-                    break;
-                case "--verify-lock" when verifyLockPath is null:
-                    verifyLockPath = value;
-                    break;
-                case "--configuration" when configuration == "Release":
-                    configuration = value;
-                    break;
-                case "--dotnet" when dotNetPath is null:
-                    dotNetPath = value;
-                    break;
-                default:
-                    return false;
-            }
-        }
-        if (projectPaths.Count == 0 || baseContractPath is null ||
-            requestOutputPath is null || overlayOutputPath is null ||
-            reportOutputPath is null || string.IsNullOrWhiteSpace(configuration))
-        {
-            return false;
-        }
-        options = new UnrealDevelopmentSurfaceOptions(
-            reflectionPath,
-            projectPaths,
-            baseContractPath,
-            requestOutputPath,
-            overlayOutputPath,
-            reportOutputPath,
-            lockOutputPath,
-            verifyLockPath,
-            configuration,
-            dotNetPath,
-            failOnOpenDecisions);
+            failOnRejected, projectPaths, configuration, dotNetPath, nativeExtensionsPath);
         return true;
     }
 
@@ -4759,7 +4335,8 @@ internal static class Program
         }
 
         var projectPaths = new List<string>();
-        string? baseContractPath = null;
+        string? bindingNamespace = null;
+        string? nativeExtensionsPath = null;
         string? outputPath = null;
         string configuration = "Release";
         string? dotNetPath = null;
@@ -4777,8 +4354,11 @@ internal static class Program
                 case "--project":
                     projectPaths.Add(value);
                     break;
-                case "--base" when baseContractPath is null:
-                    baseContractPath = value;
+                case "--namespace" when bindingNamespace is null:
+                    bindingNamespace = value;
+                    break;
+                case "--native-extensions" when nativeExtensionsPath is null:
+                    nativeExtensionsPath = value;
                     break;
                 case "--out" when outputPath is null:
                     outputPath = value;
@@ -4793,17 +4373,16 @@ internal static class Program
                     return false;
             }
         }
-        if (projectPaths.Count == 0 || baseContractPath is null || outputPath is null ||
+        if (projectPaths.Count == 0 || bindingNamespace is null || outputPath is null ||
             string.IsNullOrWhiteSpace(configuration))
         {
             return false;
         }
         options = new UnrealReflectionHintOptions(
             projectPaths,
-            baseContractPath,
             outputPath,
             configuration,
-            dotNetPath);
+            dotNetPath, bindingNamespace, nativeExtensionsPath);
         return true;
     }
 
@@ -5058,7 +4637,6 @@ internal static class Program
 
         string scanPath = args[1];
         string? outputDirectory = null;
-        string? contractPath = null;
         string? managedNamespace = null;
         bool failOnBlockers = false;
         int index = 2;
@@ -5080,9 +4658,6 @@ internal static class Program
                 case "--out" when outputDirectory is null:
                     outputDirectory = value;
                     break;
-                case "--contract" when contractPath is null:
-                    contractPath = value;
-                    break;
                 case "--namespace" when managedNamespace is null:
                     managedNamespace = value;
                     break;
@@ -5097,7 +4672,6 @@ internal static class Program
         options = new UnrealPuertsPlanOptions(
             scanPath,
             outputDirectory,
-            contractPath,
             managedNamespace,
             failOnBlockers);
         return true;
@@ -6646,15 +6220,13 @@ internal static class Program
         "  finare execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  finare debug-serve <input.cs> --root <visual-editor-directory> [--project <project.csproj>] [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
         "  finare debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
-        "  finare ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
-        "  finare ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
-        "  finare ue-reflection-hints --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --out <type-hints.json> [--configuration <name>] [--dotnet <path>]\n" +
-        "  finare ue-surface-expand <reflection.json> --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --requests-out <requests.json> --overlay-out <development-contract.json> --report <surface.json> [--lock-out <surface-lock.json>] [--verify-lock <surface-lock.json>] [--configuration <name>] [--dotnet <path>] [--fail-on-open-decisions]\n" +
+        "  finare ue-bindings <reflection.json> --out <bindings.cs> [--project <managed.csproj> ...] [--configuration <name>] [--dotnet <path>] [--native-extensions <declarations.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  finare ue-reflection-hints --project <managed.csproj> [--project <managed.csproj>...] --namespace <name> --out <type-hints.json> [--native-extensions <declarations.json>] [--configuration <name>] [--dotnet <path>]\n" +
         "  finare ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  finare ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
         "  finare ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  finare ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
-        "  finare ue-puerts-plan <scan.json> --out <directory> [--contract <api-contract.json>] [--namespace <name>] [--fail-on-blockers]\n" +
+        "  finare ue-puerts-plan <scan.json> --out <directory> [--namespace <name>] [--fail-on-blockers]\n" +
         "  finare ue-puerts-coexist <migration-plan.json> --out <directory> [--unified <SourceType=Managed.Type>]... [--fail-on-blockers]\n" +
         "  finare ue-puerts-verify <harness.json> --puerts <evidence.json> --unified <evidence.json> --out <report.json> [--fail-on-mismatch]\n" +
         "  finare ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
@@ -6836,37 +6408,21 @@ internal static class Program
         string NativeHeader,
         string NativeNamespace,
         string? ReportPath,
-        string? ContractPath,
         string? NodeCatalogOutputPath,
         string? BrowserOutputPath,
-        bool FailOnRejected);
-
-    private sealed record UnrealContractProposalOptions(
-        string ReflectionPath,
-        string RequestPath,
-        string BaseContractPath,
-        string OutputPath,
-        bool FailOnOpenDecisions);
-
-    private sealed record UnrealDevelopmentSurfaceOptions(
-        string ReflectionPath,
+        bool FailOnRejected,
         IReadOnlyList<string> ProjectPaths,
-        string BaseContractPath,
-        string RequestOutputPath,
-        string OverlayOutputPath,
-        string ReportOutputPath,
-        string? LockOutputPath,
-        string? VerifyLockPath,
         string Configuration,
         string? DotNetPath,
-        bool FailOnOpenDecisions);
+        string? NativeExtensionsPath);
 
     private sealed record UnrealReflectionHintOptions(
         IReadOnlyList<string> ProjectPaths,
-        string BaseContractPath,
         string OutputPath,
         string Configuration,
-        string? DotNetPath);
+        string? DotNetPath,
+        string Namespace,
+        string? NativeExtensionsPath);
 
     private sealed record UnrealDataPlaneOptions(
         string SchemaPath,
@@ -6965,7 +6521,6 @@ internal static class Program
     private sealed record UnrealPuertsPlanOptions(
         string ScanPath,
         string OutputDirectory,
-        string? ContractPath,
         string? ManagedNamespace,
         bool FailOnBlockers);
 

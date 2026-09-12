@@ -20,17 +20,18 @@ if ([string]::IsNullOrWhiteSpace($DotNet)) {
 $cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $cliAssembly = Join-Path $repoRoot 'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
 $reflection = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.reflection.json'
-$contract = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.api-contract.json'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
+$nativeExtensions = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.native-extensions.json'
 $dataPlane = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.data-plane.json'
 $dataPlaneExtension = Join-Path $repoRoot `
     'samples\Unreal\BlockBreaker.data-plane-extension.json'
 $expected = [ordered]@{
-    'bindings.cs' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.bindings.cs'
-    'native-thunks.cpp' = Join-Path $repoRoot (
-        'HostProject\Plugins\Finare\Source\FinareRuntime\' +
-        'Private\Generated\FinareRuntime.native-thunks.generated.cpp')
-    'api-nodes.json' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.api-nodes.json'
-    'binding-coverage.json' = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.binding-coverage.json'
+    # Source-driven bindings follow the consuming project. ABI fixture snapshots remain
+    # covered by generator unit tests; here both source-driven runs must agree.
+    'bindings.cs' = $null
+    'native-thunks.cpp' = $null
+    'api-nodes.json' = $null
+    'binding-coverage.json' = $null
     'data-plane.g.cs' = Join-Path $repoRoot 'src\Finare.Unreal\UnrealDataPlaneLayouts.g.cs'
     'data-plane.gen.h' = Join-Path $repoRoot (
         'HostProject\Plugins\Finare\Source\FinareRuntime\' +
@@ -45,9 +46,9 @@ $expected = [ordered]@{
         'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
 }
 foreach ($required in @(
-        $DotNet, $cliProject, $reflection, $contract, $dataPlane,
+        $DotNet, $cliProject, $reflection, $managedProject, $nativeExtensions, $dataPlane,
         $dataPlaneExtension) +
-        @($expected.Values)) {
+        @($expected.Values | Where-Object { $_ })) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Deterministic-generation dependency is missing: $required"
     }
@@ -73,7 +74,9 @@ function Invoke-Generation {
     Invoke-Checked -FilePath $DotNet -Label 'Unreal binding generation' -Arguments @(
         $cliAssembly,
         'ue-bindings', $reflection,
-        '--contract', $contract,
+        '--project', $managedProject,
+        '--native-extensions', $nativeExtensions,
+        '--namespace', 'Finare.Unreal.Generated',
         '--out', (Join-Path $Destination 'bindings.cs'),
         '--native-out', (Join-Path $Destination 'native-thunks.cpp'),
         '--nodes-out', (Join-Path $Destination 'api-nodes.json'),
@@ -112,18 +115,18 @@ foreach ($entry in $expected.GetEnumerator()) {
     $secondPath = Join-Path $second $entry.Key
     $firstHash = (Get-FileHash -LiteralPath $firstPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $secondHash = (Get-FileHash -LiteralPath $secondPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $expectedHash = (Get-FileHash -LiteralPath $entry.Value -Algorithm SHA256).Hash.ToLowerInvariant()
+    $expectedHash = if ($entry.Value) { (Get-FileHash -LiteralPath $entry.Value -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null }
     if ($firstHash -ne $secondHash) {
         throw "Generated artifact is nondeterministic: $($entry.Key)"
     }
-    if ($firstHash -ne $expectedHash) {
+    if ($expectedHash -and $firstHash -ne $expectedHash) {
         throw "Checked-in generated artifact is stale: $($entry.Value)"
     }
     $artifacts += [ordered]@{
         path = $entry.Key
         sha256 = $firstHash
         matchesSecondRun = $true
-        matchesCheckedIn = $true
+        matchesCheckedIn = if ($expectedHash) { $true } else { $null }
     }
 }
 

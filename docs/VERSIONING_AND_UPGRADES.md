@@ -30,13 +30,13 @@ Each family declares exactly one upgrade strategy:
 | Action | Meaning | Examples |
 | --- | --- | --- |
 | `preserve` | Current persistent data is retained byte-for-byte. An unknown version is blocked. | Script Asset, identity sidecar, graph layout, deployment declaration |
-| `rewrite` | The current release can deserialize an explicitly listed old version, normalize it, and write the current version deterministically. | Unreal reflection v0.1-v0.3 to v0.4; API Contract v0.1 to v0.2 |
+| `rewrite` | The current release can deserialize an explicitly listed old version, normalize it, and write the current version deterministically. | Unreal reflection to the current reflected metadata schema |
 | `regenerate` | The file is derived. Delete/replace it through its declared producer using the named source of truth. | HIR, Semantics, graph, Authoring Surface, visual API nodes, coverage, generated C#/C++ |
 | `rebuild` | The file is an immutable delivery or ABI artifact. Recompile/repackage a matched managed/native set. | `.uschunk`, bootstrap/call-frame/event/shared-data/gameplay-data ABI set |
 | `manual` | No safe automated route is declared. Stop and follow a release-specific guide. | Reserved for future incompatible persistent formats |
 
 Generated C# and C++ bindings are one artifact family. They must always be
-regenerated together from the same reflection manifest and API Contract; a
+regenerated together from the same reflection metadata and C# source; a
 release never patches generated source text in place. ABI component revisions
 are likewise a matched set. Compatibility is not inferred merely because one
 side still compiles.
@@ -62,7 +62,7 @@ version, after still writing the plan.
 The plan classifies every recognized file as `current`, `rewrite`,
 `regenerate`, `rebuild`, or `blocked`. An old derived schema does not need to be
 read to be classified: its declared source of truth is sufficient to request
-regeneration. An unknown reflection or API Contract revision is blocked because
+regeneration. An unknown reflection revision is blocked because
 guessing its persistent semantics could lose project intent.
 
 ## Apply direct migrations
@@ -78,7 +78,7 @@ The first implementation directly rewrites the two families for which the
 release already has verified read-old/write-current serializers:
 
 - Unreal reflection v0.1, v0.2, or v0.3 to canonical v0.4;
-- Unreal API Contract v0.1 to canonical v0.2.
+Project API Contracts and binding locks are no longer project inputs and have no upgrade path.
 
 All migrated files and `upgrade-report.json` are committed as one filesystem
 transaction. If the scan also contains a `regenerate`, `rebuild`, or `blocked`

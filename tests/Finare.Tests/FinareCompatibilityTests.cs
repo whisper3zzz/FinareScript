@@ -16,7 +16,7 @@ public sealed class FinareCompatibilityTests
         FinareCompatibilityPolicy policy = LoadPolicy();
 
         Assert.Equal(FinareCompatibilityPolicy.CurrentSchemaVersion, policy.SchemaVersion);
-        Assert.Equal(19, policy.Families.Count);
+        Assert.Equal(17, policy.Families.Count);
         Assert.Equal(HirDocument.CurrentSchemaVersion, Family(policy, "hir").CurrentVersion);
         Assert.Equal(BoundCompilation.CurrentSchemaVersion, Family(policy, "semantics").CurrentVersion);
         Assert.Equal(GraphDocument.CurrentSchemaVersion, Family(policy, "graph").CurrentVersion);
@@ -32,12 +32,7 @@ public sealed class FinareCompatibilityTests
         Assert.Equal(
             UnrealReflectionManifest.CurrentSchemaVersion,
             Family(policy, "unreal-reflection").CurrentVersion);
-        Assert.Equal(
-            UnrealApiContract.CurrentSchemaVersion,
-            Family(policy, "unreal-api-contract").CurrentVersion);
-        Assert.Equal(
-            UnrealApiGeneratedSurfaceLock.CurrentSchemaVersion,
-            Family(policy, "unreal-api-generated-surface-lock").CurrentVersion);
+        Assert.DoesNotContain(policy.Families, family => family.Id is "unreal-api-contract" or "unreal-api-generated-surface-lock");
         Assert.Equal(
             "unifiedscript.chunk/v1.0",
             Family(policy, "compiled-program-chunk").CurrentVersion);
@@ -74,8 +69,8 @@ public sealed class FinareCompatibilityTests
             Path.Combine(fixture.Path, "current-layout.usgraph"),
             "{\"schemaVersion\":\"unifiedscript.graph-layout/v0.1\"}");
         File.WriteAllText(
-            Path.Combine(fixture.Path, "legacy-contract.json"),
-            LegacyContractJson());
+            Path.Combine(fixture.Path, "legacy-reflection.json"),
+            LegacyReflectionJson());
         File.WriteAllText(
             Path.Combine(fixture.Path, "old-derived.json"),
             "{\"schemaVersion\":\"unifiedscript.graph/v0.12\"}");
@@ -108,7 +103,7 @@ public sealed class FinareCompatibilityTests
         Assert.Equal(1, first.Summary.Blocked);
         Assert.Equal(
             FinareUpgradeDisposition.Rewrite,
-            Item(first, "legacy-contract.json").Disposition);
+            Item(first, "legacy-reflection.json").Disposition);
         Assert.Equal(
             FinareUpgradeDisposition.Regenerate,
             Item(first, "old-derived.json").Disposition);
@@ -128,22 +123,14 @@ public sealed class FinareCompatibilityTests
         string rewrittenReflection = FinareUpgradePlanner.Rewrite(
             "unreal-reflection",
             legacyReflection);
-        string rewrittenContract = FinareUpgradePlanner.Rewrite(
-            "unreal-api-contract",
-            LegacyContractJson());
 
         Assert.Equal(
             UnrealReflectionManifest.CurrentSchemaVersion,
             ReadSchemaVersion(rewrittenReflection));
         Assert.Equal(
-            UnrealApiContract.CurrentSchemaVersion,
-            ReadSchemaVersion(rewrittenContract));
-        Assert.Equal(
             rewrittenReflection,
             FinareUpgradePlanner.Rewrite("unreal-reflection", rewrittenReflection));
-        Assert.Equal(
-            rewrittenContract,
-            FinareUpgradePlanner.Rewrite("unreal-api-contract", rewrittenContract));
+        Assert.Throws<ArgumentException>(() => FinareUpgradePlanner.Rewrite("unreal-api-contract", "{}"));
     }
 
     [Fact]
@@ -153,8 +140,8 @@ public sealed class FinareCompatibilityTests
         string inputDirectory = Path.Combine(fixture.Path, "input");
         string outputDirectory = Path.Combine(fixture.Path, "output");
         Directory.CreateDirectory(inputDirectory);
-        string contractPath = Path.Combine(inputDirectory, "contract.json");
-        File.WriteAllText(contractPath, LegacyContractJson());
+        string reflectionPath = Path.Combine(inputDirectory, "reflection.json");
+        File.WriteAllText(reflectionPath, LegacyReflectionJson());
 
         int exitCode = Finare.Cli.Program.Main([
             "upgrade-apply",
@@ -167,11 +154,11 @@ public sealed class FinareCompatibilityTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(
-            UnrealApiContract.LegacySchemaVersion,
-            ReadSchemaVersion(File.ReadAllText(contractPath)));
+            UnrealReflectionManifest.PreviousSchemaVersion,
+            ReadSchemaVersion(File.ReadAllText(reflectionPath)));
         Assert.Equal(
-            UnrealApiContract.CurrentSchemaVersion,
-            ReadSchemaVersion(File.ReadAllText(Path.Combine(outputDirectory, "contract.json"))));
+            UnrealReflectionManifest.CurrentSchemaVersion,
+            ReadSchemaVersion(File.ReadAllText(Path.Combine(outputDirectory, "reflection.json"))));
         Assert.True(File.Exists(Path.Combine(outputDirectory, "upgrade-report.json")));
     }
 
@@ -182,7 +169,7 @@ public sealed class FinareCompatibilityTests
         string inputDirectory = Path.Combine(fixture.Path, "input");
         string outputDirectory = Path.Combine(fixture.Path, "output");
         Directory.CreateDirectory(inputDirectory);
-        File.WriteAllText(Path.Combine(inputDirectory, "contract.json"), LegacyContractJson());
+        File.WriteAllText(Path.Combine(inputDirectory, "reflection.json"), LegacyReflectionJson());
         File.WriteAllText(
             Path.Combine(inputDirectory, "future.json"),
             "{\"schemaVersion\":\"unifiedscript.unreal-reflection/v9.0\"}");
@@ -197,7 +184,7 @@ public sealed class FinareCompatibilityTests
         ]);
 
         Assert.Equal(65, exitCode);
-        Assert.False(File.Exists(Path.Combine(outputDirectory, "contract.json")));
+        Assert.False(File.Exists(Path.Combine(outputDirectory, "reflection.json")));
         Assert.True(File.Exists(Path.Combine(outputDirectory, "upgrade-report.json")));
     }
 
@@ -221,21 +208,10 @@ public sealed class FinareCompatibilityTests
         return document.RootElement.GetProperty("schemaVersion").GetString()!;
     }
 
-    private static string LegacyContractJson() => """
-        {
-          "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
-          "contractName": "UpgradeFixture",
-          "managedNamespace": "Finare.Generated",
-          "nativeHeader": "UpgradeFixture.h",
-          "nativeNamespace": "Finare::Generated",
-          "types": [
-            {
-              "path": "/Script/Engine.Actor",
-              "members": ["GetActorLocation"]
-            }
-          ]
-        }
-        """;
+    private static string LegacyReflectionJson() => File.ReadAllText(
+        Path.Combine(AppContext.BaseDirectory, "UnrealFixtures", "FinareRuntime.reflection.json"))
+        .Replace(UnrealReflectionManifest.CurrentSchemaVersion, UnrealReflectionManifest.PreviousSchemaVersion,
+            StringComparison.Ordinal);
 
     private sealed class TemporaryDirectory : IDisposable
     {

@@ -299,8 +299,6 @@ public static class FinareUpgradePlanner
     {
         "unreal-reflection" => UnrealReflectionJson.Serialize(
             UnrealReflectionJson.Deserialize(json)),
-        "unreal-api-contract" => UnrealApiContractJson.Serialize(
-            UnrealApiContractJson.Deserialize(json)),
         _ => throw new ArgumentException(
             $"Compatibility family '{familyId}' has no direct rewrite migration.",
             nameof(familyId)),

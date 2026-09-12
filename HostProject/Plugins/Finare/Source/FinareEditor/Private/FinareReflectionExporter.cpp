@@ -452,7 +452,7 @@ namespace UE::Finare::Private
 		Traits->SetBoolField(TEXT("pure"), Function->HasAnyFunctionFlags(FUNC_BlueprintPure));
 		Traits->SetBoolField(
 			TEXT("callable"),
-			Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure));
+			Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure | FUNC_Public));
 		if (Class->HasAnyClassFlags(CLASS_Interface) &&
 			!Function->HasAnyFunctionFlags(FUNC_Static | FUNC_BlueprintEvent))
 		{
@@ -546,9 +546,23 @@ namespace UE::Finare::Private
 		return Json;
 	}
 
+	bool IsExportedProperty(const FProperty* Property, bool bIncludePublic)
+	{
+		return !Property->HasAnyPropertyFlags(CPF_Parm) &&
+			(Property->HasAnyPropertyFlags(CPF_BlueprintVisible) ||
+			 (bIncludePublic && Property->HasAnyPropertyFlags(CPF_NativeAccessSpecifierPublic)));
+	}
+
+	bool IsExportedFunction(const UFunction* Function, bool bIncludePublic)
+	{
+		return Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure) ||
+			(bIncludePublic && Function->HasAnyFunctionFlags(FUNC_Public));
+	}
+
 	TSharedRef<FJsonObject> ExportClass(
 		const UClass* Class,
-		FFinareReflectionExportResult& Result)
+		FFinareReflectionExportResult& Result,
+		bool bIncludePublic)
 	{
 		TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
 		const FString ClassPath = Class->GetPathName();
@@ -604,8 +618,7 @@ namespace UE::Finare::Private
 				}
 				continue;
 			}
-			if (!Property->HasAnyPropertyFlags(CPF_Parm) &&
-				Property->HasAnyPropertyFlags(CPF_BlueprintVisible))
+			if (IsExportedProperty(Property, bIncludePublic))
 			{
 				Properties.Add(Property);
 			}
@@ -640,7 +653,7 @@ namespace UE::Finare::Private
 		for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
 		{
 			const UFunction* Function = *It;
-			if (Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+			if (IsExportedFunction(Function, bIncludePublic))
 			{
 				Functions.Add(Function);
 			}
@@ -809,7 +822,7 @@ namespace UE::Finare::Private
 		}
 	}
 
-	void CollectClassDependencies(const UClass* Class, TSet<const UClass*>& Classes)
+	void CollectClassDependencies(const UClass* Class, TSet<const UClass*>& Classes, bool bIncludePublic)
 	{
 		if (Class == nullptr)
 		{
@@ -835,8 +848,7 @@ namespace UE::Finare::Private
 		for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
 		{
 			const FProperty* Property = *It;
-			if ((!Property->HasAnyPropertyFlags(CPF_Parm) &&
-					Property->HasAnyPropertyFlags(CPF_BlueprintVisible)) ||
+			if (IsExportedProperty(Property, bIncludePublic) ||
 				DelegateSignature(Property) != nullptr)
 			{
 				CollectReferencedClasses(Property, Classes);
@@ -845,7 +857,7 @@ namespace UE::Finare::Private
 		for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
 		{
 			const UFunction* Function = *It;
-			if (!Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+			if (!IsExportedFunction(Function, bIncludePublic))
 			{
 				continue;
 			}
@@ -1007,6 +1019,22 @@ bool FFinareReflectionExporter::Export(
 	}
 
 	TArray<FString> ClassPaths = Options.ClassPaths;
+	TSet<FString> DiscoveryModules;
+	for (FString Module : Options.DiscoveryModules)
+	{
+		Module.TrimStartAndEndInline();
+		if (!ModuleSet.Contains(Module))
+		{
+			OutError = FText::FromString(TEXT("Discovery modules must also be selected in Modules."));
+			return false;
+		}
+		DiscoveryModules.Add(Module);
+	}
+	TSet<FString> DiscoveryTypes;
+	for (const FString& Path : Options.DiscoveryTypePaths)
+	{
+		DiscoveryTypes.Add(Path);
+	}
 	TSet<FString> ClassPathSet;
 	for (FString& ClassPath : ClassPaths)
 	{
@@ -1101,8 +1129,11 @@ bool FFinareReflectionExporter::Export(
 		{
 			continue;
 		}
-		if (ModuleSet.Contains(ModuleName(Class)) &&
-			(ClassPathSet.IsEmpty() || ClassPathSet.Contains(Class->GetPathName())))
+		if (DiscoveryTypes.Contains(Class->GetPathName()) ||
+			DiscoveryModules.Contains(ModuleName(Class)) ||
+			(ModuleSet.Contains(ModuleName(Class)) &&
+			 ((ClassPathSet.IsEmpty() && DiscoveryModules.IsEmpty() && DiscoveryTypes.IsEmpty()) ||
+			  ClassPathSet.Contains(Class->GetPathName()))))
 		{
 			if (Class->HasMetaData(InternalBindingMetadata))
 			{
@@ -1248,7 +1279,7 @@ bool FFinareReflectionExporter::Export(
 	for (int32 Index = 0; Index < Classes.Num(); ++Index)
 	{
 		TSet<const UClass*> Dependencies;
-		CollectClassDependencies(Classes[Index], Dependencies);
+		CollectClassDependencies(Classes[Index], Dependencies, Options.bIncludePublicReflected);
 		for (const UClass* Dependency : Dependencies)
 		{
 			if (Dependency == nullptr ||
@@ -1271,6 +1302,20 @@ bool FFinareReflectionExporter::Export(
 
 	TSet<const UScriptStruct*> ReferencedStructSet;
 	TSet<const UEnum*> ReferencedEnumSet;
+	for (TObjectIterator<UScriptStruct> It; It; ++It)
+	{
+		if (DiscoveryTypes.Contains(It->GetPathName()) || DiscoveryModules.Contains(ModuleName(*It)))
+		{
+			if (!It->HasMetaData(InternalBindingMetadata)) ReferencedStructSet.Add(*It);
+		}
+	}
+	for (TObjectIterator<UEnum> It; It; ++It)
+	{
+		if (DiscoveryTypes.Contains(It->GetPathName()) || DiscoveryModules.Contains(ModuleName(*It)))
+		{
+			if (!It->HasMetaData(InternalBindingMetadata)) ReferencedEnumSet.Add(*It);
+		}
+	}
 	for (const UClass* Class : Classes)
 	{
 		for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
@@ -1284,8 +1329,7 @@ bool FFinareReflectionExporter::Export(
 					CollectReferencedEnums(Property, ReferencedEnumSet);
 				}
 			}
-			else if (!Property->HasAnyPropertyFlags(CPF_Parm) &&
-				Property->HasAnyPropertyFlags(CPF_BlueprintVisible))
+			else if (IsExportedProperty(Property, Options.bIncludePublicReflected))
 			{
 				CollectReferencedStructs(Property, ReferencedStructSet);
 				CollectReferencedEnums(Property, ReferencedEnumSet);
@@ -1293,7 +1337,7 @@ bool FFinareReflectionExporter::Export(
 		}
 		for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
 		{
-			if (!It->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+			if (!IsExportedFunction(*It, Options.bIncludePublicReflected))
 			{
 				continue;
 			}
@@ -1345,6 +1389,18 @@ bool FFinareReflectionExporter::Export(
 	{
 		Modules.AddUnique(ModuleName(Enum));
 	}
+	TSet<FString> MissingDiscoveryTypes = DiscoveryTypes;
+	for (const UClass* Class : Classes) MissingDiscoveryTypes.Remove(Class->GetPathName());
+	for (const UScriptStruct* Struct : ReferencedStructs) MissingDiscoveryTypes.Remove(Struct->GetPathName());
+	for (const UEnum* Enum : ReferencedEnums) MissingDiscoveryTypes.Remove(Enum->GetPathName());
+	if (!MissingDiscoveryTypes.IsEmpty())
+	{
+		TArray<FString> Missing = MissingDiscoveryTypes.Array();
+		Missing.Sort();
+		OutError = FText::FromString(FString::Printf(TEXT("Discovery types could not be loaded: %s"),
+			*FString::Join(Missing, TEXT(", "))));
+		return false;
+	}
 	Modules.Sort();
 
 	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
@@ -1367,7 +1423,7 @@ bool FFinareReflectionExporter::Export(
 	TArray<TSharedPtr<FJsonValue>> TypeValues;
 	for (const UClass* Class : Classes)
 	{
-		TypeValues.Add(MakeShared<FJsonValueObject>(ExportClass(Class, OutResult)));
+		TypeValues.Add(MakeShared<FJsonValueObject>(ExportClass(Class, OutResult, Options.bIncludePublicReflected)));
 	}
 	for (const UScriptStruct* Struct : ReferencedStructs)
 	{

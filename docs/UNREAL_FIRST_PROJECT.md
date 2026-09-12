@@ -1,9 +1,10 @@
 # First project golden path
 
 This is the shortest supported path from an extracted Finare SDK to a
-running Script Class in an existing Unreal project. It uses only packaged or
+running C# Script Class in an existing Unreal project. The default `minimal`
+template uses ordinary C#; Graph editing is optional. It uses only packaged or
 project-local entry points: no repository checkout, direct generator command,
-or hand-edited `.uproject`, Contract, deployment, or onboarding JSON is needed.
+or hand-edited `.uproject`, deployment, or onboarding JSON is needed.
 
 For the detailed ownership and recovery model, continue with
 [First Finare in an Unreal project](UNREAL_FIRST_SCRIPT.md). After the
@@ -53,7 +54,8 @@ diff.
 
 ## 2. Build the first Script Class
 
-Run the one project-local setup entry. It owns reflection, Contract expansion,
+Run the one project-local setup entry. It discovers UE APIs referenced by your
+C# source and owns reflection, binding selection,
 managed/native bindings, Script Asset synchronization, and the initial build:
 
 ```powershell
@@ -67,6 +69,16 @@ Do not run the internal generators separately. A successful receipt is written
 under `Saved/Finare/ProjectSetup`, and Doctor should now report the
 generated surface and cook baseline as ready.
 
+You do not need to maintain a list of allowed functions. The default build reads
+C# source and UE reflection directly; it creates no Contract, request list,
+selection overlay, or binding lock. For example,
+its references to `Actor.GetActorLocation()` and `Pawn.GetController()` drive
+binding generation. The generated wrappers provide C# type checking and IDE
+completion for that generated surface. This is not yet a pre-generated IDE
+catalog of every UE API; unsupported signatures still produce diagnostics.
+Removing a call removes its unused binding on the next build. Failed selection
+leaves the previous generated outputs intact.
+
 ## 3. Place it and Play
 
 Open the project and perform these Editor actions:
@@ -78,41 +90,44 @@ Open the project and perform these Editor actions:
 4. Save the map and press Play.
 5. Inspect the host: `bScriptRunning` is true and `LastScriptError` is empty.
 
-The default script increments its exposed `StartValue` in `OnStart`. That state
+The default script increments its exposed `StartValue` in `OnBeginPlay`. That state
 change, a running host, and an empty error field are the first-Play acceptance
 receipt; opening a source file or seeing generated output alone is not.
 
-## 4. Make one C#/Graph change
+## 4. Edit C# and reload
 
-Start the project-local authoring service and keep its terminal open:
+Open the generated solution or VS Code workspace in your IDE. In
+`Managed/<assembly>/FirstScript.cs`, change
+`AddClamped(StartValue, 1)` to `AddClamped(StartValue, 2)` and save.
+Use **Build & Reload** in the Editor's Finare project setup panel.
+The running instance now adds two to its preserved state. On a fresh Play it
+starts from the configured initial state.
 
-```powershell
-powershell -ExecutionPolicy Bypass `
-  -File "$projectTools\start-finare-authoring.ps1" `
-  -Project $project `
-  -EngineRoot $engine
-```
-
-Open `SA_FirstScript` through the Content Browser. Switch between **Graph** and
-**C#** on the same Script Asset, change the clamp limit in `AddClamped`, review
-the semantic Diff and round-trip receipt, then accept it. Use **Build & Reload**
-and Play again.
+The helper uses `Math.Clamp` and has no `[Visual]` attribute. Ordinary C# bodies
+go through Roslyn and do not need to fit the Graph language profile. The Graph
+authoring service and semantic Diff acceptance are not required for this loop.
+Use the Editor action to publish changes; an IDE compile alone does not reload
+the running instances.
 
 A compatible body-only change keeps the Editor open and publishes every live
 instance together. If the receipt says `restartRequired`, use **Build, Restart
 & Continue**; Play remains blocked until the required native/reflection/schema
 stage completes. Do not work around that receipt with a partial generator run.
 
+To opt into Graph editing, adopt with `--template visual-gameplay` or mark
+eligible methods with `[Visual]`, then follow the
+[authoring workflow](UNREAL_FIRST_SCRIPT.md). Its Graph profile restrictions
+apply to those visual methods.
+
 ## 5. Know the recovery buttons
 
 - Adoption conflict: rerun Preview and inspect its exact path and hash.
 - Broken installed surface: run `doctor`, then adoption Apply for a no-change
   repair or `adopt $project --rollback` to restore the latest owned transaction.
-- C# or Graph rejection: open **Diagnostics**; the rejected transaction changes
-  no source, identity, layout, generated artifact, runtime generation, or
-  history.
-- Stale Diff: refresh the preview. A changed source revision or `.usgraph`
-  baseline invalidates the old token by design.
+- C# build failure: read the Build & Reload diagnostics, fix the source in the
+  IDE, and retry. A failed build does not publish a new runtime generation.
+- Optional Graph rejection: open **Diagnostics**. A stale Diff requires a new
+  preview; a rejected authoring transaction does not change its source or graph.
 - Native/schema change: use **Build, Restart & Continue**, not hot reload.
 
 ## Done
@@ -122,7 +137,7 @@ The golden path is complete when all of these are true:
 - Apply is repeatable and Doctor is error-free;
 - initial setup has a successful project-local receipt;
 - the placed host runs `SA_FirstScript` in Play;
-- one reviewed Graph or C# edit reaches Play through Build & Reload;
+- one ordinary C# edit reaches the running host through Build & Reload;
 - no internal generator ordering or repository path was required.
 
 Next, open the recipe index directly from the adopted project:

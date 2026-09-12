@@ -41,14 +41,15 @@
     "output": "../../samples/Unreal/FinareRuntime.reflection.json"
   },
   "bindings": {
-    "contract": "../../samples/Unreal/FinareRuntime.api-contract.json",
     "managedOutput": "../../samples/Unreal/FinareRuntime.bindings.cs",
     "nativeOutput": "../Plugins/Finare/Source/FinareRuntime/Private/Generated/FinareRuntime.native-thunks.generated.cpp",
     "nodeCatalogOutput": "../../samples/Unreal/FinareRuntime.api-nodes.json",
     "browserOutput": "../../samples/Unreal/FinareRuntime.api-browser.json",
     "coverageOutput": "../../samples/Unreal/FinareRuntime.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true
+    "requireCompleteNativeCoverage": true,
+    "namespace": "Finare.Unreal.Generated",
+    "nativeExtensions": "../../samples/Unreal/FinareRuntime.native-extensions.json"
   },
   "deployment": {
     "manifest": "../../samples/Unreal/Finare.Unreal.Demo.deployment.json",

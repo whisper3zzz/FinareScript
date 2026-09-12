@@ -64,13 +64,11 @@ the report for diagnosis.
 
 ## Migration package
 
-Generate a migration package from the scan, optionally assessing it against the
-target project's current Unreal API Contract:
+Generate a migration package from the scan:
 
 ```powershell
 dotnet run --project src/Finare.Cli -c Release -- `
   ue-puerts-plan artifacts\migration\my-game.scan.json `
-  --contract Contracts\MyGame.unreal-api-contract.json `
   --namespace MyGame.Finare.Migration `
   --out artifacts\migration\my-game `
   --fail-on-blockers
@@ -97,14 +95,10 @@ The write is transactional and produces ten deterministic files:
 - two evidence templates start every case as `pending` with `TODO` observables;
 - `migration-package.json` fingerprints and sizes every payload except itself.
 
-The planner can reuse compatible target routes instead of demanding a duplicate
-binding. Current adapters include a property write such as `StaticMesh =` to an
-existing `SetStaticMesh` Contract member, Puerts object/class loads to the
-generated resource loader, and deferred actor construction to `SpawnActor`.
-Calls that belong in the command/event data plane, World services, generated
-struct/enum support, or a deliberate dynamic rewrite remain visible requests.
-Omitting `--contract` is supported, but every static API is then `unassessed`;
-that output is planning input, not coverage proof.
+The CLI leaves static API coverage `unassessed`: a Puerts scan cannot prove that
+translated C# compiles or that a native signature is supported. Implement the C#
+port, run source-driven binding generation, then verify behavior in UE. The package
+request report is migration work input, not a binding allowlist consumed by Setup.
 
 The generated C# is a scaffold, not translated gameplay. It never fabricates
 method signatures, object ownership, lifecycle order, or behavior from regular

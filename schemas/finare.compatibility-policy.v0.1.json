@@ -97,18 +97,6 @@
       "consumer": "graph projection, compiler, and debugger"
     },
     {
-      "id": "unreal-api-contract",
-      "category": "persistentContract",
-      "currentVersion": "unifiedscript.unreal-api-contract/v0.2",
-      "readableVersions": [
-        "unifiedscript.unreal-api-contract/v0.1"
-      ],
-      "upgradeStrategy": "rewrite",
-      "sourceOfTruth": "project-owned API allowlist and policy",
-      "producer": "project authoring and compatibility upgrade",
-      "consumer": "binding, coverage, and node generators"
-    },
-    {
       "id": "unreal-api-node-catalog",
       "category": "derivedArtifact",
       "currentVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
@@ -172,16 +160,6 @@
       "sourceOfTruth": "Unreal reflection export",
       "producer": "UE Finare reflection export and compatibility upgrade",
       "consumer": "API contract projector and binding generator"
-    },
-    {
-      "id": "unreal-api-generated-surface-lock",
-      "category": "generatedContract",
-      "currentVersion": "unifiedscript.unreal-api-generated-surface-lock/v0.1",
-      "readableVersions": [],
-      "upgradeStrategy": "regenerate",
-      "sourceOfTruth": "effective Unreal API Contract and selected reflection",
-      "producer": "finare ue-surface-expand",
-      "consumer": "project Setup, team review, and CI drift gates"
     },
     {
       "id": "unreal-script-deployment",

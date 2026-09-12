@@ -33,6 +33,17 @@ int32 UFinareExportCommandlet::Main(const FString& Params)
 	}
 
 	FString ClassList;
+	FString DiscoveryModuleList;
+	if (FParse::Value(*Params, TEXT("DiscoveryModules="), DiscoveryModuleList, false))
+	{
+		DiscoveryModuleList.ParseIntoArray(Options.DiscoveryModules, TEXT(","), true);
+	}
+	FString DiscoveryTypeList;
+	if (FParse::Value(*Params, TEXT("DiscoveryTypes="), DiscoveryTypeList, false))
+	{
+		DiscoveryTypeList.ParseIntoArray(Options.DiscoveryTypePaths, TEXT(","), true);
+	}
+	Options.bIncludePublicReflected = FParse::Param(*Params, TEXT("IncludePublicReflected"));
 	if (FParse::Value(*Params, TEXT("Classes="), ClassList, false))
 	{
 		ClassList.ParseIntoArray(Options.ClassPaths, TEXT(","), true);

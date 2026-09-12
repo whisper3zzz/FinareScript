@@ -168,6 +168,12 @@ try {
     }
 
     $automationLog = Join-Path $runDirectory 'automation.log'
+    Invoke-MatrixPhase -Name 'api-discovery-fixture' -Action {
+        & (Join-Path $PSScriptRoot 'prepare-api-discovery.ps1') -EngineRoot $EngineRoot
+    }
+    Invoke-MatrixPhase -Name 'pure-csharp-fixture' -Action {
+        & (Join-Path $PSScriptRoot 'prepare-pure-csharp.ps1') -EngineRoot $EngineRoot
+    }
     Invoke-MatrixPhase -Name 'editor-automation' -Action {
         $previousErrorActionPreference = $ErrorActionPreference
         $automationExitCode = -1

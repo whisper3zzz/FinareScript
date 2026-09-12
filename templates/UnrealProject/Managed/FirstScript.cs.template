@@ -13,17 +13,7 @@ public sealed class __SCRIPT_NAME__ : UnrealActorScript
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Finare")]
     public int StartValue { get; set; } = 1;
 
-    [Visual]
-    public int AddClamped(int value, int delta)
-    {
-        int result = value + delta;
-        if (result > 100)
-        {
-            result = 100;
-        }
-
-        return result;
-    }
+    public int AddClamped(int value, int delta) => Math.Clamp(value + delta, 0, 100);
 
     protected override void OnBeginPlay()
     {

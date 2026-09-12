@@ -9,6 +9,38 @@ namespace Finare.Tests;
 public sealed class UnrealApiDevelopmentSurfaceTests
 {
     [Fact]
+    public void SourceRequestsRecognizeDiscoveryAndCannotRestoreExcludedMembers()
+    {
+        UnrealReflectionManifest reflection = LoadReflection();
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new([], [new("/Script/BindingMatrix.FixtureDerived") { IncludeMembers = ["Echo*"] }]),
+        };
+        CSharpSourceDocument source = Source("Gameplay/Discovered.cs", """
+            using Api = Finare.Tests.AutoSurface;
+            public static class Discovered
+            {
+                public static void Run(Api.FixtureDerived target) { _ = target.EchoOuter(default); }
+            }
+            """);
+        var scanner = new UnrealApiSourceDependencyScanner();
+        UnrealApiDependencyRequestSet requests = scanner.Scan("Discovered", [source], reflection, contract);
+        UnrealApiDevelopmentSurfaceResult result = new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        Assert.True(result.Applied);
+        Assert.All(result.Decisions, decision => Assert.Equal("already-selected", decision.Status));
+        Assert.Contains("EchoOuter", result.EffectiveContract.Types.Single(type => type.Path.EndsWith("FixtureDerived", StringComparison.Ordinal)).Members);
+
+        contract = contract with
+        {
+            Discovery = new([], [new("/Script/BindingMatrix.FixtureDerived") { ExcludeMembers = ["EchoOuter"] }]),
+        };
+        requests = scanner.Scan("Discovered", [source], reflection, contract);
+        Assert.Contains("exclusion", Assert.Throws<JsonException>(() =>
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract)).Message);
+    }
+
+    [Fact]
     public void SourceUseCreatesDeterministicSafeDevelopmentOverlay()
     {
         UnrealReflectionManifest reflection = LoadReflection();
@@ -487,85 +519,6 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
-    public void GeneratedSurfaceLockIsDeterministicLocalizedAndStaleSafe()
-    {
-        UnrealReflectionManifest reflection = LoadReflection();
-        UnrealApiContract contract = CreateContract();
-        UnrealApiDependencyRequestSet initialRequests = new UnrealApiSourceDependencyScanner().Scan(
-            "SurfaceLockProject",
-            [Source(
-                "Gameplay/SurfaceLock.cs",
-                """
-                using Finare.Tests.AutoSurface;
-
-                public static class SurfaceLock
-                {
-                    public static void Run(FixtureDerived target)
-                    {
-                        _ = target.EchoOuter(default);
-                        _ = target.Spawn(1, false);
-                    }
-                }
-                """)],
-            reflection,
-            contract);
-        UnrealApiDevelopmentSurfaceResult initialSurface =
-            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, initialRequests, contract);
-        UnrealApiGeneratedSurfaceLock initial = UnrealApiGeneratedSurfaceLockJson.Create(
-            "SurfaceLockProject",
-            reflection,
-            initialSurface);
-        string initialJson = UnrealApiGeneratedSurfaceLockJson.Serialize(initial);
-
-        Assert.Equal(initialJson, UnrealApiGeneratedSurfaceLockJson.Serialize(
-            UnrealApiGeneratedSurfaceLockJson.Deserialize(initialJson)));
-        Assert.Empty(UnrealApiGeneratedSurfaceLockJson.Diff(initial, initial));
-        Assert.Throws<JsonException>(() => UnrealApiGeneratedSurfaceLockJson.Deserialize(
-            initialJson.Replace("\"projectName\"", "\"unknown\":true,\"projectName\"",
-                StringComparison.Ordinal)));
-        Assert.Throws<JsonException>(() => UnrealApiGeneratedSurfaceLockJson.Deserialize(
-            initialJson.Replace(initial.Fingerprint, new string('0', 64),
-                StringComparison.Ordinal)));
-
-        UnrealApiDependencyRequestSet expandedRequests = new UnrealApiSourceDependencyScanner().Scan(
-            "SurfaceLockProject",
-            [Source(
-                "Gameplay/SurfaceLock.cs",
-                """
-                using Finare.Tests.AutoSurface;
-
-                public static class SurfaceLock
-                {
-                    public static void Run(FixtureDerived target)
-                    {
-                        _ = target.EchoOuter(default);
-                        _ = target.Scale(1);
-                        _ = target.Spawn(1, false);
-                    }
-                }
-                """)],
-            reflection,
-            contract);
-        UnrealApiDevelopmentSurfaceResult expandedSurface =
-            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, expandedRequests, contract);
-        UnrealApiGeneratedSurfaceLock expanded = UnrealApiGeneratedSurfaceLockJson.Create(
-            "SurfaceLockProject",
-            reflection,
-            expandedSurface);
-        IReadOnlyList<string> differences = UnrealApiGeneratedSurfaceLockJson.Diff(
-            initial,
-            expanded);
-
-        Assert.Contains("effective-contract", differences);
-        Assert.Contains("changed:/Script/BindingMatrix.FixtureDerived", differences);
-        Assert.Equal(
-            initial.Types.Single(static type => type.TypePath == "/Script/BindingMatrix.OuterData")
-                .TypeFingerprint,
-            expanded.Types.Single(static type => type.TypePath == "/Script/BindingMatrix.OuterData")
-                .TypeFingerprint);
-    }
-
-    [Fact]
     public void ScannerSelectsExactOverloadsFromInvocationArgumentTypes()
     {
         UnrealReflectionManifest reflection = LoadReflection();
@@ -721,121 +674,97 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
-    public void CliExpandsProjectSourcesWithoutRequiringThemToCompileFirst()
+    public void DemoSourceBindingsResolveEnumsStructsCallbacksAndNativeOverloadsWithoutASelectionFile()
     {
-        string root = Path.Combine(
-            Path.GetTempPath(),
-            "FinareDevelopmentSurfaceTests",
-            Guid.NewGuid().ToString("N"));
+        DirectoryInfo? repository = new(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "Finare.slnx")))
+            repository = repository.Parent;
+        Assert.NotNull(repository);
+        string samples = Path.Combine(repository.FullName, "samples", "Unreal");
+        string root = Path.Combine(Path.GetTempPath(), "FinareSourceBindings", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            string projectPath = Path.Combine(root, "Gameplay.csproj");
-            string sourcePath = Path.Combine(root, "Gameplay.cs");
-            string reflectionPath = Path.Combine(root, "reflection.json");
-            string contractPath = Path.Combine(root, "base-contract.json");
-            string requestsPath = Path.Combine(root, "api-requests.json");
-            string overlayPath = Path.Combine(root, "development-contract.json");
-            string reportPath = Path.Combine(root, "development-surface.json");
-            string lockPath = Path.Combine(root, "generated-surface.lock.json");
-            File.WriteAllText(
-                projectPath,
-                """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
-                  </PropertyGroup>
-                </Project>
-                """);
-            File.WriteAllText(
-                sourcePath,
-                """
-                using Finare.Tests.AutoSurface;
+            string output = Path.Combine(root, "Bindings.cs");
+            string native = Path.Combine(root, "Thunks.cpp");
+            string project = Path.Combine(samples, "Finare.Unreal.Demo", "Finare.Unreal.Demo.csproj");
+            string declarations = Path.Combine(samples, "FinareRuntime.native-extensions.json");
+            Assert.Equal(0, Program.Main(["ue-bindings", Path.Combine(samples, "FinareRuntime.reflection.json"),
+                "--project", project, "--native-extensions", declarations,
+                "--namespace", "Finare.Unreal.Generated", "--out", output, "--native-out", native, "--fail-on-rejected"]));
+            string bindings = File.ReadAllText(output);
+            Assert.Contains("CreateEvaluateNowCallback", bindings);
+            Assert.Contains("record struct EEndPlayReason", bindings);
+            Assert.Contains("record struct HitResult", bindings);
+            Assert.Contains("NativeCounterChild @Initial", bindings);
+            Assert.DoesNotContain("HitObjectHandle", bindings);
+            string hints = Path.Combine(root, "hints.json");
+            Assert.Equal(0, Program.Main(["ue-reflection-hints", "--project", project,
+                "--native-extensions", declarations, "--namespace", "Finare.Unreal.Generated", "--out", hints]));
+            Assert.DoesNotContain(UnrealApiSourceTypeHintJson.Deserialize(File.ReadAllText(hints)).Hints,
+                hint => hint.ManagedTypeName.StartsWith("NativeCounter", StringComparison.Ordinal));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 
-                public static class Gameplay
-                {
-                    public static void Run(FixtureDerived target) =>
-                        target.Spawn(1, false);
-                }
-                """);
-            File.WriteAllText(
-                reflectionPath,
-                UnrealReflectionJson.Serialize(LoadReflection()));
-            File.WriteAllText(
-                contractPath,
-                UnrealApiContractJson.Serialize(CreateContract()));
+    [Fact]
+    public void RemovedSelectionCommandsAndOptionsAreRejected()
+    {
+        Assert.Equal(64, Program.Main(["ue-surface-expand"]));
+        Assert.Equal(64, Program.Main(["ue-contract-propose"]));
+        Assert.Equal(64, Program.Main(["ue-bindings", "reflection.json", "--contract", "old.json", "--out", "Bindings.cs"]));
+        Assert.Equal(64, Program.Main(["ue-reflection-hints", "--project", "Game.csproj", "--base", "old.json", "--out", "hints.json"]));
+    }
 
-            int exitCode = Finare.Cli.Program.Main(
-            [
-                "ue-surface-expand",
-                reflectionPath,
-                "--project", projectPath,
-                "--base", contractPath,
-                "--requests-out", requestsPath,
-                "--overlay-out", overlayPath,
-                "--report", reportPath,
-                "--lock-out", lockPath,
-                "--configuration", "Release",
-                "--fail-on-open-decisions",
-            ]);
+    [Fact]
+    public void CliSourceBindingsNeedNoListsRemoveUnusedMembersAndPreserveOutputsOnFailure()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "FinareSourceBindings", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string project = Path.Combine(root, "Gameplay.csproj");
+            string source = Path.Combine(root, "Gameplay.cs");
+            string reflection = Path.Combine(root, "reflection.json");
+            string output = Path.Combine(root, "Bindings.g.cs");
+            string nodes = Path.Combine(root, "nodes.json");
+            string browser = Path.Combine(root, "browser.json");
+            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(reflection, UnrealReflectionJson.Serialize(LoadReflection()));
+            File.WriteAllText(source, "using Finare.Tests.AutoSurface; public class Gameplay { public void Run(FixtureDerived actor) { actor.Spawn(1, false); } }");
+            string[] arguments = ["ue-bindings", reflection, "--project", project,
+                "--namespace", "Finare.Tests.AutoSurface", "--out", output,
+                "--nodes-out", nodes, "--browser-out", browser, "--fail-on-rejected"];
+            Assert.Equal(0, Program.Main(arguments));
+            Assert.Contains(" Spawn(", File.ReadAllText(output));
+            Assert.True(File.Exists(nodes));
+            Assert.True(File.Exists(browser));
+            Assert.DoesNotContain(Directory.EnumerateFiles(root), path =>
+                path.Contains("contract", StringComparison.OrdinalIgnoreCase) ||
+                path.Contains("requests", StringComparison.OrdinalIgnoreCase) ||
+                path.Contains("lock", StringComparison.OrdinalIgnoreCase));
 
-            Assert.Equal(0, exitCode);
-            Assert.True(File.Exists(requestsPath));
-            Assert.True(File.Exists(overlayPath));
-            Assert.True(File.Exists(reportPath));
-            Assert.True(File.Exists(lockPath));
-            UnrealApiDevelopmentSurfaceResult report =
-                UnrealApiDevelopmentSurfaceJson.Deserialize(File.ReadAllText(reportPath));
-            Assert.True(report.Applied);
-            Assert.Equal(1, report.Summary.SelectedCount);
-            Assert.Contains(
-                UnrealApiContractJson.Deserialize(File.ReadAllText(overlayPath)).Types,
-                static type => type.Path == "/Script/BindingMatrix.FixtureDerived" &&
-                    type.Members.Contains("Spawn", StringComparer.Ordinal));
-            string acceptedLock = File.ReadAllText(lockPath);
-            Assert.Equal(0, Finare.Cli.Program.Main(
-            [
-                "ue-surface-expand",
-                reflectionPath,
-                "--project", projectPath,
-                "--base", contractPath,
-                "--requests-out", requestsPath,
-                "--overlay-out", overlayPath,
-                "--report", reportPath,
-                "--lock-out", lockPath,
-                "--verify-lock", lockPath,
-                "--configuration", "Release",
-                "--fail-on-open-decisions",
-            ]));
-            File.WriteAllText(
-                sourcePath,
-                """
-                using Finare.Tests.AutoSurface;
+            File.WriteAllText(source, "using Finare.Tests.AutoSurface; public class Gameplay { public void Run(FixtureDerived actor) { } }");
+            Assert.Equal(0, Program.Main(arguments));
+            string accepted = File.ReadAllText(output);
+            Assert.Contains("class FixtureDerived", accepted);
+            Assert.DoesNotContain(" Spawn(", accepted);
+            string acceptedNodes = File.ReadAllText(nodes);
+            string acceptedBrowser = File.ReadAllText(browser);
 
-                public static class Gameplay
-                {
-                    public static void Run(FixtureDerived target)
-                    {
-                        _ = target.Scale(1);
-                        _ = target.Spawn(1, false);
-                    }
-                }
-                """);
-            Assert.Equal(65, Finare.Cli.Program.Main(
-            [
-                "ue-surface-expand",
-                reflectionPath,
-                "--project", projectPath,
-                "--base", contractPath,
-                "--requests-out", requestsPath,
-                "--overlay-out", overlayPath,
-                "--report", reportPath,
-                "--lock-out", lockPath,
-                "--verify-lock", lockPath,
-                "--configuration", "Release",
-                "--fail-on-open-decisions",
-            ]));
-            Assert.Equal(acceptedLock, File.ReadAllText(lockPath));
+            File.WriteAllText(source, "using Finare.Tests.AutoSurface; public class Gameplay { public void Run(FixtureDerived actor) { actor.MissingMember(); } }");
+            Assert.Equal(65, Program.Main(arguments));
+            Assert.Equal(accepted, File.ReadAllText(output));
+            Assert.Equal(acceptedNodes, File.ReadAllText(nodes));
+            Assert.Equal(acceptedBrowser, File.ReadAllText(browser));
+
+            File.WriteAllText(source, "public class Gameplay { public int Run() => System.Math.Clamp(3, 0, 10); }");
+            Assert.Equal(0, Program.Main(arguments));
+            Assert.DoesNotContain("class FixtureDerived", File.ReadAllText(output));
+            string emptyBindings = File.ReadAllText(output);
+            File.WriteAllText(project, "<Project>broken");
+            Assert.Equal(65, Program.Main(arguments));
+            Assert.Equal(emptyBindings, File.ReadAllText(output));
         }
         finally
         {

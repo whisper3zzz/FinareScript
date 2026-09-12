@@ -1,10 +1,10 @@
 # First Finare in an Unreal project
 
 This walkthrough starts from an existing C++ or Blueprint-only UE 5.8 project
-and ends with the same script running in editor play, opening in the native
-visual authoring surface, hot reloading, and shipping in a Win64 package. It
+and covers C# editor play, hot reloading, optional visual authoring, and the
+Win64 packaging path. The default template is source-only C#. It
 does not copy source or generated files from HostProject or BlockBreaker, and it
-does not require hand-editing `.uproject`, Contract, deployment, or onboarding
+does not require hand-editing `.uproject`, deployment, or onboarding
 JSON.
 
 For the shortest packaged-SDK route, start with the
@@ -34,7 +34,7 @@ decision without changing the project. Apply then performs one file transaction:
 - installs the SDK source plugin, managed runtime closure, project-local CLI,
   templates, setup script, and deferred onboarding helper;
 - creates the managed project and `FirstScript.cs` from the selected template;
-- creates the project-owned onboarding, Contract, and deployment inputs;
+- creates the project-owned onboarding and deployment inputs;
 - for a Blueprint-only project, creates a minimal Runtime module and matching
   Game/Editor targets and merges the module into the `.uproject`;
 - records exact before/after hashes and backups under
@@ -115,15 +115,14 @@ The adopted project owns:
   original project was Blueprint-only;
 - `Managed/Game.Finare/FirstScript.cs` and its SDK-style project;
 - `Config/Finare.onboarding.json`;
-- `Contracts/Game.unreal-api-contract.json`;
 - `Deployment/Game.finare-deployment.json`;
 - generated Declaration IR, Graph, Authoring Surface, bindings, native thunks,
-  source API requests, development Contract/report, API nodes, API/diagnostic
+  API nodes, API/diagnostic
   browser, coverage, and
   `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
 
-Onboarding success means the managed project, reflection export, complete native
-Contract, final Editor target, Game target receipt, and Script Asset have passed
+Onboarding success means the managed project, reflection export, native
+bindings, final Editor target, Game target receipt, and Script Asset have passed
 together. This closes the same native dependency graph that normal packaging
 uses; generated thunk source is preserved by later no-change Repair. The older
 `install-finare-sdk.ps1` and `new-finare-project.ps1` entry points
@@ -140,22 +139,29 @@ Open the project in UE 5.8, then:
 4. start PIE and select the actor/component;
 5. confirm `bScriptRunning` is true and `LastScriptError` is empty.
 
-The generated `FirstScript` exposes `StartValue`, a Visual
-`AddClamped(value, delta)` function, and ordinary source calls to
+The generated `FirstScript` exposes `StartValue`, an ordinary C#
+`AddClamped(value, delta)` helper using `Math.Clamp`, and source calls to
 `Actor.GetActorLocation` and `Pawn.GetController`. The source uses a normal
 `using Game.Finare.Generated;` import; an alias or fully qualified name is
 no longer required. During the first Setup run, a deterministic source type-hint
 artifact requests `Pawn` even though it is absent from the seed reflection
 selection. UE resolves it uniquely, exports that one additional Engine class,
-then turns both calls into source dependency requests and a safe development
-Contract overlay before the managed project needs to compile. The same effective
+then resolves the source references in memory before the managed project needs
+to compile. No request list, Contract overlay, or binding lock is written. The same
 members then appear in the generated native thunk, C# wrapper, visual node
-catalog, API browser, and coverage report; the reviewed seed Contract is not
-hand-edited.
+catalog, API browser, and coverage report.
 This still contains no fixture gameplay: it is the smallest lifecycle,
-source-to-Unreal API, and C#/Visual round-trip starting point.
+source-to-Unreal API, and C# edit/reload starting point.
 
-## 4. Visual open and hot reload
+## 4. C# edits, hot reload, and optional Graph authoring
+
+For the default template, edit `FirstScript.cs` in your IDE and use **Tools >
+Finare Project Setup > Build & Reload**. No authoring service or Graph acceptance
+is needed. Ordinary C# helpers follow Roslyn's language rules; `[Visual]` methods
+add the separate Visual C# profile requirements.
+
+The following Graph workflow is optional. Choose `--template visual-gameplay`
+when adopting, or add an eligible `[Visual]` method to an existing script.
 
 Start the project-specific transactional authoring host in a second terminal:
 
@@ -168,8 +174,8 @@ powershell -ExecutionPolicy Bypass `
 
 Keep that terminal open. In the editor, select `SA_FirstScript` in the Content
 Browser, choose **Tools > Finare Authoring**, and click
-**Selected Script Asset**. `AddClamped` opens as the same typed graph represented
-by its restricted C# source. Edit a supported node/default/connection and use
+**Selected Script Asset**. A `[Visual]` method opens as the same typed graph
+represented by its restricted C# source. Edit a supported node/default/connection and use
 **Apply & Reload**. The server commits the semantic patch, emits the next
 managed generation plus Declaration/Surface artifacts, and the editor reloads
 components matched to that Script Asset without restarting the process. Before

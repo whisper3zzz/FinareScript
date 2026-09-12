@@ -340,7 +340,7 @@ public sealed class UnrealApiSourceTypeHintScanner
     }
 
     private static bool IsGeneratedType(INamedTypeSymbol type, string managedNamespace) =>
-        type.ContainingNamespace?.ToDisplayString() == managedNamespace;
+        type.TypeKind != TypeKind.Delegate && type.ContainingNamespace?.ToDisplayString() == managedNamespace;
 
     private static ImportScope GetImportScope(
         SyntaxNode context,

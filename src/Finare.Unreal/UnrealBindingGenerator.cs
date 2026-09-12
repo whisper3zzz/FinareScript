@@ -845,7 +845,7 @@ public sealed class UnrealBindingGenerator
             _ => null,
         };
 
-    internal static IReadOnlyDictionary<string, string> CreateManagedTypeNames(IReadOnlyList<UnrealReflectedType> types)
+    public static IReadOnlyDictionary<string, string> CreateManagedTypeNames(IReadOnlyList<UnrealReflectedType> types)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var used = new HashSet<string>(StringComparer.Ordinal);

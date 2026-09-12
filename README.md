@@ -1,11 +1,13 @@
 # Finare
 
-Finare is an experimental Unreal gameplay authoring system. C# and a structured
-visual graph edit the same program, with Roslyn compilation, CoreCLR execution,
-stable semantic identities and generated Unreal bindings.
+Finare is an experimental C# gameplay system for Unreal. The default project
+uses ordinary C#, Roslyn compilation, CoreCLR execution and source-discovered
+Unreal bindings. Write gameplay in your IDE and publish changes with the
+Editor's Build & Reload action.
 
-Only the published [Visual C# profile](docs/VISUAL_CSHARP_PROFILE.md) promises
-lossless graph editing. Other C# helpers can remain source-only. The compiler,
+Graph editing is optional. Only methods in the published
+[Visual C# profile](docs/VISUAL_CSHARP_PROFILE.md) promise lossless graph editing.
+Ordinary C# methods do not require Graph projection. The compiler,
 semantics and graph projects stay independent of Unreal Engine.
 
 ## Current status
@@ -31,7 +33,7 @@ not install Core Redirects. Follow the [SDK migration notes](docs/UNREAL_SDK.md)
 
 Start with an extracted SDK and follow the
 [first-project guide](docs/UNREAL_FIRST_PROJECT.md). It covers adoption,
-project-local setup, first Play and a C#/Graph edit through Build & Reload.
+project-local setup, first Play and a C# edit through Build & Reload.
 
 Continue with [gameplay recipes](docs/UNREAL_GAMEPLAY_RECIPES.md) for actors,
 components, events, asset loading, spawning, UI and async work. The

@@ -284,24 +284,14 @@ configuration file.
     "output": "../Generated/Game.reflection.json"
   },
   "bindings": {
-    "contract": "../Contracts/Game.unreal-api-contract.json",
+    "namespace": "Game.Finare.Generated",
     "managedOutput": "../Managed/Generated/Game.bindings.generated.cs",
     "nativeOutput": "../Source/Game/Generated/Game.native-thunks.generated.cpp",
     "nodeCatalogOutput": "../Generated/Game.api-nodes.json",
     "browserOutput": "../Generated/Game.api-browser.json",
     "coverageOutput": "../Generated/Game.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true,
-    "developmentSurface": {
-      "enabled": true,
-      "typeHintsOutput": "../Generated/Game.api-type-hints.json",
-      "requestsOutput": "../Generated/Game.api-requests.json",
-      "contractOutput": "../Generated/Game.development-api-contract.json",
-      "reportOutput": "../Generated/Game.development-surface.json",
-      "lockOutput": "../Generated/Game.generated-surface.lock.json",
-      "lockMode": "update",
-      "failOnOpenDecisions": true
-    }
+    "requireCompleteNativeCoverage": true
   },
   "deployment": {
     "manifest": "../Deployment/Game.finare-deployment.json",
@@ -331,26 +321,15 @@ narrows broad native modules such as Engine to an exact `/Script` allowlist.
 loads those assets and exports their generated classes under exact paths such as
 `/Game/Gameplay/BP_Door.BP_Door_C`. Source type hints may also discover a unique
 Blueprint by generated class name; missing and ambiguous candidates fail instead
-of selecting by load order. The separate API Contract remains the reviewed
-shipped-member boundary. When
-`bindings.developmentSurface.enabled` is true, Setup scans the declared managed
-projects before they need to compile, writes exact source dependency requests,
-and uses a safe development Contract overlay for C++, C#, visual nodes, browser,
-and coverage. Any ambiguous, unresolved, manual, or unsupported request leaves
-the base Contract effective and fails before partial binding generation. Setting
-`failOnOpenDecisions` to false retains the diagnostic report but still does not
-partially apply an unsafe overlay.
+of selecting by load order. Setup derives members directly from C# source and
+writes generated consumers together. Missing, ambiguous or unsupported references
+fail before replacing any output. `bindings.namespace` is required; the removed
+`bindings.contract` and `bindings.developmentSurface` keys are rejected.
 
-The generated type-hint, request, overlay, report, and lock paths are resolved
-relative to the configuration exactly like other outputs. `lockMode: "update"`
-is the local-authoring default and atomically refreshes the deterministic lock
-after a safe expansion. `lockMode: "frozen"` verifies the candidate against the
-accepted lock and rejects localized added, removed, or changed type drift before
-overwriting generated output. ValidateOnly always verifies and byte-compares the
-accepted lock regardless of Apply mode. Existing v0.1 configurations that omit
-`lockOutput` derive it beside the development-surface report; configurations
-that do not declare `developmentSurface` keep their reviewed Contract-only
-behavior.
+For non-reflected C++ only, optional `bindings.nativeExtensions` points to a file
+containing signatures, headers and ownership declarations. It supplies metadata,
+not a list of supported members. Source usage still decides which bindings to emit.
+See [source-driven bindings](UNREAL_API_CONTRACT.md).
 
 `requireCompleteNativeCoverage` requires every selected member to have a native
 thunk and rejects reflection fallback, rejected members, and deferred types.

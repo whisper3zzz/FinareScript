@@ -5,10 +5,10 @@
   "templates": [
     {
       "id": "minimal",
-      "title": "Minimal lifecycle",
-      "description": "Smallest World-hosted script with one exposed state and one Visual method.",
+      "title": "C# gameplay",
+      "description": "Write ordinary C# in your IDE, call Unreal APIs, and use Editor Build & Reload. Graph editing is optional.",
       "scriptTemplate": "Managed/FirstScript.cs.template",
-      "capabilities": ["lifecycle", "exposed-state", "visual-code-roundtrip"],
+      "capabilities": ["lifecycle", "exposed-state", "source-only-csharp", "source-discovered-api"],
       "nonClaims": ["game-specific API coverage", "replication"]
     },
     {

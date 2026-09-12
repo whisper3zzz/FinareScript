@@ -350,7 +350,7 @@ try {
         'compatibility-policy.v0.1.json' = 'schemas\finare.compatibility-policy.v0.1.json'
         'diagnostics-policy.v0.1.json' = 'schemas\finare.diagnostics-policy.v0.1.json'
         'unreal-reflection.v0.4.example.json' = 'samples\Unreal\FinareRuntime.reflection.json'
-        'unreal-api-contract.v0.2.example.json' = 'samples\Unreal\FinareRuntime.api-contract.json'
+        'unreal-native-extensions.v0.3.example.json' = 'samples\Unreal\FinareRuntime.native-extensions.json'
         'unreal-api-nodes.v0.2.example.json' = 'samples\Unreal\FinareRuntime.api-nodes.json'
         'unreal-binding-coverage.v0.2.example.json' = 'samples\Unreal\FinareRuntime.binding-coverage.json'
         'unreal-data-plane-layout.v0.1.example.json' = 'samples\Unreal\FinareRuntime.data-plane.json'
@@ -383,8 +383,8 @@ try {
         -Destination (Join-Path $templateDirectory 'Finare.deployment.json') `
         -Force
     Copy-Item `
-        -LiteralPath (Join-Path $repoRoot 'samples\Unreal\FinareRuntime.api-contract.json') `
-        -Destination (Join-Path $templateDirectory 'Finare.api-contract.json') `
+        -LiteralPath (Join-Path $repoRoot 'samples\Unreal\FinareRuntime.native-extensions.json') `
+        -Destination (Join-Path $templateDirectory 'Finare.native-extensions.json') `
         -Force
     Copy-PayloadTree `
         -Source (Join-Path $repoRoot 'templates\UnrealProject') `
@@ -500,8 +500,7 @@ try {
                 diagnosticsPolicy = 'unifiedscript.diagnostics-policy/v0.1'
                 onboarding = 'unifiedscript.unreal-project-onboarding/v0.1'
                 reflection = 'unifiedscript.unreal-reflection/v0.5'
-                generatedSurfaceLock = 'unifiedscript.unreal-api-generated-surface-lock/v0.1'
-                apiContract = 'unifiedscript.unreal-api-contract/v0.2'
+                nativeExtensions = 'unifiedscript.unreal-native-extensions/v0.3'
                 apiNodeCatalog = 'unifiedscript.unreal-api-node-catalog/v0.2'
                 bindingCoverage = 'unifiedscript.unreal-binding-coverage/v0.2'
                 dataPlaneLayout = 'unifiedscript.unreal-data-plane-layout/v0.1'

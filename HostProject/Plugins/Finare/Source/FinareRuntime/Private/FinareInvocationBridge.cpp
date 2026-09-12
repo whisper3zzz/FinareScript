@@ -1459,12 +1459,12 @@ bool FFinareInvocationBridge::ReadProperty(
 			FString::Printf(TEXT("Property '%s' was not found."), *PropertyPath));
 		return false;
 	}
-	if (!Property->HasAnyPropertyFlags(CPF_BlueprintVisible))
+	if (!Property->HasAnyPropertyFlags(CPF_BlueprintVisible | CPF_NativeAccessSpecifierPublic))
 	{
 		Fail(
 			OutResult,
 			EFinareInvocationError::PropertyNotReadable,
-			FString::Printf(TEXT("Property '%s' is not Blueprint-readable."), *PropertyPath));
+			FString::Printf(TEXT("Property '%s' is neither public nor Blueprint-readable."), *PropertyPath));
 		return false;
 	}
 	if (!ReadValue(Registry, Property, Object, OutValue, OutResult))
@@ -1506,13 +1506,13 @@ bool FFinareInvocationBridge::WriteProperty(
 			FString::Printf(TEXT("Property '%s' was not found."), *PropertyPath));
 		return false;
 	}
-	if (!Property->HasAnyPropertyFlags(CPF_BlueprintVisible) ||
-		Property->HasAnyPropertyFlags(CPF_BlueprintReadOnly))
+	if (!Property->HasAnyPropertyFlags(CPF_BlueprintVisible | CPF_NativeAccessSpecifierPublic) ||
+		Property->HasAnyPropertyFlags(CPF_BlueprintReadOnly | CPF_EditConst))
 	{
 		Fail(
 			OutResult,
 			EFinareInvocationError::PropertyNotWritable,
-			FString::Printf(TEXT("Property '%s' is not Blueprint-writable."), *PropertyPath));
+			FString::Printf(TEXT("Property '%s' is not writable through reflection."), *PropertyPath));
 		return false;
 	}
 	if (Property->HasAnyPropertyFlags(CPF_Net) && Cast<UFinareBlueprintGeneratedClass>(Property->GetOwnerClass()) !=
@@ -1600,12 +1600,12 @@ bool FFinareInvocationBridge::Invoke(
 		return false;
 	}
 	const bool bStaticFunction = Function->HasAnyFunctionFlags(FUNC_Static);
-	if (!Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+	if (!Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure | FUNC_Public))
 	{
 		Fail(
 			OutResult,
 			EFinareInvocationError::FunctionNotCallable,
-			FString::Printf(TEXT("Function '%s' is not a Blueprint-callable or pure function."), *FunctionPath));
+			FString::Printf(TEXT("Function '%s' is neither public nor Blueprint-callable."), *FunctionPath));
 		return false;
 	}
 

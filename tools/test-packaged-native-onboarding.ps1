@@ -367,26 +367,9 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.binding-coverage.json") `
         -Label 'Binding coverage'
-    apiRequests = Assert-File `
-        -Path (Join-Path $projectRoot `
-            "Generated\$projectName.api-requests.json") `
-        -Label 'Source API dependency requests'
     apiTypeHints = Assert-File `
-        -Path (Join-Path $projectRoot `
-            "Generated\$projectName.api-type-hints.json") `
+        -Path (Join-Path $projectRoot 'Saved/Finare/Bindings/type-hints.json') `
         -Label 'Source reflection type hints'
-    developmentContract = Assert-File `
-        -Path (Join-Path $projectRoot `
-            "Generated\$projectName.development-api-contract.json") `
-        -Label 'Automatic development API Contract'
-    surfaceLock = Assert-File `
-        -Path (Join-Path $projectRoot `
-            "Generated\$projectName.generated-surface.lock.json") `
-        -Label 'Generated API surface lock'
-    developmentSurface = Assert-File `
-        -Path (Join-Path $projectRoot `
-            "Generated\$projectName.development-surface.json") `
-        -Label 'Automatic development API surface report'
     managedAssembly = Assert-File `
         -Path (Join-Path $projectRoot `
             "Plugins\Finare\Binaries\Managed\Scripts\$assemblyName.dll") `
@@ -447,43 +430,12 @@ if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
     }).Count -ne 1) {
     throw 'Generated project-local IDE workspace is incomplete.'
 }
-$surfaceReport = Get-Content `
-    -LiteralPath $generatedEvidence.developmentSurface.path `
-    -Raw | ConvertFrom-Json
-$surfaceRequests = Get-Content `
-    -LiteralPath $generatedEvidence.apiRequests.path `
-    -Raw | ConvertFrom-Json
-$sourceTypeHints = Get-Content `
-    -LiteralPath $generatedEvidence.apiTypeHints.path `
-    -Raw | ConvertFrom-Json
-$surfaceContract = Get-Content `
-    -LiteralPath $generatedEvidence.developmentContract.path `
-    -Raw | ConvertFrom-Json
-$surfaceLock = Get-Content `
-    -LiteralPath $generatedEvidence.surfaceLock.path `
-    -Raw | ConvertFrom-Json
-if ($surfaceReport.schemaVersion -ne
-        'unifiedscript.unreal-api-development-surface/v0.1' -or
-    $surfaceReport.applied -ne $true -or
-    [int]$surfaceReport.summary.selectedCount -lt 1 -or
-    [int]$surfaceReport.summary.openDecisionCount -ne 0 -or
-    @($surfaceRequests.requests | Where-Object {
-        $_.suggestedTypePath -eq '/Script/Engine.Actor' -and
-        $_.memberName -eq 'GetActorLocation'
-    }).Count -ne 1 -or
-    @($surfaceRequests.requests | Where-Object {
-        $_.suggestedTypePath -eq '/Script/Engine.Pawn' -and
-        $_.memberName -eq 'GetController'
-    }).Count -ne 1 -or
-    @($surfaceContract.types | Where-Object {
-        $_.path -eq '/Script/Engine.Actor' -and
-        'K2_GetActorLocation' -in @($_.members)
-    }).Count -ne 1 -or
-    @($surfaceContract.types | Where-Object {
-        $_.path -eq '/Script/Engine.Pawn' -and
-        'GetController' -in @($_.members)
-    }).Count -ne 1) {
-    throw 'Automatic Actor/Pawn development surface acceptance failed.'
+$sourceTypeHints = Get-Content -LiteralPath $generatedEvidence.apiTypeHints.path -Raw | ConvertFrom-Json
+$sourceBindingConfig = Get-Content -LiteralPath (Join-Path $projectRoot 'Config/Finare.onboarding.json') -Raw | ConvertFrom-Json
+if ($null -ne $sourceBindingConfig.bindings.contract -or
+    $null -ne $sourceBindingConfig.bindings.developmentSurface -or
+    $sourceBindingConfig.bindings.namespace -ne "$assemblyName.Generated") {
+    throw 'Default source binding setup still requires a selection list.'
 }
 if ($sourceTypeHints.schemaVersion -ne
         'unifiedscript.unreal-api-source-type-hints/v0.1' -or
@@ -491,17 +443,6 @@ if ($sourceTypeHints.schemaVersion -ne
         $_.managedTypeName -eq 'Pawn'
     }).Count -ne 1) {
     throw 'Managed source did not produce the bounded Pawn reflection hint.'
-}
-if ($surfaceLock.schemaVersion -ne
-        'unifiedscript.unreal-api-generated-surface-lock/v0.1' -or
-    [string]::IsNullOrWhiteSpace($surfaceLock.fingerprint) -or
-    @($surfaceLock.types | Where-Object {
-        $_.typePath -eq '/Script/Engine.Actor'
-    }).Count -ne 1 -or
-    @($surfaceLock.types | Where-Object {
-        $_.typePath -eq '/Script/Engine.Pawn'
-    }).Count -ne 1) {
-    throw 'Generated API surface lock did not freeze the exact Actor/Pawn surface.'
 }
 $managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path -Raw
 if ($managedBindingText -notmatch 'class Actor' -or

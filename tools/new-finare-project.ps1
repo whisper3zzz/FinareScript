@@ -283,7 +283,6 @@ try {
     $managedRoot = Join-Path $projectRoot "Managed\$assemblyName"
     $outputs = [ordered]@{
         config = Join-Path $projectRoot 'Config\Finare.onboarding.json'
-        contract = Join-Path $projectRoot "Contracts\$ProjectName.unreal-api-contract.json"
         deployment = Join-Path $projectRoot "Deployment\$ProjectName.finare-deployment.json"
         managedProject = Join-Path $managedRoot "$assemblyName.csproj"
         managedSolution = Join-Path $managedRoot "$assemblyName.slnx"
@@ -295,7 +294,6 @@ try {
     }
     foreach ($destination in @(
         $outputs.config,
-        $outputs.contract,
         $outputs.deployment,
         $outputs.managedProject,
         $outputs.managedSolution,
@@ -321,10 +319,6 @@ try {
     Render-Template `
         -TemplatePath (Join-Path $templateRoot 'Config\Finare.onboarding.json.template') `
         -Destination $outputs.config `
-        -Replacements $replacements
-    Render-Template `
-        -TemplatePath (Join-Path $templateRoot 'Contracts\Project.unreal-api-contract.json.template') `
-        -Destination $outputs.contract `
         -Replacements $replacements
     Render-Template `
         -TemplatePath (Join-Path $templateRoot 'Deployment\Project.finare-deployment.json.template') `

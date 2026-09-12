@@ -168,7 +168,8 @@ public class ${editorTarget}Target : TargetRules
         $scaffoldReport.template.id -ne $templateId -or
         $scaffoldReport.templateCatalog.sha256 -ne $catalogSha256 -or
         $source -notmatch '\[ScriptAsset\(' -or
-        $source -notmatch '\[Visual\]' -or
+        ($templateId -eq 'minimal' -and $source -match '\[Visual\]') -or
+        ($templateId -ne 'minimal' -and $source -notmatch '\[Visual\]') -or
         $solution.Solution.Project.Path -ne "$projectIdentifier.Finare.csproj" -or
         $ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
         'Finare: Build managed gameplay' -notin $ideTaskLabels -or

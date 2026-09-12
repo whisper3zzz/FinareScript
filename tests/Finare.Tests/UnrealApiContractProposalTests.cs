@@ -102,59 +102,6 @@ public sealed class UnrealApiContractProposalTests
             CreateContract()));
     }
 
-    [Fact]
-    public void CliWritesReviewArtifactBeforeOpenDecisionGateFails()
-    {
-        string root = Path.Combine(
-            Path.GetTempPath(),
-            "FinareContractProposalTests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            string reflectionPath = Path.Combine(root, "reflection.json");
-            string requestsPath = Path.Combine(root, "requests.json");
-            string contractPath = Path.Combine(root, "contract.json");
-            string outputPath = Path.Combine(root, "proposal.json");
-            File.WriteAllText(
-                reflectionPath,
-                UnrealReflectionJson.Serialize(LoadReflection()),
-                Encoding.UTF8);
-            File.WriteAllText(
-                requestsPath,
-                UnrealPuertsMigrationPackageJson.Serialize(CreateRequests(
-                    Request("REQ-0001", "FixtureDerived", null, "Scale", "contract-member", "contract"))),
-                Encoding.UTF8);
-            File.WriteAllText(
-                contractPath,
-                UnrealApiContractJson.Serialize(CreateContract()),
-                Encoding.UTF8);
-
-            int exitCode = Finare.Cli.Program.Main(
-            [
-                "ue-contract-propose",
-                reflectionPath,
-                "--requests",
-                requestsPath,
-                "--base",
-                contractPath,
-                "--out",
-                outputPath,
-                "--fail-on-open-decisions",
-            ]);
-
-            Assert.Equal(65, exitCode);
-            UnrealApiContractProposal proposal = UnrealApiContractProposalJson.Deserialize(
-                File.ReadAllText(outputPath));
-            Assert.Equal(1, proposal.Summary.AmbiguousCount);
-            Assert.Equal(1, proposal.Summary.OpenDecisionCount);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
     private static UnrealApiContractProposalDecision AssertDecision(
         UnrealApiContractProposal proposal,
         string requestId,

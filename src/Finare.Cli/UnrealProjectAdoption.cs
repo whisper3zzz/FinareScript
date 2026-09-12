@@ -209,13 +209,6 @@ internal static partial class UnrealProjectAdoptionService
         AddRenderedTemplate(
             desired,
             projectRoot,
-            Path.Combine(layout.TemplateRoot, "Contracts", "Project.unreal-api-contract.json.template"),
-            Path.Combine("Contracts", $"{projectName}.unreal-api-contract.json"),
-            "project-policy",
-            replacements);
-        AddRenderedTemplate(
-            desired,
-            projectRoot,
             Path.Combine(layout.TemplateRoot, "Deployment", "Project.finare-deployment.json.template"),
             Path.Combine("Deployment", $"{projectName}.finare-deployment.json"),
             "project-policy",

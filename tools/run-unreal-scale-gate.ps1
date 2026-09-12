@@ -149,7 +149,6 @@ function New-ContractOutputPaths {
 function Invoke-ContractGeneration {
     param(
         [Parameter(Mandatory)][string]$ReflectionPath,
-        [Parameter(Mandatory)][string]$ContractPath,
         [Parameter(Mandatory)]$Outputs,
         [Parameter(Mandatory)][string]$LogPath
     )
@@ -163,7 +162,9 @@ function Invoke-ContractGeneration {
             '--',
             'ue-bindings', $ReflectionPath,
             '--out', $Outputs.managed,
-            '--contract', $ContractPath,
+            '--namespace', 'Finare.Unreal.Scale.Generated',
+            '--native-header', 'ScaleGeneratedThunks.h',
+            '--native-namespace', 'UE::Finare::Scale::Generated',
             '--native-out', $Outputs.native,
             '--nodes-out', $Outputs.nodes,
             '--report', $Outputs.coverage,
@@ -225,15 +226,12 @@ try {
     }
 
     $types = @()
-    $contractTypes = @()
     for ($typeIndex = 0; $typeIndex -lt $TypeCount; ++$typeIndex) {
         $typeName = 'ScaleType{0:D4}' -f $typeIndex
         $typePath = "/Script/FinareScale.$typeName"
         $properties = @()
-        $memberNames = @()
         for ($memberIndex = 0; $memberIndex -lt $MembersPerType; ++$memberIndex) {
             $memberName = 'Value{0:D2}' -f $memberIndex
-            $memberNames += $memberName
             $properties += [ordered]@{
                 path = "$typePath`:$memberName"
                 name = $memberName
@@ -279,10 +277,7 @@ try {
             delegates = @()
             functions = @()
         }
-        $contractTypes += [ordered]@{
-            path = $typePath
-            members = $memberNames
-        }
+
     }
 
     $reflection = [ordered]@{
@@ -297,30 +292,8 @@ try {
         types = $types
     }
     $expectedMemberCount = $TypeCount * $MembersPerType
-    $contract = [ordered]@{
-        schemaVersion = 'unifiedscript.unreal-api-contract/v0.2'
-        contractName = 'Finare.Scale.Gate'
-        managedNamespace = 'Finare.Unreal.Scale.Generated'
-        nativeHeader = 'ScaleGeneratedThunks.h'
-        nativeNamespace = 'UE::Finare::Scale::Generated'
-        types = $contractTypes
-        policy = [ordered]@{
-            defaultAction = 'allow'
-            rules = @()
-        }
-        coverageBaseline = [ordered]@{
-            minimumMemberCount = $expectedMemberCount
-            minimumDirectThunkCount = 0
-            minimumCallFrameCount = $expectedMemberCount
-            minimumDataPlaneOperationCount = 0
-            minimumReflectionFallbackCount = 0
-            maximumRejectedCount = 0
-        }
-    }
     $reflectionPath = Join-Path $contractDirectory 'Scale.reflection.json'
-    $contractPath = Join-Path $contractDirectory 'Scale.api-contract.json'
     Write-Json -Value $reflection -Path $reflectionPath
-    Write-Json -Value $contract -Path $contractPath
 
     $contractSamples = @()
     $contractTrialOutputs = @()
@@ -330,7 +303,6 @@ try {
         $contractTrialOutputs += $outputs
         $contractSamples += Invoke-ContractGeneration `
             -ReflectionPath $reflectionPath `
-            -ContractPath $contractPath `
             -Outputs $outputs `
             -LogPath (Join-Path $trialDirectory 'generation.log')
     }
@@ -367,7 +339,6 @@ try {
         -Directory (Join-Path $contractDirectory 'incremental')
     $incrementalContractMilliseconds = Invoke-ContractGeneration `
         -ReflectionPath $reflectionPath `
-        -ContractPath $contractPath `
         -Outputs $incrementalContractOutputs `
         -LogPath (Join-Path $contractDirectory 'incremental\generation.log')
     $contractManagedChanged =

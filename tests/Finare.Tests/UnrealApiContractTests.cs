@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Finare.Cli;
 using Finare.CSharp;
 using Finare.Unreal;
 using Microsoft.CodeAnalysis;
@@ -9,6 +10,251 @@ namespace Finare.Tests;
 [Trait("Category", "Unreal")]
 public sealed class UnrealApiContractTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DiscoveryMatchesFunctionNamesAndSignaturesAndRoundTripsAnExactOverload(bool overloaded)
+    {
+        UnrealReflectionManifest reflection = LoadFixture();
+        UnrealReflectedType owner = reflection.Types.Single(type => type.Name == "FinareComponent");
+        UnrealReflectedFunction add = owner.Functions.Single(function => function.Name == "Add") with
+        {
+            Path = owner.Path + ":Add(int32,int32)",
+            NativeBinding = null,
+        };
+        UnrealReflectedFunction other = add with
+        {
+            Path = owner.Path + ":Add(int32)",
+            Parameters = add.Parameters.Take(1).ToArray(),
+        };
+        reflection = reflection with
+        {
+            Types = reflection.Types.Select(type => type.Path == owner.Path
+                ? type with { Functions = overloaded ? [add, other] : [add] } : type).ToArray(),
+        };
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new([], [new(owner.Path)
+            {
+                IncludeMembers = ["Add"],
+                ExcludeMembers = ["Add(int32)"],
+            }]),
+        };
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(reflection, contract);
+        Assert.Equal(add.Path, Assert.Single(projection.Reflection.Types.Single(type => type.Path == owner.Path).Functions).Path);
+        UnrealApiContractProjection replay = UnrealApiContractProjector.Project(reflection,
+            UnrealApiContractJson.Deserialize(UnrealApiContractJson.Serialize(projection.EffectiveContract)));
+        Assert.Equal(UnrealReflectionJson.Serialize(projection.SelectedReflection), UnrealReflectionJson.Serialize(replay.SelectedReflection));
+
+        contract = contract with { Discovery = new([], [new(owner.Path) { ExcludeMembers = ["Add(int32,int32)"] }]) };
+        projection = UnrealApiContractProjector.Project(reflection, contract);
+        Assert.DoesNotContain(projection.Reflection.Types.Single(type => type.Path == owner.Path).Functions, function => function.Path == add.Path);
+    }
+
+    [Fact]
+    public void DiscoveryPreservesAnEmptyTypeAndRejectsExplicitExcludedTypes()
+    {
+        UnrealReflectionManifest reflection = LoadFixture();
+        const string path = "/Script/FinareRuntime.FinareComponent";
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new([], [new(path) { ExcludeMembers = ["*"] }]),
+        };
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(reflection, contract);
+        Assert.Empty(Assert.Single(projection.EffectiveContract.Types).Members);
+        var replay = UnrealApiContractProjector.Project(reflection, projection.EffectiveContract);
+        Assert.Equal(UnrealReflectionJson.Serialize(projection.SelectedReflection), UnrealReflectionJson.Serialize(replay.SelectedReflection));
+        contract = CreateContract("Add") with
+        {
+            Discovery = new(["FinareRuntime"], []) { ExcludedTypePaths = [path] },
+        };
+        Assert.Contains("discovery-excluded", Assert.Throws<JsonException>(() => UnrealApiContractProjector.Project(reflection, contract)).Message);
+    }
+
+    [Fact]
+    public void DiscoverySelectsModuleAndTypeMembersAndMaterializesEffectiveContract()
+    {
+        UnrealReflectionManifest reflection = LoadFixture();
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new UnrealApiContractDiscovery(
+                ["FinareRuntime"],
+                [new UnrealApiContractTypeRule(
+                    "/Script/FinareRuntime.FinareComponent")
+                {
+                    IncludeMembers = ["Add*"],
+                    ExcludeMembers = ["AddBenchmarkVector"],
+                }])
+            {
+                ExcludedTypePaths = ["/Script/FinareRuntime.FinareAsset"],
+            },
+        };
+
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            reflection,
+            contract);
+        UnrealReflectedType component = Assert.Single(
+            projection.SelectedReflection.Types,
+            static type => type.Path == "/Script/FinareRuntime.FinareComponent");
+
+        Assert.Contains(component.Functions, static function => function.Name == "Add");
+        Assert.DoesNotContain(
+            component.Functions,
+            static function => function.Name == "AddBenchmarkVector");
+        Assert.DoesNotContain(
+            projection.SelectedReflection.Types,
+            static type => type.Path == "/Script/FinareRuntime.FinareAsset");
+        Assert.Null(projection.EffectiveContract.Discovery);
+        Assert.Equal(UnrealApiContract.CurrentSchemaVersion, projection.EffectiveContract.SchemaVersion);
+        Assert.Contains(
+            projection.EffectiveContract.Types,
+            type => type.Path == component.Path && type.Members.Contains("Add"));
+    }
+
+    [Fact]
+    public void DiscoveryIncludesReflectedMembersAddedAfterTheContractWasWritten()
+    {
+        UnrealReflectionManifest fixture = LoadFixture();
+        UnrealReflectedType component = Assert.Single(
+            fixture.Types,
+            static type => type.Path == "/Script/FinareRuntime.FinareComponent");
+        UnrealReflectedFunction added = Assert.Single(
+            component.Functions,
+            static function => function.Name == "Add") with
+        {
+            Name = "AddDiscovered",
+            Path = component.Path + ":AddDiscovered",
+            NativeBinding = null,
+        };
+        UnrealReflectionManifest updated = fixture with
+        {
+            Types = fixture.Types.Select(type => type.Path == component.Path
+                ? type with { Functions = [.. type.Functions, added] }
+                : type).ToArray(),
+        };
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new UnrealApiContractDiscovery(
+                [],
+                [new UnrealApiContractTypeRule(component.Path)
+                {
+                    IncludeMembers = ["Add*"]
+                }]),
+        };
+
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(updated, contract);
+        UnrealReflectedFunction selected = Assert.Single(
+            projection.Reflection.Types.Single(type => type.Path == component.Path).Functions,
+            static function => function.Name == "AddDiscovered");
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(
+            projection.NativeReflection,
+            new UnrealNativeThunkGeneratorOptions(
+                projection.Contract.NativeHeader,
+                projection.Contract.NativeNamespace));
+        UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(
+            projection,
+            managed,
+            native);
+        UnrealBindingCoverageEntry entry = Assert.Single(
+            coverage.Entries,
+            entry => entry.Path == selected.Path);
+
+        Assert.Contains(selected.Path, managed.Source, StringComparison.Ordinal);
+        Assert.Empty(managed.Diagnostics);
+        Assert.Equal(UnrealBindingDisposition.DirectThunk, entry.Disposition);
+        Assert.Contains(
+            "AddDiscovered",
+            projection.EffectiveContract.Types.Single(type => type.Path == component.Path).Members);
+    }
+
+    [Fact]
+    public void InMemoryDiscoveryFeedsTheBindingGenerator()
+    {
+        UnrealReflectionManifest reflection = LoadFixture();
+        UnrealApiContract contract = CreateContract() with
+        {
+            Types = [],
+            Discovery = new UnrealApiContractDiscovery(
+                [],
+                [new UnrealApiContractTypeRule(
+                    "/Script/FinareRuntime.FinareComponent")
+                {
+                    IncludeMembers = ["Add*"],
+                    ExcludeMembers = ["AddBenchmarkVector", "Stop*"]
+                }]),
+        };
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(reflection, contract);
+        string generated = new UnrealBindingGenerator().Generate(projection.Reflection).Source;
+        Assert.Contains("FinareComponent", generated, StringComparison.Ordinal);
+        Assert.Contains("Add", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddBenchmarkVector", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("StopScript", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoveryReportsMissingModulesAndExcludedDependencies()
+    {
+        UnrealReflectionManifest reflection = LoadFixture();
+        UnrealApiContract missingModule = CreateContract() with
+        {
+            Types = [],
+            Discovery = new UnrealApiContractDiscovery(["MissingModule"], []),
+        };
+        JsonException missing = Assert.Throws<JsonException>(() =>
+            UnrealApiContractProjector.Project(reflection, missingModule));
+        Assert.Contains("MissingModule", missing.Message, StringComparison.Ordinal);
+
+        UnrealReflectedType component = Assert.Single(
+            reflection.Types,
+            static type => type.Path == "/Script/FinareRuntime.FinareComponent");
+        UnrealReflectedFunction function = Assert.Single(
+            component.Functions,
+            static item => item.Name == "AddBenchmarkVector");
+        string dependencyPath = function.Parameters
+            .Select(parameter => parameter.Type.TypePath)
+            .First(path => path is not null)!;
+        UnrealApiContract excludedDependency = CreateContract() with
+        {
+            Types = [],
+            Discovery = new UnrealApiContractDiscovery(
+                [],
+                [new UnrealApiContractTypeRule(component.Path)
+                {
+                    IncludeMembers = ["AddBenchmarkVector"],
+                }])
+            {
+                ExcludedTypePaths = [dependencyPath],
+            },
+        };
+        JsonException excluded = Assert.Throws<JsonException>(() =>
+            UnrealApiContractProjector.Project(reflection, excludedDependency));
+        Assert.Contains(dependencyPath, excluded.Message, StringComparison.Ordinal);
+        Assert.Contains("dependency", excluded.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PreviousContractSchemaSerializesWithoutAnImplicitUpgrade()
+    {
+        UnrealApiContract previous = CreateContract("Add") with
+        {
+            SchemaVersion = UnrealApiContract.PreviousSchemaVersion,
+        };
+
+        string json = UnrealApiContractJson.Serialize(previous);
+        UnrealApiContract roundTrip = UnrealApiContractJson.Deserialize(json);
+
+        Assert.Equal(UnrealApiContract.PreviousSchemaVersion, roundTrip.SchemaVersion);
+        Assert.DoesNotContain("discovery", json, StringComparison.Ordinal);
+        Assert.Equal(json, UnrealApiContractJson.Serialize(roundTrip));
+    }
+
     [Fact]
     public void ContractProjectsOneAllowlistIntoEveryGenerator()
     {
@@ -302,6 +548,7 @@ public sealed class UnrealApiContractTests
                 fixture,
                 enumContract with
                 {
+                    SchemaVersion = UnrealApiContract.PreviousSchemaVersion,
                     Types =
                     [new(
                         "/Script/FinareRuntime.FinareComponent",
@@ -535,4 +782,26 @@ public sealed class UnrealApiContractTests
         [new(
             "/Script/FinareRuntime.FinareComponent",
             members)]);
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "FinareApiContractTests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
 }

@@ -177,7 +177,8 @@ public sealed class UnrealApiContractProposalGenerator
         UnrealPuertsContractRequestSet normalizedRequests = NormalizeRequests(requests);
 
         // A proposal must start from a valid, current Contract rather than repairing stale input.
-        _ = UnrealApiContractProjector.Project(normalizedReflection, normalizedContract);
+        UnrealApiContractProjection baseProjection = UnrealApiContractProjector.Project(
+            normalizedReflection, normalizedContract);
 
         string reflectionFingerprint = Sha256(
             UnrealReflectionJson.Serialize(normalizedReflection, writeIndented: false));
@@ -193,7 +194,7 @@ public sealed class UnrealApiContractProposalGenerator
                 "Regenerate the migration plan before proposing Contract changes.");
         }
 
-        var selected = normalizedContract.Types.ToDictionary(
+        var selected = baseProjection.EffectiveContract.Types.ToDictionary(
             static type => type.Path,
             static type => type.Members.ToHashSet(StringComparer.Ordinal),
             StringComparer.Ordinal);
@@ -301,8 +302,9 @@ public sealed class UnrealApiContractProposalGenerator
         {
             return Decision(
                 request,
-                "manual-review",
-                "The dependency is an enum value, not a callable member. Review explicit enum-type inclusion before expanding the Contract.",
+                selected.ContainsKey(type.Path) ? "already-selected" : "manual-review",
+                selected.ContainsKey(type.Path) ? "The enum declaration is already included." :
+                    "The dependency is an enum value; its declaring type must be included.",
                 type.Path,
                 null,
                 []);

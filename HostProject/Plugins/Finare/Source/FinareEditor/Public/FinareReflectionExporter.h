@@ -6,6 +6,11 @@ struct FFinareReflectionExportOptions
 {
 	FString OutputPath;
 	TArray<FString> Modules;
+	/** Whole-module discovery, independent of the legacy exact class filter. */
+	TArray<FString> DiscoveryModules;
+	/** Exact class, struct or enum roots requested by a discovery contract. */
+	TArray<FString> DiscoveryTypePaths;
+	bool bIncludePublicReflected = false;
 
 	/** Optional exact /Script/Module.Type allowlist. Empty exports every native class in Modules. */
 	TArray<FString> ClassPaths;

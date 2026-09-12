@@ -176,15 +176,12 @@ public sealed class UnrealPuertsMigrationPlannerTests
         using var fixture = new MigrationFixture();
         UnrealPuertsProjectScan scan = CreateScan(fixture);
         fixture.Write("scan.json", UnrealPuertsProjectScanJson.Serialize(scan));
-        fixture.Write("contract.json", UnrealApiContractJson.Serialize(CreateContract()));
         string packageRoot = fixture.PathOf("package");
 
         int planExit = Finare.Cli.Program.Main(
         [
             "ue-puerts-plan",
             fixture.PathOf("scan.json"),
-            "--contract",
-            fixture.PathOf("contract.json"),
             "--namespace",
             "Example.Game.Migration",
             "--out",

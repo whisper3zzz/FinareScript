@@ -1702,7 +1702,7 @@ public sealed class UnrealNativeThunkGenerator
         return supported;
     }
 
-    private static bool IsNativeValueType(
+    public static bool IsNativeValueType(
         UnrealTypeReference type,
         bool allowVoid,
         IReadOnlySet<string> supportedStructPaths) =>

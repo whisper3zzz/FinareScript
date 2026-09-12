@@ -152,11 +152,7 @@ function Get-OutputFingerprints {
         [string]$OnboardingReport.outputs.apiNodeCatalog,
         [string]$OnboardingReport.outputs.apiBrowser,
         [string]$OnboardingReport.outputs.bindingCoverage,
-        [string]$OnboardingReport.outputs.developmentSurface.typeHints,
-        [string]$OnboardingReport.outputs.developmentSurface.requests,
-        [string]$OnboardingReport.outputs.developmentSurface.effectiveContract,
-        [string]$OnboardingReport.outputs.developmentSurface.report,
-        [string]$OnboardingReport.outputs.developmentSurface.lock) |
+        [string]$OnboardingReport.outputs.sourceTypeHints) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Select-Object -Unique
     $fingerprints = [ordered]@{}

@@ -1130,7 +1130,7 @@ Direct CLI generation of both managed and native sides:
 
 ```bash
 finare ue-bindings reflection.json \
-  --contract game.unreal-api-contract.json \
+  --project Managed/Game.csproj --namespace Game.Generated \
   --out bindings.cs \
   --native-out native-thunks.generated.cpp \
   --nodes-out api-nodes.json \

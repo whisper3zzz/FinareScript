@@ -6,14 +6,41 @@ using Finare.Core;
 
 namespace Finare.Unreal;
 
+/// <summary>
+/// A type-level discovery rule used by the v0.3 contract. Empty includes mean
+/// every reflected member on the type; excludes are applied to discovered
+/// members before the effective contract is materialized.
+/// </summary>
+public sealed record UnrealApiContractTypeRule(string Path)
+{
+    public IReadOnlyList<string> IncludeMembers { get; init; } = [];
+
+    public IReadOnlyList<string> ExcludeMembers { get; init; } = [];
+}
+
+/// <summary>
+/// Optional module/type discovery selectors. The projector turns these rules
+/// into the same explicit reflected member lists consumed by every generator.
+/// </summary>
+public sealed record UnrealApiContractDiscovery(
+    IReadOnlyList<string> Modules,
+    IReadOnlyList<UnrealApiContractTypeRule> Types)
+{
+    /// <summary>
+    /// Exact reflected type paths excluded from module discovery. Explicit
+    /// selection of an excluded type is a configuration error.
+    /// </summary>
+    public IReadOnlyList<string> ExcludedTypePaths { get; init; } = [];
+}
+
 public sealed record UnrealApiContractType(
     string Path,
     IReadOnlyList<string> Members);
 
 /// <summary>
-/// Project-owned allowlist selecting the reflected Unreal surface that is shipped to managed
-/// code. The same normalized selection drives managed wrappers, native thunks, coverage, and
-/// visual node metadata so those artifacts cannot drift independently.
+/// Selection shared by managed wrappers, native thunks, coverage, and visual node metadata.
+/// Source-driven builds resolve this in memory; explicit project-owned contracts remain
+/// supported for existing configurations.
 /// </summary>
 public sealed record UnrealApiContract(
     string SchemaVersion,
@@ -23,9 +50,14 @@ public sealed record UnrealApiContract(
     string NativeNamespace,
     IReadOnlyList<UnrealApiContractType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-contract/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-contract/v0.3";
+
+    public const string PreviousSchemaVersion = "unifiedscript.unreal-api-contract/v0.2";
 
     public const string LegacySchemaVersion = "unifiedscript.unreal-api-contract/v0.1";
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public UnrealApiContractDiscovery? Discovery { get; init; }
 
     public UnrealApiPolicy Policy { get; init; } = UnrealApiPolicy.AllowSelected;
 
@@ -39,6 +71,13 @@ public sealed record UnrealApiContractProjection(
     UnrealApiContract Contract,
     UnrealReflectionManifest Reflection)
 {
+    /// <summary>
+    /// The resolved v0.3 contract for a discovery input. Explicit v0.1/v0.2
+    /// contracts remain unchanged so their serialized and generated forms stay
+    /// byte-compatible. This value is suitable for lock/fingerprint output.
+    /// </summary>
+    public UnrealApiContract EffectiveContract { get; init; } = Contract;
+
     public UnrealReflectionManifest SelectedReflection { get; init; } = Reflection;
 
     public UnrealReflectionManifest NativeReflection { get; init; } = Reflection;
@@ -70,17 +109,26 @@ public static class UnrealApiContractJson
     {
         ArgumentNullException.ThrowIfNull(contract);
         if (contract.SchemaVersion != UnrealApiContract.CurrentSchemaVersion &&
+            contract.SchemaVersion != UnrealApiContract.PreviousSchemaVersion &&
             contract.SchemaVersion != UnrealApiContract.LegacySchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported Unreal API contract schema '{contract.SchemaVersion}'. " +
                 $"Expected '{UnrealApiContract.CurrentSchemaVersion}'.");
         }
+        if (contract.SchemaVersion != UnrealApiContract.CurrentSchemaVersion &&
+            contract.Discovery is not null)
+        {
+            throw new JsonException(
+                $"Unreal API contract discovery requires schema '{UnrealApiContract.CurrentSchemaVersion}'.");
+        }
         if (!IsContractName(contract.ContractName) ||
             !IsQualifiedIdentifier(contract.ManagedNamespace, '.') ||
             !IsQualifiedIdentifier(contract.NativeNamespace, ':') ||
             !IsHeaderPath(contract.NativeHeader) ||
-            contract.Types is null || contract.Types.Count == 0)
+            contract.Types is null ||
+            contract.Types.Count == 0 && contract.SchemaVersion != UnrealApiContract.CurrentSchemaVersion &&
+                !HasDiscoverySelectors(contract.Discovery))
         {
             throw new JsonException("The Unreal API contract has invalid required fields.");
         }
@@ -115,20 +163,129 @@ public static class UnrealApiContractJson
                 members.Order(StringComparer.Ordinal).ToArray()));
         }
 
+        UnrealApiContractDiscovery? discovery = NormalizeDiscovery(contract.Discovery);
         return contract with
         {
-            SchemaVersion = UnrealApiContract.CurrentSchemaVersion,
+            SchemaVersion = contract.SchemaVersion == UnrealApiContract.LegacySchemaVersion
+                    ? UnrealApiContract.PreviousSchemaVersion
+                    : contract.SchemaVersion,
             ContractName = contract.ContractName.Trim(),
             ManagedNamespace = contract.ManagedNamespace.Trim(),
             NativeHeader = contract.NativeHeader.Trim().Replace('\\', '/'),
             NativeNamespace = contract.NativeNamespace.Trim(),
             Types = normalizedTypes.OrderBy(static type => type.Path, StringComparer.Ordinal).ToArray(),
+            Discovery = discovery,
             Policy = UnrealApiPolicyEvaluator.Normalize(contract.Policy),
             CoverageBaseline = NormalizeBaseline(contract.CoverageBaseline),
             NativeExtensions = contract.NativeExtensions is null
                 ? null : UnrealNativeExtensions.Normalize(contract.NativeExtensions),
         };
     }
+
+    private static bool HasDiscoverySelectors(UnrealApiContractDiscovery? discovery) =>
+        discovery is not null &&
+        (discovery.Modules is { Count: > 0 } || discovery.Types is { Count: > 0 });
+
+    private static UnrealApiContractDiscovery? NormalizeDiscovery(
+        UnrealApiContractDiscovery? discovery)
+    {
+        if (discovery is null)
+        {
+            return null;
+        }
+        if (discovery.Modules is null || discovery.Types is null ||
+            !HasDiscoverySelectors(discovery))
+        {
+            throw new JsonException("Unreal API contract discovery requires a module or type selector.");
+        }
+
+        string[] modules = discovery.Modules
+            .Select(static module => module?.Trim() ?? string.Empty)
+            .ToArray();
+        if (modules.Any(static module => !IsIdentifier(module)) ||
+            modules.Distinct(StringComparer.Ordinal).Count() != modules.Length)
+        {
+            throw new JsonException("Unreal API discovery modules must be unique identifiers.");
+        }
+
+        if (discovery.ExcludedTypePaths is null)
+        {
+            throw new JsonException("Unreal API discovery excluded type paths cannot be null.");
+        }
+
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        UnrealApiContractTypeRule[] types = discovery.Types.Select(rule =>
+        {
+            string path = rule?.Path?.Trim() ?? string.Empty;
+            if (rule is null || !IsReflectedTypePath(path) ||
+                !paths.Add(path) || rule.IncludeMembers is null ||
+                rule.ExcludeMembers is null)
+            {
+                throw new JsonException("Unreal API discovery contains an invalid type rule.");
+            }
+
+            string[] includes = NormalizeSignatureRules(
+                rule.IncludeMembers,
+                path,
+                "include");
+            string[] excludes = NormalizeSignatureRules(
+                rule.ExcludeMembers,
+                path,
+                "exclude");
+            if (includes.Intersect(excludes, StringComparer.Ordinal).Any())
+            {
+                throw new JsonException(
+                    $"Unreal API discovery type '{path}' includes and excludes the same member rule.");
+            }
+            return new UnrealApiContractTypeRule(path)
+            {
+                IncludeMembers = includes.Order(StringComparer.Ordinal).ToArray(),
+                ExcludeMembers = excludes.Order(StringComparer.Ordinal).ToArray(),
+            };
+        }).OrderBy(static rule => rule.Path, StringComparer.Ordinal).ToArray();
+
+        string[] excludedTypes = discovery.ExcludedTypePaths
+            .Select(static path => path?.Trim() ?? string.Empty)
+            .ToArray();
+        if (excludedTypes.Any(static path => !IsReflectedTypePath(path)) ||
+            excludedTypes.Distinct(StringComparer.Ordinal).Count() != excludedTypes.Length ||
+            excludedTypes.Intersect(types.Select(static type => type.Path), StringComparer.Ordinal).Any())
+        {
+            throw new JsonException(
+                "Unreal API discovery excluded type paths must be unique and cannot have type rules.");
+        }
+
+        return new UnrealApiContractDiscovery(
+            modules.Order(StringComparer.Ordinal).ToArray(),
+            types)
+        {
+            ExcludedTypePaths = excludedTypes.Order(StringComparer.Ordinal).ToArray(),
+        };
+    }
+
+    private static string[] NormalizeSignatureRules(
+        IReadOnlyList<string> rules,
+        string typePath,
+        string ruleKind)
+    {
+        string[] normalized = rules
+            .Select(static rule => rule?.Trim() ?? string.Empty)
+            .ToArray();
+        if (normalized.Any(rule => !IsSignatureRule(rule)) ||
+            normalized.Distinct(StringComparer.Ordinal).Count() != normalized.Length)
+        {
+            throw new JsonException(
+                $"Unreal API discovery type '{typePath}' has invalid or duplicate {ruleKind} signature rules.");
+        }
+        return normalized;
+    }
+
+    private static bool IsSignatureRule(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+        !value.Any(char.IsControl) &&
+        !value.Contains(':') &&
+        !value.Contains("->", StringComparison.Ordinal);
 
     private static JsonSerializerOptions CreateOptions(bool writeIndented)
     {
@@ -246,24 +403,109 @@ public static class UnrealApiContractProjector
         }
         IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes = normalizedReflection.Types
             .ToDictionary(static type => type.Path, StringComparer.Ordinal);
-        var selectedTypes = new List<UnrealReflectedType>(normalizedContract.Types.Count);
-
-        foreach (UnrealApiContractType selector in normalizedContract.Types)
+        UnrealApiContractDiscovery? discovery = normalizedContract.Discovery;
+        if (discovery is not null)
         {
-            if (!reflectedTypes.TryGetValue(selector.Path, out UnrealReflectedType? type))
+            foreach (string module in discovery.Modules)
             {
-                throw new JsonException(
-                    $"Unreal API contract type '{selector.Path}' is absent from reflection input.");
-            }
-
-            if (selector.Members.Count == 0)
-            {
-                if (type.Kind != UnrealReflectedTypeKind.Enum)
+                if (!normalizedReflection.Modules.Contains(module, StringComparer.Ordinal))
                 {
                     throw new JsonException(
-                        $"Unreal API contract type '{selector.Path}' uses an empty member " +
-                        "selector, but only reflected enum types may be selected without members.");
+                        $"Unreal API discovery module '{module}' is absent from reflection input.");
                 }
+            }
+            foreach (UnrealApiContractTypeRule rule in discovery.Types)
+            {
+                if (!reflectedTypes.ContainsKey(rule.Path))
+                {
+                    throw new JsonException(
+                        $"Unreal API discovery type '{rule.Path}' is absent from reflection input.");
+                }
+            }
+        }
+
+        HashSet<string> excludedTypePaths = discovery?.ExcludedTypePaths
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+        IReadOnlyDictionary<string, UnrealApiContractType> explicitTypes = normalizedContract.Types
+            .ToDictionary(static selector => selector.Path, StringComparer.Ordinal);
+        string[] explicitDiscoveryConflicts = explicitTypes.Keys
+            .Intersect(excludedTypePaths, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (explicitDiscoveryConflicts.Length != 0)
+        {
+            throw new JsonException(
+                "Unreal API contract explicitly selects discovery-excluded type(s): " +
+                string.Join(", ", explicitDiscoveryConflicts));
+        }
+        foreach (string path in explicitTypes.Keys)
+        {
+            if (!reflectedTypes.ContainsKey(path))
+            {
+                throw new JsonException(
+                    $"Unreal API contract type '{path}' is absent from reflection input.");
+            }
+        }
+        var selectedTypes = new List<UnrealReflectedType>();
+        foreach (UnrealReflectedType type in normalizedReflection.Types)
+        {
+            explicitTypes.TryGetValue(type.Path, out UnrealApiContractType? explicitSelector);
+            UnrealApiContractTypeRule[] typeRules = discovery?.Types
+                .Where(rule => rule.Path == type.Path)
+                .ToArray() ?? [];
+            bool selectedByModule = discovery?.Modules.Contains(
+                type.Module,
+                StringComparer.Ordinal) == true && !excludedTypePaths.Contains(type.Path);
+            if (explicitSelector is null && !selectedByModule && typeRules.Length == 0)
+            {
+                continue;
+            }
+
+            var selectedPaths = new HashSet<string>(StringComparer.Ordinal);
+            if (explicitSelector is not null)
+            {
+                if (explicitSelector.Members.Count == 0)
+                {
+                    if (type.Kind != UnrealReflectedTypeKind.Enum &&
+                        !(normalizedContract.SchemaVersion == UnrealApiContract.CurrentSchemaVersion &&
+                          type.Kind is UnrealReflectedTypeKind.Class or UnrealReflectedTypeKind.Struct or UnrealReflectedTypeKind.NativeObject))
+                    {
+                        throw new JsonException(
+                            $"Unreal API contract type '{type.Path}' uses an empty member " +
+                            "selector, but only reflected enum types may be selected without members.");
+                    }
+                }
+                else
+                {
+                    IReadOnlyDictionary<string, (string Kind, object Value)> members =
+                        CreateMemberMap(type);
+                    foreach (string member in explicitSelector.Members)
+                    {
+                        string selectedPath = GetSelectedMember(members, member, type.Path);
+                        if (typeRules.Any(rule => rule.ExcludeMembers.Any(
+                                pattern => MatchesMemberRule(members[member].Value, pattern))))
+                        {
+                            throw new JsonException(
+                                $"Unreal API contract member '{type.Path}:{member}' " +
+                                "conflicts with a discovery exclusion rule.");
+                        }
+                        selectedPaths.Add(selectedPath);
+                    }
+                }
+            }
+
+            if (selectedByModule || typeRules.Length != 0)
+            {
+                IReadOnlyDictionary<string, (string Kind, object Value)> members =
+                    CreateMemberMap(type);
+                foreach (string memberPath in DiscoverMembers(type, members, typeRules, selectedByModule))
+                {
+                    selectedPaths.Add(memberPath);
+                }
+            }
+
+            if (type.Kind == UnrealReflectedTypeKind.Enum)
+            {
                 selectedTypes.Add(type with
                 {
                     Properties = [],
@@ -273,21 +515,6 @@ public static class UnrealApiContractProjector
                 continue;
             }
 
-            var members = new Dictionary<string, (string Kind, object Value)>(StringComparer.Ordinal);
-            AddMembers(type.Properties, "property", static value => value.Name, members, type.Path);
-            AddFunctionMembers(type.Functions, members, type.Path);
-            AddMembers(type.Delegates, "delegate", static value => value.Name, members, type.Path);
-            foreach (string member in selector.Members)
-            {
-                if (!members.ContainsKey(member))
-                {
-                    throw new JsonException(
-                        $"Unreal API contract member '{selector.Path}:{member}' is absent from reflection input.");
-                }
-            }
-            var selectedPaths = selector.Members
-                .Select(member => GetSelectedMember(members, member, selector.Path))
-                .ToHashSet(StringComparer.Ordinal);
             selectedTypes.Add(type with
             {
                 Properties = type.Properties.Where(property => selectedPaths.Contains(property.Path)).ToArray(),
@@ -296,7 +523,7 @@ public static class UnrealApiContractProjector
             });
         }
 
-        AddDependencyClosure(selectedTypes, reflectedTypes);
+        AddDependencyClosure(selectedTypes, reflectedTypes, excludedTypePaths);
 
         string[] modules = selectedTypes
             .Select(static type => type.Module)
@@ -304,7 +531,8 @@ public static class UnrealApiContractProjector
             .Order(StringComparer.Ordinal)
             .ToArray();
         UnrealReflectionManifest selectedReflection = UnrealReflectionJson.NormalizeAndValidate(
-            UnrealReflectionManifest.Create(normalizedReflection.Engine, modules, selectedTypes));
+            UnrealReflectionManifest.Create(normalizedReflection.Engine,
+                modules.Length == 0 ? normalizedReflection.Modules : modules, selectedTypes));
         UnrealApiPolicyEvaluation evaluation = UnrealApiPolicyEvaluator.Evaluate(
             selectedReflection,
             normalizedContract.Policy);
@@ -317,12 +545,203 @@ public static class UnrealApiContractProjector
             evaluation,
             native: true);
         ValidateNativeExtensionRoutes(selectedReflection, nativeReflection, evaluation);
+        UnrealApiContract effectiveContract = discovery is null
+            ? normalizedContract
+            : CreateEffectiveContract(
+                normalizedContract,
+                normalizedReflection,
+                selectedTypes,
+                explicitTypes,
+                excludedTypePaths);
         return new UnrealApiContractProjection(normalizedContract, managedReflection)
         {
+            EffectiveContract = effectiveContract,
             SelectedReflection = selectedReflection,
             NativeReflection = nativeReflection,
             PolicyEvaluation = evaluation,
         };
+    }
+
+    private static UnrealApiContract CreateEffectiveContract(
+        UnrealApiContract contract,
+        UnrealReflectionManifest reflection,
+        IReadOnlyList<UnrealReflectedType> selectedTypes,
+        IReadOnlyDictionary<string, UnrealApiContractType> explicitTypes,
+        IReadOnlySet<string> excludedTypePaths)
+    {
+        var roots = new HashSet<string>(explicitTypes.Keys, StringComparer.Ordinal);
+        if (contract.Discovery is not null)
+        {
+            foreach (UnrealReflectedType type in reflection.Types)
+            {
+                if (!excludedTypePaths.Contains(type.Path) &&
+                    (contract.Discovery.Modules.Contains(type.Module, StringComparer.Ordinal) ||
+                     contract.Discovery.Types.Any(rule => rule.Path == type.Path)))
+                {
+                    roots.Add(type.Path);
+                }
+            }
+        }
+
+        UnrealApiContractType[] types = selectedTypes
+            .Where(type => roots.Contains(type.Path))
+            .Select(type => CreateResolvedTypeSelector(
+                type,
+                reflection.Types.Single(candidate => candidate.Path == type.Path)))
+            .ToArray();
+        if (types.Length == 0)
+        {
+            throw new JsonException(
+                "Unreal API discovery resolved no selected types; check module and type rules.");
+        }
+        return contract with
+        {
+            SchemaVersion = UnrealApiContract.CurrentSchemaVersion,
+            Types = types,
+            Discovery = null,
+        };
+    }
+
+    private static UnrealApiContractType CreateResolvedTypeSelector(
+        UnrealReflectedType type,
+        UnrealReflectedType originalType)
+    {
+        if (type.Kind == UnrealReflectedTypeKind.Enum)
+        {
+            return new UnrealApiContractType(type.Path, []);
+        }
+
+        var selectors = new List<string>(
+            type.Properties.Count + type.Functions.Count + type.Delegates.Count);
+        selectors.AddRange(type.Properties.Select(static property => property.Name));
+        selectors.AddRange(type.Delegates.Select(static item => item.Name));
+        IReadOnlyDictionary<string, int> originalOverloadCounts = originalType.Functions
+            .GroupBy(static function => function.Name, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+        foreach (UnrealReflectedFunction function in type.Functions)
+        {
+            selectors.Add(originalOverloadCounts[function.Name] == 1
+                ? function.Name
+                : FunctionSelector(function));
+        }
+        return new UnrealApiContractType(
+            type.Path,
+            selectors.Order(StringComparer.Ordinal).ToArray());
+    }
+
+    private static IReadOnlyDictionary<string, (string Kind, object Value)> CreateMemberMap(
+        UnrealReflectedType type)
+    {
+        var members = new Dictionary<string, (string Kind, object Value)>(StringComparer.Ordinal);
+        AddMembers(type.Properties, "property", static value => value.Name, members, type.Path);
+        AddFunctionMembers(type.Functions, members, type.Path);
+        AddMembers(type.Delegates, "delegate", static value => value.Name, members, type.Path);
+        return members;
+    }
+
+    private static IReadOnlyList<string> DiscoverMembers(
+        UnrealReflectedType type,
+        IReadOnlyDictionary<string, (string Kind, object Value)> members,
+        IReadOnlyList<UnrealApiContractTypeRule> typeRules,
+        bool selectedByModule)
+    {
+        if (type.Kind == UnrealReflectedTypeKind.Enum)
+        {
+            return [];
+        }
+
+        // A module selector discovers every member unless its type has an
+        // explicit rule. A type rule without a module selector discovers only
+        // the signatures it names (or all signatures when includes are empty).
+        IReadOnlyList<UnrealApiContractTypeRule> rules = typeRules.Count == 0 && selectedByModule
+            ? [new UnrealApiContractTypeRule(type.Path)]
+            : typeRules;
+        var selected = new HashSet<string>(StringComparer.Ordinal);
+        foreach (UnrealApiContractTypeRule rule in rules)
+        {
+            string[] candidates = rule.IncludeMembers.Count == 0
+                ? members.Keys.ToArray()
+                : members.Keys.Where(member => rule.IncludeMembers.Any(
+                    pattern => MatchesMemberRule(members[member].Value, pattern))).ToArray();
+            if (rule.IncludeMembers.Count != 0 && candidates.Length == 0)
+            {
+                throw new JsonException(
+                    $"Unreal API discovery type '{type.Path}' include rules matched no reflected members.");
+            }
+
+            foreach (string candidate in candidates)
+            {
+                if (!rule.ExcludeMembers.Any(pattern => MatchesMemberRule(members[candidate].Value, pattern)))
+                {
+                    selected.Add(candidate);
+                }
+            }
+        }
+
+        return selected
+            .Select(member => members[member].Value switch
+            {
+                UnrealReflectedProperty property => property.Path,
+                UnrealReflectedFunction function => function.Path,
+                UnrealReflectedDelegate reflectedDelegate => reflectedDelegate.Path,
+                _ => throw new InvalidOperationException("Unknown reflected member kind."),
+            })
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static bool MatchesMemberRule(object member, string pattern) => member switch
+    {
+        UnrealReflectedFunction function => MatchesSignatureRule(function.Name, pattern) ||
+            MatchesSignatureRule(FunctionSelector(function), pattern),
+        UnrealReflectedProperty property => MatchesSignatureRule(property.Name, pattern),
+        UnrealReflectedDelegate item => MatchesSignatureRule(item.Name, pattern),
+        _ => false,
+    };
+
+    private static bool MatchesSignatureRule(string value, string pattern)
+    {
+        if (pattern == "*")
+        {
+            return true;
+        }
+        int wildcard = pattern.IndexOf('*');
+        if (wildcard < 0)
+        {
+            return string.Equals(value, pattern, StringComparison.Ordinal);
+        }
+
+        int valueIndex = 0;
+        int patternIndex = 0;
+        int starIndex = -1;
+        int retryValueIndex = -1;
+        while (valueIndex < value.Length)
+        {
+            if (patternIndex < pattern.Length && pattern[patternIndex] == value[valueIndex])
+            {
+                valueIndex++;
+                patternIndex++;
+            }
+            else if (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+            {
+                starIndex = patternIndex++;
+                retryValueIndex = valueIndex;
+            }
+            else if (starIndex >= 0)
+            {
+                patternIndex = starIndex + 1;
+                valueIndex = ++retryValueIndex;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        while (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+        {
+            patternIndex++;
+        }
+        return patternIndex == pattern.Length;
     }
 
     private static void ValidateNativeExtensionRoutes(
@@ -407,13 +826,19 @@ public static class UnrealApiContractProjector
 
     private static void AddDependencyClosure(
         ICollection<UnrealReflectedType> selectedTypes,
-        IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes)
+        IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes,
+        IReadOnlySet<string> excludedTypePaths)
     {
         var selectedPaths = selectedTypes.Select(static type => type.Path)
             .ToHashSet(StringComparer.Ordinal);
         var pending = new Queue<string>(selectedTypes.SelectMany(EnumerateDependencies));
         while (pending.TryDequeue(out string? path))
         {
+            if (excludedTypePaths.Contains(path))
+            {
+                throw new JsonException(
+                    $"Unreal API discovery excluded dependency type '{path}' required by the selected surface.");
+            }
             if (!selectedPaths.Add(path) || !reflectedTypes.TryGetValue(path, out UnrealReflectedType? dependency))
             {
                 continue;

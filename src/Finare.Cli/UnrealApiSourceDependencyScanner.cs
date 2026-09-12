@@ -257,7 +257,8 @@ public sealed class UnrealApiSourceDependencyScanner
             {
                 continue;
             }
-            if (IsFrameworkWrapperMember(access.Name, semanticModel))
+            if (IsFrameworkWrapperMember(access.Name, semanticModel) ||
+                IsGeneratedValueMember(targets!, sourceMemberName))
             {
                 continue;
             }
@@ -305,7 +306,8 @@ public sealed class UnrealApiSourceDependencyScanner
 
             string sourceMemberName = binding.Name.Identifier.ValueText;
             if (string.IsNullOrWhiteSpace(sourceMemberName) ||
-                IsFrameworkWrapperMember(binding.Name, semanticModel))
+                IsFrameworkWrapperMember(binding.Name, semanticModel) ||
+                IsGeneratedValueMember(targets!, sourceMemberName))
             {
                 continue;
             }
@@ -332,6 +334,10 @@ public sealed class UnrealApiSourceDependencyScanner
         }
     }
 
+    private static bool IsGeneratedValueMember(IReadOnlyList<ReflectedTypeTarget> targets, string member) =>
+        targets.Count == 1 && (targets[0].ReflectedType.Kind, member) is
+            (UnrealReflectedTypeKind.NativeObject, "Dispose") or (UnrealReflectedTypeKind.Enum, "Value");
+
     private static bool IsFrameworkWrapperMember(
         SimpleNameSyntax member,
         SemanticModel semanticModel)
@@ -343,6 +349,8 @@ public sealed class UnrealApiSourceDependencyScanner
         }
 
         INamedTypeSymbol? declaringType = symbol.ContainingType;
+        if (declaringType?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return true;
         if (declaringType?.ContainingAssembly?.Identity.Name !=
             typeof(UnrealObject).Assembly.GetName().Name)
         {
@@ -747,6 +755,16 @@ public sealed class UnrealApiSourceDependencyScanner
         {
             return reflectedDelegate.Name;
         }
+        UnrealReflectedFunction[] callbackOwners = targets[0].ReflectedType.Functions
+            .Where(function => function.Parameters.Any(parameter =>
+            {
+                if (parameter.Type.Kind != UnrealValueKind.Callback) return false;
+                string stem = UnrealManagedNaming.FunctionName(function).TrimStart('@');
+                if (!stem.EndsWith(parameter.Name, StringComparison.Ordinal)) stem += parameter.Name;
+                if (!stem.EndsWith("Callback", StringComparison.Ordinal)) stem += "Callback";
+                return "Create" + stem == memberName;
+            })).ToArray();
+        if (callbackOwners.Length == 1) return FunctionSelector(callbackOwners[0]);
         if (access.Parent is not InvocationExpressionSyntax invocation ||
             invocation.Expression != access)
         {
@@ -763,7 +781,7 @@ public sealed class UnrealApiSourceDependencyScanner
         }
 
         UnrealReflectedFunction[] compatible = overloads.Where(function =>
-            InvocationMatches(function, invocation.ArgumentList.Arguments, semanticModel)).ToArray();
+            InvocationMatches(function, invocation.ArgumentList.Arguments.ToArray(), semanticModel)).ToArray();
         return compatible.Length == 1
             ? FunctionSelector(compatible[0])
             : memberName;
@@ -771,10 +789,13 @@ public sealed class UnrealApiSourceDependencyScanner
 
     private static bool InvocationMatches(
         UnrealReflectedFunction function,
-        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        IReadOnlyList<ArgumentSyntax> arguments,
         SemanticModel semanticModel)
     {
         IReadOnlyList<UnrealReflectedParameter> parameters = function.Parameters;
+        if (function.Traits.Static && arguments.Count > 0 &&
+            semanticModel.GetTypeInfo(arguments[0].Expression).Type?.Name == "IUnrealInvocationBridge")
+            arguments = arguments.Skip(1).ToArray();
         if (arguments.Count > parameters.Count)
         {
             return false;
@@ -891,10 +912,15 @@ public sealed class UnrealApiSourceDependencyScanner
         string actualName = named.Name;
         return expected.Kind switch
         {
+            UnrealValueKind.String or UnrealValueKind.Boolean or
+                UnrealValueKind.Int8 or UnrealValueKind.UInt8 or UnrealValueKind.Int16 or UnrealValueKind.UInt16 or
+                UnrealValueKind.Int32 or UnrealValueKind.UInt32 or UnrealValueKind.Int64 or UnrealValueKind.UInt64 or
+                UnrealValueKind.Float32 or UnrealValueKind.Float64 => false,
             UnrealValueKind.Name => actualName == "UnrealName",
             UnrealValueKind.Text => actualName == "UnrealText",
             UnrealValueKind.Object => actualName == "UnrealObjectHandle",
             UnrealValueKind.Interface => actualName == "UnrealObjectHandle",
+            UnrealValueKind.NativeObject => actualName == expected.TypePath?[(expected.TypePath.LastIndexOf('.') + 1)..],
             UnrealValueKind.Class => actualName == "UnrealClassHandle",
             UnrealValueKind.SoftObject => actualName == "UnrealSoftObjectHandle",
             UnrealValueKind.SoftClass => actualName == "UnrealSoftClassHandle",
@@ -922,7 +948,7 @@ public sealed class UnrealApiSourceDependencyScanner
     {
         int open = function.Path.IndexOf('(', StringComparison.Ordinal);
         return open >= 0
-            ? function.Path[(function.Path.LastIndexOf(':') + 1)..]
+            ? function.Path[(function.Path.IndexOf(':') + 1)..]
             : function.Name;
     }
 

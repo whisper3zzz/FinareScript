@@ -52,6 +52,7 @@ public sealed class UnrealProjectAdoptionTests
         ]);
 
         Assert.Equal(0, applied);
+        Assert.False(Directory.Exists(Path.Combine(fixture.ProjectRoot, "Contracts")));
         JsonObject project = JsonNode.Parse(File.ReadAllText(fixture.ProjectPath))!.AsObject();
         Assert.Equal("preserved", project["FixtureField"]!.GetValue<string>());
         JsonObject plugin = Assert.Single(
@@ -256,6 +257,8 @@ public sealed class UnrealProjectAdoptionTests
 
         CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
         Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        Assert.DoesNotContain("[Visual]", source, StringComparison.Ordinal);
+        Assert.Contains("Math.Clamp", source, StringComparison.Ordinal);
         ScriptAssetDeclaration asset = Assert.Single(analysis.ScriptAssets!.Assets);
         Assert.Equal("Finare.Unreal.FirstScript", asset.QualifiedName);
         Assert.Equal("Game/FirstScript", asset.AssetPath);
@@ -939,18 +942,6 @@ public sealed class UnrealProjectAdoptionTests
                   "editorTarget": "__EDITOR_TARGET__",
                   "gameTarget": "__GAME_TARGET__",
                   "projectModule": "__PROJECT_MODULE__"
-                }
-                """);
-            Write(
-                Path.Combine(templates, "Contracts", "Project.unreal-api-contract.json.template"),
-                """
-                {
-                  "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
-                  "contractName": "__PROJECT_NAME__.Gameplay",
-                  "managedNamespace": "__MANAGED_NAMESPACE__.Generated",
-                  "nativeHeader": "Fixture.h",
-                  "nativeNamespace": "Fixture",
-                  "types": []
                 }
                 """);
             Write(
