@@ -11,6 +11,7 @@ enum class EFinareDailyBuildReason : uint8
 	Manual = 1 << 0,
 	GraphPublication = 1 << 1,
 	Play = 1 << 2,
+	SourceSave = 1 << 3,
 };
 
 ENUM_CLASS_FLAGS(EFinareDailyBuildReason);

@@ -38,6 +38,11 @@ namespace UE::Finare::PropertyValueCodec
 
 	inline FString ContainerValueNativeName(const FProperty& Property)
 	{
+		if (CastField<FInt8Property>(&Property)) return TEXT("int8");
+		if (CastField<FInt16Property>(&Property)) return TEXT("int16");
+		if (CastField<FUInt16Property>(&Property)) return TEXT("uint16");
+		if (CastField<FUInt32Property>(&Property)) return TEXT("uint32");
+		if (CastField<FUInt64Property>(&Property)) return TEXT("uint64");
 		if (const FEnumProperty* Typed = CastField<FEnumProperty>(&Property))
 		{
 			return Typed->GetEnum()->GetName();

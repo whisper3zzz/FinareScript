@@ -21,6 +21,7 @@
 #include "UObject/StructOnScope.h"
 #include "UObject/TextProperty.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Script.h"
 
@@ -222,14 +223,112 @@ namespace UE::Finare::Invocation::Private
 		return true;
 	}
 
+	FString ReflectedFunctionPath(const UFunction* Function)
+	{
+		return Function->GetOuterUClass()->GetPathName() + TEXT(":") + Function->GetName();
+	}
+
+	UFunction* FindReflectedFunction(UObject* Object, uint64 Id)
+	{
+		UFunction* Match = nullptr;
+		for (TFieldIterator<UFunction> It(Object->GetClass()); It; ++It)
+		{
+			FTCHARToUTF8 Path(*ReflectedFunctionPath(*It));
+			if (FinareMemberId(Path.Get()) != Id) continue;
+			if (Match != nullptr && Match != *It) return nullptr;
+			Match = *It;
+		}
+		// Function-library wrappers use the caller's World handle. Their static
+		// UFunctions belong to a different class, so they are not in that handle's
+		// hierarchy. Resolve loaded static declarations by the same canonical ID.
+		if (!Match)
+		{
+			for (TObjectIterator<UFunction> It; It; ++It)
+			{
+				if (!It->HasAnyFunctionFlags(FUNC_Static) || !It->GetOuterUClass()) continue;
+				FTCHARToUTF8 Path(*ReflectedFunctionPath(*It));
+				if (FinareMemberId(Path.Get()) != Id) continue;
+				if (Match && Match != *It) return nullptr;
+				Match = *It;
+			}
+		}
+		return Match;
+	}
+
+	bool IsOutputParameter(const FProperty* Property)
+	{
+		return Property->HasAnyPropertyFlags(CPF_OutParm | CPF_ReferenceParm) &&
+			!Property->HasAnyPropertyFlags(CPF_ConstParm);
+	}
+
+	bool SupportsReflectedField(const FProperty* Property, int32 Depth = 0, bool bAllowCustomStruct = true)
+	{
+		if (Depth > 16 || Property->ArrayDim != 1 || Property->HasAnyPropertyFlags(
+			CPF_NativeAccessSpecifierPrivate | CPF_NativeAccessSpecifierProtected | CPF_Deprecated | CPF_EditorOnly)) return false;
+		if (const auto* Struct = CastField<FStructProperty>(Property))
+		{
+			if (Struct->Struct == TBaseStructure<FVector>::Get() || Struct->Struct == TBaseStructure<FRotator>::Get() ||
+				Struct->Struct == TBaseStructure<FTransform>::Get()) return true;
+			if (!bAllowCustomStruct) return false;
+			for (TFieldIterator<FProperty> It(Struct->Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+				if (SupportsReflectedField(*It, Depth + 1)) return true;
+			return false;
+		}
+		if (const auto* Array = CastField<FArrayProperty>(Property))
+			return bAllowCustomStruct && SupportsReflectedField(Array->Inner, Depth + 1, false);
+		if (const auto* Set = CastField<FSetProperty>(Property))
+			return bAllowCustomStruct && SupportsReflectedField(Set->ElementProp, Depth + 1, false);
+		if (const auto* Map = CastField<FMapProperty>(Property))
+			return bAllowCustomStruct && SupportsReflectedField(Map->KeyProp, Depth + 1, false) &&
+				SupportsReflectedField(Map->ValueProp, Depth + 1, false);
+		return CastField<FNumericProperty>(Property) || CastField<FBoolProperty>(Property) ||
+			CastField<FEnumProperty>(Property) || CastField<FStrProperty>(Property) || CastField<FNameProperty>(Property) ||
+			CastField<FTextProperty>(Property) || CastField<FObjectPropertyBase>(Property) ||
+			CastField<FSoftObjectProperty>(Property);
+	}
+
+	FProperty* FindReflectedProperty(UObject* Object, uint64 Id)
+	{
+		FProperty* Match = nullptr;
+		for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+		{
+			const FString Path = It->GetOwnerStruct()->GetPathName() + TEXT(":") + It->GetName();
+			if (FinareMemberId(TCHAR_TO_UTF8(*Path)) != Id) continue;
+			if (Match && Match != *It) return nullptr;
+			Match = *It;
+		}
+		return Match;
+	}
+
+	TArray<FProperty*> ReflectedStructFields(const UScriptStruct* Struct)
+	{
+		TArray<FProperty*> Fields;
+		for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+			if (!It->HasAnyPropertyFlags(CPF_Parm) && SupportsReflectedField(*It)) Fields.Add(*It);
+		Fields.Sort([](const FProperty& A, const FProperty& B) { return A.GetName() < B.GetName(); });
+		return Fields;
+	}
+
+	void NormalizeFrameValue(FFinareValue& Value)
+	{
+		if (Value.Kind == EFinareValueKind::SoftObject || Value.Kind == EFinareValueKind::SoftClass)
+			Value.Kind = EFinareValueKind::String;
+		for (auto& Child : Value.ContainerValues) NormalizeFrameValue(Child);
+	}
+
 	bool ReadValue(
 		FFinareObjectRegistry& Registry,
 		const FProperty* Property,
 		const void* Container,
 		FFinareValue& OutValue,
 		FFinareInvocationResult& OutResult,
-		bool bDirectValue = false)
+		bool bDirectValue = false, int32 Depth = 0)
 	{
+		if (Depth > 16 || Property->ArrayDim != 1)
+		{
+			Fail(OutResult, EFinareInvocationError::UnsupportedValueType, TEXT("Reflected value exceeds the supported shape depth or has a fixed array dimension."));
+			return false;
+		}
 		const void* Value = bDirectValue
 			                    ? Container
 			                    : Property->ContainerPtrToValuePtr<void>(Container);
@@ -257,7 +356,7 @@ namespace UE::Finare::Invocation::Private
 			const auto ReadChild = [&](const FProperty& ChildProperty, const void* ChildValue)
 			{
 				FFinareValue Child;
-				if (!ReadValue(Registry, &ChildProperty, ChildValue, Child, OutResult, true))
+				if (!ReadValue(Registry, &ChildProperty, ChildValue, Child, OutResult, true, Depth + 1))
 				{
 					return false;
 				}
@@ -451,6 +550,23 @@ namespace UE::Finare::Invocation::Private
 					*static_cast<const FTransform*>(Value));
 				return true;
 			}
+			const auto Fields = ReflectedStructFields(TypedProperty->Struct);
+			if (Fields.IsEmpty())
+			{
+				Fail(OutResult, EFinareInvocationError::UnsupportedValueType, TEXT("Reflected struct has no supported public value fields."));
+				return false;
+			}
+			TArray<FFinareValue> Values;
+			for (const FProperty* Field : Fields)
+			{
+				FFinareValue Child;
+				if (!ReadValue(Registry, Field, Value, Child, OutResult, false, Depth + 1)) return false;
+				NormalizeFrameValue(Child);
+				Values.Add(MoveTemp(Child));
+			}
+			OutValue = FFinareValue::FromStruct(MoveTemp(Values),
+				UE::Finare::PropertyValueCodec::TypeIdFromPath(TypedProperty->Struct->GetPathName()));
+			return true;
 		}
 		if (const FClassProperty* TypedProperty = CastField<FClassProperty>(Property))
 		{
@@ -531,8 +647,13 @@ namespace UE::Finare::Invocation::Private
 		void* Container,
 		const FFinareValue& Value,
 		FFinareInvocationResult& OutResult,
-		bool bDirectValue = false)
+		bool bDirectValue = false, int32 Depth = 0)
 	{
+		if (Depth > 16 || Property->ArrayDim != 1)
+		{
+			Fail(OutResult, EFinareInvocationError::UnsupportedValueType, TEXT("Reflected value exceeds the supported shape depth or has a fixed array dimension."));
+			return false;
+		}
 		void* ValueAddress = bDirectValue
 			                     ? Container
 			                     : Property->ContainerPtrToValuePtr<void>(Container);
@@ -609,7 +730,7 @@ namespace UE::Finare::Invocation::Private
 				{
 					TypedCell.Kind = EFinareValueKind::SoftObject;
 				}
-				return WriteValue(Registry, &Child, Destination, TypedCell, OutResult, true);
+				return WriteValue(Registry, &Child, Destination, TypedCell, OutResult, true, Depth + 1);
 			};
 
 			void* Temporary = AllocateValue(*Property);
@@ -884,7 +1005,7 @@ namespace UE::Finare::Invocation::Private
 		if (FSoftClassProperty* TypedProperty = CastField<FSoftClassProperty>(Property))
 		{
 			FString PathText;
-			if (!Value.TryGetSoftClassPath(PathText))
+			if (!Value.TryGetSoftClassPath(PathText) && !Value.TryGetString(PathText))
 			{
 				Fail(OutResult, EFinareInvocationError::ValueTypeMismatch,
 				     FString::Printf(TEXT("Property '%s' requires a soft class path."), *Property->GetName()));
@@ -910,7 +1031,7 @@ namespace UE::Finare::Invocation::Private
 		if (FSoftObjectProperty* TypedProperty = CastField<FSoftObjectProperty>(Property))
 		{
 			FString PathText;
-			if (!Value.TryGetSoftObjectPath(PathText))
+			if (!Value.TryGetSoftObjectPath(PathText) && !Value.TryGetString(PathText))
 			{
 				Fail(OutResult, EFinareInvocationError::ValueTypeMismatch,
 				     FString::Printf(TEXT("Property '%s' requires a soft object path."), *Property->GetName()));
@@ -971,6 +1092,23 @@ namespace UE::Finare::Invocation::Private
 					*static_cast<FTransform*>(ValueAddress) = NativeValue;
 					return true;
 				}
+			}
+			else
+			{
+				const auto Fields = ReflectedStructFields(TypedProperty->Struct);
+				TConstArrayView<FFinareValue> Cells;
+				const uint64 Id = UE::Finare::PropertyValueCodec::TypeIdFromPath(TypedProperty->Struct->GetPathName());
+				if (Fields.IsEmpty() || !Value.TryGetStruct(Id, Cells) || Fields.Num() != Cells.Num())
+				{
+					Fail(OutResult, EFinareInvocationError::ValueTypeMismatch, TEXT("Reflected struct value does not match its public field layout."));
+					return false;
+				}
+				FStructOnScope Candidate(TypedProperty->Struct);
+				TypedProperty->Struct->CopyScriptStruct(Candidate.GetStructMemory(), ValueAddress);
+				for (int32 Index = 0; Index < Fields.Num(); ++Index)
+					if (!WriteValue(Registry, Fields[Index], Candidate.GetStructMemory(), Cells[Index], OutResult, false, Depth + 1)) return false;
+				TypedProperty->Struct->CopyScriptStruct(ValueAddress, Candidate.GetStructMemory());
+				return true;
 			}
 		}
 		if (FInterfaceProperty* TypedProperty = CastField<FInterfaceProperty>(Property))
@@ -1545,6 +1683,15 @@ bool FFinareInvocationBridge::Invoke(
 	FFinareValue& OutReturnValue,
 	FFinareInvocationResult& OutResult)
 {
+	TArray<FFinareValue> Outputs;
+	return Invoke(Target, FunctionPath, Arguments, OutReturnValue, Outputs, OutResult);
+}
+
+bool FFinareInvocationBridge::Invoke(
+	FFinareObjectHandle Target, const FString& FunctionPath,
+	TConstArrayView<FFinareValue> Arguments, FFinareValue& OutReturnValue,
+	TArray<FFinareValue>& OutOutputValues, FFinareInvocationResult& OutResult)
+{
 	using namespace UE::Finare::Invocation::Private;
 
 	UObject* Object = ResolveTarget(Registry, Target, OutResult);
@@ -1639,6 +1786,7 @@ bool FFinareInvocationBridge::Invoke(
 			return false;
 		}
 	}
+	TArray<FProperty*, TInlineAllocator<8>> OutputProperties;
 	FProperty* ReturnProperty = nullptr;
 	for (TFieldIterator<FProperty> Iterator(Function); Iterator; ++Iterator)
 	{
@@ -1652,18 +1800,9 @@ bool FFinareInvocationBridge::Invoke(
 			ReturnProperty = Parameter;
 			continue;
 		}
-		if (Parameter->HasAnyPropertyFlags(CPF_OutParm | CPF_ReferenceParm))
-		{
-			Fail(
-				OutResult,
-				EFinareInvocationError::UnsupportedParameter,
-				FString::Printf(
-					TEXT("Function '%s' contains unsupported output or reference parameter '%s'."),
-					*FunctionPath,
-					*Parameter->GetName()));
-			return false;
-		}
-		InputProperties.Add(Parameter);
+		if (IsOutputParameter(Parameter)) OutputProperties.Add(Parameter);
+		if (!IsOutputParameter(Parameter) || Parameter->HasAnyPropertyFlags(CPF_ReferenceParm))
+			InputProperties.Add(Parameter);
 	}
 
 	if (InputProperties.Num() != Arguments.Num())
@@ -1703,19 +1842,59 @@ bool FFinareInvocationBridge::Invoke(
 			return false;
 		}
 	}
+	// Validate the result shapes before any user function can mutate gameplay.
+	FFinareValue CandidateReturn;
+	TArray<FFinareValue> CandidateOutputs;
+	if (ReturnProperty && !ReadValue(Registry, ReturnProperty, ParameterMemory, CandidateReturn, OutResult)) return false;
+	for (FProperty* Output : OutputProperties)
+	{
+		FFinareValue Descriptor;
+		if (!ReadValue(Registry, Output, ParameterMemory, Descriptor, OutResult)) return false;
+	}
 	ProcessTarget->ProcessEvent(Function, ParameterMemory);
-	if (ReturnProperty != nullptr)
+	if (ReturnProperty && !ReadValue(Registry, ReturnProperty, ParameterMemory, CandidateReturn, OutResult)) return false;
+	for (FProperty* Output : OutputProperties)
 	{
-		if (!ReadValue(Registry, ReturnProperty, ParameterMemory, OutReturnValue, OutResult))
-		{
-			return false;
-		}
+		FFinareValue Value;
+		if (!ReadValue(Registry, Output, ParameterMemory, Value, OutResult)) return false;
+		CandidateOutputs.Add(MoveTemp(Value));
 	}
-	else
-	{
-		OutReturnValue = {};
-	}
+	OutReturnValue = MoveTemp(CandidateReturn);
+	OutOutputValues = MoveTemp(CandidateOutputs);
 
+	Succeed(OutResult);
+	return true;
+}
+
+bool FFinareInvocationBridge::DescribeReflectedInvocation(
+	FFinareObjectHandle Target, uint64 Id,
+	TArray<FFinareValue>& OutDescriptors, FFinareInvocationResult& OutResult)
+{
+	using namespace UE::Finare::Invocation::Private;
+	UObject* Object = ResolveTarget(Registry, Target, OutResult);
+	if (!Object) return false;
+	UFunction* Function = FindReflectedFunction(Object, Id);
+	if (!Function || !Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure | FUNC_Public))
+	{
+		Fail(OutResult, EFinareInvocationError::InvalidMemberPath, TEXT("No callable reflected function matches this member ID."));
+		return false;
+	}
+	FStructOnScope Storage(Function);
+	TArray<FFinareValue> Descriptors;
+	const auto Describe = [&](FProperty* Property)
+	{
+		FFinareValue Value;
+		if (!ReadValue(Registry, Property, Storage.GetStructMemory(), Value, OutResult)) return false;
+		NormalizeFrameValue(Value);
+		Descriptors.Add(MoveTemp(Value));
+		return true;
+	};
+	if (FProperty* Return = Function->GetReturnProperty())
+		if (!Describe(Return)) return false;
+	for (TFieldIterator<FProperty> It(Function); It; ++It)
+		if (It->HasAnyPropertyFlags(CPF_Parm) && !It->HasAnyPropertyFlags(CPF_ReturnParm) && IsOutputParameter(*It))
+			if (!Describe(*It)) return false;
+	OutDescriptors = MoveTemp(Descriptors);
 	Succeed(OutResult);
 	return true;
 }
@@ -1736,6 +1915,9 @@ bool FFinareInvocationBridge::ReadPropertyById(
 			OutValue,
 			OutResult))
 	{
+		if (Object && OutResult.Error == EFinareInvocationError::InvalidMemberPath)
+			if (FProperty* Property = FindReflectedProperty(Object, MemberIdValue))
+				return ReadProperty(Target, Property->GetOwnerStruct()->GetPathName() + TEXT(":") + Property->GetName(), OutValue, OutResult);
 		return false;
 	}
 	FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
@@ -1758,6 +1940,9 @@ bool FFinareInvocationBridge::WritePropertyById(
 			Value,
 			OutResult))
 	{
+		if (Object && OutResult.Error == EFinareInvocationError::InvalidMemberPath)
+			if (FProperty* Property = FindReflectedProperty(Object, MemberIdValue))
+				return WriteProperty(Target, Property->GetOwnerStruct()->GetPathName() + TEXT(":") + Property->GetName(), Value, OutResult);
 		return false;
 	}
 	FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
@@ -1791,6 +1976,14 @@ bool FFinareInvocationBridge::InvokeById(
 {
 	using namespace UE::Finare::Invocation::Private;
 	UObject* Object = ResolveTarget(Registry, Target, OutResult);
+	if (Object == nullptr) return false;
+	uint32 GeneratedResultCount = 0;
+	if (!FFinareGeneratedThunkRegistry::DescribeInvokeResultCount(MemberIdValue, GeneratedResultCount))
+	{
+		UFunction* Function = FindReflectedFunction(Object, MemberIdValue);
+		if (Function)
+			return Invoke(Target, ReflectedFunctionPath(Function), Arguments, OutReturnValue, OutOutputValues, OutResult);
+	}
 	if (Object == nullptr ||
 		!FFinareGeneratedThunkRegistry::Invoke(
 			Object,

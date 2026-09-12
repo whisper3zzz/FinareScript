@@ -101,7 +101,6 @@ namespace UE::Finare::Private
 		FString HeaderPath = Type->GetMetaData(TEXT("ModuleRelativePath"));
 		HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		HeaderPath.RemoveFromStart(TEXT("Public/"));
-		HeaderPath.RemoveFromStart(TEXT("Private/"));
 		HeaderPath.RemoveFromStart(TEXT("Classes/"));
 		return HeaderPath;
 	}
@@ -155,12 +154,18 @@ namespace UE::Finare::Private
 	TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property, int32 Depth = 0)
 	{
 		const FString NativeName = CanonicalNativeName(Property);
-		if (Depth > 16)
+		if (Depth > 16 || Property->ArrayDim != 1 || Property->HasAnyPropertyFlags(CPF_Deprecated | CPF_EditorOnly))
 		{
 			return TypeReference(TEXT("unsupported"), NativeName);
 		}
 		if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property))
 		{
+			// Callback transport accepts only direct function inputs. Preserve other
+			// reflected shapes as unsupported metadata instead of invalid JSON models.
+			if (Depth != 0 || !Property->HasAnyPropertyFlags(CPF_Parm) ||
+				Property->HasAnyPropertyFlags(CPF_ReturnParm) ||
+				(Property->HasAnyPropertyFlags(CPF_OutParm) && !Property->HasAnyPropertyFlags(CPF_ConstParm)))
+				return TypeReference(TEXT("unsupported"), NativeName);
 			const UFunction* Signature = Delegate->SignatureFunction;
 			if (!Signature)
 			{
@@ -461,6 +466,16 @@ namespace UE::Finare::Private
 		Traits->SetStringField(TEXT("nativeAccess"), FunctionNativeAccess(Function));
 		Json->SetObjectField(TEXT("traits"), Traits);
 		TSharedRef<FJsonObject> Metadata = BlueprintMetadata(Function);
+		for (const TCHAR* Key : {TEXT("worldContextParameter"), TEXT("latentInfoParameter")})
+		{
+			FString ParameterName;
+			if (Metadata->TryGetStringField(Key, ParameterName))
+			{
+				const FProperty* Parameter = Function->FindPropertyByName(*ParameterName);
+				if (!Parameter || !Parameter->HasAnyPropertyFlags(CPF_Parm)) Metadata->RemoveField(Key);
+			}
+		}
+		if (!Metadata->HasField(TEXT("worldContextParameter"))) Metadata->RemoveField(TEXT("callableWithoutWorldContext"));
 		const bool bThreadSafe = Function->HasMetaData(TEXT("BlueprintThreadSafe")) ||
 			!Function->HasMetaData(TEXT("NotBlueprintThreadSafe")) &&
 			Class->HasMetaData(TEXT("BlueprintThreadSafe"));
@@ -573,7 +588,6 @@ namespace UE::Finare::Private
 		FString HeaderPath = Class->GetMetaData(TEXT("ModuleRelativePath"));
 		HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		HeaderPath.RemoveFromStart(TEXT("Public/"));
-		HeaderPath.RemoveFromStart(TEXT("Private/"));
 		HeaderPath.RemoveFromStart(TEXT("Classes/"));
 		if (!HeaderPath.IsEmpty())
 		{
@@ -887,7 +901,6 @@ namespace UE::Finare::Private
 		FString HeaderPath = Struct->GetMetaData(TEXT("ModuleRelativePath"));
 		HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 		HeaderPath.RemoveFromStart(TEXT("Public/"));
-		HeaderPath.RemoveFromStart(TEXT("Private/"));
 		HeaderPath.RemoveFromStart(TEXT("Classes/"));
 		if (!HeaderPath.IsEmpty())
 		{
@@ -967,7 +980,7 @@ namespace UE::Finare::Private
 			}
 			TSharedRef<FJsonObject> Value = MakeShared<FJsonObject>();
 			Value->SetStringField(TEXT("name"), Enum->GetNameStringByIndex(Index));
-			Value->SetNumberField(TEXT("value"), static_cast<double>(Enum->GetValueByIndex(Index)));
+			Value->SetField(TEXT("value"), MakeShared<FJsonValueNumberString>(LexToString(Enum->GetValueByIndex(Index))));
 			const FString DisplayName = Enum->GetDisplayNameTextByIndex(Index).ToString();
 			if (!DisplayName.IsEmpty())
 			{

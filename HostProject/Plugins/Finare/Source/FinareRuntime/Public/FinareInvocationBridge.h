@@ -260,6 +260,16 @@ public:
 		FFinareValue& OutValue,
 		FFinareInvocationResult& OutResult);
 
+	/** Describe generic reflected results before executing any gameplay. */
+	bool DescribeReflectedInvocation(
+		FFinareObjectHandle Target, uint64 MemberId,
+		TArray<FFinareValue>& OutDescriptors, FFinareInvocationResult& OutResult);
+
+	bool Invoke(
+		FFinareObjectHandle Target, const FString& FunctionPath,
+		TConstArrayView<FFinareValue> Arguments, FFinareValue& OutReturnValue,
+		TArray<FFinareValue>& OutOutputValues, FFinareInvocationResult& OutResult);
+
 	bool WritePropertyById(
 		FFinareObjectHandle Target,
 		uint64 MemberId,

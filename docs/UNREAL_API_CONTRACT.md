@@ -1,35 +1,36 @@
-# Source-driven Unreal bindings
+# Available Unreal API library
 
-Project setup derives bindings from the managed projects in `managed.projects`.
-There is no project API Contract, allowlist, development overlay, or frozen binding
-lock. Old `bindings.contract` and `bindings.developmentSurface` configuration keys
-are errors. The removed `ue-contract-propose`, `ue-surface-expand`, `--contract`,
-and reflection-hint `--base` options are not compatibility entrypoints.
+Setup generates supported declarations for configured UE modules before gameplay
+uses them. IDE completion includes APIs that have never appeared in the project's
+C# source. No project Contract, member allowlist, request overlay or binding lock
+is required.
 
-## Build flow
+## Build and edit flow
 
-1. Load the C# projects through MSBuild, including their actual source files,
-   references and compilation settings. Binding generation does not require the
-   gameplay project to compile before missing bindings can be generated.
-2. Find referenced generated types and ask UE to export their reflected metadata.
-   Public reflected members do not need BlueprintCallable or BlueprintReadWrite.
-3. Resolve source member references and exact overloads against that metadata.
-4. Generate C#, native dispatch, optional Graph nodes, API browser and coverage
-   together. Missing, ambiguous or unsupported references fail with source locations
-   before any generated output is replaced.
+1. Export public reflected types and members from `reflection.modules`, plus
+   configured classes and Blueprint assets. Public members do not require
+   BlueprintCallable or BlueprintReadWrite.
+2. Project metadata through managed/native transport capabilities. Generate C#,
+   native dispatch where necessary, optional Graph nodes, API browser and coverage
+   together. Unsupported signatures are excluded from the available library; raw
+   reflection retains their metadata.
+3. Compile gameplay against this library. Adding or removing an available call
+   does not change the library or native dispatch.
+4. With the Editor open, saving `.cs`, `.csproj`, `.props` or `.targets` inside a
+   configured managed project directory queues Build & Reload. Saves are
+   debounced; generated files and build outputs are ignored. Play still waits
+   for the build gate. Compilation/reload failure preserves the running
+   generation and reports the error.
 
-Removing a call removes its unused binding on the next generation. Ordinary C#
-helpers remain ordinary C#; Graph authoring is optional. Type-only references,
-enums and supported struct fields retain the declarations needed by C# signatures.
-The type hint cache under `Saved/Finare/Bindings` is disposable exporter input.
-It is not a support checklist or an artifact that a developer approves.
+Reflection/library generation is cached on engine, module and native inputs.
+Changing reflected C++ declarations, module configuration or generated native
+layout still requires a native build and may require restarting the Editor.
+External linked source files outside configured project directories are not
+watched; use Build & Reload for those edits.
 
 ```powershell
-finare ue-reflection-hints --project Managed/Game.Finare.csproj `
-  --namespace Game.Finare.Generated --out Generated/type-hints.json
-
-finare ue-bindings Generated/Game.reflection.json `
-  --project Managed/Game.Finare.csproj --namespace Game.Finare.Generated `
+finare ue-bindings Generated/Game.reflection.json --api-library `
+  --namespace Game.Finare.Generated `
   --out Managed/Generated/Game.bindings.generated.cs `
   --native-out Source/Game/Generated/Game.thunks.cpp `
   --nodes-out Generated/Game.api-nodes.json `
@@ -37,43 +38,56 @@ finare ue-bindings Generated/Game.reflection.json `
   --report Generated/Game.binding-coverage.json --fail-on-rejected
 ```
 
-Setup config uses `bindings.namespace` and output paths. The source project list
-comes from `managed.projects`. See [project onboarding](UNREAL_ONBOARDING.md).
-The low-level `ue-bindings` command also accepts a reflection-only input for
-synthetic generator fixtures and benchmarks; project Setup always supplies C# projects.
+Setup runs this internally. `managed.projects` selects gameplay projects;
+`bindings.namespace` names their available API namespace. See
+[project onboarding](UNREAL_ONBOARDING.md).
 
-## Non-reflected C++ declarations
+## Dispatch and non-reflected C++
 
-UHT cannot discover ordinary C++ classes or methods. Their actual signatures,
-header paths, argument passing and return ownership remain necessary generator
-inputs. They live in an optional standalone native-extension declaration file,
-not inside a project member selection list. The repository example is
-[FinareRuntime.native-extensions.json](../samples/Unreal/FinareRuntime.native-extensions.json).
+Supported reflected scalars, objects, enums, core math values, public value
+structs, common containers and supported input callbacks use the generic
+reflection bridge, including ordered `ref/out` results. Struct values use a
+deterministic order of supported public fields. Fixed arrays, private/protected,
+deprecated and editor-only fields are excluded; writing the remaining fields
+preserves excluded native state. Nested containers and struct fields containing
+collections of custom structs are excluded from this layout. This is value
+marshalling, not a shared-memory struct view.
 
-Use `bindings.nativeExtensions` in Setup, or `--native-extensions <file>` on both
-commands above. The generator adds these declarations to reflection before
-resolving C# use; unused declared methods are not selected merely because they
-are declared. Native-only classes are excluded from UE reflected-class discovery.
-No declaration file is needed for ordinary reflected APIs.
+ABI v3 validates output
+descriptors before gameplay executes and retains correlated results during buffer
+growth, so retries do not invoke the function twice. World handles and
+transactional reload rules remain unchanged.
 
-C# factory calls and native object ownership helpers keep the existing lifetime
-rules: constructor overloads select exact signatures, owned objects are disposed,
-and borrowed objects stay tied to their owner and World generation.
+Signatures requiring generated native transport receive dispatch code during the
+initial library build. UHT cannot discover non-reflected C++: optional
+`bindings.nativeExtensions` / `--native-extensions` supplies actual signatures,
+headers and ownership. Supported declarations in that file join the library.
+It is not a project member selection list. Owned and borrowed native objects
+retain their existing disposal and generation lifetime rules.
 
-## Generator internals and evidence
+The library covers supported signatures in configured modules, not every C++ API
+in UE. An absent API needs metadata or transport support; writing a C# call alone
+cannot make an unsupported ABI executable.
 
-The generator still uses an in-memory selection model named `UnrealApiContract`
-and its projector. JSON fixtures used by generator tests describe synthetic
-selection and ABI cases; they are not accepted as project configuration or CLI
-selection inputs. No request, overlay or lock files are emitted by Setup.
+## Internal selection and verification
 
-The shared selection feeds all consumers with the same reflected IDs. Native
-routing still chooses a supported generated thunk or safe reflection route;
-unsupported signatures are diagnosed, never represented as working bindings.
-Blueprint assets retain exact generated-class paths and lifetime rules.
+The in-memory projector remains named `UnrealApiContract`; it is an internal
+model. Low-level `ue-bindings --project` and `ue-reflection-hints` remain useful
+for source analysis and focused fixtures. Setup uses `--api-library` independently
+of gameplay source. Removed project Contract/configuration modes remain rejected.
 
-Focused integration tests cover call removal, type-only use, empty UE usage,
-invalid projects and all-or-nothing output replacement. The pure C# UE fixture
-loads the emitted `.uschunk`, runs gameplay and reloads a second revision while
-preserving state. See [first script](UNREAL_FIRST_SCRIPT.md) and
-[architecture](ARCHITECTURE.md) for runtime boundaries.
+`tools/test-api-library.ps1 -EngineRoot <UE root>` runs the complete focused gate:
+preparation, Editor/Game native builds and the required CMD Automation tests. It
+restores the checkout's focused native fixture and rebuilds its binaries afterward.
+The gate runs in the `unreal-automation` CI lane; the managed lane also tests that
+C# edits invalidate managed compilation without invalidating binding generation.
+
+`tools/prepare-api-library.ps1` exports Engine and FinareRuntime, compiles the
+library before gameplay, then emits two C# revisions with unchanged generated
+bindings/native output. `Finare.Unreal.ApiLibrary.NewCallReload` loads both in one
+UE process and checks previously unused scalar, struct, container-field and
+`ref/out` calls, including a static Kismet function called through the current
+World's handle.
+`Finare.Unreal.ApiDiscovery.GenericOutputs` covers descriptor rejection and
+single-execution retries. `Finare.Unreal.ProjectSetup.SourceSave` exercises real
+directory notifications and save debouncing.

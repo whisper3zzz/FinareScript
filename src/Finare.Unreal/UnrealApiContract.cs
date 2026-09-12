@@ -82,6 +82,8 @@ public sealed record UnrealApiContractProjection(
 
     public UnrealReflectionManifest NativeReflection { get; init; } = Reflection;
 
+    public IReadOnlySet<string>? ReflectedStructPaths { get; init; }
+
     public UnrealApiPolicyEvaluation PolicyEvaluation { get; init; } =
         UnrealApiPolicyEvaluator.Evaluate(Reflection, UnrealApiPolicy.AllowSelected);
 }
@@ -1097,12 +1099,12 @@ public static class UnrealApiNodeCatalogGenerator
             }
             foreach (UnrealReflectedFunction function in type.Functions)
             {
-                string managedFunctionName = UnrealManagedNaming.FunctionName(function);
+                string managedFunctionName = UnrealManagedNaming.FunctionName(function, type);
                 (int FirstDefault, string?[] Expressions)? projectedDefaults =
                     UnrealBindingGenerator.GetProjectableDefaultExpressions(function, managedNames);
                 bool overloaded = type.Functions.Count(candidate =>
                     string.Equals(
-                        UnrealManagedNaming.FunctionName(candidate),
+                        UnrealManagedNaming.FunctionName(candidate, type),
                         managedFunctionName,
                         StringComparison.Ordinal)) > 1;
                 var pins = new List<UnrealApiNodePin>();

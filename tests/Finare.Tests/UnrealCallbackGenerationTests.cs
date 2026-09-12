@@ -26,6 +26,19 @@ public sealed class UnrealCallbackGenerationTests
             [new("Callback", callback ?? Callback(), UnrealParameterDirection.Input)], new(false, false, true))], "CallbackHost.h")]);
 
     [Fact]
+    public void ClassScopedCallbackSignatureRetainsItsExactReflectedFieldPath()
+    {
+        var callback = Callback() with { TypePath = Owner + ":Evaluate__DelegateSignature" };
+        var manifest = UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(Manifest(callback)));
+        Assert.Equal(callback.TypePath, manifest.Types[0].Functions[0].Parameters[0].Type.TypePath);
+        var generated = new UnrealBindingGenerator().Generate(manifest);
+        var compilation = new CSharpCompilationHost().Create(CSharpSyntaxTree.ParseText(generated.Source),
+            [MetadataReference.CreateFromFile(typeof(UnrealCallback<>).Assembly.Location)]);
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(callback.TypePath, generated.Source);
+    }
+
+    [Fact]
     public void CallbackSignaturesRoundTripAndGenerateTypedLeaseFactories()
     {
         var manifest = Manifest();

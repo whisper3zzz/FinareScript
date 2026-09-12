@@ -283,7 +283,7 @@ public static class UnrealReflectionJson
         bool hasValue = type.ValueType is not null;
         switch (type.Kind)
         {
-            case UnrealValueKind.Callback when depth == 0 && hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
+            case UnrealValueKind.Callback when depth == 0 && hasTypePath && IsReflectedFieldPath(type.TypePath!) &&
                 !hasElement && !hasKey && !hasValue && type.CallbackSignature is { } signature:
                 if (signature.Parameters is null || signature.Parameters.Count > 16 ||
                     signature.ReturnType is null || UnrealCallbackBindings.ContainsCallback(signature.ReturnType))

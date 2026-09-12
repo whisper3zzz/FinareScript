@@ -1584,6 +1584,13 @@ namespace UE::Finare::NativeTransport::Private
 		return true;
 	}
 
+	void NormalizeReflectedFrameValue(FFinareValue& Value)
+	{
+		if (Value.Kind == EFinareValueKind::SoftObject || Value.Kind == EFinareValueKind::SoftClass)
+			Value.Kind = EFinareValueKind::String;
+		for (auto& Child : Value.ContainerValues) NormalizeReflectedFrameValue(Child);
+	}
+
 	bool ToNativeKindV3(
 		EFinareValueKind Kind,
 		EFinareNativeValueKindV3& OutKind)
@@ -2395,13 +2402,23 @@ namespace UE::Finare::NativeTransport::Private
 		}
 		EFinareValueKind ExpectedKind;
 		uint64 ExpectedTypeId = 0;
+		FFinareValue ReflectedValue;
+		bool bReflectedRead = false;
 		if (!FFinareGeneratedThunkRegistry::DescribeReadResult(
 			MemberId, ExpectedKind, ExpectedTypeId))
 		{
 			FFinareInvocationResult Result;
-			Result.Error = EFinareInvocationError::InvalidMemberPath;
-			InvocationFailureV3(*Frame, EntryByteCount, Result);
-			return;
+			const bool bExecuted = Context && static_cast<FFinareNativeBridgeContext*>(Context)->Execute(
+				[&](FFinareInvocationBridge& Bridge) { bReflectedRead = Bridge.ReadPropertyById({Target}, MemberId, ReflectedValue, Result); });
+			if (!bExecuted || !bReflectedRead)
+			{
+				if (!bExecuted) Result.Error = EFinareInvocationError::InvalidMemberPath;
+				InvocationFailureV3(*Frame, EntryByteCount, Result);
+				return;
+			}
+			NormalizeReflectedFrameValue(ReflectedValue);
+			ExpectedKind = ReflectedValue.Kind;
+			ExpectedTypeId = ReflectedValue.TypeIdValue;
 		}
 		EFinareNativeValueKindV3 SupportedKind;
 		if (!ToNativeKindV3(ExpectedKind, SupportedKind))
@@ -2419,7 +2436,8 @@ namespace UE::Finare::NativeTransport::Private
 				{
 					FFinareValue Value;
 					FFinareInvocationResult Result;
-					if (!Bridge.ReadPropertyById({Target}, MemberId, Value, Result))
+					if (bReflectedRead) Value = ReflectedValue;
+					else if (!Bridge.ReadPropertyById({Target}, MemberId, Value, Result))
 					{
 						InvocationFailureV3(*Frame, EntryByteCount, Result);
 						return;
@@ -2522,18 +2540,28 @@ namespace UE::Finare::NativeTransport::Private
 			InvocationFailureV3(*Frame, EntryByteCount, Result);
 			return;
 		}
+		TArray<FFinareValue> ReflectedDescriptors;
+		bool bReflected = false;
 		uint32 ExpectedResultCount = 0;
 		if (bParentCall)
 		{
 			ExpectedResultCount = Frame->ResultCount;
 		}
-		else if (!FFinareGeneratedThunkRegistry::DescribeInvokeResultCount(
-			MemberId, ExpectedResultCount))
+		else if (!FFinareGeneratedThunkRegistry::DescribeInvokeResultCount(MemberId, ExpectedResultCount))
 		{
 			FFinareInvocationResult Result;
-			Result.Error = EFinareInvocationError::InvalidMemberPath;
-			InvocationFailureV3(*Frame, EntryByteCount, Result);
-			return;
+			const bool bExecuted = Context != nullptr &&
+				static_cast<FFinareNativeBridgeContext*>(Context)->Execute([&](FFinareInvocationBridge& Bridge)
+				{
+					bReflected = Bridge.DescribeReflectedInvocation({Target}, MemberId, ReflectedDescriptors, Result);
+				});
+			if (!bExecuted || !bReflected)
+			{
+				if (!bExecuted) Result.Error = EFinareInvocationError::InvalidMemberPath;
+				InvocationFailureV3(*Frame, EntryByteCount, Result);
+				return;
+			}
+			ExpectedResultCount = ReflectedDescriptors.Num();
 		}
 		if (ExpectedResultCount > 64)
 		{
@@ -2581,7 +2609,12 @@ namespace UE::Finare::NativeTransport::Private
 		{
 			EFinareValueKind ExpectedKind;
 			uint64 ExpectedTypeId = 0;
-			if (!FFinareGeneratedThunkRegistry::DescribeInvokeResult(
+			if (bReflected)
+			{
+				ExpectedKind = ReflectedDescriptors[ResultIndex].Kind;
+				ExpectedTypeId = ReflectedDescriptors[ResultIndex].TypeIdValue;
+			}
+			else if (!FFinareGeneratedThunkRegistry::DescribeInvokeResult(
 				MemberId, ResultIndex, ExpectedKind, ExpectedTypeId))
 			{
 				InvalidFrameV3(Frame, EntryByteCount);
@@ -2775,8 +2808,14 @@ namespace UE::Finare::NativeTransport::Private
 						}
 					}
 					const uint32 ProducedResultCount =
+						// Reflected soft references share the v3 string representation.
 						(ReturnValue.Kind == EFinareValueKind::Void ? 0u : 1u) +
 						static_cast<uint32>(OutputValues.Num());
+					if (bReflected)
+					{
+						NormalizeReflectedFrameValue(ReturnValue);
+						for (auto& Value : OutputValues) NormalizeReflectedFrameValue(Value);
+					}
 					if (ProducedResultCount != ExpectedResultCount)
 					{
 						Pending.Reset();

@@ -8,7 +8,7 @@ public class FinareRuntime : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "EnhancedInput" });
-        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "Json", "Projects", "NetCore" });
+        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "Json", "Projects", "NetCore", "AudioExtensions" });
         AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
 
         RuntimeDependencies.Add("$(PluginDir)/Binaries/Managed/...", StagedFileType.NonUFS);

@@ -618,6 +618,7 @@ function Invoke-BindingGeneration {
         $CliAssembly,
         'ue-bindings',
         $ReflectionManifest,
+        '--api-library',
         '--out', $ManagedOutput,
         '--native-out', $NativeOutput,
         '--nodes-out', $NodeCatalogOutput,
@@ -626,7 +627,6 @@ function Invoke-BindingGeneration {
     )
     $arguments += @('--namespace', $BindingNamespace, '--configuration', $ManagedConfiguration, '--dotnet', $DotNet)
     if ($NativeExtensions) { $arguments += @('--native-extensions', $NativeExtensions) }
-    foreach ($managedProject in $ManagedProjects) { $arguments += @('--project', $managedProject) }
     if ($FailOnRejected) {
         $arguments += '--fail-on-rejected'
     }
@@ -636,38 +636,6 @@ function Invoke-BindingGeneration {
         -LogPath $LogPath `
         -FailureCode 'USONB2002' `
         -FailureMessage 'Unreal binding generation failed.'
-}
-
-function Invoke-ReflectionHintScan {
-    param(
-        [Parameter(Mandatory)][string]$DotNet,
-        [Parameter(Mandatory)][string]$CliAssembly,
-        [string]$BindingNamespace,
-        [string]$NativeExtensions,
-        [Parameter(Mandatory)][string[]]$ManagedProjects,
-        [Parameter(Mandatory)][string]$ManagedConfiguration,
-        [Parameter(Mandatory)][string]$Output,
-        [Parameter(Mandatory)][string]$LogPath
-    )
-
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
-    $arguments = @($CliAssembly, 'ue-reflection-hints')
-    foreach ($managedProject in $ManagedProjects) {
-        $arguments += @('--project', $managedProject)
-    }
-    $arguments += @(
-        '--out', $Output,
-        '--configuration', $ManagedConfiguration,
-        '--dotnet', $DotNet
-    )
-    $arguments += @('--namespace', $BindingNamespace)
-    if ($NativeExtensions) { $arguments += @('--native-extensions', $NativeExtensions) }
-    Invoke-LoggedCommand `
-        -FilePath $DotNet `
-        -Arguments $arguments `
-        -LogPath $LogPath `
-        -FailureCode 'USONB2006' `
-        -FailureMessage 'Managed source reflection-hint scan failed.'
 }
 
 function Assert-GeneratedFileMatches {
@@ -965,7 +933,6 @@ try {
         $resolved.failOnRejected = $configJson.bindings.failOnRejected -ne $false
         $resolved.requireCompleteNativeCoverage =
             $configJson.bindings.requireCompleteNativeCoverage -eq $true
-        $resolved.sourceTypeHints = Join-Path $projectDirectory 'Saved/Finare/Bindings/type-hints.json'
         $resolved.deploymentEnabled = $configJson.deployment.enabled -ne $false
         $resolved.deployment = Resolve-FullPath `
             -Path ([string]$configJson.deployment.manifest) `
@@ -1092,7 +1059,7 @@ try {
              $resolved.browserOutput,
              $resolved.coverageOutput,
              $resolved.managedStage,
-             $resolved.sourceTypeHints) |
+             $resolved.reflection) |
              Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
              Assert-WritableDestination -Path $destination
          }
@@ -1408,33 +1375,7 @@ try {
                 -FailureMessage 'Initial Unreal editor build failed.'
         }
 
-            Invoke-DependencyAwareOnboardingPhase `
-                -Name 'source-reflection-hints' `
-                -Values ([ordered]@{
-                    namespace = $resolved.bindingNamespace
-                    configuration = $resolved.managedConfiguration
-                }) `
-                -PathInputs ([ordered]@{
-                    nativeExtensions = @($resolved.nativeExtensions) | Where-Object { $_ }
-                    managedSources = $managedSourceInputs
-                    generator = @($cliAssembly)
-                }) `
-                -OutputPaths @($resolved.sourceTypeHints) `
-                -Action {
-                Invoke-ReflectionHintScan `
-                    -DotNet $resolved.dotnet `
-                    -CliAssembly $cliAssembly `
-                    -BindingNamespace $resolved.bindingNamespace `
-                    -NativeExtensions $resolved.nativeExtensions `
-                    -ManagedProjects $resolved.managedProjects `
-                    -ManagedConfiguration $resolved.managedConfiguration `
-                    -Output $resolved.sourceTypeHints `
-                    -LogPath (Join-Path $script:RunDirectory 'source-reflection-hints.log')
-            }
-
-
         $reflectionDependencies = @('managed-toolchain', 'native-bootstrap-build')
-            $reflectionDependencies += 'source-reflection-hints'
 
         Invoke-DependencyAwareOnboardingPhase `
             -Name 'reflection-export' `
@@ -1442,11 +1383,10 @@ try {
                 modules = @($resolved.modules)
                 classes = @($resolved.classes)
                 blueprintAssets = @($resolved.blueprintAssets)
-                publicSourceReflection = $true
+                apiLibrary = $true
             }) `
             -PathInputs ([ordered]@{
                 project = @($script:ResolvedProjectPath)
-                sourceTypeHints = @($resolved.sourceTypeHints)
             }) `
             -Dependencies $reflectionDependencies `
             -OutputPaths @($resolved.reflection) `
@@ -1465,26 +1405,10 @@ try {
                 '-nosplash',
                 '-NullRHI'
             )
+            $arguments += @('-IncludePublicReflected', "-DiscoveryModules=$($exportModules -join ',')")
             if ($resolved.classes.Count -gt 0) {
                 $arguments += "-Classes=$($resolved.classes -join ',')"
             }
-            $arguments += '-IncludePublicReflected'
-
-                    $hintDocument = Get-Content `
-                    -LiteralPath $resolved.sourceTypeHints `
-                    -Raw | ConvertFrom-Json
-                if ($hintDocument.schemaVersion -ne
-                        'unifiedscript.unreal-api-source-type-hints/v0.1') {
-                    Throw-OnboardingError `
-                        -Code 'USONB2006' `
-                        -Message 'Managed source reflection hints have an unsupported schema.'
-                }
-                $typeNames = @($hintDocument.hints | ForEach-Object {
-                    [string]$_.managedTypeName
-                })
-                if ($typeNames.Count -gt 0) {
-                    $arguments += "-TypeNames=$($typeNames -join ',')"
-                }
 
             if ($resolved.blueprintAssets.Count -gt 0) {
                 $arguments += "-BlueprintAssets=$($resolved.blueprintAssets -join ',')"
@@ -1506,6 +1430,7 @@ try {
         Invoke-DependencyAwareOnboardingPhase `
             -Name 'binding-generation' `
             -Values ([ordered]@{
+                apiLibrary = $true
                 namespace = $resolved.bindingNamespace
                 configuration = $resolved.managedConfiguration
                 failOnRejected = $resolved.failOnRejected
@@ -1514,7 +1439,6 @@ try {
             -PathInputs ([ordered]@{
                 reflection = @($resolved.reflection)
                 nativeExtensions = @($resolved.nativeExtensions) | Where-Object { $_ }
-                sources = $managedSourceInputs
                 generator = @($cliAssembly)
             }) `
             -Dependencies $bindingDependencies `
@@ -1895,6 +1819,7 @@ try {
     Invoke-DependencyAwareOnboardingPhase `
         -Name 'determinism' `
         -Values ([ordered]@{
+            apiLibrary = $true
             namespace = $resolved.bindingNamespace
             configuration = $resolved.managedConfiguration
             failOnRejected = $resolved.failOnRejected
@@ -1903,7 +1828,6 @@ try {
         -PathInputs ([ordered]@{
             reflection = @($resolved.reflection)
             nativeExtensions = @($resolved.nativeExtensions) | Where-Object { $_ }
-            sources = $managedSourceInputs
             generatedBindings = @(
                 $resolved.managedOutput,
                 $resolved.nativeOutput,
@@ -1984,6 +1908,11 @@ try {
             $hostFixtureProject = [IO.Path]::GetFullPath(
                 (Join-Path (Split-Path -Parent $PSScriptRoot) 'HostProject/FinareHost.uproject'))
             if ($script:ResolvedProjectPath -eq $hostFixtureProject -and
+                'Finare.Unreal.ApiLibrary.NewCallReload'.StartsWith(
+                    $resolved.automationFilter, [StringComparison]::OrdinalIgnoreCase)) {
+                & (Join-Path $PSScriptRoot 'prepare-api-library.ps1') -EngineRoot $script:ResolvedEngineRoot
+            }
+            if ($script:ResolvedProjectPath -eq $hostFixtureProject -and
                 'Finare.Unreal.ApiDiscovery.ReflectedManagedCall'.StartsWith(
                     $resolved.automationFilter, [StringComparison]::OrdinalIgnoreCase)) {
                 & (Join-Path $PSScriptRoot 'prepare-api-discovery.ps1') -EngineRoot $script:ResolvedEngineRoot
@@ -2063,7 +1992,6 @@ try {
         apiNodeCatalog = $resolved.nodeCatalogOutput
         apiBrowser = $resolved.browserOutput
          bindingCoverage = $resolved.coverageOutput
-        sourceTypeHints = $resolved.sourceTypeHints
 
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage

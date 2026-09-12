@@ -194,8 +194,8 @@ public sealed class UnrealBindingCoverageTests
 
         Assert.Equal(5, report.Summary.MemberCount);
         Assert.Equal(2, report.Summary.NativeThunkCount);
-        Assert.Equal(1, report.Summary.ReflectionFallbackCount);
-        Assert.Equal(2, report.Summary.RejectedCount);
+        Assert.Equal(2, report.Summary.ReflectionFallbackCount);
+        Assert.Equal(1, report.Summary.RejectedCount);
         Assert.Equal(
             UnrealBindingDisposition.ReflectionFallback,
             Assert.Single(report.Entries, static item => item.Path.EndsWith(":FallbackValue")).Disposition);
@@ -205,9 +205,8 @@ public sealed class UnrealBindingCoverageTests
         UnrealBindingCoverageEntry outputEntry = Assert.Single(
             report.Entries,
             static item => item.Path.EndsWith(":OutputCall"));
-        Assert.Equal(UnrealBindingDisposition.Rejected, outputEntry.Disposition);
-        Assert.Contains("USUE4001", outputEntry.DiagnosticCodes);
-        Assert.Contains("output or reference", outputEntry.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(UnrealBindingDisposition.ReflectionFallback, outputEntry.Disposition);
+        Assert.Contains("USUE4104", outputEntry.DiagnosticCodes);
 
         string first = UnrealBindingCoverageJson.Serialize(report);
         string second = UnrealBindingCoverageJson.Serialize(report);

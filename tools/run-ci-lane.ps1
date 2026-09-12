@@ -283,6 +283,9 @@ try {
             $python = (Get-Command python -ErrorAction Stop).Source
             Invoke-CiPhase -Name 'repository-validator' -FilePath $python -Arguments @(
                 (Join-Path $repoRoot 'tools\validate_project.py'))
+            Invoke-CiPhase -Name 'api-library-build-graph' -FilePath $powershell -Arguments @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                (Join-Path $repoRoot 'tools\test-api-library-build-graph.ps1'))
         }
         'deterministic-generation' {
             $generationReport = Join-Path $runDirectory 'generation\deterministic-generation.json'
@@ -307,6 +310,11 @@ try {
         }
         'unreal-automation' {
             Require-UnrealEngine
+            $apiLibraryLog = Join-Path $runDirectory 'api-library-automation.log'
+            Invoke-CiPhase -Name 'api-library-new-call-reload' -FilePath $powershell -Arguments @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                (Join-Path $repoRoot 'tools\test-api-library.ps1'),
+                '-EngineRoot', $EngineRoot, '-AutomationLog', $apiLibraryLog) -Artifacts @($apiLibraryLog)
             $onboardingReport = Join-Path $runDirectory 'onboarding-report.json'
             Invoke-CiPhase -Name 'unreal-automation' -FilePath $powershell -Arguments @(
                 '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',

@@ -37,6 +37,9 @@ bool FFinareApiDiscoveryExportScopeTest::RunTest(const FString& Parameters)
 	Module.DiscoveryModules = Module.Modules;
 	TSet<FString> ModulePaths;
 	if (!ExportPaths(Module, TEXT("module-scope.json"), ModulePaths)) return false;
+	FString ModuleJson;
+	FFileHelper::LoadFileToString(ModuleJson, *FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Finare/ApiDiscovery/module-scope.json")));
+	TestTrue(TEXT("64-bit enum values retain exact integer digits"), ModuleJson.Contains(TEXT("\"value\": 1152921504606846977")));
 	TestTrue(TEXT("Module discovery finds the newly reflected class"), ModulePaths.Contains(
 		TEXT("/Script/FinareRuntime.FinareApiDiscoveryComponent")));
 

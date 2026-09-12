@@ -1,9 +1,9 @@
 # Finare
 
 Finare is an experimental C# gameplay system for Unreal. The default project
-uses ordinary C#, Roslyn compilation, CoreCLR execution and source-discovered
-Unreal bindings. Write gameplay in your IDE and publish changes with the
-Editor's Build & Reload action.
+uses ordinary C#, Roslyn compilation, CoreCLR execution and an available Unreal
+API library. Supported APIs appear in IDE completion before use. Saving gameplay
+source queues the Editor's Build & Reload flow.
 
 Graph editing is optional. Only methods in the published
 [Visual C# profile](docs/VISUAL_CSHARP_PROFILE.md) promise lossless graph editing.

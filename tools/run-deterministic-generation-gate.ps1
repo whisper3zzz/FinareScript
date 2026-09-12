@@ -20,14 +20,13 @@ if ([string]::IsNullOrWhiteSpace($DotNet)) {
 $cliProject = Join-Path $repoRoot 'src\Finare.Cli\Finare.Cli.csproj'
 $cliAssembly = Join-Path $repoRoot 'src\Finare.Cli\bin\Release\net10.0\Finare.Cli.dll'
 $reflection = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.reflection.json'
-$managedProject = Join-Path $repoRoot 'samples\Unreal\Finare.Unreal.Demo\Finare.Unreal.Demo.csproj'
 $nativeExtensions = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.native-extensions.json'
 $dataPlane = Join-Path $repoRoot 'samples\Unreal\FinareRuntime.data-plane.json'
 $dataPlaneExtension = Join-Path $repoRoot `
     'samples\Unreal\BlockBreaker.data-plane-extension.json'
 $expected = [ordered]@{
-    # Source-driven bindings follow the consuming project. ABI fixture snapshots remain
-    # covered by generator unit tests; here both source-driven runs must agree.
+    # Available libraries are independent of gameplay. ABI fixture snapshots remain
+    # covered by generator unit tests; both available-library runs must agree.
     'bindings.cs' = $null
     'native-thunks.cpp' = $null
     'api-nodes.json' = $null
@@ -46,7 +45,7 @@ $expected = [ordered]@{
         'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
 }
 foreach ($required in @(
-        $DotNet, $cliProject, $reflection, $managedProject, $nativeExtensions, $dataPlane,
+        $DotNet, $cliProject, $reflection, $nativeExtensions, $dataPlane,
         $dataPlaneExtension) +
         @($expected.Values | Where-Object { $_ })) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
@@ -74,7 +73,7 @@ function Invoke-Generation {
     Invoke-Checked -FilePath $DotNet -Label 'Unreal binding generation' -Arguments @(
         $cliAssembly,
         'ue-bindings', $reflection,
-        '--project', $managedProject,
+        '--api-library',
         '--native-extensions', $nativeExtensions,
         '--namespace', 'Finare.Unreal.Generated',
         '--out', (Join-Path $Destination 'bindings.cs'),

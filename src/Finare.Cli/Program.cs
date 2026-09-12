@@ -1102,7 +1102,12 @@ internal static class Program
         string managedNamespace = options.Namespace;
         string nativeHeader = options.NativeHeader;
         string nativeNamespace = options.NativeNamespace;
-        if (options.ProjectPaths.Count > 0)
+        if (options.ApiLibrary)
+        {
+            projection = UnrealApiLibrary.Project(manifest, managedNamespace, nativeHeader, nativeNamespace);
+            manifest = projection.Reflection;
+        }
+        else if (options.ProjectPaths.Count > 0)
         {
             UnrealApiContract seed = UnrealSourceBindingInput.CreateSeed(
                 managedNamespace, nativeHeader, nativeNamespace);
@@ -4247,10 +4252,12 @@ internal static class Program
         string configuration = "Release";
         string? dotNetPath = null;
         bool failOnRejected = false;
+        bool apiLibrary = false;
         int index = 2;
         while (index < args.Count)
         {
             string option = args[index++];
+            if (option == "--api-library" && !apiLibrary) { apiLibrary = true; continue; }
             if (option == "--fail-on-rejected" && !failOnRejected)
             {
                 failOnRejected = true;
@@ -4305,7 +4312,7 @@ internal static class Program
             }
         }
 
-        if (outputPath is null || string.IsNullOrWhiteSpace(configuration))
+        if (outputPath is null || string.IsNullOrWhiteSpace(configuration) || apiLibrary && projectPaths.Count > 0)
         {
             return false;
         }
@@ -4320,7 +4327,7 @@ internal static class Program
             reportPath,
             nodeCatalogOutputPath,
             browserOutputPath,
-            failOnRejected, projectPaths, configuration, dotNetPath, nativeExtensionsPath);
+            failOnRejected, projectPaths, configuration, dotNetPath, nativeExtensionsPath, apiLibrary);
         return true;
     }
 
@@ -6220,7 +6227,7 @@ internal static class Program
         "  finare execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  finare debug-serve <input.cs> --root <visual-editor-directory> [--project <project.csproj>] [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
         "  finare debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
-        "  finare ue-bindings <reflection.json> --out <bindings.cs> [--project <managed.csproj> ...] [--configuration <name>] [--dotnet <path>] [--native-extensions <declarations.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  finare ue-bindings <reflection.json> --out <bindings.cs> [--api-library | --project <managed.csproj> ...] [--configuration <name>] [--dotnet <path>] [--native-extensions <declarations.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  finare ue-reflection-hints --project <managed.csproj> [--project <managed.csproj>...] --namespace <name> --out <type-hints.json> [--native-extensions <declarations.json>] [--configuration <name>] [--dotnet <path>]\n" +
         "  finare ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  finare ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
@@ -6414,7 +6421,8 @@ internal static class Program
         IReadOnlyList<string> ProjectPaths,
         string Configuration,
         string? DotNetPath,
-        string? NativeExtensionsPath);
+        string? NativeExtensionsPath,
+        bool ApiLibrary);
 
     private sealed record UnrealReflectionHintOptions(
         IReadOnlyList<string> ProjectPaths,

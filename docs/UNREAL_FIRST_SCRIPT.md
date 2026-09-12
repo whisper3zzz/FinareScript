@@ -143,20 +143,19 @@ The generated `FirstScript` exposes `StartValue`, an ordinary C#
 `AddClamped(value, delta)` helper using `Math.Clamp`, and source calls to
 `Actor.GetActorLocation` and `Pawn.GetController`. The source uses a normal
 `using Game.Finare.Generated;` import; an alias or fully qualified name is
-no longer required. During the first Setup run, a deterministic source type-hint
-artifact requests `Pawn` even though it is absent from the seed reflection
-selection. UE resolves it uniquely, exports that one additional Engine class,
-then resolves the source references in memory before the managed project needs
-to compile. No request list, Contract overlay, or binding lock is written. The same
-members then appear in the generated native thunk, C# wrapper, visual node
-catalog, API browser, and coverage report.
+no longer required. Setup exports the configured modules and generates their
+supported API library before compiling gameplay. `Pawn` and other available
+types appear in IDE completion even before the first call. No request list,
+Contract overlay, or binding lock is written. Supported reflected calls use the
+generic bridge; signatures requiring native dispatch receive generated thunks.
 This still contains no fixture gameplay: it is the smallest lifecycle,
 source-to-Unreal API, and C# edit/reload starting point.
 
 ## 4. C# edits, hot reload, and optional Graph authoring
 
-For the default template, edit `FirstScript.cs` in your IDE and use **Tools >
-Finare Project Setup > Build & Reload**. No authoring service or Graph acceptance
+For the default template, save `FirstScript.cs` in your IDE to queue Build &
+Reload automatically. **Tools > Finare Project Setup > Build & Reload** remains
+available for an explicit build. No authoring service or Graph acceptance
 is needed. Ordinary C# helpers follow Roslyn's language rules; `[Visual]` methods
 add the separate Visual C# profile requirements.
 

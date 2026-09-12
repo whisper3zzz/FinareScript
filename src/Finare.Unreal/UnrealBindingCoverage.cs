@@ -74,7 +74,8 @@ public sealed record UnrealBindingCoverageReport(
             managed,
             native,
             projection.PolicyEvaluation,
-            projection.Contract.CoverageBaseline);
+            projection.Contract.CoverageBaseline,
+            projection.ReflectedStructPaths);
     }
 
     private static UnrealBindingCoverageReport Create(
@@ -82,7 +83,8 @@ public sealed record UnrealBindingCoverageReport(
         UnrealBindingGenerationResult managed,
         UnrealNativeThunkGenerationResult native,
         UnrealApiPolicyEvaluation policy,
-        UnrealBindingCoverageBaseline? baseline)
+        UnrealBindingCoverageBaseline? baseline,
+        IReadOnlySet<string>? reflectedStructPaths = null)
     {
         UnrealReflectionManifest normalized = UnrealReflectionJson.NormalizeAndValidate(selectedManifest);
         ArgumentNullException.ThrowIfNull(managed);
@@ -125,6 +127,15 @@ public sealed record UnrealBindingCoverageReport(
             }
             foreach (UnrealReflectedProperty property in type.Properties)
             {
+                if (type.Kind == UnrealReflectedTypeKind.Struct && reflectedStructPaths?.Contains(type.Path) == true &&
+                    policy.For(property.Path).Action == UnrealApiPolicyAction.Allow &&
+                    policy.For(property.Path).Route == UnrealBindingRoute.Auto &&
+                    !managedDiagnostics.ContainsKey(property.Path) && SupportsReflectionType(property.Type, false, reflectedStructPaths))
+                {
+                    AddEntry(entries, property.Path, type.Path, "structField", UnrealBindingDisposition.ReflectionFallback,
+                        [], [], "USUE4104", "Public value field is carried by the canonical reflected struct layout.");
+                    continue;
+                }
                 AddMember(
                     entries,
                     type.Path,
@@ -135,7 +146,7 @@ public sealed record UnrealBindingCoverageReport(
                     supportsReflectionFallback: type.Kind == UnrealReflectedTypeKind.Class &&
                         !type.Traits.Interface &&
                         property.NativeExtension is null &&
-                        SupportsReflectionType(property.Type, allowVoid: false),
+                        SupportsReflectionType(property.Type, allowVoid: false, reflectedStructPaths),
                     property.NativeExtension is null ? "Safe reflection fallback cannot marshal this property type."
                         : "Native-only properties have no reflected fallback.",
                     policy.For(property.Path),
@@ -144,12 +155,10 @@ public sealed record UnrealBindingCoverageReport(
             }
             foreach (UnrealReflectedFunction function in type.Functions)
             {
-                bool hasOutputs = function.Parameters.Any(static parameter =>
-                    parameter.Direction != UnrealParameterDirection.Input);
                 bool reflectionTypesSupported =
-                    SupportsReflectionType(function.ReturnType, allowVoid: true) &&
-                    function.Parameters.All(static parameter =>
-                        SupportsReflectionType(parameter.Type, allowVoid: false));
+                    SupportsReflectionType(function.ReturnType, allowVoid: true, reflectedStructPaths) &&
+                    function.Parameters.All(parameter =>
+                        SupportsReflectionType(parameter.Type, allowVoid: false, reflectedStructPaths));
                 AddMember(
                     entries,
                     type.Path,
@@ -158,10 +167,8 @@ public sealed record UnrealBindingCoverageReport(
                     function.ReturnType,
                     function,
                     function.NativeBinding is null && !type.Traits.Interface &&
-                        !hasOutputs && reflectionTypesSupported,
-                    function.NativeBinding is not null ? "Native-only functions have no reflected fallback." : hasOutputs
-                        ? "Safe reflection fallback cannot preserve output or reference parameters."
-                        : "Safe reflection fallback cannot marshal one or more function value types.",
+                        reflectionTypesSupported,
+                    function.NativeBinding is not null ? "Native-only functions have no reflected fallback." : "Safe reflection fallback cannot marshal one or more function value types.",
                     policy.For(function.Path),
                     managedDiagnostics,
                     nativeDiagnostics);
@@ -346,7 +353,8 @@ public sealed record UnrealBindingCoverageReport(
         type.Kind == UnrealValueKind.Struct && type.TypePath == "/Script/CoreUObject.Vector" ||
         allowVoid && type.Kind == UnrealValueKind.Void;
 
-    private static bool SupportsReflectionType(UnrealTypeReference type, bool allowVoid) =>
+    public static bool SupportsReflectionType(UnrealTypeReference type, bool allowVoid,
+        IReadOnlySet<string>? reflectedStructPaths = null) =>
         type.Kind is
             UnrealValueKind.Boolean or
             UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
@@ -361,7 +369,18 @@ public sealed record UnrealBindingCoverageReport(
             "/Script/CoreUObject.Vector" or
             "/Script/CoreUObject.Rotator" or
             "/Script/CoreUObject.Transform" ||
-        allowVoid && type.Kind == UnrealValueKind.Void;
+        allowVoid && type.Kind == UnrealValueKind.Void ||
+        reflectedStructPaths is not null && (
+            type.Kind == UnrealValueKind.Callback && type.CallbackSignature is { } signature &&
+                SupportsReflectionType(signature.ReturnType, true, reflectedStructPaths) &&
+                signature.Parameters.All(parameter => SupportsReflectionType(parameter.Type, false, reflectedStructPaths)) ||
+            type.Kind == UnrealValueKind.Struct && type.TypePath is not null && reflectedStructPaths.Contains(type.TypePath) ||
+            type.Kind is UnrealValueKind.Array or UnrealValueKind.Set && CollectionElement(type.ElementType!, reflectedStructPaths) ||
+            type.Kind == UnrealValueKind.Map && CollectionElement(type.KeyType!, reflectedStructPaths) && CollectionElement(type.ValueType!, reflectedStructPaths));
+
+    private static bool CollectionElement(UnrealTypeReference type, IReadOnlySet<string> structs) =>
+        type.Kind is not (UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map or UnrealValueKind.Interface or UnrealValueKind.Callback) &&
+        SupportsReflectionType(type, false, structs);
 
     private static UnrealBindingCoverageGate EvaluateGate(
         UnrealBindingCoverageSummary summary,

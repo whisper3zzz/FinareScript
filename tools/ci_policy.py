@@ -15,10 +15,10 @@ LANES = (
     "package-smoke", "workload-performance", "sdk-installation",
 )
 PHASES = {
-    "managed-tests": ("managed-tests", "repository-validator"),
+    "managed-tests": ("managed-tests", "repository-validator", "api-library-build-graph"),
     "deterministic-generation": ("deterministic-generation",),
     "ue-build": ("managed-release-build", "ue-editor-build"),
-    "unreal-automation": ("unreal-automation",),
+    "unreal-automation": ("api-library-new-call-reload", "unreal-automation"),
     "package-smoke": ("development-package-smoke",),
     "workload-performance": ("matched-package-size", "matched-workload-performance"),
     "sdk-installation": ("clean-sdk-installation",),
@@ -127,7 +127,10 @@ def validate_child(path: Path, revision: str | None = None, allow_dirty: bool = 
         rows = report.get("artifacts", [])
         require(report.get("status") == "passed" and bool(rows), "generation has no passing artifacts")
         require(report.get("artifactCount") == len(rows), "generation artifact count disagrees")
-        require(all(r.get("matchesSecondRun") is True and r.get("matchesCheckedIn") is True for r in rows),
+        available = {"bindings.cs", "native-thunks.cpp", "api-nodes.json", "binding-coverage.json"}
+        require(all(r.get("matchesSecondRun") is True and
+                    (r.get("matchesCheckedIn") is True or
+                     r.get("path") in available and r.get("matchesCheckedIn") is None) for r in rows),
                 "generation drift detected")
     elif "onboarding" in schema:
         require(report.get("status") == "passed", "onboarding did not pass")
@@ -177,7 +180,7 @@ def validate_lane(path: Path, lane: str, revision: str, allow_dirty: bool = Fals
         require(phase.get("status") == "passed" and phase.get("exitCode") == 0, "CI phase failed")
         contained_file(path.parent, phase.get("log"))
         artifacts = phase.get("artifacts", [])
-        if phase["name"] not in ("repository-validator", "managed-release-build", "ue-editor-build"):
+        if phase["name"] not in ("repository-validator", "managed-release-build", "ue-editor-build", "api-library-build-graph"):
             require(bool(artifacts), f"{phase['name']} has no test evidence")
         for artifact in artifacts:
             validate_child(contained_file(path.parent, artifact), revision, allow_dirty)

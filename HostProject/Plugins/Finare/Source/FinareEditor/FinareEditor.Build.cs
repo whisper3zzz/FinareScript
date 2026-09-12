@@ -16,6 +16,7 @@ public class FinareEditor : ModuleRules
             "BlueprintGraph",
             "ContentBrowser",
             "DesktopPlatform",
+            "DirectoryWatcher",
             "Engine",
             "EngineAssetDefinitions",
             "EnhancedInput",

@@ -25,10 +25,10 @@ relative artifact paths. Detailed child output remains in per-phase logs.
 
 | Lane | Runner | Owned gate |
 | --- | --- | --- |
-| `managed-tests` | GitHub-hosted Windows | Debug `dotnet test` plus repository validator; Debug matches the ProjectLoader default configuration |
-| `deterministic-generation` | GitHub-hosted Windows | Build CLI once; generate bindings, native thunks, node catalog, coverage, and both data-plane layouts twice; compare both runs and checked-in files |
+| `managed-tests` | GitHub-hosted Windows | Debug `dotnet test`, repository validator and available-API build graph invalidation; Debug matches the ProjectLoader default configuration |
+| `deterministic-generation` | GitHub-hosted Windows | Generate available bindings, native thunks, node catalog and coverage twice; compare both runs. Data-plane outputs must also match checked-in snapshots; bounded ABI snapshots remain covered by generator unit tests |
 | `ue-build` | dedicated UE runner | Managed Release build plus `FinareHostEditor` Win64 Development build |
-| `unreal-automation` | dedicated UE runner | Validate-only onboarding, deterministic generation, UE build, deployment validation, managed startup, and all `Finare.Unreal` Automation tests |
+| `unreal-automation` | dedicated UE runner | Available API library Editor/Game build and same-process new-call reload; then validate-only onboarding, deterministic generation, deployment validation, managed startup and all `Finare.Unreal` Automation tests |
 | `package-smoke` | dedicated UE runner | Development Build/Cook/Stage/Pak/Archive, plugin-local CoreCLR closure, and packaged managed gameplay smoke |
 | `workload-performance` | dedicated comparison runner | Complete 54-slot matched Finare/Puerts suite and reviewed performance budgets |
 | `sdk-installation` | dedicated UE runner | Exact UE 5.8.1 compatibility matrix, deterministic SDK archive, clean project installation, package, poisoned external .NET roots, and runtime smoke |

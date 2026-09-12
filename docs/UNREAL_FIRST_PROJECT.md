@@ -69,15 +69,13 @@ Do not run the internal generators separately. A successful receipt is written
 under `Saved/Finare/ProjectSetup`, and Doctor should now report the
 generated surface and cook baseline as ready.
 
-You do not need to maintain a list of allowed functions. The default build reads
-C# source and UE reflection directly; it creates no Contract, request list,
-selection overlay, or binding lock. For example,
-its references to `Actor.GetActorLocation()` and `Pawn.GetController()` drive
-binding generation. The generated wrappers provide C# type checking and IDE
-completion for that generated surface. This is not yet a pre-generated IDE
-catalog of every UE API; unsupported signatures still produce diagnostics.
-Removing a call removes its unused binding on the next build. Failed selection
-leaves the previous generated outputs intact.
+The default build generates the supported API library for configured UE modules;
+no member list is required. IDE completion includes available APIs before you use
+them. Adding or removing an ordinary call such as `Actor.GetActorLocation()` or
+`Pawn.GetController()` only rebuilds gameplay and its chunk. Saving C# queues
+Build & Reload while the Editor is open. New native declarations or module
+configuration still require regeneration and a native build. See
+[available API library](UNREAL_API_CONTRACT.md) for dispatch and coverage limits.
 
 ## 3. Place it and Play
 

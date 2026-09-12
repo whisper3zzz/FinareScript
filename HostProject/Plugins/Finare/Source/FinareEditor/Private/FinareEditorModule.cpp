@@ -31,6 +31,7 @@
 #include "FinareBlueprint.h"
 #include "FinareEditorDiagnostics.h"
 #include "FinareProjectSetup.h"
+#include "FinareSourceWatcher.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SFinareAuthoringSurface.h"
 #include "Widgets/SFinareProjectSetup.h"
@@ -265,6 +266,7 @@ namespace UE::Finare::Editor::Private
 		{
 			Labels.Add(TEXT("play"));
 		}
+		if ((Reasons & static_cast<uint8>(EFinareDailyBuildReason::SourceSave)) != 0) Labels.Add(TEXT("sourceSave"));
 		return FString::Join(Labels, TEXT(", "));
 	}
 }
@@ -363,6 +365,11 @@ public:
 				this,
 				&FFinareEditorModule::RegisterMenus));
 
+		if (!IsRunningCommandlet())
+			SourceWatcher = MakeUnique<FFinareSourceWatcher>(
+				FPaths::Combine(FPaths::ProjectConfigDir(), TEXT("Finare.onboarding.json")),
+				[this]() { RequestDailyBuild(EFinareDailyBuildReason::SourceSave, true); });
+
 		if (FParse::Param(FCommandLine::Get(), TEXT("FinareFirstPlay")))
 		{
 			FirstPlayStartupHandle = FTSTicker::GetCoreTicker().AddTicker(
@@ -375,6 +382,7 @@ public:
 
 	virtual void ShutdownModule() override
 	{
+		SourceWatcher.Reset();
 		IModularFeatures::Get().UnregisterModularFeature(
 			IPIEAuthorizer::GetModularFeatureName(),
 			this);
@@ -504,6 +512,7 @@ private:
 	IConsoleObject* OpenAuthoringConsoleCommand = nullptr;
 	IConsoleObject* OpenProjectSetupConsoleCommand = nullptr;
 	IConsoleObject* BuildAndReloadConsoleCommand = nullptr;
+	TUniquePtr<FFinareSourceWatcher> SourceWatcher;
 	FTSTicker::FDelegateHandle FirstPlayStartupHandle;
 	FTSTicker::FDelegateHandle CreatedClassSetupHandle;
 	TWeakPtr<SFinareAuthoringSurface> AuthoringSurfaceWidget;

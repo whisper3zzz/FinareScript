@@ -68,12 +68,15 @@ class CiEvidenceTests(unittest.TestCase):
         self.write("managed-tests.trx", trx())
         self.write("01-tests.log", "tests passed")
         self.write("02-structure.log", "contracts passed")
+        self.write("03-api-library.log", "Available API edit invalidates managed compilation only: PASS")
         return {"schemaVersion": "unifiedscript.ci-lane/v0.1", "lane": "managed-tests",
                 "sourceRevision": REVISION, "sourceDirty": False, "status": "passed", "failure": None,
                 "phases": [{"name": "managed-tests", "status": "passed", "exitCode": 0,
                             "log": "01-tests.log", "artifacts": ["managed-tests.trx"]},
                            {"name": "repository-validator", "status": "passed", "exitCode": 0,
-                            "log": "02-structure.log", "artifacts": []}]}
+                            "log": "02-structure.log", "artifacts": []},
+                           {"name": "api-library-build-graph", "status": "passed", "exitCode": 0,
+                            "log": "03-api-library.log", "artifacts": []}]}
 
     def test_real_test_results_are_required_even_with_success_exit(self):
         for content in (trx(0, 0, 0), trx(1, 0, 0, "NotExecuted"), trx(1, 1, 0, "Failed"),
@@ -135,6 +138,15 @@ class CiEvidenceTests(unittest.TestCase):
         ):
             with self.subTest(report=report), self.assertRaises(ValueError):
                 validate_child(self.write("child.json", report))
+
+    def test_available_library_still_requires_determinism_and_data_plane_snapshots(self):
+        row = {"path": "bindings.cs", "matchesSecondRun": True, "matchesCheckedIn": None}
+        report = {"schemaVersion": "unifiedscript.deterministic-generation-gate/v0.1",
+                  "status": "passed", "artifactCount": 1, "artifacts": [row]}
+        validate_child(self.write("generation.json", report))
+        for mutation in ({"matchesSecondRun": False}, {"matchesCheckedIn": False}, {"path": "data-plane.g.cs"}):
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_child(self.write("generation.json", report | {"artifacts": [row | mutation]}))
 
     def test_child_revision_must_match_even_when_the_outer_lane_is_current(self):
         child = {"schemaVersion": "unifiedscript.deterministic-generation-gate/v0.1", "status": "passed",

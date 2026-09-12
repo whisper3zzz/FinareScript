@@ -26,7 +26,7 @@
     "browserOutput": "../Generated/__PROJECT_NAME__.api-browser.json",
     "coverageOutput": "../Generated/__PROJECT_NAME__.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true
+    "requireCompleteNativeCoverage": false
   },
   "deployment": {
     "manifest": "../Deployment/__PROJECT_NAME__.finare-deployment.json",

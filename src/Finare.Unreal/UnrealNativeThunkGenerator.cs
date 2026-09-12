@@ -40,8 +40,13 @@ public sealed class UnrealNativeThunkGenerator
         var diagnostics = new List<UnrealNativeThunkDiagnostic>();
         var properties = new List<(UnrealReflectedType Type, UnrealReflectedProperty Property)>();
         var functions = new List<(UnrealReflectedType Type, UnrealReflectedFunction Function)>();
+        var privateTypes = normalized.Types.Where(type => IsPrivateHeader(type.HeaderPath))
+            .Select(type => type.Path).ToHashSet(StringComparer.Ordinal);
+        bool HasPrivateType(UnrealTypeReference reference) => EnumerateTypeReferences(reference)
+            .Any(item => IsPrivateHeader(item.HeaderPath) || item.TypePath is not null && privateTypes.Contains(item.TypePath));
         UnrealReflectedType[] structTypes = normalized.Types
-            .Where(static type => type.Kind == UnrealReflectedTypeKind.Struct)
+            .Where(type => type.Kind == UnrealReflectedTypeKind.Struct && !privateTypes.Contains(type.Path) &&
+                !type.Properties.Any(field => HasPrivateType(field.Type)))
             .ToArray();
         HashSet<string> interfaceBearingStructPaths = GetInterfaceBearingStructPaths(structTypes);
         HashSet<string> supportedStructPaths = GetSupportedStructPaths(structTypes, interfaceBearingStructPaths);
@@ -49,6 +54,12 @@ public sealed class UnrealNativeThunkGenerator
         foreach (UnrealReflectedType type in normalized.Types)
         {
             if (type.Kind == UnrealReflectedTypeKind.NativeObject) continue;
+            if (privateTypes.Contains(type.Path))
+            {
+                foreach (string path in type.Properties.Select(field => field.Path).Concat(type.Functions.Select(function => function.Path)))
+                    diagnostics.Add(new("USUE3011", "Module-private C++ declarations require a supported reflected route.", path));
+                continue;
+            }
             if (!type.Path.StartsWith("/Script/", StringComparison.Ordinal))
             {
                 foreach (UnrealReflectedProperty property in type.Properties)
@@ -104,7 +115,7 @@ public sealed class UnrealNativeThunkGenerator
                         property.Path));
                     continue;
                 }
-                if (!IsNativeValueType(property.Type, allowVoid: false, supportedStructPaths))
+                if (HasPrivateType(property.Type) || !IsNativeValueType(property.Type, allowVoid: false, supportedStructPaths))
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3003",
@@ -125,7 +136,8 @@ public sealed class UnrealNativeThunkGenerator
                         function.Path));
                     continue;
                 }
-                if (!IsNativeValueType(function.ReturnType, allowVoid: true, supportedStructPaths) ||
+                if (HasPrivateType(function.ReturnType) || function.Parameters.Any(parameter => HasPrivateType(parameter.Type)) ||
+                    !IsNativeValueType(function.ReturnType, allowVoid: true, supportedStructPaths) ||
                     function.Parameters.Any(parameter =>
                         !IsNativeValueType(parameter.Type, allowVoid: false, supportedStructPaths)))
                 {
@@ -1812,6 +1824,10 @@ public sealed class UnrealNativeThunkGenerator
         return $"{name}.h";
     }
 
+    private static bool IsPrivateHeader(string? path) =>
+        path?.StartsWith("Private/", StringComparison.OrdinalIgnoreCase) == true ||
+        path?.StartsWith("Internal/", StringComparison.OrdinalIgnoreCase) == true;
+
     private static IEnumerable<UnrealTypeReference> EnumerateTypeReferences(
         UnrealTypeReference type)
     {
@@ -1926,7 +1942,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Float32 => "0.0f",
         UnrealValueKind.Float64 => "0.0",
         UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
-        UnrealValueKind.Struct or UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => "{}",
+        UnrealValueKind.Enum or UnrealValueKind.Struct or UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => "{}",
         UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or UnrealValueKind.Callback => "{}",
         UnrealValueKind.Interface => "{}",
         UnrealValueKind.Object or UnrealValueKind.Class => "nullptr",

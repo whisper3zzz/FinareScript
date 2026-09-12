@@ -759,7 +759,7 @@ public sealed class UnrealApiSourceDependencyScanner
             .Where(function => function.Parameters.Any(parameter =>
             {
                 if (parameter.Type.Kind != UnrealValueKind.Callback) return false;
-                string stem = UnrealManagedNaming.FunctionName(function).TrimStart('@');
+                string stem = UnrealManagedNaming.FunctionName(function, targets[0].ReflectedType).TrimStart('@');
                 if (!stem.EndsWith(parameter.Name, StringComparison.Ordinal)) stem += parameter.Name;
                 if (!stem.EndsWith("Callback", StringComparison.Ordinal)) stem += "Callback";
                 return "Create" + stem == memberName;
@@ -773,7 +773,7 @@ public sealed class UnrealApiSourceDependencyScanner
 
         UnrealReflectedFunction[] overloads = targets[0].ReflectedType.Functions
             .Where(function => function.Name == memberName ||
-                UnrealManagedNaming.FunctionName(function) == memberName)
+                UnrealManagedNaming.FunctionName(function, targets[0].ReflectedType) == memberName)
             .ToArray();
         if (overloads.Length <= 1)
         {

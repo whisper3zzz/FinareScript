@@ -142,7 +142,8 @@ public sealed class UnrealBindingGenerator
         }
         source.AppendLine("    }");
 
-        var memberNames = new HashSet<string>(StringComparer.Ordinal);
+        var memberNames = new HashSet<string>(StringComparer.Ordinal)
+            { className, "GetType", "Equals", "GetHashCode", "ToString", "Handle", "Bridge" };
         var functionNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (UnrealReflectedProperty property in type.Properties)
         {
@@ -281,7 +282,7 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            string candidateName = UnrealManagedNaming.FunctionName(function);
+            string candidateName = UnrealManagedNaming.FunctionName(function, type);
             string memberName;
             if (!memberNames.Contains(candidateName))
             {
@@ -405,7 +406,8 @@ public sealed class UnrealBindingGenerator
         ICollection<UnrealBindingDiagnostic> diagnostics)
     {
         var fields = new List<(UnrealReflectedProperty Property, string ManagedType, string Name)>();
-        var memberNames = new HashSet<string>(StringComparer.Ordinal);
+        var memberNames = new HashSet<string>(StringComparer.Ordinal)
+            { structName, "Equals", "GetHashCode", "ToString", "GetType", "Deconstruct" };
         foreach (UnrealReflectedProperty property in type.Properties)
         {
             string? managedType = GetManagedType(property.Type, managedTypeNames);
@@ -459,7 +461,8 @@ public sealed class UnrealBindingGenerator
         source.Append("public readonly record struct ").Append(enumName)
             .AppendLine("(long Value) : global::Finare.Unreal.IUnrealEnumValue");
         source.AppendLine("{");
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        var names = new HashSet<string>(StringComparer.Ordinal)
+            { enumName, "Value", "ToUntyped", "Equals", "GetHashCode", "ToString", "GetType", "Deconstruct" };
         foreach (UnrealEnumValueDefinition value in type.EnumValues)
         {
             string name = MakeUniqueMemberName(ToIdentifier(value.Name), $"{type.Path}:{value.Name}", names);
@@ -586,6 +589,7 @@ public sealed class UnrealBindingGenerator
         for (int count = function.Parameters.Count - 1; count >= firstProjectedDefault; --count)
         {
             source.AppendLine();
+            EmitObsolete(source, function.Metadata, "    ");
             source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
             EmitParameterList(
                 source,
@@ -608,6 +612,7 @@ public sealed class UnrealBindingGenerator
                 {
                     source.Append(", ");
                 }
+                if (index < count) source.Append(DirectionModifier(function.Parameters[index].Direction));
                 source.Append(index < count ? parameterNames[index] : defaults[index]);
             }
             source.AppendLine(");");

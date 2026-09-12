@@ -402,7 +402,7 @@ public sealed class UnrealApiContractProposalGenerator
         foreach (IGrouping<string, UnrealReflectedFunction> group in functionGroups)
         {
             UnrealReflectedFunction[] functions = group.ToArray();
-            string managedName = UnrealManagedNaming.FunctionName(functions[0]);
+            string managedName = UnrealManagedNaming.FunctionName(functions[0], type);
             if (functions.Length == 1)
             {
                 if (group.Key == requestedMember || managedName == requestedMember)

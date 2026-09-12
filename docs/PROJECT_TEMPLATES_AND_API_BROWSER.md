@@ -14,7 +14,7 @@ templates:
 
 | ID | Starting point | Product boundary |
 | --- | --- | --- |
-| `minimal` | ordinary C#, lifecycle, exposed state, source-driven bindings | no game-specific API or replication |
+| `minimal` | ordinary C#, lifecycle, exposed state, available module API library | no game-specific API or replication |
 | `visual-gameplay` | structured health/shield/movement policy | no network authority or project Actor bindings |
 | `data-plane` | World-scoped command buffer and batch trace | no project-specific semantics or portable benchmark claim |
 

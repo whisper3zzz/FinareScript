@@ -2,7 +2,7 @@
 
 `finare adopt <Game.uproject>` is the M13.1A first-use entry point. It
 transactionally enables and installs the plugin/runtime and creates the first
-managed workspace plus project-owned onboarding, Contract, and deployment
+managed workspace plus project-owned onboarding and deployment
 inputs. `--preview` makes no project changes, identical Apply is a no-op, and
 `--rollback` restores exact retained backups only when doing so cannot overwrite
 later user edits. `finare doctor <Game.uproject>` diagnoses the resulting
@@ -16,7 +16,7 @@ the same project-local Build/Play graph.
 
 `tools/setup-unreal-project.ps1` is the build/onboarding stage used after
 adoption. It turns the managed build, Unreal build, reflection export, binding
-generation, source-driven development-surface expansion, Script Asset
+generation of the available module API library, Script Asset
 synchronization, determinism, and Automation steps into one versioned operation
 driven by the adopted configuration. The same
 script runs from a source checkout, an extracted [distributable SDK](UNREAL_SDK.md),
@@ -201,30 +201,23 @@ per-stage reasons.
 
 Apply performs these phases in order:
 
-1. preflight every input, tool, target, plugin module, output parent, contract,
+1. preflight every input, tool, target, plugin module, output parent,
    deployment manifest, and managed project before product files are changed;
 2. build the Finare CLI/runtime and stage the managed host into the
    selected project's plugin;
 3. bootstrap native bindings from the last reflection artifact when present;
-4. build the editor target, scan source for collision-safe generated type hints,
-   and export the configured classes plus uniquely requested native project,
-   plugin, Engine, or loaded Blueprint generated classes under their exact
-   `/Script` or content object paths;
-5. analyze ordinary imported, aliased, or fully qualified generated-API use in
-   the managed projects, use Roslyn symbols to reject user-type collisions,
-   resolve deterministic overloads, and fold every request into an all-or-nothing
-   development Contract overlay and per-type surface lock before generating the
-   C# wrappers, native thunks, visual API catalog, API browser, and coverage
-   report atomically;
+4. build the editor target and export configured module types plus explicit
+   classes and Blueprint assets under their exact `/Script` or content paths;
+5. project supported members into the available API library independently of
+   gameplay source, then generate C# wrappers, required native thunks, visual API
+   catalog, API browser and coverage atomically;
 6. build project managed assemblies and rebuild the editor target against the
    final native thunks;
 7. build the configured project Game target and require its target receipt, so
    ordinary BuildCookRun cannot silently fall back to a generic game that omits
    the source plugin;
 8. synchronize the deployment manifest into deterministic Script Assets;
-9. regenerate the type hints, dependency requests, development Contract/report,
-   generated surface lock, and all five binding consumers in `Saved` and compare
-   their exact bytes;
+9. regenerate all five binding consumers in `Saved` and compare exact bytes;
 10. optionally run the configured UE Automation filter and require its minimum
    successful test count.
 
@@ -243,11 +236,10 @@ powershell -ExecutionPolicy Bypass `
 ```
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
-reflection, source type hints, dependency requests, the development
-Contract/report, generated surface lock, bindings, native thunks, node catalogs,
+reflection, bindings, native thunks, node catalogs,
 browser, coverage, or Script Assets.
 ValidateOnly deliberately does not trust Build/Play skip decisions: it reruns
-the non-mutating development-surface, deployment, deterministic-generation,
+the non-mutating deployment, deterministic-generation,
 coverage, and configured Automation checks against the accepted baseline.
 That baseline must match the current managed assemblies and compiled chunks. If
 a shared Finare assembly changed after the last Apply run, run ordinary
@@ -258,7 +250,7 @@ When it runs from this repository, it first builds the current Release CLI for
 validation only, so deterministic output checks cannot accidentally use a stale
 tool binary. The rebuilt CLI is not staged into the Unreal plugin.
 It validates the deployment manifest through the editor commandlet, regenerates
-the source request/development-surface artifacts and binding outputs under
+the available API library outputs under
 `Saved` for byte comparison, verifies configured native coverage, and runs the
 optional managed-startup Automation gate. Logs and the machine-readable report are diagnostic artifacts under
 `Saved/Finare/Onboarding` rather than project source.
@@ -315,26 +307,25 @@ configuration file.
 }
 ```
 
-`reflection.modules` controls what Unreal may inspect. `reflection.classes`
-narrows broad native modules such as Engine to an exact `/Script` allowlist.
+`reflection.modules` selects modules whose supported API library is exported.
+`reflection.classes` adds explicit `/Script` class roots; it does not narrow the
+selected modules.
 `reflection.blueprintAssets` contains exact Blueprint asset object paths; Setup
 loads those assets and exports their generated classes under exact paths such as
-`/Game/Gameplay/BP_Door.BP_Door_C`. Source type hints may also discover a unique
-Blueprint by generated class name; missing and ambiguous candidates fail instead
-of selecting by load order. Setup derives members directly from C# source and
-writes generated consumers together. Missing, ambiguous or unsupported references
-fail before replacing any output. `bindings.namespace` is required; the removed
+`/Game/Gameplay/BP_Door.BP_Door_C`. Setup derives supported members from metadata
+and writes generated consumers together before compiling gameplay. Unsupported
+signatures are excluded from this library. `bindings.namespace` is required; the removed
 `bindings.contract` and `bindings.developmentSurface` keys are rejected.
 
 For non-reflected C++ only, optional `bindings.nativeExtensions` points to a file
 containing signatures, headers and ownership declarations. It supplies metadata,
-not a list of supported members. Source usage still decides which bindings to emit.
-See [source-driven bindings](UNREAL_API_CONTRACT.md).
+not a project member selection list. Supported declarations join the library.
+See [available API library](UNREAL_API_CONTRACT.md).
 
 `requireCompleteNativeCoverage` requires every selected member to have a native
 thunk and rejects reflection fallback, rejected members, and deferred types.
-Projects may set it to false only when their reviewed product policy permits a
-safe reflected fallback.
+The default is false because supported generic reflected dispatch is a normal
+execution route. Set true only for an explicit native-only policy.
 
 `editorTarget` loads reflection/export and editor Automation; `gameTarget`
 closes the native runtime and cook dependency graph. Adoption renders both from

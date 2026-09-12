@@ -4,6 +4,7 @@
 #include "FinareCoreClrHost.h"
 #include "FinareGeneratedThunkRegistry.h"
 #include "FinareInvocationBridge.h"
+#include "FinareNativeTransport.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
@@ -65,6 +66,83 @@ bool FFinareApiDiscoveryManagedTest::RunTest(const FString& Parameters)
 	World->RemoveFromRoot();
 	World->DestroyWorld(false);
 	TestEqual(TEXT("Managed World lifetime is balanced"), FFinareCoreClrHost::Get().GetManagedWorldCount(), InitialWorldCount);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFinareApiLibraryOutputsTest,
+	"Finare.Unreal.ApiDiscovery.GenericOutputs",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FFinareApiLibraryOutputsTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("World exists"), World)) return false;
+	{
+		FFinareObjectRegistry Registry(World);
+		FFinareInvocationBridge Bridge(Registry);
+		auto* Context = new FFinareNativeBridgeContext(Bridge);
+		auto* Component = NewObject<UFinareApiDiscoveryComponent>(World);
+		FFinareObjectHandleResult Registered;
+		const auto Handle = Registry.RegisterObject(Component, Registered);
+		constexpr uint64 Id = FinareMemberId("/Script/FinareRuntime.FinareApiDiscoveryComponent:DiscoveryOutputs");
+		uint32 Count = 0;
+		TestFalse(TEXT("Output function has no generated native thunk"),
+			FFinareGeneratedThunkRegistry::DescribeInvokeResultCount(Id, Count));
+		const auto* Transport = Finare_GetNativeTransportV3();
+		TArray<FFinareValue> Descriptors;
+		FFinareInvocationResult DescriptionResult;
+		TestTrue(TEXT("Reflected result descriptors resolve without a thunk"),
+			Bridge.DescribeReflectedInvocation(Handle, Id, Descriptors, DescriptionResult));
+		TestEqual(TEXT("Return plus ref and out descriptors"), Descriptors.Num(), 3);
+		FFinareNativeValueV3 Args[2];
+		Args[0].Kind = Args[1].Kind = EFinareNativeValueKindV3::Int32;
+		Args[0].Payload0 = 2; Args[1].Payload0 = 40;
+		FFinareNativeValueV3 Results[3];
+		Results[0].Kind = EFinareNativeValueKindV3::Int32; // Deliberately wrong return descriptor.
+		Results[1].Kind = EFinareNativeValueKindV3::Int32;
+		Results[2].Kind = EFinareNativeValueKindV3::String;
+		Results[2].Flags = EFinareNativeValueFlagsV3::ArenaBacked;
+		uint8 Arena[128] = {};
+		FFinareNativeCallFrameV3 Frame;
+		auto PrepareFrame = [&](uint32 Capacity)
+		{
+			Frame = FFinareNativeCallFrameV3{};
+			Frame.Arguments = Args; Frame.ArgumentCount = 2;
+			Frame.Results = Results; Frame.ResultCount = Frame.ResultCapacity = 3;
+			Frame.ByteBuffer = Arena; Frame.ByteCapacity = Capacity;
+		};
+		PrepareFrame(sizeof(Arena));
+		Transport->InvokeCorrelatedById(Context, 123, Handle.Value, Id, &Frame);
+		TestTrue(TEXT("Invalid result descriptor fails"), Frame.Status != EFinareNativeCallStatusV3::Success);
+		TestEqual(TEXT("Invalid request never executes gameplay"), Component->DiscoveryCalls, 0);
+		Results[0].Kind = EFinareNativeValueKindV3::Boolean;
+		PrepareFrame(1);
+		Transport->InvokeCorrelatedById(Context, 124, Handle.Value, Id, &Frame);
+		TestTrue(TEXT("String output requests a larger result arena"), Frame.Status == EFinareNativeCallStatusV3::BufferTooSmall);
+		TestEqual(TEXT("First invocation executes once"), Component->DiscoveryCalls, 1);
+		PrepareFrame(sizeof(Arena));
+		Transport->InvokeCorrelatedById(Context, 124, Handle.Value, Id, &Frame);
+		TestTrue(TEXT("Generic ref/out call succeeds"), Frame.Status == EFinareNativeCallStatusV3::Success);
+		TestEqual(TEXT("Ref value is published in parameter order"), Results[1].Payload0, 42ull);
+		TestEqual(TEXT("Output retry does not execute twice"), Component->DiscoveryCalls, 1);
+		TestEqual(TEXT("String output length"), Results[2].Payload1, 8ull);
+		Transport->ReleaseCorrelatedResult(Context, 124);
+		Component->DiscoveryData.Label = TEXT("before");
+		FFinareValue Data;
+		const FString DataPath = TEXT("/Script/FinareRuntime.FinareApiDiscoveryComponent:DiscoveryData");
+		TestTrue(TEXT("Generic struct reads public supported fields"), Bridge.ReadProperty(Handle, DataPath, Data, DescriptionResult));
+		TestEqual(TEXT("Fixed arrays are excluded from the canonical struct layout"), Data.ContainerValues.Num(), 3);
+		if (Data.ContainerValues.Num() == 3)
+		{
+			Data.ContainerValues[0] = FFinareValue::FromString(TEXT("must not leak"));
+			Data.ContainerValues[2] = FFinareValue::FromString(TEXT("wrong integer"));
+			TestFalse(TEXT("Invalid late struct field rejects the entire write"), Bridge.WriteProperty(Handle, DataPath, Data, DescriptionResult));
+			TestEqual(TEXT("Earlier fields remain unchanged after failure"), Component->DiscoveryData.Label, FString(TEXT("before")));
+			TestEqual(TEXT("Unprojected native data remains unchanged"), Component->DiscoveryData.Fixed[0], 7);
+		}
+		Context->Release();
+	}
+	World->RemoveFromRoot(); World->DestroyWorld(false);
 	return true;
 }
 

@@ -47,7 +47,7 @@
     "browserOutput": "../../samples/Unreal/FinareRuntime.api-browser.json",
     "coverageOutput": "../../samples/Unreal/FinareRuntime.binding-coverage.json",
     "failOnRejected": true,
-    "requireCompleteNativeCoverage": true,
+    "requireCompleteNativeCoverage": false,
     "namespace": "Finare.Unreal.Generated",
     "nativeExtensions": "../../samples/Unreal/FinareRuntime.native-extensions.json"
   },

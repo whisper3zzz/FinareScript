@@ -30,6 +30,14 @@ public static class UnrealManagedNaming
         return FunctionName(function.Name);
     }
 
+    public static string FunctionName(UnrealReflectedFunction function, UnrealReflectedType owner)
+    {
+        string candidate = FunctionName(function);
+        return function.Name.StartsWith("K2_", StringComparison.Ordinal) &&
+            owner.Functions.Any(other => other.Name == function.Name[3..])
+                ? ToIdentifier(function.Name) : candidate;
+    }
+
     public static string FunctionName(string reflectedName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reflectedName);

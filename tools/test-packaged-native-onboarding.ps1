@@ -319,7 +319,6 @@ $applyReport = Assert-OnboardingReport `
 $incrementalPhases = @(
     'managed-toolchain',
     'native-bootstrap-build',
-    'source-reflection-hints',
     'reflection-export',
     'development-surface',
     'binding-generation',
@@ -367,9 +366,6 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.binding-coverage.json") `
         -Label 'Binding coverage'
-    apiTypeHints = Assert-File `
-        -Path (Join-Path $projectRoot 'Saved/Finare/Bindings/type-hints.json') `
-        -Label 'Source reflection type hints'
     managedAssembly = Assert-File `
         -Path (Join-Path $projectRoot `
             "Plugins\Finare\Binaries\Managed\Scripts\$assemblyName.dll") `
@@ -430,26 +426,19 @@ if ($ideManifest.schemaVersion -ne 'unifiedscript.ide-workspace/v0.1' -or
     }).Count -ne 1) {
     throw 'Generated project-local IDE workspace is incomplete.'
 }
-$sourceTypeHints = Get-Content -LiteralPath $generatedEvidence.apiTypeHints.path -Raw | ConvertFrom-Json
 $sourceBindingConfig = Get-Content -LiteralPath (Join-Path $projectRoot 'Config/Finare.onboarding.json') -Raw | ConvertFrom-Json
 if ($null -ne $sourceBindingConfig.bindings.contract -or
     $null -ne $sourceBindingConfig.bindings.developmentSurface -or
     $sourceBindingConfig.bindings.namespace -ne "$assemblyName.Generated") {
     throw 'Default source binding setup still requires a selection list.'
 }
-if ($sourceTypeHints.schemaVersion -ne
-        'unifiedscript.unreal-api-source-type-hints/v0.1' -or
-    @($sourceTypeHints.hints | Where-Object {
-        $_.managedTypeName -eq 'Pawn'
-    }).Count -ne 1) {
-    throw 'Managed source did not produce the bounded Pawn reflection hint.'
-}
 $managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path -Raw
 if ($managedBindingText -notmatch 'class Actor' -or
     $managedBindingText -notmatch 'GetActorLocation' -or
     $managedBindingText -notmatch 'class Pawn' -or
-    $managedBindingText -notmatch 'GetController') {
-    throw 'Generated managed binding does not contain the source-requested Actor/Pawn API.'
+    $managedBindingText -notmatch 'GetController' -or
+    $managedBindingText -notmatch 'SetActorTickEnabled') {
+    throw 'Available API library is missing supported APIs, including unused Actor calls.'
 }
 $firstScriptText = Get-Content -LiteralPath $generatedEvidence.firstScriptSource.path -Raw
 $generatedNamespacePattern = [regex]::Escape("$assemblyName.Generated")
