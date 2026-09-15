@@ -821,8 +821,10 @@ bool FFinareNativeObjectAbiTest::RunTest(const FString& Parameters)
 		auto* Context = new FFinareNativeBridgeContext(Bridge);
 		const auto* Table = Finare_GetNativeObjectTransportV1();
 		const auto* Extended = reinterpret_cast<const FFinareNativeObjectTransportWithText*>(Table);
-		TestEqual(TEXT("Object table advertises text tail"), Table->TableSize,
-		          uint32(sizeof(FFinareNativeObjectTransportWithText)));
+		TestEqual(TEXT("Object table advertises memory tail"), Table->TableSize,
+		          uint32(sizeof(FFinareNativeObjectTransportWithMemory)));
+		TestEqual(TEXT("Object memory capability"), Extended->Base.Capabilities & 4, uint64(4));
+		TestTrue(TEXT("Memory entry point"), reinterpret_cast<const FFinareNativeObjectTransportWithMemory*>(Table)->Borrow != nullptr);
 		TestEqual(TEXT("Object input capability"), Extended->Base.Capabilities & 1, uint64(1));
 		TestEqual(TEXT("Object text capability"), Extended->Base.Capabilities & 2, uint64(2));
 		TestNotNull(TEXT("Text transport tail"), Extended->TextTransport);

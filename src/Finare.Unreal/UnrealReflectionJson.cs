@@ -99,7 +99,8 @@ public static class UnrealReflectionJson
             throw new JsonException("The Unreal reflection manifest contains an invalid reflected type.");
         }
 
-        if (type.BaseTypePath is not null && !IsReflectedObjectPath(type.BaseTypePath))
+        if (type.BaseTypePath is not null && !IsReflectedObjectPath(type.BaseTypePath) &&
+            !(type.Kind == UnrealReflectedTypeKind.NativeObject && type.BaseTypePath.StartsWith("/Native/", StringComparison.Ordinal)))
         {
             throw new JsonException($"Unreal type '{type.Path}' has an invalid base type path.");
         }
@@ -110,10 +111,10 @@ public static class UnrealReflectionJson
         }
         ValidateMetadata(type.Metadata, $"type '{type.Path}'");
         if (type.Kind == UnrealReflectedTypeKind.NativeObject &&
-            (type.BaseTypePath is not null || type.Traits.Abstract || type.Traits.BlueprintType || type.Traits.Interface ||
+            (type.Traits.Abstract || type.Traits.BlueprintType || type.Traits.Interface ||
              type.InterfacePaths.Count != 0 || type.Delegates.Count != 0 ||
              type.Properties.Any(p => p.NativeExtension is null) || type.Functions.Any(f => f.NativeBinding is null)))
-            throw new JsonException("USUE5404: Ordinary C++ types require explicit native bindings and cannot claim UObject traits or inheritance.");
+            throw new JsonException("USUE5404: Ordinary C++ types require explicit native bindings and cannot claim UObject traits.");
         if (type.Kind == UnrealReflectedTypeKind.Enum)
         {
             if (type.Properties.Count != 0 || type.Functions.Count != 0 || type.Delegates.Count != 0 ||
@@ -197,8 +198,9 @@ public static class UnrealReflectionJson
                     $"parameter '{function.Path}:{parameter.Name}'");
                 if (parameter.Type.Kind == UnrealValueKind.Callback &&
                     (parameter.Direction != UnrealParameterDirection.Input || parameter.DefaultValue is not null ||
-                     type.Kind != UnrealReflectedTypeKind.Class || function.NativeBinding is not null))
-                    throw new JsonException($"USUE5502: Callback '{function.Path}:{parameter.Name}' requires a reflected function input without a default.");
+                     !(type.Kind == UnrealReflectedTypeKind.Class && function.NativeBinding is null ||
+                       type.Kind == UnrealReflectedTypeKind.NativeObject && function.NativeBinding is not null && UnrealNativeObjectBindings.IsStdFunction(parameter.Type))))
+                    throw new JsonException($"USUE5502: Callback '{function.Path}:{parameter.Name}' requires a reflected input or a supported native std::function input without a default.");
             }
             if (function.Metadata.WorldContextParameter is not null &&
                 !parameterNames.Contains(function.Metadata.WorldContextParameter) ||

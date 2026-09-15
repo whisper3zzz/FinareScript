@@ -49,7 +49,7 @@ public sealed class UnrealNativeThunkGenerator
                 !type.Properties.Any(field => HasPrivateType(field.Type)))
             .ToArray();
         HashSet<string> interfaceBearingStructPaths = GetInterfaceBearingStructPaths(structTypes);
-        HashSet<string> supportedStructPaths = GetSupportedStructPaths(structTypes, interfaceBearingStructPaths);
+        HashSet<string> supportedStructPaths = GetSupportedStructPaths(structTypes, new HashSet<string>());
 
         foreach (UnrealReflectedType type in normalized.Types)
         {
@@ -175,7 +175,7 @@ public sealed class UnrealNativeThunkGenerator
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        bool hasInterfaceValues = properties.Any(static item => ContainsInterfaceValue(item.Property.Type)) ||
+        bool hasInterfaceValues = interfaceBearingStructPaths.Count > 0 || properties.Any(static item => ContainsInterfaceValue(item.Property.Type)) ||
             functions.Any(static item => ContainsInterfaceValue(item.Function.ReturnType) ||
                 item.Function.Parameters.Any(parameter => ContainsInterfaceValue(parameter.Type)));
         bool hasTypedClassValues = properties.Any(static item => ContainsTypedClassValue(item.Property.Type)) ||
@@ -1718,7 +1718,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealTypeReference type,
         bool allowVoid,
         IReadOnlySet<string> supportedStructPaths) =>
-        type.Kind != UnrealValueKind.Interface && ContainsInterfaceValue(type) ? false : type.Kind is
+        type.Kind == UnrealValueKind.Callback && ContainsInterfaceValue(type) ? false : type.Kind is
             UnrealValueKind.Boolean or
             UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
             UnrealValueKind.Int16 or UnrealValueKind.UInt16 or
@@ -1967,7 +1967,7 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string WireNativeName(UnrealTypeReference type) => type.Kind switch
     {
-        UnrealValueKind.Object => "UObject*",
+        UnrealValueKind.Object or UnrealValueKind.Interface => "UObject*",
         UnrealValueKind.Class => "UClass*",
         UnrealValueKind.SoftObject => "FSoftObjectPath",
         UnrealValueKind.SoftClass => "FSoftClassPath",

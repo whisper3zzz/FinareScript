@@ -275,16 +275,16 @@ namespace UE::Finare::Invocation::Private
 			return false;
 		}
 		if (const auto* Array = CastField<FArrayProperty>(Property))
-			return bAllowCustomStruct && SupportsReflectedField(Array->Inner, Depth + 1, false);
+			return SupportsReflectedField(Array->Inner, Depth + 1);
 		if (const auto* Set = CastField<FSetProperty>(Property))
-			return bAllowCustomStruct && SupportsReflectedField(Set->ElementProp, Depth + 1, false);
+			return SupportsReflectedField(Set->ElementProp, Depth + 1);
 		if (const auto* Map = CastField<FMapProperty>(Property))
-			return bAllowCustomStruct && SupportsReflectedField(Map->KeyProp, Depth + 1, false) &&
-				SupportsReflectedField(Map->ValueProp, Depth + 1, false);
+			return SupportsReflectedField(Map->KeyProp, Depth + 1) &&
+				SupportsReflectedField(Map->ValueProp, Depth + 1);
 		return CastField<FNumericProperty>(Property) || CastField<FBoolProperty>(Property) ||
 			CastField<FEnumProperty>(Property) || CastField<FStrProperty>(Property) || CastField<FNameProperty>(Property) ||
 			CastField<FTextProperty>(Property) || CastField<FObjectPropertyBase>(Property) ||
-			CastField<FSoftObjectProperty>(Property);
+			CastField<FSoftObjectProperty>(Property) || CastField<FInterfaceProperty>(Property);
 	}
 
 	FProperty* FindReflectedProperty(UObject* Object, uint64 Id)
@@ -2696,3 +2696,4 @@ void FFinareInvocationBridge::ReleaseEventArguments(
 		ReleaseValue(Value);
 	}
 }
+#include "FinareNativeData.inl"

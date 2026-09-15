@@ -109,11 +109,7 @@ public static class UnrealApiLibrary
 
     private static bool SupportsStructField(UnrealTypeReference type, IReadOnlySet<string> structs)
     {
-        if (type.Kind is UnrealValueKind.Interface or UnrealValueKind.Callback) return false;
-        // Reflected value fields may contain scalar collections. Recursive
-        // collection-of-struct layouts need an explicit layout contract.
-        if (type.Kind is UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map)
-            return UnrealBindingCoverageReport.SupportsReflectionType(type, false, new HashSet<string>());
+        if (type.Kind == UnrealValueKind.Callback) return false;
         return UnrealBindingCoverageReport.SupportsReflectionType(type, false, structs);
     }
 }

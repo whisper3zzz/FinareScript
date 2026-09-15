@@ -39,6 +39,8 @@
 #include "FinareActor.h"
 #include "FinareClassBases.h"
 #include "FinareComponent.h"
+#include "FinareCoreClrHost.h"
+#include "Misc/SecureHash.h"
 #include "FinareDeclarationMaterializer.h"
 #include "FinareClassOperationJournal.h"
 #include "FinareAuthoringTransBuffer.h"
@@ -492,6 +494,11 @@ namespace UE::Finare::BlueprintClass::Private
 		TArray<FFinareManagedDelegateBinding> ManagedDelegateBindings;
 		TArray<FFinareManagedInterfaceFunctionBinding> ManagedInterfaceBindings;
 		TStrongObjectPtr<UFinareAsset> ManagedScriptAsset;
+		bool bHasManagedConstruction = false;
+		FString ManagedConstructionProgramHash;
+		FString ManagedConstructionError;
+		TSet<FName> ManagedConstructionProperties;
+		TMap<FName, FString> ManagedConstructionDefaults;
 
 		void Capture(const UFinareBlueprintGeneratedClass& GeneratedClass)
 		{
@@ -502,6 +509,11 @@ namespace UE::Finare::BlueprintClass::Private
 			ManagedDelegateBindings = GeneratedClass.ManagedDelegateBindings;
 			ManagedInterfaceBindings = GeneratedClass.ManagedInterfaceBindings;
 			ManagedScriptAsset.Reset(GeneratedClass.ManagedScriptAsset.Get());
+			bHasManagedConstruction = GeneratedClass.bHasManagedConstruction;
+			ManagedConstructionProgramHash = GeneratedClass.ManagedConstructionProgramHash;
+			ManagedConstructionError = GeneratedClass.ManagedConstructionError;
+			ManagedConstructionProperties = GeneratedClass.ManagedConstructionProperties;
+			ManagedConstructionDefaults = GeneratedClass.ManagedConstructionDefaults;
 		}
 
 		bool RestoreTo(UBlueprint& Blueprint, FString& OutError) const
@@ -526,6 +538,11 @@ namespace UE::Finare::BlueprintClass::Private
 			GeneratedClass->ManagedDelegateBindings = ManagedDelegateBindings;
 			GeneratedClass->ManagedInterfaceBindings = ManagedInterfaceBindings;
 			GeneratedClass->ManagedScriptAsset = ManagedScriptAsset.Get();
+			GeneratedClass->bHasManagedConstruction = bHasManagedConstruction;
+			GeneratedClass->ManagedConstructionProgramHash = ManagedConstructionProgramHash;
+			GeneratedClass->ManagedConstructionError = ManagedConstructionError;
+			GeneratedClass->ManagedConstructionProperties = ManagedConstructionProperties;
+			GeneratedClass->ManagedConstructionDefaults = ManagedConstructionDefaults;
 			OutError.Reset();
 			return true;
 		}
@@ -9347,6 +9364,31 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 			Cast<UFinareBlueprintGeneratedClass>(Blueprint.GeneratedClass);
 		OutResult.bChanged |= RuntimeClass != nullptr &&
 			RuntimeClass->ManagedScriptAsset != UnifiedBlueprint->ScriptAsset;
+		if (RuntimeClass && (RuntimeClass->bHasManagedConstruction ||
+			(!ScriptAsset.ScriptTypeName.IsEmpty() &&
+				(!ScriptAsset.CompiledChunkPath.IsEmpty() || !ScriptAsset.ScriptAssemblyPath.IsEmpty()))))
+		{
+			FString Program, Type, ConstructionError;
+			if (!ScriptAsset.ResolveRuntimeConfiguration(true, Program, Type, ConstructionError))
+			{ OutError = ConstructionError; return false; }
+			const bool bProgramExists = IFileManager::Get().FileExists(*Program);
+			const bool bProgramChanged = bProgramExists &&
+				RuntimeClass->ManagedConstructionProgramHash != LexToString(FMD5Hash::HashFile(*Program));
+			bool bCandidateHasHook = false;
+			if (bProgramChanged && !FFinareCoreClrHost::Get().HasManagedConstruction(Program, Type, bCandidateHasHook, ConstructionError))
+			{ OutError = ConstructionError; return false; }
+			if ((RuntimeClass->bHasManagedConstruction || bCandidateHasHook) &&
+				(bProgramChanged || !RuntimeClass->ValidateManagedConstruction(Program, ConstructionError)))
+			{
+				for (TObjectIterator<UFinareComponent> It; It; ++It)
+					if (It->bScriptRunning && It->GetActiveManagedGeneratedClass() &&
+						It->GetActiveManagedGeneratedClass()->IsChildOf(RuntimeClass))
+					{ OutError = TEXT("Stop gameplay and rebuild the Script Class CDO before changing its native constructor program."); return false; }
+				// A stopped program update must recreate its CDO, even when the
+				// reflected declaration schema is unchanged.
+				OutResult.bChanged = true;
+			}
+		}
 	}
 
 	if (!OutResult.bChanged)

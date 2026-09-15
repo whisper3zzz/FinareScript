@@ -1,6 +1,7 @@
 #include "FinareNativeObjectRegistry.h"
 #include "FinareNativeTransport.h"
 #include "FinareNativeObjectValues.h"
+#include "FinareCppCallback.h"
 #include <atomic>
 
 namespace
@@ -28,11 +29,13 @@ namespace
 		uint64 Library;
 		FFinareNativeObjectMember Invoke;
 		FFinareNativeObjectTextMember TextInvoke;
+		decltype(FFinareNativeObjectMemberEntry::Memory) Memory = nullptr;
 	};
 
 	struct FLibraries
 	{
 		TMap<uint64, TArray<FLibraryEntry>> Members;
+		TMap<uint64, TArray<FFinareNativeObjectCastEntry>> Casts;
 		TSet<FFinareNativeObjectRegistry*> Registries;
 	};
 
@@ -120,6 +123,7 @@ struct FFinareNativeObjectRegistry::FImpl
 
 	EStatus Check(uint64 Scope) const
 	{
+		if (Finare_IsNativeMemoryBorrowed()) return EStatus::Unavailable;
 		if (!IsInGameThread())
 		{
 			return EStatus::WrongThread;
@@ -333,12 +337,42 @@ EStatus FFinareNativeObjectRegistry::Resolve(uint64 Scope, FFinareNativeObjectHa
 	{
 		return EStatus::WrongOwner;
 	}
-	if (!TypeId || Entry->TypeId != TypeId)
+	if (!TypeId) return EStatus::WrongType;
+	uint64 CurrentType = Entry->TypeId;
+	void* CurrentPointer = Entry->Pointer;
+	TSet<uint64> Visited;
+	while (Visited.Num() < 64 && !Visited.Contains(CurrentType))
 	{
-		return EStatus::WrongType;
+		if (CurrentType == TypeId) { OutPointer = CurrentPointer; return EStatus::Success; }
+		Visited.Add(CurrentType);
+		const FFinareNativeObjectCastEntry* Edge = nullptr;
+		for (const auto& Library : Libraries().Casts)
+			for (const auto& Candidate : Library.Value)
+				if (Candidate.DerivedType == CurrentType)
+				{
+					if (Edge) return EStatus::WrongType; // Ambiguous module declarations never guess an adjustment.
+					Edge = &Candidate;
+				}
+		if (!Edge || !Edge->Cast) return EStatus::WrongType;
+		CurrentPointer = Edge->Cast(CurrentPointer); CurrentType = Edge->BaseType;
 	}
-	OutPointer = Entry->Pointer;
-	return EStatus::Success;
+	return EStatus::WrongType;
+}
+
+EStatus FFinareNativeObjectRegistry::BorrowMemory(uint64 Scope, FFinareNativeObjectHandle Target, uint64 MemberId,
+	uint8 Kind, uint32 ElementSize, bool bWrite, FFinareMemoryCallback Callback, void* UserData)
+{
+	EStatus Status = Impl->Check(Scope);
+	if (Status != EStatus::Success) return Status;
+	if (!Callback) return EStatus::InvalidArgument;
+	const auto* Entries = Libraries().Members.Find(MemberId);
+	if (!Entries || Entries->IsEmpty()) return EStatus::UnknownMember;
+	if (Entries->Num() != 1) return EStatus::DuplicateMember;
+	if (!(*Entries)[0].Memory) return EStatus::InvalidArgument;
+	void* Data = nullptr; int32 Count = 0;
+	Status = (*Entries)[0].Memory(*this, Scope, Target, Kind, ElementSize, bWrite, Data, Count);
+	if (Status != EStatus::Success) return Status;
+	return Finare_WithNativeMemory(Data, Count, ElementSize, Callback, UserData) ? EStatus::Success : EStatus::InvalidArgument;
 }
 
 EStatus FFinareNativeObjectRegistry::Release(uint64 Scope, FFinareNativeObjectHandle Handle)
@@ -480,6 +514,7 @@ EStatus FFinareNativeObjectRegistry::BeginText(uint64 Scope, FFinareNativeObject
 				}
 			}
 		}
+		else if (Value.Kind == EFinareNativeValueKindV3::Callback && ResolveCppCallback(Value, Value.TypeId).IsValid()) { }
 		else if (!IsFixedCell(Value, false))
 		{
 			return EStatus::InvalidArgument;
@@ -708,6 +743,7 @@ EStatus FFinareNativeObjectRegistry::Invoke(uint64 Scope, FFinareNativeObjectHan
 				return Status;
 			}
 		}
+		else if (Value.Kind == EFinareNativeValueKindV3::Callback && ResolveCppCallback(Value, Value.TypeId).IsValid()) { }
 		else if (!IsFixedCell(Value, false))
 		{
 			return EStatus::InvalidArgument;
@@ -797,20 +833,23 @@ int32 FFinareNativeObjectRegistry::NumScopes() const
 	return Impl->Scopes.Num();
 }
 
-FFinareNativeObjectLibrary::FFinareNativeObjectLibrary(TConstArrayView<FFinareNativeObjectMemberEntry> Members)
+FFinareNativeObjectLibrary::FFinareNativeObjectLibrary(TConstArrayView<FFinareNativeObjectMemberEntry> Members,
+	TConstArrayView<FFinareNativeObjectCastEntry> Casts)
 {
 	check(IsInGameThread() || Libraries().Registries.IsEmpty());
 	Id = AllocateNativeToken();
 	check(Id);
+	Libraries().Casts.Add(Id, TArray<FFinareNativeObjectCastEntry>(Casts));
 	for (const auto& Member : Members)
 	{
-		check(Member.MemberId && (Member.Invoke || Member.TextInvoke));
-		Libraries().Members.FindOrAdd(Member.MemberId).Add({Id, Member.Invoke, Member.TextInvoke});
+		check(Member.MemberId && (Member.Invoke || Member.TextInvoke || Member.Memory));
+		Libraries().Members.FindOrAdd(Member.MemberId).Add({Id, Member.Invoke, Member.TextInvoke, Member.Memory});
 	}
 }
 
 FFinareNativeObjectLibrary::~FFinareNativeObjectLibrary()
 {
+	Libraries().Casts.Remove(Id);
 	// Unregister before invoking destructors, while the module's code is still loaded.
 	check(IsInGameThread() || Libraries().Registries.IsEmpty());
 	for (auto It = Libraries().Members.CreateIterator(); It; ++It)

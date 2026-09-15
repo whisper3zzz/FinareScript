@@ -95,16 +95,21 @@ through the generated module API library. Deferred inputs, attachment, Tick,
 destruction, stale-handle rejection and reload cleanup passed CMD Automation.
 
 Runtime `AddComponentByClass` / `FinishAddComponent` and native constructor
-`CreateDefaultSubobject` are distinct entry points. The latter still requires
-real constructor/CDO integration; invoking gameplay initialization at BeginPlay
-does not provide that capability.
+`CreateDefaultSubobject` are distinct entry points. The
+[native C# Character example](../tests/Finare.Tests/Fixtures/NativeConstruction/README.md)
+now uses `OnConstruct` during the actual UE constructor to create a camera and
+mesh, retain a reflected component reference, and preserve edited camera defaults
+through save/reopen and independent spawned instances. It uses a temporary
+constructor scope without starting a managed World. The constructor program is
+checked against the saved class; changed programs require stopping and rebuilding
+the CDO. Async loading and cooked delivery remain outside this Editor tranche.
 
 Remaining C-4 work follows concrete public API gaps:
 
-1. Build on the completed runtime component entry when a public workflow needs
-   native constructor/default-subobject initialization. This requires the real
-   construction phase, including CDO and loading behavior; it is not a new
-   component-composition data model.
+1. Extend the native construction entry for concrete loading/default-edit cases
+   beyond the synchronous Character example, including async class loading and
+   constructor-default changes across class hierarchies. Keep native constructor
+   semantics; do not introduce a component-composition data model.
 2. Keep source bindings, saved UE classes, component identity and runtime
    behavior ownership consistent. Preserve explicit default/reference overrides.
 3. Exercise save/reopen and permitted stop/edit/restart. Reject active or
@@ -169,6 +174,15 @@ The selected breadth target has been met for the reviewed use cases. Preserve
 the typed contract, object ownership, World teardown and rollback guarantees
 as new cases are added. The pinned upstream comparison and detailed checkpoint
 evidence remain in the [September 11 snapshot](history/ROADMAP_2026-09-11.md#puerts-comparison-and-capability-breadth-target).
+
+The September 15 explicit interop task adds interface arrays/Map values,
+interface/collection-bearing USTRUCTs, live native views, one declared ordinary
+C++ base chain, retained fixed-signature std::function inputs and synchronous
+zero-copy numeric spans over UE/C++ storage. See the
+[implementation scope and evidence](plans/2026-09-15-interop-parity.md) and
+[example](../tests/Finare.Tests/Fixtures/InteropParity/README.md). This closes
+those bounded gaps; it does not establish unrestricted Puerts parity or renew
+Cook/platform acceptance.
 
 ## Working and verification policy
 

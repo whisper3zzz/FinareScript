@@ -817,8 +817,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests : IDis
             callback,
             userData,
             success: false,
-            error: UnrealInvocationError.ValueTypeMismatch,
-            message: "Fast property value mismatch.");
+            error: memberId == UnrealMemberId.FromPath(ScriptAssetPath)
+                ? UnrealInvocationError.ValueTypeMismatch : UnrealInvocationError.InvalidMemberPath,
+            message: "Fast property ID or value mismatch.");
     }
 
     private void InvokeById(

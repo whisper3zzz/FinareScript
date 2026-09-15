@@ -43,6 +43,9 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
     private NativeReadText? _nativeReadText;
     private NativeDiscardText? _nativeDiscardText;
     private uint _nativeTextMaxInputBytes, _nativeTextMaxOutputBytes;
+    private nint _nativeObjectBorrow;
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeObjectMemoryTable { public UnrealNativeObjectTransportTableWithText Base; public nint Borrow; }
     private readonly HashSet<ulong> _nativeObjectScopes = [];
 
     private void LoadNativeObjects(nint tablePointer, NativeTransportTableV1 parent)
@@ -55,6 +58,12 @@ public sealed partial class InProcessUnrealNativeInvocationTransport : IUnrealNa
             header.ValueSize != UnrealNativeAbiV3.ValueSize || header.Reserved != 0)
             throw new InvalidOperationException("The native object ownership ABI has an incompatible layout.");
         var table = Marshal.PtrToStructure<UnrealNativeObjectTransportTableV1>(extension.NativeObjectTransport);
+        if (header.TableSize >= Marshal.SizeOf<NativeObjectMemoryTable>())
+        {
+            var memory = Marshal.PtrToStructure<NativeObjectMemoryTable>(extension.NativeObjectTransport);
+            if ((memory.Base.Base.Capabilities & 4UL) != 0)
+                _nativeObjectBorrow = memory.Borrow != 0 ? memory.Borrow : throw new InvalidOperationException("Native memory transport is incomplete.");
+        }
         if (table.RetainContext != parent.RetainContext || table.ReleaseContext != parent.ReleaseContext ||
             table.OpenScope == 0 || table.CloseScope == 0 || table.ReleaseObject == 0 || table.Invoke == 0)
             throw new InvalidOperationException("The native object ownership table is incomplete or belongs to another context ABI.");

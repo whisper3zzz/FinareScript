@@ -88,6 +88,8 @@ class FINARERUNTIME_API FFinareObjectRegistry
 {
 public:
 	explicit FFinareObjectRegistry(UWorld* InWorld);
+	/** Synchronous constructor scope; accepts only the receiver and its subobjects. */
+	explicit FFinareObjectRegistry(UObject& InConstructionRoot);
 	~FFinareObjectRegistry();
 
 	FFinareObjectRegistry(const FFinareObjectRegistry&) = delete;

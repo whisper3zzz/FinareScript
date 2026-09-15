@@ -98,6 +98,31 @@ namespace UE::Finare::Editor::Private
 		}
 
 	protected:
+		virtual void CopyTermDefaultsToDefaultObject(UObject* DefaultObject) override
+		{
+			// Kismet may already have copied the old CDO over the newly constructed
+			// one. Merge actual constructor defaults at the same point as terms.
+			if (auto* Generated = Cast<UFinareBlueprintGeneratedClass>(DefaultObject->GetClass()))
+			{
+				if (!Generated->ManagedConstructionError.IsEmpty())
+					MessageLog.Error(*FString::Printf(TEXT("Native construction: %s"), *Generated->ManagedConstructionError));
+				for (const FBPVariableDescription& Variable : Blueprint->NewVariables)
+				{
+					const FName Key(TEXT("UnifiedScript.DeclarationDefault"));
+					// Kismet consumes and clears Variable.DefaultValue during layout.
+					// The pending term map retains the value being assigned this compile.
+					const FString* Pending = DefaultPropertyValueMap.Find(Variable.VarName);
+					if (Generated->ManagedConstructionProperties.Contains(Variable.VarName) &&
+						Pending && Variable.HasMetaData(Key) && Variable.GetMetaData(Key) == *Pending)
+					{
+						if (const FString* Value = Generated->ManagedConstructionDefaults.Find(Variable.VarName))
+							DefaultPropertyValueMap.Add(Variable.VarName, *Value);
+					}
+				}
+			}
+			FKismetCompilerContext::CopyTermDefaultsToDefaultObject(DefaultObject);
+		}
+
 		virtual void EnsureProperGeneratedClass(UClass*& InTargetClass) override
 		{
 			if (InTargetClass != nullptr &&
@@ -145,6 +170,13 @@ namespace UE::Finare::Editor::Private
 
 		virtual void FinishCompilingClass(UClass* Class) override
 		{
+			if (auto* Generated = Cast<UFinareBlueprintGeneratedClass>(Class); Generated && IsInGameThread())
+			{
+				FString Error;
+				auto* Unified = Cast<UFinareBlueprint>(Blueprint);
+				if (!Generated->ConfigureManagedConstruction(Unified ? Unified->ScriptAsset.Get() : nullptr, Error))
+					MessageLog.Error(*FString::Printf(TEXT("Native construction: %s"), *Error));
+			}
 			FKismetCompilerContext::FinishCompilingClass(Class);
 			if (UFinareBlueprintGeneratedClass* GeneratedClass =
 				Cast<UFinareBlueprintGeneratedClass>(Class))

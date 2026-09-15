@@ -738,6 +738,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
         LoadNativeObjects(tablePointer, table);
         LoadCallbacks(tablePointer, table);
         LoadObjectReferences(tablePointer, table);
+        LoadNativeData(tablePointer, table);
         if (retainContext(_context) == 0)
         {
             throw new InvalidOperationException(
@@ -1571,6 +1572,7 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
 
     public void Dispose()
     {
+        if (_nativeMemoryCallback) throw new InvalidOperationException("Cannot dispose the World transport during a native memory callback.");
         bool releaseContext;
         lock (_lifetimeGate)
         {
@@ -1650,6 +1652,8 @@ public sealed partial class InProcessUnrealNativeInvocationTransport
 
     private void ThrowIfDisposed()
     {
+        if (_nativeMemoryCallback)
+            throw new InvalidOperationException("UE reentry is forbidden while a native Span callback is active.");
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 

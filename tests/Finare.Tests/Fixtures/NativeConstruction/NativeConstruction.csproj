@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Finare.NativeConstruction</AssemblyName>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <ConstructionDirectory>$(MSBuildProjectDirectory)/../../../../artifacts/native-construction</ConstructionDirectory>
+    <HostDirectory>$(MSBuildProjectDirectory)/../../../../HostProject/Plugins/Finare/Binaries/Managed</HostDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ConstructionDirectory)/Bindings.g.cs" />
+    <Compile Include="CharacterScript.cs" />
+    <Analyzer Include="$(HostDirectory)/Finare.Unreal.Generators.dll" />
+    <Reference Include="Finare.Unreal"><HintPath>$(HostDirectory)/Finare.Unreal.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Finare.Core"><HintPath>$(HostDirectory)/Finare.Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

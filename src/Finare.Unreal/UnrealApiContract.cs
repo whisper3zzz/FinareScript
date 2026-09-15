@@ -847,7 +847,11 @@ public static class UnrealApiContractProjector
             }
             selectedTypes.Add(dependency.Kind == UnrealReflectedTypeKind.NativeObject
                 ? dependency with { Properties = [], Functions = [] } : dependency);
-            if (dependency.Kind == UnrealReflectedTypeKind.NativeObject) continue;
+            if (dependency.Kind == UnrealReflectedTypeKind.NativeObject)
+            {
+                if (dependency.BaseTypePath is not null) pending.Enqueue(dependency.BaseTypePath);
+                continue;
+            }
             foreach (string nested in EnumerateDependencies(dependency))
             {
                 pending.Enqueue(nested);

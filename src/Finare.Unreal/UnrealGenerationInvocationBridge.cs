@@ -5,7 +5,7 @@ namespace Finare.Unreal;
 /// invocation capability while owning event subscriptions created by that
 /// generation, so reload and World teardown cannot retain an old ALC.
 /// </summary>
-internal sealed class UnrealGenerationInvocationBridge :
+internal sealed partial class UnrealGenerationInvocationBridge :
     IUnrealInvocationBridge,
     IUnrealNativeBindingBridge,
     IUnrealNativeObjectProvider,
@@ -90,7 +90,7 @@ internal sealed class UnrealGenerationInvocationBridge :
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 return _nativeObjects ??= LiveInner is IUnrealNativeObjectScopeFactory factory
-                    ? factory.CreateNativeObjectScope()
+                    ? factory.CreateNativeObjectScope(this)
                     : throw new NotSupportedException("The World bridge does not support generation-owned native objects.");
             }
         }

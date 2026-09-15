@@ -356,7 +356,7 @@ public sealed class UnrealInvocationException : Exception
 /// Converts generated-wrapper CLR values to the owned native invocation
 /// contract. A world/runtime host supplies the concrete process transport.
 /// </summary>
-public sealed class NativeUnrealInvocationBridge
+public sealed partial class NativeUnrealInvocationBridge
     : IUnrealInvocationBridge,
       IUnrealNativeBindingBridge,
       IUnrealNativeObjectProvider,
@@ -464,11 +464,11 @@ public sealed class NativeUnrealInvocationBridge
         }
     }
 
-    UnrealNativeObjectScope IUnrealNativeObjectScopeFactory.CreateNativeObjectScope() => CreateNativeObjectScope();
+    UnrealNativeObjectScope IUnrealNativeObjectScopeFactory.CreateNativeObjectScope(IUnrealInvocationBridge owner) => CreateNativeObjectScope(owner);
 
-    private UnrealNativeObjectScope CreateNativeObjectScope() =>
+    private UnrealNativeObjectScope CreateNativeObjectScope(IUnrealInvocationBridge? owner = null) =>
         _transport is IUnrealNativeObjectTransport native
-            ? new UnrealNativeObjectScope(native)
+            ? new UnrealNativeObjectScope(native, owner ?? this)
             : throw new NotSupportedException("The installed transport does not support native objects.");
 
     UnrealObjectReferenceScope IUnrealObjectReferenceScopeFactory.GetObjectReferenceScope()

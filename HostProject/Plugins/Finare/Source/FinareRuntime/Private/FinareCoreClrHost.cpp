@@ -397,6 +397,61 @@ bool FFinareCoreClrHost::Initialize()
 	return InitializeLocked();
 }
 
+namespace
+{
+	void* LoadConstructionEntry(FFinareCoreClrHost& Host, const TCHAR* Method, FString& Error)
+	{
+		using namespace UE::Finare::CoreClr::Private;
+		if (!Host.Initialize()) { Error = TEXT("CoreCLR is unavailable for native construction."); return nullptr; }
+		auto Load = reinterpret_cast<FLoadAssemblyAndGetFunctionPointer>(Host.GetLoadAssemblyAndGetFunctionPointer());
+		void* Entry = nullptr;
+#if PLATFORM_WINDOWS
+		const int32 Status = Load(*GetManagedAssemblyPath(),
+			TEXT("Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal"), Method,
+			reinterpret_cast<const FFinareHostChar*>(MAX_uint64), nullptr, &Entry);
+#else
+		FTCHARToUTF8 Assembly(*GetManagedAssemblyPath()), Name(Method);
+		const int32 Status = Load(Assembly.Get(),
+			"Finare.Unreal.UnrealWorldManagedEntryPoint, Finare.Unreal", Name.Get(),
+			reinterpret_cast<const FFinareHostChar*>(MAX_uint64), nullptr, &Entry);
+#endif
+		if (Status != 0 || !Entry) Error = FString::Printf(TEXT("Managed constructor export %s is unavailable (%d)."), Method, Status);
+		return Entry;
+	}
+}
+
+bool FFinareCoreClrHost::HasManagedConstruction(const FString& Program, const FString& Type,
+	bool& OutHasHook, FString& OutError)
+{
+	OutHasHook = false;
+	using FEntry = int32(FINARE_HOSTFXR_CALLTYPE *)(const uint8*, int32, const uint8*, int32, uint8*, int32);
+	auto Entry = reinterpret_cast<FEntry>(LoadConstructionEntry(*this, TEXT("HasConstruction"), OutError));
+	if (!Entry) return false;
+	FTCHARToUTF8 ProgramUtf8(*Program), TypeUtf8(*Type);
+	uint8 Error[4096] = {};
+	const int32 Status = Entry(reinterpret_cast<const uint8*>(ProgramUtf8.Get()), ProgramUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeUtf8.Get()), TypeUtf8.Length(), Error, UE_ARRAY_COUNT(Error));
+	if (Status < 0) { OutError = UTF8_TO_TCHAR(reinterpret_cast<const ANSICHAR*>(Error)); return false; }
+	OutHasHook = Status == 1;
+	return true;
+}
+
+bool FFinareCoreClrHost::ConstructManagedObject(void* Context, const FFinareNativeTransportV2* Transport,
+	const void* Operations, uint64 Host, bool bIsCDO, const FString& Program, const FString& Type, FString& OutError)
+{
+	using FEntry = int32(FINARE_HOSTFXR_CALLTYPE *)(void*, const void*, const void*, uint64, int32,
+		const uint8*, int32, const uint8*, int32, uint8*, int32);
+	auto Entry = reinterpret_cast<FEntry>(LoadConstructionEntry(*this, TEXT("ConstructScript"), OutError));
+	if (!Entry) return false;
+	FTCHARToUTF8 ProgramUtf8(*Program), TypeUtf8(*Type);
+	uint8 Error[4096] = {};
+	const int32 Status = Entry(Context, Transport, Operations, Host, bIsCDO ? 1 : 0,
+		reinterpret_cast<const uint8*>(ProgramUtf8.Get()), ProgramUtf8.Length(),
+		reinterpret_cast<const uint8*>(TypeUtf8.Get()), TypeUtf8.Length(), Error, UE_ARRAY_COUNT(Error));
+	if (Status != 0) { OutError = UTF8_TO_TCHAR(reinterpret_cast<const ANSICHAR*>(Error)); return false; }
+	return true;
+}
+
 void FFinareCoreClrHost::Shutdown()
 {
 	FScopeLock Lock(&StateLock);

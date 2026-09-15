@@ -49,6 +49,8 @@ public sealed record UnrealNativeExtensionType(
     IReadOnlyList<UnrealReflectedProperty> Properties,
     IReadOnlyList<UnrealNativeExtensionFunction> Functions)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BaseTypePath { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public UnrealReflectedTypeKind Kind { get; init; } = UnrealReflectedTypeKind.Class;
 }
@@ -84,6 +86,7 @@ public static class UnrealNativeExtensions
                     ? @"\A/Native/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\z"
                     : @"\A/Script/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\z") ||
                 type.Kind is not (UnrealReflectedTypeKind.Class or UnrealReflectedTypeKind.NativeObject) ||
+                type.BaseTypePath is not null && type.Kind != UnrealReflectedTypeKind.NativeObject ||
                 type.Kind == UnrealReflectedTypeKind.NativeObject && manifest.SchemaVersion == UnrealNativeExtensionManifest.LegacySchemaVersion ||
                 !paths.Add(type.Path) || string.IsNullOrWhiteSpace(type.NativeName) ||
                 !Regex.IsMatch(type.NativeName, @"\A[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*\z") ||
@@ -233,7 +236,7 @@ public static class UnrealNativeExtensions
     private static UnrealReflectedType MakeType(UnrealNativeExtensionType type, string extension) =>
         new(type.Path, type.Path[(type.Path.IndexOf('.') + 1)..], type.NativeName,
             type.Path["/Script/".Length..type.Path.IndexOf('.')], type.Kind,
-            null, new UnrealTypeTraits(false, false),
+            type.BaseTypePath, new UnrealTypeTraits(false, false),
             type.Properties.Select(field => field with { NativeExtension = extension }).ToArray(),
             type.Functions.Select(method => method.Declaration with
             {

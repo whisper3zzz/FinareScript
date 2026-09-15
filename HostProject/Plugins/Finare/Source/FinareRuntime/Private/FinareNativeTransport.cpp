@@ -1,4 +1,5 @@
 #include "FinareNativeTransport.h"
+#include "FinareCppCallback.h"
 
 #include "Containers/StringConv.h"
 #include "HAL/Event.h"
@@ -64,6 +65,7 @@ FFinareNativeBridgeContext::FFinareNativeBridgeContext(
 	: Bridge(&InBridge)
 	  , FastBridge(&InBridge)
 {
+	NativeObjects.SetCallbackContext(this);
 	UE::Finare::NativeTransport::LifecycleDiagnostics::GLiveContextCount.fetch_add(
 		1,
 		std::memory_order_relaxed);
@@ -176,6 +178,8 @@ void FFinareNativeBridgeContext::Detach()
 			}
 		}
 		CallbackProxies.Reset();
+		for (auto& Entry : CppCallbacks) Entry.Value->Retire();
+		CppCallbacks.Reset();
 		CallbackScopes.Reset();
 		FastBridge.store(nullptr, std::memory_order_release);
 		Bridge = nullptr;
@@ -209,6 +213,7 @@ void FFinareNativeBridgeContext::Detach()
 bool FFinareNativeBridgeContext::Execute(
 	TUniqueFunction<void(FFinareInvocationBridge&)>&& Operation)
 {
+	if (Finare_IsNativeMemoryBorrowed()) return false;
 	if (IsInGameThread())
 	{
 		FScopeLock Lock(&BridgeLock);
@@ -246,6 +251,7 @@ bool FFinareNativeBridgeContext::Execute(
 bool FFinareNativeBridgeContext::ExecuteGameThreadFast(
 	TUniqueFunction<void(FFinareInvocationBridge&)>&& Operation)
 {
+	if (Finare_IsNativeMemoryBorrowed()) return false;
 	if (!IsInGameThread())
 	{
 		return Execute(MoveTemp(Operation));
@@ -333,6 +339,7 @@ void FFinareNativeBridgeContext::ReleaseCorrelatedResult(uint64 CorrelationId)
 bool FFinareNativeBridgeContext::ExecuteNativeObjects(
 	TFunctionRef<void(FFinareNativeObjectRegistry&)> Operation)
 {
+	if (Finare_IsNativeMemoryBorrowed()) return false;
 	if (!IsInGameThread() || FastBridge.load(std::memory_order_acquire) == nullptr)
 	{
 		return false;
@@ -3769,6 +3776,7 @@ Finare_GetNativeTransportV2()
 		Finare_GetNativeObjectTransportV1(),
 		Finare_GetCallbackTransport(),
 		Finare_GetUObjectReferenceTransportV1(),
+		Finare_GetNativeDataTransportV1(),
 	};
 	return &Transport;
 }
@@ -3948,3 +3956,4 @@ Finare_GetNativeTransportV3()
 	};
 	return &Transport;
 }
+#include "FinareNativeDataTransport.inl"

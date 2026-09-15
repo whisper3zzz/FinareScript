@@ -59,11 +59,23 @@ are rejected. Lifecycle, RPC and parent calls do not synchronize managed copies.
 On a `[ScriptAsset]` owner this applies to every declared instance state property;
 a plain helper base contributes only its explicit `[Expose]` properties.
 
-Reflected containers and structs are values: reads produce detached snapshots,
-and assignment publishes a replacement through the common marshaller. Object
-elements retain object identity, but mutating a snapshot does not mutate its
-native container. This contract does not imply shared-memory aliases or a
-live `TArray` proxy. Replicated property setters retain authority checks.
+Normal reflected container/struct getters produce detached values, and assignment
+publishes a replacement through the common marshaller. Generated `PropertyNative`
+views additionally support live element/field operations. They retain object and
+generation identity plus a logical path, re-resolving storage after reallocation.
+Set elements and Map keys remain values to preserve hash invariants. Optional
+native-data transport uses the existing ABI v3 value codec for these operations.
+Numeric contiguous storage can be borrowed synchronously as C# Span; the native
+scope prevents reentry, keeps the owner alive and ends before the address can
+escape. No UObject-containing struct is reinterpreted as managed memory.
+Replicated and read-only writes retain the same authority/access checks.
+
+Ordinary C++ objects use a separate ownership registry. Declared inheritance
+registers pointer-adjustment edges while sharing the original object's single
+destructor lease. std::function captures a weak, generation-owned callback
+endpoint, reusing the callback ABI and managed delegate registration. Numeric
+std::vector/TArray fields use an optional memory-borrow tail on that registry's
+transport. These Unreal/native services remain outside Core/Graph/Semantics.
 
 Project loading carries analyzer paths into in-process Roslyn compilation,
 source patches and remote compilation requests. Generator assembly contents

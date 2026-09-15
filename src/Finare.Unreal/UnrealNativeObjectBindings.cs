@@ -25,6 +25,13 @@ internal static class UnrealNativeObjectBindings
         var types = manifest.Types.ToDictionary(t => t.Path, StringComparer.Ordinal);
         foreach (var owner in manifest.Types.Where(t => t.Kind == UnrealReflectedTypeKind.NativeObject))
         {
+            var ancestors = new HashSet<string>(StringComparer.Ordinal) { owner.Path };
+            for (string? parent = owner.BaseTypePath; parent is not null;)
+            {
+                if (!ancestors.Add(parent) || !types.TryGetValue(parent, out var ancestor) || ancestor.Kind != UnrealReflectedTypeKind.NativeObject)
+                    throw new JsonException($"USUE5415: Native inheritance of '{owner.Path}' has an unknown, non-native or cyclic base.");
+                parent = ancestor.BaseTypePath;
+            }
             if (owner.Path != $"/Native/{owner.Module}.{owner.Name}" || string.IsNullOrEmpty(owner.HeaderPath) ||
                 !Regex.IsMatch(owner.NativeName, @"\A[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*\z") ||
                 owner.Properties.Any(p => p.Name == owner.Name || p.Metadata.ThreadSafe))
@@ -71,6 +78,22 @@ internal static class UnrealNativeObjectBindings
     internal static bool IsText(UnrealTypeReference type) =>
         type.Kind == UnrealValueKind.String && type.NativeName is ("FString" or "std::string");
 
+    internal static byte MemoryKind(UnrealTypeReference type) => type.Kind switch
+    {
+        UnrealValueKind.UInt8 => 1, UnrealValueKind.Int32 => 2, UnrealValueKind.Float32 => 3,
+        UnrealValueKind.Float64 => 4, UnrealValueKind.Int64 => 5, UnrealValueKind.UInt32 => 6, _ => 0,
+    };
+    internal static bool IsMemory(UnrealTypeReference type) => type.Kind == UnrealValueKind.Array &&
+        type.ElementType is { } element && MemoryKind(element) != 0 &&
+        (type.NativeName == $"std::vector<{CppType(element)}>" || type.NativeName == $"TArray<{CppType(element)}>");
+
+    internal static bool IsStdFunction(UnrealTypeReference type) => type.Kind == UnrealValueKind.Callback &&
+        type.NativeName.StartsWith("std::function<", StringComparison.Ordinal) && type.CallbackSignature is { } signature &&
+        signature.Parameters.Count <= 16 && signature.Parameters.All(p => p.Direction == UnrealParameterDirection.Input &&
+            IsFixed(p.Type) && p.Type.Kind != UnrealValueKind.Enum) &&
+        IsFixed(signature.ReturnType, true) && signature.ReturnType.Kind != UnrealValueKind.Enum &&
+        type.NativeName == $"std::function<{CppType(signature.ReturnType)}({string.Join(",", signature.Parameters.Select(p => CppType(p.Type)))})>";
+
     internal static bool IsTextPassing(UnrealTypeReference type, UnrealNativeParameterPassing passing) =>
         IsText(type) && passing is (UnrealNativeParameterPassing.Value or UnrealNativeParameterPassing.ConstReference);
 
@@ -108,14 +131,14 @@ internal static class UnrealNativeObjectBindings
 
     internal static string? Unsupported(UnrealReflectedFunction function) =>
         function.Parameters.Count > 16 || function.Parameters.Where((p, i) => p.Direction != UnrealParameterDirection.Input ||
-            p.DefaultValue is not null || !(IsFixed(p.Type) || IsText(p.Type) && IsTextPassing(p.Type, function.NativeBinding!.Parameters[i]) ||
+            p.DefaultValue is not null || !(IsFixed(p.Type) || IsStdFunction(p.Type) && function.NativeBinding!.Parameters[i] is (UnrealNativeParameterPassing.Value or UnrealNativeParameterPassing.ConstReference) || IsText(p.Type) && IsTextPassing(p.Type, function.NativeBinding!.Parameters[i]) ||
                 p.Type.Kind == UnrealValueKind.NativeObject && IsObjectPassing(function.NativeBinding!.Parameters[i]))).Any() ||
         !(IsFixed(function.ReturnType, true) || IsText(function.ReturnType) || function.ReturnType.Kind == UnrealValueKind.NativeObject)
-            ? "Native-object calls support up to 16 fixed, exact text, or explicitly qualified object inputs and fixed, text, or ownership-qualified object returns. Defaults, containers and ref/out require another codec path."
+            ? "Native-object calls support up to 16 fixed, exact text, qualified object or fixed-signature std::function inputs, and fixed, text or ownership-qualified object returns. Defaults, container parameters and ref/out require another codec path."
             : null;
 
     internal static string? Unsupported(UnrealReflectedProperty field) =>
-        !(IsFixed(field.Type) || IsText(field.Type)) || field.Name is "Dispose" or "Handle" or "Scope" or "Lease"
-            ? "Native-object fields currently require fixed values or exact FString/std::string text and names distinct from generated lifecycle members."
+        !(IsFixed(field.Type) || IsText(field.Type) || IsMemory(field.Type)) || field.Name is "Dispose" or "Handle" or "Scope" or "Lease"
+            ? "Native-object fields require fixed values, exact FString/std::string text, or supported numeric std::vector/TArray storage, and names distinct from generated lifecycle members."
             : null;
 }

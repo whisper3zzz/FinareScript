@@ -75,6 +75,28 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
 		bDeleteListenerRegistered = true;
 	}
 
+	explicit FImpl(UObject& InRoot) : FImpl(static_cast<UWorld*>(nullptr))
+	{
+		ConstructionRoot = &InRoot;
+		WorldIdentity = &InRoot;
+	}
+
+	bool HasScope() const { return World.IsValid() || ConstructionRoot.IsValid(); }
+	bool AcceptsObject(UObject* Object) const
+	{
+		if (UObject* Root = ConstructionRoot.Get())
+			return Object == Root || Object->IsIn(Root);
+		UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
+		return ObjectWorld == nullptr || ObjectWorld == World.Get();
+	}
+	bool ValidateScope(FFinareObjectHandleResult& OutResult) const
+	{
+		if (HasScope()) return true;
+		UE::Finare::Private::Fail(OutResult, EFinareObjectHandleError::RegistryWorldUnavailable,
+			TEXT("The Finare object scope has expired."));
+		return false;
+	}
+
 	virtual ~FImpl() override
 	{
 		if (bDeleteListenerRegistered)
@@ -90,6 +112,7 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
 		{
 			InvalidateAllLocked();
 			World.Reset();
+			ConstructionRoot.Reset();
 			WorldIdentity = nullptr;
 			return;
 		}
@@ -132,22 +155,6 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
 			EFinareObjectHandleError::NotGameThread,
 			TEXT("Finare UObject handles may only be accessed on the game thread."));
 		return false;
-	}
-
-	UWorld* GetWorld(FFinareObjectHandleResult& OutResult) const
-	{
-		FScopeLock Lock(&CriticalSection);
-		UWorld* RegistryWorld = World.Get();
-		if (RegistryWorld != nullptr)
-		{
-			return RegistryWorld;
-		}
-
-		UE::Finare::Private::Fail(
-			OutResult,
-			EFinareObjectHandleError::RegistryWorldUnavailable,
-			TEXT("The Finare UObject registry world is no longer available."));
-		return nullptr;
 	}
 
 	bool DecodeHandleLocked(
@@ -236,6 +243,7 @@ struct FFinareObjectRegistry::FImpl final : FUObjectArray::FUObjectDeleteListene
 	}
 
 	TWeakObjectPtr<UWorld> World;
+	TWeakObjectPtr<UObject> ConstructionRoot;
 	const UObjectBase* WorldIdentity = nullptr;
 	TArray<FEntry> Entries;
 	TArray<uint32> FreeSlots;
@@ -253,6 +261,9 @@ FFinareObjectRegistry::FFinareObjectRegistry(UWorld* InWorld)
 
 FFinareObjectRegistry::~FFinareObjectRegistry() = default;
 
+FFinareObjectRegistry::FFinareObjectRegistry(UObject& InConstructionRoot)
+	: Impl(MakeUnique<FImpl>(InConstructionRoot)) {}
+
 FFinareObjectHandle FFinareObjectRegistry::RegisterObject(
 	UObject* Object,
 	FFinareObjectHandleResult& OutResult)
@@ -263,8 +274,7 @@ FFinareObjectHandle FFinareObjectRegistry::RegisterObject(
 	{
 		return {};
 	}
-	UWorld* RegistryWorld = Impl->GetWorld(OutResult);
-	if (RegistryWorld == nullptr)
+	if (!Impl->ValidateScope(OutResult))
 	{
 		return {};
 	}
@@ -276,8 +286,7 @@ FFinareObjectHandle FFinareObjectRegistry::RegisterObject(
 			TEXT("A live UObject is required to create a Finare handle."));
 		return {};
 	}
-	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
-		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
+	if (!Impl->AcceptsObject(Object))
 	{
 		Fail(
 			OutResult,
@@ -332,8 +341,7 @@ UObject* FFinareObjectRegistry::ResolveObject(
 	}
 
 	FScopeLock Lock(&Impl->CriticalSection);
-	UWorld* RegistryWorld = Impl->World.Get();
-	if (RegistryWorld == nullptr)
+	if (!Impl->HasScope())
 	{
 		Fail(
 			OutResult,
@@ -357,8 +365,7 @@ UObject* FFinareObjectRegistry::ResolveObject(
 			TEXT("The UObject referenced by the Finare handle has been destroyed."));
 		return nullptr;
 	}
-	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
-		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
+	if (!Impl->AcceptsObject(Object))
 	{
 		Impl->RetireSlotLocked(SlotIndex, Object);
 		Fail(
@@ -378,7 +385,7 @@ bool FFinareObjectRegistry::ReleaseObject(
 {
 	using namespace UE::Finare::Private;
 
-	if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+	if (!Impl->ValidateThread(OutResult) || !Impl->ValidateScope(OutResult))
 	{
 		return false;
 	}
@@ -408,7 +415,7 @@ bool FFinareObjectRegistry::OpenReferenceScope(
 {
 	using namespace UE::Finare::Private;
 	OutScope = 0;
-	if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+	if (!Impl->ValidateThread(OutResult) || !Impl->ValidateScope(OutResult))
 	{
 		return false;
 	}
@@ -470,7 +477,7 @@ bool FFinareObjectRegistry::RetainReference(
 	FFinareObjectHandleResult& OutResult)
 {
 	using namespace UE::Finare::Private;
-	if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+	if (!Impl->ValidateThread(OutResult) || !Impl->ValidateScope(OutResult))
 	{
 		return false;
 	}
@@ -487,15 +494,13 @@ bool FFinareObjectRegistry::RetainReference(
 		return false;
 	}
 	UObject* Object = Impl->Entries[static_cast<int32>(SlotIndex)].Object.Get();
-	UWorld* RegistryWorld = Impl->World.Get();
-	if (Object == nullptr || RegistryWorld == nullptr)
+	if (Object == nullptr || !Impl->HasScope())
 	{
 		Fail(OutResult, EFinareObjectHandleError::StaleHandle,
 		     TEXT("The UObject reference is no longer available."));
 		return false;
 	}
-	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
-		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
+	if (!Impl->AcceptsObject(Object))
 	{
 		Fail(OutResult, EFinareObjectHandleError::WorldMismatch,
 		     TEXT("The UObject reference belongs to another world."));

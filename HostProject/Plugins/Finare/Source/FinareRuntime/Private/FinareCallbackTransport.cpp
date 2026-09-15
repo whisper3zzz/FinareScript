@@ -1,4 +1,5 @@
 #include "FinareCallbackTransport.h"
+#include "FinareCppCallback.h"
 #include "FinareCallbackProxy.h"
 #include "FinareNativeValueCodec.h"
 #include "Containers/StringConv.h"
@@ -324,6 +325,17 @@ EFinareCallbackStatus FFinareNativeBridgeContext::RegisterCallback(uint64 Scope,
 			Result = Status::InvalidScope;
 			return;
 		}
+		if (FFinareCppCallbackSignature::Contains(SignaturePath))
+		{
+			static uint64 NextCppToken = 1ull << 63;
+			if (!Callback || NextCppToken == MAX_uint64) { Result = Status::Exhausted; return; }
+			auto Endpoint = MakeShared<FFinareCppCallbackEndpoint>();
+			Endpoint->Token = ++NextCppToken; Endpoint->Scope = Scope;
+			Endpoint->Signature = FinareMemberId(TCHAR_TO_UTF8(*SignaturePath));
+			Endpoint->Handler = Callback; Endpoint->UserData = UserData;
+			OutToken = Endpoint->Token; CppCallbacks.Add(OutToken, MoveTemp(Endpoint));
+			Result = Status::Success; return;
+		}
 		UFunction* Signature = FindObject<UFunction>(nullptr, *SignaturePath);
 		if (!Signature || !Signature->HasAnyFunctionFlags(FUNC_Delegate) || Signature->NumParms > 17 || !Callback)
 		{
@@ -365,6 +377,11 @@ EFinareCallbackStatus FFinareNativeBridgeContext::ReleaseCallback(uint64 Scope, 
 		{
 			Result = Status::InvalidScope;
 			return;
+		}
+		if (auto* Cpp = CppCallbacks.Find(Token))
+		{
+			if ((*Cpp)->Scope != Scope) { Result = Status::WrongOwner; return; }
+			(*Cpp)->Retire(); CppCallbacks.Remove(Token); Result = Status::Success; return;
 		}
 		auto* Entry = CallbackProxies.Find(Token);
 		if (!Entry)
@@ -409,6 +426,7 @@ EFinareCallbackStatus FFinareNativeBridgeContext::CloseCallbackScope(uint64 Scop
 				Tokens.Add(Entry.Key);
 			}
 		}
+		for (const auto& Entry : CppCallbacks) if (Entry.Value->Scope == Scope) Tokens.Add(Entry.Key);
 		for (uint64 Token : Tokens)
 		{
 			ReleaseCallback(Scope, Token);

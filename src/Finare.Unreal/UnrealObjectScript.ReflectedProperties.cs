@@ -9,24 +9,27 @@ public abstract partial class UnrealObjectScript
     /// <summary>Whether generated reflected accessors may use the live host.</summary>
     protected bool IsReflectedPropertyAccessActive => _reflectedPropertyAccessActive;
 
+    protected UnrealArrayView<T> NativeArray<T>(string propertyName) => new(NativeViewOwner(), NativeViewPath(propertyName));
+    protected UnrealSetView<T> NativeSet<T>(string propertyName) => new(NativeViewOwner(), NativeViewPath(propertyName));
+    protected UnrealMapView<K, V> NativeMap<K, V>(string propertyName) where K : notnull => new(NativeViewOwner(), NativeViewPath(propertyName));
+    protected UnrealNativeView NativeStruct(string propertyName) => new(NativeViewOwner(), NativeViewPath(propertyName));
+    private UnrealObject NativeViewOwner() => UnrealObject.InvocationTarget(_constructionContext?.HostHandle ?? Context.Host, RequireReflectedPropertyAccess());
+    private string NativeViewPath(string propertyName) => UnrealScriptClassIdentity.MemberPath(GetType(), GetRequiredScriptClassAttribute().GeneratedClassPath!, propertyName);
+
     /// <summary>
-    /// Reads a generated reflected property from the live script host. Before
-    /// OnStart the generated accessor may still use its C# initializer; once a
-    /// script stops, every access fails instead of falling back to that value.
+    /// Reads a generated property from the constructing or live native host.
+    /// Before activation the accessor may use its C# initializer; once its
+    /// construction/lifecycle scope ends, access fails rather than returning it.
     /// </summary>
     protected T ReadReflectedProperty<T>(string propertyName)
     {
         IUnrealInvocationBridge bridge = RequireReflectedPropertyAccess();
         UnrealScriptClassAttribute classAttribute = GetRequiredScriptClassAttribute();
-        UnrealObject target = UnrealObject.InvocationTarget(Context.Host, bridge);
+        UnrealObject target = UnrealObject.InvocationTarget(_constructionContext?.HostHandle ?? Context.Host, bridge);
+        string path = UnrealScriptClassIdentity.MemberPath(GetType(), classAttribute.GeneratedClassPath!, propertyName);
         return UnrealObjectInvocationAdapter.ReadProperty<T>(
             target,
-            0,
-            UnrealScriptClassIdentity.MemberPath(
-                GetType(),
-                classAttribute.GeneratedClassPath!,
-                propertyName),
-            fast: false);
+            UnrealMemberId.FromPath(path), path, fast: true);
     }
 
     /// <summary>
@@ -39,7 +42,7 @@ public abstract partial class UnrealObjectScript
         bool replicated = false)
     {
         IUnrealInvocationBridge bridge = RequireReflectedPropertyAccess();
-        if (replicated && !HasActorAuthority(bridge))
+        if (replicated && _constructionContext is null && !HasActorAuthority(bridge))
         {
             throw new InvalidOperationException(
                 $"Replicated reflected property '{GetType().FullName}.{propertyName}' " +
@@ -47,20 +50,16 @@ public abstract partial class UnrealObjectScript
         }
 
         UnrealScriptClassAttribute classAttribute = GetRequiredScriptClassAttribute();
-        UnrealObject target = UnrealObject.InvocationTarget(Context.Host, bridge);
+        UnrealObject target = UnrealObject.InvocationTarget(_constructionContext?.HostHandle ?? Context.Host, bridge);
+        string path = UnrealScriptClassIdentity.MemberPath(GetType(), classAttribute.GeneratedClassPath!, propertyName);
         UnrealObjectInvocationAdapter.WriteProperty(
             target,
-            0,
-            UnrealScriptClassIdentity.MemberPath(
-                GetType(),
-                classAttribute.GeneratedClassPath!,
-                propertyName),
-            value,
-            fast: false);
+            UnrealMemberId.FromPath(path), path, value, fast: true);
     }
 
     private IUnrealInvocationBridge RequireReflectedPropertyAccess()
     {
+        if (_constructionContext is not null) return _constructionContext.Bridge;
         if (!_reflectedPropertyAccessActive || !IsRunning)
         {
             throw new ObjectDisposedException(

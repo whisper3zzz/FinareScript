@@ -7,8 +7,36 @@
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 #include "FinareComponent.h"
+#include "FinareAsset.h"
 #include "UObject/GarbageCollection.h"
 #include "UObject/UObjectGlobals.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFinareConstructionRegistryTest,
+	"Finare.Unreal.ObjectRegistry.ConstructionScope",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FFinareConstructionRegistryTest::RunTest(const FString& Parameters)
+{
+	UObject* Root = NewObject<UFinareAsset>();
+	Root->AddToRoot();
+	UObject* Child = NewObject<UFinareAsset>(Root);
+	UObject* Foreign = NewObject<UFinareAsset>();
+	FFinareObjectRegistry Registry(*Root);
+	FFinareObjectHandleResult Result;
+	const auto RootHandle = Registry.RegisterObject(Root, Result);
+	const auto ChildHandle = Registry.RegisterObject(Child, Result);
+	TestTrue(TEXT("Constructor scope works without a World"), RootHandle.IsWellFormed() && ChildHandle.IsWellFormed());
+	TestFalse(TEXT("Unrelated object cannot enter constructor scope"), Registry.RegisterObject(Foreign, Result).IsWellFormed());
+	TestEqual(TEXT("Foreign object rejected by scope"), Result.Error, EFinareObjectHandleError::WorldMismatch);
+	uint64 Lease = 0;
+	TestTrue(TEXT("Scoped lease opens"), Registry.OpenReferenceScope(Lease, Result));
+	TestTrue(TEXT("Owned reference can be retained"), Registry.RetainReference(Lease, ChildHandle, Result));
+	TestTrue(TEXT("Lease closes"), Registry.CloseReferenceScope(Lease, Result));
+	TestTrue(TEXT("Scope invalidates all handles"), Registry.InvalidateAll(Result));
+	TestNull(TEXT("An escaped constructor handle is stale"), Registry.ResolveObject(ChildHandle, Result));
+	Root->RemoveFromRoot();
+	return !HasAnyErrors();
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FFinareObjectRegistryLifecycleTest,

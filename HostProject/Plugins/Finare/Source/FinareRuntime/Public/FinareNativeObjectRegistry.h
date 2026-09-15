@@ -1,8 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "FinareNativeData.h"
 
 struct FFinareNativeValueV3;
+class FFinareNativeBridgeContext;
+struct FFinareCppCallbackEndpoint;
 
 /** Separate from UObject identities: these tokens never contain native addresses. */
 struct FFinareNativeObjectHandle
@@ -44,13 +47,23 @@ struct FFinareNativeObjectMemberEntry
 	uint64 MemberId;
 	FFinareNativeObjectMember Invoke;
 	FFinareNativeObjectTextMember TextInvoke = nullptr;
+	EFinareNativeObjectStatus (*Memory)(FFinareNativeObjectRegistry&, uint64, FFinareNativeObjectHandle,
+		uint8, uint32, bool, void*&, int32&) = nullptr;
+};
+
+struct FFinareNativeObjectCastEntry
+{
+	uint64 DerivedType;
+	uint64 BaseType;
+	void* (*Cast)(void*);
 };
 
 /** Generated module-lifetime registration, usable by existing and future Worlds. */
 class FINARERUNTIME_API FFinareNativeObjectLibrary final
 {
 public:
-	explicit FFinareNativeObjectLibrary(TConstArrayView<FFinareNativeObjectMemberEntry> Members);
+	explicit FFinareNativeObjectLibrary(TConstArrayView<FFinareNativeObjectMemberEntry> Members,
+		TConstArrayView<FFinareNativeObjectCastEntry> Casts = {});
 	~FFinareNativeObjectLibrary();
 	FFinareNativeObjectLibrary(const FFinareNativeObjectLibrary&) = delete;
 	FFinareNativeObjectLibrary& operator=(const FFinareNativeObjectLibrary&) = delete;
@@ -100,12 +113,17 @@ public:
 	                                   FFinareNativeObjectHandle& OutHandle);
 	EFinareNativeObjectStatus DiscardText(uint64 Scope, uint64 Token);
 	void Detach();
+	EFinareNativeObjectStatus BorrowMemory(uint64 Scope, FFinareNativeObjectHandle Target, uint64 MemberId,
+		uint8 Kind, uint32 ElementSize, bool bWrite, FFinareMemoryCallback Callback, void* UserData);
 	int32 Num() const;
 	int32 NumScopes() const;
+	void SetCallbackContext(FFinareNativeBridgeContext* Context) { CallbackContext = Context; }
+	TWeakPtr<FFinareCppCallbackEndpoint> ResolveCppCallback(const FFinareNativeValueV3& Value, uint64 Signature) const;
 
 private:
 	friend class FFinareNativeObjectLibrary;
 	void ReleaseLibrary(uint64 LibraryId);
 	struct FImpl;
 	TUniquePtr<FImpl> Impl;
+	FFinareNativeBridgeContext* CallbackContext = nullptr;
 };

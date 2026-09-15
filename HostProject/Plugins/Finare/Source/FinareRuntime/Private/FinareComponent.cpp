@@ -4056,6 +4056,18 @@ bool UFinareComponent::ResolveScriptConfiguration(
 	}
 
 	OutAssemblyPath = ResolveConfiguredPath(ConfiguredAssemblyPath);
+	if (const UObject* Receiver = GetNativeReceiver())
+	{
+		for (const UClass* Class = Receiver->GetClass(); Class; Class = Class->GetSuperClass())
+		{
+			const auto* Managed = Cast<UFinareBlueprintGeneratedClass>(Class);
+			if (Managed && Managed->bHasManagedConstruction)
+			{
+				if (!Managed->ValidateManagedConstruction(OutAssemblyPath, OutError)) return false;
+				break;
+			}
+		}
+	}
 	OutError.Reset();
 	return true;
 }

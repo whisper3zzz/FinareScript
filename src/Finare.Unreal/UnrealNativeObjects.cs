@@ -114,6 +114,8 @@ public sealed class UnrealNativeObjectException(UnrealNativeObjectStatus status,
 /// <summary>Optional native-object transport, distinct from reflected UObject invocation.</summary>
 public interface IUnrealNativeObjectTransport
 {
+    void BorrowNativeObjectMemory<T>(ulong scope, UnrealNativeObjectHandle target, ulong member, bool write, UnrealSpanAction<T> action) where T : unmanaged =>
+        throw new NotSupportedException("The native object transport does not expose contiguous memory.");
     bool SupportsNativeObjects { get; }
     // Older transports remain usable for fixed values but cannot accept object cells.
     bool SupportsNativeObjectArguments => false;
@@ -148,7 +150,7 @@ public interface IUnrealNativeObjectProvider
 
 internal interface IUnrealNativeObjectScopeFactory
 {
-    UnrealNativeObjectScope CreateNativeObjectScope();
+    UnrealNativeObjectScope CreateNativeObjectScope(IUnrealInvocationBridge owner);
 }
 
 /// <summary>
@@ -159,12 +161,14 @@ internal interface IUnrealNativeObjectScopeFactory
 public sealed class UnrealNativeObjectScope : IDisposable
 {
     private readonly IUnrealNativeObjectTransport _transport;
+    private readonly IUnrealInvocationBridge? _bridge;
     private readonly ulong _scope;
     private readonly object _gate = new();
     private bool _disposed;
 
-    public UnrealNativeObjectScope(IUnrealNativeObjectTransport transport)
+    public UnrealNativeObjectScope(IUnrealNativeObjectTransport transport, IUnrealInvocationBridge? bridge = null)
     {
+        _bridge = bridge;
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         if (!transport.SupportsNativeObjects)
             throw new NotSupportedException("The installed runtime does not provide native object bindings.");
@@ -175,6 +179,14 @@ public sealed class UnrealNativeObjectScope : IDisposable
     public static UnrealNativeObjectScope FromBridge(IUnrealInvocationBridge bridge) =>
         bridge is IUnrealNativeObjectProvider provider ? provider.NativeObjects :
         throw new NotSupportedException("The bridge does not provide native object bindings.");
+
+    public UnrealNativeValueV3 EncodeCallback<T>(UnrealCallback<T> callback) where T : Delegate
+    {
+        lock (_gate) ObjectDisposedException.ThrowIf(_disposed, this);
+        var value = callback.AsArgument(_bridge ?? throw new NotSupportedException("Callbacks require a World bridge."));
+        return new UnrealNativeValueV3 { Kind = UnrealNativeValueKindV3.Callback,
+            TypeId = value.SignatureId, Payload0 = value.Token, Payload1 = value.Scope };
+    }
 
     public UnrealNativeObjectLease Construct(ulong constructorId, ReadOnlySpan<UnrealNativeValueV3> arguments) =>
         Acquire(default, constructorId, arguments);
@@ -218,6 +230,15 @@ public sealed class UnrealNativeObjectScope : IDisposable
         if (result.Handle.Value == 0)
             throw new InvalidOperationException("The native constructor/borrow member returned no object.");
         return new UnrealNativeObjectLease(this, result.Handle);
+    }
+
+    internal void BorrowMemory<T>(UnrealNativeObjectHandle target, ulong member, bool write, UnrealSpanAction<T> action) where T : unmanaged
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _transport.BorrowNativeObjectMemory(_scope, target, member, write, action);
+        }
     }
 
     public UnrealNativeObjectCallResult Invoke(UnrealNativeObjectHandle target, ulong memberId,
@@ -376,6 +397,15 @@ public sealed class UnrealNativeObjectTextPendingCall : IDisposable
 /// <summary>Disposing an owned lease destroys it; disposing a borrow only retires that alias.</summary>
 public sealed class UnrealNativeObjectLease : IDisposable
 {
+    internal void BorrowMemory<T>(ulong member, bool write, UnrealSpanAction<T> action) where T : unmanaged
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _scope.BorrowMemory(Handle, member, write, action);
+        }
+    }
+    public UnrealNativeValueV3 EncodeCallback<T>(UnrealCallback<T> callback) where T : Delegate => _scope.EncodeCallback(callback);
     private readonly UnrealNativeObjectScope _scope;
     private readonly object _gate = new();
     private bool _disposed;

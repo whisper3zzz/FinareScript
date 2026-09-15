@@ -379,7 +379,7 @@ public sealed record UnrealBindingCoverageReport(
             type.Kind == UnrealValueKind.Map && CollectionElement(type.KeyType!, reflectedStructPaths) && CollectionElement(type.ValueType!, reflectedStructPaths));
 
     private static bool CollectionElement(UnrealTypeReference type, IReadOnlySet<string> structs) =>
-        type.Kind is not (UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map or UnrealValueKind.Interface or UnrealValueKind.Callback) &&
+        type.Kind is not (UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map or UnrealValueKind.Callback) &&
         SupportsReflectionType(type, false, structs);
 
     private static UnrealBindingCoverageGate EvaluateGate(

@@ -67,7 +67,7 @@ internal sealed record UnrealManagedReloadTransaction(
     CoreClrGenerationPrewarmSnapshot? Prewarm,
     CoreClrProgramLoaderPrewarmSnapshot? ProgramLoaderPrewarm);
 
-public static class UnrealWorldManagedEntryPoint
+public static partial class UnrealWorldManagedEntryPoint
 {
     private static readonly ConcurrentDictionary<ulong, WorldEntry> Worlds = new();
     private static readonly ConcurrentDictionary<ulong, string> BoundaryErrors = new();

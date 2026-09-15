@@ -206,6 +206,12 @@ public sealed class UnrealBindingGenerator
             }
 
             source.AppendLine("    }");
+            if (property.Access.Readable && property.NativeExtension is null && NativeViewType(property.Type, managedTypeNames) is { } viewType)
+            {
+                string viewName = MakeUniqueMemberName(ToIdentifier(property.Name + "Native"), property.Path + "#nativeview", memberNames);
+                source.Append("    public ").Append(viewType).Append(' ').Append(viewName)
+                    .Append(" => new(this, ").Append(Literal(property.Path)).AppendLine(");");
+            }
         }
 
         foreach (UnrealReflectedDelegate reflectedDelegate in type.Delegates)
@@ -426,6 +432,15 @@ public sealed class UnrealBindingGenerator
         source.AppendLine();
     }
 
+    private static string? NativeViewType(UnrealTypeReference type, IReadOnlyDictionary<string, string> names) => type.Kind switch
+    {
+        UnrealValueKind.Array => "global::Finare.Unreal.UnrealArrayView<" + GetManagedType(type.ElementType!, names) + ">",
+        UnrealValueKind.Set => "global::Finare.Unreal.UnrealSetView<" + GetManagedType(type.ElementType!, names) + ">",
+        UnrealValueKind.Map => "global::Finare.Unreal.UnrealMapView<" + GetManagedType(type.KeyType!, names)?.TrimEnd('?') + ", " + GetManagedType(type.ValueType!, names) + ">",
+        UnrealValueKind.Struct when type.TypePath is not null && names.TryGetValue(type.TypePath + "#nativeview", out string? view) => view,
+        _ => null,
+    };
+
     private static void EmitStruct(
         StringBuilder source,
         UnrealReflectedType type,
@@ -482,6 +497,28 @@ public sealed class UnrealBindingGenerator
             source.AppendLine(");");
         }
         source.AppendLine();
+        if (!wire)
+        {
+            string view = managedTypeNames[type.Path + "#nativeview"];
+            source.Append("public sealed class ").Append(view).AppendLine(" : global::Finare.Unreal.UnrealNativeView");
+            source.AppendLine("{");
+            source.Append("    public ").Append(view).AppendLine("(global::Finare.Unreal.UnrealObject owner, string path) : base(owner, path) { }");
+            foreach (var field in fields)
+            {
+                string location = "FieldPath(" + Literal(field.Property.Name) + ")";
+                if (NativeViewType(field.Property.Type, managedTypeNames) is { } fieldView)
+                    source.Append("    public ").Append(fieldView).Append(' ').Append(field.Name).Append(" => new(OwnerForView, ").Append(location).AppendLine(");");
+                else
+                {
+                    source.Append("    public ").Append(field.ManagedType).Append(' ').Append(field.Name).AppendLine();
+                    source.AppendLine("    {");
+                    if (field.Property.Access.Readable) source.Append("        get => Field<").Append(field.ManagedType).Append(">(").Append(Literal(field.Property.Name)).AppendLine(").Value;");
+                    if (field.Property.Access.Writable) source.Append("        set => Field<").Append(field.ManagedType).Append(">(").Append(Literal(field.Property.Name)).AppendLine(").Value = value;");
+                    source.AppendLine("    }");
+                }
+            }
+            source.AppendLine("}");
+        }
     }
 
     private static void EmitEnum(StringBuilder source, UnrealReflectedType type, string enumName)
@@ -876,13 +913,12 @@ public sealed class UnrealBindingGenerator
                 "global::Finare.Unreal.UnrealTransform",
             UnrealValueKind.Struct when type.TypePath is not null &&
                 managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
-            UnrealValueKind.Array when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
+            UnrealValueKind.Array when GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
                 $"global::System.Collections.Generic.IReadOnlyList<{element}>",
-            UnrealValueKind.Set when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
+            UnrealValueKind.Set when GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
                 $"global::System.Collections.Generic.IReadOnlySet<{element}>",
             UnrealValueKind.Map
-                when !ContainsInterfaceValue(type) &&
-                     GetManagedType(type.KeyType!, managedTypeNames, objectViews) is string key &&
+                when GetManagedType(type.KeyType!, managedTypeNames, objectViews) is string key &&
                      GetManagedType(type.ValueType!, managedTypeNames, objectViews) is string value =>
                 $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
             _ => null,
@@ -898,8 +934,11 @@ public sealed class UnrealBindingGenerator
                 ? ToIdentifier(TrimNativeStructPrefix(type.NativeName)) : ToIdentifier(type.Name);
             names.Add(type.Path, MakeUniqueTypeName(candidate, type.Path, used));
         }
+        foreach (var type in types.Where(t => t.Kind == UnrealReflectedTypeKind.Struct))
+            names.Add(type.Path + "#nativeview", MakeUniqueTypeName(names[type.Path] + "NativeView", type.Path + "#nativeview", used));
         foreach (var callback in UnrealCallbackBindings.Collect(types))
-            names.Add(callback.TypePath!, MakeUniqueTypeName(ToIdentifier(TrimNativeStructPrefix(callback.NativeName)) + "Handler", callback.TypePath!, used));
+            names.Add(callback.TypePath!, MakeUniqueTypeName(ToIdentifier(callback.NativeName.StartsWith("std::function<", StringComparison.Ordinal)
+                ? callback.TypePath![(callback.TypePath!.LastIndexOf(':') + 1)..] : TrimNativeStructPrefix(callback.NativeName)) + "Handler", callback.TypePath!, used));
         return names;
     }
 

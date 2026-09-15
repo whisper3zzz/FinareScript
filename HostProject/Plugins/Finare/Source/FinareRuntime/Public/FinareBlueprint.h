@@ -292,6 +292,23 @@ public:
 	UPROPERTY()
 	TObjectPtr<UFinareAsset> ManagedScriptAsset;
 
+	/** Constructor presence and exact compiled program retained with the UE class. */
+	UPROPERTY()
+	bool bHasManagedConstruction = false;
+	UPROPERTY()
+	FString ManagedConstructionProgramHash;
+	UPROPERTY(Transient)
+	FString ManagedConstructionError;
+	/** Actual CDO writes, used only while the Blueprint compiler merges defaults. */
+	UPROPERTY(Transient)
+	TSet<FName> ManagedConstructionProperties;
+	UPROPERTY(Transient)
+	TMap<FName, FString> ManagedConstructionDefaults;
+
+	bool ConfigureManagedConstruction(UFinareAsset* Asset, FString& OutError);
+	bool ValidateManagedConstruction(const FString& Program, FString& OutError) const;
+	static void ConstructFinareObject(const FObjectInitializer& Initializer);
+
 	void BindManagedFunctions();
 	void PrepareManagedFunctionsForRecompile();
 	bool IsManagedFunctionBound(FName FunctionName) const;

@@ -30,6 +30,12 @@ Build-Target 'FinareHostEditor'
 & (Join-Path $PSScriptRoot 'prepare-native-component-creation.ps1') -EngineRoot $EngineRoot `
     -ReflectionPath (Join-Path $output 'full-reflection.json') `
     -CliPath (Join-Path $output 'build/bin/Finare.Cli/debug/Finare.Cli.dll')
+& (Join-Path $PSScriptRoot 'prepare-native-construction.ps1') -EngineRoot $EngineRoot -SkipManagedBuild `
+    -ReflectionPath (Join-Path $output 'full-reflection.json') `
+    -CliPath (Join-Path $output 'build/bin/Finare.Cli/debug/Finare.Cli.dll')
+& (Join-Path $PSScriptRoot 'prepare-interop-parity.ps1') -EngineRoot $EngineRoot `
+    -ReflectionPath (Join-Path $output 'full-reflection.json') `
+    -CliPath (Join-Path $output 'build/bin/Finare.Cli/debug/Finare.Cli.dll')
 
 $native = Join-Path $repo 'HostProject/Plugins/Finare/Source/FinareRuntime/Private/Generated/FinareRuntime.native-thunks.generated.cpp'
 $snapshots = @{}
@@ -45,7 +51,8 @@ try {
     Build-Target 'FinareHost'
     $tests = @('Finare.Unreal.ApiDiscovery.ExportScope', 'Finare.Unreal.ApiDiscovery.GenericOutputs',
         'Finare.Unreal.ApiLibrary.NewCallReload', 'Finare.Unreal.ProjectSetup.SourceSave',
-        'Finare.Unreal.Components.GeneratedCreation')
+        'Finare.Unreal.Components.GeneratedCreation', 'Finare.Unreal.Construction.CharacterDefaults',
+        'Finare.Unreal.InteropParity.Managed', 'Finare.Unreal.InteropParity.MemoryIdentity')
     $logPath = if ($AutomationLog) { [IO.Path]::GetFullPath($AutomationLog) } else { Join-Path $output 'automation.log' }
     if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath }
     Invoke-Checked $editor @($project, "-ExecCmds=Automation RunTests $($tests -join '+')",

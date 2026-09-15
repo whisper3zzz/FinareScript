@@ -11,15 +11,25 @@ internal static class UnrealNativeObjectThunkGenerator
         if (objects.Length == 0) return;
         UnrealNativeObjectBindings.ValidateReferences(manifest);
         source.AppendLine("#include \"FinareNativeObjectValues.h\"");
+        source.AppendLine("#include \"FinareCppCallback.h\"");
         foreach (string header in manifest.Types.Select(t => t.HeaderPath).Where(h => h is not null).Cast<string>().Distinct().Order(StringComparer.Ordinal))
             source.AppendLine($"#include \"{header}\"");
         source.AppendLine($"namespace {cppNamespace}::NativeObjects");
         source.AppendLine("{");
         source.AppendLine("using Status = EFinareNativeObjectStatus;");
         source.AppendLine("namespace Values = UE::Finare::NativeObjectValues;");
+        foreach (var callback in objects.SelectMany(t => t.Functions).SelectMany(f => f.Parameters).Select(p => p.Type)
+            .Where(UnrealNativeObjectBindings.IsStdFunction).DistinctBy(t => t.TypePath))
+            source.AppendLine($"static FFinareCppCallbackSignature Callback_{UnrealMemberId.FromPath(callback.TypePath!):X16}(TEXT(\"{callback.TypePath}\"));");
         var entries = new List<string>();
+        var casts = new List<string>();
         foreach (var type in objects)
         {
+            if (type.BaseTypePath is not null)
+            {
+                var parent = objects.Single(t => t.Path == type.BaseTypePath);
+                casts.Add($"    {{{Id(type.Path)}, {Id(parent.Path)}, [](void* Pointer) -> void* {{ return static_cast<{parent.NativeName}*>(static_cast<{type.NativeName}*>(Pointer)); }}}},");
+            }
             source.AppendLine($"static_assert(!std::is_base_of_v<UObject, {type.NativeName}>, \"Native object bindings cannot own UObjects\");");
             foreach (var field in type.Properties)
             {
@@ -27,6 +37,24 @@ internal static class UnrealNativeObjectThunkGenerator
                 {
                     diagnostics.Add(new("USUE5410", reason, field.Path));
                     continue;
+                }
+                if (UnrealNativeObjectBindings.IsMemory(field.Type))
+                {
+                    if (!field.Access.Readable) continue;
+                    string memoryName = $"Memory_{UnrealMemberId.FromPath(field.Path):X16}";
+                    entries.Add($"    {{{Id(field.Path + "#memory")}, nullptr, nullptr, &{memoryName}}},");
+                    source.AppendLine($"static Status {memoryName}(FFinareNativeObjectRegistry& Registry, uint64 Scope, FFinareNativeObjectHandle Target, uint8 Kind, uint32 Size, bool Write, void*& Data, int32& Count)");
+                    source.AppendLine("{");
+                    Target(source, type);
+                    string cpp = UnrealNativeObjectBindings.CppType(field.Type.ElementType!);
+                    source.AppendLine($"    static_assert(std::is_same_v<std::remove_cv_t<decltype(TypedTarget->{field.Name})>, {field.Type.NativeName}>);");
+                    if (field.Access.Writable) source.AppendLine($"    static_assert(!std::is_const_v<decltype(TypedTarget->{field.Name})>, \"A const buffer cannot be writable\");");
+                    source.AppendLine($"    if (Kind != {UnrealNativeObjectBindings.MemoryKind(field.Type.ElementType!)} || Size != sizeof({cpp}){(field.Access.Writable ? "" : " || Write")}) return Status::InvalidArgument;");
+                    bool vector = field.Type.NativeName.StartsWith("std::vector<", StringComparison.Ordinal);
+                    source.AppendLine($"    auto& Buffer = TypedTarget->{field.Name};");
+                    source.AppendLine($"    if (Buffer.{(vector ? "size()" : "Num()")} > (64u * 1024u * 1024u) / sizeof({cpp})) return Status::InvalidArgument;");
+                    source.AppendLine($"    Count = static_cast<int32>(Buffer.{(vector ? "size()" : "Num()")}); Data = const_cast<{cpp}*>(Buffer.{(vector ? "data()" : "GetData()")});");
+                    End(source); continue;
                 }
                 foreach (bool write in new[] { false, true })
                 {
@@ -121,13 +149,23 @@ internal static class UnrealNativeObjectThunkGenerator
                 }
             }
         }
-        if (entries.Count > 0)
+        if (entries.Count > 0 || casts.Count > 0)
         {
+            if (entries.Count > 0)
+            {
             source.AppendLine("static const FFinareNativeObjectMemberEntry Members[] =");
             source.AppendLine("{");
             foreach (string entry in entries) source.AppendLine(entry);
             source.AppendLine("};");
-            source.AppendLine("static FFinareNativeObjectLibrary Library(MakeArrayView(Members));");
+            }
+            if (casts.Count > 0)
+            {
+                source.AppendLine("static const FFinareNativeObjectCastEntry Casts[] = {");
+                foreach (string cast in casts) source.AppendLine(cast);
+                source.AppendLine("};");
+                source.AppendLine($"static FFinareNativeObjectLibrary Library({(entries.Count > 0 ? "MakeArrayView(Members)" : "TConstArrayView<FFinareNativeObjectMemberEntry>()")}, MakeArrayView(Casts));");
+            }
+            else source.AppendLine("static FFinareNativeObjectLibrary Library(MakeArrayView(Members));");
         }
         source.AppendLine("}");
     }
@@ -167,6 +205,15 @@ internal static class UnrealNativeObjectThunkGenerator
     private static void Decode(StringBuilder source, UnrealTypeReference type, int index,
         UnrealNativeParameterPassing passing = UnrealNativeParameterPassing.Value)
     {
+        if (UnrealNativeObjectBindings.IsStdFunction(type))
+        {
+            var signature = type.CallbackSignature!;
+            string types = string.Join(", ", signature.Parameters.Select(p => UnrealNativeObjectBindings.CppType(p.Type)).Prepend(UnrealNativeObjectBindings.CppType(signature.ReturnType)));
+            source.AppendLine($"    auto Endpoint{index} = Registry.ResolveCppCallback(Arguments[{index}], {Id(type.TypePath!)});");
+            source.AppendLine($"    if (!Endpoint{index}.IsValid()) return Status::InvalidArgument;");
+            source.AppendLine($"    auto Argument{index} = Values::MakeStdFunction<{types}>(Endpoint{index});");
+            return;
+        }
         if (type.Kind == UnrealValueKind.NativeObject)
         {
             string pointerType = UnrealNativeObjectBindings.ParameterCppType(type, passing).Replace('&', '*');

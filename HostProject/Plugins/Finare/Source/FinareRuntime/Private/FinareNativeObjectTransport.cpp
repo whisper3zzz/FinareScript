@@ -110,6 +110,12 @@ namespace
 	{
 		return Execute(Context, [&](auto& Registry) { return Registry.DiscardText(Scope, Token); });
 	}
+	EStatus Borrow(void* Context, uint64 Scope, uint64 Target, uint64 Member, uint8 Kind, uint32 Size, uint8 Write,
+		FFinareMemoryCallback Callback, void* UserData)
+	{
+		if (Write > 1) return EStatus::InvalidArgument;
+		return Execute(Context, [&](auto& Registry) { return Registry.BorrowMemory(Scope, {Target}, Member, Kind, Size, Write != 0, Callback, UserData); });
+	}
 }
 
 extern "C" const FFinareNativeObjectTransportV1* Finare_GetNativeObjectTransportV1()
@@ -119,17 +125,17 @@ extern "C" const FFinareNativeObjectTransportV1* Finare_GetNativeObjectTransport
 		16u * 1024u * 1024u, 16u * 1024u * 1024u, 16u * 1024u * 1024u, 64,
 		&BeginText, &ReadText, &DiscardText
 	};
-	static const FFinareNativeObjectTransportWithText Table{
+	static const FFinareNativeObjectTransportWithMemory Table{{
 		{
 			{
-				1, sizeof(FFinareNativeObjectTransportWithText), sizeof(FFinareNativeValueV3), 0,
+				1, sizeof(FFinareNativeObjectTransportWithMemory), sizeof(FFinareNativeValueV3), 0,
 				Finare_GetNativeTransportV1()->RetainContext,
 				Finare_GetNativeTransportV1()->ReleaseContext,
 				&OpenScope, &CloseScope, &ReleaseObject, &Invoke
 			},
-			3
+			7
 		},
 		&TextTable
-	};
-	return &Table.Base.Base;
+	}, &Borrow};
+	return &Table.Base.Base.Base;
 }

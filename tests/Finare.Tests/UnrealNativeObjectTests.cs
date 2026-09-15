@@ -6,6 +6,35 @@ namespace Finare.Tests;
 [Trait("Category", "Unreal")]
 public sealed class UnrealNativeObjectTests
 {
+    private sealed class DataOwner(UnrealObjectHandle handle, IUnrealInvocationBridge bridge) : UnrealObject(handle, bridge);
+
+    [Fact]
+    public void NativeViewsRejectRetiredGenerationsBeforeAccessingTransport()
+    {
+        var generation = Generation(new NativeUnrealInvocationBridge(new FixtureTransport()));
+        var owner = new DataOwner(UnrealObjectHandle.Create(1, 2), (IUnrealInvocationBridge)generation);
+        var array = new UnrealArrayView<int>(owner, "/Script/Fixture.Owner:Numbers");
+        var element = array.Element(0);
+        ((IDisposable)generation).Dispose();
+        Assert.Throws<ObjectDisposedException>(() => array.Count);
+        Assert.Throws<ObjectDisposedException>(() => element.Value = 7);
+        Assert.Throws<ObjectDisposedException>(() => array.WithSpan(values => values.Clear()));
+    }
+
+    [Fact]
+    public void NativeBuffersCheckReadOnlyAndOwnerLeaseBeforeBorrowing()
+    {
+        var transport = new FixtureTransport();
+        using var scope = new UnrealNativeObjectScope(transport);
+        var lease = scope.Construct(1, []);
+        var readOnly = new UnrealNativeBuffer<int>(lease, 2, false);
+        Assert.Throws<InvalidOperationException>(() => readOnly.WithSpan(values => values.Clear()));
+        readOnly.ReadSpan(values => Assert.True(values.IsEmpty));
+        Assert.Equal(1, transport.MemoryBorrows);
+        lease.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => readOnly.ReadSpan(values => { }));
+        Assert.Equal(1, transport.MemoryBorrows);
+    }
     [Fact]
     public void OwnershipAbiHasIndependentFixedLayout()
     {
@@ -194,6 +223,9 @@ public sealed class UnrealNativeObjectTests
 
     private sealed class FixtureTransport : IUnrealNativeObjectTransport, IUnrealNativeInvocationTransport
     {
+        public int MemoryBorrows { get; private set; }
+        public void BorrowNativeObjectMemory<T>(ulong scope, UnrealNativeObjectHandle target, ulong member, bool write, UnrealSpanAction<T> action) where T : unmanaged
+        { MemoryBorrows++; action(Span<T>.Empty); }
         private ulong _next;
         public HashSet<ulong> Scopes { get; } = [];
         public int Releases { get; private set; }

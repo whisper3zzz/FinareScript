@@ -11,9 +11,9 @@ internal static class UnrealNativeObjectBindingGenerator
         IReadOnlyDictionary<string, string> names, ICollection<UnrealBindingDiagnostic> diagnostics)
     {
         source.AppendLine($"[{Runtime}UnrealNativeObjectTypeAttribute({JsonSerializer.Serialize(type.Path)})]");
-        source.AppendLine($"public sealed partial class {name} : {Runtime}UnrealNativeObject");
+        source.AppendLine($"public partial class {name} : {(type.BaseTypePath is null ? Runtime + "UnrealNativeObject" : names[type.BaseTypePath])}");
         source.AppendLine("{");
-        source.AppendLine($"    internal {name}({Runtime}UnrealNativeObjectLease lease) : base(lease) {{ }}");
+        source.AppendLine($"    protected internal {name}({Runtime}UnrealNativeObjectLease lease) : base(lease) {{ }}");
         var emittedSignatures = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in type.Properties)
         {
@@ -23,6 +23,12 @@ internal static class UnrealNativeObjectBindingGenerator
                 continue;
             }
             string managed = UnrealBindingGenerator.GetManagedType(field.Type, names)!;
+            if (UnrealNativeObjectBindings.IsMemory(field.Type))
+            {
+                if (field.Access.Readable)
+                    source.AppendLine($"    public {Runtime}UnrealNativeBuffer<{UnrealBindingGenerator.GetManagedType(field.Type.ElementType!, names)}> @{field.Name} => new(Lease, {Id(field.Path + "#memory")}, {(field.Access.Writable ? "true" : "false")});");
+                continue;
+            }
             bool text = UnrealNativeObjectBindings.IsText(field.Type);
             source.AppendLine($"    public {managed} @{field.Name}");
             source.AppendLine("    {");
@@ -154,7 +160,7 @@ internal static class UnrealNativeObjectBindingGenerator
     }
 
     private static string ArgumentExpression(UnrealReflectedParameter parameter, int index, string argumentScope, UnrealReflectedFunction function) =>
-        parameter.Type.Kind == UnrealValueKind.NativeObject
+        UnrealNativeObjectBindings.IsStdFunction(parameter.Type) ? $"{argumentScope}.EncodeCallback(@{parameter.Name})" : parameter.Type.Kind == UnrealValueKind.NativeObject
             ? $"{argumentScope}.EncodeObject(@{parameter.Name}, {Id(parameter.Type.TypePath!)}, {(UnrealNativeObjectBindings.AllowsNull(function.NativeBinding!.Parameters[index]) ? "true" : "false")})"
             : $"{Runtime}UnrealNativeObjectValues.Encode(@{parameter.Name})";
 

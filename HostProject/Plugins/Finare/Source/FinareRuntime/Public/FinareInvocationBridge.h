@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "FinareObjectRegistry.h"
 #include "FinareByteBuffer.h"
+#include "FinareNativeData.h"
 
 #include <atomic>
 
@@ -331,6 +332,10 @@ public:
 
 	void ReleaseEventArguments(TConstArrayView<FFinareValue> Arguments);
 	FFinareObjectRegistry& GetObjectRegistry() { return Registry; }
+	bool AccessNativeData(FFinareObjectHandle Target, const FString& Path, uint8 Operation,
+		TConstArrayView<FFinareValue> Arguments, FFinareValue& Value, FFinareInvocationResult& Result);
+	bool BorrowNativeData(FFinareObjectHandle Target, const FString& Path, uint8 ElementKind,
+		uint32 ElementSize, bool bWrite, FFinareMemoryCallback Callback, void* UserData, FString& Error);
 	bool WriteCallbackOutputs(const UFunction* Signature, void* Parameters,
 	                          TConstArrayView<FFinareValue> Outputs, FFinareInvocationResult& OutResult);
 

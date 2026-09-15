@@ -1780,6 +1780,7 @@ void UFinareBlueprintGeneratedClass::Bind()
 	// native functions without a handwritten UHT registration table.
 	RegisterManagedNativeFunctions();
 	Super::Bind();
+	ClassConstructor = &UFinareBlueprintGeneratedClass::ConstructFinareObject;
 	bManagedFunctionsBound = false;
 	if (IsInGameThread())
 	{

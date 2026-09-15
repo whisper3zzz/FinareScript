@@ -131,7 +131,7 @@ public sealed class UnrealInterfaceSupportTests
     }
 
     [Fact]
-    public void UnsupportedInterfaceContainersAndCallbacksRemainParseableButAreRejected()
+    public void InterfaceContainersAreSupportedWhileDirectInterfaceCallbacksRemainRejected()
     {
         UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: true);
         string json = UnrealReflectionJson.Serialize(manifest);
@@ -141,14 +141,13 @@ public sealed class UnrealInterfaceSupportTests
         UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(normalized);
         UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(normalized, managed, native);
 
-        Assert.Contains(managed.Diagnostics, static item => item.MemberPath.EndsWith(":InterfaceArray"));
+        Assert.DoesNotContain(managed.Diagnostics, static item => item.MemberPath.EndsWith(":InterfaceArray"));
         Assert.Contains(managed.Diagnostics, static item => item.MemberPath.EndsWith(":UseCallback"));
         Assert.Contains(managed.Diagnostics, static item => item.MemberPath.EndsWith(":OnInterface"));
-        Assert.Contains(native.Diagnostics, static item => item.MemberPath.EndsWith(":InterfaceArray"));
+        Assert.DoesNotContain(native.Diagnostics, static item => item.MemberPath.EndsWith(":InterfaceArray"));
         Assert.Contains(native.Diagnostics, static item => item.MemberPath.EndsWith(":UseCallback"));
         Assert.All(
             coverage.Entries.Where(static entry =>
-                entry.Path.EndsWith(":InterfaceArray") ||
                 entry.Path.EndsWith(":UseCallback")),
             static entry => Assert.Equal(UnrealBindingDisposition.Rejected, entry.Disposition));
     }
@@ -183,7 +182,7 @@ public sealed class UnrealInterfaceSupportTests
     }
 
     [Fact]
-    public void InterfaceBearingStructsStayRejectedInNativeCallbackCoverage()
+    public void InterfaceBearingStructsParticipateInNativeCallbackCoverage()
     {
         UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: false);
         const string interfaceStructPath = "/Script/FixtureRuntime.InterfaceStruct";
@@ -264,11 +263,11 @@ public sealed class UnrealInterfaceSupportTests
         UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(manifest);
         UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(manifest, managed, native);
 
-        Assert.Contains(native.Diagnostics, static item => item.MemberPath.EndsWith(":UseNestedCallback"));
+        Assert.DoesNotContain(native.Diagnostics, static item => item.MemberPath.EndsWith(":UseNestedCallback"));
         UnrealBindingCoverageEntry entry = Assert.Single(
             coverage.Entries,
             static item => item.Path.EndsWith(":UseNestedCallback"));
-        Assert.Equal(UnrealBindingDisposition.Rejected, entry.Disposition);
+        Assert.NotEqual(UnrealBindingDisposition.Rejected, entry.Disposition);
     }
 
     [Fact]

@@ -10,6 +10,8 @@
 #include "FinareInvocationBridge.h"
 #include "FinareNativeObjectTransport.h"
 #include "FinareCallbackTransport.h"
+#include "FinareNativeData.h"
+struct FFinareCppCallbackEndpoint;
 #include "FinareSharedDataPlane.h"
 
 #include <atomic>
@@ -266,6 +268,7 @@ public:
 	EFinareCallbackStatus RegisterCallback(uint64 Scope, const FString& Signature,
 	                                       FFinareCallback Callback, void* UserData, uint64& OutToken);
 	EFinareCallbackStatus ReleaseCallback(uint64 Scope, uint64 Token);
+	TWeakPtr<FFinareCppCallbackEndpoint> ResolveCppCallback(uint64 Scope, uint64 Token, uint64 Signature) const;
 
 private:
 	struct FPendingGameThreadCall;
@@ -287,6 +290,7 @@ private:
 	uint64 NextEventSubscriptionId = 1;
 	TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
 	TSet<uint64> CallbackScopes;
+	TMap<uint64, TSharedPtr<FFinareCppCallbackEndpoint>> CppCallbacks;
 	TMap<uint64, TStrongObjectPtr<UObject>> CallbackProxies;
 };
 
@@ -378,6 +382,7 @@ struct FFinareNativeTransportV2
 	const FFinareCallbackTransport* CallbackTransport = nullptr;
 	/** Optional weak UObject reference leases; older v2 clients ignore it. */
 	const FFinareUObjectReferenceTransportV1* ObjectReferenceTransport = nullptr;
+	const FFinareNativeDataTransportV1* NativeDataTransport = nullptr;
 };
 
 /**

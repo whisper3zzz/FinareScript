@@ -101,7 +101,7 @@ namespace UE::Finare::PropertyValueCodec
 		{
 			return TEXT("UClass*");
 		}
-		if (CastField<FObjectPropertyBase>(&Property))
+		if (CastField<FObjectPropertyBase>(&Property) || CastField<FInterfaceProperty>(&Property))
 		{
 			return TEXT("UObject*");
 		}

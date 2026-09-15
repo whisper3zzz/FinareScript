@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Finare.InteropParity</AssemblyName>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ParityDirectory>$(MSBuildProjectDirectory)/../../../../artifacts/interop-parity</ParityDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ParityDirectory)/Bindings.g.cs" />
+    <Compile Include="ParityScript.cs" />
+    <Reference Include="Finare.Unreal"><HintPath>$(MSBuildProjectDirectory)/../../../../HostProject/Plugins/Finare/Binaries/Managed/Finare.Unreal.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Finare.Core"><HintPath>$(MSBuildProjectDirectory)/../../../../HostProject/Plugins/Finare/Binaries/Managed/Finare.Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

@@ -68,3 +68,10 @@ static_assert(STRUCT_OFFSET(FFinareNativeObjectTransportWithText, TextTransport)
 
 extern "C" FINARERUNTIME_API const FFinareNativeObjectTransportV1*
 Finare_GetNativeObjectTransportV1();
+
+struct alignas(8) FFinareNativeObjectTransportWithMemory
+{
+	FFinareNativeObjectTransportWithText Base;
+	EFinareNativeObjectStatus (*Borrow)(void*, uint64, uint64, uint64, uint8, uint32, uint8, FFinareMemoryCallback, void*) = nullptr;
+};
+static_assert(sizeof(FFinareNativeObjectTransportWithMemory) == 88);

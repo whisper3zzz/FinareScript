@@ -21,6 +21,10 @@ public:
 	static FFinareCoreClrHost& Get();
 
 	bool Initialize();
+	bool HasManagedConstruction(const FString& Program, const FString& Type, bool& OutHasHook, FString& OutError);
+	bool ConstructManagedObject(void* Context, const FFinareNativeTransportV2* Transport,
+		const void* Operations, uint64 Host, bool bIsCDO, const FString& Program,
+		const FString& Type, FString& OutError);
 	void Shutdown();
 
 	EFinareCoreClrHostState GetState() const;
