@@ -268,7 +268,7 @@ It appends state kinds and default kinds without renumbering prior values;
 older payloads keep their existing version and encoding. Soft references do
 not masquerade as arbitrary struct state and carry no synthetic struct
 descriptor. Object and class references remain distinct through JSON, binary,
-native properties, managed hydration and patch preconditions.
+native properties, generated managed accessors and patch preconditions.
 
 The Unreal adapter materializes native soft-object/soft-class properties and
 Property Bag entries. It compares stored paths when reconciling defaults and
@@ -325,6 +325,15 @@ and every child before publishing native state. An invalid late element must
 not leave an earlier element written to the active bag or instance.
 The reused value-type descriptor kinds keep their existing values: Enum 0,
 Struct 1, Array 2, Set 3 and Map 4. Descriptor presence is encoded separately.
+
+Typed UObject and interface views append value descriptor kinds Object 5 and
+Interface 6. Their native class/interface path survives properties, function
+signatures and container elements; the invocation wire value remains a handle.
+Binary declarations containing these identities use minor 6. Declarations
+without them retain the earlier version required by their existing features.
+Object-reference source defaults are null. Native materialization constrains
+`FObjectProperty` or `FInterfaceProperty` to the declared native type; a runtime
+wrapper or a raw handle cannot bypass that constraint.
 
 ## Declaration patch v0.2
 
@@ -423,8 +432,8 @@ override survives a declaration/graph/source rename and CoreCLR Reload. See
 For Unreal targets the reviewed common types materialize as real `FNameProperty`,
 `FTextProperty`, `FObjectProperty`, `FClassProperty`, and `FStructProperty`
 (`FVector`) fields on the generated Blueprint class. The same declaration
-default initializes the native Property Bag and generated CDO, while managed
-startup/reload hydrates and flushes the corresponding strongly typed C# value.
+default initializes the native Property Bag and generated CDO. Generated partial
+accessors read and write that native property throughout the active generation.
 
 ## CLI and prototype
 

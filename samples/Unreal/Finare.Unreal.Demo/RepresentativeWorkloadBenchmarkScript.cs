@@ -12,6 +12,8 @@ namespace Finare.Unreal.Demo;
 /// </summary>
 public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 {
+    private IUnrealInvocationBridge _bridge = null!;
+
     private const string StructContainerWorkload = "struct-container-transfer";
     private const string DelegateWorkload = "delegate-storm";
     private const string PerFrameActorWorkload = "per-frame-actor-logic";
@@ -39,6 +41,7 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 
     public void OnStart(UnrealScriptContext context)
     {
+        _bridge = context.Bridge;
         var component = new FinareComponent(context.Host, context.Bridge);
         string workload = component.ManagedState.StartsWith(
             "Run=", StringComparison.Ordinal)
@@ -343,7 +346,7 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
         return checksum;
     }
 
-    private static string RunResourceSpawn(
+    private string RunResourceSpawn(
         FinareWorldLibrary world,
         UnrealObjectHandle worldContext)
     {
@@ -382,7 +385,7 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             checksum);
     }
 
-    private static long RunResourceSpawnLoop(
+    private long RunResourceSpawnLoop(
         FinareWorldLibrary world,
         UnrealObjectHandle worldContext,
         int iterations)
@@ -391,7 +394,7 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
         for (int index = 0; index < iterations; index++)
         {
             UnrealClassHandle actorClass = world.LoadClassByPath(
-                worldContext,
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(worldContext, _bridge),
                 BenchmarkActorClassPath);
             if (actorClass.IsNull)
             {
@@ -400,18 +403,18 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             }
             checksum++;
 
-            UnrealObjectHandle actor = world.SpawnActor(
-                worldContext,
+            Actor? actor = world.SpawnActor(
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(worldContext, _bridge),
                 actorClass,
                 UnrealTransform.Identity);
-            if (actor.IsNull)
+            if (actor is null)
             {
                 throw new InvalidOperationException(
                     "The benchmark Actor could not be spawned.");
             }
             checksum++;
 
-            if (!world.DestroyActor(worldContext, actor))
+            if (!world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(worldContext, _bridge), actor))
             {
                 throw new InvalidOperationException(
                     "The benchmark Actor could not be destroyed.");

@@ -167,7 +167,7 @@ public sealed class CoreClrExecutionHostTests
 
             public partial class PartialOpaqueBase
             {
-                public int Marker { get; set; } = 4;
+                public partial int Marker { get; set; } = 4;
             }
             """;
         const string leafSource = """
@@ -189,7 +189,8 @@ public sealed class CoreClrExecutionHostTests
                 new CSharpSourceDocument("Tests/Execution/PartialOpaqueLeaf.cs", leafSource),
             ],
             [unrealAssembly],
-            runtimeReferencePaths: [unrealAssembly]);
+            runtimeReferencePaths: [unrealAssembly],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
 
         using CoreClrExecutionSession session = new CoreClrExecutionHost().CompileAndLoad(request);
         Core.ScriptAssetDeclaration baseAsset = Assert.Single(

@@ -12,16 +12,16 @@ namespace Finare.Unreal.Demo;
 [UnrealScriptClass(
     UnrealScriptClassKind.Actor,
     GeneratedClassPath = "/Game/UnifiedScriptDemo/BP_CommonStateGameplay.BP_CommonStateGameplay_C")]
-public sealed class CommonStateGameplayDemoScript : UnrealActorScript
+public sealed partial class CommonStateGameplayDemoScript : UnrealActorScript
 {
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Common State")]
-    public ETickingGroup TickGroup { get; set; } = ETickingGroup.TG_DuringPhysics;
+    public partial ETickingGroup TickGroup { get; set; } = ETickingGroup.TG_DuringPhysics;
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Common State")]
-    public UnrealRotator Facing { get; set; } = new(0.0, 45.0, 0.0);
+    public partial UnrealRotator Facing { get; set; } = new(0.0, 45.0, 0.0);
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Common State")]
-    public UnrealTransform Placement { get; set; } = new(
+    public partial UnrealTransform Placement { get; set; } = new(
         new UnrealQuaternion(0.0, 0.0, 0.3826834323650898, 0.9238795325112867),
         new UnrealVector(120.0, 0.0, 40.0),
         new UnrealVector(1.25, 0.75, 1.0));

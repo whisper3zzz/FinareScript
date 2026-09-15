@@ -189,20 +189,21 @@ public sealed class UnrealProjectAdoptionTests
             "UnrealProject",
             "Managed",
             "FirstScript.cs.template"));
-        Assert.Contains("public sealed class __SCRIPT_NAME__ : UnrealActorScript", template);
+        Assert.Contains("public sealed partial class __SCRIPT_NAME__ : UnrealActorScript", template);
         Assert.Contains("protected override void OnBeginPlay()", template);
-        Assert.Contains("GetScriptStateInt32(nameof(StartValue), StartValue)", template);
-        Assert.Contains("SetScriptStateInt32(nameof(StartValue), StartValue)", template);
+        Assert.Contains("public partial int StartValue", template);
+        Assert.DoesNotContain("GetScriptStateInt32", template);
+        Assert.DoesNotContain("SetScriptStateInt32", template);
         Assert.Contains("var actor = new Actor(Context.Target, Context.Bridge);", template);
-        Assert.Contains("UnrealObjectHandle instigator = actor.GetInstigator();", template);
-        Assert.Contains("if (!instigator.IsNull)", template);
+        Assert.Contains("Pawn? instigator = actor.GetInstigator();", template);
+        Assert.Contains("if (instigator is not null)", template);
         Assert.DoesNotContain("new Pawn(context.Target, context.Bridge)", template);
         Assert.DoesNotContain("IUnrealManagedScript", template);
         Assert.DoesNotContain("void OnStart(", template);
     }
 
     [Fact]
-    public void FirstScriptTemplateCompilesAndDeclaresHydratedActorStateLifecycle()
+    public void FirstScriptTemplateCompilesAndUsesNativeActorState()
     {
         string repository = FindRepositoryRoot();
         string template = File.ReadAllText(Path.Combine(
@@ -223,7 +224,7 @@ public sealed class UnrealProjectAdoptionTests
             public static class FirstScriptGeneratedFixtureExtensions
             {
                 public static UnrealVector GetActorLocation(this Actor actor) => default;
-                public static UnrealObjectHandle GetInstigator(this Actor actor) => default;
+                public static Pawn? GetInstigator(this Actor actor) => null;
             }
 
             public sealed class Pawn
@@ -232,17 +233,6 @@ public sealed class UnrealProjectAdoptionTests
                 public UnrealObjectHandle GetController() => default;
             }
 
-            public sealed class FinareComponent : UnrealObject
-            {
-                public FinareComponent(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
-                    : base(handle, bridge) { }
-
-                public int GetScriptStateInt32(string name, int fallback) =>
-                    Invoke<int, string, int>(0, "/Script/FinareRuntime.FinareComponent:GetScriptStateInt32", name, fallback);
-
-                public bool SetScriptStateInt32(string name, int value) =>
-                    Invoke<bool, string, int>(0, "/Script/FinareRuntime.FinareComponent:SetScriptStateInt32", name, value);
-            }
             """;
         var request = new CSharpCompilationRequest(
             "Fixture.Game",
@@ -253,7 +243,7 @@ public sealed class UnrealProjectAdoptionTests
             [
                 typeof(UnrealActorScript).Assembly.Location,
                 typeof(UnrealProjectAdoptionTests).Assembly.Location,
-            ]);
+            ], sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
 
         CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
         Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
@@ -787,28 +777,23 @@ public sealed class UnrealProjectAdoptionTests
         {
             if (typeof(T) == typeof(int))
             {
-                return (T)(object)1;
+                return (T)(object)PersistedStartValue;
             }
             return default!;
         }
 
-        public void WriteProperty<T>(UnrealObjectHandle target, string propertyPath, T value) =>
+        public void WriteProperty<T>(UnrealObjectHandle target, string propertyPath, T value)
+        {
+            Assert.EndsWith(":StartValue", propertyPath);
+            PersistedStartValue = (int)(object)value!;
             Writes.Add((target, propertyPath, value));
+        }
 
         public T Invoke<T>(
             UnrealObjectHandle target,
             string functionPath,
             IReadOnlyList<object?> arguments)
         {
-            if (functionPath.EndsWith(":GetScriptStateInt32", StringComparison.Ordinal))
-            {
-                return (T)(object)PersistedStartValue;
-            }
-            if (functionPath.EndsWith(":SetScriptStateInt32", StringComparison.Ordinal))
-            {
-                PersistedStartValue = (int)arguments[1]!;
-                return (T)(object)true;
-            }
             return default!;
         }
 
@@ -1065,6 +1050,7 @@ public sealed class UnrealProjectAdoptionTests
                      {
                          "Finare.Core.dll",
                          "Finare.Unreal.dll",
+                         "Finare.Unreal.Generators.dll",
                          "Finare.Unreal.deps.json",
                      })
             {

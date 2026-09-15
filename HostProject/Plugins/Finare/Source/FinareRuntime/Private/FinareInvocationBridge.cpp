@@ -2023,11 +2023,28 @@ bool FFinareInvocationBridge::InvokeParentById(
 	UFinareComponent* Component = Cast<UFinareComponent>(HostObject);
 	if (Component == nullptr)
 	{
-		Fail(
-			OutResult,
-			EFinareInvocationError::TargetTypeMismatch,
-			TEXT("Blueprint parent invocation host must be a running Finare component."));
-		return false;
+		UWorld* World = HostObject->GetWorld();
+		UFinareWorldSubsystem* WorldHost = World != nullptr
+			                                     ? World->GetSubsystem<UFinareWorldSubsystem>()
+			                                     : nullptr;
+		FString ReceiverError;
+		Component = WorldHost != nullptr
+			            ? WorldHost->ResolveManagedReceiver(
+					      HostObject,
+					      nullptr,
+					      false,
+					      ReceiverError)
+			            : nullptr;
+		if (Component == nullptr)
+		{
+			Fail(
+				OutResult,
+				EFinareInvocationError::TargetTypeMismatch,
+				ReceiverError.IsEmpty()
+					? TEXT("Blueprint parent invocation host has no unique active managed execution host.")
+					: ReceiverError);
+			return false;
+		}
 	}
 	UObject* Receiver = Component->GetParentInvocationReceiver();
 	const UFinareBlueprintGeneratedClass* ManagedClass =

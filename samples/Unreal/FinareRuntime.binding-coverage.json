@@ -3,18 +3,18 @@
   "engine": {
     "major": 5,
     "minor": 8,
-    "patch": 1,
+    "patch": 2,
     "branch": "//UE5/Release-5.8"
   },
   "summary": {
     "typeCount": 22,
-    "memberCount": 190,
+    "memberCount": 191,
     "directThunkCount": 66,
-    "callFrameCount": 121,
+    "callFrameCount": 122,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 187,
+    "nativeThunkCount": 188,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -1534,6 +1534,14 @@
       "diagnosticCodes": [],
       "message": "",
       "nativeExtension": "Demo.Native"
+    },
+    {
+      "path": "/Script/FinareRuntime.FinareWorldLibrary:CreateObject",
+      "ownerPath": "/Script/FinareRuntime.FinareWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
     },
     {
       "path": "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor",

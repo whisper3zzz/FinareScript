@@ -31,8 +31,16 @@ never loaded as runtime implementations.
 
 Project loading executes restore, build, and custom MSBuild targets from the
 project. Treat an untrusted project like any other untrusted build input.
-Compiler analyzers and source generators are not replayed by the Finare
-compilation host yet; projects that depend on generator-only source can build in
-MSBuild but will receive ordinary missing-symbol diagnostics during Finare
-analysis. Project files must remain buildable, and project-reference outputs
-must exist when `--no-build` is used.
+Source generators from evaluated `Analyzer` items run in the Finare compilation
+host as well as the SDK build. Analyzer assembly bytes participate in the
+configuration identity and are reloaded for each compilation. Generated source
+is available to declaration analysis and executable compilation; source edits
+continue to target the authored files. The Finare Unreal property generator is
+included in new project templates and the SDK payload.
+
+Standalone diagnostic analyzers are not replayed. Generator `AdditionalFiles`
+and analyzer-config options are not currently supplied by the in-process host;
+packages depending on those inputs need separate support. The generator must
+also target a Roslyn version supported by both hosts. Project files must remain
+buildable, and project-reference/analyzer outputs must exist when `--no-build`
+is used.

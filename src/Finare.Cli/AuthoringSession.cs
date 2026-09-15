@@ -514,7 +514,7 @@ internal sealed class AuthoringSession : IDisposable
             source.IdentityPins)).ToArray();
         return new ProjectAuthoringInput(new CSharpCompilationRequest(previous.AssemblyName, sources,
             previous.ReferencePaths, previous.EffectCatalog, previous.Settings, previous.RuntimeReferencePaths,
-            previous.IncludeDefaultReferences), sourcePath, identityPath ?? sourcePath + ".usids", sourceFiles,
+            previous.IncludeDefaultReferences, previous.SourceGeneratorPaths), sourcePath, identityPath ?? sourcePath + ".usids", sourceFiles,
             readOnlySources, identityFiles);
     }
 

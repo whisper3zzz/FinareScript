@@ -141,6 +141,7 @@ internal static partial class UnrealProjectAdoptionService
     [
         "Finare.Core.dll",
         "Finare.Unreal.dll",
+        "Finare.Unreal.Generators.dll",
         "Finare.Unreal.deps.json",
     ];
 

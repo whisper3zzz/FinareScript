@@ -8,6 +8,8 @@ namespace Finare.Unreal.Demo;
 [ScriptAsset("Unreal/ReferenceCollectionGameplay")]
 public sealed class ReferenceCollectionGameplayDemoScript : IUnrealManagedScript
 {
+    private IUnrealInvocationBridge _bridge = null!;
+
     private FinareInteropFixture _fixture = null!;
     private FinareWorldLibrary _worldLibrary = null!;
     private GameplayStatics _gameplayStatics = null!;
@@ -32,18 +34,19 @@ public sealed class ReferenceCollectionGameplayDemoScript : IUnrealManagedScript
 
     private int QueryActorCountSource(UnrealObjectHandle worldContextObject, UnrealClassHandle actorClass)
     {
-        _gameplayStatics.GetAllActorsOfClass(worldContextObject, actorClass, out IReadOnlyList<UnrealObjectHandle> actors);
+        _gameplayStatics.GetAllActorsOfClass(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(worldContextObject, _bridge), actorClass, out IReadOnlyList<Actor?> actors);
         return actors.Count;
     }
 
     public void OnStart(UnrealScriptContext context)
     {
+        _bridge = context.Bridge;
         _fixture = new FinareInteropFixture(context.Host, context.Bridge);
         _worldLibrary = new FinareWorldLibrary(context.Target, context.Bridge);
         _gameplayStatics = new GameplayStatics(context.Target, context.Bridge);
 
         UnrealClassHandle actorClass = _worldLibrary.LoadClassByPath(
-            context.Target,
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
             "/Script/Engine.StaticMeshActor");
         if (actorClass.IsNull)
         {
@@ -51,19 +54,19 @@ public sealed class ReferenceCollectionGameplayDemoScript : IUnrealManagedScript
         }
 
         _gameplayStatics.GetAllActorsOfClass(
-            context.Target,
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
             actorClass,
-            out IReadOnlyList<UnrealObjectHandle> actors);
+            out IReadOnlyList<Actor?> actors);
         if (actors.Count == 0)
         {
             throw new InvalidOperationException("GameplayStatics returned no Actor handles.");
         }
 
-        IReadOnlyList<UnrealObjectHandle> echoedActors = _fixture.EchoActorArray(actors);
-        IReadOnlyList<UnrealObjectHandle> actorAccumulator = Array.Empty<UnrealObjectHandle>();
+        IReadOnlyList<Actor?> echoedActors = _fixture.EchoActorArray(actors);
+        IReadOnlyList<Actor?> actorAccumulator = Array.Empty<Actor?>();
         if (!_fixture.MutateActorArray(
                 echoedActors,
-                out IReadOnlyList<UnrealObjectHandle> outputActors,
+                out IReadOnlyList<Actor?> outputActors,
                 ref actorAccumulator) ||
             outputActors.Count != actors.Count ||
             actorAccumulator.Count != actors.Count)

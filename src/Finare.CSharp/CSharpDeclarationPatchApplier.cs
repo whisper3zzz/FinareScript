@@ -433,7 +433,7 @@ public sealed class CSharpDeclarationPatchApplier
             request.EffectCatalog,
             request.Settings,
             request.RuntimeReferencePaths,
-            request.IncludeDefaultReferences);
+            request.IncludeDefaultReferences, request.SourceGeneratorPaths);
         CSharpAnalysisResult patchedAnalysis = pipeline.Analyze(patchedRequest);
         if (!patchedAnalysis.Succeeded || patchedAnalysis.ScriptAssets is null)
         {
@@ -474,7 +474,7 @@ public sealed class CSharpDeclarationPatchApplier
             patchedRequest.EffectCatalog,
             patchedRequest.Settings,
             patchedRequest.RuntimeReferencePaths,
-            patchedRequest.IncludeDefaultReferences);
+            patchedRequest.IncludeDefaultReferences, patchedRequest.SourceGeneratorPaths);
         return new CSharpPatchResult(persistedRequest, patchedAnalysis, patchedAnalysis.Diagnostics);
     }
 
@@ -1104,11 +1104,13 @@ public sealed class CSharpDeclarationPatchApplier
             {
                 members = members.Insert(
                     insertionIndex++,
-                    CreateProperty(add.State, type, context.SemanticModel));
+                    CreateProperty(add.State, type, context.SemanticModel, first.Asset.ClassBinding is not null));
             }
 
             TypeDeclarationSyntax replacement = type.WithMembers(members)
                 .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
+            if (first.Asset.ClassBinding is not null && !replacement.Modifiers.Any(SyntaxKind.PartialKeyword))
+                replacement = replacement.AddModifiers(SyntaxFactory.Token(SyntaxKind.PartialKeyword).WithTrailingTrivia(SyntaxFactory.Space));
             context.Root = context.Root.ReplaceNode(type, replacement);
         }
     }
@@ -1133,6 +1135,8 @@ public sealed class CSharpDeclarationPatchApplier
             }
             TypeDeclarationSyntax replacement = type.WithMembers(members)
                 .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
+            if (first.Asset.ClassBinding is not null && !replacement.Modifiers.Any(SyntaxKind.PartialKeyword))
+                replacement = replacement.AddModifiers(SyntaxFactory.Token(SyntaxKind.PartialKeyword).WithTrailingTrivia(SyntaxFactory.Space));
             context.Root = context.Root.ReplaceNode(type, replacement);
         }
     }
@@ -1157,6 +1161,8 @@ public sealed class CSharpDeclarationPatchApplier
             }
             TypeDeclarationSyntax replacement = type.WithMembers(members)
                 .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
+            if (first.Asset.ClassBinding is not null && !replacement.Modifiers.Any(SyntaxKind.PartialKeyword))
+                replacement = replacement.AddModifiers(SyntaxFactory.Token(SyntaxKind.PartialKeyword).WithTrailingTrivia(SyntaxFactory.Space));
             context.Root = context.Root.ReplaceNode(type, replacement);
         }
     }
@@ -1221,6 +1227,8 @@ public sealed class CSharpDeclarationPatchApplier
             }
             TypeDeclarationSyntax replacement = type.WithMembers(members)
                 .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
+            if (first.Asset.ClassBinding is not null && !replacement.Modifiers.Any(SyntaxKind.PartialKeyword))
+                replacement = replacement.AddModifiers(SyntaxFactory.Token(SyntaxKind.PartialKeyword).WithTrailingTrivia(SyntaxFactory.Space));
             context.Root = context.Root.ReplaceNode(type, replacement);
         }
     }
@@ -1529,7 +1537,8 @@ public sealed class CSharpDeclarationPatchApplier
     private static PropertyDeclarationSyntax CreateProperty(
         ScriptStatePatchSpec spec,
         TypeDeclarationSyntax containingType,
-        SemanticModel semanticModel)
+        SemanticModel semanticModel,
+        bool nativeState)
     {
         string source = RenderProperty(
             spec,
@@ -1538,6 +1547,15 @@ public sealed class CSharpDeclarationPatchApplier
         PropertyDeclarationSyntax property = SyntaxFactory.ParseMemberDeclaration(source)
             as PropertyDeclarationSyntax ??
             throw new InvalidOperationException("A validated state specification did not parse as a property.");
+        // Adding a state to a class with generated native properties must keep
+        // its existing ownership model instead of introducing a mirrored value.
+        // containingType already includes earlier edits in this transaction;
+        // it is no longer a node from semanticModel's original syntax tree.
+        if (nativeState || containingType.Members.OfType<PropertyDeclarationSyntax>().Any(existing =>
+                existing.Modifiers.Any(SyntaxKind.PartialKeyword)))
+        {
+            property = property.AddModifiers(SyntaxFactory.Token(SyntaxKind.PartialKeyword));
+        }
         string newline = containingType.SyntaxTree?.GetText().ToString().Contains("\r\n", StringComparison.Ordinal) == true
             ? "\r\n"
             : "\n";
@@ -1741,6 +1759,9 @@ public sealed class CSharpDeclarationPatchApplier
         string typeName,
         ITypeSymbol? resolvedType)
     {
+        if (resolvedType is INamedTypeSymbol named && value.ValueKind == JsonValueKind.Null)
+            for (INamedTypeSymbol? current = named; current is not null; current = current.BaseType)
+                if (current.ToDisplayString() == "Finare.Unreal.UnrealObject") return "null";
         string normalizedType = (resolvedType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? typeName)
             .Replace("global::", string.Empty, StringComparison.Ordinal)
             .Trim();

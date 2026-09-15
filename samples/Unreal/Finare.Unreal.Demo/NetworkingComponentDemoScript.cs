@@ -7,45 +7,45 @@ namespace Finare.Unreal.Demo;
 [ScriptAsset("Unreal/NetworkingComponentDemo", ClassId = "us_762043152e714d68b05a31426591ee02")]
 [UnrealScriptClass(UnrealScriptClassKind.ActorComponent,
     GeneratedClassPath = "/Game/UnifiedScriptTests/BP_NetworkingComponentDemo.BP_NetworkingComponentDemo_C")]
-public sealed class NetworkingComponentDemoScript : UnrealActorComponentScript
+public sealed partial class NetworkingComponentDemoScript : UnrealActorComponentScript
 {
     [Expose(Replicated = true)]
-    public int Score { get; set; } = 0;
+    public partial int Score { get; set; } = 0;
 
     [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.OwnerOnly)]
-    public int OwnerSecret { get; set; } = 0;
+    public partial int OwnerSecret { get; set; } = 0;
 
     [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.InitialOnly)]
-    public int InitialScore { get; set; } = 0;
+    public partial int InitialScore { get; set; } = 0;
 
     [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.SkipOwner)]
-    public int ObserverScore { get; set; } = 0;
+    public partial int ObserverScore { get; set; } = 0;
 
     [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.InitialOrOwner)]
-    public int InitialOrOwnerScore { get; set; } = 0;
+    public partial int InitialOrOwnerScore { get; set; } = 0;
 
     [Expose(Replicated = true)]
-    public int Pings { get; set; } = 0;
+    public partial int Pings { get; set; } = 0;
 
     [Expose(Replicated = true)]
-    public string Label { get; set; } = "";
+    public partial string Label { get; set; } = "";
 
-    public int Notifications { get; set; } = 0;
-    public int PreviousScore { get; set; } = 0;
-    public int AcknowledgedScore { get; set; } = 0;
-    public int BroadcastScore { get; set; } = 0;
-    public string PreviousLabel { get; set; } = "";
-    public int LabelNotifications { get; set; } = 0;
-    public string AcknowledgedLabel { get; set; } = "";
-    public UnrealObjectHandle AcknowledgedActor { get; set; } = default;
-    public float Gain { get; set; } = 0;
-    public bool Enabled { get; set; } = false;
-    public UnrealVector Aim { get; set; } = UnrealVector.Zero;
-    public UnrealVector RequestedAim { get; set; } = new(1, 2, 3);
-    public float BroadcastGain { get; set; } = 0;
-    public long ReceivedWide { get; set; } = 0;
-    public long AcknowledgedWide { get; set; } = 0;
-    public string CommonPayloadError { get; set; } = "";
+    public partial int Notifications { get; set; } = 0;
+    public partial int PreviousScore { get; set; } = 0;
+    public partial int AcknowledgedScore { get; set; } = 0;
+    public partial int BroadcastScore { get; set; } = 0;
+    public partial string PreviousLabel { get; set; } = "";
+    public partial int LabelNotifications { get; set; } = 0;
+    public partial string AcknowledgedLabel { get; set; } = "";
+    public partial UnrealObjectHandle AcknowledgedActor { get; set; } = default;
+    public partial float Gain { get; set; } = 0;
+    public partial bool Enabled { get; set; } = false;
+    public partial UnrealVector Aim { get; set; } = UnrealVector.Zero;
+    public partial UnrealVector RequestedAim { get; set; } = new(1, 2, 3);
+    public partial float BroadcastGain { get; set; } = 0;
+    public partial long ReceivedWide { get; set; } = 0;
+    public partial long AcknowledgedWide { get; set; } = 0;
+    public partial string CommonPayloadError { get; set; } = "";
 
     [Visual]
     public void InitializeScore(int value)

@@ -8,13 +8,13 @@ namespace Finare.Unreal.Demo;
 [ScriptAsset("Unreal/AsyncUiDemo", ClassId = "us_762043152e714d68b05a31426591ee03")]
 [UnrealScriptClass(UnrealScriptClassKind.Actor,
     GeneratedClassPath = "/Game/UnifiedScriptDemo/BP_AsyncUiDemo.BP_AsyncUiDemo_C")]
-public sealed class AsyncUiDemoScript : UnrealActorScript
+public sealed partial class AsyncUiDemoScript : UnrealActorScript
 {
     [Expose]
-    public string WidgetClassPath { get; set; } = "/Script/FinareHost.FinareAsyncDemoWidget";
+    public partial string WidgetClassPath { get; set; } = "/Script/FinareHost.FinareAsyncDemoWidget";
 
     [Expose]
-    public string MeshPath { get; set; } = "/Engine/BasicShapes/Cube.Cube";
+    public partial string MeshPath { get; set; } = "/Engine/BasicShapes/Cube.Cube";
 
     private FinareWorldLibrary _world = null!;
     private FinareComponent _host = null!;
@@ -34,7 +34,8 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
     protected override void OnBeginPlay()
     {
         _world = new FinareWorldLibrary(TargetHandle, Bridge);
-        _host = new FinareComponent(HostHandle, Bridge);
+        _host = new FinareActor(HostHandle, Bridge).GetFinareComponent()
+            ?? throw new InvalidOperationException("Async UI Actor script has no Finare component.");
         _ = InitializeHudAsync();
     }
 
@@ -66,8 +67,8 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
             _host.ManagedState = "UI:Initializing";
             UnrealObjectHandle widgetClass = await LoadClassAsync(WidgetClassPath, 10.0f, lifetime);
             lifetime.ThrowIfCancellationRequested();
-            UnrealObjectHandle widget = new UI.WidgetBlueprintLibrary(TargetHandle, Bridge)
-                .Create(TargetHandle, new UnrealClassHandle(widgetClass.Value), default);
+            UnrealObjectHandle widget = (new UI.WidgetBlueprintLibrary(TargetHandle, Bridge)
+                .Create(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), new UnrealClassHandle(widgetClass.Value), default))?.Handle ?? default;
             if (widget.IsNull) throw new InvalidOperationException("CreateWidget returned null.");
             _hud = new UI.UserWidget(widget, Bridge);
             var spawn = new UI.Button(RequireWidget("SpawnButton"), Bridge);
@@ -92,7 +93,7 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
 
     private UnrealObjectHandle RequireWidget(string name)
     {
-        UnrealObjectHandle handle = _hud!.GetWidgetFromName(new UnrealName(name));
+        UnrealObjectHandle handle = (_hud!.GetWidgetFromName(new UnrealName(name)))?.Handle ?? default;
         return handle.IsWellFormed ? handle :
             throw new InvalidOperationException($"The HUD requires a widget named '{name}'.");
     }
@@ -131,17 +132,17 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
                 _loadedMeshPath = requestedMesh;
             }
             cancellation.ThrowIfCancellationRequested();
-            candidate = _world.SpawnActor(TargetHandle, _actorClass,
+            candidate = (_world.SpawnActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), _actorClass,
                 new UnrealTransform(new UnrealQuaternion(0, 0, 0, 1),
-                    new UnrealVector(200, 0, PreviewHeight()), new UnrealVector(1, 1, 1)));
+                    new UnrealVector(200, 0, PreviewHeight()), new UnrealVector(1, 1, 1))))?.Handle ?? default;
             if (candidate.IsNull) throw new InvalidOperationException("SpawnActor returned null.");
             var actor = new UI.StaticMeshActor(candidate, Bridge);
             actor.SetMobility(UI.EComponentMobility.Movable);
-            if (!new UI.StaticMeshComponent(actor.StaticMeshComponent, Bridge).SetStaticMesh(_mesh))
+            if (!new UI.StaticMeshComponent((actor.StaticMeshComponent)?.Handle ?? default, Bridge).SetStaticMesh(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(_mesh, Bridge)))
                 throw new InvalidOperationException("The loaded object is not a usable StaticMesh.");
 
             // Preserve the previous successful preview until its replacement is ready.
-            if (!_spawned.IsNull) _world.DestroyActor(TargetHandle, _spawned);
+            if (!_spawned.IsNull) _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
             _spawned = candidate;
             candidate = default;
             _spawnCount++;
@@ -157,7 +158,7 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
         }
         finally
         {
-            if (!candidate.IsNull) _world.DestroyActor(TargetHandle, candidate);
+            if (!candidate.IsNull) _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(candidate, Bridge));
             if (ReferenceEquals(_request, request)) _request = null;
             request.Dispose();
             if (!lifetime.IsCancellationRequested) SetBusy(false);
@@ -182,7 +183,7 @@ public sealed class AsyncUiDemoScript : UnrealActorScript
         CleanupView();
         if (!_spawned.IsNull)
         {
-            _world.DestroyActor(TargetHandle, _spawned);
+            _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
             _spawned = default;
         }
     }

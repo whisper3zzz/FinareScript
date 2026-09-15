@@ -36,10 +36,12 @@ Actor overlap callbacks:
 
 ```csharp
 [ScriptAsset("MyGame/PatrolActor")]
-public sealed class PatrolActorScript : UnrealActorScript
+[UnrealScriptClass(UnrealScriptClassKind.Actor,
+    GeneratedClassPath = "/Game/PatrolActor.PatrolActor_C")]
+public sealed partial class PatrolActorScript : UnrealActorScript
 {
     [Expose(InstanceEditable = true, Category = "Patrol")]
-    public float Speed { get; set; }
+    public partial float Speed { get; set; }
 
     public PatrolActorScript()
     {
@@ -48,10 +50,7 @@ public sealed class PatrolActorScript : UnrealActorScript
 
     protected override void OnBeginPlay()
     {
-        if (!Context.HasDistinctTarget)
-        {
-            throw new InvalidOperationException("PatrolActor requires an Actor target.");
-        }
+        // HostHandle and TargetHandle both identify this generated Actor.
     }
 
     protected override void OnTick(float deltaSeconds)
@@ -82,11 +81,11 @@ The reviewed Blueprint-visible common state shapes can be authored directly in
 the same class:
 
 ```csharp
-public UnrealName StateTag { get; set; }
-public UnrealText DisplayText { get; set; }
-public UnrealObjectHandle LinkedObject { get; set; }
-public UnrealClassHandle LinkedClass { get; set; }
-public UnrealVector SpawnOffset { get; set; }
+[Expose] public partial UnrealName StateTag { get; set; }
+[Expose] public partial UnrealText DisplayText { get; set; }
+[Expose] public partial UnrealObject? LinkedObject { get; set; }
+[Expose] public partial UnrealClassHandle LinkedClass { get; set; }
+[Expose] public partial UnrealVector SpawnOffset { get; set; }
 
 public MyActorScript()
 {
@@ -100,10 +99,21 @@ public MyActorScript()
 
 These become native `FName`, `FText`, `UObject`, `UClass`, and `FVector`
 properties on the generated Blueprint class and use the same state Semantic ID
-for CDO reconciliation and managed hydrate/flush. Source defaults for object and
-class handles must remain null: a nonzero handle is valid only for its current
+for CDO reconciliation. Generated partial accessors read and write the native
+property immediately, including after a native or Blueprint edit. Source
+defaults for object references and class handles must remain null: a nonzero handle is valid only for its current
 World registry generation. Assign durable object/class references through the
 normal Blueprint CDO/instance property surface or resolve assets at runtime.
+
+For Script Classes, use partial `[Expose]` properties and the analyzer
+already included by the project template. A reflected container getter returns
+a value snapshot; assign the edited value back to replace the native container.
+For example, `var scores = Scores.ToArray(); scores[0]++; Scores = scores;`.
+Object references inside the snapshot still identify their original native
+objects. Access through the script fails after its generation stops. Non-partial
+reflected state is a compilation error. A `[ScriptAsset]` owner also projects
+instance properties without `[Expose]`; those properties must be partial too.
+Use ordinary fields for private managed values that should not become UE state.
 
 Generated Unreal enum wrappers, `UnrealRotator` and `UnrealTransform` also have
 typed state/default contracts. For example, the
@@ -112,13 +122,13 @@ exposes configuration used by ordinary generated Actor calls:
 
 ```csharp
 [Expose(InstanceEditable = true, SaveGame = true)]
-public ETickingGroup TickGroup { get; set; } = ETickingGroup.TG_DuringPhysics;
+public partial ETickingGroup TickGroup { get; set; } = ETickingGroup.TG_DuringPhysics;
 
 [Expose(InstanceEditable = true, SaveGame = true)]
-public UnrealRotator Facing { get; set; } = new(0.0, 45.0, 0.0);
+public partial UnrealRotator Facing { get; set; } = new(0.0, 45.0, 0.0);
 
 [Expose(InstanceEditable = true, SaveGame = true)]
-public UnrealTransform Placement { get; set; } = new(
+public partial UnrealTransform Placement { get; set; } = new(
     UnrealQuaternion.Identity,
     new UnrealVector(120.0, 0.0, 40.0),
     UnrealVector.One);
@@ -145,16 +155,16 @@ storing a runtime object handle:
 
 ```csharp
 [Expose(InstanceEditable = true, SaveGame = true)]
-public UnrealSoftObjectHandle Mesh { get; set; } =
+public partial UnrealSoftObjectHandle Mesh { get; set; } =
     new("/Engine/BasicShapes/Cube.Cube");
 
 [Expose(InstanceEditable = true, SaveGame = true)]
-public UnrealSoftClassHandle ActorClass { get; set; } =
+public partial UnrealSoftClassHandle ActorClass { get; set; } =
     new("/Script/Engine.StaticMeshActor");
 ```
 
 These fields appear as native soft-object and soft-class properties. Their
-defaults and overrides store paths across reload; creating or hydrating the
+defaults and overrides store paths across reload; creating or reading the
 script does not load the assets. `default`, `new()` and an empty path are null
 references. Use absolute Unreal object paths, including the object name after
 the dot. A valid path can refer to an asset that is currently missing, so handle
@@ -177,7 +187,7 @@ collection value:
 
 ```csharp
 [Expose(InstanceEditable = true, SaveGame = true)]
-public IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
+public partial IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
     new List<UnrealSoftObjectHandle>
     {
         new("/Engine/BasicShapes/Cube.Cube"),
@@ -185,11 +195,11 @@ public IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
     };
 
 [Expose(InstanceEditable = true)]
-public IReadOnlySet<UnrealName> EnabledChoices { get; set; } =
+public partial IReadOnlySet<UnrealName> EnabledChoices { get; set; } =
     new HashSet<UnrealName> { new("Cube"), new("Sphere") };
 
 [Expose(InstanceEditable = true)]
-public IReadOnlyDictionary<UnrealName, int> ChoiceIndices { get; set; } =
+public partial IReadOnlyDictionary<UnrealName, int> ChoiceIndices { get; set; } =
     new Dictionary<UnrealName, int>
     {
         { new("Cube"), 0 },
@@ -407,13 +417,14 @@ Use the generated World service for synchronous startup loads whose hitch is
 explicitly acceptable:
 
 ```csharp
-private static UnrealObjectHandle LoadIcon(
+private static UnrealObject LoadIcon(
     UnrealScriptContext context,
     string objectPath)
 {
     var world = new FinareWorldLibrary(context.Target, context.Bridge);
-    UnrealObjectHandle icon = world.LoadObjectByPath(context.Target, objectPath);
-    if (icon.IsNull)
+    var receiver = UnrealObject.Wrap<UnrealObject>(context.Target, context.Bridge)!;
+    UnrealObject? icon = world.LoadObjectByPath(receiver, objectPath);
+    if (icon is null)
     {
         throw new InvalidOperationException($"Asset was not found: {objectPath}");
     }
@@ -433,22 +444,23 @@ Load a class through the World service and pass the resulting typed class
 handle to `SpawnActor`:
 
 ```csharp
-private static UnrealObjectHandle SpawnPickup(UnrealScriptContext context)
+private static Actor SpawnPickup(UnrealScriptContext context)
 {
     var world = new FinareWorldLibrary(context.Target, context.Bridge);
+    var receiver = UnrealObject.Wrap<UnrealObject>(context.Target, context.Bridge)!;
     UnrealClassHandle actorClass = world.LoadClassByPath(
-        context.Target,
+        receiver,
         "/Game/Gameplay/BP_Pickup.BP_Pickup_C");
     if (actorClass.IsNull)
     {
         throw new InvalidOperationException("Pickup class could not be loaded.");
     }
 
-    UnrealObjectHandle actor = world.SpawnActor(
-        context.Target,
+    Actor? actor = world.SpawnActor(
+        receiver,
         actorClass,
         UnrealTransform.Identity);
-    if (actor.IsNull)
+    if (actor is null)
     {
         throw new InvalidOperationException("Pickup could not be spawned.");
     }
@@ -460,25 +472,49 @@ Use `DestroyActor` through the same generated service when the script owns the
 spawned instance. Verify spawn failure, explicit destroy, World teardown, and
 reload; never carry the handle into another World.
 
+## Create an ordinary UObject
+
+Use `CreateObject` for an ordinary UObject class, with a World-associated Outer:
+
+```csharp
+private static UnrealObject CreateData(UnrealScriptContext context, string classPath)
+{
+    var world = new FinareWorldLibrary(context.Host, context.Bridge);
+    var receiver = UnrealObject.Wrap<UnrealObject>(context.Host, context.Bridge)!;
+    UnrealClassHandle type = world.LoadClassByPath(receiver, classPath);
+    return world.CreateObject(receiver, type, receiver)
+        ?? throw new InvalidOperationException("Object creation or script activation failed.");
+}
+```
+
+For a Finare Object Script Class, this also activates its managed behavior;
+plain native classes are constructed without attaching a script. Keep a newly
+created object in a native reflected object property when it must survive GC.
+A C# view, handle lease, or Outer alone does not root the object. A missing Outer
+defaults to the World; cross-World Outers and incompatible native class families
+are rejected. Use `SpawnActor` for Actors and the appropriate UE component or
+widget factory when their construction requires it.
+
 ## Trace and FHitResult
 
 Use the generated synchronous service for an occasional trace and inspect the
 field-addressable `HitResult` value:
 
 ```csharp
-private static UnrealObjectHandle TraceForward(
+private static Actor? TraceForward(
     UnrealScriptContext context,
     UnrealVector start,
     UnrealVector end)
 {
     var world = new FinareWorldLibrary(context.Target, context.Bridge);
+    var receiver = UnrealObject.Wrap<UnrealObject>(context.Target, context.Bridge)!;
     bool hit = world.LineTraceSingle(
-        context.Target,
+        receiver,
         start,
         end,
-        context.Target,
+        receiver.IsA<Actor>() ? receiver.As<Actor>() : null,
         out HitResult result,
-        out UnrealObjectHandle hitActor);
+        out Actor? hitActor);
 
     return hit && result.bBlockingHit ? hitActor : default;
 }
@@ -570,10 +606,11 @@ script can keep that generation alive. Persistent state belongs in the supported
 Script Class state contract, not a dependency's process-global cache.
 
 Library compilation does not expand the editable Graph language. Keep code that
-uses unsupported visual syntax in ordinary C# helper bodies. Compiler analyzers
-and source generators are not replayed by the Finare compilation host;
-see the project-loading restrictions before adopting a package that generates
-required source. Native dependencies and P/Invoke additionally need a matching
+uses unsupported visual syntax in ordinary C# helper bodies. Project source
+generators are replayed by the Finare compilation host; standalone diagnostic
+analyzers, generator AdditionalFiles and analyzer-config inputs remain outside
+that path. See the [project-loading restrictions](PROJECT_LOADING.md) before
+adopting a package that generates required source. Native dependencies and P/Invoke additionally need a matching
 OS/architecture, deployment and lifetime strategy; the managed dependency loader
 does not establish general native-package support.
 
@@ -643,7 +680,7 @@ identifies its replica even when the Actor archetype's `bReplicates` is false.
 
 ```csharp
 [Expose(Replicated = true)]
-public int Score { get; set; } = 0;
+public partial int Score { get; set; } = 0;
 
 [UnrealRepNotify(nameof(Score))]
 public void ScoreChanged(int previous)
@@ -679,9 +716,9 @@ may send a Server RPC; clients cannot originate Client/Multicast sends. A Server
 RPC still needs game-specific payload/permission checks in its body. `HasAuthority`
 queries the owning Actor rather than caching a role across travel/reload.
 
-Client state synchronization restores server-owned replicated fields instead of
-writing local changes back. Direct native-bridge writes enforce the same boundary.
-Incoming state is hydrated before a managed callback. An initial RepNotify can
+Writing a replicated property without authority is rejected by its generated
+setter and the native bridge. Getters read the current native value directly,
+including state received from the server. An initial RepNotify can
 arrive before the managed host starts: its owned previous-value snapshot is queued
 and delivered once after automatic activation. Pre-start changes coalesce while
 retaining the first old value; stop/failed activation discards the queue. This is

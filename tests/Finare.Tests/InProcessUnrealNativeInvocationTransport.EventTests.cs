@@ -588,10 +588,10 @@ public sealed partial class InProcessUnrealNativeInvocationTransportTests
     [UnrealScriptClass(
         UnrealScriptClassKind.Actor,
         GeneratedClassPath = "/Game/Tests/BP_StatefulEvent.BP_StatefulEvent_C")]
-    private sealed class AbiV4StatefulEventScript : UnrealActorScript
+    private sealed partial class AbiV4StatefulEventScript : UnrealActorScript
     {
         [Expose]
-        public int Count { get; set; }
+        public partial int Count { get; set; }
 
         private IUnrealEventSubscription? _subscription;
 

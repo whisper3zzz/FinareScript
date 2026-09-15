@@ -9,6 +9,7 @@
 
 class UFinareAsset;
 class UFinareBlueprintGeneratedClass;
+class UFinareWorldSubsystem;
 class UEnhancedInputComponent;
 class UInputAction;
 class AActor;
@@ -105,6 +106,22 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="Finare|State")
 	int32 MaterializedStateOverrideCount = 0;
 
+	/**
+	 * Copies the persistent override identity metadata while migrating a
+	 * managed component between a native CDO and an SCS template.  The fields
+	 * intentionally remain private so callers cannot mutate the override set
+	 * without the normal state APIs.
+	 */
+	void CopyScriptStateOverrideMetadata(const UFinareComponent& Source);
+
+	/** Captures/restores the persistent override metadata during editor reinstance. */
+	void GetScriptStateOverrideMetadata(
+		TArray<FGuid>& OutOverrideIds,
+		bool& bOutBaselineInitialized) const;
+	void SetScriptStateOverrideMetadata(
+		TConstArrayView<FGuid> OverrideIds,
+		bool bBaselineInitialized);
+
 	/** Summary of the last declaration/default/override reconciliation. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="Finare|State")
 	FString LastStateMigration;
@@ -154,6 +171,11 @@ public:
 	bool InvokeManagedScriptFunctionV2(
 		const FString& FunctionName,
 		FFinareNativeCallFrameV3& Frame,
+		FString& OutError);
+
+	/** Drives the managed generation from a native receiver lifecycle thunk. */
+	bool TickManagedScriptFromNativeReceiver(
+		float DeltaSeconds,
 		FString& OutError);
 
 	/** Retains initial network notifications until automatic managed activation. */
@@ -243,6 +265,20 @@ public:
 	UFUNCTION(BlueprintPure, Category="Finare")
 	UObject* GetScriptTarget();
 
+	/**
+	 * Native object that receives the managed instance's Host calls.  The
+	 * UFinareComponent may be an internal execution host for a generated class;
+	 * in that case this points at the real Actor/ActorComponent receiver.
+	 */
+	UObject* GetNativeReceiver() const;
+	bool SetNativeReceiver(UObject* Receiver, FString& OutError);
+
+	/** Creates the internal execution host for a generated native receiver. */
+	static UFinareComponent* CreateExecutionHost(
+		UObject* Receiver,
+		UFinareAsset* ScriptAsset,
+		FString& OutError);
+
 	/** Exact active managed class/receiver used by the Blueprint parent bridge. */
 	const UFinareBlueprintGeneratedClass* GetActiveManagedGeneratedClass() const;
 	UObject* GetParentInvocationReceiver() const;
@@ -295,6 +331,8 @@ public:
 		return ManagedInputBindingHandles.Num();
 	}
 
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(
@@ -357,7 +395,8 @@ private:
 		FString& OutAssemblyPath,
 		FString& OutTypeName,
 		UFinareAsset*& OutAsset,
-		FString& OutError) const;
+		FString& OutError,
+		bool bValidateTarget = true) const;
 	bool HasConfiguredManagedLifecycleOverride(FName FunctionName) const;
 	bool HasActiveManagedLifecycleOverride(FName FunctionName) const;
 	bool BuildScriptState(
@@ -392,6 +431,16 @@ private:
 	FString ActiveResolvedAssemblyPath;
 	FString ActiveResolvedTypeName;
 	TWeakObjectPtr<UObject> ActiveLifecycleHostObject;
+	/** Explicit native receiver; unset means this component for legacy hosts. */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UObject> NativeReceiver;
+	UPROPERTY(Transient)
+	bool bNativeReceiverExplicit = false;
+	/** True only for a World-owned sidecar hosting an ordinary UObject receiver. */
+	bool bWorldOwnedObjectExecutionHost = false;
+	/** Prevents receiver teardown callbacks from re-entering StopScript. */
+	bool bStopInProgress = false;
+	bool bProcessingNativeReceiverTick = false;
 	bool bReloadRequested = false;
 	bool bActorEventsBound = false;
 	bool bManagedCreatedInputComponent = false;

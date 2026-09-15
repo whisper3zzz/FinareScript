@@ -40,7 +40,7 @@ public sealed class LifecycleStressScript : UnrealActorScript
         typeof(FinareComponent),
         "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
         Source = UnrealEventSource.Host)]
-    private void OnManagedSignal(int value, UnrealObjectHandle signalContext)
+    private void OnManagedSignal(int value, UnrealObject? signalContext)
     {
         _host!.ManagedState = $"StressEvent:{Generation}:{value}";
     }

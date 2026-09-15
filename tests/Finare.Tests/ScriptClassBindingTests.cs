@@ -344,7 +344,7 @@ public sealed class ScriptClassBindingTests
             FinareRuntimeDeclarationBinary.Decode(invalidPresence));
 
         byte[] unsupportedMinor = encoded.ToArray();
-        unsupportedMinor[10] = 6;
+        unsupportedMinor[10] = 7;
         unsupportedMinor[11] = 0;
         Assert.Throws<InvalidDataException>(() =>
             FinareRuntimeDeclarationBinary.Decode(unsupportedMinor));
@@ -432,9 +432,9 @@ public sealed class ScriptClassBindingTests
             [UnrealScriptClass(
                 UnrealScriptClassKind.Actor,
                 GeneratedClassPath = "/Game/Temp/C4PublicationOwner.C4PublicationOwner_C")]
-            public sealed class C4PublicationOwner : UnrealActorScript
+            public sealed partial class C4PublicationOwner : UnrealActorScript
             {
-                public int Count { get; set; } = 1;
+                public partial int Count { get; set; } = 1;
 
                 protected override void OnBeginPlay() => Count += 100;
 
@@ -445,9 +445,9 @@ public sealed class ScriptClassBindingTests
             [UnrealScriptClass(
                 UnrealScriptClassKind.Actor,
                 GeneratedClassPath = "/Game/Temp/C4PublicationDescendant.C4PublicationDescendant_C")]
-            public sealed class C4PublicationDescendant : UnrealActorScript
+            public sealed partial class C4PublicationDescendant : UnrealActorScript
             {
-                public int DescCount { get; set; } = 2;
+                public partial int DescCount { get; set; } = 2;
 
                 protected override void OnBeginPlay() => DescCount += 200;
 
@@ -460,7 +460,8 @@ public sealed class ScriptClassBindingTests
             "C4PublicationWorldFixture",
             [new CSharpSourceDocument("Game/C4PublicationWorldFixture.cs", source)],
             referencePaths: [unrealAssembly, coreAssembly],
-            runtimeReferencePaths: [unrealAssembly, coreAssembly]);
+            runtimeReferencePaths: [unrealAssembly, coreAssembly],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
         CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(request);
         Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
         CSharpProgramImage image = Assert.IsType<CSharpProgramImage>(emitted.Image);

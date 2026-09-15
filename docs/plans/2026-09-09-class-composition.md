@@ -22,6 +22,48 @@ remain outside the implementation scope.
 
 ## Decisions and remaining work
 
+### September 12: first pure C# composition workflow
+
+The first Editor workflow now has a real ordinary Actor plus Health/Mover C#
+components, declared defaults and exposed overrides, persisted component
+references, save/unload/reopen, and source-save compilation followed by one
+reload barrier across different Script Assets. A failing Mover candidate keeps
+all three previous generations running. The scalar reference check spawns two
+Actors and also preserves an intentional live cross-Actor reference.
+
+Actor declarations may explicitly select ordinary `AActor`; the default factory
+continues to create `AFinareActor`. Ordinary actors use an owned SCS
+`UnifiedScript` carrier. Component classes remain in the `UFinareComponent`
+family. Template state refresh defers runtime target validation; actual starts
+and reloads still validate targets and exact class identity. Scalar hard-object
+references to owned component templates resolve by archetype identity at
+registration/start, without selecting components by name or type.
+
+The common native publication path reconciles `RequiredTargetClass` and the
+existing deployment entry in its journal, including pending manifest edits.
+Failure restores separate Script Asset/package files and the in-memory target.
+Private override IDs and existing child carrier ownership survive parent changes.
+
+Reproduce with `tools/test-class-composition.ps1`; see the
+[fixture guide](../../tests/Finare.Tests/Fixtures/ClassComposition/README.md).
+`artifacts/class-composition/workflow-editor-passed.log` records the first passed
+full workflow. The fixture uses the real watcher, build queue, compiler and
+reload path with an Automation-only isolated build command. Broader C-4
+composition/parent ownership, container references, full setup and Cook/package
+acceptance remain outside this completed slice.
+
+The affected nine-test Editor run passed in
+`artifacts/class-composition/composition-regressions-passed.log`, including
+parent transitions, active/stopped Worlds, persistent values, native publication
+and asset configuration. The final strengthened workflow also passed in
+`workflow-generation-rollback-passed.log`: the rejected candidate changes its
+behavior marker to `bad`, while all three live scripts retain both generation
+2 and their `v2` behavior. Fixture preparation and deliberate C# compilation
+failure were checked separately; failed compilation leaves the live DLL and
+declaration unchanged. No new Cook/package acceptance was performed.
+
+### Earlier publication and ownership work
+
 The normal-authoring publication coordinator now reserves an analyzed managed
 candidate without swapping its active generation. The native participant joins
 prepared source/artifact writes, parent changes, package saves, native history

@@ -19,6 +19,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/GameModeBase.h"
 #include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
@@ -78,8 +79,13 @@ namespace UE::Finare::AsyncUI::Tests
 		bool Build()
 		{
 			FString Declaration;
-			const FString DeclarationPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() /
-				TEXT("../artifacts/ue/compiled-chunks/release/UnifiedScript.Unreal.Demo.asset.json"));
+			const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Finare"));
+			if (!Test.TestTrue(TEXT("Async UI plugin is installed"), Plugin.IsValid()))
+			{
+				return false;
+			}
+			const FString DeclarationPath = FPaths::Combine(
+				Plugin->GetBaseDir(), TEXT("Binaries/Managed/Demo/Finare.Unreal.Demo.asset.json"));
 			if (!Test.TestTrue(
 				TEXT("Read emitted C# declaration"), FFileHelper::LoadFileToString(Declaration, *DeclarationPath)))
 			{

@@ -187,9 +187,9 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
     {
         for (int index = 0; index < WarmupIterations; index++)
         {
-            checksum += world.GetWorldTimeSeconds(context.Target);
+            checksum += world.GetWorldTimeSeconds(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge));
             _ = world.LineTraceSingle(
-                context.Target,
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
                 missStart,
                 missEnd,
                 default,
@@ -222,7 +222,7 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
             long started = Stopwatch.GetTimestamp();
             for (int index = 0; index < MeasuredIterations; index++)
             {
-                checksum += world.GetWorldTimeSeconds(context.Target);
+                checksum += world.GetWorldTimeSeconds(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge));
             }
             samples[sample] =
                 Stopwatch.GetElapsedTime(started).TotalNanoseconds /
@@ -265,7 +265,7 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
             for (int index = 0; index < MeasuredIterations; index++)
             {
                 if (world.LineTraceSingle(
-                        context.Target,
+                        UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
                         start,
                         end,
                         default,

@@ -423,6 +423,7 @@ try {
         'benchmarks\unreal\usability-budgets.v0.1.json',
         'Managed\Runtime\Finare.Core.dll',
         'Managed\Runtime\Finare.Unreal.dll',
+        'Managed\Runtime\Finare.Unreal.Generators.dll',
         'Managed\Runtime\Finare.Unreal.deps.json',
         'release-manifest.json',
         'Documentation\DOCUMENTATION.md',

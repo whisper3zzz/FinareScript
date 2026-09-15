@@ -6,13 +6,18 @@
 #include "InputCoreTypes.h"
 #include "UObject/UObjectGlobals.h"
 #include "FinareWorldSubsystem.h"
+#include "FinareWorldContext.h"
+#include "FinareBlueprint.h"
+#include "FinareComponent.h"
+#include "FinareAsset.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
 
 namespace
 {
 	template <typename TObjectType>
 	TObjectType* RetainForWorld(UObject* WorldContextObject, TObjectType* Resource)
 	{
-		UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+		UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 		if (World != nullptr && IsValid(Resource))
 		{
 			if (UFinareWorldSubsystem* Subsystem =
@@ -25,6 +30,15 @@ namespace
 	}
 }
 
+namespace
+{
+	UWorld* ResolveRuntimeWorld(UObject* Context)
+	{
+		UWorld* World = UE::Finare::WorldContext::Resolve(Context);
+		return World != nullptr && World->IsGameWorld() ? World : nullptr;
+	}
+}
+
 bool UFinareWorldLibrary::ClaimGameplayLifecycle(
 	UObject* WorldContextObject,
 	UObject* Claimant,
@@ -33,7 +47,7 @@ bool UFinareWorldLibrary::ClaimGameplayLifecycle(
 	EFinareRuntimeOwner RuntimeOwner,
 	FString& OutError)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	UFinareWorldSubsystem* Subsystem =
 		World != nullptr ? World->GetSubsystem<UFinareWorldSubsystem>() : nullptr;
 	if (Subsystem == nullptr)
@@ -57,7 +71,7 @@ bool UFinareWorldLibrary::ReleaseGameplayLifecycle(
 	EFinareRuntimeOwner RuntimeOwner,
 	FString& OutError)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	UFinareWorldSubsystem* Subsystem =
 		World != nullptr ? World->GetSubsystem<UFinareWorldSubsystem>() : nullptr;
 	if (Subsystem == nullptr)
@@ -76,7 +90,7 @@ bool UFinareWorldLibrary::ReleaseGameplayLifecycle(
 FString UFinareWorldLibrary::GetGameplayLifecycleOwnershipReport(
 	UObject* WorldContextObject)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	const UFinareWorldSubsystem* Subsystem =
 		World != nullptr ? World->GetSubsystem<UFinareWorldSubsystem>() : nullptr;
 	return Subsystem != nullptr
@@ -115,7 +129,7 @@ AActor* UFinareWorldLibrary::SpawnActor(
 	UClass* ActorClass,
 	const FTransform& Transform)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	if (World == nullptr || ActorClass == nullptr || !ActorClass->IsChildOf(AActor::StaticClass()))
 	{
 		return nullptr;
@@ -127,7 +141,7 @@ bool UFinareWorldLibrary::DestroyActor(
 	UObject* WorldContextObject,
 	AActor* Actor)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	return World != nullptr && IsValid(Actor) && Actor->GetWorld() == World &&
 		Actor->Destroy();
 }
@@ -137,7 +151,7 @@ UActorComponent* UFinareWorldLibrary::FindComponentByClass(
 	AActor* Actor,
 	UClass* ComponentClass)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	if (World == nullptr || !IsValid(Actor) || Actor->GetWorld() != World ||
 		ComponentClass == nullptr ||
 		!ComponentClass->IsChildOf(UActorComponent::StaticClass()))
@@ -152,7 +166,7 @@ bool UFinareWorldLibrary::IsInputKeyDown(
 	APlayerController* PlayerController,
 	FName KeyName)
 {
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	return World != nullptr && IsValid(PlayerController) &&
 		PlayerController->GetWorld() == World && !KeyName.IsNone() &&
 		PlayerController->IsInputKeyDown(FKey(KeyName));
@@ -160,9 +174,107 @@ bool UFinareWorldLibrary::IsInputKeyDown(
 
 float UFinareWorldLibrary::GetWorldTimeSeconds(UObject* WorldContextObject)
 {
-	const UWorld* World =
-		IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	const UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	return World != nullptr ? World->GetTimeSeconds() : 0.0f;
+}
+
+TArray<FString> UFinareWorldLibrary::GetObjectTypePaths(UObject* Object)
+{
+	TArray<FString> Paths;
+	if (!IsValid(Object))
+	{
+		return Paths;
+	}
+
+	for (const UClass* Class = Object->GetClass(); Class != nullptr; Class = Class->GetSuperClass())
+	{
+		Paths.Add(Class->GetPathName());
+	}
+	return Paths;
+}
+
+bool UFinareWorldLibrary::IsObjectOfClass(UObject* Object, const FString& ClassPath)
+{
+	if (!IsValid(Object) || ClassPath.IsEmpty())
+	{
+		return false;
+	}
+
+	const UClass* Candidate = FindObject<UClass>(nullptr, *ClassPath, EFindObjectFlags::None);
+	if (Candidate == nullptr)
+	{
+		return false;
+	}
+	return Candidate->HasAnyClassFlags(CLASS_Interface)
+		? Object->GetClass()->ImplementsInterface(Candidate)
+		: Object->IsA(Candidate);
+}
+
+UObject* UFinareWorldLibrary::CreateObject(
+	UObject* WorldContextObject,
+	UClass* ObjectClass,
+	UObject* Outer)
+{
+	UWorld* World = ResolveRuntimeWorld(WorldContextObject);
+	if (World == nullptr || ObjectClass == nullptr ||
+		ObjectClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return nullptr;
+	}
+	if (ObjectClass->IsChildOf(AActor::StaticClass()) ||
+		ObjectClass->IsChildOf(UActorComponent::StaticClass()) ||
+		ObjectClass->IsChildOf(UBlueprintFunctionLibrary::StaticClass()) ||
+		ObjectClass->IsChildOf(UClass::StaticClass()))
+	{
+		return nullptr;
+	}
+	const UFinareBlueprintGeneratedClass* GeneratedClass =
+		Cast<UFinareBlueprintGeneratedClass>(ObjectClass);
+	if (GeneratedClass != nullptr &&
+		(GeneratedClass->ManagedScriptAsset == nullptr ||
+		 GeneratedClass->ManagedScriptAsset->ScriptClassKind != EFinareClassKind::Object))
+	{
+		return nullptr;
+	}
+	if (Outer == nullptr)
+	{
+		Outer = World;
+	}
+	if (!IsValid(Outer) || Outer->IsTemplate() ||
+		UE::Finare::WorldContext::Resolve(Outer) != World)
+	{
+		return nullptr;
+	}
+	if (ObjectClass->ClassWithin != nullptr &&
+		!Outer->IsA(ObjectClass->ClassWithin))
+	{
+		return nullptr;
+	}
+
+	UObject* Instance = NewObject<UObject>(Outer, ObjectClass);
+	if (Instance == nullptr)
+	{
+		return nullptr;
+	}
+	if (GeneratedClass == nullptr)
+	{
+		return Instance;
+	}
+	FString Error;
+	UFinareComponent* ExecutionHost = UFinareComponent::CreateExecutionHost(
+		Instance,
+		GeneratedClass->ManagedScriptAsset,
+		Error);
+	if (ExecutionHost == nullptr || !ExecutionHost->StartScript())
+	{
+		if (ExecutionHost != nullptr)
+		{
+			ExecutionHost->StopScript();
+		}
+		Instance->MarkAsGarbage();
+		return nullptr;
+	}
+	return Instance;
 }
 
 bool UFinareWorldLibrary::LineTraceSingle(
@@ -175,7 +287,7 @@ bool UFinareWorldLibrary::LineTraceSingle(
 {
 	OutHit = {};
 	OutHitActor = nullptr;
-	UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+	UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 	if (World == nullptr)
 	{
 		return false;

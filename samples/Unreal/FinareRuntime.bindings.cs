@@ -195,8 +195,8 @@ public sealed partial class NativeCounterChild : global::Finare.Unreal.UnrealNat
 
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Interface", Tooltip = "Interface")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
-[global::Finare.Unreal.UnrealTypeAttribute("/Script/CoreUObject.Interface")]
-public sealed partial class Interface : global::Finare.Unreal.UnrealObject
+[global::Finare.Unreal.UnrealTypeAttribute("/Script/CoreUObject.Interface", IsInterface = true)]
+public partial class Interface : global::Finare.Unreal.UnrealObject
 {
     public Interface(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -206,10 +206,10 @@ public sealed partial class Interface : global::Finare.Unreal.UnrealObject
     }
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor", Tooltip = "Actor\u662F\u53EF\u653E\u7F6E\u5728\u5173\u5361\u4E2D\u3001\u6216\u53EF\u5728\u5173\u5361\u4E2D\u751F\u6210\u7684Object\u7684\u57FA\u7C7B\u3002\nActor\u53EF\u80FD\u5305\u542BActor\u7EC4\u4EF6\u7684\u4E00\u4E2A\u96C6\u5408\uFF0C\u53EF\u7528\u4E8E\u63A7\u5236Actor\u7684\u79FB\u52A8\u65B9\u5F0F\u3001\u5176\u6E32\u67D3\u65B9\u5F0F\u7B49\u5185\u5BB9\u3002\nActor\u7684\u5176\u4ED6\u4E3B\u51FD\u6570\u662F\u6E38\u620F\u4E2D\u7F51\u7EDC\u4E0A\u5C5E\u6027\u4E0E\u51FD\u6570\u8C03\u7528\u7684\u590D\u5236\u3002\n\n\nActor\u521D\u59CB\u5316\u62E5\u6709\u591A\u4E2A\u6B65\u9AA4\uFF0C\u4EE5\u4E0B\u662F\u91CD\u8981\u865A\u62DF\u51FD\u6570\u88AB\u8C03\u7528\u7684\u987A\u5E8F\uFF1A\n- UObject::PostLoad\uFF1A\u5BF9\u5173\u5361\u4E2D\u9759\u6001\u653E\u7F6E\u7684Actor\u800C\u8A00\uFF0C\u666E\u901AUObject PostLoad\u5C06\u5728\u7F16\u8F91\u5668\u548C\u6E38\u620F\u8FDB\u7A0B\u4E2D\u88AB\u8C03\u7528\u3002\n                     \u6B64\u51FD\u6570\u4E0D\u4F1A\u4E3A\u65B0\u751F\u6210\u7684actor\u8C03\u7528\u3002\n- UActorComponent::OnComponentCreated\uFF1A\u4E00\u4E2Aactor\u5728\u7F16\u8F91\u5668\u6216\u6E38\u620F\u8FDB\u7A0B\u4E2D\u751F\u6210\u65F6\uFF0C\u5C06\u4E3A\u6240\u6709\u539F\u751F\u7EC4\u4EF6\u8C03\u7528\u6B64\u51FD\u6570\u3002\n                                       \u5BF9\u84DD\u56FE\u521B\u5EFA\u7684\u7EC4\u4EF6\u800C\u8A00\uFF0C\u8FD9\u5C06\u5728\u8BE5\u7EC4\u4EF6\u7684\u6784\u9020\u4E2D\u8C03\u7528\u3002\n                                       \u6B64\u51FD\u6570\u4E0D\u4F1A\u4ECE\u5173\u5361\u4E2D\u52A0\u8F7D\u7684\u7EC4\u4EF6\u8FDB\u884C\u8C03\u7528\u3002\n- AActor::PreRegisterAllComponents\uFF1A\u5BF9\u9759\u6001\u653E\u7F6E\u7684actor\u548C\u62E5\u6709\u539F\u751F\u6839\u7EC4\u4EF6\u7684\u5DF2\u751F\u6210actor\u800C\u8A00\uFF0C\u6B64\u51FD\u6570\u5C06\u5728\u73B0\u5728\u88AB\u8C03\u7528\u3002\n                                    \u5BF9\u4E0D\u5E26\u539F\u751F\u6839\u7EC4\u4EF6\u7684\u84DD\u56FEactor\u800C\u8A00\uFF0C\u8FD9\u4E9B\u6CE8\u518C\u51FD\u6570\u5C06\u5728\u4E4B\u540E\u7684\u6784\u9020\u4E2D\u88AB\u8C03\u7528\u3002\n- UActorComponent::RegisterComponent\uFF1A\u6240\u6709\u7EC4\u4EF6\u5747\u5728\u7F16\u8F91\u5668\u4E2D\u6CE8\u518C\uFF0C\u5728\u8FD0\u884C\u65F6\u8FD9\u5C06\u521B\u5EFA\u5176\u7269\u7406/\u89C6\u89C9\u4EE3\u8868\u3002\n                                      \u8FD9\u4E9B\u8C03\u7528\u53EF\u80FD\u5206\u5E03\u5728\u591A\u4E2A\u5E27\u4E0A\uFF0C\u4F46\u56FA\u5B9A\u5728PreRegisterAllComponents\u4E4B\u540E\u3002\n                                      \u5728UnregisterComponent\u8C03\u7528\u5C06\u5176\u4ECE\u573A\u666F\u4E2D\u79FB\u9664\u540E\uFF0C\u5B83\u4E5F\u53EF\u4EE5\u5728\u4E4B\u540E\u88AB\u8C03\u7528\u3002\n- AActor::PostRegisterAllComponents\uFF1A\u4E3A\u7F16\u8F91\u5668\u548C\u6E38\u620F\u8FDB\u7A0B\u4E2D\u7684\u6240\u6709actor\u8C03\u7528\uFF0C\u8FD9\u662F\u5728\u6240\u6709\u60C5\u51B5\u4E2D\u8C03\u7528\u7684\u6700\u540E\u4E00\u4E2A\u51FD\u6570\u3002\n- AActor::PostActorCreated\uFF1A\u5F53\u4E00\u4E2Aactor\u5728\u7F16\u8F91\u5668\u6216\u6E38\u620F\u8FDB\u7A0B\u4E2D\u88AB\u521B\u5EFA\u65F6\uFF0C\u8FD9\u5C06\u5728\u6784\u9020\u4E4B\u524D\u88AB\u8C03\u7528\u3002\n                            \u8FD9\u4E0D\u4F1A\u4E3A\u4ECE\u5173\u5361\u4E2D\u52A0\u8F7D\u7684\u7EC4\u4EF6\u8FDB\u884C\u8C03\u7528\u3002\n- AActor::UserConstructionScript\uFF1A\u4E3A\u5B9E\u73B0\u6784\u9020\u811A\u672C\u7684\u84DD\u56FE\u800C\u8C03\u7528\u3002\n- AActor::OnConstruction\uFF1A\u5728ExecuteConstruction\u7ED3\u675F\u540E\u8C03\u7528\uFF0C\u5176\u5C06\u8C03\u7528\u84DD\u56FE\u6784\u9020\u811A\u672C\u3002\n                          \u8FD9\u5C06\u5728\u6240\u6709\u84DD\u56FE\u521B\u5EFA\u7684\u7EC4\u4EF6\u5B8C\u5168\u521B\u5EFA\u548C\u6CE8\u518C\u540E\u8C03\u7528\u3002\n                          \u8FD9\u53EA\u4F1A\u4E3A\u5DF2\u751F\u6210actor\u5728\u6E38\u620F\u8FDB\u7A0B\u4E2D\u8C03\u7528\uFF0C\u53EF\u4EE5\u5728\u4FEE\u6539\u84DD\u56FE\u65F6\u5728\u7F16\u8F91\u5668\u4E2D\u91CD\u65B0\u8FD0\u884C\u3002\n- AActor::PreInitializeComponents\uFF1A\u5728InitializeComponent\u5728actor\u7684\u7EC4\u4EF6\u4E0A\u88AB\u8C03\u7528\u4E4B\u524D\u8FDB\u884C\u8C03\u7528\u3002\n                                   \u8FD9\u53EA\u5728\u6E38\u620F\u8FDB\u7A0B\u548C\u7279\u5B9A\u7F16\u8F91\u5668\u9884\u89C8\u7A97\u53E3\u4E2D\u8C03\u7528\u3002\n- UActorComponent::Activate\uFF1A\u53EA\u5728\u7EC4\u4EF6\u8BBE\u7F6E\u4E86bAutoActivate\u65F6\u8FDB\u884C\u8C03\u7528\u3002\n                             \u5982\u7EC4\u4EF6\u88AB\u624B\u52A8\u542F\u7528\uFF0C\u5176\u4E5F\u5C06\u88AB\u8C03\u7528\u3002\n- UActorComponent::InitializeComponent\uFF1A\u8FD9\u53EA\u5728\u7EC4\u4EF6\u62E5\u6709bWantsInitializeComponentSet\u65F6\u8FDB\u884C\u8C03\u7528\u3002\n                                        \u8FD9\u53EA\u5728\u4E00\u4E2A\u6E38\u620F\u4F1A\u8BDD\u4E2D\u53D1\u751F\u4E00\u6B21\u3002\n- AActor::PostInitializeComponents\uFF1A\u5728actor\u7684\u7EC4\u4EF6\u521D\u59CB\u5316\u540E\u8C03\u7528\uFF0C\u53EA\u5728\u6E38\u620F\u8FDB\u7A0B\u548C\u90E8\u5206\u7F16\u8F91\u5668\u9884\u89C8\u4E2D\u8C03\u7528\u3002\n- AActor::BeginPlay\uFF1A\u5728\u5173\u5361\u5F00\u59CBtick\u65F6\u8C03\u7528\uFF0C\u53EA\u5728\u5B9E\u9645\u6E38\u620F\u8FDB\u7A0B\u4E2D\u8C03\u7528\u3002\n                     \u8FD9\u901A\u5E38\u5728PostInitializeComponents\u4E4B\u540E\u53D1\u751F\uFF0C\u4F46\u53EF\u786C\u8054\u7F51\u6216\u5B50actor\u800C\u5EF6\u8FDF\u3002\n\n@\u53C2\u89C1https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors\n@\u53C2\u89C1https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors/ActorLifecycle\n@\u53C2\u89C1UActorComponent")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor", Tooltip = "Actor is the base class for an Object that can be placed or spawned in a level.\nActors may contain a collection of ActorComponents, which can be used to control how actors move, how they are rendered, etc.\nThe other main function of an Actor is the replication of properties and function calls across the network during play.\n\n\nActor initialization has multiple steps, here\u0027s the order of important virtual functions that get called:\n- UObject::PostLoad: For actors statically placed in a level, the normal UObject PostLoad gets called both in the editor and during gameplay.\n                     This is not called for newly spawned actors.\n- UActorComponent::OnComponentCreated: When an actor is spawned in the editor or during gameplay, this gets called for any native components.\n                                       For blueprint-created components, this gets called during construction for that component.\n                                       This is not called for components loaded from a level.\n- AActor::PreRegisterAllComponents: For statically placed actors and spawned actors that have native root components, this gets called now.\n                                    For blueprint actors without a native root component, these registration functions get called later during construction.\n- UActorComponent::RegisterComponent: All components are registered in editor and at runtime, this creates their physical/visual representation.\n                                      These calls may be distributed over multiple frames, but are always after PreRegisterAllComponents.\n                                      This may also get called later on after an UnregisterComponent call removes it from the world.\n- AActor::PostRegisterAllComponents: Called for all actors both in the editor and in gameplay, this is the last function that is called in all cases.\n- AActor::PostActorCreated: When an actor is created in the editor or during gameplay, this gets called right before construction.\n                            This is not called for components loaded from a level.\n- AActor::UserConstructionScript: Called for blueprints that implement a construction script.\n- AActor::OnConstruction: Called at the end of ExecuteConstruction, which calls the blueprint construction script.\n                          This is called after all blueprint-created components are fully created and registered.\n                          This is only called during gameplay for spawned actors, and may get rerun in the editor when changing blueprints.\n- AActor::PreInitializeComponents: Called before InitializeComponent is called on the actor\u0027s components.\n                                   This is only called during gameplay and in certain editor preview windows.\n- UActorComponent::Activate: This will be called only if the component has bAutoActivate set.\n                             It will also got called later on if a component is manually activated.\n- UActorComponent::InitializeComponent: This will be called only if the component has bWantsInitializeComponentSet.\n                                        This only happens once per gameplay session.\n- AActor::PostInitializeComponents: Called after the actor\u0027s components have been initialized, only during gameplay and some editor previews.\n- AActor::BeginPlay: Called when the level starts ticking, only during actual gameplay.\n                     This normally happens right after PostInitializeComponents but can be delayed for networked or child actors.\n\n@see https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors\n@see https://docs.unrealengine.com/Programming/UnrealArchitecture/Actors/ActorLifecycle\n@see UActorComponent")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.Actor")]
-public sealed partial class Actor : global::Finare.Unreal.UnrealObject
+public partial class Actor : global::Finare.Unreal.UnrealObject
 {
     public Actor(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -218,11 +218,11 @@ public sealed partial class Actor : global::Finare.Unreal.UnrealObject
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Rotation", Category = "Transformation", Tooltip = "\u5C06Actor\u7684\u65CB\u8F6C\u7ACB\u5373\u8BBE\u4E3A\u6307\u5B9A\u7684\u65CB\u8F6C\u3002\n\n@param       NewRotation     Actor\u7684\u65B0\u65CB\u8F6C\u3002\n@param       bTeleportPhysics \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n         \u8BBE\u7F6E\u65CB\u8F6C\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u65CB\u8F6C\u3002\n@return      \u8FD4\u56DE\u65CB\u8F6C\u662F\u5426\u8BBE\u7F6E\u6210\u529F\u3002")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Rotation", Category = "Transformation", Tooltip = "Set the Actor\u0027s rotation instantly to the specified rotation.\n\n@param       NewRotation     The new rotation for the Actor.\n@param       bTeleportPhysics Whether we teleport the physics state (if physics collision is enabled for this object).\n                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n         Setting the rotation without teleporting will not update the rotation of simulated child/attached components.\n@return      Whether the rotation was successfully set.")]
     public bool SetActorRotation(global::Finare.Unreal.UnrealRotator newRotation, bool bTeleportPhysics)
         => Invoke<bool, global::Finare.Unreal.UnrealRotator, bool>(0x91CB9E715E3273B0UL, "/Script/Engine.Actor:K2_SetActorRotation", newRotation, bTeleportPhysics);
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Transform", Category = "Transformation", Tooltip = "\u5C06Actors\u53D8\u6362\u8BBE\u4E3A\u6307\u5B9A\u7684\u53D8\u6362\u3002\n@param NewTransform          \u65B0\u7684\u53D8\u6362\u3002\n@param bSweep                        \u662F\u5426\u626B\u63CF\u5230\u76EE\u6807\u4F4D\u7F6E\uFF0C\u6CBF\u9014\u89E6\u53D1\u91CD\u53E0\uFF0C\u5E76\u5728\u88AB\u67D0\u7269\u963B\u6321\u65F6\u505C\u6B62\u5230\u8FBE\u76EE\u6807\u3002\n                                                     \u53EA\u6709\u6839\u7EC4\u4EF6\u88AB\u626B\u63CF\u5E76\u68C0\u67E5\u963B\u6321\u78B0\u649E\uFF0C\u5B50\u7EC4\u4EF6\u79FB\u52A8\u65F6\u4E0D\u8FDB\u884C\u626B\u63CF\u3002\u5982\u679C\u78B0\u649E\u5173\u95ED\uFF0C\u8FD9\u6CA1\u6709\u6548\u679C\u3002@param bTeleport                     \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                                                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u5982\u679CCCD\u6253\u5F00\u4E14\u672A\u4F20\u9001\uFF0C\u8FD9\u5C06\u5F71\u54CD\u6574\u4E2A\u626B\u63CF\u4F53\u79EF\u4E0A\u7684Object\u3002\n                         \u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n                         \u8BBE\u7F6E\u53D8\u6362\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u53D8\u6362\u3002")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Actor Transform", Category = "Transformation", Tooltip = "Set the Actors transform to the specified one.\n@param NewTransform          The new transform.\n@param bSweep                        Whether we sweep to the destination location, triggering overlaps along the way and stopping short of the target if blocked by something.\n                                                     Only the root component is swept and checked for blocking collision, child components move without sweeping. If collision is off, this has no effect.\n@param bTeleport                     Whether we teleport the physics state (if physics collision is enabled for this object).\n                                                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                                                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n                                                     If CCD is on and not teleporting, this will affect objects along the entire swept volume.\n                         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n                         Setting the transform without teleporting will not update the transform of simulated child/attached components.")]
     public bool SetActorTransform(global::Finare.Unreal.UnrealTransform newTransform, bool bSweep, out HitResult sweepHitResult, bool bTeleport)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
@@ -239,12 +239,12 @@ public sealed partial class Actor : global::Finare.Unreal.UnrealObject
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Tick Group", Category = "Actor|Tick", Tooltip = "\u8BBE\u7F6E\u6B64actor\u7684ticking\u7EC4\u3002\n@param NewTickGroup \u8981\u8FDB\u884C\u6307\u5B9A\u7684\u65B0\u503C")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Tick Group", Category = "Actor|Tick", Tooltip = "Sets the ticking group for this actor.\n@param NewTickGroup the new value to assign")]
     public void SetTickGroup(ETickingGroup newTickGroup)
         => Invoke<ETickingGroup>(0x6D54E7B208E979BFUL, "/Script/Engine.Actor:SetTickGroup", newTickGroup);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EEnd Play Reason", Tooltip = "\u6307\u5B9A\u6B63\u5728\u4ECE\u5173\u5361\u4E2D\u5220\u9664/\u79FB\u9664actor\u7684\u539F\u56E0")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EEnd Play Reason", Tooltip = "Specifies why an actor is being deleted/removed from a level")]
 [global::Finare.Unreal.UnrealEnumAttribute("/Script/Engine.EEndPlayReason", "EEndPlayReason")]
 [global::Finare.Unreal.UnrealValueAttribute]
 public readonly record struct EEndPlayReason(long Value) : global::Finare.Unreal.IUnrealEnumValue
@@ -265,7 +265,7 @@ public readonly record struct EEndPlayReason(long Value) : global::Finare.Unreal
     public global::Finare.Unreal.UnrealEnumValue ToUntyped() => new("/Script/Engine.EEndPlayReason", Value);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "ETicking Group", Tooltip = "\u51B3\u5B9Atick\u51FD\u6570\u6240\u5C5E\u7684tick\u7EC4\u3002")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "ETicking Group", Tooltip = "Determines which ticking group a tick function belongs to.")]
 [global::Finare.Unreal.UnrealEnumAttribute("/Script/Engine.ETickingGroup", "ETickingGroup")]
 [global::Finare.Unreal.UnrealValueAttribute]
 public readonly record struct ETickingGroup(long Value) : global::Finare.Unreal.IUnrealEnumValue
@@ -284,10 +284,10 @@ public readonly record struct ETickingGroup(long Value) : global::Finare.Unreal.
     public global::Finare.Unreal.UnrealEnumValue ToUntyped() => new("/Script/Engine.ETickingGroup", Value);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Gameplay\u9759\u6001", Tooltip = "\u62E5\u6709\u5B9E\u7528gameplay\u6548\u7528\u51FD\u6570\uFF08\u53EF\u4ECE\u84DD\u56FE\u548CC\u002B\u002B\u8FDB\u884C\u8C03\u7528\uFF09\u7684\u9759\u6001\u7C7B")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Gameplay Statics", Tooltip = "Static class with useful gameplay utility functions that can be called from both Blueprint and C\u002B\u002B")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.GameplayStatics")]
-public sealed partial class GameplayStatics : global::Finare.Unreal.UnrealStaticService
+public partial class GameplayStatics : global::Finare.Unreal.UnrealStaticService
 {
     public GameplayStatics(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -296,24 +296,24 @@ public sealed partial class GameplayStatics : global::Finare.Unreal.UnrealStatic
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get All Actors Of Class", Category = "Actor", Tooltip = "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002", WorldContextParameter = "WorldContextObject")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get All Actors Of Class", Category = "Actor", Tooltip = "Find all Actors in the world of the specified class.\nThis will be slow if there are many actors of the specified class.\n@param  ActorClass      Class of Actor to find. Must be specified or result array will be empty.\n@param  OutActors       Output array of Actors of the specified class.", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public void GetAllActorsOfClass(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealClassHandle actorClass, out global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> outActors)
+    public void GetAllActorsOfClass(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealClassHandle actorClass, out global::System.Collections.Generic.IReadOnlyList<Actor?> outActors)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
             0x373F7E65F4E2E77BUL,
             "/Script/Engine.GameplayStatics:GetAllActorsOfClass",
             typeof(void),
             [
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input, worldContextObject),
+                new(typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input, worldContextObject),
                 new(typeof(global::Finare.Unreal.UnrealClassHandle), global::Finare.Unreal.UnrealParameterDirection.Input, actorClass),
-                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>), global::Finare.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<Actor>), global::Finare.Unreal.UnrealParameterDirection.Output, null),
             ]);
-        outActors = (global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[0]!;
+        outActors = (global::System.Collections.Generic.IReadOnlyList<Actor?>)__unifiedScriptResult.Outputs[0]!;
     }
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u547D\u4E2D\u7ED3\u679C", Tooltip = "\u5305\u542B\u68C0\u6D4B\u4E00\u4E2A\u547D\u4E2D\u4FE1\u606F\u7684\u7ED3\u6784\uFF0C\u5982\u5F71\u54CD\u7684\u4E00\u4E2A\u70B9\u548C\u6B64\u70B9\u4E0A\u7684\u8868\u9762\u6CD5\u7EBF\u3002")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Hit Result", Tooltip = "Structure containing information about one hit of a trace, such as point of impact and surface normal at that point.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute(null)]
 [global::Finare.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]
 [global::Finare.Unreal.UnrealValueAttribute]
@@ -336,10 +336,10 @@ public readonly record struct HitResult(
     [property: global::Finare.Unreal.UnrealStructFieldAttribute(15, "bBlockingHit")] bool bBlockingHit,
     [property: global::Finare.Unreal.UnrealStructFieldAttribute(16, "bStartPenetrating")] bool bStartPenetrating);
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u91CD\u64AD\u5B50\u7CFB\u7EDF", Tooltip = "\u91CD\u64AD\u5B50\u7CFB\u7EDF")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Replay Subsystem", Tooltip = "Replay Subsystem")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.GameInstanceSubsystem")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.ReplaySubsystem")]
-public sealed partial class ReplaySubsystem : global::Finare.Unreal.UnrealObject
+public partial class ReplaySubsystem : global::Finare.Unreal.UnrealObject
 {
     public ReplaySubsystem(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -348,7 +348,7 @@ public sealed partial class ReplaySubsystem : global::Finare.Unreal.UnrealObject
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Active Replay Name", Category = "Replay", Tooltip = "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Active Replay Name", Category = "Replay", Tooltip = "Get current recording/playing replay name\n\n@return FString Name of relpay (session id, file name, etc)")]
     public string GetActiveReplayName()
         => Invoke<string>(0xC04A7D0A6F66D2B8UL, "/Script/Engine.ReplaySubsystem:GetActiveReplayName");
 
@@ -361,10 +361,10 @@ public sealed partial class ReplaySubsystem : global::Finare.Unreal.UnrealObject
         => Invoke<bool>(0x899D1D62B656ED89UL, "/Script/Engine.ReplaySubsystem:IsRecording");
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u6D41\u9001\u4E16\u754C\u5B50\u7CFB\u7EDF\u63A5\u53E3", Tooltip = "\u6D41\u9001\u4E16\u754C\u5B50\u7CFB\u7EDF\u63A5\u53E3")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Streaming World Subsystem Interface", Tooltip = "Streaming World Subsystem Interface")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
-[global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.StreamingWorldSubsystemInterface")]
-public sealed partial class StreamingWorldSubsystemInterface : global::Finare.Unreal.UnrealObject
+[global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.StreamingWorldSubsystemInterface", IsInterface = true)]
+public partial class StreamingWorldSubsystemInterface : global::Finare.Unreal.Generated.Interface
 {
     public StreamingWorldSubsystemInterface(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -374,10 +374,10 @@ public sealed partial class StreamingWorldSubsystemInterface : global::Finare.Un
     }
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u5B50\u7CFB\u7EDF\u84DD\u56FE\u5E93", Tooltip = "\u5B50\u7CFB\u7EDF\u84DD\u56FE\u5E93")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Subsystem Blueprint Library", Tooltip = "Subsystem Blueprint Library")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.SubsystemBlueprintLibrary")]
-public sealed partial class SubsystemBlueprintLibrary : global::Finare.Unreal.UnrealStaticService
+public partial class SubsystemBlueprintLibrary : global::Finare.Unreal.UnrealStaticService
 {
     public SubsystemBlueprintLibrary(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -386,31 +386,31 @@ public sealed partial class SubsystemBlueprintLibrary : global::Finare.Unreal.Un
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Game Instance Subsystem", Category = "GameInstance Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Game Instance Subsystem", Category = "GameInstance Subsystems", Tooltip = "Get a Game Instance Subsystem from the Game Instance associated with the provided context", WorldContextParameter = "ContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle GetGameInstanceSubsystem(global::Finare.Unreal.UnrealObjectHandle contextObject, global::Finare.Unreal.UnrealClassHandle @class)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle>(0x42E04F4834C375CFUL, "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem", contextObject, @class);
+    public global::Finare.Unreal.UnrealObject? GetGameInstanceSubsystem(global::Finare.Unreal.UnrealObject? contextObject, global::Finare.Unreal.UnrealClassHandle @class)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle>(0x42E04F4834C375CFUL, "/Script/Engine.SubsystemBlueprintLibrary:GetGameInstanceSubsystem", contextObject, @class);
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Sub System from Player Controller", Category = "LocalPlayer Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Sub System from Player Controller", Category = "LocalPlayer Subsystems", Tooltip = "Get a Local Player Subsystem from the LocalPlayer associated with the provided context\nIf the player controller isn\u0027t associated to a LocalPlayer nullptr is returned")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle GetLocalPlayerSubSystemFromPlayerController(global::Finare.Unreal.UnrealObjectHandle playerController, global::Finare.Unreal.UnrealClassHandle @class)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle>(0x81E45AF78119039DUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController", playerController, @class);
+    public global::Finare.Unreal.UnrealObject? GetLocalPlayerSubSystemFromPlayerController(global::Finare.Unreal.UnrealObject? playerController, global::Finare.Unreal.UnrealClassHandle @class)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle>(0x81E45AF78119039DUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubSystemFromPlayerController", playerController, @class);
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Subsystem", Category = "LocalPlayer Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Local Player Subsystem", Category = "LocalPlayer Subsystems", Tooltip = "Get a Local Player Subsystem from the Local Player associated with the provided context", WorldContextParameter = "ContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle GetLocalPlayerSubsystem(global::Finare.Unreal.UnrealObjectHandle contextObject, global::Finare.Unreal.UnrealClassHandle @class)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle>(0x6CBE9559DB0FD3ACUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem", contextObject, @class);
+    public global::Finare.Unreal.UnrealObject? GetLocalPlayerSubsystem(global::Finare.Unreal.UnrealObject? contextObject, global::Finare.Unreal.UnrealClassHandle @class)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle>(0x6CBE9559DB0FD3ACUL, "/Script/Engine.SubsystemBlueprintLibrary:GetLocalPlayerSubsystem", contextObject, @class);
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get World Subsystem", Category = "GameInstance Subsystems", Tooltip = "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF", WorldContextParameter = "ContextObject")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get World Subsystem", Category = "GameInstance Subsystems", Tooltip = "Get a World Subsystem from the World associated with the provided context", WorldContextParameter = "ContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle GetWorldSubsystem(global::Finare.Unreal.UnrealObjectHandle contextObject, global::Finare.Unreal.UnrealClassHandle @class)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle>(0x2401498FBF61013EUL, "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem", contextObject, @class);
+    public global::Finare.Unreal.UnrealObject? GetWorldSubsystem(global::Finare.Unreal.UnrealObject? contextObject, global::Finare.Unreal.UnrealClassHandle @class)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle>(0x2401498FBF61013EUL, "/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem", contextObject, @class);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u4E16\u754C\u5206\u533A\u5B50\u7CFB\u7EDF", Tooltip = "UWorldPartitionSubsystem")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "World Partition Subsystem", Tooltip = "UWorldPartitionSubsystem")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.TickableWorldSubsystem", "/Script/Engine.StreamingWorldSubsystemInterface")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.WorldPartitionSubsystem")]
-public sealed partial class WorldPartitionSubsystem : global::Finare.Unreal.UnrealObject
+public partial class WorldPartitionSubsystem : global::Finare.Unreal.UnrealObject
 {
     public WorldPartitionSubsystem(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -419,15 +419,15 @@ public sealed partial class WorldPartitionSubsystem : global::Finare.Unreal.Unre
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is All Streaming Completed", Category = "Streaming", Tooltip = "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002")]
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is All Streaming Completed", Category = "Streaming", Tooltip = "Returns true if world partition is done streaming levels, adding them to the world or removing them from the world.")]
     public bool IsAllStreamingCompleted()
         => Invoke<bool>(0x7F31DA79156A9F6BUL, "/Script/Engine.WorldPartitionSubsystem:IsAllStreamingCompleted");
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u589E\u5F3A\u8F93\u5165\u5B50\u7CFB\u7EDF\u63A5\u53E3", Tooltip = "\u589E\u5F3A\u8F93\u5165\u5B50\u7CFB\u7EDF\u63A5\u53E3")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Enhanced Input Subsystem Interface", Tooltip = "Enhanced Input Subsystem Interface")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
-[global::Finare.Unreal.UnrealTypeAttribute("/Script/EnhancedInput.EnhancedInputSubsystemInterface")]
-public sealed partial class EnhancedInputSubsystemInterface : global::Finare.Unreal.UnrealObject
+[global::Finare.Unreal.UnrealTypeAttribute("/Script/EnhancedInput.EnhancedInputSubsystemInterface", IsInterface = true)]
+public partial class EnhancedInputSubsystemInterface : global::Finare.Unreal.Generated.Interface
 {
     public EnhancedInputSubsystemInterface(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -436,31 +436,31 @@ public sealed partial class EnhancedInputSubsystemInterface : global::Finare.Unr
     {
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Mapping Context", Category = "Input", Tooltip = "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002")]
-    public void AddMappingContext(global::Finare.Unreal.UnrealObjectHandle mappingContext, int priority, ModifyContextOptions options)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, int, ModifyContextOptions>(0xDE98945928C593E2UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext", mappingContext, priority, options);
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Mapping Context", Category = "Input", Tooltip = "Add a control mapping context.\n@param MappingContext                A set of key to action mappings to apply to this player\n@param Priority                              Higher priority mappings will be applied first and, if they consume input, will block lower priority mappings.\n@param Options                               Options to consider when adding this mapping context.")]
+    public void AddMappingContext(global::Finare.Unreal.UnrealObject? mappingContext, int priority, ModifyContextOptions options)
+        => Invoke<global::Finare.Unreal.UnrealObject?, int, ModifyContextOptions>(0xDE98945928C593E2UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:AddMappingContext", mappingContext, priority, options);
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Has Mapping Context", Category = "Input|Mapping Queries", Tooltip = "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue")]
-    public bool HasMappingContext(global::Finare.Unreal.UnrealObjectHandle mappingContext, out int outFoundPriority)
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Has Mapping Context", Category = "Input|Mapping Queries", Tooltip = "Check if a mapping context is applied to this subsystem\u0027s owner.\n\n@param MappingContext                The mapping context to search for on the subsystem\u0027s owner.\n@param OutFoundPriority              The priority of the mapping context if it is applied. -1 if the context is not applied\n@return      True if the mapping context is applied")]
+    public bool HasMappingContext(global::Finare.Unreal.UnrealObject? mappingContext, out int outFoundPriority)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
             0x6B45E6BF64B268B5UL,
             "/Script/EnhancedInput.EnhancedInputSubsystemInterface:HasMappingContext",
             typeof(bool),
             [
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input, mappingContext),
+                new(typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input, mappingContext),
                 new(typeof(int), global::Finare.Unreal.UnrealParameterDirection.Output, null),
             ]);
         outFoundPriority = (int)__unifiedScriptResult.Outputs[0]!;
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Remove Mapping Context", Category = "Input", Tooltip = "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879")]
-    public void RemoveMappingContext(global::Finare.Unreal.UnrealObjectHandle mappingContext, ModifyContextOptions options)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, ModifyContextOptions>(0xAE4AECB5DAB4A4E5UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext", mappingContext, options);
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Remove Mapping Context", Category = "Input", Tooltip = "Remove a specific control context.\nThis is safe to call even if the context is not applied.\n@param MappingContext         Context to remove from the player\n@param Options                        Options to consider when removing this input mapping context")]
+    public void RemoveMappingContext(global::Finare.Unreal.UnrealObject? mappingContext, ModifyContextOptions options)
+        => Invoke<global::Finare.Unreal.UnrealObject?, ModifyContextOptions>(0xAE4AECB5DAB4A4E5UL, "/Script/EnhancedInput.EnhancedInputSubsystemInterface:RemoveMappingContext", mappingContext, options);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u4FEE\u6539\u4E0A\u4E0B\u6587\u9009\u9879", Tooltip = "\u4F5C\u4E3A\u53C2\u6570\u4F20\u5165\u7528\u4E8E\u6DFB\u52A0/\u79FB\u9664\u4E0A\u4E0B\u6587")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Modify Context Options", Tooltip = "Passed in as params for Adding/Remove input contexts")]
 [global::Finare.Unreal.UnrealInheritanceAttribute(null)]
 [global::Finare.Unreal.UnrealStructAttribute("/Script/EnhancedInput.ModifyContextOptions", "FModifyContextOptions")]
 [global::Finare.Unreal.UnrealValueAttribute]
@@ -469,7 +469,7 @@ public readonly record struct ModifyContextOptions(
     [property: global::Finare.Unreal.UnrealStructFieldAttribute(1, "bIgnoreAllPressedKeysUntilRelease")] bool bIgnoreAllPressedKeysUntilRelease,
     [property: global::Finare.Unreal.UnrealStructFieldAttribute(2, "bNotifyUserSettings")] bool bNotifyUserSettings);
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EUnified Script Interop Mode", Tooltip = "EUnified Script Interop Mode")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EFinare Interop Mode", Tooltip = "EFinare Interop Mode")]
 [global::Finare.Unreal.UnrealEnumAttribute("/Script/FinareRuntime.EFinareInteropMode", "EFinareInteropMode")]
 [global::Finare.Unreal.UnrealValueAttribute]
 public readonly record struct EFinareInteropMode(long Value) : global::Finare.Unreal.IUnrealEnumValue
@@ -486,10 +486,10 @@ public readonly record struct EFinareInteropMode(long Value) : global::Finare.Un
     public global::Finare.Unreal.UnrealEnumValue ToUntyped() => new("/Script/FinareRuntime.EFinareInteropMode", Value);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Actor", Tooltip = "Placeable Actor whose gameplay behavior is supplied by a managed\nUnrealActorScript. The native class remains the stable Blueprint/UObject\nidentity while managed generations can be reloaded independently.")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Actor", Tooltip = "Placeable Actor whose gameplay behavior is supplied by a managed\nUnrealActorScript. The native class remains the stable Blueprint/UObject\nidentity while managed generations can be reloaded independently.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.Actor")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareActor")]
-public sealed partial class FinareActor : global::Finare.Unreal.UnrealObject
+public partial class FinareActor : global::Finare.Unreal.Generated.Actor
 {
     public FinareActor(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -512,14 +512,14 @@ public sealed partial class FinareActor : global::Finare.Unreal.UnrealObject
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Component", Category = "Finare")]
-    public global::Finare.Unreal.UnrealObjectHandle ScriptComponent
+    public FinareComponent? ScriptComponent
     {
-        get => ReadProperty<global::Finare.Unreal.UnrealObjectHandle>(0x42B3C00010585E99UL, "/Script/FinareRuntime.FinareActor:ScriptComponent");
+        get => ReadProperty<FinareComponent?>(0x42B3C00010585E99UL, "/Script/FinareRuntime.FinareActor:ScriptComponent");
     }
 
-    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Unified Script Component", Category = "Finare", Tooltip = "Get Unified Script Component")]
-    public global::Finare.Unreal.UnrealObjectHandle GetFinareComponent()
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle>(0x43B1C3EAEF469121UL, "/Script/FinareRuntime.FinareActor:GetFinareComponent");
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Finare Component", Category = "Finare", Tooltip = "Get Finare Component")]
+    public FinareComponent? GetFinareComponent()
+        => Invoke<FinareComponent?>(0x43B1C3EAEF469121UL, "/Script/FinareRuntime.FinareActor:GetFinareComponent");
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Increment Managed Tick Count", Category = "Finare|State", Tooltip = "Increment Managed Tick Count")]
     public void IncrementManagedTickCount()
@@ -542,10 +542,10 @@ public sealed partial class FinareActor : global::Finare.Unreal.UnrealObject
         => Invoke(0x45AD12A08A833760UL, "/Script/FinareRuntime.FinareActor:StopManagedBehavior");
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Callback Service", Tooltip = "Public sample of a reflected API that invokes and retains a typed callback.")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Callback Service", Tooltip = "Public sample of a reflected API that invokes and retains a typed callback.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareCallbackService")]
-public sealed partial class FinareCallbackService : global::Finare.Unreal.UnrealObject
+public partial class FinareCallbackService : global::Finare.Unreal.UnrealObject
 {
     public FinareCallbackService(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -567,8 +567,8 @@ public sealed partial class FinareCallbackService : global::Finare.Unreal.Unreal
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Create", Category = "Finare|Callbacks", Tooltip = "Create")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle Create(global::Finare.Unreal.UnrealObjectHandle outer)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle>(0x375C5A1E5CB112ECUL, "/Script/FinareRuntime.FinareCallbackService:Create", outer);
+    public FinareCallbackService? Create(global::Finare.Unreal.UnrealObject? outer)
+        => Invoke<FinareCallbackService?, global::Finare.Unreal.UnrealObject?>(0x375C5A1E5CB112ECUL, "/Script/FinareRuntime.FinareCallbackService:Create", outer);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Evaluate", Category = "Finare|Callbacks", Tooltip = "Evaluate")]
     public bool Evaluate(int value, ref string text, out global::Finare.Unreal.UnrealVector position)
@@ -628,10 +628,10 @@ public sealed partial class FinareCallbackService : global::Finare.Unreal.Unreal
     }
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Component", Tooltip = "Unified Script Component")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Component", Tooltip = "Finare Component")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.ActorComponent")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareComponent")]
-public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
+public partial class FinareComponent : global::Finare.Unreal.UnrealObject
 {
     public FinareComponent(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -730,7 +730,7 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
         set => WriteProperty(0xBAD822FFE8B66947UL, "/Script/FinareRuntime.FinareComponent:bTickAutomatically", value);
     }
 
-    public delegate void OnBenchmarkSignalHandler(int value, float weight, bool bEnabled, global::Finare.Unreal.UnrealObjectHandle context);
+    public delegate void OnBenchmarkSignalHandler(int value, float weight, bool bEnabled, global::Finare.Unreal.UnrealObject? context);
 
     public static global::Finare.Unreal.UnrealEventDescriptor OnBenchmarkSignalEvent { get; } = new(
         0x67725D77F98AC301UL,
@@ -742,14 +742,14 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
             new("Value", typeof(int), global::Finare.Unreal.UnrealParameterDirection.Input),
             new("Weight", typeof(float), global::Finare.Unreal.UnrealParameterDirection.Input),
             new("bEnabled", typeof(bool), global::Finare.Unreal.UnrealParameterDirection.Input),
-            new("Context", typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input),
         ]);
 
     [global::Finare.Unreal.UnrealEventEndpointAttribute("/Script/FinareRuntime.FinareComponent:OnBenchmarkSignal")]
     public global::Finare.Unreal.IUnrealEventSubscription SubscribeOnBenchmarkSignal(OnBenchmarkSignalHandler handler)
         => SubscribeEvent(OnBenchmarkSignalEvent, handler);
 
-    public delegate void OnManagedSignalHandler(int value, global::Finare.Unreal.UnrealObjectHandle context);
+    public delegate void OnManagedSignalHandler(int value, global::Finare.Unreal.UnrealObject? context);
 
     public static global::Finare.Unreal.UnrealEventDescriptor OnManagedSignalEvent { get; } = new(
         0xF45861ECC2547DA3UL,
@@ -759,7 +759,7 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
         global::Finare.Unreal.UnrealDelegateKind.Multicast,
         [
             new("Value", typeof(int), global::Finare.Unreal.UnrealParameterDirection.Input),
-            new("Context", typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input),
         ]);
 
     [global::Finare.Unreal.UnrealEventEndpointAttribute("/Script/FinareRuntime.FinareComponent:OnManagedSignal")]
@@ -779,12 +779,12 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
         => Invoke<global::Finare.Unreal.UnrealVector, float, float, float, float>(0xE498D3BE363CFC03UL, "/Script/FinareRuntime.FinareComponent:ApplyBenchmarkActorInput", moveForward, moveRight, lookHorizontal, lookVertical);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Benchmark Signal", Category = "Finare|Verification", Tooltip = "Broadcast Benchmark Signal")]
-    public void BroadcastBenchmarkSignal(int value, float weight, bool bEnabled, global::Finare.Unreal.UnrealObjectHandle context)
-        => Invoke<int, float, bool, global::Finare.Unreal.UnrealObjectHandle>(0x17777266611126DDUL, "/Script/FinareRuntime.FinareComponent:BroadcastBenchmarkSignal", value, weight, bEnabled, context);
+    public void BroadcastBenchmarkSignal(int value, float weight, bool bEnabled, global::Finare.Unreal.UnrealObject? context)
+        => Invoke<int, float, bool, global::Finare.Unreal.UnrealObject?>(0x17777266611126DDUL, "/Script/FinareRuntime.FinareComponent:BroadcastBenchmarkSignal", value, weight, bEnabled, context);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Managed Signal", Category = "Finare|Verification", Tooltip = "Broadcast Managed Signal")]
-    public void BroadcastManagedSignal(int value, global::Finare.Unreal.UnrealObjectHandle context)
-        => Invoke<int, global::Finare.Unreal.UnrealObjectHandle>(0x7432AEE9EE90FEFFUL, "/Script/FinareRuntime.FinareComponent:BroadcastManagedSignal", value, context);
+    public void BroadcastManagedSignal(int value, global::Finare.Unreal.UnrealObject? context)
+        => Invoke<int, global::Finare.Unreal.UnrealObject?>(0x7432AEE9EE90FEFFUL, "/Script/FinareRuntime.FinareComponent:BroadcastManagedSignal", value, context);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Benchmark Array", Category = "Finare|Verification", Tooltip = "Echo Benchmark Array")]
     public global::System.Collections.Generic.IReadOnlyList<int> EchoBenchmarkArray(global::System.Collections.Generic.IReadOnlyList<int> values)
@@ -799,8 +799,8 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
         => Invoke<int, string, int>(0x7568C562BB811EF1UL, "/Script/FinareRuntime.FinareComponent:GetScriptStateInt32", name, fallback);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Script Target", Category = "Finare", Tooltip = "UObject whose behavior is implemented by the managed script.")]
-    public global::Finare.Unreal.UnrealObjectHandle GetScriptTarget()
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle>(0x6B7C25A6AE2F25CBUL, "/Script/FinareRuntime.FinareComponent:GetScriptTarget");
+    public global::Finare.Unreal.UnrealObject? GetScriptTarget()
+        => Invoke<global::Finare.Unreal.UnrealObject?>(0x6B7C25A6AE2F25CBUL, "/Script/FinareRuntime.FinareComponent:GetScriptTarget");
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Script State Overridden", Category = "Finare|State", Tooltip = "Is Script State Overridden")]
     public bool IsScriptStateOverridden(string name)
@@ -843,10 +843,10 @@ public sealed partial class FinareComponent : global::Finare.Unreal.UnrealObject
         => Invoke(0x1924628D08B9D084UL, "/Script/FinareRuntime.FinareComponent:StopScript");
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Interop Contract", Tooltip = "Unified Script Interop Contract")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Interop Contract", Tooltip = "Finare Interop Contract")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
-[global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareInteropContract")]
-public sealed partial class FinareInteropContract : global::Finare.Unreal.UnrealObject
+[global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareInteropContract", IsInterface = true)]
+public partial class FinareInteropContract : global::Finare.Unreal.Generated.Interface
 {
     public FinareInteropContract(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -860,10 +860,10 @@ public sealed partial class FinareInteropContract : global::Finare.Unreal.Unreal
         => Invoke<int, int>(0xF65E74314F627653UL, "/Script/FinareRuntime.FinareInteropContract:TransformManagedValue", value);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Interop Fixture", Tooltip = "Public interop fixture used to keep generated common-type bindings executable.")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Interop Fixture", Tooltip = "Public interop fixture used to keep generated common-type bindings executable.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object", "/Script/FinareRuntime.FinareInteropContract")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareInteropFixture")]
-public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealObject
+public partial class FinareInteropFixture : global::Finare.Unreal.UnrealObject
 {
     public FinareInteropFixture(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -873,9 +873,9 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Actor Array Value", Category = "Finare|Interop|References")]
-    public global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> ActorArrayValue
+    public global::System.Collections.Generic.IReadOnlyList<Actor?> ActorArrayValue
     {
-        get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>>(0x8EB9C3D0EFD576E7UL, "/Script/FinareRuntime.FinareInteropFixture:ActorArrayValue");
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<Actor?>>(0x8EB9C3D0EFD576E7UL, "/Script/FinareRuntime.FinareInteropFixture:ActorArrayValue");
         set => WriteProperty(0x8EB9C3D0EFD576E7UL, "/Script/FinareRuntime.FinareInteropFixture:ActorArrayValue", value);
     }
 
@@ -950,9 +950,9 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Interface Value", Category = "Finare|Interop")]
-    public global::Finare.Unreal.UnrealObjectHandle InterfaceValue
+    public FinareInteropContract? InterfaceValue
     {
-        get => ReadProperty<global::Finare.Unreal.UnrealObjectHandle>(0x78CAAC4A5E960044UL, "/Script/FinareRuntime.FinareInteropFixture:InterfaceValue");
+        get => ReadProperty<FinareInteropContract?>(0x78CAAC4A5E960044UL, "/Script/FinareRuntime.FinareInteropFixture:InterfaceValue");
         set => WriteProperty(0x78CAAC4A5E960044UL, "/Script/FinareRuntime.FinareInteropFixture:InterfaceValue", value);
     }
 
@@ -971,9 +971,9 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Object Value", Category = "Finare|Interop")]
-    public global::Finare.Unreal.UnrealObjectHandle ObjectValue
+    public global::Finare.Unreal.UnrealObject? ObjectValue
     {
-        get => ReadProperty<global::Finare.Unreal.UnrealObjectHandle>(0x1B93343B6F737BB8UL, "/Script/FinareRuntime.FinareInteropFixture:ObjectValue");
+        get => ReadProperty<global::Finare.Unreal.UnrealObject?>(0x1B93343B6F737BB8UL, "/Script/FinareRuntime.FinareInteropFixture:ObjectValue");
         set => WriteProperty(0x1B93343B6F737BB8UL, "/Script/FinareRuntime.FinareInteropFixture:ObjectValue", value);
     }
 
@@ -1040,7 +1040,7 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         set => WriteProperty(0x9292A61993ED7DD8UL, "/Script/FinareRuntime.FinareInteropFixture:VectorValue", value);
     }
 
-    public delegate void OnInteropChangedHandler(int newValue, global::Finare.Unreal.UnrealObjectHandle context);
+    public delegate void OnInteropChangedHandler(int newValue, global::Finare.Unreal.UnrealObject? context);
 
     public static global::Finare.Unreal.UnrealEventDescriptor OnInteropChangedEvent { get; } = new(
         0x699E36924EB07412UL,
@@ -1050,7 +1050,7 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         global::Finare.Unreal.UnrealDelegateKind.Multicast,
         [
             new("NewValue", typeof(int), global::Finare.Unreal.UnrealParameterDirection.Input),
-            new("Context", typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input),
         ]);
 
     [global::Finare.Unreal.UnrealEventEndpointAttribute("/Script/FinareRuntime.FinareInteropFixture:OnInteropChanged")]
@@ -1073,16 +1073,16 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         => AddWithDefault(value, 1);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Interop Changed", Category = "Finare|Interop", Tooltip = "Broadcast Interop Changed")]
-    public void BroadcastInteropChanged(int newValue, global::Finare.Unreal.UnrealObjectHandle context)
-        => Invoke<int, global::Finare.Unreal.UnrealObjectHandle>(0x5F6D3A74F48CB194UL, "/Script/FinareRuntime.FinareInteropFixture:BroadcastInteropChanged", newValue, context);
+    public void BroadcastInteropChanged(int newValue, global::Finare.Unreal.UnrealObject? context)
+        => Invoke<int, global::Finare.Unreal.UnrealObject?>(0x5F6D3A74F48CB194UL, "/Script/FinareRuntime.FinareInteropFixture:BroadcastInteropChanged", newValue, context);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Count Set", Category = "Finare|Interop", Tooltip = "Count Set")]
     public int CountSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlySet<int>>(0xCBEA356CD87913B1UL, "/Script/FinareRuntime.FinareInteropFixture:CountSet", values);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Actor Array", Category = "Finare|Interop|References", Tooltip = "Echo Actor Array")]
-    public global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> EchoActorArray(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> values)
-        => Invoke<global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>, global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>>(0xEFFDEC13B1E43A23UL, "/Script/FinareRuntime.FinareInteropFixture:EchoActorArray", values);
+    public global::System.Collections.Generic.IReadOnlyList<Actor?> EchoActorArray(global::System.Collections.Generic.IReadOnlyList<Actor?> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<Actor?>, global::System.Collections.Generic.IReadOnlyList<Actor?>>(0xEFFDEC13B1E43A23UL, "/Script/FinareRuntime.FinareInteropFixture:EchoActorArray", values);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Actor Class Set", Category = "Finare|Interop|References", Tooltip = "Echo Actor Class Set")]
     public global::System.Collections.Generic.IReadOnlySet<global::Finare.Unreal.UnrealClassHandle> EchoActorClassSet(global::System.Collections.Generic.IReadOnlySet<global::Finare.Unreal.UnrealClassHandle> values)
@@ -1097,16 +1097,16 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         => Invoke<global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealClassHandle>(0xB3FA954DEBE81887UL, "/Script/FinareRuntime.FinareInteropFixture:EchoClass", value);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Interface", Category = "Finare|Interop", Tooltip = "Echo Interface")]
-    public global::Finare.Unreal.UnrealObjectHandle EchoInterface(global::Finare.Unreal.UnrealObjectHandle value)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle>(0xE0895FDA332BBC88UL, "/Script/FinareRuntime.FinareInteropFixture:EchoInterface", value);
+    public FinareInteropContract? EchoInterface(FinareInteropContract? value)
+        => Invoke<FinareInteropContract?, FinareInteropContract?>(0xE0895FDA332BBC88UL, "/Script/FinareRuntime.FinareInteropFixture:EchoInterface", value);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Map", Category = "Finare|Interop", Tooltip = "Echo Map")]
     public global::System.Collections.Generic.IReadOnlyDictionary<int, int> EchoMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<int, int>, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0x28ED325423F77379UL, "/Script/FinareRuntime.FinareInteropFixture:EchoMap", values);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Object", Category = "Finare|Interop", Tooltip = "Echo Object")]
-    public global::Finare.Unreal.UnrealObjectHandle EchoObject(global::Finare.Unreal.UnrealObjectHandle value)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle>(0x0B46E75857712AA2UL, "/Script/FinareRuntime.FinareInteropFixture:EchoObject", value);
+    public global::Finare.Unreal.UnrealObject? EchoObject(global::Finare.Unreal.UnrealObject? value)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?>(0x0B46E75857712AA2UL, "/Script/FinareRuntime.FinareInteropFixture:EchoObject", value);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Set", Category = "Finare|Interop", Tooltip = "Echo Set")]
     public global::System.Collections.Generic.IReadOnlySet<int> EchoSet(global::System.Collections.Generic.IReadOnlySet<int> values)
@@ -1137,8 +1137,8 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         => Invoke<bool, bool, int>(0x407666A6209B4DFBUL, "/Script/FinareRuntime.FinareInteropFixture:FixedArity2", bEnabled, count);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 3", Category = "Finare|Interop|Fixed", Tooltip = "Fixed Arity 3")]
-    public global::Finare.Unreal.UnrealObjectHandle FixedArity3(global::Finare.Unreal.UnrealObjectHandle context, bool bEnabled, float weight)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, bool, float>(0x407665A6209B4C48UL, "/Script/FinareRuntime.FinareInteropFixture:FixedArity3", context, bEnabled, weight);
+    public global::Finare.Unreal.UnrealObject? FixedArity3(global::Finare.Unreal.UnrealObject? context, bool bEnabled, float weight)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, bool, float>(0x407665A6209B4C48UL, "/Script/FinareRuntime.FinareInteropFixture:FixedArity3", context, bEnabled, weight);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 4", Category = "Finare|Interop|Fixed", Tooltip = "Fixed Arity 4")]
     public global::Finare.Unreal.UnrealVector FixedArity4(global::Finare.Unreal.UnrealVector location, int count, float scale, bool bEnabled)
@@ -1149,19 +1149,19 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0xFD9B7F73A2EC296FUL, "/Script/FinareRuntime.FinareInteropFixture:MakeArray", count);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Actor Array", Category = "Finare|Interop|References", Tooltip = "Mutate Actor Array")]
-    public bool MutateActorArray(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> input, out global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> outActors, ref global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle> accumulator)
+    public bool MutateActorArray(global::System.Collections.Generic.IReadOnlyList<Actor?> input, out global::System.Collections.Generic.IReadOnlyList<Actor?> outActors, ref global::System.Collections.Generic.IReadOnlyList<Actor?> accumulator)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
             0x1E6CAAC44595A68CUL,
             "/Script/FinareRuntime.FinareInteropFixture:MutateActorArray",
             typeof(bool),
             [
-                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>), global::Finare.Unreal.UnrealParameterDirection.Input, input),
-                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>), global::Finare.Unreal.UnrealParameterDirection.Output, null),
-                new(typeof(global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>), global::Finare.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<Actor>), global::Finare.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<Actor>), global::Finare.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::System.Collections.Generic.IReadOnlyList<Actor>), global::Finare.Unreal.UnrealParameterDirection.InputOutput, accumulator),
             ]);
-        outActors = (global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[0]!;
-        accumulator = (global::System.Collections.Generic.IReadOnlyList<global::Finare.Unreal.UnrealObjectHandle>)__unifiedScriptResult.Outputs[1]!;
+        outActors = (global::System.Collections.Generic.IReadOnlyList<Actor?>)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (global::System.Collections.Generic.IReadOnlyList<Actor?>)__unifiedScriptResult.Outputs[1]!;
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
@@ -1183,19 +1183,19 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Interfaces", Category = "Finare|Interop", Tooltip = "Mutate Interfaces")]
-    public bool MutateInterfaces(global::Finare.Unreal.UnrealObjectHandle input, out global::Finare.Unreal.UnrealObjectHandle outInterface, ref global::Finare.Unreal.UnrealObjectHandle accumulator)
+    public bool MutateInterfaces(FinareInteropContract? input, out FinareInteropContract? outInterface, ref FinareInteropContract? accumulator)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
             0xD52CCBD163904F3AUL,
             "/Script/FinareRuntime.FinareInteropFixture:MutateInterfaces",
             typeof(bool),
             [
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input, input),
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Output, null),
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+                new(typeof(FinareInteropContract), global::Finare.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(FinareInteropContract), global::Finare.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(FinareInteropContract), global::Finare.Unreal.UnrealParameterDirection.InputOutput, accumulator),
             ]);
-        outInterface = (global::Finare.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[0]!;
-        accumulator = (global::Finare.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[1]!;
+        outInterface = (FinareInteropContract?)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (FinareInteropContract?)__unifiedScriptResult.Outputs[1]!;
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
@@ -1263,10 +1263,10 @@ public sealed partial class FinareInteropFixture : global::Finare.Unreal.UnrealO
         => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xC48389972363CA9FUL, "/Script/FinareRuntime.FinareInteropFixture:SumMap", values);
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Native Extension Fixture", Tooltip = "Deliberately lacks UPROPERTY/UFUNCTION metadata on every bound member.")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare Native Extension Fixture", Tooltip = "Deliberately lacks UPROPERTY/UFUNCTION metadata on every bound member.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareNativeExtensionFixture")]
-public sealed partial class FinareNativeExtensionFixture : global::Finare.Unreal.UnrealObject
+public partial class FinareNativeExtensionFixture : global::Finare.Unreal.UnrealObject
 {
     public FinareNativeExtensionFixture(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -1361,10 +1361,10 @@ public sealed partial class FinareNativeExtensionFixture : global::Finare.Unreal
     }
 }
 
-[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script World Library", Tooltip = "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.")]
+[global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Finare World Library", Tooltip = "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/FinareRuntime.FinareWorldLibrary")]
-public sealed partial class FinareWorldLibrary : global::Finare.Unreal.UnrealStaticService
+public partial class FinareWorldLibrary : global::Finare.Unreal.UnrealStaticService
 {
     public FinareWorldLibrary(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -1373,59 +1373,64 @@ public sealed partial class FinareWorldLibrary : global::Finare.Unreal.UnrealSta
     {
     }
 
+    [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Create Object", Category = "Finare|Objects", Tooltip = "Creates an ordinary native UObject, or creates and immediately activates a Finare UObject Script Class.", WorldContextParameter = "WorldContextObject")]
+    [global::Finare.Unreal.UnrealStaticFunctionAttribute]
+    public global::Finare.Unreal.UnrealObject? CreateObject(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealClassHandle objectClass, global::Finare.Unreal.UnrealObject? outer)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealObject?>(0x39FF0F3BA6CCA308UL, "/Script/FinareRuntime.FinareWorldLibrary:CreateObject", worldContextObject, objectClass, outer);
+
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Destroy Actor", Category = "Finare|World", Tooltip = "Destroy Actor", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public bool DestroyActor(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealObjectHandle actor)
-        => Invoke<bool, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle>(0xB6B7037F59417AB0UL, "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor", worldContextObject, actor);
+    public bool DestroyActor(global::Finare.Unreal.UnrealObject? worldContextObject, Actor? actor)
+        => Invoke<bool, global::Finare.Unreal.UnrealObject?, Actor?>(0xB6B7037F59417AB0UL, "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor", worldContextObject, actor);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Find Component by Class", Category = "Finare|Components", Tooltip = "Find Component by Class", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle FindComponentByClass(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealObjectHandle actor, global::Finare.Unreal.UnrealClassHandle componentClass)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle>(0x340F5DC15344225AUL, "/Script/FinareRuntime.FinareWorldLibrary:FindComponentByClass", worldContextObject, actor, componentClass);
+    public global::Finare.Unreal.UnrealObject? FindComponentByClass(global::Finare.Unreal.UnrealObject? worldContextObject, Actor? actor, global::Finare.Unreal.UnrealClassHandle componentClass)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, Actor?, global::Finare.Unreal.UnrealClassHandle>(0x340F5DC15344225AUL, "/Script/FinareRuntime.FinareWorldLibrary:FindComponentByClass", worldContextObject, actor, componentClass);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get World Time Seconds", Category = "Finare|World", Tooltip = "Get World Time Seconds", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public float GetWorldTimeSeconds(global::Finare.Unreal.UnrealObjectHandle worldContextObject)
-        => Invoke<float, global::Finare.Unreal.UnrealObjectHandle>(0xD2005B436F8AB087UL, "/Script/FinareRuntime.FinareWorldLibrary:GetWorldTimeSeconds", worldContextObject);
+    public float GetWorldTimeSeconds(global::Finare.Unreal.UnrealObject? worldContextObject)
+        => Invoke<float, global::Finare.Unreal.UnrealObject?>(0xD2005B436F8AB087UL, "/Script/FinareRuntime.FinareWorldLibrary:GetWorldTimeSeconds", worldContextObject);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Input Key Down", Category = "Finare|Input", Tooltip = "Is Input Key Down", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public bool IsInputKeyDown(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealObjectHandle playerController, global::Finare.Unreal.UnrealName keyName)
-        => Invoke<bool, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealName>(0x17967F4385437948UL, "/Script/FinareRuntime.FinareWorldLibrary:IsInputKeyDown", worldContextObject, playerController, keyName);
+    public bool IsInputKeyDown(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealObject? playerController, global::Finare.Unreal.UnrealName keyName)
+        => Invoke<bool, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealName>(0x17967F4385437948UL, "/Script/FinareRuntime.FinareWorldLibrary:IsInputKeyDown", worldContextObject, playerController, keyName);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Line Trace Single", Category = "Finare|World", Tooltip = "Line Trace Single", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public bool LineTraceSingle(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealVector start, global::Finare.Unreal.UnrealVector end, global::Finare.Unreal.UnrealObjectHandle ignoreActor, out HitResult outHit, out global::Finare.Unreal.UnrealObjectHandle outHitActor)
+    public bool LineTraceSingle(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealVector start, global::Finare.Unreal.UnrealVector end, Actor? ignoreActor, out HitResult outHit, out Actor? outHitActor)
     {
         global::Finare.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
             0xD0737BA558A53E12UL,
             "/Script/FinareRuntime.FinareWorldLibrary:LineTraceSingle",
             typeof(bool),
             [
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input, worldContextObject),
+                new(typeof(global::Finare.Unreal.UnrealObject), global::Finare.Unreal.UnrealParameterDirection.Input, worldContextObject),
                 new(typeof(global::Finare.Unreal.UnrealVector), global::Finare.Unreal.UnrealParameterDirection.Input, start),
                 new(typeof(global::Finare.Unreal.UnrealVector), global::Finare.Unreal.UnrealParameterDirection.Input, end),
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Input, ignoreActor),
+                new(typeof(Actor), global::Finare.Unreal.UnrealParameterDirection.Input, ignoreActor),
                 new(typeof(HitResult), global::Finare.Unreal.UnrealParameterDirection.Output, null),
-                new(typeof(global::Finare.Unreal.UnrealObjectHandle), global::Finare.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(Actor), global::Finare.Unreal.UnrealParameterDirection.Output, null),
             ]);
         outHit = (HitResult)__unifiedScriptResult.Outputs[0]!;
-        outHitActor = (global::Finare.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[1]!;
+        outHitActor = (Actor?)__unifiedScriptResult.Outputs[1]!;
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Load Class by Path", Category = "Finare|Resources", Tooltip = "Load Class by Path", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealClassHandle LoadClassByPath(global::Finare.Unreal.UnrealObjectHandle worldContextObject, string classPath)
-        => Invoke<global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealObjectHandle, string>(0xADED7B91E1621593UL, "/Script/FinareRuntime.FinareWorldLibrary:LoadClassByPath", worldContextObject, classPath);
+    public global::Finare.Unreal.UnrealClassHandle LoadClassByPath(global::Finare.Unreal.UnrealObject? worldContextObject, string classPath)
+        => Invoke<global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealObject?, string>(0xADED7B91E1621593UL, "/Script/FinareRuntime.FinareWorldLibrary:LoadClassByPath", worldContextObject, classPath);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Load Object by Path", Category = "Finare|Resources", Tooltip = "Load Object by Path", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle LoadObjectByPath(global::Finare.Unreal.UnrealObjectHandle worldContextObject, string objectPath)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, string>(0xDB5E9135D7E70E46UL, "/Script/FinareRuntime.FinareWorldLibrary:LoadObjectByPath", worldContextObject, objectPath);
+    public global::Finare.Unreal.UnrealObject? LoadObjectByPath(global::Finare.Unreal.UnrealObject? worldContextObject, string objectPath)
+        => Invoke<global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealObject?, string>(0xDB5E9135D7E70E46UL, "/Script/FinareRuntime.FinareWorldLibrary:LoadObjectByPath", worldContextObject, objectPath);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Spawn Actor", Category = "Finare|World", Tooltip = "Spawn Actor", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle SpawnActor(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealClassHandle actorClass, global::Finare.Unreal.UnrealTransform transform)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealTransform>(0x42B0F45EE55D44CFUL, "/Script/FinareRuntime.FinareWorldLibrary:SpawnActor", worldContextObject, actorClass, transform);
+    public Actor? SpawnActor(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealClassHandle actorClass, global::Finare.Unreal.UnrealTransform transform)
+        => Invoke<Actor?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealTransform>(0x42B0F45EE55D44CFUL, "/Script/FinareRuntime.FinareWorldLibrary:SpawnActor", worldContextObject, actorClass, transform);
 }

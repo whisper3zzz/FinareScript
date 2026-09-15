@@ -358,7 +358,7 @@ namespace UE::Finare::CollectionStateGameplayTests
 			}
 
 			UFinareAsset* ScriptAsset = NewObject<UFinareAsset>(Package);
-			FGuid::ParseExact(TEXT("02aebfe361013d426bdf4b76921e821c"), EGuidFormats::Digits,
+			FGuid::ParseExact(TEXT("efcd16a91621a3c89bfbbe28004804c0"), EGuidFormats::Digits,
 			                  ScriptAsset->ScriptClassId);
 			ScriptAsset->ScriptClassKind = EFinareClassKind::Actor;
 			ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);
@@ -372,7 +372,7 @@ namespace UE::Finare::CollectionStateGameplayTests
 				TEXT("Collection state Blueprint keeps the fixture sidecar"), Blueprint->ScriptAsset == ScriptAsset);
 			Test.TestEqual(TEXT("Collection state fixture uses the staged semantic ID"),
 			               ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower(),
-			               FString(TEXT("02aebfe361013d426bdf4b76921e821c")));
+			               FString(TEXT("efcd16a91621a3c89bfbbe28004804c0")));
 
 			FFinareBlueprintClassSyncResult Result;
 			FString Error;
@@ -716,6 +716,12 @@ namespace UE::Finare::CollectionStateGameplayTests
 			const FString State = Component->ManagedState;
 			if (Phase == 0)
 			{
+				if (State.StartsWith(TEXT("CollectionState:Error:")))
+				{
+					Test.AddError(State);
+					Scenario.Reset();
+					return true;
+				}
 				if (State != TEXT("CollectionState:Loaded:/Engine/BasicShapes/Cube.Cube"))
 				{
 					return false;
@@ -749,19 +755,19 @@ namespace UE::Finare::CollectionStateGameplayTests
 				FScriptArrayHelper MeshesHelper(Meshes, Meshes->ContainerPtrToValuePtr<void>(S.Actor));
 				FScriptSetHelper ChoicesHelper(Choices, Choices->ContainerPtrToValuePtr<void>(S.Actor));
 				FScriptMapHelper IndicesHelper(Indices, Indices->ContainerPtrToValuePtr<void>(S.Actor));
-				Test.TestEqual(TEXT("Flushed mesh array contains exactly one item"), MeshesHelper.Num(), 1);
-				Test.TestEqual(TEXT("Flushed enabled set contains exactly one item"), ChoicesHelper.Num(), 1);
-				Test.TestEqual(TEXT("Flushed choice map contains exactly one item"), IndicesHelper.Num(), 1);
+				Test.TestEqual(TEXT("Native mesh array contains exactly one item"), MeshesHelper.Num(), 1);
+				Test.TestEqual(TEXT("Native enabled set contains exactly one item"), ChoicesHelper.Num(), 1);
+				Test.TestEqual(TEXT("Native choice map contains exactly one item"), IndicesHelper.Num(), 1);
 				Test.TestEqual(
-					TEXT("Flushed collection has one Sphere mesh"), FScenario::FirstMeshPath(Meshes, S.Actor),
+					TEXT("Native collection has one Sphere mesh"), FScenario::FirstMeshPath(Meshes, S.Actor),
 					FString(TEXT("/Engine/BasicShapes/Sphere.Sphere")));
 				Test.TestTrue(
-					TEXT("Flushed enabled set contains only Sphere"),
+					TEXT("Native enabled set contains only Sphere"),
 					FScenario::HasChoice(Choices, S.Actor, TEXT("Sphere")));
 				Test.TestTrue(
-					TEXT("Flushed map maps Sphere to zero"), FScenario::HasIndex(Indices, S.Actor, TEXT("Sphere"), 0));
+					TEXT("Native map maps Sphere to zero"), FScenario::HasIndex(Indices, S.Actor, TEXT("Sphere"), 0));
 				Test.TestEqual(
-					TEXT("Flushed scalar selection is Sphere"), Selected->GetPropertyValue_InContainer(S.Actor),
+					TEXT("Native scalar selection is Sphere"), Selected->GetPropertyValue_InContainer(S.Actor),
 					FName(TEXT("Sphere")));
 				FFinareManagedFunctionValueV1 Value;
 				FString Error;

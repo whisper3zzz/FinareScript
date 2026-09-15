@@ -9,6 +9,70 @@ namespace Finare.Tests;
 [Trait("Category", "Authoring")]
 public sealed class CSharpDeclarationPatchApplierTests
 {
+    [Fact]
+    public void AddedStatePreservesNativePropertyAccessAndGeneratorConfiguration()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+            [ScriptAsset("Game/NativeState")]
+            [UnrealScriptClass(UnrealScriptClassKind.ActorComponent, GeneratedClassPath="/Game/NativeState.NativeState_C")]
+            public partial class NativeState : UnrealActorComponentScript {
+                [Expose] public partial int Health { get; set; } = 100;
+            }
+            """;
+        var request = new CSharpCompilationRequest("NativeState",
+            [new CSharpSourceDocument("NativeState.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        var asset = Assert.Single(original.ScriptAssets!.Assets);
+        var result = new CSharpDeclarationPatchApplier().Apply(request, Patch(original,
+            new AddScriptStatePatchOperation(asset.Id,
+                Spec("Armor", "int", ScriptStateTypeKind.Integer, 10, new ScriptExposure(true, false, false, "State")))));
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(request.SourceGeneratorPaths, result.PatchedRequest!.SourceGeneratorPaths);
+        Assert.Contains("public partial int Armor", Assert.Single(result.PatchedRequest.Sources).Source);
+        Assert.Equal(2, Assert.Single(result.Analysis!.ScriptAssets!.Assets).States.Count);
+    }
+
+    [Fact]
+    public void FirstNativeStateAdditionMakesANonPartialScriptClassPartial()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+            [ScriptAsset("Game/EmptyComponent")]
+            [UnrealScriptClass(UnrealScriptClassKind.ActorComponent, GeneratedClassPath="/Game/EmptyComponent.EmptyComponent_C")]
+            public sealed class EmptyComponent : UnrealActorComponentScript { }
+            """;
+        var request = new CSharpCompilationRequest(
+            "EmptyComponent",
+            [new CSharpSourceDocument("EmptyComponent.cs", source)],
+            [typeof(UnrealObjectScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(
+            request,
+            Patch(original, new AddScriptStatePatchOperation(
+                asset.Id,
+                Spec("Health", "int", ScriptStateTypeKind.Integer, 100,
+                    new ScriptExposure(true, false, false, "State")))));
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patched = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "public sealed partial class EmptyComponent : UnrealActorComponentScript",
+            patched,
+            StringComparison.Ordinal);
+        Assert.Contains("public partial int Health", patched, StringComparison.Ordinal);
+        Assert.True(result.Analysis is not null);
+        Assert.Single(result.Analysis!.ScriptAssets!.Assets).States.Single(
+            static state => state.Name == "Health");
+    }
+
     private const string Path = "Game/CombatPolicy.cs";
     private const string Source = """
         using Finare;

@@ -81,14 +81,14 @@ configuration still require regeneration and a native build. See
 
 Open the project and perform these Editor actions:
 
-1. Open `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
-2. Place a `FinareActor` in a map, or add a `FinareComponent` to
-   an existing Actor Blueprint.
-3. Assign `SA_FirstScript` to the host's **Script Asset** property.
+1. Open `/Game/UnifiedScript/FirstScript/BP_FirstScript`.
+2. Place an instance of that generated Actor class in a map.
+3. Inspect its native `StartValue` property; its source default is `1`.
 4. Save the map and press Play.
 5. Inspect the host: `bScriptRunning` is true and `LastScriptError` is empty.
 
-The default script increments its exposed `StartValue` in `OnBeginPlay`. That state
+The default script increments its partial `StartValue` property in `OnBeginPlay`.
+Its generated accessor writes the Actor's native property immediately. That state
 change, a running host, and an empty error field are the first-Play acceptance
 receipt; opening a source file or seeing generated output alone is not.
 

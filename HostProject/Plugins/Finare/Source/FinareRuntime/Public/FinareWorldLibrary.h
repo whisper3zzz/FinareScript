@@ -70,6 +70,21 @@ public:
 	UFUNCTION(BlueprintPure, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
 	static float GetWorldTimeSeconds(UObject* WorldContextObject);
 
+	/** Returns the loaded native class path followed by its loaded superclasses. */
+	UFUNCTION(BlueprintPure, Category="Finare|Reflection")
+	static TArray<FString> GetObjectTypePaths(UObject* Object);
+
+	/** Checks a loaded native class or interface without loading it. */
+	UFUNCTION(BlueprintPure, Category="Finare|Reflection")
+	static bool IsObjectOfClass(UObject* Object, const FString& ClassPath);
+
+	/** Creates an ordinary native UObject, or creates and immediately activates a Finare UObject Script Class. */
+	UFUNCTION(BlueprintCallable, Category="Finare|Objects", meta=(WorldContext="WorldContextObject"))
+	static UObject* CreateObject(
+		UObject* WorldContextObject,
+		UClass* ObjectClass,
+		UObject* Outer);
+
 	UFUNCTION(BlueprintCallable, Category="Finare|World", meta=(WorldContext="WorldContextObject"))
 	static bool LineTraceSingle(
 		UObject* WorldContextObject,

@@ -8,17 +8,17 @@ using Finare.Unreal;
 namespace Finare.Tests;
 
 [Trait("Category", "Unreal")]
-public sealed class UnrealScriptNetworkingTests
+public sealed partial class UnrealScriptNetworkingTests
 {
     private const string Source = """
         using Finare;
         using Finare.Unreal;
         [ScriptAsset("Tests/Network")]
         [UnrealScriptClass(UnrealScriptClassKind.Actor, GeneratedClassPath = "/Game/Tests/BP_Network.BP_Network_C")]
-        public sealed class NetworkScript : UnrealActorScript
+        public sealed partial class NetworkScript : UnrealActorScript
         {
             [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.OwnerOnly)]
-            public int Score { get; set; } = 0;
+            public partial int Score { get; set; } = 0;
             [UnrealRepNotify(nameof(Score))]
             public void ScoreChanged(int previous) { Notify(previous); }
             [UnrealRpc(UnrealRpcTarget.Server, Reliable = true)]
@@ -30,7 +30,11 @@ public sealed class UnrealScriptNetworkingTests
         """;
 
     private static CSharpAnalysisResult Analyze(string source) => new CSharpSemanticPipeline().Analyze(
-        new CSharpCompilationRequest("Network", [new("Network.cs", source)], [typeof(UnrealActorScript).Assembly.Location]));
+        new CSharpCompilationRequest(
+            "Network",
+            [new("Network.cs", source)],
+            [typeof(UnrealActorScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]));
 
     [Fact]
     public void NetworkingDeclarationsSerializeAndProjectWithoutNativeFlagValues()
@@ -102,7 +106,14 @@ public sealed class UnrealScriptNetworkingTests
         IUnrealManagedScript lifecycle = script;
         var handle = UnrealObjectHandle.Create(0, 1);
         lifecycle.OnStart(new(bridge, handle, handle, 1, 1));
-        lifecycle.OnTick(0.01f);
+        if (authority)
+        {
+            lifecycle.OnTick(0.01f);
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => lifecycle.OnTick(0.01f));
+        }
         Assert.Equal(authority ? 11 : 10, bridge.Score);
         Assert.Equal(bridge.Score, script.Score);
         script.Request(7);
@@ -114,9 +125,9 @@ public sealed class UnrealScriptNetworkingTests
     }
 
     [UnrealScriptClass(UnrealScriptClassKind.Actor, GeneratedClassPath = "/Game/Tests/BP_Network.BP_Network_C")]
-    private sealed class NetworkProbe : UnrealActorScript
+    private sealed partial class NetworkProbe : UnrealActorScript
     {
-        [Expose(Replicated = true)] public int Score { get; set; }
+        [Expose(Replicated = true)] public partial int Score { get; set; }
         protected override void OnTick(float deltaSeconds) => Score++;
         [UnrealRpc(UnrealRpcTarget.Server)] public void ServerAdd(int amount) => Score += amount;
         public void Request(int amount) => SendRpc(ServerAdd, amount);
@@ -160,7 +171,14 @@ public sealed class UnrealScriptNetworkingTests
         IUnrealManagedScript lifecycle = script;
         lifecycle.OnStart(new(bridge, host, actor, 1, 1));
         Assert.Equal(authority, script.HasAuthority);
-        lifecycle.OnTick(0.01f);
+        if (authority)
+        {
+            lifecycle.OnTick(0.01f);
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => lifecycle.OnTick(0.01f));
+        }
         Assert.Equal(authority ? 11 : 10, bridge.Score);
         script.RequestAll(delegates);
         Assert.Equal(5, bridge.Calls.Count);
@@ -172,9 +190,9 @@ public sealed class UnrealScriptNetworkingTests
     }
 
     [UnrealScriptClass(UnrealScriptClassKind.ActorComponent, GeneratedClassPath = "/Game/Tests/BP_NetworkComponent.BP_NetworkComponent_C")]
-    private sealed class ComponentProbe : UnrealActorComponentScript
+    private sealed partial class ComponentProbe : UnrealActorComponentScript
     {
-        [Expose(Replicated = true)] public int Score { get; set; }
+        [Expose(Replicated = true)] public partial int Score { get; set; }
         protected override void OnTick(float deltaSeconds) => Score++;
         [UnrealRpc(UnrealRpcTarget.Server)] public void Zero() { }
         [UnrealRpc(UnrealRpcTarget.Server)] public void One(int a) { }

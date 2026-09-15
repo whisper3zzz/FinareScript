@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>ClassCompositionFixture</AssemblyName>
+    <RootNamespace>Finare.Tests.Fixtures.ClassComposition</RootNamespace>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CompositionHostDirectory Condition="'$(CompositionHostDirectory)' == ''">$(MSBuildProjectDirectory)/../../../../HostProject/Plugins/Finare/Binaries/Managed</CompositionHostDirectory>
+    <CompositionGeneratedDirectory Condition="'$(CompositionGeneratedDirectory)' == ''">$(MSBuildProjectDirectory)/../../../../artifacts/class-composition/generated</CompositionGeneratedDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Analyzer Include="$(CompositionHostDirectory)/Finare.Unreal.Generators.dll" />
+    <Compile Include="ClassCompositionFixture.cs" />
+    <Compile Include="../../../../samples/Unreal/FinareRuntime.bindings.cs" Link="Generated/FinareRuntime.bindings.cs" />
+    <Compile Include="$(CompositionGeneratedDirectory)/CompositionPaths.g.cs" />
+    <Compile Include="$(CompositionGeneratedDirectory)/CompositionRevision.cs" />
+    <Reference Include="Finare.Core"><HintPath>$(CompositionHostDirectory)/Finare.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Finare.Unreal"><HintPath>$(CompositionHostDirectory)/Finare.Unreal.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

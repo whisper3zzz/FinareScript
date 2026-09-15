@@ -5410,7 +5410,7 @@ namespace UE::Finare::SoftReferenceTests
 			}
 
 			UFinareAsset* ScriptAsset = NewObject<UFinareAsset>(Package);
-			FGuid::ParseExact(TEXT("12cc5b929c9135b650045fa1ef9d0797"), EGuidFormats::Digits,
+			FGuid::ParseExact(TEXT("9239fdb122032474505c5bec7dd6059e"), EGuidFormats::Digits,
 			                  ScriptAsset->ScriptClassId);
 			ScriptAsset->ScriptClassKind = EFinareClassKind::Actor;
 			ScriptAsset->GeneratedClassPath = FSoftClassPath(Blueprint->GeneratedClass);

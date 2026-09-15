@@ -5,7 +5,7 @@ namespace Finare.Unreal.Generated.Matrix;
 
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/BindingMatrix.FixtureBase")]
-public sealed partial class FixtureBase : global::Finare.Unreal.UnrealObject
+public partial class FixtureBase : global::Finare.Unreal.UnrealObject
 {
     public FixtureBase(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -18,7 +18,7 @@ public sealed partial class FixtureBase : global::Finare.Unreal.UnrealObject
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixture Derived", Category = "Finare|Matrix", Tooltip = "M7.1 binding matrix fixture.")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/BindingMatrix.FixtureBase", "/Script/BindingMatrix.FixtureInterface")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/BindingMatrix.FixtureDerived")]
-public sealed partial class FixtureDerived : global::Finare.Unreal.UnrealObject
+public partial class FixtureDerived : global::Finare.Unreal.Generated.Matrix.FixtureBase
 {
     public FixtureDerived(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -45,9 +45,9 @@ public sealed partial class FixtureDerived : global::Finare.Unreal.UnrealObject
         set => WriteProperty(0x319AB3BF0098B5FBUL, "/Script/BindingMatrix.FixtureDerived:Mode", value);
     }
 
-    public global::Finare.Unreal.UnrealObjectHandle ObjectValue
+    public global::Finare.Unreal.UnrealObject? ObjectValue
     {
-        get => ReadProperty<global::Finare.Unreal.UnrealObjectHandle>(0x81650CA106ECED34UL, "/Script/BindingMatrix.FixtureDerived:ObjectValue");
+        get => ReadProperty<global::Finare.Unreal.UnrealObject?>(0x81650CA106ECED34UL, "/Script/BindingMatrix.FixtureDerived:ObjectValue");
         set => WriteProperty(0x81650CA106ECED34UL, "/Script/BindingMatrix.FixtureDerived:ObjectValue", value);
     }
 
@@ -94,25 +94,25 @@ public sealed partial class FixtureDerived : global::Finare.Unreal.UnrealObject
         => Invoke<int, int>(0x8CE2D11E4C6E0539UL, "/Script/BindingMatrix.FixtureDerived:Scale(int32)", value);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Spawn Fixture", Category = "Gameplay|Spawn", Tooltip = "Spawns fixture objects.")]
-    public global::Finare.Unreal.UnrealObjectHandle Spawn(int count, bool deferred)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, int, bool>(0x84489A3995E3D7D7UL, "/Script/BindingMatrix.FixtureDerived:Spawn", count, deferred);
+    public global::Finare.Unreal.UnrealObject? Spawn(int count, bool deferred)
+        => Invoke<global::Finare.Unreal.UnrealObject?, int, bool>(0x84489A3995E3D7D7UL, "/Script/BindingMatrix.FixtureDerived:Spawn", count, deferred);
 
-    public global::Finare.Unreal.UnrealObjectHandle Spawn(int count)
+    public global::Finare.Unreal.UnrealObject? Spawn(int count)
         => Spawn(count, false);
 
-    public global::Finare.Unreal.UnrealObjectHandle Spawn()
+    public global::Finare.Unreal.UnrealObject? Spawn()
         => Spawn(1, false);
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "World Time", Category = "World", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public double WorldTime(global::Finare.Unreal.UnrealObjectHandle worldContextObject)
-        => Invoke<double, global::Finare.Unreal.UnrealObjectHandle>(0xFB92636BBA04B99DUL, "/Script/BindingMatrix.FixtureDerived:WorldTime", worldContextObject);
+    public double WorldTime(global::Finare.Unreal.UnrealObject? worldContextObject)
+        => Invoke<double, global::Finare.Unreal.UnrealObject?>(0xFB92636BBA04B99DUL, "/Script/BindingMatrix.FixtureDerived:WorldTime", worldContextObject);
 }
 
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixture Interface")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
-[global::Finare.Unreal.UnrealTypeAttribute("/Script/BindingMatrix.FixtureInterface")]
-public sealed partial class FixtureInterface : global::Finare.Unreal.UnrealObject
+[global::Finare.Unreal.UnrealTypeAttribute("/Script/BindingMatrix.FixtureInterface", IsInterface = true)]
+public partial class FixtureInterface : global::Finare.Unreal.UnrealObject
 {
     public FixtureInterface(
         global::Finare.Unreal.UnrealObjectHandle handle,

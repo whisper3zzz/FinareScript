@@ -27,6 +27,8 @@
 #include "FinareObjectRegistry.h"
 #include "FinareRuntimeDiagnostic.h"
 #include "FinareWorldSubsystem.h"
+#include "FinareWorldContext.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
 #include "UObject/GCObject.h"
@@ -489,12 +491,230 @@ namespace UE::Finare::Component::Private
 		TSharedPtr<FJsonObject> Root;
 		TArray<TSharedPtr<FJsonValue>> Phases;
 	};
+
+	struct FScriptComponentTemplateReferenceMap
+	{
+		TMap<const UObject*, UFinareComponent*> UniqueTemplates;
+		TSet<const UObject*> AmbiguousTemplates;
+
+		void Add(const UObject* Template, UFinareComponent* Instance)
+		{
+			if (Template == nullptr || Instance == nullptr ||
+				AmbiguousTemplates.Contains(Template))
+			{
+				return;
+			}
+
+			UFinareComponent** Existing = UniqueTemplates.Find(Template);
+			if (Existing == nullptr)
+			{
+				UniqueTemplates.Add(Template, Instance);
+				return;
+			}
+			if (*Existing != Instance)
+			{
+				UniqueTemplates.Remove(Template);
+				AmbiguousTemplates.Add(Template);
+			}
+		}
+	};
+
+	bool IsInActorClassHierarchy(
+		const UClass* CandidateClass,
+		const UClass* ActorClass)
+	{
+		if (CandidateClass == nullptr || ActorClass == nullptr)
+		{
+			return false;
+		}
+		for (const UClass* Current = ActorClass;
+			 Current != nullptr;
+			 Current = Current->GetSuperClass())
+		{
+			if (Current == CandidateClass)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsActorClassOwnedTemplate(
+		const UObject* Template,
+		const AActor* Owner)
+	{
+		if (Template == nullptr || Owner == nullptr ||
+			Template->HasAnyFlags(RF_ClassDefaultObject))
+		{
+			return false;
+		}
+
+		const UClass* ActorClass = Owner->GetClass();
+		for (const UObject* Outer = Template->GetOuter();
+			 Outer != nullptr;
+			 Outer = Outer->GetOuter())
+		{
+			if (const UClass* OuterClass = Cast<UClass>(Outer);
+				OuterClass != nullptr &&
+				IsInActorClassHierarchy(OuterClass, ActorClass))
+			{
+				return true;
+			}
+			if (Outer->HasAnyFlags(RF_ClassDefaultObject) &&
+				IsInActorClassHierarchy(Outer->GetClass(), ActorClass))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void AddComponentArchetypeChain(
+		FScriptComponentTemplateReferenceMap& OutMap,
+		UFinareComponent* Instance,
+		const AActor* Owner)
+	{
+		if (Instance == nullptr || Owner == nullptr || Instance->IsTemplate())
+		{
+			return;
+		}
+
+		TSet<const UObject*> Visited;
+		for (UObject* Archetype = Instance->GetArchetype();
+			 Archetype != nullptr && !Visited.Contains(Archetype);
+			 Archetype = Archetype->GetArchetype())
+		{
+			Visited.Add(Archetype);
+			if (Cast<UFinareComponent>(Archetype) != nullptr &&
+				IsActorClassOwnedTemplate(Archetype, Owner))
+			{
+				OutMap.Add(Archetype, Instance);
+			}
+		}
+	}
+
+	void RemapScriptObjectProperties(
+		UObject* Instance,
+		const FScriptComponentTemplateReferenceMap& ReferenceMap)
+	{
+		if (Instance == nullptr || Instance->IsTemplate())
+		{
+			return;
+		}
+
+		// Ordinary Blueprint descendants also inherit Script Class properties.
+		for (TFieldIterator<FProperty> It(Instance->GetClass()); It; ++It)
+		{
+			FProperty* Property = *It;
+			if (Property == nullptr ||
+				Property->ArrayDim != 1 ||
+				!Property->HasAnyPropertyFlags(CPF_BlueprintVisible) ||
+				Cast<UFinareBlueprintGeneratedClass>(Property->GetOwner<UClass>()) == nullptr)
+			{
+				continue;
+			}
+
+			FObjectProperty* ObjectProperty = CastField<FObjectProperty>(Property);
+			if (ObjectProperty == nullptr)
+			{
+				continue;
+			}
+
+			UObject* CurrentValue =
+				ObjectProperty->GetObjectPropertyValue_InContainer(Instance);
+			if (CurrentValue == nullptr ||
+				ReferenceMap.AmbiguousTemplates.Contains(CurrentValue))
+			{
+				continue;
+			}
+
+			UFinareComponent* const* Replacement =
+				ReferenceMap.UniqueTemplates.Find(CurrentValue);
+			if (Replacement != nullptr && *Replacement != nullptr &&
+				*Replacement != CurrentValue)
+			{
+				ObjectProperty->SetObjectPropertyValue_InContainer(
+					Instance,
+					*Replacement);
+			}
+		}
+	}
+
+	void RemapScriptComponentTemplateReferences(UFinareComponent& RegisteredComponent)
+	{
+		if (RegisteredComponent.IsTemplate())
+		{
+			return;
+		}
+
+		AActor* Owner = RegisteredComponent.GetOwner();
+		if (Owner == nullptr || Owner->IsTemplate())
+		{
+			return;
+		}
+
+		FScriptComponentTemplateReferenceMap ReferenceMap;
+		TArray<UActorComponent*> Components;
+		Owner->GetComponents(Components);
+		for (UActorComponent* Component : Components)
+		{
+			AddComponentArchetypeChain(
+				ReferenceMap,
+				Cast<UFinareComponent>(Component),
+				Owner);
+		}
+
+		for (UActorComponent* Component : Components)
+		{
+			RemapScriptObjectProperties(Component, ReferenceMap);
+		}
+		RemapScriptObjectProperties(Owner, ReferenceMap);
+	}
 }
 
 UFinareComponent::UFinareComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+}
+
+void UFinareComponent::OnRegister()
+{
+	Super::OnRegister();
+	UE::Finare::Component::Private::RemapScriptComponentTemplateReferences(*this);
+	if (UObject* Receiver = GetNativeReceiver())
+	{
+		if (UFinareWorldSubsystem* Host = GetWorld() != nullptr
+				? GetWorld()->GetSubsystem<UFinareWorldSubsystem>()
+				: nullptr;
+			Host != nullptr && Host->IsNativeRuntimeReady())
+		{
+				FString Error;
+				if (!Host->RegisterManagedReceiver(Receiver, this, Error))
+				{
+					UE_LOG(
+						LogTemp,
+						Error,
+						TEXT("Finare could not register native receiver '%s': %s"),
+						*Receiver->GetPathName(),
+						*Error);
+				}
+			}
+		}
+}
+
+void UFinareComponent::OnUnregister()
+{
+	if (UObject* Receiver = GetNativeReceiver())
+	{
+		if (UFinareWorldSubsystem* Host = GetWorld() != nullptr
+				? GetWorld()->GetSubsystem<UFinareWorldSubsystem>()
+				: nullptr)
+		{
+			Host->UnregisterManagedReceiver(Receiver, this);
+		}
+	}
+	Super::OnUnregister();
 }
 
 void UFinareComponent::BeginPlay()
@@ -552,6 +772,18 @@ void UFinareComponent::TickComponent(
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (bNativeReceiverExplicit)
+	{
+		if (UActorComponent* ReceiverComponent = Cast<UActorComponent>(NativeReceiver.Get());
+			ReceiverComponent == nullptr ||
+			!ReceiverComponent->IsRegistered() ||
+			ReceiverComponent->GetOwner() != GetOwner())
+		{
+			StopScript();
+			DestroyComponent();
+			return;
+		}
+	}
 	if (!bScriptRunning)
 	{
 		SetComponentTickEnabled(false);
@@ -604,7 +836,7 @@ void UFinareComponent::TickComponent(
 	const bool bStepManagedFrame = bDebugStepFrameRequested;
 	bDebugStepFrameRequested = false;
 
-	if (bTickAutomatically || bStepManagedFrame)
+	if (bTickAutomatically || bStepManagedFrame || bProcessingNativeReceiverTick)
 	{
 		FString Error;
 		if (bSemanticDebugEnabled)
@@ -643,6 +875,29 @@ void UFinareComponent::TickComponent(
 	SetComponentTickEnabled(
 		bTickAutomatically || bReloadRequested || bDebugPausedAtFrameBoundary ||
 		bSemanticDebugEnabled);
+}
+
+bool UFinareComponent::TickManagedScriptFromNativeReceiver(
+	float DeltaSeconds,
+	FString& OutError)
+{
+	check(IsInGameThread());
+	OutError.Reset();
+	if (!bScriptRunning || ManagedScriptInstanceId == 0)
+	{
+		OutError = TEXT("The managed execution host is not running for its native receiver.");
+		return false;
+	}
+	if (!bNativeReceiverExplicit || bProcessingNativeReceiverTick)
+	{
+		OutError = TEXT("A receiver Tick requires a non-reentrant internal execution host.");
+		return false;
+	}
+	TGuardValue<bool> ReceiverTickGuard(bProcessingNativeReceiverTick, true);
+	// Use the same reload, debugger, async and failure path as existing hosts.
+	TickComponent(DeltaSeconds, LEVELTICK_All, &PrimaryComponentTick);
+	if (!bScriptRunning) OutError = LastScriptError;
+	return bScriptRunning;
 }
 
 #if WITH_EDITOR
@@ -698,6 +953,7 @@ bool UFinareComponent::StartScript()
 	{
 		return true;
 	}
+	UE::Finare::Component::Private::RemapScriptComponentTemplateReferences(*this);
 	bManagedStartAttempted = true;
 	ON_SCOPE_EXIT
 	{
@@ -768,10 +1024,16 @@ bool UFinareComponent::StartScript()
 		(FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
 	PhaseStartSeconds = FPlatformTime::Seconds();
+	UObject* ReceiverObject = GetNativeReceiver();
+	if (ReceiverObject == nullptr)
+	{
+		SetScriptFailure(TEXT("The managed Script Component has no valid native receiver."));
+		return false;
+	}
 	UObject* ScriptTarget = GetScriptTarget();
 	FString Error;
 	if (ResolvedAsset != nullptr &&
-		!ResolvedAsset->ValidateGeneratedClassIdentity(this, ScriptTarget, Error))
+		!ResolvedAsset->ValidateGeneratedClassIdentity(ReceiverObject, ScriptTarget, Error))
 	{
 		SetScriptFailure(MoveTemp(Error));
 		return false;
@@ -807,7 +1069,7 @@ bool UFinareComponent::StartScript()
 		                                   : LifecycleOwnershipKey;
 	if (!Host->ClaimGameplayLifecycle(
 		this,
-		ScriptTarget,
+		ReceiverObject,
 		ResolvedOwnershipKey,
 		EFinareRuntimeOwner::Finare,
 		Error))
@@ -820,7 +1082,7 @@ bool UFinareComponent::StartScript()
 		FString ReleaseError;
 		if (!Host->ReleaseGameplayLifecycle(
 			this,
-			ScriptTarget,
+			ReceiverObject,
 			ResolvedOwnershipKey,
 			EFinareRuntimeOwner::Finare,
 			ReleaseError))
@@ -835,23 +1097,31 @@ bool UFinareComponent::StartScript()
 
 	PhaseStartSeconds = FPlatformTime::Seconds();
 	FFinareObjectHandleResult HandleResult;
-	const FFinareObjectHandle HostHandle = Host->RegisterObject(this, HandleResult);
+	if (!Host->RegisterManagedReceiver(ReceiverObject, this, Error))
+	{
+		ReleaseCandidateOwnership();
+		SetScriptFailure(MoveTemp(Error));
+		return false;
+	}
+	const FFinareObjectHandle HostHandle = Host->RegisterObject(ReceiverObject, HandleResult);
 	if (!HandleResult.IsSuccess())
 	{
 		Error = HandleResult.Message;
+		Host->UnregisterManagedReceiver(ReceiverObject, this);
 		ReleaseCandidateOwnership();
 		SetScriptFailure(MoveTemp(Error));
 		return false;
 	}
 
 	FFinareObjectHandle TargetHandle = HostHandle;
-	if (ScriptTarget != this)
+	if (ScriptTarget != ReceiverObject)
 	{
 		TargetHandle = Host->RegisterObject(ScriptTarget, HandleResult);
 		if (!HandleResult.IsSuccess())
 		{
 			FFinareObjectHandleResult ReleaseResult;
 			Host->ReleaseObject(HostHandle, ReleaseResult);
+			Host->UnregisterManagedReceiver(ReceiverObject, this);
 			Error = HandleResult.Message;
 			ReleaseCandidateOwnership();
 			SetScriptFailure(MoveTemp(Error));
@@ -892,6 +1162,7 @@ bool UFinareComponent::StartScript()
 			Host->ReleaseObject(TargetHandle, ReleaseResult);
 		}
 		Host->ReleaseObject(HostHandle, ReleaseResult);
+		Host->UnregisterManagedReceiver(ReceiverObject, this);
 		ReleaseCandidateOwnership();
 		SetScriptFailure(MoveTemp(Error));
 		return false;
@@ -904,7 +1175,7 @@ bool UFinareComponent::StartScript()
 	ManagedHostHandle = HostHandle.Value;
 	ManagedTargetHandle = TargetHandle.Value;
 	ActiveLifecycleOwnershipKey = ResolvedOwnershipKey;
-	ActiveLifecycleHostObject = ScriptTarget;
+	ActiveLifecycleHostObject = ReceiverObject;
 	bScriptRunning = true;
 	ActiveGeneration = TEXT("1");
 	ActiveScriptAsset = ResolvedAsset;
@@ -1007,7 +1278,7 @@ bool UFinareComponent::QueueInitialRepNotify(UObject* Target, UFunction* Functio
 	const UObject* ExpectedTarget =
 		ConfiguredAsset != nullptr &&
 		ConfiguredAsset->ScriptClassKind == EFinareClassKind::ActorComponent
-			? static_cast<const UObject*>(this)
+			? static_cast<const UObject*>(GetNativeReceiver())
 			: GetOwner() != nullptr
 			? static_cast<const UObject*>(GetOwner())
 			: static_cast<const UObject*>(this);
@@ -1032,12 +1303,21 @@ bool UFinareComponent::QueueInitialRepNotify(UObject* Target, UFunction* Functio
 void UFinareComponent::StopScript()
 {
 	check(IsInGameThread());
+	if (bStopInProgress)
+	{
+		return;
+	}
+	TGuardValue<bool> StopGuard(bStopInProgress, true);
+	// UObject deletion retires its registry slot before the World prunes the
+	// weak receiver route. Releasing that already-retired lease is normal cleanup.
+	const bool bCollectedObjectReceiver = bWorldOwnedObjectExecutionHost && !NativeReceiver.IsValid();
 	InitialRepNotifies.Reset();
 	UnbindManagedInputActions();
 	bStopRequestedByInputFailure = false;
 	if (!bScriptRunning && ManagedScriptInstanceId == 0 &&
 		ManagedHostHandle == 0 && ManagedTargetHandle == 0 &&
-		ActiveLifecycleOwnershipKey.IsNone())
+		ActiveLifecycleOwnershipKey.IsNone() &&
+		!bWorldOwnedObjectExecutionHost)
 	{
 		SetComponentTickEnabled(false);
 		return;
@@ -1105,13 +1385,13 @@ void UFinareComponent::StopScript()
 		if (ManagedHostHandle != 0)
 		{
 			Host->ReleaseObject({ManagedHostHandle}, ReleaseResult);
-			if (!ReleaseResult.IsSuccess() && StopError.IsEmpty())
+			if (!ReleaseResult.IsSuccess() && StopError.IsEmpty() &&
+				!(bCollectedObjectReceiver && ReleaseResult.Error == EFinareObjectHandleError::StaleHandle))
 			{
 				StopError = ReleaseResult.Message;
 			}
 		}
 	}
-
 	PreparedScriptReload.Reset();
 	ManagedScriptInstanceId = 0;
 	ManagedHostHandle = 0;
@@ -1132,7 +1412,21 @@ void UFinareComponent::StopScript()
 	ActiveDeclarationAssetPath.Reset();
 	ActiveResolvedAssemblyPath.Reset();
 	ActiveResolvedTypeName.Reset();
+	const bool bDestroyWorldOwnedObjectExecutionHost =
+		bWorldOwnedObjectExecutionHost;
+	bWorldOwnedObjectExecutionHost = false;
 	SetComponentTickEnabled(false);
+	if (bDestroyWorldOwnedObjectExecutionHost)
+	{
+		if (Host != nullptr)
+		{
+			Host->ReleaseManagedObjectExecutionHost(this);
+		}
+		if (IsRegistered())
+		{
+			DestroyComponent();
+		}
+	}
 	if (!StopError.IsEmpty())
 	{
 		SetScriptFailure(MoveTemp(StopError));
@@ -2660,7 +2954,8 @@ bool UFinareComponent::RefreshScriptState()
 		ResolvedAssemblyPath,
 		ResolvedTypeName,
 		ResolvedAsset,
-		Error))
+		Error,
+		!IsTemplate()))
 	{
 		SetScriptFailure(MoveTemp(Error));
 		return false;
@@ -2719,7 +3014,8 @@ bool UFinareComponent::RefreshScriptStateWithTransaction(
 		ResolvedAssemblyPath,
 		ResolvedTypeName,
 		ResolvedAsset,
-		Error))
+		Error,
+		!IsTemplate()))
 	{
 		Transaction.AddPhase(
 			TEXT("configurationResolution"),
@@ -2836,6 +3132,36 @@ bool UFinareComponent::SetScriptStateInt32(
 	return true;
 }
 
+void UFinareComponent::CopyScriptStateOverrideMetadata(
+	const UFinareComponent& Source)
+{
+	if (this == &Source)
+	{
+		return;
+	}
+	ScriptStateOverrideIds = Source.ScriptStateOverrideIds;
+	bScriptStateOverrideBaselineInitialized =
+		Source.bScriptStateOverrideBaselineInitialized;
+	MaterializedStateOverrideCount = ScriptStateOverrideIds.Num();
+}
+
+void UFinareComponent::GetScriptStateOverrideMetadata(
+	TArray<FGuid>& OutOverrideIds,
+	bool& bOutBaselineInitialized) const
+{
+	OutOverrideIds = ScriptStateOverrideIds;
+	bOutBaselineInitialized = bScriptStateOverrideBaselineInitialized;
+}
+
+void UFinareComponent::SetScriptStateOverrideMetadata(
+	TConstArrayView<FGuid> OverrideIds,
+	bool bBaselineInitialized)
+{
+	ScriptStateOverrideIds = OverrideIds;
+	bScriptStateOverrideBaselineInitialized = bBaselineInitialized;
+	MaterializedStateOverrideCount = ScriptStateOverrideIds.Num();
+}
+
 bool UFinareComponent::IsScriptStateOverridden(const FString& Name) const
 {
 	const FPropertyBagPropertyDesc* Desc =
@@ -2890,11 +3216,256 @@ bool UFinareComponent::ResetAllScriptStateOverrides()
 	return false;
 }
 
+UObject* UFinareComponent::GetNativeReceiver() const
+{
+	if (bNativeReceiverExplicit)
+	{
+		return NativeReceiver.Get();
+	}
+	const UFinareAsset* ConfiguredAsset = ScriptAsset.Get();
+	if (ConfiguredAsset == nullptr && !ScriptAssetPath.IsEmpty())
+	{
+		const FSoftObjectPath AssetReference(ScriptAssetPath);
+		ConfiguredAsset = Cast<UFinareAsset>(
+			AssetReference.IsValid() ? AssetReference.TryLoad() : nullptr);
+	}
+	if (ConfiguredAsset != nullptr &&
+		ConfiguredAsset->ScriptClassKind == EFinareClassKind::Actor &&
+		GetOwner() != nullptr)
+	{
+		// Actor carriers are an execution detail.  The generated Actor itself is
+		// the native receiver and therefore owns its lifecycle/Blueprint route.
+		return GetOwner();
+	}
+	return const_cast<UFinareComponent*>(this);
+}
+
+bool UFinareComponent::SetNativeReceiver(UObject* Receiver, FString& OutError)
+{
+	check(IsInGameThread());
+	OutError.Reset();
+	if (Receiver != nullptr && !IsValid(Receiver))
+	{
+		OutError = TEXT("A Finare native receiver must be a valid UObject.");
+		return false;
+	}
+	if (Receiver != nullptr && GetWorld() != nullptr &&
+		UE::Finare::WorldContext::Resolve(Receiver) !=
+			UE::Finare::WorldContext::Resolve(this))
+	{
+		OutError = TEXT("A Finare native receiver must belong to the component's World.");
+		return false;
+	}
+	if (Receiver == this)
+	{
+		Receiver = nullptr;
+	}
+
+	UObject* PreviousReceiver = GetNativeReceiver();
+	const bool bPreviousExplicit = bNativeReceiverExplicit;
+	if ((Receiver == nullptr && !bPreviousExplicit) ||
+		(Receiver != nullptr && bPreviousExplicit && PreviousReceiver == Receiver))
+	{
+		return true;
+	}
+
+	UFinareWorldSubsystem* Host = GetWorld() != nullptr
+		                               ? GetWorld()->GetSubsystem<UFinareWorldSubsystem>()
+		                               : nullptr;
+	if (IsRegistered() && Host != nullptr && PreviousReceiver != nullptr)
+	{
+		Host->UnregisterManagedReceiver(PreviousReceiver, this);
+	}
+
+	NativeReceiver = Receiver;
+	bNativeReceiverExplicit = Receiver != nullptr;
+	if (IsRegistered() && Host != nullptr && Receiver != nullptr &&
+		Host->IsNativeRuntimeReady())
+	{
+		if (!Host->RegisterManagedReceiver(Receiver, this, OutError))
+		{
+			NativeReceiver = PreviousReceiver == this ? nullptr : PreviousReceiver;
+			bNativeReceiverExplicit = bPreviousExplicit;
+			if (PreviousReceiver != nullptr && Host->IsNativeRuntimeReady())
+			{
+				FString RestoreError;
+				Host->RegisterManagedReceiver(PreviousReceiver, this, RestoreError);
+			}
+			return false;
+		}
+	}
+	return true;
+}
+
+UFinareComponent* UFinareComponent::CreateExecutionHost(
+	UObject* Receiver,
+	UFinareAsset* InScriptAsset,
+	FString& OutError)
+{
+	check(IsInGameThread());
+	OutError.Reset();
+	if (!IsValid(Receiver) || Receiver->IsTemplate() || InScriptAsset == nullptr)
+	{
+		OutError = TEXT("A managed execution host requires a non-template receiver and Script Asset.");
+		return nullptr;
+	}
+
+	UWorld* World = UE::Finare::WorldContext::Resolve(Receiver);
+	if (World == nullptr || !World->IsGameWorld())
+	{
+		OutError = FString::Printf(
+			TEXT("Native receiver '%s' has no runtime World for its managed execution host."),
+			*GetPathNameSafe(Receiver));
+		return nullptr;
+	}
+
+	const bool bObjectScript =
+		InScriptAsset->ScriptClassKind == EFinareClassKind::Object;
+	if (bObjectScript &&
+		(Cast<AActor>(Receiver) != nullptr ||
+		 Cast<UActorComponent>(Receiver) != nullptr ||
+		 Cast<UBlueprintFunctionLibrary>(Receiver) != nullptr ||
+		 Cast<UClass>(Receiver) != nullptr))
+	{
+		OutError = FString::Printf(
+			TEXT("Object Script Asset '%s' cannot host Actor, ActorComponent, class, or FunctionLibrary receiver '%s'."),
+			*GetPathNameSafe(InScriptAsset),
+			*Receiver->GetPathName());
+		return nullptr;
+	}
+
+	AActor* Owner = Cast<AActor>(Receiver);
+	if (Owner == nullptr)
+	{
+		if (UActorComponent* ReceiverComponent = Cast<UActorComponent>(Receiver))
+		{
+			Owner = ReceiverComponent->GetOwner();
+			if (Owner == nullptr)
+			{
+				// During component instancing UE may assign the Actor owner just
+				// after PostInitInstance; the Actor remains the stable Outer.
+				Owner = Cast<AActor>(ReceiverComponent->GetOuter());
+			}
+		}
+	}
+	if (!bObjectScript &&
+		(Owner == nullptr || Owner->IsTemplate() || Owner->GetWorld() != World))
+	{
+		OutError = FString::Printf(
+			TEXT("Native receiver '%s' has no runtime Actor owner for its managed execution host."),
+			*GetPathNameSafe(Receiver));
+		return nullptr;
+	}
+
+	UFinareWorldSubsystem* WorldHost = World->GetSubsystem<UFinareWorldSubsystem>();
+	if (WorldHost == nullptr || !WorldHost->IsNativeRuntimeReady())
+	{
+		OutError = TEXT("The Finare managed World host is unavailable for an execution host.");
+		return nullptr;
+	}
+
+	if (bObjectScript)
+	{
+		if (UFinareComponent* Existing = WorldHost->FindManagedObjectExecutionHost(
+				Receiver,
+				InScriptAsset))
+		{
+			return Existing;
+		}
+		if (UFinareComponent* Conflicting = WorldHost->FindManagedObjectExecutionHost(
+				Receiver,
+				nullptr))
+		{
+			OutError = FString::Printf(
+				TEXT("Native receiver '%s' is already bound to Script Asset '%s'."),
+				*Receiver->GetPathName(),
+				*GetPathNameSafe(Conflicting->ScriptAsset.Get()));
+			return nullptr;
+		}
+	}
+	else
+	{
+		TArray<UFinareComponent*> ExistingHosts;
+		Owner->GetComponents<UFinareComponent>(ExistingHosts);
+		for (UFinareComponent* Existing : ExistingHosts)
+		{
+			if (Existing == nullptr || Existing->GetNativeReceiver() != Receiver)
+			{
+				continue;
+			}
+			if (Existing->ScriptAsset.Get() != InScriptAsset)
+			{
+				OutError = FString::Printf(
+					TEXT("Native receiver '%s' is already bound to Script Asset '%s'."),
+					*Receiver->GetPathName(),
+					*GetPathNameSafe(Existing->ScriptAsset.Get()));
+				return nullptr;
+			}
+			return Existing;
+		}
+	}
+
+	const FName HostName = MakeUniqueObjectName(
+		Owner != nullptr ? static_cast<UObject*>(Owner) : static_cast<UObject*>(World),
+		UFinareComponent::StaticClass(),
+		TEXT("FinareExecutionHost"));
+	UFinareComponent* ExecutionHost = NewObject<UFinareComponent>(
+		Owner != nullptr ? static_cast<UObject*>(Owner) : static_cast<UObject*>(World),
+		HostName,
+		RF_Transient);
+	if (ExecutionHost == nullptr)
+	{
+		OutError = FString::Printf(
+			TEXT("Could not create a managed execution host for native receiver '%s'."),
+			*Receiver->GetPathName());
+		return nullptr;
+	}
+	ExecutionHost->ScriptAsset = InScriptAsset;
+	ExecutionHost->ScriptAssetPath = InScriptAsset->GetPathName();
+	// The real native receiver owns the UE lifecycle.  This sidecar only owns
+	// the managed generation and is driven by generated receiver thunks.
+	ExecutionHost->bStartAutomatically = false;
+	ExecutionHost->bTickAutomatically = false;
+	ExecutionHost->bWorldOwnedObjectExecutionHost = bObjectScript;
+	if (!ExecutionHost->SetNativeReceiver(Receiver, OutError))
+	{
+		ExecutionHost->MarkAsGarbage();
+		return nullptr;
+	}
+	ExecutionHost->CreationMethod = EComponentCreationMethod::Instance;
+	if (Owner != nullptr)
+	{
+		Owner->AddInstanceComponent(ExecutionHost);
+	}
+	ExecutionHost->RegisterComponentWithWorld(World);
+	if (!ExecutionHost->IsRegistered())
+	{
+		OutError = FString::Printf(
+			TEXT("Could not register the managed execution host for native receiver '%s'."),
+			*Receiver->GetPathName());
+		if (Owner != nullptr)
+		{
+			Owner->RemoveInstanceComponent(ExecutionHost);
+		}
+		ExecutionHost->MarkAsGarbage();
+		return nullptr;
+	}
+	if (bObjectScript)
+	{
+		WorldHost->RetainManagedObjectExecutionHost(ExecutionHost);
+	}
+	return ExecutionHost;
+}
+
 UObject* UFinareComponent::GetScriptTarget()
 {
 	if (AActor* Owner = GetOwner())
 	{
 		return Owner;
+	}
+	if (bNativeReceiverExplicit && NativeReceiver.IsValid())
+	{
+		return NativeReceiver.Get();
 	}
 	return this;
 }
@@ -2928,7 +3499,7 @@ UObject* UFinareComponent::GetParentInvocationReceiver() const
 	if (ActiveScriptAsset != nullptr &&
 		ActiveScriptAsset->ScriptClassKind == EFinareClassKind::ActorComponent)
 	{
-		return const_cast<UFinareComponent*>(this);
+		return GetNativeReceiver();
 	}
 	return const_cast<UFinareComponent*>(this)->GetScriptTarget();
 }
@@ -2964,7 +3535,7 @@ bool UFinareComponent::OwnsConfiguredManagedOverride(
 
 	const UObject* Receiver =
 		ConfiguredAsset->ScriptClassKind == EFinareClassKind::ActorComponent
-			? this
+			? GetNativeReceiver()
 			: GetOwner() != nullptr
 			? static_cast<const UObject*>(GetOwner())
 			: static_cast<const UObject*>(this);
@@ -3415,7 +3986,8 @@ bool UFinareComponent::ResolveScriptConfiguration(
 	FString& OutAssemblyPath,
 	FString& OutTypeName,
 	UFinareAsset*& OutAsset,
-	FString& OutError) const
+	FString& OutError,
+	bool bValidateTarget) const
 {
 	OutAsset = ScriptAsset.Get();
 	if (OutAsset == nullptr && !ScriptAssetPath.IsEmpty())
@@ -3455,12 +4027,17 @@ bool UFinareComponent::ResolveScriptConfiguration(
 		{
 			return false;
 		}
-		const UObject* Target = GetOwner() != nullptr
-			                        ? static_cast<const UObject*>(GetOwner())
-			                        : static_cast<const UObject*>(this);
-		if (!OutAsset->ValidateTarget(Target, OutError))
+		if (bValidateTarget)
 		{
-			return false;
+			const UObject* Target = GetOwner() != nullptr
+					                        ? static_cast<const UObject*>(GetOwner())
+					                        : bNativeReceiverExplicit && NativeReceiver.IsValid()
+					                        ? static_cast<const UObject*>(NativeReceiver.Get())
+					                        : static_cast<const UObject*>(this);
+			if (!OutAsset->ValidateTarget(Target, OutError))
+			{
+				return false;
+			}
 		}
 	}
 	else
@@ -3500,7 +4077,7 @@ bool UFinareComponent::HasConfiguredManagedLifecycleOverride(
 	}
 	return UE::Finare::Component::Private::HasDirectActorComponentLifecycleOverride(
 		ResolvedAsset,
-		this,
+		GetNativeReceiver(),
 		FunctionName);
 }
 
@@ -3509,7 +4086,7 @@ bool UFinareComponent::HasActiveManagedLifecycleOverride(
 {
 	return UE::Finare::Component::Private::HasDirectActorComponentLifecycleOverride(
 		ActiveScriptAsset,
-		this,
+		GetNativeReceiver(),
 		FunctionName);
 }
 

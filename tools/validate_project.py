@@ -25,6 +25,7 @@ PROJECTS = [
     ROOT / "src" / "Finare.ProgramModel" / "Finare.ProgramModel.csproj",
     ROOT / "src" / "Finare.Compilation" / "Finare.Compilation.csproj",
     ROOT / "src" / "Finare.Unreal" / "Finare.Unreal.csproj",
+    ROOT / "src" / "Finare.Unreal.Generators" / "Finare.Unreal.Generators.csproj",
     ROOT / "src" / "Finare.Cli" / "Finare.Cli.csproj",
     ROOT
     / "samples"
@@ -1167,7 +1168,7 @@ def main() -> int:
         'Options.TypeNames' in reflection_exporter and
         'CandidatesByName' in reflection_exporter and
         'DiscoveredClassCount' in reflection_exporter and
-        'new Pawn' in first_script_template and
+        'Pawn? instigator = actor.GetInstigator()' in first_script_template and
         'Available API library is missing supported APIs, including unused Actor calls.' in packaged_native_onboarding,
         "Available API library or low-level source discovery is incomplete",
     )
@@ -6443,11 +6444,11 @@ def main() -> int:
         / "Private"
         / "FinareSyncClassesCommandlet.cpp"
     ).read_text(encoding="utf-8")
-    managed_state_synchronizer = (
+    managed_native_properties = (
         ROOT
         / "src"
         / "Finare.Unreal"
-        / "UnrealScriptStateSynchronizer.cs"
+        / "UnrealObjectScript.ReflectedProperties.cs"
     ).read_text(encoding="utf-8")
     managed_state_tests = (
         ROOT
@@ -6471,14 +6472,13 @@ def main() -> int:
         '-run=FinareSyncClasses' in onboarding_script and
         'script-class-materialization.log' in onboarding_script and
         'GeneratedClassPath' in managed_script_class_model and
-        'UnrealScriptStateSynchronizer.Open' in managed_script_object_model and
-        'context.Host' in managed_state_synchronizer and
-        'context.Target' in managed_state_synchronizer and
-        'ConditionalWeakTable<Type, StateContract>' in managed_state_synchronizer and
-        'reviewed Blueprint state matrix' in managed_state_synchronizer and
-        'UnsupportedScriptStateFailsBeforeManagedLifecycleStarts' in managed_state_tests and
+        '_stateSession' not in managed_script_object_model and
+        not (ROOT / 'src/Finare.Unreal/UnrealScriptStateSynchronizer.cs').exists() and
+        'ReadReflectedProperty<T>' in managed_native_properties and
+        'WriteReflectedProperty<T>' in managed_native_properties and
+        'Context.Host' in managed_native_properties and
         'Every retired collectible script context is reclaimed' in unreal_lifecycle_stress_test,
-        "M13.3B-1 Blueprint reflection, state identity, default preservation, commandlet, or managed synchronization is incomplete",
+        "M13.3B-1 Blueprint reflection, state identity, default preservation, commandlet, or generated native property access is incomplete",
     )
     checks.append(
         "M13.3B-1 materializes reviewed managed state as stable Blueprint properties"
@@ -6694,7 +6694,7 @@ def main() -> int:
         'Finare.Unreal.UnrealObjectHandle' in script_asset_lowerer and
         'Finare.Unreal.UnrealClassHandle' in script_asset_lowerer and
         'Finare.Unreal.UnrealVector' in script_asset_lowerer and
-        'ushort minorVersion = normalized.Assets.Any' in compiled_program_chunk_source and
+        'ushort minorVersion = allStates.Any(s => HasObjectType(s.UnrealType))' in compiled_program_chunk_source and
         'reader.MinorVersion >= 1' in compiled_program_chunk_source and
         'EPropertyBagPropertyType::Name' in declaration_materializer_source and
         'EPropertyBagPropertyType::Text' in declaration_materializer_source and
@@ -6703,8 +6703,8 @@ def main() -> int:
         'UEdGraphSchema_K2::PC_Text' in blueprint_class_materializer_source and
         'FName default reaches the generated CDO' in blueprint_class_materializer_tests and
         'FVector default reaches the generated CDO' in blueprint_class_materializer_tests and
-        'StateBinding<UnrealVector>.CreateTyped' in managed_state_synchronizer and
-        'public UnrealName StateTag' in script_class_factory_tests and
+        'UnrealObjectInvocationAdapter.ReadProperty<T>' in managed_native_properties and
+        'public partial UnrealName StateTag' in script_class_factory_tests and
         'ReadUInt64Payload' in managed_native_transport_source and
         'ReadVectorPayload' in managed_native_transport_source and
         'LegacyValueSliceCarriesObjectClassAndVectorPayloads' in managed_native_transport_tests and

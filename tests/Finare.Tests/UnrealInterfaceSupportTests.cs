@@ -8,7 +8,7 @@ namespace Finare.Tests;
 public sealed class UnrealInterfaceSupportTests
 {
     [Fact]
-    public void ScalarInterfaceValuesUseObjectHandlesAndGeneratedExecuteCalls()
+    public void ScalarInterfaceValuesUseTypedViewsAndGeneratedExecuteCalls()
     {
         UnrealReflectionManifest manifest = CreateManifest(includeUnsupportedShapes: false);
 
@@ -17,8 +17,9 @@ public sealed class UnrealInterfaceSupportTests
 
         Assert.Empty(managed.Diagnostics);
         Assert.Empty(native.Diagnostics);
-        Assert.Contains("UnrealObjectHandle InterfaceValue", managed.Source, StringComparison.Ordinal);
-        Assert.Contains("UnrealObjectHandle EchoInterface", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("FinareInteropContract? InterfaceValue", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("FinareInteropContract? EchoInterface", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("IsInterface = true", managed.Source, StringComparison.Ordinal);
         Assert.Contains("#include \"UObject/Interface.h\"", native.Source, StringComparison.Ordinal);
         Assert.Contains("DecodeInterface<IFinareInteropContract>", native.Source, StringComparison.Ordinal);
         Assert.Contains("EncodeInterface<IFinareInteropContract>", native.Source, StringComparison.Ordinal);

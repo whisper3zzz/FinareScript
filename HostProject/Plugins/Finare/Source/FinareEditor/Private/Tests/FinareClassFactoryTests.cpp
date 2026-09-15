@@ -315,11 +315,11 @@ namespace UE::Finare::ClassFactory::Tests
 					*TypeName)));
 			Test.TestTrue(
 				TEXT("Managed instance scaffold demonstrates the common Blueprint state matrix"),
-				Source.Contains(TEXT("public UnrealName StateTag")) &&
-				Source.Contains(TEXT("public UnrealText DisplayText")) &&
-				Source.Contains(TEXT("public UnrealObjectHandle LinkedObject")) &&
-				Source.Contains(TEXT("public UnrealClassHandle LinkedClass")) &&
-				Source.Contains(TEXT("public UnrealVector SpawnOffset")) &&
+				Source.Contains(TEXT("public partial UnrealName StateTag")) &&
+				Source.Contains(TEXT("public partial UnrealText DisplayText")) &&
+				Source.Contains(TEXT("public partial UnrealObject? LinkedObject")) &&
+				Source.Contains(TEXT("public partial UnrealClassHandle LinkedClass")) &&
+				Source.Contains(TEXT("public partial UnrealVector SpawnOffset")) &&
 				Source.Contains(TEXT("StateTag = new UnrealName(\"Demo\");")) &&
 				Source.Contains(TEXT("DisplayText = new UnrealText(\"Ready\");")) &&
 				Source.Contains(TEXT("SpawnOffset = new UnrealVector(100.0, 0.0, 0.0);")));

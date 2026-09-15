@@ -18,6 +18,8 @@ internal sealed class UnrealGenerationInvocationBridge :
     IUnrealEventBridge,
     IUnrealWorldDataPlaneProvider,
     IUnrealAsyncServiceProvider,
+    IUnrealObjectBridgeScope,
+    IUnrealObjectTypeBridge,
     IDisposable
 {
     private readonly IUnrealInvocationBridge _inner;
@@ -30,6 +32,42 @@ internal sealed class UnrealGenerationInvocationBridge :
     private UnrealCallbackScope? _callbacks;
     private UnrealObjectScript? _ownerScript;
 
+    public object IdentityScope =>
+        _inner is IUnrealObjectBridgeScope scoped ? scoped.IdentityScope : _inner;
+
+    public void ValidateAccess(UnrealObjectHandle handle)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_inner is IUnrealObjectBridgeScope scoped)
+        {
+            scoped.ValidateAccess(handle);
+        }
+        else if (!handle.IsWellFormed)
+        {
+            throw new ObjectDisposedException(
+                nameof(UnrealObject),
+                "The managed Unreal object handle is null or malformed.");
+        }
+    }
+
+    public IReadOnlyList<string> GetObjectTypePaths(UnrealObjectHandle target)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _inner is IUnrealObjectTypeBridge typeBridge
+            ? typeBridge.GetObjectTypePaths(target)
+            : throw new NotSupportedException(
+                "The World bridge does not support native Unreal type queries.");
+    }
+
+    public bool IsObjectOfClass(UnrealObjectHandle target, string classPath)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _inner is IUnrealObjectTypeBridge typeBridge
+            ? typeBridge.IsObjectOfClass(target, classPath)
+            : throw new NotSupportedException(
+                "The World bridge does not support native Unreal type queries.");
+    }
+
     public UnrealCallbackScope Callbacks
     {
         get
@@ -38,7 +76,7 @@ internal sealed class UnrealGenerationInvocationBridge :
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 return _callbacks ??= LiveInner is IUnrealCallbackScopeFactory factory
-                    ? factory.CreateCallbackScope()
+                    ? factory.CreateCallbackScope(this)
                     : throw new NotSupportedException("The World bridge does not support generation-owned callbacks.");
             }
         }

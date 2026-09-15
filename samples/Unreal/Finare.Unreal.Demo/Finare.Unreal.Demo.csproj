@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Finare.Unreal/Finare.Unreal.csproj" />
+    <ProjectReference Include="../../../src/Finare.Unreal.Generators/Finare.Unreal.Generators.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     <Compile Include="../FinareRuntime.bindings.cs"
              Link="Generated/FinareRuntime.bindings.cs" />
     <Compile Include="../UMG.bindings.cs" Link="Generated/UMG.bindings.cs" />

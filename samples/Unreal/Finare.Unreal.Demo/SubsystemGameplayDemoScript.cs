@@ -49,7 +49,7 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
     {
         var input = new EnhancedInputSubsystemInterface(subsystem, _bridge!);
         int priority;
-        return input.HasMappingContext(mappingContext, out priority);
+        return input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, _bridge!), out priority);
     }
 
     public void OnStart(UnrealScriptContext context)
@@ -60,11 +60,11 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
         _worldLibrary = new FinareWorldLibrary(context.Target, context.Bridge);
 
         UnrealClassHandle worldSubsystemClass = _worldLibrary.LoadClassByPath(
-            context.Target,
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
             "/Script/Engine.WorldPartitionSubsystem");
-        UnrealObjectHandle worldSubsystem = _subsystems.GetWorldSubsystem(
-            context.Target,
-            worldSubsystemClass);
+        UnrealObjectHandle worldSubsystem = (_subsystems.GetWorldSubsystem(
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
+            worldSubsystemClass))?.Handle ?? default;
         if (worldSubsystem.IsNull)
         {
             throw new InvalidOperationException("The live world did not provide a World Partition subsystem.");
@@ -73,11 +73,11 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
             .IsAllStreamingCompleted();
 
         UnrealClassHandle replayClass = _worldLibrary.LoadClassByPath(
-            context.Target,
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
             "/Script/Engine.ReplaySubsystem");
-        UnrealObjectHandle replaySubsystem = _subsystems.GetGameInstanceSubsystem(
-            context.Target,
-            replayClass);
+        UnrealObjectHandle replaySubsystem = (_subsystems.GetGameInstanceSubsystem(
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
+            replayClass))?.Handle ?? default;
         if (replaySubsystem.IsNull)
         {
             throw new InvalidOperationException("The live game instance did not provide a Replay subsystem.");
@@ -88,18 +88,18 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
         _ = replay.GetActiveReplayName();
 
         UnrealClassHandle enhancedInputSubsystemClass = _worldLibrary.LoadClassByPath(
-            context.Target,
+            UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
             "/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem");
-        UnrealObjectHandle enhancedInputSubsystem = _subsystems
-            .GetLocalPlayerSubSystemFromPlayerController(context.Target, enhancedInputSubsystemClass);
+        UnrealObjectHandle enhancedInputSubsystem = (_subsystems
+            .GetLocalPlayerSubSystemFromPlayerController(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge), enhancedInputSubsystemClass))?.Handle ?? default;
         if (enhancedInputSubsystem.IsNull)
         {
-            enhancedInputSubsystem = _subsystems.GetLocalPlayerSubsystem(
-                context.Target,
-                enhancedInputSubsystemClass);
+            enhancedInputSubsystem = (_subsystems.GetLocalPlayerSubsystem(
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge),
+                enhancedInputSubsystemClass))?.Handle ?? default;
         }
 
-        UnrealObjectHandle mappingContext = _fixture.ObjectValue;
+        UnrealObjectHandle mappingContext = (_fixture.ObjectValue)?.Handle ?? default;
         if (enhancedInputSubsystem.IsNull || mappingContext.IsNull)
         {
             throw new InvalidOperationException(
@@ -111,32 +111,32 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
             bForceImmediately: true,
             bIgnoreAllPressedKeysUntilRelease: true,
             bNotifyUserSettings: false);
-        if (input.HasMappingContext(mappingContext, out int existingPriority))
+        if (input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), out int existingPriority))
         {
             throw new InvalidOperationException(
                 $"The mapping context was already registered with priority {existingPriority}; refusing to overwrite it.");
         }
-        input.AddMappingContext(mappingContext, 37, options);
+        input.AddMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), 37, options);
         _input = input;
         _mappingContext = mappingContext;
         _mappingOptions = options;
         _mappingInstalled = true;
         InputMappingActive = true;
-        if (!input.HasMappingContext(mappingContext, out int priority) || priority != 37)
+        if (!input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), out int priority) || priority != 37)
         {
             throw new InvalidOperationException("Generated Enhanced Input HasMappingContext did not return priority 37.");
         }
 
         MappingPriority = priority;
-        input.RemoveMappingContext(mappingContext, options);
-        InputMappingWasRemoved = !input.HasMappingContext(mappingContext, out _);
+        input.RemoveMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), options);
+        InputMappingWasRemoved = !input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), out _);
         if (!InputMappingWasRemoved)
         {
             throw new InvalidOperationException("Generated Enhanced Input RemoveMappingContext did not remove the context.");
         }
 
-        input.AddMappingContext(mappingContext, 37, options);
-        if (!input.HasMappingContext(mappingContext, out priority) || priority != 37)
+        input.AddMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), 37, options);
+        if (!input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mappingContext, context.Bridge), out priority) || priority != 37)
         {
             throw new InvalidOperationException("Generated Enhanced Input re-add did not restore priority 37.");
         }
@@ -158,8 +158,8 @@ public sealed class SubsystemGameplayDemoScript : IUnrealManagedScript
     {
         if (_mappingInstalled && _input is not null && !_mappingContext.IsNull)
         {
-            _input.RemoveMappingContext(_mappingContext, _mappingOptions);
-            if (_input.HasMappingContext(_mappingContext, out _))
+            _input.RemoveMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(_mappingContext, _bridge!), _mappingOptions);
+            if (_input.HasMappingContext(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(_mappingContext, _bridge!), out _))
             {
                 throw new InvalidOperationException("Generated Enhanced Input cleanup left the mapping context registered.");
             }

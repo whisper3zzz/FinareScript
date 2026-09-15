@@ -51,6 +51,8 @@ public enum ScriptFunctionValueTypeKind
     Array,
     Set,
     Map,
+    Object,
+    Interface,
 }
 
 public sealed record ScriptFunctionStructFieldDeclaration(

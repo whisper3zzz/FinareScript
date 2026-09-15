@@ -2,6 +2,11 @@
 
 Status: complete
 
+> Property synchronization notes and test results below describe the original implementation.
+> The current runtime requires generated partial native accessors and has removed
+> lifecycle/RPC/parent-call hydration and flushing. See the
+> [object model decision](2026-09-13-unified-unreal-object-model.md).
+
 ## Outcome and scope
 
 M13.3C-2 must let managed behavior replace an inherited BlueprintNativeEvent or

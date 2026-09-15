@@ -1,13 +1,18 @@
 #include "FinareWorldSubsystem.h"
 
 #include "Dom/JsonObject.h"
+#include "Components/ActorComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Subsystems/SubsystemCollection.h"
 #include "FinareCoreClrHost.h"
+#include "FinareComponent.h"
+#include "FinareAsset.h"
 #include "FinareRuntimeDiagnostic.h"
+#include "FinareWorldContext.h"
 
 #include <atomic>
 
@@ -165,6 +170,7 @@ void UFinareWorldSubsystem::BeginManagedFrame()
 	{
 		GameplayDataPlane->BeginFrame();
 	}
+	PruneManagedReceiverBindings();
 }
 
 void UFinareWorldSubsystem::EndManagedFrame()
@@ -370,7 +376,8 @@ bool UFinareWorldSubsystem::ClaimGameplayLifecycle(
 		OutError = TEXT("A lifecycle claim requires valid claimant/host objects and a non-empty key.");
 		return false;
 	}
-	if (Claimant->GetWorld() != World || HostObject->GetWorld() != World)
+	if (UE::Finare::WorldContext::Resolve(Claimant) != World ||
+		UE::Finare::WorldContext::Resolve(HostObject) != World)
 	{
 		OutError = TEXT("Lifecycle claimant and host objects must belong to the same World host.");
 		return false;
@@ -465,6 +472,282 @@ bool UFinareWorldSubsystem::ReleaseGameplayLifecycle(
 	}
 	GameplayLifecycleClaims.Remove(Key);
 	return true;
+}
+
+bool UFinareWorldSubsystem::RegisterManagedReceiver(
+	UObject* Receiver,
+	UFinareComponent* ExecutionHost,
+	FString& OutError)
+{
+	check(IsInGameThread());
+	OutError.Reset();
+	UWorld* World = GetWorld();
+	if (!IsNativeRuntimeReady() || World == nullptr || !World->IsGameWorld())
+	{
+		OutError = TEXT("The Finare native World host is unavailable for runtime receiver registration.");
+		return false;
+	}
+	if (!IsValid(Receiver) || !IsValid(ExecutionHost) ||
+		Receiver->IsTemplate() || ExecutionHost->IsTemplate())
+	{
+		OutError = TEXT("A managed receiver route requires non-template receiver and execution host objects.");
+		return false;
+	}
+	if (UE::Finare::WorldContext::Resolve(Receiver) != World ||
+		UE::Finare::WorldContext::Resolve(ExecutionHost) != World)
+	{
+		OutError = TEXT("Managed receiver and execution host must belong to the same World host.");
+		return false;
+	}
+
+	const FObjectKey Key(Receiver);
+	if (FFinareManagedReceiverBinding* Existing = ManagedReceiverBindings.Find(Key))
+	{
+		if (Existing->Receiver.Get() == Receiver &&
+			Existing->ExecutionHost.Get() == ExecutionHost)
+		{
+			return true;
+		}
+		OutError = FString::Printf(
+			TEXT("Native receiver '%s' is already owned by execution host '%s'."),
+			*Receiver->GetPathName(),
+			Existing->ExecutionHost.IsValid()
+				? *Existing->ExecutionHost->GetPathName()
+				: TEXT("<retired>"));
+		return false;
+	}
+
+	ManagedReceiverBindings.Add(
+		Key,
+		FFinareManagedReceiverBinding{Receiver, ExecutionHost});
+	return true;
+}
+
+void UFinareWorldSubsystem::RetainManagedObjectExecutionHost(
+	UFinareComponent* ExecutionHost)
+{
+	check(IsInGameThread());
+	if (IsValid(ExecutionHost) &&
+		UE::Finare::WorldContext::Resolve(ExecutionHost) == GetWorld())
+	{
+		ManagedObjectExecutionHosts.AddUnique(ExecutionHost);
+	}
+}
+
+void UFinareWorldSubsystem::ReleaseManagedObjectExecutionHost(
+	UFinareComponent* ExecutionHost)
+{
+	check(IsInGameThread());
+	ManagedObjectExecutionHosts.Remove(ExecutionHost);
+}
+
+UFinareComponent* UFinareWorldSubsystem::FindManagedObjectExecutionHost(
+	UObject* Receiver,
+	UFinareAsset* ScriptAsset) const
+{
+	check(IsInGameThread());
+	for (UFinareComponent* ExecutionHost : ManagedObjectExecutionHosts)
+	{
+		if (IsValid(ExecutionHost) &&
+			ExecutionHost->GetNativeReceiver() == Receiver &&
+			(ScriptAsset == nullptr || ExecutionHost->ScriptAsset == ScriptAsset))
+		{
+			return ExecutionHost;
+		}
+	}
+	return nullptr;
+}
+
+void UFinareWorldSubsystem::UnregisterManagedReceiver(
+	UObject* Receiver,
+	UFinareComponent* ExecutionHost)
+{
+	check(IsInGameThread());
+	if (Receiver == nullptr || ExecutionHost == nullptr)
+	{
+		return;
+	}
+	const FObjectKey Key(Receiver);
+	if (const FFinareManagedReceiverBinding* Existing = ManagedReceiverBindings.Find(Key);
+		Existing != nullptr && Existing->ExecutionHost.Get() == ExecutionHost)
+	{
+		ManagedReceiverBindings.Remove(Key);
+	}
+}
+
+UFinareComponent* UFinareWorldSubsystem::ResolveManagedReceiver(
+	UObject* Receiver,
+	const UFinareBlueprintGeneratedClass* GeneratedClass,
+	bool bConfigured,
+	FString& OutError) const
+{
+	check(IsInGameThread());
+	OutError.Reset();
+	UWorld* World = GetWorld();
+	if (!IsValid(Receiver) || World == nullptr ||
+		UE::Finare::WorldContext::Resolve(Receiver) != World)
+	{
+		OutError = TEXT("The managed receiver is invalid or belongs to another World host.");
+		return nullptr;
+	}
+
+	auto Matches = [GeneratedClass, bConfigured](UFinareComponent* Candidate)
+	{
+		if (Candidate == nullptr || !IsValid(Candidate))
+		{
+			return false;
+		}
+		if (bConfigured)
+		{
+			return GeneratedClass != nullptr &&
+				Candidate->OwnsConfiguredManagedOverride(GeneratedClass);
+		}
+		return GeneratedClass == nullptr
+			       ? Candidate->bScriptRunning
+			       : Candidate->OwnsActiveManagedOverride(GeneratedClass);
+	};
+
+	const FObjectKey DirectKey(Receiver);
+	if (const FFinareManagedReceiverBinding* Direct =
+			ManagedReceiverBindings.Find(DirectKey))
+	{
+		UFinareComponent* Candidate = Direct->ExecutionHost.Get();
+		if (Direct->Receiver.Get() == Receiver && Matches(Candidate))
+		{
+			return Candidate;
+		}
+		OutError = FString::Printf(
+			TEXT("Native receiver '%s' has no matching %s managed generation."),
+			*Receiver->GetPathName(),
+			bConfigured ? TEXT("configured") : TEXT("active"));
+		return nullptr;
+	}
+
+	// Actor dispatch is resolved from the receiver-to-host table rather than
+	// by treating every component on the Actor as the same host.  This keeps
+	// multiple ordinary native components independently addressable.
+	UFinareComponent* Match = nullptr;
+	for (const TPair<FObjectKey, FFinareManagedReceiverBinding>& Pair :
+		 ManagedReceiverBindings)
+	{
+		UFinareComponent* Candidate = Pair.Value.ExecutionHost.Get();
+		if (Candidate == nullptr ||
+			Candidate->GetScriptTarget() != Receiver ||
+			!Matches(Candidate))
+		{
+			continue;
+		}
+		if (Match != nullptr && Match != Candidate)
+		{
+			OutError = FString::Printf(
+				TEXT("Native receiver '%s' has multiple matching managed execution hosts."),
+				*Receiver->GetPathName());
+			return nullptr;
+		}
+		Match = Candidate;
+	}
+	if (Match == nullptr)
+	{
+		OutError = FString::Printf(
+			TEXT("Native receiver '%s' has no matching %s managed execution host."),
+			*Receiver->GetPathName(),
+			bConfigured ? TEXT("configured") : TEXT("active"));
+	}
+	return Match;
+}
+
+void UFinareWorldSubsystem::PruneManagedReceiverBindings()
+{
+	check(IsInGameThread());
+	UWorld* World = GetWorld();
+	if (World == nullptr || !World->IsGameWorld())
+	{
+		return;
+	}
+
+	TArray<FObjectKey, TInlineAllocator<8>> StaleKeys;
+	TArray<UFinareComponent*, TInlineAllocator<8>> HostsToStop;
+	TArray<UFinareComponent*, TInlineAllocator<8>> HostsToSuspend;
+	TArray<UFinareComponent*, TInlineAllocator<8>> HostsToResume;
+	for (TPair<FObjectKey, FFinareManagedReceiverBinding>& Pair :
+		 ManagedReceiverBindings)
+	{
+		UObject* Receiver = Pair.Value.Receiver.Get();
+		UFinareComponent* ExecutionHost = Pair.Value.ExecutionHost.Get();
+		bool bStale = !IsValid(Receiver) || !IsValid(ExecutionHost) ||
+			Receiver->IsTemplate() || ExecutionHost->IsTemplate() ||
+			UE::Finare::WorldContext::Resolve(Receiver) != World ||
+			UE::Finare::WorldContext::Resolve(ExecutionHost) != World;
+		if (!bStale)
+		{
+			if (UActorComponent* ReceiverComponent = Cast<UActorComponent>(Receiver))
+			{
+				bStale = Receiver != ExecutionHost &&
+					(ReceiverComponent->GetOwner() == nullptr ||
+					 ReceiverComponent->GetOwner() != ExecutionHost->GetOwner());
+				if (!bStale && Receiver != ExecutionHost)
+				{
+					if (!ReceiverComponent->IsRegistered())
+					{
+						// Unregister is reversible and need not emit EndPlay. Retain
+						// the weak configuration, but release the managed generation.
+						if (ExecutionHost->bScriptRunning)
+						{
+							Pair.Value.bResumeAfterRegistration = true;
+							HostsToSuspend.AddUnique(ExecutionHost);
+						}
+						continue;
+					}
+					if (Pair.Value.bResumeAfterRegistration)
+					{
+						Pair.Value.bResumeAfterRegistration = false;
+						HostsToResume.AddUnique(ExecutionHost);
+					}
+				}
+			}
+			else if (AActor* ReceiverActor = Cast<AActor>(Receiver))
+			{
+				bStale = ReceiverActor->IsActorBeingDestroyed();
+			}
+		}
+		if (!bStale)
+		{
+			continue;
+		}
+		StaleKeys.Add(Pair.Key);
+		if (ExecutionHost != nullptr)
+		{
+			HostsToStop.AddUnique(ExecutionHost);
+		}
+	}
+
+	// Remove the routes before stopping components. StopScript/DestroyComponent
+	// can synchronously invoke OnUnregister, so mutating the map while iterating
+	// it would invalidate the traversal and could leave another route behind.
+	for (const FObjectKey& Key : StaleKeys)
+	{
+		ManagedReceiverBindings.Remove(Key);
+	}
+	for (UFinareComponent* ExecutionHost : HostsToSuspend)
+	{
+		if (IsValid(ExecutionHost)) ExecutionHost->StopScript();
+	}
+	for (UFinareComponent* ExecutionHost : HostsToResume)
+	{
+		if (IsValid(ExecutionHost)) ExecutionHost->StartScript();
+	}
+	for (UFinareComponent* ExecutionHost : HostsToStop)
+	{
+		if (!IsValid(ExecutionHost))
+		{
+			continue;
+		}
+		ExecutionHost->StopScript();
+		if (ExecutionHost->IsRegistered())
+		{
+			ExecutionHost->DestroyComponent();
+		}
+	}
 }
 
 int32 UFinareWorldSubsystem::GetGameplayLifecycleClaimCount() const
@@ -1159,8 +1442,25 @@ void UFinareWorldSubsystem::ShutdownNativeRuntime()
 
 	const bool bManagedWorldWasReady = IsManagedWorldReady();
 	const uint64 ShuttingDownWorldHostId = WorldHostId;
+	// Ordinary UObject scripts have no UE BeginPlay/EndPlay callback. Stop their
+	// World-owned sidecars while the managed World is still alive so their
+	// generation and object leases are retired through the normal path.
+	TArray<UFinareComponent*, TInlineAllocator<8>> ObjectHostsToStop;
+	for (TObjectPtr<UFinareComponent> ObjectHost : ManagedObjectExecutionHosts)
+	{
+		ObjectHostsToStop.Add(ObjectHost.Get());
+	}
+	for (UFinareComponent* ObjectHost : ObjectHostsToStop)
+	{
+		if (IsValid(ObjectHost))
+		{
+			ObjectHost->StopScript();
+		}
+	}
+	ManagedObjectExecutionHosts.Reset();
 	HostState = EFinareWorldHostState::ShuttingDown;
 	GameplayLifecycleClaims.Reset();
+	ManagedReceiverBindings.Reset();
 	DataPlaneExtensionRegistry.Reset();
 	FFinareRuntimeBreadcrumbs::RecordLifecycle(
 		TEXT("WorldShutdown.Begin"),

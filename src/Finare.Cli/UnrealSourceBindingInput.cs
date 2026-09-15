@@ -45,6 +45,7 @@ internal static class UnrealSourceBindingInput
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray();
         return new CSharpCompilationRequest("Finare.SourceBindings", sources, references,
             settings: requests[0].Settings, runtimeReferencePaths: references,
-            includeDefaultReferences: requests[0].IncludeDefaultReferences);
+            includeDefaultReferences: requests[0].IncludeDefaultReferences,
+            sourceGeneratorPaths: requests.SelectMany(request => request.SourceGeneratorPaths));
     }
 }

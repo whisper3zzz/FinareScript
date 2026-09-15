@@ -50,6 +50,19 @@ public sealed class UnrealBindingGenerator
         source.AppendLine();
 
         var managedTypeNames = CreateManagedTypeNames(normalized.Types);
+        var reflectedTypes = normalized.Types.ToDictionary(type => type.Path, StringComparer.Ordinal);
+        var projectedStructs = new HashSet<string>(StringComparer.Ordinal);
+        bool ContainsView(UnrealTypeReference value) =>
+            value.Kind is UnrealValueKind.Object or UnrealValueKind.Interface ||
+            value.Kind == UnrealValueKind.Struct && value.TypePath is not null && projectedStructs.Contains(value.TypePath) ||
+            value.ElementType is not null && ContainsView(value.ElementType) ||
+            value.KeyType is not null && ContainsView(value.KeyType) ||
+            value.ValueType is not null && ContainsView(value.ValueType);
+        while (normalized.Types.Where(t => t.Kind == UnrealReflectedTypeKind.Struct &&
+                   t.Properties.Any(p => ContainsView(p.Type))).Count(t => projectedStructs.Add(t.Path)) > 0) { }
+        var wireNames = new Dictionary<string, string>(managedTypeNames, StringComparer.Ordinal);
+        foreach (string path in projectedStructs)
+            wireNames[path] = "__FinareWire_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)));
 
         foreach (var callback in UnrealCallbackBindings.Collect(normalized.Types))
         {
@@ -72,7 +85,10 @@ public sealed class UnrealBindingGenerator
             }
             if (type.Kind == UnrealReflectedTypeKind.Struct)
             {
-                EmitStruct(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
+                EmitStruct(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics,
+                    projectedStructs.Contains(type.Path) ? wireNames[type.Path] : null);
+                if (projectedStructs.Contains(type.Path))
+                    EmitStruct(source, type, wireNames[type.Path], wireNames, diagnostics, wire: true);
                 continue;
             }
             if (type.Kind == UnrealReflectedTypeKind.Enum)
@@ -89,7 +105,7 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            EmitClass(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
+            EmitClass(source, type, managedTypeNames[type.Path], managedTypeNames, reflectedTypes, options.Namespace, diagnostics);
         }
 
         return new UnrealBindingGenerationResult(
@@ -105,6 +121,8 @@ public sealed class UnrealBindingGenerator
         UnrealReflectedType type,
         string className,
         IReadOnlyDictionary<string, string> managedTypeNames,
+        IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes,
+        string namespaceName,
         ICollection<UnrealBindingDiagnostic> diagnostics)
     {
         EmitBlueprintMetadata(source, type.Metadata, string.Empty);
@@ -116,13 +134,23 @@ public sealed class UnrealBindingGenerator
         }
         source.AppendLine(")]");
         source.Append("[global::Finare.Unreal.UnrealTypeAttribute(")
-            .Append(Literal(type.Path)).AppendLine(")]");
+            .Append(Literal(type.Path));
+        if (type.Traits.Interface) source.Append(", IsInterface = true");
+        source.AppendLine(")]");
         bool staticService = type.Properties.Count == 0 && type.Delegates.Count == 0 &&
             type.Functions.Count > 0 && type.Functions.All(static function => function.Traits.Static);
-        source.Append("public sealed partial class ").Append(className)
-            .Append(staticService
-                ? " : global::Finare.Unreal.UnrealStaticService"
-                : " : global::Finare.Unreal.UnrealObject")
+        string? generatedBaseType = type.BaseTypePath is not null &&
+            reflectedTypes.TryGetValue(type.BaseTypePath, out UnrealReflectedType? reflectedBase) &&
+            reflectedBase.Kind == UnrealReflectedTypeKind.Class &&
+            managedTypeNames.TryGetValue(type.BaseTypePath, out string? baseName)
+                ? baseName
+                : null;
+        source.Append("public partial class ").Append(className)
+            .Append(generatedBaseType is not null
+                ? " : global::" + namespaceName + "." + generatedBaseType
+                : staticService
+                    ? " : global::Finare.Unreal.UnrealStaticService"
+                    : " : global::Finare.Unreal.UnrealObject")
             .AppendLine();
         source.AppendLine("{");
         source.Append("    public ").Append(className)
@@ -143,7 +171,7 @@ public sealed class UnrealBindingGenerator
         source.AppendLine("    }");
 
         var memberNames = new HashSet<string>(StringComparer.Ordinal)
-            { className, "GetType", "Equals", "GetHashCode", "ToString", "Handle", "Bridge" };
+            { className, "GetType", "Equals", "GetHashCode", "ToString", "Handle", "Bridge", "Wrap", "As", "IsA" };
         var functionNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (UnrealReflectedProperty property in type.Properties)
         {
@@ -242,7 +270,7 @@ public sealed class UnrealBindingGenerator
             source.Append("        ").Append(MemberIdLiteral(reflectedDelegate.Path)).AppendLine(",");
             source.Append("        ").Append(Literal(reflectedDelegate.Path)).AppendLine(",");
             source.Append("        ").Append(Literal(reflectedDelegate.SignaturePath)).AppendLine(",");
-            source.Append("        typeof(").Append(returnType).AppendLine("),");
+            source.Append("        typeof(").Append(RuntimeTypeName(returnType)).AppendLine("),");
             source.Append("        global::Finare.Unreal.UnrealDelegateKind.")
                 .Append(reflectedDelegate.Traits.Kind).AppendLine(",");
             source.AppendLine("        [");
@@ -250,7 +278,7 @@ public sealed class UnrealBindingGenerator
             {
                 UnrealReflectedParameter parameter = reflectedDelegate.Parameters[index];
                 source.Append("            new(").Append(Literal(parameter.Name)).Append(", typeof(")
-                    .Append(GetManagedType(parameter.Type, managedTypeNames)).Append("), ")
+                    .Append(RuntimeTypeName(GetManagedType(parameter.Type, managedTypeNames))).Append("), ")
                     .Append("global::Finare.Unreal.UnrealParameterDirection.")
                     .Append(parameter.Direction).AppendLine("),");
             }
@@ -403,14 +431,16 @@ public sealed class UnrealBindingGenerator
         UnrealReflectedType type,
         string structName,
         IReadOnlyDictionary<string, string> managedTypeNames,
-        ICollection<UnrealBindingDiagnostic> diagnostics)
+        ICollection<UnrealBindingDiagnostic> diagnostics,
+        string? wireTypeName = null,
+        bool wire = false)
     {
         var fields = new List<(UnrealReflectedProperty Property, string ManagedType, string Name)>();
         var memberNames = new HashSet<string>(StringComparer.Ordinal)
             { structName, "Equals", "GetHashCode", "ToString", "GetType", "Deconstruct" };
         foreach (UnrealReflectedProperty property in type.Properties)
         {
-            string? managedType = GetManagedType(property.Type, managedTypeNames);
+            string? managedType = GetManagedType(property.Type, managedTypeNames, objectViews: !wire);
             if (managedType is null)
             {
                 diagnostics.Add(new UnrealBindingDiagnostic(
@@ -436,7 +466,9 @@ public sealed class UnrealBindingGenerator
         source.Append("[global::Finare.Unreal.UnrealStructAttribute(")
             .Append(Literal(type.Path)).Append(", ").Append(Literal(type.NativeName)).AppendLine(")]");
         source.AppendLine("[global::Finare.Unreal.UnrealValueAttribute]");
-        source.Append("public readonly record struct ").Append(structName).AppendLine("(");
+        if (wireTypeName is not null)
+            source.Append("[global::Finare.Unreal.UnrealWireTypeAttribute(typeof(").Append(wireTypeName).AppendLine("))]");
+        source.Append(wire ? "internal readonly record struct " : "public readonly record struct ").Append(structName).AppendLine("(");
         for (int index = 0; index < fields.Count; index++)
         {
             var field = fields[index];
@@ -515,14 +547,14 @@ public sealed class UnrealBindingGenerator
             .Append(resultName).AppendLine(" = InvokeWithOutputs(");
         source.Append("            ").Append(MemberIdLiteral(function.Path)).AppendLine(",");
         source.Append("            ").Append(Literal(function.Path)).AppendLine(",");
-        source.Append("            typeof(").Append(returnType).AppendLine("),");
+        source.Append("            typeof(").Append(RuntimeTypeName(returnType)).AppendLine("),");
         source.AppendLine("            [");
         for (int index = 0; index < function.Parameters.Count; index++)
         {
             UnrealReflectedParameter parameter = function.Parameters[index];
             bool callback = parameter.Type.Kind == UnrealValueKind.Callback;
             string managedType = callback ? "global::Finare.Unreal.UnrealCallbackArgument" : GetManagedType(parameter.Type, managedTypeNames)!;
-            source.Append("                new(typeof(").Append(managedType).Append("), ")
+            source.Append("                new(typeof(").Append(RuntimeTypeName(managedType)).Append("), ")
                 .Append("global::Finare.Unreal.UnrealParameterDirection.")
                 .Append(parameter.Direction).Append(", ")
                 .Append(parameter.Direction == UnrealParameterDirection.Output
@@ -791,7 +823,8 @@ public sealed class UnrealBindingGenerator
 
     internal static string? GetManagedType(
         UnrealTypeReference type,
-        IReadOnlyDictionary<string, string> managedTypeNames) => type.Kind switch
+        IReadOnlyDictionary<string, string> managedTypeNames,
+        bool objectViews = true) => type.Kind switch
         {
             UnrealValueKind.Void => "void",
             UnrealValueKind.Boolean => "bool",
@@ -816,10 +849,15 @@ public sealed class UnrealBindingGenerator
                 signature.Parameters.Select(p => p.Type).Append(signature.ReturnType).All(t =>
                     t.Kind is not (UnrealValueKind.NativeObject or UnrealValueKind.InvocationContext) && GetManagedType(t, managedTypeNames) is not null) =>
                 $"global::Finare.Unreal.UnrealCallback<{callbackName}>",
+            UnrealValueKind.Object or UnrealValueKind.Interface when !objectViews => "global::Finare.Unreal.UnrealObjectHandle",
             UnrealValueKind.Object =>
-                "global::Finare.Unreal.UnrealObjectHandle",
+                type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? objectName)
+                    ? objectName + "?"
+                    : "global::Finare.Unreal.UnrealObject?",
             UnrealValueKind.Interface =>
-                "global::Finare.Unreal.UnrealObjectHandle",
+                type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? interfaceName)
+                    ? interfaceName + "?"
+                    : "global::Finare.Unreal.UnrealObject?",
             UnrealValueKind.NativeObject when type.TypePath is not null && managedTypeNames.TryGetValue(type.TypePath, out string? nativeName) => nativeName,
             UnrealValueKind.Class =>
                 "global::Finare.Unreal.UnrealClassHandle",
@@ -838,14 +876,14 @@ public sealed class UnrealBindingGenerator
                 "global::Finare.Unreal.UnrealTransform",
             UnrealValueKind.Struct when type.TypePath is not null &&
                 managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
-            UnrealValueKind.Array when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+            UnrealValueKind.Array when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
                 $"global::System.Collections.Generic.IReadOnlyList<{element}>",
-            UnrealValueKind.Set when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames) is string element =>
+            UnrealValueKind.Set when !ContainsInterfaceValue(type) && GetManagedType(type.ElementType!, managedTypeNames, objectViews) is string element =>
                 $"global::System.Collections.Generic.IReadOnlySet<{element}>",
             UnrealValueKind.Map
                 when !ContainsInterfaceValue(type) &&
-                     GetManagedType(type.KeyType!, managedTypeNames) is string key &&
-                     GetManagedType(type.ValueType!, managedTypeNames) is string value =>
+                     GetManagedType(type.KeyType!, managedTypeNames, objectViews) is string key &&
+                     GetManagedType(type.ValueType!, managedTypeNames, objectViews) is string value =>
                 $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
             _ => null,
         };
@@ -864,6 +902,10 @@ public sealed class UnrealBindingGenerator
             names.Add(callback.TypePath!, MakeUniqueTypeName(ToIdentifier(TrimNativeStructPrefix(callback.NativeName)) + "Handler", callback.TypePath!, used));
         return names;
     }
+
+    private static string RuntimeTypeName(string? managedType) =>
+        (managedType ?? throw new InvalidOperationException("A reflected managed type is required."))
+        .Replace("?", string.Empty, StringComparison.Ordinal);
 
     private static string TrimNativeStructPrefix(string nativeName) =>
         nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName;

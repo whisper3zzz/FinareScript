@@ -20,6 +20,8 @@
     <ProjectReference Include="../../src/Finare.Runtime/Finare.Runtime.csproj" />
     <ProjectReference Include="../../src/Finare.Semantics/Finare.Semantics.csproj" />
     <ProjectReference Include="../../src/Finare.Unreal/Finare.Unreal.csproj" />
+    <ProjectReference Include="../../src/Finare.Unreal.Generators/Finare.Unreal.Generators.csproj"
+                      OutputItemType="Analyzer" />
     <ProjectReference Include="../../samples/Unreal/Finare.Unreal.Demo/Finare.Unreal.Demo.csproj"
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../samples/ProjectLoading/ProjectLoadingDemo.csproj"

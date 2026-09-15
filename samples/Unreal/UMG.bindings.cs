@@ -23,7 +23,7 @@ public readonly record struct EComponentMobility(long Value) : global::Finare.Un
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u9759\u6001\u7F51\u683C\u4F53Actor", Tooltip = "\u9759\u6001\u7F51\u683C\u4F53Actor\u662FUStaticMesh\u5728\u4E16\u754C\u573A\u666F\u4E2D\u7684\u5B9E\u4F8B\u3002\n\u9759\u6001\u7F51\u683C\u4F53\u662F\u4E00\u79CD\u6CA1\u6709\u52A8\u753B\uFF0C\u6216\u4E0D\u80FD\u4EE5\u4EFB\u4F55\u5176\u4ED6\u5F62\u5F0F\u53D8\u5316\u7684\u51E0\u4F55\u4F53\uFF0C\u5E76\u4E14\u6BD4\u5176\u4ED6\u7C7B\u578B\u7684\u51E0\u4F55\u4F53\u66F4\u6709\u6548\u7387\u3002\n\u9759\u6001\u7F51\u683C\u4F53\u53EF\u4EE5\u4ECE\u5185\u5BB9\u6D4F\u89C8\u5668\u4E2D\u76F4\u63A5\u62D6\u62FD\u5230\u573A\u666F\u4E2D\uFF0C\u5E76\u4E14\u4F1A\u81EA\u52A8\u8F6C\u6362\u6210StaticMeshActors\u3002\n\n@\u8BF7\u53C2\u9605 https://docs.unrealengine.com/latest/INT/Engine/Actors/StaticMeshActor/index.html\n@\u8BF7\u53C2\u9605 UStaticMesh")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.Actor")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.StaticMeshActor")]
-public sealed partial class StaticMeshActor : global::Finare.Unreal.UnrealObject
+public partial class StaticMeshActor : global::Finare.Unreal.UnrealObject
 {
     public StaticMeshActor(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -33,9 +33,9 @@ public sealed partial class StaticMeshActor : global::Finare.Unreal.UnrealObject
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u9759\u6001\u7F51\u683C\u4F53\u7EC4\u4EF6", Category = "StaticMeshActor")]
-    public global::Finare.Unreal.UnrealObjectHandle StaticMeshComponent
+    public StaticMeshComponent? StaticMeshComponent
     {
-        get => ReadProperty<global::Finare.Unreal.UnrealObjectHandle>(0x773F7AAFA26F42A6UL, "/Script/Engine.StaticMeshActor:StaticMeshComponent");
+        get => ReadProperty<StaticMeshComponent?>(0x773F7AAFA26F42A6UL, "/Script/Engine.StaticMeshActor:StaticMeshComponent");
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Mobility", Category = "Mobility", Tooltip = "\u6539\u53D8\u79FB\u52A8\u7C7B\u578B\u7684\u529F\u80FD")]
@@ -46,7 +46,7 @@ public sealed partial class StaticMeshActor : global::Finare.Unreal.UnrealObject
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u9759\u6001\u7F51\u683C\u4F53\u7EC4\u4EF6", Tooltip = "\u4F7F\u7528StaticMeshComponent\u521B\u5EFAUStaticMesh\u7684\u5B9E\u4F8B\u3002\n\u9759\u6001\u7F51\u683C\u4F53\u662F\u7EC4\u6210\u591A\u8FB9\u5F62\u9759\u6001\u96C6\u7684\u51E0\u4F55\u4F53\u7684\u4E00\u5757\u3002\n\n@seehttps://docs.unrealengine.com/latest/INT/Engine/Content/Types/StaticMeshes/\n@seeUStaticMesh")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.MeshComponent")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/Engine.StaticMeshComponent")]
-public sealed partial class StaticMeshComponent : global::Finare.Unreal.UnrealObject
+public partial class StaticMeshComponent : global::Finare.Unreal.UnrealObject
 {
     public StaticMeshComponent(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -56,14 +56,14 @@ public sealed partial class StaticMeshComponent : global::Finare.Unreal.UnrealOb
     }
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Static Mesh", Category = "Components|StaticMesh", Tooltip = "\u4FEE\u6539\u6B64\u5B9E\u4F8B\u4F7F\u7528\u7684StaticMesh\u3002")]
-    public bool SetStaticMesh(global::Finare.Unreal.UnrealObjectHandle newMesh)
-        => Invoke<bool, global::Finare.Unreal.UnrealObjectHandle>(0xA4B9F97F0FFD6A35UL, "/Script/Engine.StaticMeshComponent:SetStaticMesh", newMesh);
+    public bool SetStaticMesh(global::Finare.Unreal.UnrealObject? newMesh)
+        => Invoke<bool, global::Finare.Unreal.UnrealObject?>(0xA4B9F97F0FFD6A35UL, "/Script/Engine.StaticMeshComponent:SetStaticMesh", newMesh);
 }
 
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u6309\u94AE", Tooltip = "\u6309\u952E\u662F\u53EF\u70B9\u51FB\u7684\u57FA\u5143\u7A7A\u95F4\uFF0C\u4EE5\u542F\u7528\u57FA\u7840\u4EA4\u4E92\u3002\n\u53EF\u5728\u6309\u952E\u4E2D\u653E\u7F6E\u4EFB\u610F\u5176\u4ED6\u63A7\u4EF6\uFF0C\u5728UI\u4E2D\u6784\u5EFA\n\u66F4\u4E3A\u590D\u6742\u548C\u6709\u8DA3\u7684\u53EF\u70B9\u51FB\u5143\u7D20\u3002\n\n* \u5355\u4E2A\u5B50\u9879\n* \u53EF\u70B9\u51FB")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/UMG.ContentWidget")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/UMG.Button")]
-public sealed partial class Button : global::Finare.Unreal.UnrealObject
+public partial class Button : global::Finare.Unreal.UnrealObject
 {
     public Button(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -91,7 +91,7 @@ public sealed partial class Button : global::Finare.Unreal.UnrealObject
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u6587\u672C", Tooltip = "\u7B80\u5355\u9759\u6001\u6587\u672C\u63A7\u4EF6\u3002\n\n*\u65E0\u5B50\u9879\n*\u6587\u672C")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/UMG.TextLayoutWidget")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/UMG.TextBlock")]
-public sealed partial class TextBlock : global::Finare.Unreal.UnrealObject
+public partial class TextBlock : global::Finare.Unreal.UnrealObject
 {
     public TextBlock(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -112,7 +112,7 @@ public sealed partial class TextBlock : global::Finare.Unreal.UnrealObject
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u7528\u6237\u63A7\u4EF6", Tooltip = "\u4E00\u4E2A\u901A\u8FC7WidgetBlueprint\u5B9E\u73B0UI\u53EF\u6269\u5C55\u6027\u7684\u63A7\u4EF6\u3002")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/UMG.Widget", "/Script/UMG.NamedSlotInterface")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/UMG.UserWidget")]
-public sealed partial class UserWidget : global::Finare.Unreal.UnrealObject
+public partial class UserWidget : global::Finare.Unreal.Generated.UI.Widget
 {
     public UserWidget(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -129,14 +129,14 @@ public sealed partial class UserWidget : global::Finare.Unreal.UnrealObject
     public void AddToViewport()
         => AddToViewport(0);
 
-    public global::Finare.Unreal.UnrealObjectHandle GetWidgetFromName(global::Finare.Unreal.UnrealName name)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealName>(0x890F0C0AF0D474ECUL, "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst\u0026)", name);
+    public Widget? GetWidgetFromName(global::Finare.Unreal.UnrealName name)
+        => Invoke<Widget?, global::Finare.Unreal.UnrealName>(0x890F0C0AF0D474ECUL, "/Script/UMG.UserWidget:GetWidgetFromName(FNameconst\u0026)", name);
 }
 
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u63A7\u4EF6", Tooltip = "\u8FD9\u662F\u516C\u5F00\u5230UObjects\u7684\u6240\u6709\u5DF2\u5305\u88F9Slate\u63A7\u5236\u7684\u57FA\u7C7B\u3002")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/UMG.Visual", "/Script/FieldNotification.NotifyFieldValueChanged")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/UMG.Widget")]
-public sealed partial class Widget : global::Finare.Unreal.UnrealObject
+public partial class Widget : global::Finare.Unreal.UnrealObject
 {
     public Widget(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -161,7 +161,7 @@ public sealed partial class Widget : global::Finare.Unreal.UnrealObject
 [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u63A7\u4EF6\u84DD\u56FE\u5E93", Tooltip = "\u63A7\u4EF6\u84DD\u56FE\u5E93")]
 [global::Finare.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
 [global::Finare.Unreal.UnrealTypeAttribute("/Script/UMG.WidgetBlueprintLibrary")]
-public sealed partial class WidgetBlueprintLibrary : global::Finare.Unreal.UnrealStaticService
+public partial class WidgetBlueprintLibrary : global::Finare.Unreal.UnrealStaticService
 {
     public WidgetBlueprintLibrary(
         global::Finare.Unreal.UnrealObjectHandle handle,
@@ -172,6 +172,6 @@ public sealed partial class WidgetBlueprintLibrary : global::Finare.Unreal.Unrea
 
     [global::Finare.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Create Widget", Category = "Widget", Tooltip = "\u521B\u5EFA\u4E00\u4E2A\u63A7\u4EF6", WorldContextParameter = "WorldContextObject")]
     [global::Finare.Unreal.UnrealStaticFunctionAttribute]
-    public global::Finare.Unreal.UnrealObjectHandle Create(global::Finare.Unreal.UnrealObjectHandle worldContextObject, global::Finare.Unreal.UnrealClassHandle widgetType, global::Finare.Unreal.UnrealObjectHandle owningPlayer)
-        => Invoke<global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealObjectHandle, global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealObjectHandle>(0x4B72F7160A024D3BUL, "/Script/UMG.WidgetBlueprintLibrary:Create", worldContextObject, widgetType, owningPlayer);
+    public UserWidget? Create(global::Finare.Unreal.UnrealObject? worldContextObject, global::Finare.Unreal.UnrealClassHandle widgetType, global::Finare.Unreal.UnrealObject? owningPlayer)
+        => Invoke<UserWidget?, global::Finare.Unreal.UnrealObject?, global::Finare.Unreal.UnrealClassHandle, global::Finare.Unreal.UnrealObject?>(0x4B72F7160A024D3BUL, "/Script/UMG.WidgetBlueprintLibrary:Create", worldContextObject, widgetType, owningPlayer);
 }

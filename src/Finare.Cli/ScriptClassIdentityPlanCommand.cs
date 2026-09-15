@@ -76,7 +76,7 @@ internal static class ScriptClassIdentityPlanCommand
             loaded.Request.EffectCatalog,
             loaded.Request.Settings,
             loaded.Request.RuntimeReferencePaths,
-            loaded.Request.IncludeDefaultReferences);
+            loaded.Request.IncludeDefaultReferences, loaded.Request.SourceGeneratorPaths);
         CSharpSourceIdentityTransitionPlanResult planned =
             new CSharpSourceIdentityTransitionPlanner().Plan(plannerRequest, transitions);
         if (!planned.Succeeded || planned.Analysis?.Semantics is null)

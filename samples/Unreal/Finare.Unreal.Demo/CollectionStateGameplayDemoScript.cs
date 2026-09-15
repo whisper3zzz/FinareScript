@@ -10,29 +10,29 @@ namespace Finare.Unreal.Demo;
 
 /// <summary>
 /// A gameplay example whose three editable collection states jointly select the
-/// mesh loaded for the preview actor.  The collections remain ordinary managed
-/// state until this script asks the World-owned async service to load the
+/// mesh loaded for the preview actor.  The collections are native property
+/// snapshots while this script asks the World-owned async service to load the
 /// selected path.
 /// </summary>
 [ScriptAsset("Unreal/CollectionStateGameplay")]
 [UnrealScriptClass(
     UnrealScriptClassKind.Actor,
     GeneratedClassPath = "/Game/UnifiedScriptDemo/BP_CollectionStateGameplay.BP_CollectionStateGameplay_C")]
-public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
+public sealed partial class CollectionStateGameplayDemoScript : UnrealActorScript
 {
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Collection State")]
-    public IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
+    public partial IReadOnlyList<UnrealSoftObjectHandle> Meshes { get; set; } =
     [
         new UnrealSoftObjectHandle("/Engine/BasicShapes/Cube.Cube"),
         new UnrealSoftObjectHandle("/Engine/BasicShapes/Sphere.Sphere"),
     ];
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Collection State")]
-    public IReadOnlySet<UnrealName> EnabledChoices { get; set; } =
+    public partial IReadOnlySet<UnrealName> EnabledChoices { get; set; } =
         new HashSet<UnrealName> { new("Cube"), new("Sphere") };
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Collection State")]
-    public IReadOnlyDictionary<UnrealName, int> ChoiceIndices { get; set; } =
+    public partial IReadOnlyDictionary<UnrealName, int> ChoiceIndices { get; set; } =
         new Dictionary<UnrealName, int>
         {
             { new UnrealName("Cube"), 0 },
@@ -40,10 +40,10 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
         };
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Collection State")]
-    public UnrealName SelectedChoice { get; set; } = new("Cube");
+    public partial UnrealName SelectedChoice { get; set; } = new("Cube");
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Collection State")]
-    public UnrealSoftClassHandle PreviewActorClass { get; set; } =
+    public partial UnrealSoftClassHandle PreviewActorClass { get; set; } =
         new("/Script/Engine.StaticMeshActor");
 
     private FinareWorldLibrary _world = null!;
@@ -54,7 +54,8 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
     protected override void OnBeginPlay()
     {
         _world = new FinareWorldLibrary(TargetHandle, Bridge);
-        _host = new FinareComponent(HostHandle, Bridge);
+        _host = new FinareActor(HostHandle, Bridge).GetFinareComponent()
+            ?? throw new InvalidOperationException("Collection state Actor script has no Finare component.");
         _load = LoadPreviewAsync();
     }
 
@@ -126,23 +127,24 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
 
     private async Task LoadPreviewAsync()
     {
-        // Snapshot every collection and the scalar class before the first await.
-        // A later state flush can replace the collections while an old request
-        // is resolving; that request must finish with one coherent selection.
-        IReadOnlyList<UnrealSoftObjectHandle> meshes = Meshes;
-        IReadOnlySet<UnrealName> enabledChoices = EnabledChoices;
-        IReadOnlyDictionary<UnrealName, int> choiceIndices = ChoiceIndices;
-        UnrealName selectedChoice = SelectedChoice;
-        UnrealSoftClassHandle actorClassPath = PreviewActorClass;
         CancellationToken lifetime = Lifetime;
-        if (lifetime.IsCancellationRequested)
-        {
-            return;
-        }
-        _host.ManagedState = "CollectionState:Loading";
 
         try
         {
+            // Snapshot every collection and the scalar class before the first await.
+            // A later native property write can replace the collections while an old request
+            // is resolving; that request must finish with one coherent selection.
+            IReadOnlyList<UnrealSoftObjectHandle> meshes = Meshes;
+            IReadOnlySet<UnrealName> enabledChoices = EnabledChoices;
+            IReadOnlyDictionary<UnrealName, int> choiceIndices = ChoiceIndices;
+            UnrealName selectedChoice = SelectedChoice;
+            UnrealSoftClassHandle actorClassPath = PreviewActorClass;
+            if (lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+            _host.ManagedState = "CollectionState:Loading";
+
             if (!enabledChoices.Contains(selectedChoice) ||
                 !choiceIndices.TryGetValue(selectedChoice, out int meshIndex) ||
                 (uint)meshIndex >= (uint)meshes.Count)
@@ -156,13 +158,13 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
             UnrealObjectHandle actorClass = await LoadClassAsync(actorClassPath, 10.0f, lifetime);
             lifetime.ThrowIfCancellationRequested();
 
-            UnrealObjectHandle candidate = _world.SpawnActor(
-                TargetHandle,
+            UnrealObjectHandle candidate = (_world.SpawnActor(
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge),
                 new UnrealClassHandle(actorClass.Value),
                 new UnrealTransform(
                     UnrealQuaternion.Identity,
                     new UnrealVector(200.0, 0.0, 40.0),
-                    UnrealVector.One));
+                    UnrealVector.One)))?.Handle ?? default;
             if (candidate.IsNull)
             {
                 throw new InvalidOperationException("Collection preview SpawnActor returned null.");
@@ -172,13 +174,13 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
             {
                 var actor = new UI.StaticMeshActor(candidate, Bridge);
                 actor.SetMobility(UI.EComponentMobility.Movable);
-                if (!new UI.StaticMeshComponent(actor.StaticMeshComponent, Bridge).SetStaticMesh(mesh))
+                if (!new UI.StaticMeshComponent((actor.StaticMeshComponent)?.Handle ?? default, Bridge).SetStaticMesh(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mesh, Bridge)))
                 {
                     throw new InvalidOperationException("The selected collection mesh was not accepted.");
                 }
                 if (!_spawned.IsNull)
                 {
-                    _world.DestroyActor(TargetHandle, _spawned);
+                    _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
                 }
                 _spawned = candidate;
                 candidate = default;
@@ -188,7 +190,7 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
             {
                 if (!candidate.IsNull)
                 {
-                    _world.DestroyActor(TargetHandle, candidate);
+                    _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(candidate, Bridge));
                 }
             }
         }
@@ -212,7 +214,7 @@ public sealed class CollectionStateGameplayDemoScript : UnrealActorScript
     {
         if (!_spawned.IsNull)
         {
-            _world.DestroyActor(TargetHandle, _spawned);
+            _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
             _spawned = default;
         }
         _load = null;

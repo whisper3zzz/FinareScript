@@ -332,7 +332,12 @@ public static class FinareRuntimeDeclarationBinary
         FinareRuntimeStateDeclaration[] allStates = normalized.Assets
             .SelectMany(static asset => asset.States)
             .ToArray();
-        ushort minorVersion = normalized.Assets.Any(static asset => asset.ClassBinding is not null)
+        static bool HasObjectType(ScriptFunctionValueTypeDeclaration? type) => type is not null &&
+            (type.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface ||
+             type.Fields.Any(f => HasObjectType(f.UnrealType)) ||
+             (type.TypeArguments?.Any(a => HasObjectType(a.UnrealType)) ?? false));
+        ushort minorVersion = allStates.Any(s => HasObjectType(s.UnrealType)) ? (ushort)6 :
+            normalized.Assets.Any(static asset => asset.ClassBinding is not null)
             ? (ushort)5
             : allStates.Any(static state =>
                 state.TypeKind is ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map ||
@@ -392,7 +397,7 @@ public static class FinareRuntimeDeclarationBinary
 
     public static FinareRuntimeDeclarationDocument Decode(ReadOnlySpan<byte> source)
     {
-        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 5);
+        var reader = new ChunkPayloadReader(source, Magic, maximumMinorVersion: 6);
         SemanticId compilationId = reader.ReadSemanticId();
         SemanticId configurationId = reader.ReadSemanticId();
         int assetCount = reader.ReadCount();
@@ -620,6 +625,8 @@ public static class FinareRuntimeDeclarationBinary
         ScriptFunctionTypeArgumentDeclaration argument)
     {
         string metadata = argument.TypeMetadataName;
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface)
+            return new(FinareRuntimeStateValueKind.Null);
         if (metadata == "System.Boolean")
             return new(FinareRuntimeStateValueKind.Boolean, BooleanValue: value.GetBoolean());
         if (metadata is "System.Byte" or "System.UInt16" or "System.UInt32" or "System.UInt64")
@@ -709,6 +716,8 @@ public static class FinareRuntimeDeclarationBinary
             return null;
         }
         var kind = (ScriptFunctionValueTypeKind)reader.ReadByte();
+        if (!Enum.IsDefined(kind) || kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface && reader.MinorVersion < 6)
+            throw new InvalidDataException("Reference type identities require declaration payload v1.6.");
         string path = reader.ReadString();
         string nativeName = reader.ReadString();
         int fieldCount = reader.ReadCount();
@@ -1003,7 +1012,11 @@ public static class FinareRuntimeDeclarationBinary
                     $"Runtime soft reference state '{state.Name}' has an incompatible identity or path.");
             }
         }
-        if (state.TypeKind is not (ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct or
+        if (state.TypeKind == ScriptStateTypeKind.Object && state.UnrealType is not null &&
+            (state.UnrealType.Kind is not (ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface) ||
+             string.IsNullOrWhiteSpace(state.UnrealType.UnrealTypePath) || state.UnrealType.Fields.Count != 0))
+            throw new InvalidDataException($"Runtime object state '{state.Name}' has an invalid reference identity.");
+        if (state.TypeKind is not (ScriptStateTypeKind.Object or ScriptStateTypeKind.Enum or ScriptStateTypeKind.Struct or
             ScriptStateTypeKind.Array or ScriptStateTypeKind.Set or ScriptStateTypeKind.Map) &&
             state.UnrealType is not null)
         {
@@ -1117,7 +1130,9 @@ public static class FinareRuntimeDeclarationBinary
         string metadata = argument.TypeMetadataName;
         if (!ScriptAssetJson.IsSupportedCollectionLeaf(argument))
             throw new InvalidDataException($"Collection leaf '{metadata}' is unsupported.");
-        bool valid = metadata == "System.Boolean"
+        bool valid = argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface
+            ? value.Kind == FinareRuntimeStateValueKind.Null
+            : metadata == "System.Boolean"
             ? value.Kind == FinareRuntimeStateValueKind.Boolean
             : metadata == "System.Byte"
                 ? value.Kind == FinareRuntimeStateValueKind.UnsignedInteger &&
@@ -1237,7 +1252,8 @@ public static class FinareRuntimeDeclarationBinary
                     z = value.TransformScaleZ,
                 },
             });
-        if (metadata is "Finare.Unreal.UnrealObjectHandle" or
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface ||
+            metadata is "Finare.Unreal.UnrealObjectHandle" or
             "Finare.Unreal.UnrealClassHandle")
             return JsonSerializer.SerializeToElement<object?>(null);
         return JsonSerializer.SerializeToElement(value.TextValue ?? string.Empty);

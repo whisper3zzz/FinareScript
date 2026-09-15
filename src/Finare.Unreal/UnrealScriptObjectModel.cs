@@ -27,7 +27,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
 {
     private CancellationTokenSource? _lifetime;
     private UnrealAsyncScope? _asyncScope;
-    private UnrealScriptStateSynchronizer.StateSession? _stateSession;
     private Dictionary<string, UnrealBlueprintOverrideInvocationContract>? _parentContracts;
     private bool _running;
     private bool _initializing;
@@ -77,6 +76,11 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             context.Generation,
             _lifetime.Token);
         _running = true;
+        // Once a lifecycle start has been attempted, generated accessors must
+        // never fall back to their declaration-side field. If initialization
+        // fails, the existing running-state cleanup below still makes access
+        // fail instead of exposing stale mirrored data.
+        ActivateReflectedPropertyAccess();
         _initializing = true;
         _generatedFunctionCallDepth = 0;
         _parentContracts = new Dictionary<string, UnrealBlueprintOverrideInvocationContract>(
@@ -84,18 +88,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         try
         {
             generationBridge?.BindScript(this);
-            _stateSession = UnrealScriptStateSynchronizer.Open(this, context);
-            BeginManagedStateBoundary();
-            bool initialized = false;
-            try
-            {
-                OnInitialized();
-                initialized = true;
-            }
-            finally
-            {
-                EndManagedStateBoundary(initialized);
-            }
+            OnInitialized();
             _initializing = false;
         }
         catch
@@ -120,7 +113,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
                 // every generation-owned resource below.
             }
             _asyncScope = null;
-            _stateSession = null;
             _parentContracts = null;
             _lifetime?.Dispose();
             _lifetime = null;
@@ -139,20 +131,8 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
         // Async service V5 may complete a zero-delay request synchronously.
-        // Enter the state boundary before Advance so its continuation observes
-        // the current reflected state and its writes are retained by this tick.
-        BeginManagedStateBoundary();
-        bool tickSucceeded = false;
-        try
-        {
-            _asyncScope!.Advance(deltaSeconds);
-            OnUpdate(deltaSeconds);
-            tickSucceeded = true;
-        }
-        finally
-        {
-            EndManagedStateBoundary(tickSucceeded);
-        }
+        _asyncScope!.Advance(deltaSeconds);
+        OnUpdate(deltaSeconds);
     }
 
     void IUnrealManagedEventSink.OnUnrealEvent(UnrealScriptEvent scriptEvent)
@@ -166,17 +146,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new ArgumentException("A managed Unreal event contains an invalid object handle.", nameof(scriptEvent));
         }
-        BeginManagedStateBoundary();
-        bool eventSucceeded = false;
-        try
-        {
-            OnUnrealEvent(scriptEvent);
-            eventSucceeded = true;
-        }
-        finally
-        {
-            EndManagedStateBoundary(eventSucceeded);
-        }
+        OnUnrealEvent(scriptEvent);
     }
 
     internal void BeginGeneratedFunctionCall()
@@ -185,7 +155,7 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         {
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
-        BeginManagedStateBoundary();
+        _generatedFunctionCallDepth++;
     }
 
     internal void EndGeneratedFunctionCall()
@@ -199,10 +169,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             throw new InvalidOperationException("No generated function call is active.");
         }
         _generatedFunctionCallDepth--;
-        if (_generatedFunctionCallDepth == 0)
-        {
-            _stateSession?.Flush();
-        }
     }
 
     void IUnrealManagedScript.OnStop()
@@ -216,26 +182,12 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         _destroying = true;
         UnrealGenerationInvocationBridge? generationBridge =
             Context.Bridge as UnrealGenerationInvocationBridge;
-        bool stateBoundaryEntered = false;
-        bool cancellationAttempted = false;
-        bool bodySucceeded = false;
         ExceptionDispatchInfo? teardownFailure = null;
         try
         {
-            BeginManagedStateBoundary();
-            stateBoundaryEntered = true;
-            try
-            {
-                cancellationAttempted = true;
-                lifetime.Cancel();
-                _asyncScope!.Dispose();
-                OnDestroyed();
-                bodySucceeded = true;
-            }
-            catch (Exception exception)
-            {
-                teardownFailure = ExceptionDispatchInfo.Capture(exception);
-            }
+            lifetime.Cancel();
+            _asyncScope!.Dispose();
+            OnDestroyed();
         }
         catch (Exception exception)
         {
@@ -243,33 +195,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         }
         finally
         {
-            if (stateBoundaryEntered)
-            {
-                try
-                {
-                    EndManagedStateBoundary(bodySucceeded);
-                }
-                catch (Exception exception)
-                {
-                    teardownFailure ??= ExceptionDispatchInfo.Capture(exception);
-                }
-                finally
-                {
-                    stateBoundaryEntered = false;
-                }
-            }
-            if (!cancellationAttempted)
-            {
-                try
-                {
-                    cancellationAttempted = true;
-                    lifetime.Cancel();
-                }
-                catch (Exception exception)
-                {
-                    teardownFailure ??= ExceptionDispatchInfo.Capture(exception);
-                }
-            }
             try
             {
                 _asyncScope?.Dispose();
@@ -282,7 +207,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
             _running = false;
             _generatedFunctionCallDepth = 0;
             _asyncScope = null;
-            _stateSession = null;
             _parentContracts = null;
             _lifetime = null;
             Context = default;
@@ -503,51 +427,38 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
         string memberPath =
             contract.Attribute.DeclaringClassPath + ":" + contract.Attribute.FunctionName;
         ulong memberId = UnrealMemberId.FromPath(memberPath);
-        _stateSession?.Flush();
-        UnrealOutputInvocationResult result = default!;
-        ExceptionDispatchInfo? invocationFailure = null;
         int suspendedDepth = _generatedFunctionCallDepth;
-        // The native parent body may synchronously re-enter this managed
-        // script. The outer state was flushed above, so let that re-entry open
-        // a fresh boundary and hydrate the parent's native writes before it
-        // changes state. Restore the caller's nesting depth after native
-        // control returns so the outer boundary still owns the final flush.
+        // A native parent body may synchronously re-enter this managed script.
+        // Give that call a fresh generated-call depth, then restore the caller
+        // depth even when the bridge or projection rejects the result.
         _generatedFunctionCallDepth = 0;
         try
         {
-            result = parentBridge.InvokeParentWithOutputs(
+            bool project = UnrealObjectInvocationAdapter.ContainsObjectView(returnType) ||
+                arguments.Any(a => UnrealObjectInvocationAdapter.ContainsObjectView(a.Type));
+            UnrealOutputInvocationResult result = parentBridge.InvokeParentWithOutputs(
                 context.Host,
                 memberId,
                 memberPath,
-                returnType,
-                arguments);
-        }
-        catch (Exception exception)
-        {
-            invocationFailure = ExceptionDispatchInfo.Capture(exception);
+                project ? UnrealObjectInvocationAdapter.WireType(returnType) : returnType,
+                project ? arguments.Select(a => new UnrealOutputArgument(UnrealObjectInvocationAdapter.WireType(a.Type),
+                    a.Direction, a.Direction == UnrealParameterDirection.Output ? null :
+                        UnrealObjectInvocationAdapter.Convert(a.Value, a.Type, context.Bridge, false))).ToArray() : arguments);
+            if (project)
+            {
+                var outputArguments = arguments.Where(a => a.Direction != UnrealParameterDirection.Input).ToArray();
+                if (result.Outputs.Count != outputArguments.Length)
+                    throw new InvalidOperationException("Parent output count differs from its declared signature.");
+                result = new UnrealOutputInvocationResult(
+                    UnrealObjectInvocationAdapter.Convert(result.ReturnValue, returnType, context.Bridge, true),
+                    outputArguments.Select((a, i) => UnrealObjectInvocationAdapter.Convert(result.Outputs[i], a.Type, context.Bridge, true)).ToArray());
+            }
+            return result;
         }
         finally
         {
             _generatedFunctionCallDepth = suspendedDepth;
         }
-
-        try
-        {
-            _stateSession?.Hydrate();
-        }
-        catch (Exception hydrateFailure)
-        {
-            if (invocationFailure is not null)
-            {
-                throw new AggregateException(
-                    "Blueprint parent invocation failed and managed state hydration also failed.",
-                    invocationFailure.SourceException,
-                    hydrateFailure);
-            }
-            throw;
-        }
-        invocationFailure?.Throw();
-        return result;
     }
 
     private UnrealScriptContext RequireParentContext()
@@ -629,28 +540,6 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
     private UnrealScriptContext RequireRunning() => _running
         ? Context
         : throw new InvalidOperationException("The Unreal script is not running.");
-
-    private void BeginManagedStateBoundary()
-    {
-        if (_generatedFunctionCallDepth == 0)
-        {
-            _stateSession?.Hydrate();
-        }
-        _generatedFunctionCallDepth++;
-    }
-
-    private void EndManagedStateBoundary(bool flush)
-    {
-        if (_generatedFunctionCallDepth <= 0)
-        {
-            throw new InvalidOperationException("No managed state boundary is active.");
-        }
-        _generatedFunctionCallDepth--;
-        if (flush && _generatedFunctionCallDepth == 0)
-        {
-            _stateSession?.Flush();
-        }
-    }
 
 }
 

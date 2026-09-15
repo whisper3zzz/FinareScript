@@ -67,7 +67,7 @@ internal sealed record ProjectAuthoringInput(
         CSharpCompilationRequest template = project.Request;
         return new ProjectAuthoringInput(new CSharpCompilationRequest(
             template.AssemblyName, sources, template.ReferencePaths, template.EffectCatalog,
-            template.Settings, template.RuntimeReferencePaths, template.IncludeDefaultReferences),
+            template.Settings, template.RuntimeReferencePaths, template.IncludeDefaultReferences, template.SourceGeneratorPaths),
             primaryPath, sidecarPath, files, readOnly, identityFiles);
     }
 

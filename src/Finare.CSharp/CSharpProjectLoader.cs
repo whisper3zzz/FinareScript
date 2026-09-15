@@ -75,6 +75,7 @@ public sealed class CSharpProjectLoader
         "Compile",
         "ReferencePath",
         "ReferenceCopyLocalPaths",
+        "Analyzer",
     ];
 
     public CSharpProjectLoadResult Load(
@@ -189,7 +190,8 @@ public sealed class CSharpProjectLoader
             effectCatalog,
             settings,
             runtimeReferencePaths,
-            includeDefaultReferences: false);
+            includeDefaultReferences: false,
+            sourceGeneratorPaths: ReadAnalyzerPaths(items));
         return new CSharpProjectLoadResult(
             fullProjectPath,
             options.Configuration,
@@ -340,6 +342,13 @@ public sealed class CSharpProjectLoader
             .Order(StringComparer.Ordinal)
             .ToArray();
     }
+
+    private static string[] ReadAnalyzerPaths(JsonElement items) =>
+        items.TryGetProperty("Analyzer", out JsonElement analyzers)
+            ? analyzers.EnumerateArray().Select(item => OptionalItemMetadata(item, "FullPath"))
+                .Where(path => !string.IsNullOrWhiteSpace(path) && IsManagedAssembly(path))
+                .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : [];
 
     private static CSharpCompilationSettings ReadSettings(
         JsonElement properties,

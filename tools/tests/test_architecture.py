@@ -9,6 +9,22 @@ from repository_checks.architecture import validate_architecture
 
 
 class ArchitectureTests(unittest.TestCase):
+    def test_analyzer_build_dependency_is_not_a_runtime_reference_but_still_checks_cycles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "src" / "Finare.Unreal" / "Finare.Unreal.csproj"
+            analyzer = root / "src" / "Generator" / "Generator.csproj"
+            runtime.parent.mkdir(parents=True)
+            analyzer.parent.mkdir(parents=True)
+            runtime.write_text('<Project><ItemGroup><ProjectReference Include="../Generator/Generator.csproj" '
+                'ReferenceOutputAssembly="false" OutputItemType="Analyzer" /></ItemGroup></Project>')
+            analyzer.write_text('<Project><ItemGroup><PackageReference Include="Microsoft.CodeAnalysis.CSharp" />'
+                '</ItemGroup></Project>')
+            self.assertEqual(validate_architecture(root), [])
+            analyzer.write_text('<Project><ItemGroup><ProjectReference Include="../Finare.Unreal/Finare.Unreal.csproj" '
+                'ReferenceOutputAssembly="false" /></ItemGroup></Project>')
+            self.assertTrue(any("dependency cycle" in issue for issue in validate_architecture(root)))
+
     def test_repository_runtime_closure_is_compiler_free(self):
         self.assertEqual(validate_architecture(ROOT), [])
 

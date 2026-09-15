@@ -4,7 +4,7 @@ using Finare.Unreal;
 namespace Finare.Tests;
 
 [Trait("Category", "Unreal")]
-public sealed class UnrealBlueprintParentInvocationTests
+public sealed partial class UnrealBlueprintParentInvocationTests
 {
     [Fact]
     public void ManagedOverrideHelperUsesHostAndPreservesRefOutResults()
@@ -127,7 +127,7 @@ public sealed class UnrealBlueprintParentInvocationTests
     }
 
     [Fact]
-    public void ParentInvocationFlushesAndHydratesStateAroundTheNativeBridge()
+    public void ParentInvocationUsesLiveStateAroundTheNativeBridge()
     {
         var bridge = new StateParentBridge();
         UnrealObjectHandle host = UnrealObjectHandle.Create(3, 8);
@@ -135,7 +135,7 @@ public sealed class UnrealBlueprintParentInvocationTests
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 4);
         var script = new StateParentCallScript();
         IUnrealManagedScript lifecycle = script;
-        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 45, 1));
+        lifecycle.OnStart(new UnrealScriptContext(bridge, target, target, 45, 1));
 
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 8);
         script.BeginGeneratedFunctionCall();
@@ -151,14 +151,14 @@ public sealed class UnrealBlueprintParentInvocationTests
         Assert.Equal(19, script.Value);
         Assert.Equal(19, bridge.Get<int>(target, StateParentCallScript.StatePath + ":Value"));
         Assert.Equal(
-            new object[] { 4, 13, 19 },
+            new object[] { 13, 19 },
             bridge.Writes.Select(write => write.Value).ToArray());
         Assert.Equal(13, bridge.ParentObservedValue);
         lifecycle.OnStop();
     }
 
     [Fact]
-    public void ParentInvocationReentryHydratesParentStateAndReturnsNestedWrites()
+    public void ParentInvocationReentryUsesLiveStateAndReturnsNestedWrites()
     {
         var bridge = new StateParentBridge();
         UnrealObjectHandle host = UnrealObjectHandle.Create(3, 8);
@@ -178,7 +178,7 @@ public sealed class UnrealBlueprintParentInvocationTests
             }
         };
         IUnrealManagedScript lifecycle = script;
-        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 49, 1));
+        lifecycle.OnStart(new UnrealScriptContext(bridge, target, target, 49, 1));
 
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 8);
         script.BeginGeneratedFunctionCall();
@@ -194,13 +194,13 @@ public sealed class UnrealBlueprintParentInvocationTests
         Assert.Equal(20, script.Value);
         Assert.Equal(20, bridge.Get<int>(target, StateParentCallScript.StatePath + ":Value"));
         Assert.Equal(13, bridge.ParentObservedValue);
-        Assert.Equal(new object[] { 4, 13, 19, 20 },
+        Assert.Equal(new object[] { 13, 19, 20 },
             bridge.Writes.Select(write => write.Value).ToArray());
         lifecycle.OnStop();
     }
 
     [Fact]
-    public void ParentFailureHydratesNativeStateAndPreservesTheOriginalException()
+    public void ParentFailurePreservesTheOriginalExceptionAndNativeWrites()
     {
         var bridge = new StateParentBridge
         {
@@ -212,7 +212,7 @@ public sealed class UnrealBlueprintParentInvocationTests
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 4);
         var script = new StateParentCallScript();
         IUnrealManagedScript lifecycle = script;
-        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 46, 1));
+        lifecycle.OnStart(new UnrealScriptContext(bridge, target, target, 46, 1));
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 8);
 
         script.BeginGeneratedFunctionCall();
@@ -228,34 +228,32 @@ public sealed class UnrealBlueprintParentInvocationTests
     }
 
     [Fact]
-    public void ParentAndHydrateFailurePreservesTheCallFailureFirst()
+    public void ParentFailureDoesNotPerformAnImplicitStateRead()
     {
         var bridge = new StateParentBridge
         {
             ParentStateValue = 29,
             ParentException = new InvalidOperationException("parent body failed first"),
-            FailNextHydrateAfterParent = true,
         };
         UnrealObjectHandle host = UnrealObjectHandle.Create(3, 8);
         UnrealObjectHandle target = UnrealObjectHandle.Create(4, 8);
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 4);
         var script = new StateParentCallScript();
         IUnrealManagedScript lifecycle = script;
-        lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 47, 1));
+        lifecycle.OnStart(new UnrealScriptContext(bridge, target, target, 47, 1));
         bridge.Set(target, StateParentCallScript.StatePath + ":Value", 8);
 
-        AggregateException failure = Assert.Throws<AggregateException>(
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(
             () => script.RunEvaluate(5));
 
-        Assert.Collection(
-            failure.InnerExceptions,
-            exception => Assert.Equal("parent body failed first", exception.Message),
-            exception => Assert.Equal("hydrate failed", exception.Message));
+        Assert.Equal("parent body failed first", failure.Message);
+        Assert.Equal(new object[] { 13 }, bridge.Writes.Select(write => write.Value).ToArray());
+        Assert.Equal(1, bridge.ReadCount);
         lifecycle.OnStop();
     }
 
     [Fact]
-    public void GenerationBridgeRejectsBeforeStateFlushAndDisposedBridgeRejectsDirectParentCall()
+    public void GenerationBridgeRejectsBeforeLiveParentCallAndDisposedBridgeRejectsDirectParentCall()
     {
         var inner = new StateParentBridge(supportsParentInvocation: false);
         var generation = new UnrealGenerationInvocationBridge(inner);
@@ -264,13 +262,14 @@ public sealed class UnrealBlueprintParentInvocationTests
         inner.Set(target, StateParentCallScript.StatePath + ":Value", 4);
         var script = new StateParentCallScript();
         IUnrealManagedScript lifecycle = script;
-        lifecycle.OnStart(new UnrealScriptContext(generation, host, target, 48, 1));
+        lifecycle.OnStart(new UnrealScriptContext(generation, target, target, 48, 1));
         script.BeginGeneratedFunctionCall();
         script.Value = 17;
         int writesBeforeRejectedCall = inner.Writes.Count;
 
         Assert.Throws<NotSupportedException>(() => script.RunEvaluate(5));
-        Assert.Equal(writesBeforeRejectedCall, inner.Writes.Count);
+        Assert.Equal(writesBeforeRejectedCall + 1, inner.Writes.Count);
+        Assert.Equal(22, inner.Get<int>(target, StateParentCallScript.StatePath + ":Value"));
         lifecycle.OnStop();
         generation.Dispose();
 
@@ -501,12 +500,12 @@ internal sealed class CountingReadOnlyList(int count) : IReadOnlyList<int>
 [UnrealScriptClass(
     UnrealScriptClassKind.Actor,
     GeneratedClassPath = StateParentCallScript.StatePath)]
-public sealed class StateParentCallScript : UnrealActorScript
+public sealed partial class StateParentCallScript : UnrealActorScript
 {
     public const string StatePath = "/Game/Tests/BP_ParentState.BP_ParentState_C";
 
     [Expose]
-    public int Value { get; set; }
+    public partial int Value { get; set; }
 
     [UnrealBlueprintOverride(
         "/Script/FinareEventExtensionFixture.AFinareEventExtensionFixture",
@@ -534,19 +533,17 @@ internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParent
 
     public List<(UnrealObjectHandle Handle, string Path, object Value)> Writes { get; } = [];
 
+    public int ReadCount { get; private set; }
+
     public bool SupportsParentInvocation => _supportsParentInvocation;
 
     public int ParentStateValue { get; set; } = 18;
 
     public Exception? ParentException { get; set; }
 
-    public bool FailNextHydrateAfterParent { get; set; }
-
     public int ParentObservedValue { get; private set; }
 
     public Action? ParentReentry { get; set; }
-
-    private bool _failNextRead;
 
     public void Set<T>(UnrealObjectHandle handle, string path, T value)
         where T : notnull => _values[(handle, path)] = value;
@@ -555,11 +552,7 @@ internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParent
 
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
     {
-        if (_failNextRead)
-        {
-            _failNextRead = false;
-            throw new InvalidOperationException("hydrate failed");
-        }
+        ReadCount++;
         return Get<T>(target, propertyPath);
     }
 
@@ -587,16 +580,12 @@ internal sealed class StateParentBridge : IUnrealInvocationBridge, IUnrealParent
         Type returnType,
         IReadOnlyList<UnrealOutputArgument> arguments)
     {
-        Assert.Equal(host, UnrealObjectHandle.Create(3, 8));
+        Assert.Equal(host, UnrealObjectHandle.Create(4, 8));
         Assert.Equal("/Script/FinareEventExtensionFixture.AFinareEventExtensionFixture:EvaluateInheritedAlternate", memberPath);
         var stateKey = (UnrealObjectHandle.Create(4, 8), StateParentCallScript.StatePath + ":Value");
         ParentObservedValue = Get<int>(stateKey.Item1, stateKey.Item2);
         _values[stateKey] = ParentStateValue;
         ParentReentry?.Invoke();
-        if (FailNextHydrateAfterParent)
-        {
-            _failNextRead = true;
-        }
         if (ParentException is not null)
         {
             throw ParentException;

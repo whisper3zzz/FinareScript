@@ -10,6 +10,77 @@ namespace Finare.Tests;
 [Trait("Category", "Compiler")]
 public sealed class CSharpScriptAssetLowererTests
 {
+    [Fact]
+    public void UnrealScriptStateWithoutTheGeneratorIsRejectedClearly()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+
+            [ScriptAsset("Game/LegacyState")]
+            public sealed class LegacyState : UnrealObjectScript
+            {
+                public int Value { get; set; } = 1;
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            new CSharpCompilationRequest(
+                "LegacyState",
+                [new CSharpSourceDocument("Game/LegacyState.cs", source)],
+                [typeof(UnrealObjectScript).Assembly.Location]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.UnsupportedStateShape &&
+            diagnostic.Message.Contains("must be partial", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TypedObjectAndInterfaceStateRetainNativeIdentityAcrossSerialization()
+    {
+        const string source = """
+            using Finare;
+            using Finare.Unreal;
+            using System.Collections.Generic;
+            [UnrealType("/Script/Fixture.Actor")]
+            public class Actor : UnrealObject {
+                public Actor(UnrealObjectHandle h, IUnrealInvocationBridge b) : base(h,b) {}
+            }
+            [UnrealType("/Script/Fixture.Contract", IsInterface = true)]
+            public class Contract : UnrealObject {
+                public Contract(UnrealObjectHandle h, IUnrealInvocationBridge b) : base(h,b) {}
+            }
+            [ScriptAsset("Game/TypedState")]
+            [UnrealScriptClass(UnrealScriptClassKind.Actor)]
+            public partial class Behavior : UnrealActorScript {
+                [Expose] public partial Actor? Target { get; set; } = null;
+                [Expose] public partial Contract? Service { get; set; } = null;
+                [Expose] public partial IReadOnlyList<Actor?> Actors { get; set; } = [];
+                [Visual] public Actor? Echo(Actor? value) { return value; }
+            }
+            """;
+        var request = new CSharpCompilationRequest("TypedState", [new CSharpSourceDocument("TypedState.cs", source)],
+            [typeof(UnrealObject).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
+        var result = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        var roundTrip = ScriptAssetJson.Deserialize(ScriptAssetJson.Serialize(result.ScriptAssets!));
+        var asset = Assert.Single(roundTrip.Assets);
+        byte[] binary = Finare.Runtime.FinareRuntimeDeclarationBinary.Encode(Finare.Runtime.FinareRuntimeDeclarationBinary.FromScriptAssets(roundTrip));
+        Assert.Equal(6, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(10, 2)));
+        var runtime = Finare.Runtime.FinareRuntimeDeclarationBinary.Decode(binary);
+        Assert.Equal("/Script/Fixture.Actor", Assert.Single(Assert.Single(runtime.Assets).States, s => s.Name == "Target").UnrealType!.UnrealTypePath);
+        var target = Assert.Single(asset.States, s => s.Name == "Target");
+        Assert.Equal(ScriptStateTypeKind.Object, target.TypeKind);
+        Assert.Equal(ScriptFunctionValueTypeKind.Object, target.UnrealType!.Kind);
+        Assert.Equal("/Script/Fixture.Actor", target.UnrealType.UnrealTypePath);
+        Assert.Equal(JsonValueKind.Null, target.DefaultValue.ValueKind);
+        Assert.Equal(ScriptFunctionValueTypeKind.Interface, Assert.Single(asset.States, s => s.Name == "Service").UnrealType!.Kind);
+        Assert.Equal(ScriptFunctionValueTypeKind.Object, Assert.Single(asset.States, s => s.Name == "Actors").UnrealType!.TypeArguments![0].UnrealType!.Kind);
+        Assert.Equal("/Script/Fixture.Actor", Assert.Single(asset.Functions).ReturnUnrealType!.UnrealTypePath);
+    }
+
     private const string Source = """
         using System;
         using Finare;
@@ -177,24 +248,24 @@ public sealed class CSharpScriptAssetLowererTests
 
             namespace Game;
 
-            public class FrameworkHelper : UnrealActorScript
+            public partial class FrameworkHelper : UnrealActorScript
             {
                 [Expose]
-                public int ExposedHelper { get; set; } = 5;
+                public partial int ExposedHelper { get; set; } = 5;
 
                 public int HiddenHelper { get; set; } = 6;
             }
 
             [ScriptAsset("Game/BaseState")]
-            public class BaseState : FrameworkHelper
+            public partial class BaseState : FrameworkHelper
             {
-                public int Seed { get; set; } = 3;
+                public partial int Seed { get; set; } = 3;
             }
 
             [ScriptAsset("Game/MiddleState")]
-            public class MiddleState : BaseState
+            public partial class MiddleState : BaseState
             {
-                public IReadOnlyList<int> Values { get; set; } =
+                public partial IReadOnlyList<int> Values { get; set; } =
                     new List<int> { 2, 4 };
                 public MiddleState()
                 {
@@ -207,11 +278,11 @@ public sealed class CSharpScriptAssetLowererTests
             [UnrealScriptClass(
                 UnrealScriptClassKind.Actor,
                 GeneratedClassPath = "/Game/Tests/BP_ConcreteState.BP_ConcreteState_C")]
-            public sealed class ConcreteState : MiddleState
+            public sealed partial class ConcreteState : MiddleState
             {
-                public IReadOnlySet<int> Enabled { get; set; } =
+                public partial IReadOnlySet<int> Enabled { get; set; } =
                     new HashSet<int> { 11, 13 };
-                public IReadOnlyDictionary<int, int> Weights { get; set; } =
+                public partial IReadOnlyDictionary<int, int> Weights { get; set; } =
                     new Dictionary<int, int> { { 17, 19 } };
                 public ConcreteState()
                 {
@@ -225,7 +296,8 @@ public sealed class CSharpScriptAssetLowererTests
             new CSharpCompilationRequest(
                 "InheritedStateProjection",
                 [new CSharpSourceDocument("Game/InheritedStateProjection.cs", source)],
-                [typeof(UnrealObjectScript).Assembly.Location]));
+                [typeof(UnrealObjectScript).Assembly.Location],
+                sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]));
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         ScriptAssetDeclaration concrete = result.ScriptAssets!.Assets.Single(
@@ -805,10 +877,10 @@ public sealed class CSharpScriptAssetLowererTests
 
             [ScriptAsset("Game/Object", ClassId = "us_00000000000000000000000000000001")]
             [UnrealScriptClass(UnrealScriptClassKind.Object)]
-            public sealed class ObjectBehavior : UnrealObjectScript
+            public sealed partial class ObjectBehavior : UnrealObjectScript
             {
                 [Expose(InstanceEditable = true)]
-                public int StartValue { get; set; } = 1;
+                public partial int StartValue { get; set; } = 1;
 
                 [Visual]
                 public int AddOne(int value) { return value + 1; }
@@ -867,7 +939,8 @@ public sealed class CSharpScriptAssetLowererTests
         var request = new CSharpCompilationRequest(
             "ReviewedUnrealProxyClasses",
             [new CSharpSourceDocument("Game/ReviewedClasses.cs", source)],
-            [typeof(UnrealActorScript).Assembly.Location]);
+            [typeof(UnrealActorScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
 
         CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
 
@@ -914,7 +987,7 @@ public sealed class CSharpScriptAssetLowererTests
         ScriptDelegateBindingDeclaration delegateBinding = Assert.Single(
             eventFunction.DelegateBindings!);
         Assert.Equal(
-            "/Script/FinareRuntime.FinareComponent",
+            "/Script/CoreUObject.Object",
             delegateBinding.SourceTypePath);
         Assert.Equal(ScriptDelegateSource.Target, delegateBinding.Source);
         Assert.Equal(
@@ -935,10 +1008,10 @@ public sealed class CSharpScriptAssetLowererTests
 
             [ScriptAsset("Game/LifecycleActor", ClassId = "us_00000000000000000000000000000007")]
             [UnrealScriptClass(UnrealScriptClassKind.Actor)]
-            public sealed class LifecycleActor : UnrealActorScript
+            public sealed partial class LifecycleActor : UnrealActorScript
             {
                 [Expose]
-                public int Value { get; set; } = 0;
+                public partial int Value { get; set; } = 0;
 
                 [UnrealBlueprintEvent]
                 public void Activate(int amount) { Value = amount; }
@@ -951,14 +1024,16 @@ public sealed class CSharpScriptAssetLowererTests
         var firstRequest = new CSharpCompilationRequest(
             "StableGameplayContract",
             [new CSharpSourceDocument("Game/LifecycleActor.cs", source)],
-            [typeof(UnrealActorScript).Assembly.Location]);
+            [typeof(UnrealActorScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
         var editedRequest = new CSharpCompilationRequest(
             "StableGameplayContract",
             [new CSharpSourceDocument(
                 "Game/LifecycleActor.cs",
                 source.Replace("Value += 1", "Value += 2", StringComparison.Ordinal)
                     .Replace("Value = amount", "Value = amount + 1", StringComparison.Ordinal))],
-            [typeof(UnrealActorScript).Assembly.Location]);
+            [typeof(UnrealActorScript).Assembly.Location],
+            sourceGeneratorPaths: [typeof(Finare.Unreal.Generators.UnrealNativePropertyGenerator).Assembly.Location]);
 
         CSharpAnalysisResult first = new CSharpSemanticPipeline().Analyze(firstRequest);
         CSharpAnalysisResult edited = new CSharpSemanticPipeline().Analyze(editedRequest);

@@ -142,7 +142,7 @@ public sealed class DemoScript : IUnrealManagedScript
         }
         _component = new FinareComponent(context.Host, context.Bridge);
         var worldServices = new FinareWorldLibrary(context.Target, context.Bridge);
-        if (worldServices.GetWorldTimeSeconds(context.Target) < 0.0f)
+        if (worldServices.GetWorldTimeSeconds(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(context.Target, context.Bridge)) < 0.0f)
         {
             throw new InvalidOperationException("Generated World service invocation failed.");
         }
@@ -160,7 +160,7 @@ public sealed class DemoScript : IUnrealManagedScript
         typeof(FinareComponent),
         "/Script/FinareRuntime.FinareComponent:OnManagedSignal",
         Source = UnrealEventSource.Host)]
-    private void OnManagedSignal(int value, UnrealObjectHandle signalContext)
+    private void OnManagedSignal(int value, UnrealObject? signalContext)
     {
         _component.ManagedState += "|Event:" + value;
     }

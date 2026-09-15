@@ -58,17 +58,20 @@ and omits that member instead of guessing a marshal layout.
 
 ## Managed bindings
 
-`ue-bindings` produces one sealed partial wrapper per reflected class. A wrapper
+`ue-bindings` produces one partial wrapper per reflected class, deriving from
+its known generated native base wrapper. A wrapper
 contains the native class path and exact member paths, but never stores a raw
 `UObject*`. It receives:
 
 - `UnrealObjectHandle`: an opaque native-owned handle;
 - `IUnrealInvocationBridge`: the only property/function crossing point.
 
-Binding v0.1 generates primitives, strings/names/text, object handles, and
-recursive list/set/map shapes. Native structs and enums, static functions,
-and output/reference parameters remain explicit deferred diagnostics until the
-marshalling and class-default-object rules exist.
+The original Binding v0.1 baseline covered primitives and raw handles. The
+current public surface includes typed nullable object/interface views, value
+structs/enums, static functions and supported output/reference parameters.
+Objects inside supported structs and containers use the same typed projection;
+the transport retains handles underneath. See [capabilities](CAPABILITIES.md)
+for the supported combinations and their verification scope.
 
 `UnrealObject` rejects malformed handles and a null bridge. Handles are unsigned
 64-bit values rather than addresses: the low 32 bits encode `slot + 1`, the high
@@ -416,12 +419,12 @@ as a direct constant assignment in the explicit parameterless C# constructor.
 The latter is the default Script Class scaffold form. Constructor order is
 canonical, but only unconditional top-level simple assignments are projected;
 non-deterministic constructor shapes fail before native class mutation. This
-keeps generated CDO defaults, managed state hydration, compatible override
+keeps generated CDO defaults, native property access, compatible override
 migration, and packaged reload on one typed declaration contract.
 
 Source-defined managed base state is projected into each concrete Script Asset.
 Exposure is decided by each declaring type: its own `[ScriptAsset]` includes
-its instance auto-properties, while a plain helper base contributes only its
+its instance properties, while a plain helper base contributes only its
 explicit `[Expose]` properties. The leaf's attribute does not export unexposed
 helper or framework properties. A projected state keeps the declaring
 property's persistent `.usids` identity and source span; different leaves can
@@ -438,11 +441,13 @@ defines it, preserving derived constructor overrides. Failed edits publish no
 partial source or sidecar. Runtime bindings use the concrete generated class
 path for every inherited property, with Actor state on the Target and component
 state on the Host; CoreCLR receiver overrides can also reach eligible private
-base properties. This contract does not infer a native Blueprint parent from
-the C# base type. Three-level managed inheritance passes Actor startup, state
-hydration/flush, reload and teardown in two Worlds and in Win64 Development
-cooked execution, with complete scalar/Array/Set/Map values and no native field
-for the unexposed helper. Native authoring owner selection and inherited
+base properties. Script Class state requires generated partial accessors;
+ordinary non-Unreal Script Assets retain their own state model. This contract
+does not infer a native Blueprint parent from the C# base type. The earlier
+three-level inheritance checkpoint covered startup, reload and teardown in two
+Worlds and Win64 Development cooked execution using the former synchronization
+path. That historical Cook result does not validate the replacement accessor
+implementation. Native authoring owner selection and inherited
 function projections remain tracked in the
 [inheritance checkpoint](plans/2026-09-08-blueprint-inherited-defaults.md).
 
@@ -461,7 +466,7 @@ declared UEnum value in byte range. Ordinary CLR enum state retains its legacy
 member-name string representation. Object/class source defaults must be null because
 nonzero managed handles belong to one native registry generation, while normal
 Blueprint CDO edits may still store real reflected object/class references.
-Managed instance startup and compatible reload hydrate/flush the same
+Generated partial accessors read and write the same
 `UnrealName`, `UnrealText`, `UnrealObjectHandle`, `UnrealClassHandle`, and
 `UnrealVector`, `UnrealRotator`, `UnrealTransform` and generated enum state
 without a facade field. Transform defaults retain quaternion, translation and
@@ -471,14 +476,14 @@ readback so untouched defaults and explicit overrides compare consistently.
 
 Soft-reference defaults persist Unreal asset paths and materialize as
 `FSoftObjectProperty` or `FSoftClassProperty`, with the corresponding Property
-Bag value type. The ordinary managed state synchronizer reads and writes these
+Bag value type. Generated partial accessors read and write these
 through the reflection property bridge. Its owned values distinguish soft
 objects from soft classes; they do not become untyped strings or generation
 handles. The frozen native table and value layouts are unchanged, and existing
 value-kind numbers are preserved. Update managed and native parts together to
 use these appended kinds.
 
-Declaration validation, CDO reconciliation, hydration, flush and reload only
+Declaration validation, CDO reconciliation, property access and reload only
 store and compare paths. They do not load referenced packages. Null paths use
 the empty string in the declaration and `None` for Blueprint default import;
 raw stored paths determine whether a value follows its source default or is an
@@ -1003,7 +1008,8 @@ capabilities. Result-buffer retries retain the completed parent result; each
 explicit helper call executes the parent once. Existing frame sizes and
 transport-table pointers are unchanged. Calls require an active generation and
 are rejected during managed initialization, destruction and after retirement.
-Managed state is flushed before entering the parent and hydrated afterward.
+Managed and parent bodies access the same native state immediately, including
+synchronous re-entry. There is no pre-call or post-call property synchronization.
 
 Startup obtains the override contract from the Script Asset's exact generated
 class, including when its receiver is an ordinary Blueprint child. Persistent

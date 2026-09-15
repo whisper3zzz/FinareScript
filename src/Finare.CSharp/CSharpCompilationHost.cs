@@ -52,7 +52,8 @@ public sealed class CSharpCompilationHost
             references.AddRange(additionalReferences);
         }
 
-        return CreateCore(request.AssemblyName, syntaxTrees, references, request.Settings);
+        CSharpCompilation compilation = CreateCore(request.AssemblyName, syntaxTrees, references, request.Settings);
+        return CSharpSourceGeneratorRunner.Run(compilation, request);
     }
 
     public CSharpCompilation Create(CSharpCompilationRequest request)

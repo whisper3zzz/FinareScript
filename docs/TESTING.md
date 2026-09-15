@@ -120,7 +120,7 @@ For a specific regression, use its stable class or method name:
 
 ```powershell
 dotnet test tests/Finare.Tests/Finare.Tests.csproj --filter "FullyQualifiedName~UnrealScriptObjectModelTests"
-dotnet test tests/Finare.Tests/Finare.Tests.csproj --filter "FullyQualifiedName~NestedLifecycleEventPreservesOuterUnflushedState"
+dotnet test tests/Finare.Tests/Finare.Tests.csproj --filter "FullyQualifiedName~NestedLifecycleEventPreservesOuterNativeState"
 ```
 
 Omit `--no-build` after changing source, fixtures or test classification.
@@ -140,6 +140,7 @@ Cross-module changes often require more than one managed category.
 | Event updates survive Tick or reload | `UnrealScriptObjectModelTests`, event transport and reload tests | Object registry/lifecycle cases; affected Lyra health sequence |
 | Cached callback references remain valid | Transport object-reference tests and generation/lifetime tests | `Finare.Unreal.ObjectRegistry.UObjectReferenceTransport` and actual GC/World teardown |
 | Parent/default/reference edit | Class-base patch, inherited state and ownership tests | Parent-change, inherited-class and `Finare.Unreal.Editor.Authoring.NativePublicationWorlds` cases |
+| Pure C# Actor + Health/Mover composition | Real fixture build and declaration emission | `./tools/test-class-composition.ps1`: saved classes, exposed overrides, component references and save-triggered batch reload; [fixture scope](../tests/Finare.Tests/Fixtures/ClassComposition/README.md) |
 | Installation preserves a user's project | `UnrealProjectAdoptionTests`, compatibility and guidance tests | Clean SDK install/upgrade/rollback in an authorized consumer |
 | Packaged gameplay uses its own runtime | Chunk and deployment contracts | Game build/cook/archive plus execution using the staged chunk and bundled hostfxr |
 
@@ -170,6 +171,28 @@ The class-composition plan records an existing
 assumption disagrees with the multi-asset Demo. It is not waived or fixed by
 test classification. See the [owning record](plans/2026-09-09-class-composition.md)
 before interpreting a broader run containing that case.
+
+## Unified UObject and property behavior
+
+For the unified UObject model and native reflected properties, run the focused
+Editor checks after staging the Demo assembly and building FinareHostEditor:
+
+```powershell
+& tools/test-class-composition.ps1 -SkipBuild -SkipPrepare -Tests @(
+    'Finare.Unreal.ObjectModel.NativeTypesAndProperties',
+    'Finare.Unreal.ObjectModel.LiveProperties',
+    'Finare.Unreal.Objects.Factory',
+    'Finare.Unreal.Objects.ManagedLifecycle',
+    'Finare.Unreal.ScriptClass.NativeReceiverLifecycle'
+)
+```
+
+These exercise typed native properties, immediate C# property access, detached
+container snapshots, reload retention, and ordinary SceneComponent lifecycle.
+The Object checks cover ordinary native creation, public C# factory calls,
+lazy activation, successful and failed reload, failed-start retries, weak
+receiver GC and World teardown. They establish Editor behavior, not Cook or
+packaged acceptance.
 
 ## Installed Lyra regression
 

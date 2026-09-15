@@ -188,7 +188,7 @@ public sealed class UnrealBindingGeneratorTests
         Assert.Contains("public global::Finare.Unreal.UnrealRotator Rotation", result.Source, StringComparison.Ordinal);
         Assert.Contains("public global::Finare.Unreal.UnrealTransform Transform", result.Source, StringComparison.Ordinal);
         Assert.Contains("public global::Finare.Unreal.UnrealEnumValue Mode", result.Source, StringComparison.Ordinal);
-        Assert.Contains("public global::Finare.Unreal.UnrealObjectHandle Owner", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::Finare.Unreal.UnrealObject? Owner", result.Source, StringComparison.Ordinal);
         Assert.Contains("public global::Finare.Unreal.UnrealName RowName", result.Source, StringComparison.Ordinal);
         Assert.Contains("public global::Finare.Unreal.UnrealText Label", result.Source, StringComparison.Ordinal);
         Assert.Contains("public ulong PreciseCount", result.Source, StringComparison.Ordinal);
@@ -283,7 +283,7 @@ public sealed class UnrealBindingGeneratorTests
 
         Assert.Empty(result.Diagnostics);
         Assert.Contains(
-            "public delegate void OnInteropChangedHandler(int newValue, global::Finare.Unreal.UnrealObjectHandle context);",
+            "public delegate void OnInteropChangedHandler(int newValue, global::Finare.Unreal.UnrealObject? context);",
             result.Source,
             StringComparison.Ordinal);
         Assert.Contains(

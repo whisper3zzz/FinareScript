@@ -530,6 +530,16 @@ internal sealed class CSharpScriptAssetLowerer
                 continue;
             }
 
+            if (EnumerateTypeHierarchy(type).Any(owner => owner.ToDisplayString() == "Finare.Unreal.UnrealObjectScript") &&
+                !propertySyntax!.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.UnsupportedStateShape, UnifiedDiagnosticSeverity.Error,
+                    $"Reflected Unreal state '{property.Name}' must be partial and use the Finare native property generator.",
+                    GetPropertySpan(property, type), CSharpSemanticIds.ForRoslynSymbol(property)));
+                continue;
+            }
+
             PropertyDeclarationSyntax stateSyntax = propertySyntax!;
 
             if (!TryClassifyType(
@@ -1419,6 +1429,15 @@ internal sealed class CSharpScriptAssetLowerer
         }
 
         string knownValueMetadata = type.ToDisplayString(TypeMetadataFormat);
+        if (IsObjectView(type))
+        {
+            AttributeData? objectAttribute = FindAttribute(type, UnrealTypeAttributeName);
+            string path = objectAttribute?.ConstructorArguments.FirstOrDefault().Value as string ?? "/Script/CoreUObject.Object";
+            bool isInterface = objectAttribute is not null && ReadNamedBoolean(objectAttribute, "IsInterface");
+            return new ScriptFunctionValueTypeDeclaration(
+                isInterface ? ScriptFunctionValueTypeKind.Interface : ScriptFunctionValueTypeKind.Object,
+                path, path[(path.LastIndexOf('.') + 1)..], []);
+        }
         if (knownValueMetadata is "Finare.Unreal.UnrealVector" or
             "Finare.Unreal.UnrealRotator" or
             "Finare.Unreal.UnrealTransform")
@@ -1507,6 +1526,11 @@ internal sealed class CSharpScriptAssetLowerer
         nativeName = attribute?.ConstructorArguments.ElementAtOrDefault(1).Value as string ?? string.Empty;
         return !string.IsNullOrWhiteSpace(path) && !string.IsNullOrWhiteSpace(nativeName);
     }
+
+    private static bool IsObjectView(ITypeSymbol type) => type is INamedTypeSymbol named &&
+        EnumerateTypeHierarchy(named).Any(static t =>
+            t.Name == "UnrealObject" &&
+            t.ContainingNamespace.ToDisplayString() == "Finare.Unreal");
 
     private static bool TryGetAutoPropertySyntax(
         IPropertySymbol property,
@@ -1624,6 +1648,12 @@ internal sealed class CSharpScriptAssetLowerer
         unrealType = null;
         ScriptFunctionValueTypeDeclaration? classifiedValueType =
             LowerFunctionValueType(compilation, type);
+        if (classifiedValueType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface)
+        {
+            kind = ScriptStateTypeKind.Object;
+            unrealType = classifiedValueType;
+            return true;
+        }
         if (classifiedValueType?.Kind is ScriptFunctionValueTypeKind.Array or
             ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
         {
@@ -2437,6 +2467,11 @@ internal sealed class CSharpScriptAssetLowerer
             return false;
         }
 
+        if (IsObjectView(type))
+        {
+            value = JsonSerializer.SerializeToElement<object?>(null);
+            return IsDefaultValueExpression(expression) || expression.IsKind(SyntaxKind.NullLiteralExpression);
+        }
         if (metadataName is "Finare.Unreal.UnrealObjectHandle" or
             "Finare.Unreal.UnrealClassHandle")
         {

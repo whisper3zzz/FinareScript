@@ -14,6 +14,62 @@ their owner.
 
 ## Non-negotiable decisions
 
+### Native objects, managed views and execution ownership
+
+An `UnrealObject` is a typed view of a native UObject, identified by its World
+scope and registry handle. Generated wrappers follow the known native base
+chain. Object properties, arguments, outputs and callbacks use these views;
+raw handles remain the invocation wire representation. `Wrap<T>`, `As<T>` and
+`IsA<T>` validate the actual native class or interface. A view also carries its
+generation access lease: equality remains stable after retirement, but native
+access cannot use an expired generation or cross a World boundary.
+
+The object receiving gameplay and the object holding the managed runtime are
+separate. Ordinary native component subclasses can receive generated lifecycle
+and reflected calls while an internal execution component owns their managed
+generation. Routing uses the exact receiver identity, including when two
+receivers share an Actor. The internal host must not introduce an extra Tick.
+Registration, unregistration and destruction govern activation and cleanup.
+
+Ordinary UObject Script Classes use the same receiver routing and generated
+function dispatch. Their internal execution host is strongly held by the World;
+the receiver remains weak. World resolution also follows Outer when GetWorld
+is absent. The public `CreateObject` API activates a Script Class immediately;
+an external `NewObject` activates on its first managed function call. Failed
+starts release their hosts; GC and World teardown retire their generations.
+Ordinary objects do not acquire Actor BeginPlay/Tick hooks. The World host does
+not root newly created receivers; use native reflected references for GC ownership.
+
+New Script Class scaffolds declare reflected state as partial C# properties:
+
+```csharp
+[Expose]
+public partial int Health { get; set; } = 100;
+
+[Expose]
+public partial IReadOnlyList<int> Scores { get; set; } = [];
+```
+
+The Roslyn generator supplies accessors. Before activation, the backing field
+allows ordinary C# initializers and constructors to establish declaration
+defaults. After activation, reads and writes go directly to the receiver's
+native property; stopped or failed generations cannot fall back to stale
+fields. Reflected state requires partial properties; non-partial declarations
+are rejected. Lifecycle, RPC and parent calls do not synchronize managed copies.
+On a `[ScriptAsset]` owner this applies to every declared instance state property;
+a plain helper base contributes only its explicit `[Expose]` properties.
+
+Reflected containers and structs are values: reads produce detached snapshots,
+and assignment publishes a replacement through the common marshaller. Object
+elements retain object identity, but mutating a snapshot does not mutate its
+native container. This contract does not imply shared-memory aliases or a
+live `TArray` proxy. Replicated property setters retain authority checks.
+
+Project loading carries analyzer paths into in-process Roslyn compilation,
+source patches and remote compilation requests. Generator assembly contents
+participate in compilation configuration identity. A new compilation loads the
+current generator bytes so a rebuilt analyzer cannot silently reuse old code.
+
 ### C# is the text surface
 
 The project uses actual C# syntax and Roslyn. It does not inherit JavaScript
@@ -792,11 +848,10 @@ Blueprint variable GUID, while generated-owner/type/previous-default metadata
 supports stable rename, stale-field removal, and preservation of intentional
 Blueprint class-default overrides. A complete preflight rejects user-owned name
 or GUID collisions, unsupported types, and unsafe overridden type changes before
-the real Blueprint is touched. Managed callbacks hydrate and flush those fields
-through strongly typed accessors cached by weak script-type identity and the
-existing invocation bridge, preserving the fast path without retaining a
-collectible hot-reload generation. ActorComponent classes use the component host
-handle; Actor/Object classes use the target handle.
+the real Blueprint is touched. Generated partial accessors read and write those
+fields directly through the existing invocation bridge. The host handle resolves
+the native receiver for Actor, ActorComponent and Object scripts. There is no
+managed state copy to overwrite native changes after a callback or failed call.
 
 Flat collection state preserves whole-value overrides across Blueprint
 reinstancing. For loaded ordinary Blueprint descendants, each CDO and live
@@ -838,8 +893,8 @@ instance ID; static BlueprintFunctionLibrary calls resolve their Script Asset
 and a World-owned collectible library context. Both paths invoke strongly typed
 expression delegates compiled once per generation. No JSON, `MethodInfo.Invoke`,
 or handwritten native thunk appears on the call path. `UnrealObjectScript`
-functions hydrate/flush reflected state at the call boundary, while World
-teardown disposes every static library context. Public inherited `[Visual]`
+functions access reflected state directly, while World teardown disposes every
+static library context. Public inherited `[Visual]`
 instance declarations share the same path and retain their base semantic IDs.
 Generated enum wrappers carry the exact reflected `/Script/...` path and raw
 numeric value. Generated UStruct records carry exact native field names and
@@ -902,5 +957,7 @@ consumes evaluated Compile, ReferencePath, and ReferenceCopyLocalPaths items;
 language version, target-framework constants, nullable/unsafe/overflow options,
 NuGet assets, and built project-reference outputs enter the same deterministic
 compilation request. Downstream Semantics and Graph modules continue to consume
-the compilation-neutral contracts. Source-generator/analyzer replay and UE
-symbol-assembly import remain outside this boundary.
+the compilation-neutral contracts. Evaluated source generators are replayed in
+the compiler host; their assembly contents enter configuration identity.
+Standalone diagnostic analyzers, AdditionalFiles/analyzer configuration replay,
+and UE symbol-assembly import remain outside this boundary.

@@ -462,7 +462,7 @@ public sealed class CSharpSourcePatchApplier
             request.EffectCatalog,
             request.Settings,
             request.RuntimeReferencePaths,
-            request.IncludeDefaultReferences);
+            request.IncludeDefaultReferences, request.SourceGeneratorPaths);
         CSharpAnalysisResult patchedAnalysis = pipeline.Analyze(patchedRequest);
         if (!patchedAnalysis.Succeeded)
         {

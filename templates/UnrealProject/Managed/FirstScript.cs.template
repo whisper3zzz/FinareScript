@@ -6,28 +6,25 @@ using __MANAGED_NAMESPACE__.Generated;
 namespace __MANAGED_NAMESPACE__;
 
 [ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
-public sealed class __SCRIPT_NAME__ : UnrealActorScript
+[UnrealScriptClass(UnrealScriptClassKind.Actor,
+    GeneratedClassPath = "/Game/UnifiedScript/__SCRIPT_NAME__/BP___SCRIPT_NAME__.BP___SCRIPT_NAME___C")]
+public sealed partial class __SCRIPT_NAME__ : UnrealActorScript
 {
-    private FinareComponent _component = null!;
-
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Finare")]
-    public int StartValue { get; set; } = 1;
+    public partial int StartValue { get; set; } = 1;
 
     public int AddClamped(int value, int delta) => Math.Clamp(value + delta, 0, 100);
 
     protected override void OnBeginPlay()
     {
-        _component = new FinareComponent(HostHandle, Bridge);
-        StartValue = _component.GetScriptStateInt32(nameof(StartValue), StartValue);
         var actor = new Actor(Context.Target, Context.Bridge);
         _ = actor.GetActorLocation();
-        UnrealObjectHandle instigator = actor.GetInstigator();
-        if (!instigator.IsNull)
+        Pawn? instigator = actor.GetInstigator();
+        if (instigator is not null)
         {
-            _ = new Pawn(instigator, Context.Bridge).GetController();
+            _ = instigator.GetController();
         }
         StartValue = AddClamped(StartValue, 1);
-        _component.SetScriptStateInt32(nameof(StartValue), StartValue);
     }
 
     protected override void OnTick(float deltaSeconds)

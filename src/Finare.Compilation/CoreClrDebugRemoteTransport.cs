@@ -747,7 +747,8 @@ internal sealed record DebugWireCompilation(
     IReadOnlyList<string> RuntimeReferencePaths,
     IReadOnlyList<MethodEffectRule> EffectRules,
     DebugWireCompilationSettings Settings,
-    bool IncludeDefaultReferences)
+    bool IncludeDefaultReferences,
+    IReadOnlyList<string>? SourceGeneratorPaths = null)
 {
     public static DebugWireCompilation From(CSharpCompilationRequest value) => new(
         value.AssemblyName,
@@ -760,7 +761,7 @@ internal sealed record DebugWireCompilation(
         value.RuntimeReferencePaths,
         value.EffectCatalog.Rules,
         DebugWireCompilationSettings.From(value.Settings),
-        value.IncludeDefaultReferences);
+        value.IncludeDefaultReferences, value.SourceGeneratorPaths);
 
     public CSharpCompilationRequest ToCompilationRequest()
     {
@@ -772,6 +773,7 @@ internal sealed record DebugWireCompilation(
                 source.Source is null) ||
             ReferencePaths is null || ReferencePaths.Count > 1024 ||
             RuntimeReferencePaths is null || RuntimeReferencePaths.Count > 1024 ||
+            SourceGeneratorPaths is { Count: > 1024 } ||
             EffectRules is null || EffectRules.Count > 4096 ||
             Settings is null)
         {
@@ -789,7 +791,8 @@ internal sealed record DebugWireCompilation(
             new MethodEffectCatalog(EffectRules),
             Settings.ToSettings(),
             RuntimeReferencePaths,
-            IncludeDefaultReferences);
+            IncludeDefaultReferences,
+            SourceGeneratorPaths);
     }
 }
 

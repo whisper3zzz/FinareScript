@@ -5,7 +5,7 @@
   "engine": {
     "major": 5,
     "minor": 8,
-    "patch": 1,
+    "patch": 2,
     "branch": "//UE5/Release-5.8"
   },
   "types": [
@@ -3758,7 +3758,7 @@
           "metadata": {
             "displayName": "Set Actor Rotation",
             "category": "Transformation",
-            "tooltip": "\u5C06Actor\u7684\u65CB\u8F6C\u7ACB\u5373\u8BBE\u4E3A\u6307\u5B9A\u7684\u65CB\u8F6C\u3002\n\n@param       NewRotation     Actor\u7684\u65B0\u65CB\u8F6C\u3002\n@param       bTeleportPhysics \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n         \u8BBE\u7F6E\u65CB\u8F6C\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u65CB\u8F6C\u3002\n@return      \u8FD4\u56DE\u65CB\u8F6C\u662F\u5426\u8BBE\u7F6E\u6210\u529F\u3002",
+            "tooltip": "Set the Actor\u0027s rotation instantly to the specified rotation.\n\n@param       NewRotation     The new rotation for the Actor.\n@param       bTeleportPhysics Whether we teleport the physics state (if physics collision is enabled for this object).\n                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n         Setting the rotation without teleporting will not update the rotation of simulated child/attached components.\n@return      Whether the rotation was successfully set.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -3843,7 +3843,7 @@
           "metadata": {
             "displayName": "Set Actor Transform",
             "category": "Transformation",
-            "tooltip": "\u5C06Actors\u53D8\u6362\u8BBE\u4E3A\u6307\u5B9A\u7684\u53D8\u6362\u3002\n@param NewTransform          \u65B0\u7684\u53D8\u6362\u3002\n@param bSweep                        \u662F\u5426\u626B\u63CF\u5230\u76EE\u6807\u4F4D\u7F6E\uFF0C\u6CBF\u9014\u89E6\u53D1\u91CD\u53E0\uFF0C\u5E76\u5728\u88AB\u67D0\u7269\u963B\u6321\u65F6\u505C\u6B62\u5230\u8FBE\u76EE\u6807\u3002\n                                                     \u53EA\u6709\u6839\u7EC4\u4EF6\u88AB\u626B\u63CF\u5E76\u68C0\u67E5\u963B\u6321\u78B0\u649E\uFF0C\u5B50\u7EC4\u4EF6\u79FB\u52A8\u65F6\u4E0D\u8FDB\u884C\u626B\u63CF\u3002\u5982\u679C\u78B0\u649E\u5173\u95ED\uFF0C\u8FD9\u6CA1\u6709\u6548\u679C\u3002@param bTeleport                     \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                                                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u5982\u679CCCD\u6253\u5F00\u4E14\u672A\u4F20\u9001\uFF0C\u8FD9\u5C06\u5F71\u54CD\u6574\u4E2A\u626B\u63CF\u4F53\u79EF\u4E0A\u7684Object\u3002\n                         \u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n                         \u8BBE\u7F6E\u53D8\u6362\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u53D8\u6362\u3002",
+            "tooltip": "Set the Actors transform to the specified one.\n@param NewTransform          The new transform.\n@param bSweep                        Whether we sweep to the destination location, triggering overlaps along the way and stopping short of the target if blocked by something.\n                                                     Only the root component is swept and checked for blocking collision, child components move without sweeping. If collision is off, this has no effect.\n@param bTeleport                     Whether we teleport the physics state (if physics collision is enabled for this object).\n                                                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                                                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n                                                     If CCD is on and not teleporting, this will affect objects along the entire swept volume.\n                         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n                         Setting the transform without teleporting will not update the transform of simulated child/attached components.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -3886,7 +3886,7 @@
           "metadata": {
             "displayName": "Set Tick Group",
             "category": "Actor|Tick",
-            "tooltip": "\u8BBE\u7F6E\u6B64actor\u7684ticking\u7EC4\u3002\n@param NewTickGroup \u8981\u8FDB\u884C\u6307\u5B9A\u7684\u65B0\u503C",
+            "tooltip": "Sets the ticking group for this actor.\n@param NewTickGroup the new value to assign",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -3902,7 +3902,7 @@
           "kind": "function",
           "title": "Set Actor Rotation",
           "category": "Transformation",
-          "tooltip": "\u5C06Actor\u7684\u65CB\u8F6C\u7ACB\u5373\u8BBE\u4E3A\u6307\u5B9A\u7684\u65CB\u8F6C\u3002\n\n@param       NewRotation     Actor\u7684\u65B0\u65CB\u8F6C\u3002\n@param       bTeleportPhysics \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n         \u8BBE\u7F6E\u65CB\u8F6C\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u65CB\u8F6C\u3002\n@return      \u8FD4\u56DE\u65CB\u8F6C\u662F\u5426\u8BBE\u7F6E\u6210\u529F\u3002",
+          "tooltip": "Set the Actor\u0027s rotation instantly to the specified rotation.\n\n@param       NewRotation     The new rotation for the Actor.\n@param       bTeleportPhysics Whether we teleport the physics state (if physics collision is enabled for this object).\n                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n         Setting the rotation without teleporting will not update the rotation of simulated child/attached components.\n@return      Whether the rotation was successfully set.",
           "pure": false,
           "pins": [
             {
@@ -3996,7 +3996,7 @@
           "kind": "function",
           "title": "Set Actor Transform",
           "category": "Transformation",
-          "tooltip": "\u5C06Actors\u53D8\u6362\u8BBE\u4E3A\u6307\u5B9A\u7684\u53D8\u6362\u3002\n@param NewTransform          \u65B0\u7684\u53D8\u6362\u3002\n@param bSweep                        \u662F\u5426\u626B\u63CF\u5230\u76EE\u6807\u4F4D\u7F6E\uFF0C\u6CBF\u9014\u89E6\u53D1\u91CD\u53E0\uFF0C\u5E76\u5728\u88AB\u67D0\u7269\u963B\u6321\u65F6\u505C\u6B62\u5230\u8FBE\u76EE\u6807\u3002\n                                                     \u53EA\u6709\u6839\u7EC4\u4EF6\u88AB\u626B\u63CF\u5E76\u68C0\u67E5\u963B\u6321\u78B0\u649E\uFF0C\u5B50\u7EC4\u4EF6\u79FB\u52A8\u65F6\u4E0D\u8FDB\u884C\u626B\u63CF\u3002\u5982\u679C\u78B0\u649E\u5173\u95ED\uFF0C\u8FD9\u6CA1\u6709\u6548\u679C\u3002@param bTeleport                     \u662F\u5426\u4F20\u9001\u7269\u7406\u72B6\u6001\uFF08\u5982\u679C\u4E3A\u6B64Object\u542F\u7528\u7269\u7406\u78B0\u649E\uFF09\u3002\n                                                     \u5982\u4E3Atrue\uFF0C\u5219\u6B64Object\u7684\u7269\u7406\u901F\u5EA6\u4E0D\u53D8\uFF08\u56E0\u6B64\u5E03\u5A03\u5A03\u90E8\u4EF6\u4E0D\u53D7\u4F4D\u7F6E\u53D8\u5316\u7684\u5F71\u54CD\uFF09\u3002\u5982\u4E3Afalse\uFF0C\u5219\u6839\u636E\u4F4D\u7F6E\u7684\u53D8\u5316\u66F4\u65B0\u7269\u7406\u901F\u5EA6\uFF08\u5F71\u54CD\u5E03\u5A03\u5A03\u90E8\u4EF6\uFF09\u3002\u5982\u679CCCD\u6253\u5F00\u4E14\u672A\u4F20\u9001\uFF0C\u8FD9\u5C06\u5F71\u54CD\u6574\u4E2A\u626B\u63CF\u4F53\u79EF\u4E0A\u7684Object\u3002\n                         \u8BF7\u6CE8\u610F\uFF1A\u4F20\u9001\u65F6\uFF0C\u4EFB\u4F55\u5B50/\u9644\u52A0\u7EC4\u4EF6\u4E5F\u5C06\u88AB\u4F20\u9001\uFF0C\u5373\u4F7F\u5B83\u4EEC\u6B63\u5728\u88AB\u6A21\u62DF\uFF0C\u4E5F\u4FDD\u6301\u5176\u5F53\u524D\u7684\u504F\u79FB\u3002\n                         \u8BBE\u7F6E\u53D8\u6362\u800C\u4E0D\u4F20\u9001\u5C06\u4E0D\u4F1A\u66F4\u65B0\u6A21\u62DF\u5B50/\u9644\u52A0\u7EC4\u4EF6\u7684\u53D8\u6362\u3002",
+          "tooltip": "Set the Actors transform to the specified one.\n@param NewTransform          The new transform.\n@param bSweep                        Whether we sweep to the destination location, triggering overlaps along the way and stopping short of the target if blocked by something.\n                                                     Only the root component is swept and checked for blocking collision, child components move without sweeping. If collision is off, this has no effect.\n@param bTeleport                     Whether we teleport the physics state (if physics collision is enabled for this object).\n                                                     If true, physics velocity for this object is unchanged (so ragdoll parts are not affected by change in location).\n                                                     If false, physics velocity is updated based on the change in position (affecting ragdoll parts).\n                                                     If CCD is on and not teleporting, this will affect objects along the entire swept volume.\n                         Note that when teleporting, any child/attached components will be teleported too, maintaining their current offset even if they are being simulated.\n                         Setting the transform without teleporting will not update the transform of simulated child/attached components.",
           "pure": false,
           "pins": [
             {
@@ -4120,7 +4120,7 @@
           "kind": "function",
           "title": "Set Tick Group",
           "category": "Actor|Tick",
-          "tooltip": "\u8BBE\u7F6E\u6B64actor\u7684ticking\u7EC4\u3002\n@param NewTickGroup \u8981\u8FDB\u884C\u6307\u5B9A\u7684\u65B0\u503C",
+          "tooltip": "Sets the ticking group for this actor.\n@param NewTickGroup the new value to assign",
           "pure": false,
           "pins": [
             {
@@ -4279,7 +4279,7 @@
           "metadata": {
             "displayName": "Get All Actors Of Class",
             "category": "Actor",
-            "tooltip": "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002",
+            "tooltip": "Find all Actors in the world of the specified class.\nThis will be slow if there are many actors of the specified class.\n@param  ActorClass      Class of Actor to find. Must be specified or result array will be empty.\n@param  OutActors       Output array of Actors of the specified class.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": "WorldContextObject"
@@ -4295,7 +4295,7 @@
           "kind": "function",
           "title": "Get All Actors Of Class",
           "category": "Actor",
-          "tooltip": "\u67E5\u627E\u4E16\u754C\u4E2D\u6307\u5B9A\u7C7B\u7684\u6240\u6709Actor\u3002\n\u5982\u679C\u6307\u5B9A\u7C7B\u7684Actor\u5F88\u591A\uFF0C\u8FD9\u5C06\u5341\u5206\u7F13\u6162\u3002\n@param  ActorClass      \u8981\u67E5\u627E\u7684Actor\u7684\u7C7B\u3002\u5FC5\u987B\u6307\u5B9A\uFF0C\u5426\u5219\u7ED3\u679C\u6570\u7EC4\u5C06\u4E3A\u7A7A\u3002\n@param  OutActors       \u6307\u5B9A\u7C7B\u7684Actor\u7684\u8F93\u51FA\u6570\u7EC4\u3002",
+          "tooltip": "Find all Actors in the world of the specified class.\nThis will be slow if there are many actors of the specified class.\n@param  ActorClass      Class of Actor to find. Must be specified or result array will be empty.\n@param  OutActors       Output array of Actors of the specified class.",
           "pure": false,
           "pins": [
             {
@@ -4417,9 +4417,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u9AA8\u9ABC\u540D\u79F0",
+            "displayName": "Bone Name",
             "category": null,
-            "tooltip": "\u6240\u547D\u4E2D\u9AA8\u9ABC\u7684\u547D\u540D\uFF08\u7528\u4E8E\u9AA8\u9ABC\u7F51\u683C\u4F53\uFF09\u3002",
+            "tooltip": "Name of bone we hit (for skeletal meshes).",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4444,9 +4444,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u8DDD\u79BB",
+            "displayName": "Distance",
             "category": null,
-            "tooltip": "\u4ECETraceStart\u5230\u573A\u666F\u7A7A\u95F4\u4E2DLocation\u7684\u8DDD\u79BB\u3002\u5982\u5B58\u5728\u521D\u59CB\u91CD\u53E0\uFF0C\u5219\u6B64\u503C\u4E3A0\uFF08\u68C0\u6D4B\u5728\u53E6\u4E00\u4E2A\u78B0\u649E\u5BF9\u8C61\u4E2D\u5F00\u59CB\uFF09\u3002",
+            "tooltip": "The distance from the TraceStart to the Location in world space. This value is 0 if there was an initial overlap (trace started inside another colliding object).",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4471,9 +4471,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u5143\u7D20\u7D22\u5F15",
+            "displayName": "Element Index",
             "category": null,
-            "tooltip": "\u88AB\u547D\u4E2D\u9879\u76EE\u7684\u7D22\u5F15\uFF0C\u4E3A\u547D\u4E2D\u57FA\u5143\u6240\u7279\u5B9A\u7684\u5185\u5BB9\u3002",
+            "tooltip": "Index to item that was hit, also hit primitive specific.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4498,9 +4498,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u9762\u7D22\u5F15",
+            "displayName": "Face Index",
             "category": null,
-            "tooltip": "\u547D\u4E2D\u7684\u9762\u7D22\u5F15\uFF08\u4E09\u89D2\u5F62\u7F51\u683C\u4F53\u7684\u590D\u6742\u547D\u4E2D\uFF09\u3002",
+            "tooltip": "Face index we hit (for complex hits with triangle meshes).",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4525,9 +4525,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u5F71\u54CD\u6CD5\u7EBF",
+            "displayName": "Impact Normal",
             "category": null,
-            "tooltip": "\u573A\u666F\u7A7A\u95F4\u4E2D\u547D\u4E2D\u7684\u6CD5\u7EBF\uFF0C\u7528\u4E8E\u88AB\u626B\u63CF\u547D\u4E2D\u7684\u5BF9\u8C61\uFF08\u5982\u6709\uFF09\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4E00\u4E2A\u7403\u4F53\u547D\u4E2D\u4E00\u4E2A\u5E73\u9762\uFF0C\u8FD9\u4FBF\u662F\u4E00\u4E2A\u4ECE\u5E73\u9762\u6307\u51FA\u7684\u6807\u51C6\u5316\u5411\u91CF\u3002\n\u5728\u8868\u9762\u89D2\u6216\u8FB9\u53D7\u5F71\u54CD\u7684\u60C5\u51B5\u4E0B\uFF0C\u901A\u5E38\u4F1A\u9009\u62E9\u201C\u6700\u76F8\u53CD\u201D\u7684\u6CD5\u7EBF\uFF08\u4E0E\u67E5\u8BE2\u65B9\u5411\u76F8\u53CD\uFF09\u3002",
+            "tooltip": "Normal of the hit in world space, for the object that was hit by the sweep, if any.\nFor example if a sphere hits a flat plane, this is a normalized vector pointing out from the plane.\nIn the case of impact with a corner or edge of a surface, usually the \u0022most opposing\u0022 normal (opposed to the query direction) is chosen.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4552,9 +4552,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u5F71\u54CD\u70B9",
+            "displayName": "Impact Point",
             "category": null,
-            "tooltip": "\u68C0\u6D4B\u5F62\u72B6\uFF08\u76D2\u4F53\u3001\u7403\u4F53\u3001\u5149\u7EBF\u7B49\uFF09\u4E0E\u53D7\u5F71\u54CD\u5BF9\u8C61\u5728\u573A\u666F\u7A7A\u95F4\u4E2D\u53D1\u751F\u5B9E\u9645\u63A5\u89E6\u7684\u4F4D\u7F6E\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF1A\u5728\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u7403\u4F53\u8868\u9762\u63A5\u89E6\u5230\u5176\u4ED6\u5BF9\u8C61\u7684\u70B9\u3002\n@\u6CE8\u610F\uFF1A\u5728\u521D\u59CB\u91CD\u53E0\u7684\u60C5\u51B5\u4E2D\uFF08bStartPenetrating\u4E3Atrue\uFF09\uFF0CImpactPoint\u5C06\u4E0ELocation\u76F8\u540C\uFF0C\u56E0\u4E3A\u6CA1\u6709\u8981\u62A5\u544A\u7684\u6709\u610F\u4E49\u7684\u5355\u4E2A\u5F71\u54CD\u70B9\u3002",
+            "tooltip": "Location in world space of the actual contact of the trace shape (box, sphere, ray, etc) with the impacted object.\nExample: for a sphere trace test, this is the point where the surface of the sphere touches the other object.\n@note: In the case of initial overlap (bStartPenetrating=true), ImpactPoint will be the same as Location because there is no meaningful single impact point to report.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4579,9 +4579,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u9879\u76EE",
+            "displayName": "Item",
             "category": null,
-            "tooltip": "\u5173\u4E8E\u88AB\u547D\u4E2D\u9879\u76EE\u7684\u989D\u5916\u6570\u636E\uFF08\u547D\u4E2D\u7279\u5B9A\u7684\u57FA\u5143\uFF09\u3002",
+            "tooltip": "Extra data about item that was hit (hit primitive specific).",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4606,9 +4606,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u4F4D\u7F6E",
+            "displayName": "Location",
             "category": null,
-            "tooltip": "\u5982\u53D1\u751F\u547D\u4E2D\uFF0C\u79FB\u52A8\u5F62\u72B6\u4E0E\u53D7\u5F71\u54CD\u5BF9\u8C61\u76F8\u5BF9\u7684\u573A\u666F\u7A7A\u95F4\u4F4D\u7F6E\u3002\u7B49\u4E8E\u7EBF\u6761\u6D4B\u8BD5\u7684\u5F71\u54CD\u70B9\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF1A\u5728\u4E00\u4E2A\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u7403\u4F53\u63A5\u89E6\u5230\u5176\u4ED6\u5BF9\u8C61\u65F6\u5176\u4E2D\u5FC3\u6240\u5904\u7684\u70B9\u3002\n\u5728\u626B\u63CF\u8FD0\u52A8\uFF08\u4F46\u975E\u67E5\u8BE2\uFF09\u4E2D\uFF0C\u8FD9\u53EF\u80FD\u4E0D\u7B49\u4E8E\u5F62\u72B6\u7684\u6700\u7EC8\u4F4D\u7F6E\uFF0C\u56E0\u4E3A\u547D\u4E2D\u4F1A\u7A0D\u5FAE\u56DE\u64A4\uFF0C\u9632\u6B62\u8986\u76D6\u53E6\u4E00\u4E2A\u8868\u9762\u800C\u4EA7\u751F\u7684\u7CBE\u786E\u5EA6\u95EE\u9898\u3002",
+            "tooltip": "The location in world space where the moving shape would end up against the impacted object, if there is a hit. Equal to the point of impact for line tests.\nExample: for a sphere trace test, this is the point where the center of the sphere would be located when it touched the other object.\nFor swept movement (but not queries) this may not equal the final location of the shape since hits are pulled back slightly to prevent precision issues from overlapping another surface.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4633,9 +4633,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u6211\u7684\u9AA8\u9ABC\u547D\u540D",
+            "displayName": "My Bone Name",
             "category": null,
-            "tooltip": "\u53C2\u4E0E\u547D\u4E2D\u4E8B\u4EF6\u7684_\u6211\u7684_\u9AA8\u9ABC\u7684\u547D\u540D\uFF08\u5728\u4E24\u4E2A\u9AA8\u9ABC\u7F51\u683C\u4F53\u53D1\u751F\u78B0\u649E\u7684\u60C5\u51B5\u4E2D\uFF09\u3002",
+            "tooltip": "Name of the _my_ bone which took part in hit event (in case of two skeletal meshes colliding).",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4660,9 +4660,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u6211\u7684\u9879\u76EE",
+            "displayName": "My Item",
             "category": null,
-            "tooltip": "\u5982\u679C\u547D\u4E2D\u7ED3\u679C\u6765\u81EA\u78B0\u649E\uFF0C\u90A3\u4E48\u8FD9\u5C06\u62E5\u6709\u5173\u4E8E\u547D\u4E2D\u7B2C\u4E8C\u4E2A\u9879\u76EE\u7684\u9879\u76EE\u7684\u989D\u5916\u4FE1\u606F\u3002",
+            "tooltip": "If the hit result is from a collision this will have extra info about the item that hit the second item.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4687,9 +4687,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u6CD5\u7EBF",
+            "displayName": "Normal",
             "category": null,
-            "tooltip": "\u5728\u573A\u666F\u7A7A\u95F4\u4E2D\u547D\u4E2D\u7684\u6CD5\u7EBF\uFF0C\u7528\u4E8E\u88AB\u626B\u63CF\u7684\u5BF9\u8C61\u3002\u7B49\u4E8E\u7EBF\u6761\u6D4B\u8BD5\u4E2D\u7684ImpactNormal\u3002\n\u8FD9\u4E3A\u80F6\u56CA\u4F53\u548C\u7403\u4F53\u8BA1\u7B97\uFF0C\u5426\u5219\u5176\u5C06\u4E0EImpactNormal\u76F8\u540C\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5728\u4E00\u4E2A\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u6307\u5411\u5F71\u54CD\u70B9\u5904\u7403\u4F53\u4E2D\u5FC3\u7684\u6807\u51C6\u5316\u5411\u91CF\u3002",
+            "tooltip": "Normal of the hit in world space, for the object that was swept. Equal to ImpactNormal for line tests.\nThis is computed for capsules and spheres, otherwise it will be the same as ImpactNormal.\nExample: for a sphere trace test, this is a normalized vector pointing in towards the center of the sphere at the point of impact.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4714,9 +4714,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u7A7F\u900F\u6DF1\u5EA6",
+            "displayName": "Penetration Depth",
             "category": null,
-            "tooltip": "\u5982\u679C\u6B64\u6D4B\u8BD5\u5F00\u59CB\u5904\u4E8E\u7A7F\u900F\u4E2D\uFF08bStartPenetrating\u4E3Atrue\uFF09\u4E14\u53EF\u4EE5\u8BA1\u7B97\u4E00\u4E2A\u53CD\u5411\u7A7F\u900F\u5411\u91CF\uFF0C\n\u5219\u6B64\u503C\u4E3A\u6CBF\u6CD5\u7EBF\u7684\u8DDD\u79BB\uFF0C\u6B64\u6CD5\u7EBF\u5C06\u5BFC\u81F4\u79FB\u51FA\u7A7F\u900F\u3002\n\u5982\u679C\u8DDD\u79BB\u65E0\u6CD5\u8BA1\u7B97\uFF0C\u5219\u6B64\u503C\u5C06\u4E3A\u96F6\u3002",
+            "tooltip": "If this test started in penetration (bStartPenetrating is true) and a depenetration vector can be computed,\nthis value is the distance along Normal that will result in moving out of penetration.\nIf the distance cannot be computed, this distance will be zero.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4741,9 +4741,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u65F6\u95F4",
+            "displayName": "Time",
             "category": null,
-            "tooltip": "\u5982\u53D1\u751F\u547D\u4E2D\uFF0C\u6CBF\u68C0\u6D4B\u65B9\u5411\u7684\u5F71\u54CD\u201C\u65F6\u95F4\u201D\uFF08\u8303\u56F4\u4ECE0.0\u52301.0\uFF09\uFF0C\u8868\u660ETraceStart\u548CTraceEnd\u4E4B\u95F4\u7684\u65F6\u95F4\u3002\n\u5728\u626B\u63CF\u8FD0\u52A8\u4E2D\uFF08\u800C\u975E\u67E5\u8BE2\uFF09\uFF0C\u6B64\u9879\u53EF\u80FD\u4F1A\u4ECE\u5B9E\u9645\u7684\u5F71\u54CD\u65F6\u95F4\u4E0A\u7A0D\u5FAE\u9000\u5374\uFF0C\u9632\u6B62\u4E0E\u76F8\u90BB\u51E0\u4F55\u4F53\u4EA7\u751F\u7CBE\u786E\u5EA6\u95EE\u9898\u3002",
+            "tooltip": "\u0027Time\u0027 of impact along trace direction (ranging from 0.0 to 1.0) if there is a hit, indicating time between TraceStart and TraceEnd.\nFor swept movement (but not queries) this may be pulled back slightly from the actual time of impact, to prevent precision problems with adjacent geometry.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4768,9 +4768,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u68C0\u6D4B\u7ED3\u675F",
+            "displayName": "Trace End",
             "category": null,
-            "tooltip": "\u68C0\u6D4B\u7684\u6700\u7EC8\u4F4D\u7F6E\uFF1B\u8FD9\u5E76\u975E\u5F71\u54CD\u53D1\u751F\u4E4B\u5904\uFF08\u5982\u6709\uFF09\uFF0C\u800C\u662F\u5C1D\u8BD5\u8FDB\u884C\u7684\u626B\u63CF\u4E2D\u6700\u8FDC\u7684\u70B9\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4E00\u4E2A\u7403\u4F53\u9488\u5BF9\u573A\u666F\u8FDB\u884C\u626B\u63CF\uFF0C\u6CA1\u6709\u963B\u6321\u547D\u4E2D\u65F6\u8FD9\u4FBF\u662F\u7403\u4F53\u7684\u4E2D\u5FC3\u3002",
+            "tooltip": "End location of the trace; this is NOT where the impact occurred (if any), but the furthest point in the attempted sweep.\nFor example if a sphere is swept against the world, this would be the center of the sphere if there was no blocking hit.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4795,9 +4795,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u68C0\u6D4B\u5F00\u59CB",
+            "displayName": "Trace Start",
             "category": null,
-            "tooltip": "\u68C0\u6D4B\u7684\u5F00\u59CB\u4F4D\u7F6E\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u9488\u5BF9\u573A\u666F\u626B\u63CF\u7403\u4F53\uFF0C\u8FD9\u4FBF\u662F\u7403\u4F53\u4E2D\u5FC3\u7684\u5F00\u59CB\u4F4D\u7F6E\u3002",
+            "tooltip": "Start location of the trace.\nFor example if a sphere is swept against the world, this is the starting location of the center of the sphere.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4822,9 +4822,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u963B\u6321\u547D\u4E2D",
+            "displayName": "Blocking Hit",
             "category": null,
-            "tooltip": "\u8BF4\u660E\u6B64\u547D\u4E2D\u662F\u5426\u4E3A\u963B\u6321\u78B0\u649E\u7684\u7ED3\u679C\u3002\u5982\u4E3Afalse\uFF0C\u5219\u65E0\u547D\u4E2D\uFF0C\u6216\u53EA\u662F\u91CD\u53E0\u6216\u63A5\u89E6\u3002",
+            "tooltip": "Indicates if this hit was a result of blocking collision. If false, there was no hit or it was an overlap/touch instead.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -4849,9 +4849,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u5F00\u59CB\u7A7F\u900F",
+            "displayName": "Start Penetrating",
             "category": null,
-            "tooltip": "\u68C0\u6D4B\u662F\u5426\u4ECE\u7A7F\u900F\u4E2D\u5F00\u59CB\uFF0C\u5373\u5E26\u6709\u521D\u59CB\u963B\u6321\u91CD\u53E0\u3002\n\u5728\u7A7F\u900F\u4E2D\uFF0C\u5982PenetrationDepth \u003E 0.f\uFF0C\u5219\u5176\u5C06\u4EE3\u8868\u6CBF\u6CD5\u7EBF\u5411\u91CF\u7684\u8DDD\u79BB\uFF0C\u4F1A\u9020\u6210\n\u626B\u63CF\u5F62\u72B6\u548C\u88AB\u547D\u4E2D\u5BF9\u8C61\u4E4B\u95F4\u7684\u6700\u5C0F\u63A5\u89E6\u3002\u5728\u6B64\u60C5\u51B5\u4E0B\uFF0CImpactNormal\u5C06\u662F\u4E0E\u4F4D\u7F6E\u5904\u8FD0\u52A8\u76F8\u53CD\u7684\u6CD5\u7EBF\uFF08\u5373\u6CD5\u7EBF\u53EF\u80FD\u4E0D\u7B49\u4E8EImpactNormal\uFF09\u3002ImpactPoint\u5C06\u4E0ELocation\u76F8\u540C\uFF0C\u56E0\u4E3A\u6CA1\u6709\u8981\u62A5\u544A\u7684\u5355\u4E2A\u5F71\u54CD\u70B9\u3002",
+            "tooltip": "Whether the trace started in penetration, i.e. with an initial blocking overlap.\nIn the case of penetration, if PenetrationDepth \u003E 0.f, then it will represent the distance along the Normal vector that will result in\nminimal contact between the swept shape and the object that was hit. In this case, ImpactNormal will be the normal opposed to movement at that location\n(ie, Normal may not equal ImpactNormal). ImpactPoint will be the same as Location, since there is no single impact point to report.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -5472,7 +5472,7 @@
           "metadata": {
             "displayName": "Get Active Replay Name",
             "category": "Replay",
-            "tooltip": "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09",
+            "tooltip": "Get current recording/playing replay name\n\n@return FString Name of relpay (session id, file name, etc)",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -5544,7 +5544,7 @@
           "kind": "function",
           "title": "Get Active Replay Name",
           "category": "Replay",
-          "tooltip": "\u83B7\u53D6\u5F53\u524D\u7684\u5F55\u5236/\u64AD\u653E\u91CD\u64AD\u540D\u79F0\n\n@return \u8FD4\u56DE\u56DE\u653E\u7684FString\u540D\u79F0\uFF08\u4F1A\u8BDDid\u3001\u6587\u4EF6\u540D\u7B49\uFF09",
+          "tooltip": "Get current recording/playing replay name\n\n@return FString Name of relpay (session id, file name, etc)",
           "pure": true,
           "pins": [
             {
@@ -5757,7 +5757,7 @@
           "metadata": {
             "displayName": "Get Game Instance Subsystem",
             "category": "GameInstance Subsystems",
-            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF",
+            "tooltip": "Get a Game Instance Subsystem from the Game Instance associated with the provided context",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": "ContextObject"
@@ -5814,7 +5814,7 @@
           "metadata": {
             "displayName": "Get Local Player Sub System from Player Controller",
             "category": "LocalPlayer Subsystems",
-            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr",
+            "tooltip": "Get a Local Player Subsystem from the LocalPlayer associated with the provided context\nIf the player controller isn\u0027t associated to a LocalPlayer nullptr is returned",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -5871,7 +5871,7 @@
           "metadata": {
             "displayName": "Get Local Player Subsystem",
             "category": "LocalPlayer Subsystems",
-            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF",
+            "tooltip": "Get a Local Player Subsystem from the Local Player associated with the provided context",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": "ContextObject"
@@ -5928,7 +5928,7 @@
           "metadata": {
             "displayName": "Get World Subsystem",
             "category": "GameInstance Subsystems",
-            "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF",
+            "tooltip": "Get a World Subsystem from the World associated with the provided context",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": "ContextObject"
@@ -5944,7 +5944,7 @@
           "kind": "function",
           "title": "Get Game Instance Subsystem",
           "category": "GameInstance Subsystems",
-          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u6E38\u620F\u5B9E\u4F8B\u5904\u83B7\u53D6\u4E00\u4E2A\u6E38\u620F\u5B9E\u4F8B\u5B50\u7CFB\u7EDF",
+          "tooltip": "Get a Game Instance Subsystem from the Game Instance associated with the provided context",
           "pure": true,
           "pins": [
             {
@@ -6024,7 +6024,7 @@
           "kind": "function",
           "title": "Get Local Player Sub System from Player Controller",
           "category": "LocalPlayer Subsystems",
-          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684LocalPlayer\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF\n\u5982\u73A9\u5BB6\u63A7\u5236\u5668\u672A\u5173\u8054\u5230\u4E00\u4E2ALocalPlayer\uFF0C\u5219\u8FD4\u56DEnullptr",
+          "tooltip": "Get a Local Player Subsystem from the LocalPlayer associated with the provided context\nIf the player controller isn\u0027t associated to a LocalPlayer nullptr is returned",
           "pure": true,
           "pins": [
             {
@@ -6104,7 +6104,7 @@
           "kind": "function",
           "title": "Get Local Player Subsystem",
           "category": "LocalPlayer Subsystems",
-          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u672C\u5730\u73A9\u5BB6\u5904\u83B7\u53D6\u4E00\u4E2A\u672C\u5730\u73A9\u5BB6\u5B50\u7CFB\u7EDF",
+          "tooltip": "Get a Local Player Subsystem from the Local Player associated with the provided context",
           "pure": true,
           "pins": [
             {
@@ -6184,7 +6184,7 @@
           "kind": "function",
           "title": "Get World Subsystem",
           "category": "GameInstance Subsystems",
-          "tooltip": "\u4ECE\u4E0E\u63D0\u4F9B\u7684\u60C5\u5883\u76F8\u5173\u7684\u573A\u666F\u5904\u83B7\u53D6\u573A\u666F\u5B50\u7CFB\u7EDF",
+          "tooltip": "Get a World Subsystem from the World associated with the provided context",
           "pure": true,
           "pins": [
             {
@@ -6288,7 +6288,7 @@
           "metadata": {
             "displayName": "Is All Streaming Completed",
             "category": "Streaming",
-            "tooltip": "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002",
+            "tooltip": "Returns true if world partition is done streaming levels, adding them to the world or removing them from the world.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6304,7 +6304,7 @@
           "kind": "function",
           "title": "Is All Streaming Completed",
           "category": "Streaming",
-          "tooltip": "\u5982\u679C\u4E16\u754C\u5206\u533A\u5B8C\u6210\u6D41\u9001\u5173\u5361\uFF0C\u5E76\u5C06\u5B83\u4EEC\u6DFB\u52A0\u5230\u4E16\u754C\u6216\u4ECE\u4E16\u754C\u79FB\u9664\uFF0C\u5219\u8FD4\u56DEtrue\u3002",
+          "tooltip": "Returns true if world partition is done streaming levels, adding them to the world or removing them from the world.",
           "pure": false,
           "pins": [
             {
@@ -6436,7 +6436,7 @@
           "metadata": {
             "displayName": "Add Mapping Context",
             "category": "Input",
-            "tooltip": "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002",
+            "tooltip": "Add a control mapping context.\n@param MappingContext                A set of key to action mappings to apply to this player\n@param Priority                              Higher priority mappings will be applied first and, if they consume input, will block lower priority mappings.\n@param Options                               Options to consider when adding this mapping context.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6494,7 +6494,7 @@
           "metadata": {
             "displayName": "Has Mapping Context",
             "category": "Input|Mapping Queries",
-            "tooltip": "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue",
+            "tooltip": "Check if a mapping context is applied to this subsystem\u0027s owner.\n\n@param MappingContext                The mapping context to search for on the subsystem\u0027s owner.\n@param OutFoundPriority              The priority of the mapping context if it is applied. -1 if the context is not applied\n@return      True if the mapping context is applied",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6552,7 +6552,7 @@
           "metadata": {
             "displayName": "Remove Mapping Context",
             "category": "Input",
-            "tooltip": "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879",
+            "tooltip": "Remove a specific control context.\nThis is safe to call even if the context is not applied.\n@param MappingContext         Context to remove from the player\n@param Options                        Options to consider when removing this input mapping context",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6568,7 +6568,7 @@
           "kind": "function",
           "title": "Add Mapping Context",
           "category": "Input",
-          "tooltip": "\u6DFB\u52A0\u4E00\u4E2A\u63A7\u5236\u70B9\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param MappingContext                \u5E94\u7528\u5230\u6B64\u64AD\u653E\u5668\u7684\u64CD\u4F5C\u6620\u5C04\u7684\u4E00\u7EC4\u952E\n@param Priority                              \u9AD8\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u5C06\u9996\u5148\u5E94\u7528\uFF0C\u5982\u679C\u4ED6\u4EEC\u6D88\u8017\u8F93\u5165\uFF0C\u5C06\u963B\u6321\u4F4E\u4F18\u5148\u7EA7\u7684\u6620\u5C04\u3002\n@param Options                               \u6DFB\u52A0\u6B64\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879\u3002",
+          "tooltip": "Add a control mapping context.\n@param MappingContext                A set of key to action mappings to apply to this player\n@param Priority                              Higher priority mappings will be applied first and, if they consume input, will block lower priority mappings.\n@param Options                               Options to consider when adding this mapping context.",
           "pure": false,
           "pins": [
             {
@@ -6662,7 +6662,7 @@
           "kind": "function",
           "title": "Has Mapping Context",
           "category": "Input|Mapping Queries",
-          "tooltip": "\u68C0\u67E5\u6620\u5C04\u4E0A\u4E0B\u6587\u662F\u5426\u5E94\u7528\u4E8E\u6B64\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u3002\n\n@param MappingContext                \u5728\u5B50\u7CFB\u7EDF\u7684\u62E5\u6709\u8005\u4E0A\u8981\u641C\u7D22\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\u3002\n@param OutFoundPriority              \u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\uFF0C\u5176\u7684\u4F18\u5148\u7EA7\u3002\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C-1\n@return      \u5982\u5E94\u7528\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u8FD4\u56DETrue",
+          "tooltip": "Check if a mapping context is applied to this subsystem\u0027s owner.\n\n@param MappingContext                The mapping context to search for on the subsystem\u0027s owner.\n@param OutFoundPriority              The priority of the mapping context if it is applied. -1 if the context is not applied\n@return      True if the mapping context is applied",
           "pure": true,
           "pins": [
             {
@@ -6742,7 +6742,7 @@
           "kind": "function",
           "title": "Remove Mapping Context",
           "category": "Input",
-          "tooltip": "\u79FB\u9664\u7279\u5B9A\u63A7\u5236\u70B9\u4E0A\u4E0B\u6587\u3002\n\u5982\u672A\u5E94\u7528\u4E0A\u4E0B\u6587\uFF0C\u4E5F\u53EF\u4EE5\u5B89\u5168\u8C03\u7528\u3002\n@param MappingContext         \u8981\u4ECE\u73A9\u5BB6\u79FB\u9664\u7684\u4E0A\u4E0B\u6587\n@param Options                        \u79FB\u9664\u6B64\u8F93\u5165\u6620\u5C04\u4E0A\u4E0B\u6587\u65F6\u8981\u8003\u8651\u7684\u9009\u9879",
+          "tooltip": "Remove a specific control context.\nThis is safe to call even if the context is not applied.\n@param MappingContext         Context to remove from the player\n@param Options                        Options to consider when removing this input mapping context",
           "pure": false,
           "pins": [
             {
@@ -6841,9 +6841,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u7ACB\u5373\u5F3A\u5236",
+            "displayName": "Force Immediately",
             "category": "Input",
-            "tooltip": "\u6620\u5C04\u53D8\u66F4\u5C06\u540C\u6B65\u5E94\u7528\uFF0C\u800C\u4E0D\u662F\u5728\u5E27\u672B\u5C3E\u5E94\u7528\uFF0C\n\u4ECE\u800C\u4F7F\u5B83\u4EEC\u53EF\u7528\u4E8E\u540C\u4E00\u5E27\u4E0A\u7684\u8F93\u5165\u7CFB\u7EDF\u3002\n\n\u5982\u679C\u4F60\u8981\u6DFB\u52A0\u591A\u4E2A\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\u5219\u4E0D\u5EFA\u8BAE\u5C06\u5176\u8BBE\u4E3Atrue\uFF0C\n\u56E0\u4E3A\u8FD9\u4F1A\u964D\u4F4E\u6027\u80FD\u3002\n\n\u9ED8\u8BA4\uFF1Afalse",
+            "tooltip": "The mapping changes will be applied synchronously, rather than at the end of the frame,\nmaking them available to the input system on the same frame.\n\nThis is not recommended to be set to true if you are adding multiple mapping contexts\nas it will have poor performance.\n\nDefault: False",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6868,9 +6868,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u5FFD\u7565\u6240\u6709\u6309\u4E0B\u7684\u952E\u76F4\u5230\u677E\u5F00",
+            "displayName": "Ignore All Pressed Keys Until Release",
             "category": "Input",
-            "tooltip": "\u5982\u4E3Atrue\uFF0C\u5219\u5728\u63A7\u5236\u6620\u5C04\u91CD\u5EFA\u8FC7\u7A0B\u4E2D\u201C\u6309\u4E0B\u201D\u6216\u201C\u6309\u4E0B\u201D\u7684\u4EFB\u4F55\u952E\n\u5728\u201C\u91CA\u653E\u201D\u4E4B\u524D\u90FD\u4E0D\u4F1A\u88AB\u589E\u5F3A\u8F93\u5165\u5904\u7406\u3002\n\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4F60\u8981\u6DFB\u52A0\u952E\u6620\u5C04\u5230\u201CX\u201D\u7684\u6620\u5C04\u4E0A\u4E0B\u6587\uFF0C\n\u5E76\u4E14\u73A9\u5BB6\u5728\u6DFB\u52A0IMC\u65F6\u6309\u4F4F\u201CX\u201D\uFF0C\n\u5219\u5728\u73A9\u5BB6\u91CA\u653E\u201CX\u201D\u4E4B\u524D\u4E0D\u4F1A\u51FA\u73B0\u201C\u89E6\u53D1\u201D\u4E8B\u4EF6\u5E76\u518D\u6B21\u6309\u4E0B\u5B83\u3002\n\n\u5982\u679C\u5728\u4E0A\u9762\u7684\u793A\u4F8B\u4E2D\u5C06\u5176\u8BBE\u4E3Afalse\uFF0C\u5219\u4E00\u65E6IMC\u6DFB\u52A0\u5B8C\u6210\uFF0C\n\u201C\u5DF2\u89E6\u53D1\u201D\u5C06\u7ACB\u5373\u89E6\u53D1\u3002\n\n\u9ED8\u8BA4\uFF1ATrue\n\n\u6CE8\u610F\uFF1A\u8FD9\u53EA\u4F1A\u5BF9\u7ED1\u5B9A\u5230\u5E03\u5C14\u8F93\u5165\u64CD\u4F5C\u7C7B\u578B\u7684\u952E\u6267\u884C\u67D0\u4E9B\u64CD\u4F5C\u3002\n\u6CE8\u610F\uFF1A\u8FD9\u5305\u62EC\u73A9\u5BB6\u6309\u4E0B\u7684\u6240\u6709\u6309\u952E\uFF0C\u800C\u4E0D\u4EC5\u4EC5\u662F\u4E4B\u524D\u5728\u8C03\u7528RebuildControlMappings\u4E4B\u524D\n\u5728\u589E\u5F3A\u8F93\u5165\u4E2D\u6620\u5C04\u7684\u6309\u952E\u3002",
+            "tooltip": "If true, then any keys that are \u0022down\u0022 or \u0022pressed\u0022 during the rebuild of control mappings will\nnot be processed by Enhanced Input until after they are \u0022released\u0022.\n\nFor example, if you are adding a mapping context with a key mapping to \u0022X\u0022,\nand the player is holding down \u0022X\u0022 while that IMC is added,\nthere will not be a \u0022Triggered\u0022 event until the player releases \u0022X\u0022 and presses it again.\n\nIf this is set to false for the above example, then the \u0022Triggered\u0022 would fire immediately\nas soon as the IMC is finished being added.\n\nDefault: True\n\nNote: This will only do something for keys bound to boolean Input Action types.\nNote: This includes all keys that the player has pressed, not just the keys that are previously mapped in Enhanced Input before\nthe call to RebuildControlMappings.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -6895,9 +6895,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "\u901A\u77E5\u7528\u6237\u8BBE\u7F6E",
+            "displayName": "Notify User Settings",
             "category": "Input",
-            "tooltip": "\u5982\u4E3Atrue\uFF0C\u90A3\u4E48\u8FD9\u4E2A\u6620\u5C04\u4E0A\u4E0B\u6587\u5C06\u4F1A\n\u5728\u8FD9\u4E2A\u5B50\u7CFB\u7EDF\u4E0A\u6CE8\u518C\u6216\u53D6\u6D88\u6CE8\u518C\u5230\u589E\u5F3A\u8F93\u5165\u7528\u6237\u8BBE\u7F6E\u4E2D\uFF08\u5982\u679C\u5176\u5B58\u5728\uFF09\u3002\u9ED8\u8BA4\uFF1AFalse\n\n\u6CE8\u610F\uFF1A\u4F60\u9700\u8981\u5728\u9879\u76EE\u8BBE\u7F6E\u4E2D\u542F\u7528\u5E76\u914D\u7F6EUEnhancedInputUserSettings\u7C7B\u624D\u80FD\u6267\u884C\u4EFB\u4F55\u64CD\u4F5C\u3002",
+            "tooltip": "If true, then this Mapping Context will be registered or unregistered with the\nEnhanced Input User Settings on this subsystem, if they exist.\n\nDefault: False\n\nNote: You need to enable and configure your UEnhancedInputUserSettings class in the project\nsettings for this to do anything.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -7188,9 +7188,9 @@
             "nativeAccess": "public"
           },
           "metadata": {
-            "displayName": "Get Unified Script Component",
+            "displayName": "Get Finare Component",
             "category": "Finare",
-            "tooltip": "Get Unified Script Component",
+            "tooltip": "Get Finare Component",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -7359,9 +7359,9 @@
           "memberPath": "/Script/FinareRuntime.FinareActor:GetFinareComponent",
           "memberId": "0x43B1C3EAEF469121",
           "kind": "function",
-          "title": "Get Unified Script Component",
+          "title": "Get Finare Component",
           "category": "Finare",
-          "tooltip": "Get Unified Script Component",
+          "tooltip": "Get Finare Component",
           "pure": true,
           "pins": [
             {
@@ -13362,11 +13362,11 @@
           "name": "ActorArrayValue",
           "type": {
             "kind": "array",
-            "nativeName": "TArray\u003CAActor*\u003E",
+            "nativeName": "TArray\u003CTObjectPtr\u003CAActor\u003E\u003E",
             "typePath": null,
             "elementType": {
               "kind": "object",
-              "nativeName": "AActor*",
+              "nativeName": "TObjectPtr\u003CAActor\u003E",
               "typePath": "/Script/Engine.Actor",
               "elementType": null,
               "keyType": null,
@@ -18923,11 +18923,11 @@
               "kind": "data",
               "type": {
                 "kind": "array",
-                "nativeName": "TArray\u003CAActor*\u003E",
+                "nativeName": "TArray\u003CTObjectPtr\u003CAActor\u003E\u003E",
                 "typePath": null,
                 "elementType": {
                   "kind": "object",
-                  "nativeName": "AActor*",
+                  "nativeName": "TObjectPtr\u003CAActor\u003E",
                   "typePath": "/Script/Engine.Actor",
                   "elementType": null,
                   "keyType": null,
@@ -20202,11 +20202,11 @@
               "kind": "data",
               "type": {
                 "kind": "array",
-                "nativeName": "TArray\u003CAActor*\u003E",
+                "nativeName": "TArray\u003CTObjectPtr\u003CAActor\u003E\u003E",
                 "typePath": null,
                 "elementType": {
                   "kind": "object",
-                  "nativeName": "AActor*",
+                  "nativeName": "TObjectPtr\u003CAActor\u003E",
                   "typePath": "/Script/Engine.Actor",
                   "elementType": null,
                   "keyType": null,
@@ -23262,6 +23262,77 @@
       "properties": [],
       "functions": [
         {
+          "path": "/Script/FinareRuntime.FinareWorldLibrary:CreateObject",
+          "name": "CreateObject",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UObject*",
+            "typePath": "/Script/CoreUObject.Object",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/Object.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ObjectClass",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Outer",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Create Object",
+            "category": "Finare|Objects",
+            "tooltip": "Creates an ordinary native UObject, or creates and immediately activates a Finare UObject Script Class.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
           "path": "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor",
           "name": "DestroyActor",
           "returnType": {
@@ -23804,6 +23875,115 @@
       ],
       "delegates": [],
       "nodes": [
+        {
+          "id": "ue.call|FinareWorldLibrary|CreateObject",
+          "memberPath": "/Script/FinareRuntime.FinareWorldLibrary:CreateObject",
+          "memberId": "0x39FF0F3BA6CCA308",
+          "kind": "function",
+          "title": "Create Object",
+          "category": "Finare|Objects",
+          "tooltip": "Creates an ordinary native UObject, or creates and immediately activates a Finare UObject Script Class.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ObjectClass",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Outer",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "WorldContextObject",
+          "callableWithoutWorldContext": false
+        },
         {
           "id": "ue.call|FinareWorldLibrary|DestroyActor",
           "memberPath": "/Script/FinareRuntime.FinareWorldLibrary:DestroyActor",

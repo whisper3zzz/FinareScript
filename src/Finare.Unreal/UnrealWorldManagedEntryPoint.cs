@@ -1442,7 +1442,7 @@ public static class UnrealWorldManagedEntryPoint
                     library = ManagedStaticLibrary.Create(
                         _worldId,
                         fullAssemblyPath,
-                        typeName);
+                        typeName, Bridge);
                     _staticLibraries.Add(key, library);
                 }
                 library.Invoke(functionName, frameAddress);
@@ -2636,6 +2636,7 @@ public static class UnrealWorldManagedEntryPoint
         private readonly ulong _worldId;
         private readonly string _assemblyPath;
         private readonly string _typeName;
+        private readonly IUnrealInvocationBridge? _bridge;
         private StaticLibraryGeneration? _current;
         private PreparedStaticLibraryReload? _preparedReload;
         private int _nextGeneration;
@@ -2645,38 +2646,41 @@ public static class UnrealWorldManagedEntryPoint
             ulong worldId,
             string assemblyPath,
             string typeName,
-            StaticLibraryGeneration current)
+            StaticLibraryGeneration current,
+            IUnrealInvocationBridge? bridge)
         {
             _worldId = worldId;
             _assemblyPath = assemblyPath;
             _typeName = typeName;
             _current = current;
+            _bridge = bridge;
             _nextGeneration = checked(current.Generation + 1);
         }
 
         public static ManagedStaticLibrary Create(
             ulong worldId,
             string assemblyPath,
-            string typeName)
+            string typeName,
+            IUnrealInvocationBridge? bridge = null)
         {
             string fullAssemblyPath = Path.GetFullPath(assemblyPath);
             StaticLibraryGeneration current = LoadGeneration(
                 worldId,
                 fullAssemblyPath,
                 typeName,
-                generation: 1);
+                generation: 1, bridge);
             return new ManagedStaticLibrary(
                 worldId,
                 fullAssemblyPath,
                 typeName,
-                current);
+                current, bridge);
         }
 
         public void Invoke(string functionName, nint frameAddress)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            (_current ?? throw new ObjectDisposedException(nameof(ManagedStaticLibrary)))
-                .Functions.Invoke(target: null, functionName, frameAddress);
+            var current = _current ?? throw new ObjectDisposedException(nameof(ManagedStaticLibrary));
+            current.Functions.Invoke(target: null, functionName, frameAddress, current.Bridge);
         }
 
         internal int PrepareReload()
@@ -2694,7 +2698,7 @@ public static class UnrealWorldManagedEntryPoint
                 _worldId,
                 _assemblyPath,
                 _typeName,
-                candidateGeneration);
+                candidateGeneration, _bridge);
             try
             {
                 ValidateCompatible(
@@ -2840,7 +2844,7 @@ public static class UnrealWorldManagedEntryPoint
             ulong worldId,
             string assemblyPath,
             string typeName,
-            int generation)
+            int generation, IUnrealInvocationBridge? bridge)
         {
             var loadContext = new ScriptAssemblyLoadContext(
                 worldId,
@@ -2855,7 +2859,8 @@ public static class UnrealWorldManagedEntryPoint
                 ValidateStaticLibraryType(type, typeName);
                 UnrealManagedFunctionDispatcherV2 functions =
                     UnrealManagedFunctionDispatcherV2.Create(type, staticOnly: true);
-                return new StaticLibraryGeneration(generation, loadContext, functions);
+                return new StaticLibraryGeneration(generation, loadContext, functions,
+                    bridge is null ? null : new UnrealGenerationInvocationBridge(bridge));
             }
             catch
             {
@@ -2914,7 +2919,8 @@ public static class UnrealWorldManagedEntryPoint
         private sealed class StaticLibraryGeneration(
             int generation,
             ScriptAssemblyLoadContext loadContext,
-            UnrealManagedFunctionDispatcherV2 functions) : IDisposable
+            UnrealManagedFunctionDispatcherV2 functions,
+            UnrealGenerationInvocationBridge? bridge) : IDisposable
         {
             private bool _disposed;
 
@@ -2923,6 +2929,7 @@ public static class UnrealWorldManagedEntryPoint
             public ScriptAssemblyLoadContext LoadContext { get; } = loadContext;
 
             public UnrealManagedFunctionDispatcherV2 Functions { get; } = functions;
+            public UnrealGenerationInvocationBridge? Bridge { get; } = bridge;
 
             public void Dispose()
             {
@@ -2931,7 +2938,8 @@ public static class UnrealWorldManagedEntryPoint
                     return;
                 }
                 _disposed = true;
-                RetireLoadContext(LoadContext);
+                try { Bridge?.Dispose(); }
+                finally { RetireLoadContext(LoadContext); }
             }
         }
     }

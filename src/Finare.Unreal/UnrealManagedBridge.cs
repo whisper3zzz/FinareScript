@@ -1,3 +1,6 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
 namespace Finare.Unreal;
 
 [AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
@@ -71,6 +74,26 @@ public interface IUnrealInvocationBridge
         UnrealObjectHandle target,
         string functionPath,
         IReadOnlyList<object?> arguments);
+}
+
+/// <summary>
+/// Optional lifetime and identity contract for bridges that expose UObject
+/// views. Identity is separate from the bridge instance so generation bridges
+/// over one World can exchange objects while disposed generations still fail.
+/// </summary>
+public interface IUnrealObjectBridgeScope
+{
+    object IdentityScope { get; }
+
+    void ValidateAccess(UnrealObjectHandle handle);
+}
+
+/// <summary>Native type queries used to validate typed managed views.</summary>
+public interface IUnrealObjectTypeBridge
+{
+    IReadOnlyList<string> GetObjectTypePaths(UnrealObjectHandle target);
+
+    bool IsObjectOfClass(UnrealObjectHandle target, string classPath);
 }
 
 /// <summary>
@@ -361,6 +384,7 @@ public static class UnrealMemberId
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class UnrealTypeAttribute(string path) : Attribute
 {
+    public bool IsInterface { get; init; }
     public string Path { get; } = string.IsNullOrWhiteSpace(path)
         ? throw new ArgumentException("An Unreal type path is required.", nameof(path))
         : path;
@@ -372,8 +396,20 @@ public interface IUnrealNativeBindingBridge
     void RequireNativeBindings(IReadOnlyList<string> memberPaths);
 }
 
-public abstract class UnrealObject
+[UnrealType("/Script/CoreUObject.Object")]
+public class UnrealObject
 {
+    private static readonly ConditionalWeakTable<Assembly, ObjectViewTypes> ViewTypes = new();
+
+    private sealed class ObjectViewTypes(Assembly assembly)
+    {
+        internal readonly Dictionary<string, Type[]> ByPath = assembly.GetTypes()
+            .Where(t => !t.IsAbstract && typeof(UnrealObject).IsAssignableFrom(t))
+            .Select(t => (Type: t, Attribute: t.GetCustomAttribute<UnrealTypeAttribute>()))
+            .Where(t => t.Attribute is not null)
+            .GroupBy(t => t.Attribute!.Path, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(t => t.Type).ToArray(), StringComparer.Ordinal);
+    }
     protected UnrealObject(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
     {
         if (!handle.IsWellFormed)
@@ -383,13 +419,193 @@ public abstract class UnrealObject
                 nameof(handle));
         }
 
-        Handle = handle;
+        _handle = handle;
         Bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+        _identityScope = UnrealObjectBridgeAccess.Identity(Bridge);
+        UnrealObjectBridgeAccess.Validate(Bridge, _handle);
     }
 
-    public UnrealObjectHandle Handle { get; }
+    private readonly UnrealObjectHandle _handle;
+    private readonly object _identityScope;
+
+    public UnrealObjectHandle Handle
+    {
+        get
+        {
+            EnsureAccessible();
+            return _handle;
+        }
+    }
 
     protected IUnrealInvocationBridge Bridge { get; }
+
+    /// <summary>
+    /// Materializes a managed view only after the bridge confirms the native
+    /// class relationship. A null handle maps to null for nullable UObject
+    /// properties and parameters.
+    /// </summary>
+    public static T? Wrap<T>(
+        UnrealObjectHandle handle,
+        IUnrealInvocationBridge bridge)
+        where T : UnrealObject
+    {
+        if (handle.IsNull)
+        {
+            return null;
+        }
+        ArgumentNullException.ThrowIfNull(bridge);
+        UnrealObjectBridgeAccess.Validate(bridge, handle);
+        if (typeof(T) == typeof(UnrealObject))
+        {
+            ValidateNativeObject(bridge, handle);
+            return (T)(object)new UnrealObject(handle, bridge);
+        }
+
+        ValidateNativeType<T>(bridge, handle);
+
+        // An ephemeron cache keeps lookup cheap without rooting collectible
+        // assemblies through the Type objects stored in each value.
+        Type requested = typeof(T);
+        IReadOnlyList<string> paths = ((IUnrealObjectTypeBridge)bridge).GetObjectTypePaths(handle);
+        ObjectViewTypes candidates = ViewTypes.GetValue(requested.Assembly, a => new ObjectViewTypes(a));
+        Type selected = paths.Select(path => candidates.ByPath.TryGetValue(path, out Type[]? types)
+            ? types.FirstOrDefault(requested.IsAssignableFrom) : null).FirstOrDefault(t => t is not null) ?? requested;
+
+        try
+        {
+            return (T?)Activator.CreateInstance(
+                selected,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                args: [handle, bridge],
+                culture: null);
+        }
+        catch (MissingMethodException exception)
+        {
+            throw new InvalidOperationException(
+                $"Managed Unreal view '{typeof(T).FullName}' must expose a (UnrealObjectHandle, IUnrealInvocationBridge) constructor.",
+                exception);
+        }
+    }
+
+    public T? As<T>() where T : UnrealObject
+    {
+        EnsureAccessible();
+        ValidateNativeType<T>(Bridge, _handle);
+        return this is T typed ? typed : Wrap<T>(_handle, Bridge);
+    }
+
+    public bool IsA<T>() where T : UnrealObject
+    {
+        EnsureAccessible();
+        try
+        {
+            ValidateNativeType<T>(Bridge, _handle);
+            return true;
+        }
+        catch (InvalidCastException)
+        {
+            return false;
+        }
+    }
+
+    private static void ValidateNativeObject(
+        IUnrealInvocationBridge bridge,
+        UnrealObjectHandle handle)
+    {
+        if (bridge is not IUnrealObjectTypeBridge typeBridge ||
+            typeBridge.GetObjectTypePaths(handle).Count == 0)
+        {
+            throw new InvalidCastException(
+                $"Native object handle {handle.Value} could not be resolved to a loaded Unreal object.");
+        }
+    }
+
+    private static void ValidateNativeType<T>(
+        IUnrealInvocationBridge bridge,
+        UnrealObjectHandle handle)
+        where T : UnrealObject
+    {
+        if (typeof(T) == typeof(UnrealObject))
+        {
+            ValidateNativeObject(bridge, handle);
+            return;
+        }
+        UnrealTypeAttribute? type = typeof(T).GetCustomAttribute<UnrealTypeAttribute>();
+        if (type is null)
+        {
+            throw new InvalidOperationException(
+                $"Managed Unreal view '{typeof(T).FullName}' is missing {nameof(UnrealTypeAttribute)}.");
+        }
+        if (bridge is not IUnrealObjectTypeBridge typeBridge)
+        {
+            throw new NotSupportedException(
+                "Typed Unreal object views require a bridge with native type-query support.");
+        }
+        if (!typeBridge.IsObjectOfClass(handle, type.Path))
+        {
+            throw new InvalidCastException(
+                $"Native object handle {handle.Value} is not an instance of Unreal class '{type.Path}'.");
+        }
+    }
+
+    internal IUnrealInvocationBridge InvocationBridge => Bridge;
+    internal static UnrealObject InvocationTarget(UnrealObjectHandle handle, IUnrealInvocationBridge bridge) => new(handle, bridge);
+
+    internal void EnsureAccessible() => UnrealObjectBridgeAccess.Validate(Bridge, _handle);
+
+    internal static bool AreCompatible(
+        UnrealObject source,
+        IUnrealInvocationBridge destination)
+    {
+        source.EnsureAccessible();
+        ArgumentNullException.ThrowIfNull(destination);
+        UnrealObjectBridgeAccess.Validate(destination, source._handle);
+        return ReferenceEquals(
+            source._identityScope,
+            UnrealObjectBridgeAccess.Identity(destination));
+    }
+
+    public override bool Equals(object? obj) =>
+        obj is UnrealObject other &&
+        _handle == other._handle &&
+        ReferenceEquals(
+            _identityScope,
+            other._identityScope);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(
+            _handle,
+            RuntimeHelpers.GetHashCode(_identityScope));
+
+    public static bool operator ==(UnrealObject? left, UnrealObject? right) =>
+        ReferenceEquals(left, right) || left is not null && left.Equals(right);
+
+    public static bool operator !=(UnrealObject? left, UnrealObject? right) => !(left == right);
+
+    private static class UnrealObjectBridgeAccess
+    {
+        internal static object Identity(IUnrealInvocationBridge bridge) =>
+            bridge is IUnrealObjectBridgeScope scoped
+                ? scoped.IdentityScope
+                : bridge;
+
+        internal static void Validate(
+            IUnrealInvocationBridge bridge,
+            UnrealObjectHandle handle)
+        {
+            if (!handle.IsWellFormed)
+            {
+                throw new ObjectDisposedException(
+                    nameof(UnrealObject),
+                    "The managed Unreal object handle is null or malformed.");
+            }
+            if (bridge is IUnrealObjectBridgeScope scoped)
+            {
+                scoped.ValidateAccess(handle);
+            }
+        }
+    }
 
     protected void RequireNativeBindings(params string[] memberPaths)
     {
@@ -401,60 +617,68 @@ public abstract class UnrealObject
     }
 
     protected T ReadProperty<T>(string propertyPath) =>
-        Bridge.ReadProperty<T>(Handle, propertyPath);
+        UnrealObjectInvocationAdapter.ReadProperty<T>(this, 0, propertyPath, false);
 
     protected T ReadProperty<T>(ulong memberId, string propertyPath) =>
-        Bridge is IUnrealFastInvocationBridge fastBridge &&
-        fastBridge.SupportsFastInvocation
-            ? fastBridge.ReadProperty<T>(Handle, memberId, propertyPath)
-            : Bridge.ReadProperty<T>(Handle, propertyPath);
+        UnrealObjectInvocationAdapter.ReadProperty<T>(this, memberId, propertyPath, true);
 
     protected void WriteProperty<T>(string propertyPath, T value) =>
-        Bridge.WriteProperty(Handle, propertyPath, value);
+        UnrealObjectInvocationAdapter.WriteProperty(this, 0, propertyPath, value, false);
 
     protected void WriteProperty<T>(
         ulong memberId,
         string propertyPath,
         T value)
     {
-        if (Bridge is IUnrealFastInvocationBridge fastBridge &&
-            fastBridge.SupportsFastInvocation)
-        {
-            fastBridge.WriteProperty(Handle, memberId, propertyPath, value);
-            return;
-        }
-        Bridge.WriteProperty(Handle, propertyPath, value);
+        UnrealObjectInvocationAdapter.WriteProperty(this, memberId, propertyPath, value, true);
     }
 
     protected T Invoke<T>(string functionPath, params object?[] arguments) =>
-        Bridge.Invoke<T>(Handle, functionPath, arguments);
+        UnrealObjectInvocationAdapter.Invoke<T>(this, 0, functionPath, arguments, false);
 
     protected T Invoke<T>(
         ulong memberId,
-        string functionPath) =>
-        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        string functionPath)
+    {
+        if (UnrealObjectProjection<T>.Required)
+        {
+            return (T)UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(T), []).ReturnValue!;
+        }
+        return Bridge is IUnrealTypedInvocationBridge typedBridge &&
         typedBridge.SupportsTypedInvocation
             ? typedBridge.Invoke<T>(Handle, memberId, functionPath)
             : Bridge is IUnrealFastInvocationBridge fastBridge &&
               fastBridge.SupportsFastInvocation
                 ? fastBridge.Invoke<T>(Handle, memberId, functionPath, [])
                 : Bridge.Invoke<T>(Handle, functionPath, []);
+    }
 
     protected TResult Invoke<TResult, T0>(
         ulong memberId,
         string functionPath,
-        T0 argument0) =>
-        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        T0 argument0)
+    {
+        if (UnrealObjectProjection<TResult>.Required || UnrealObjectProjection<T0>.Required)
+        {
+            return (TResult)UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0)]).ReturnValue!;
+        }
+        return Bridge is IUnrealTypedInvocationBridge typedBridge &&
         typedBridge.SupportsTypedInvocation
             ? typedBridge.Invoke<TResult, T0>(Handle, memberId, functionPath, argument0)
             : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0]);
+    }
 
     protected TResult Invoke<TResult, T0, T1>(
         ulong memberId,
         string functionPath,
         T0 argument0,
-        T1 argument1) =>
-        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        T1 argument1)
+    {
+        if (UnrealObjectProjection<TResult>.Required || UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required)
+        {
+            return (TResult)UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1)]).ReturnValue!;
+        }
+        return Bridge is IUnrealTypedInvocationBridge typedBridge &&
         typedBridge.SupportsTypedInvocation
             ? typedBridge.Invoke<TResult, T0, T1>(
                 Handle,
@@ -463,14 +687,20 @@ public abstract class UnrealObject
                 argument0,
                 argument1)
             : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1]);
+    }
 
     protected TResult Invoke<TResult, T0, T1, T2>(
         ulong memberId,
         string functionPath,
         T0 argument0,
         T1 argument1,
-        T2 argument2) =>
-        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        T2 argument2)
+    {
+        if (UnrealObjectProjection<TResult>.Required || UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required || UnrealObjectProjection<T2>.Required)
+        {
+            return (TResult)UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2)]).ReturnValue!;
+        }
+        return Bridge is IUnrealTypedInvocationBridge typedBridge &&
         typedBridge.SupportsTypedInvocation
             ? typedBridge.Invoke<TResult, T0, T1, T2>(
                 Handle,
@@ -480,6 +710,7 @@ public abstract class UnrealObject
                 argument1,
                 argument2)
             : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1, argument2]);
+    }
 
     protected TResult Invoke<TResult, T0, T1, T2, T3>(
         ulong memberId,
@@ -487,8 +718,13 @@ public abstract class UnrealObject
         T0 argument0,
         T1 argument1,
         T2 argument2,
-        T3 argument3) =>
-        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        T3 argument3)
+    {
+        if (UnrealObjectProjection<TResult>.Required || UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required || UnrealObjectProjection<T2>.Required || UnrealObjectProjection<T3>.Required)
+        {
+            return (TResult)UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(TResult), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2), new(typeof(T3), UnrealParameterDirection.Input, argument3)]).ReturnValue!;
+        }
+        return Bridge is IUnrealTypedInvocationBridge typedBridge &&
         typedBridge.SupportsTypedInvocation
             ? typedBridge.Invoke<TResult, T0, T1, T2, T3>(
                 Handle,
@@ -499,24 +735,16 @@ public abstract class UnrealObject
                 argument2,
                 argument3)
             : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1, argument2, argument3]);
+    }
 
     protected T Invoke<T>(
         ulong memberId,
         string functionPath,
         params object?[] arguments) =>
-        InvokeLegacyResult<T>(memberId, functionPath, arguments);
-
-    private T InvokeLegacyResult<T>(
-        ulong memberId,
-        string functionPath,
-        IReadOnlyList<object?> arguments) =>
-        Bridge is IUnrealFastInvocationBridge fastBridge &&
-        fastBridge.SupportsFastInvocation
-            ? fastBridge.Invoke<T>(Handle, memberId, functionPath, arguments)
-            : Bridge.Invoke<T>(Handle, functionPath, arguments);
+        UnrealObjectInvocationAdapter.Invoke<T>(this, memberId, functionPath, arguments, true);
 
     protected void Invoke(string functionPath, params object?[] arguments) =>
-        Bridge.Invoke(Handle, functionPath, arguments);
+        UnrealObjectInvocationAdapter.InvokeVoid(this, 0, functionPath, arguments, false);
 
     protected void Invoke(
         ulong memberId,
@@ -535,13 +763,18 @@ public abstract class UnrealObject
         ulong memberId,
         string functionPath,
         params object?[] arguments) =>
-        InvokeLegacy(memberId, functionPath, arguments);
+        UnrealObjectInvocationAdapter.InvokeVoid(this, memberId, functionPath, arguments, true);
 
     protected void Invoke<T0>(
         ulong memberId,
         string functionPath,
         T0 argument0)
     {
+        if (UnrealObjectProjection<T0>.Required)
+        {
+            UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0)]);
+            return;
+        }
         if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
             typedBridge.SupportsTypedInvocation)
         {
@@ -557,6 +790,11 @@ public abstract class UnrealObject
         T0 argument0,
         T1 argument1)
     {
+        if (UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required)
+        {
+            UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1)]);
+            return;
+        }
         if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
             typedBridge.SupportsTypedInvocation)
         {
@@ -573,6 +811,11 @@ public abstract class UnrealObject
         T1 argument1,
         T2 argument2)
     {
+        if (UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required || UnrealObjectProjection<T2>.Required)
+        {
+            UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2)]);
+            return;
+        }
         if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
             typedBridge.SupportsTypedInvocation)
         {
@@ -590,6 +833,11 @@ public abstract class UnrealObject
         T2 argument2,
         T3 argument3)
     {
+        if (UnrealObjectProjection<T0>.Required || UnrealObjectProjection<T1>.Required || UnrealObjectProjection<T2>.Required || UnrealObjectProjection<T3>.Required)
+        {
+            UnrealObjectInvocationAdapter.InvokeWithOutputs(this, memberId, functionPath, typeof(void), [new(typeof(T0), UnrealParameterDirection.Input, argument0), new(typeof(T1), UnrealParameterDirection.Input, argument1), new(typeof(T2), UnrealParameterDirection.Input, argument2), new(typeof(T3), UnrealParameterDirection.Input, argument3)]);
+            return;
+        }
         if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
             typedBridge.SupportsTypedInvocation)
         {
@@ -606,23 +854,26 @@ public abstract class UnrealObject
         InvokeLegacy(memberId, functionPath, [argument0, argument1, argument2, argument3]);
     }
 
+    private T InvokeLegacyResult<T>(ulong memberId, string functionPath, IReadOnlyList<object?> arguments) =>
+        Bridge is IUnrealFastInvocationBridge fast && fast.SupportsFastInvocation
+            ? fast.Invoke<T>(Handle, memberId, functionPath, arguments)
+            : Bridge.Invoke<T>(Handle, functionPath, arguments);
+
+    private void InvokeLegacy(ulong memberId, string functionPath, IReadOnlyList<object?> arguments)
+    {
+        if (Bridge is IUnrealFastInvocationBridge fast && fast.SupportsFastInvocation)
+            fast.Invoke(Handle, memberId, functionPath, arguments);
+        else Bridge.Invoke(Handle, functionPath, arguments);
+    }
+
     protected UnrealOutputInvocationResult InvokeWithOutputs(
         ulong memberId,
         string functionPath,
         Type returnType,
         IReadOnlyList<UnrealOutputArgument> arguments)
     {
-        if (Bridge is not IUnrealOutputInvocationBridge outputBridge)
-        {
-            throw new NotSupportedException(
-                "The Unreal invocation bridge does not support output or reference parameters.");
-        }
-        return outputBridge.InvokeWithOutputs(
-            Handle,
-            memberId,
-            functionPath,
-            returnType,
-            arguments);
+        return UnrealObjectInvocationAdapter.InvokeWithOutputs(
+            this, memberId, functionPath, returnType, arguments);
     }
 
     protected IUnrealEventSubscription SubscribeEvent(
@@ -637,22 +888,17 @@ public abstract class UnrealObject
                 "The Unreal invocation bridge does not support reflected delegate subscriptions.");
         }
 
-        return eventBridge.Subscribe(Handle, descriptor, handler);
+        Delegate projected = UnrealObjectDelegateAdapter.Adapt(handler, Bridge);
+        if (!ReferenceEquals(projected, handler))
+            descriptor = descriptor with
+            {
+                ReturnType = UnrealObjectInvocationAdapter.WireType(descriptor.ReturnType),
+                Parameters = descriptor.Parameters.Select(p => p with
+                { Type = UnrealObjectInvocationAdapter.WireType(p.Type) }).ToArray(),
+            };
+        return eventBridge.Subscribe(Handle, descriptor, projected);
     }
 
-    private void InvokeLegacy(
-        ulong memberId,
-        string functionPath,
-        IReadOnlyList<object?> arguments)
-    {
-        if (Bridge is IUnrealFastInvocationBridge fastBridge &&
-            fastBridge.SupportsFastInvocation)
-        {
-            fastBridge.Invoke(Handle, memberId, functionPath, arguments);
-            return;
-        }
-        Bridge.Invoke(Handle, functionPath, arguments);
-    }
 }
 
 /// <summary>

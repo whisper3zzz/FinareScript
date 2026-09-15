@@ -6,18 +6,18 @@ namespace Finare.Unreal.Demo;
 [ScriptAsset("Unreal/NetworkingDemo", ClassId = "us_762043152e714d68b05a31426591ee01")]
 [UnrealScriptClass(UnrealScriptClassKind.Actor,
     GeneratedClassPath = "/Game/UnifiedScriptTests/BP_NetworkingDemo.BP_NetworkingDemo_C")]
-public sealed class NetworkingDemoScript : UnrealActorScript
+public sealed partial class NetworkingDemoScript : UnrealActorScript
 {
     [Expose(Replicated = true)]
-    public int Score { get; set; } = 0;
+    public partial int Score { get; set; } = 0;
 
     [Expose(Replicated = true, ReplicationCondition = ReplicationCondition.OwnerOnly)]
-    public int OwnerSecret { get; set; } = 0;
+    public partial int OwnerSecret { get; set; } = 0;
 
-    public int Notifications { get; set; } = 0;
-    public int PreviousScore { get; set; } = 0;
-    public int AcknowledgedScore { get; set; } = 0;
-    public int BroadcastScore { get; set; } = 0;
+    public partial int Notifications { get; set; } = 0;
+    public partial int PreviousScore { get; set; } = 0;
+    public partial int AcknowledgedScore { get; set; } = 0;
+    public partial int BroadcastScore { get; set; } = 0;
 
     [Visual]
     public void InitializeScore(int value)

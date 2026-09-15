@@ -918,8 +918,7 @@ public sealed class UnrealApiSourceDependencyScanner
                 UnrealValueKind.Float32 or UnrealValueKind.Float64 => false,
             UnrealValueKind.Name => actualName == "UnrealName",
             UnrealValueKind.Text => actualName == "UnrealText",
-            UnrealValueKind.Object => actualName == "UnrealObjectHandle",
-            UnrealValueKind.Interface => actualName == "UnrealObjectHandle",
+            UnrealValueKind.Object or UnrealValueKind.Interface => ObjectViewMatches(named, expected.TypePath),
             UnrealValueKind.NativeObject => actualName == expected.TypePath?[(expected.TypePath.LastIndexOf('.') + 1)..],
             UnrealValueKind.Class => actualName == "UnrealClassHandle",
             UnrealValueKind.SoftObject => actualName == "UnrealSoftObjectHandle",
@@ -939,6 +938,18 @@ public sealed class UnrealApiSourceDependencyScanner
             UnrealValueKind.Map => actualName is "IReadOnlyDictionary" or "Dictionary",
             _ => true,
         };
+    }
+
+    private static bool ObjectViewMatches(INamedTypeSymbol actual, string? expectedPath)
+    {
+        for (INamedTypeSymbol? current = actual; current is not null; current = current.BaseType)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "Finare.Unreal.UnrealTypeAttribute" &&
+                a.ConstructorArguments.FirstOrDefault().Value as string == expectedPath)) return true;
+            if (current.ToDisplayString() == "Finare.Unreal.UnrealObject" &&
+                (expectedPath is null or "/Script/CoreUObject.Object")) return true;
+        }
+        return false;
     }
 
     private static string ManagedNameFromNative(string nativeName) => ToIdentifier(

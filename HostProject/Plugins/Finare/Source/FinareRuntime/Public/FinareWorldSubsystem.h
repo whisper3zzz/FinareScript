@@ -54,6 +54,19 @@ struct FFinareGameplayLifecycleClaim
 };
 
 /**
+ * Maps a real native receiver to the internal Finare component that owns its
+ * managed generation.  The receiver is deliberately separate from the
+ * execution host so multiple native components on one Actor cannot collide
+ * on the Actor as their lifecycle key or Blueprint dispatch context.
+ */
+struct FFinareManagedReceiverBinding
+{
+	TWeakObjectPtr<UObject> Receiver;
+	TWeakObjectPtr<class UFinareComponent> ExecutionHost;
+	bool bResumeAfterRegistration = false;
+};
+
+/**
  * One native Finare runtime boundary per supported UWorld.
  *
  * The subsystem exclusively owns the weak-object registry and invocation
@@ -190,6 +203,38 @@ public:
 		FName LifecycleKey,
 		EFinareRuntimeOwner RuntimeOwner,
 		FString& OutError);
+
+	/** Registers one receiver-to-host route in this World scope. */
+	bool RegisterManagedReceiver(
+		UObject* Receiver,
+		class UFinareComponent* ExecutionHost,
+		FString& OutError);
+
+	/** Keeps ordinary UObject script sidecars alive without owning their receivers. */
+	void RetainManagedObjectExecutionHost(class UFinareComponent* ExecutionHost);
+	void ReleaseManagedObjectExecutionHost(class UFinareComponent* ExecutionHost);
+	int32 GetManagedObjectExecutionHostCount() const
+	{
+		return ManagedObjectExecutionHosts.Num();
+	}
+	class UFinareComponent* FindManagedObjectExecutionHost(
+		UObject* Receiver,
+		class UFinareAsset* ScriptAsset) const;
+
+	/** Removes a route only when it still belongs to the supplied execution host. */
+	void UnregisterManagedReceiver(
+		UObject* Receiver,
+		class UFinareComponent* ExecutionHost);
+
+	/**
+	 * Resolves an active or configured execution host for a native dispatch
+	 * receiver.  A null GeneratedClass requests a unique active route.
+	 */
+	class UFinareComponent* ResolveManagedReceiver(
+		UObject* Receiver,
+		const class UFinareBlueprintGeneratedClass* GeneratedClass,
+		bool bConfigured,
+		FString& OutError) const;
 
 	int32 GetGameplayLifecycleClaimCount() const;
 	FString BuildGameplayLifecycleOwnershipReport() const;
@@ -365,6 +410,7 @@ public:
 private:
 	void HandleWorldPreActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
 	void HandleWorldPostActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
+	void PruneManagedReceiverBindings();
 	void PruneGameplayLifecycleClaims();
 	void ShutdownNativeRuntime();
 
@@ -382,7 +428,12 @@ private:
 	TMap<
 		FFinareGameplayLifecycleClaimKey,
 		FFinareGameplayLifecycleClaim> GameplayLifecycleClaims;
+	TMap<FObjectKey, FFinareManagedReceiverBinding> ManagedReceiverBindings;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> LoadedResources;
+
+	/** Strong World ownership for ordinary UObject execution sidecars. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UFinareComponent>> ManagedObjectExecutionHosts;
 };

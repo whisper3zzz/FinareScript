@@ -1,6 +1,6 @@
 # Finare product roadmap
 
-Last reviewed: **2026-09-11**
+Last reviewed: **2026-09-15**
 
 This document owns the active product outcome, remaining work and completion
 conditions. [CAPABILITIES.md](CAPABILITIES.md) owns implemented scope and limits.
@@ -21,9 +21,17 @@ performance win on every workload.
 ## Current execution cursor
 
 - Active milestone: **M13.3 — ordinary Script Class integration**.
-- Current tranche: **M13.3C-4 — class composition in normal authoring**.
-- [ ] **M13.3C-4**: finish ordinary Actor/component composition and its
-  default/reference ownership through the existing asset workflow.
+- Current tranche: **M13.3C-4** — remaining composition and ownership workflows,
+  using the completed Unreal object/type foundation below.
+- [x] Unify generated C# object types, native inheritance, checked object views,
+  and World-scoped identity through the existing invocation transport.
+- [x] Decouple managed behavior ownership from the native parent class,
+  including activation, callbacks, state, reload and destruction.
+- [x] Converge Script Class reflected properties/containers on generated
+  native accessors and value-snapshot semantics; remove the old managed
+  mirror synchronization path and require partial reflected state.
+- Architecture decisions and unfinished work:
+  [unified object model](plans/2026-09-13-unified-unreal-object-model.md).
 - Verification scope: **Editor-only for current work**. Additional Cook/package
   checks are deferred; existing cooked results retain their original scope.
 - Integration reference: the already authorized **Lyra health/HUD pilot**.
@@ -42,14 +50,18 @@ boundaries are in [capabilities](CAPABILITIES.md), not inferred from a checked b
 
 C-4 already has declaration/base edits, partial-source ownership, reserved
 managed candidates, native publication/recovery, exact function-owner routing
-and stopped-hierarchy preservation. These are dependencies of composition;
-they do not establish its complete user workflow.
+and stopped-hierarchy preservation. The Actor + Health/Mover backend fixture
+also runs through saved/reopened classes, scalar component references and
+save-triggered batch reload in Editor. Native test code assembles its SCS nodes
+and installs an isolated build command; this does not complete the normal C#
+authoring workflow. The remaining C-4 composition/ownership operations are open.
 
 ## Delivery order
 
 | Order | User-visible outcome | Completion boundary |
 | --- | --- | --- |
-| Active: M13.3C-4 | Edit ordinary Actor/component composition through normal authoring while preserving intentional defaults and references | Complete the behavior and Editor checks below |
+| Delivered foundation: object/type integration | Use strongly typed UE objects, extend supported native parents without a required Finare base, and access reflected state with explicit ownership | Three stages above verified through public bindings and affected Editor checks |
+| Active: M13.3C-4 | Edit ordinary Actor/component composition through normal authoring while preserving intentional defaults and references | Complete the behavior and Editor checks below using the unified integration |
 | Alongside affected changes: M13.4 | Keep the installed Lyra health/HUD workflow usable and close its remaining asset/async coverage | Run relevant public-workflow checks when changed code affects the pilot |
 | Later: M13.6 | Ship a clearly identified candidate and extend supported configurations | Explicit release, upgrade and platform acceptance |
 
@@ -61,7 +73,17 @@ feedback. Conversely, a passing health/HUD slice does not finish all of M13.4.
 
 ### M13.3 — Make Script Classes ordinary Unreal gameplay types
 
-The next deliverable is one complete normal-authoring composition workflow:
+- [ ] **M13.3C-4** Complete the remaining composition/default/reference ownership
+  workflows described below, using the delivered object/type integration.
+
+The first composition backend fixture executes C# gameplay with explicit ordinary
+`AActor`, two Finare component classes, authored defaults/overrides, a same-Actor
+component reference, save/reopen, and source-save compilation/reload with all
+three prior generations retained when one candidate fails. The
+[reproduction guide](../tests/Finare.Tests/Fixtures/ClassComposition/README.md)
+defines the Editor fixture and its isolated build-command substitution.
+
+Remaining C-4 work covers the broader normal-authoring composition operations:
 
 1. Edit the relevant Actor/component parent or composition through the existing
    asset/C#/Graph workflow, including the component-family behavior still open.

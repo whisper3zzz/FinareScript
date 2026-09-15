@@ -1383,8 +1383,8 @@ bool FFinareClassParentChangeTest::RunTest(const FString& Parameters)
 				return Variable.VarName == TEXT("ExternalRenamedCount");
 			}));
 
-	TestFalse(
-		TEXT("A non-carrier Actor parent reports composition requirement"),
+	TestTrue(
+		TEXT("An ordinary Actor parent passes composition preflight"),
 		FFinareBlueprintClassMaterializer::SynchronizeJson(
 			*ScriptAsset,
 			*ManagedBlueprint,
@@ -1392,7 +1392,8 @@ bool FFinareClassParentChangeTest::RunTest(const FString& Parameters)
 			true,
 			Result,
 			Error));
-	TestTrue(TEXT("Composition failure is explicit"), Error.Contains(TEXT("composition")));
+	TestTrue(TEXT("Ordinary Actor preflight leaves the existing parent unchanged"),
+		ManagedBlueprint->ParentClass == OrdinaryParent->GeneratedClass && Error.IsEmpty());
 	TestFalse(
 		TEXT("A generated owner self-parent cycle is rejected"),
 		FFinareBlueprintClassMaterializer::SynchronizeJson(

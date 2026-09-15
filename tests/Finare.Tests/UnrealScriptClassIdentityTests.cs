@@ -3,7 +3,7 @@ using Finare.Unreal;
 namespace Finare.Tests;
 
 [Trait("Category", "Unreal")]
-public sealed class UnrealScriptClassIdentityTests
+public sealed partial class UnrealScriptClassIdentityTests
 {
     private const string StableId = "us_0123456789abcdef0123456789abcdef";
     private const string GeneratedPath = "/Game/Tests/Active.Active_C";
@@ -67,15 +67,15 @@ public sealed class UnrealScriptClassIdentityTests
 
     [ScriptAsset("Game/Stable", ClassId = StableId)]
     [UnrealScriptClass(UnrealScriptClassKind.Actor, GeneratedClassPath = GeneratedPath)]
-    private sealed class StableActor : UnrealActorScript
+    private sealed partial class StableActor : UnrealActorScript
     {
-        [Expose] public int Seed { get; set; }
+        [Expose] public partial int Seed { get; set; }
     }
 
     [UnrealScriptClass(UnrealScriptClassKind.Actor, GeneratedClassPath = GeneratedPath)]
-    private sealed class LegacyActor : UnrealActorScript
+    private sealed partial class LegacyActor : UnrealActorScript
     {
-        [Expose] public int Seed { get; set; }
+        [Expose] public partial int Seed { get; set; }
     }
 
     [ScriptAsset("Game/MissingPrefix", ClassId = "0123456789abcdef0123456789abcdef")]

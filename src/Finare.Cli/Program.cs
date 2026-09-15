@@ -3106,7 +3106,7 @@ internal static class Program
             effectCatalog,
             project.Request.Settings,
             runtimeReferences,
-            project.Request.IncludeDefaultReferences);
+            project.Request.IncludeDefaultReferences, project.Request.SourceGeneratorPaths);
         CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
         foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
         {
@@ -3549,7 +3549,7 @@ internal static class Program
             effectCatalog,
             loaded.Request.Settings,
             runtimeReferences,
-            loaded.Request.IncludeDefaultReferences);
+            loaded.Request.IncludeDefaultReferences, loaded.Request.SourceGeneratorPaths);
     }
 
     internal static CSharpSourceDocument[] AttachIdentitySidecars(

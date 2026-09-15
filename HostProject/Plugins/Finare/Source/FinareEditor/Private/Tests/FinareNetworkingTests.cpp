@@ -485,8 +485,11 @@ namespace UE::Finare::Networking::Tests
 						TEXT("SkipOwner delivers initial component state to observer"),
 						S.Value(Observer, TEXT("ObserverScore")), 10);
 				}
-				// A normal local method tries to edit replicated state: client flush
-				// must restore authority's values rather than contaminate the mirror.
+				// A normal local method cannot write replicated state on a client.
+				S.Test.AddExpectedError(
+					TEXT("cannot be written by a non-authoritative Actor"),
+					EAutomationExpectedErrorFlags::Contains,
+					1);
 				S.Call(Owner, TEXT("InitializeScore"), 999);
 				S.Test.TestEqual(
 					TEXT("Client cannot overwrite authoritative state"), S.Value(Owner, TEXT("Score")), 10);

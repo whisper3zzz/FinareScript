@@ -661,7 +661,7 @@ internal sealed class UnrealBlueprintOverrideActivationContract
         out string? error)
     {
         if (UnrealNativeValueCodecV3.TryCreateBlueprintOverrideShape(
-                type,
+                UnrealObjectInvocationAdapter.WireType(type),
                 out shape,
                 out error))
         {

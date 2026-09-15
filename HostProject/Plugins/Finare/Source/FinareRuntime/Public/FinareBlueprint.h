@@ -319,12 +319,23 @@ public:
 
 private:
 	void RegisterManagedNativeFunctions();
+	void BuildRuntimeLifecycleFunctionBindings();
+	void BindManagedFunction(
+		FName FunctionName,
+		const FFinareManagedFunctionBinding& Binding,
+		bool& bOutAllFunctionsBound);
 
 	/** Runtime-only guard; persistent bindings remain the serialized source of truth. */
 	bool bManagedFunctionsBound = false;
 
 	/** Prevent duplicate entries in UClass's transient native lookup table. */
 	TSet<FName> RegisteredManagedNativeFunctions;
+
+	/**
+	 * Runtime-only thunks for lifecycle hooks inherited from ordinary UE
+	 * ActorComponent parents. They never enter the serialized managed contract.
+	 */
+	TMap<FName, FFinareManagedFunctionBinding> RuntimeLifecycleFunctionBindings;
 
 	DECLARE_FUNCTION(execDispatchManagedFunction);
 };

@@ -36,7 +36,7 @@ public sealed class InterfaceGameplayDemoScript : IUnrealManagedScript
 
         if (InterfaceTarget.IsNull)
         {
-            InterfaceTarget = _fixture.InterfaceValue;
+            InterfaceTarget = (_fixture.InterfaceValue)?.Handle ?? default;
         }
 
         if (InterfaceTarget.IsNull)
@@ -46,9 +46,9 @@ public sealed class InterfaceGameplayDemoScript : IUnrealManagedScript
         }
 
         _selectedInterface = new(InterfaceTarget, _bridge);
-        UnrealObjectHandle echoed = _fixture.EchoInterface(InterfaceTarget);
-        UnrealObjectHandle accumulator = default;
-        bool mutated = _fixture.MutateInterfaces(echoed, out UnrealObjectHandle output, ref accumulator);
+        FinareInteropContract? echoed = _fixture.EchoInterface(_selectedInterface);
+        FinareInteropContract? accumulator = null;
+        bool mutated = _fixture.MutateInterfaces(echoed, out FinareInteropContract? output, ref accumulator);
         if (!mutated || output != echoed || accumulator != echoed)
         {
             InterfaceTarget = default;
@@ -57,7 +57,7 @@ public sealed class InterfaceGameplayDemoScript : IUnrealManagedScript
         }
 
         _fixture.InterfaceValue = output;
-        InterfaceTarget = _fixture.InterfaceValue;
+        InterfaceTarget = (_fixture.InterfaceValue)?.Handle ?? default;
         _fixture.Int32Value = CallSelectedInterface(3);
     }
 

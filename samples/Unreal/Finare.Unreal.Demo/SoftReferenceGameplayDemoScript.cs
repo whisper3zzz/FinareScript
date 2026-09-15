@@ -6,21 +6,21 @@ namespace Finare.Unreal.Demo;
 
 /// <summary>
 /// Editable soft references remain paths until the gameplay operation asks the
-/// World-owned async service to resolve them. Materialization and state sync do
-/// not load either reference.
+/// World-owned async service to resolve them. Materialization does not load
+/// either reference.
 /// </summary>
 [ScriptAsset("Unreal/SoftReferenceGameplay")]
 [UnrealScriptClass(
     UnrealScriptClassKind.Actor,
     GeneratedClassPath = "/Game/UnifiedScriptDemo/BP_SoftReferenceGameplay.BP_SoftReferenceGameplay_C")]
-public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
+public sealed partial class SoftReferenceGameplayDemoScript : UnrealActorScript
 {
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Soft References")]
-    public UnrealSoftObjectHandle PreviewMesh { get; set; } =
+    public partial UnrealSoftObjectHandle PreviewMesh { get; set; } =
         new("/Engine/BasicShapes/Cube.Cube");
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Soft References")]
-    public UnrealSoftClassHandle PreviewActorClass { get; set; } =
+    public partial UnrealSoftClassHandle PreviewActorClass { get; set; } =
         new("/Script/Engine.StaticMeshActor");
 
     private FinareWorldLibrary _world = null!;
@@ -31,7 +31,8 @@ public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
     protected override void OnBeginPlay()
     {
         _world = new FinareWorldLibrary(TargetHandle, Bridge);
-        _host = new FinareComponent(HostHandle, Bridge);
+        _host = new FinareActor(HostHandle, Bridge).GetFinareComponent()
+            ?? throw new InvalidOperationException("Soft reference Actor script has no Finare component.");
         _load = LoadPreviewAsync();
     }
 
@@ -70,13 +71,13 @@ public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
             UnrealObjectHandle actorClass = await LoadClassAsync(PreviewActorClass, 10.0f, lifetime);
             lifetime.ThrowIfCancellationRequested();
 
-            UnrealObjectHandle candidate = _world.SpawnActor(
-                TargetHandle,
+            UnrealObjectHandle candidate = (_world.SpawnActor(
+                UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge),
                 new UnrealClassHandle(actorClass.Value),
                 new UnrealTransform(
                     UnrealQuaternion.Identity,
                     new UnrealVector(200.0, 0.0, 40.0),
-                    UnrealVector.One));
+                    UnrealVector.One)))?.Handle ?? default;
             if (candidate.IsNull)
             {
                 throw new InvalidOperationException("Soft reference preview SpawnActor returned null.");
@@ -86,14 +87,14 @@ public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
             {
                 var actor = new UI.StaticMeshActor(candidate, Bridge);
                 actor.SetMobility(UI.EComponentMobility.Movable);
-                if (!new UI.StaticMeshComponent(actor.StaticMeshComponent, Bridge)
-                        .SetStaticMesh(mesh))
+                if (!new UI.StaticMeshComponent((actor.StaticMeshComponent)?.Handle ?? default, Bridge)
+                        .SetStaticMesh(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(mesh, Bridge)))
                 {
                     throw new InvalidOperationException("The loaded preview mesh was not accepted.");
                 }
                 if (!_spawned.IsNull)
                 {
-                    _world.DestroyActor(TargetHandle, _spawned);
+                    _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
                 }
                 _spawned = candidate;
                 candidate = default;
@@ -103,7 +104,7 @@ public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
             {
                 if (!candidate.IsNull)
                 {
-                    _world.DestroyActor(TargetHandle, candidate);
+                    _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(candidate, Bridge));
                 }
             }
         }
@@ -127,7 +128,7 @@ public sealed class SoftReferenceGameplayDemoScript : UnrealActorScript
     {
         if (!_spawned.IsNull)
         {
-            _world.DestroyActor(TargetHandle, _spawned);
+            _world.DestroyActor(UnrealObject.Wrap<global::Finare.Unreal.UnrealObject>(TargetHandle, Bridge), UnrealObject.Wrap<global::Finare.Unreal.Generated.Actor>(_spawned, Bridge));
             _spawned = default;
         }
         _load = null;

@@ -373,7 +373,9 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealInvocationMetrics,
       IUnrealInvocationProfiler,
       IUnrealWorldDataPlaneProvider,
-      IUnrealAsyncServiceProvider
+      IUnrealAsyncServiceProvider,
+      IUnrealObjectBridgeScope,
+      IUnrealObjectTypeBridge
 {
     private const int CallFrameArenaByteCapacity = 4096;
     private const int ParentInputArenaByteCapacity = 64 * 1024;
@@ -404,6 +406,36 @@ public sealed class NativeUnrealInvocationBridge
 
     public UnrealWorldDataPlane DataPlane { get; }
 
+    /// <summary>All generation bridges over this transport share its World scope.</summary>
+    public object IdentityScope => _transport;
+
+    public void ValidateAccess(UnrealObjectHandle handle)
+    {
+        if (!handle.IsWellFormed)
+        {
+            throw new ObjectDisposedException(
+                nameof(UnrealObject),
+                "The managed Unreal object handle is null or malformed.");
+        }
+    }
+
+    public IReadOnlyList<string> GetObjectTypePaths(UnrealObjectHandle target) =>
+        Invoke<IReadOnlyList<string>, UnrealObjectHandle>(
+            target,
+            UnrealMemberId.FromPath("/Script/FinareRuntime.FinareWorldLibrary:GetObjectTypePaths"),
+            "/Script/FinareRuntime.FinareWorldLibrary:GetObjectTypePaths",
+            target);
+
+    public bool IsObjectOfClass(UnrealObjectHandle target, string classPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(classPath);
+        return Invoke<bool, UnrealObjectHandle, string>(
+            target,
+            UnrealMemberId.FromPath("/Script/FinareRuntime.FinareWorldLibrary:IsObjectOfClass"),
+            "/Script/FinareRuntime.FinareWorldLibrary:IsObjectOfClass",
+            target, classPath);
+    }
+
     public bool SupportsParentInvocation =>
         _transport is IUnrealNativeCallFrameTransportV3 frameTransport &&
         _transport is IUnrealNativeCallFrameScopeFactory &&
@@ -418,10 +450,10 @@ public sealed class NativeUnrealInvocationBridge
         get { lock (_nativeObjectGate) return _callbacks ??= CreateCallbackScope(); }
     }
 
-    UnrealCallbackScope IUnrealCallbackScopeFactory.CreateCallbackScope() => CreateCallbackScope();
+    UnrealCallbackScope IUnrealCallbackScopeFactory.CreateCallbackScope(IUnrealInvocationBridge owner) => CreateCallbackScope(owner);
 
-    private UnrealCallbackScope CreateCallbackScope() =>
-        _transport is IUnrealNativeCallbackTransport callbacks ? new(callbacks) :
+    private UnrealCallbackScope CreateCallbackScope(IUnrealInvocationBridge? owner = null) =>
+        _transport is IUnrealNativeCallbackTransport callbacks ? new(callbacks, owner ?? this) :
         throw new NotSupportedException("The installed transport does not support typed callbacks.");
 
     public UnrealNativeObjectScope NativeObjects

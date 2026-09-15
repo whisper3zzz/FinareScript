@@ -65,6 +65,20 @@ DECLARE_MULTICAST_DELEGATE_OneParam(
 	FOnFinareDailyBuildCompleted,
 	const FFinareDailyBuildResult&);
 
+#if WITH_DEV_AUTOMATION_TESTS
+/**
+ * Temporary command seam for editor Automation.  It replaces only the
+ * process launch and report path; the normal queue, receipt reader, and
+ * component reload barrier remain in control of the operation.
+ */
+struct FINAREEDITOR_API FFinareDailyBuildCommandOverride
+{
+	FString Executable;
+	FString Arguments;
+	FString ReportPath;
+};
+#endif
+
 /** Public editor navigation used by product workflows such as first Play. */
 class FINAREEDITOR_API IFinareEditorModule : public IModuleInterface
 {
@@ -87,5 +101,10 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	/** Scoped runtime tests supply compiled inputs; do not rebuild their fixtures on PIE startup. Returns the previous state. */
 	virtual bool SetPrecompiledAutomationPlay(bool bEnabled) = 0;
+	/** Installs a temporary Daily Build process command for Automation only. */
+	virtual bool SetDailyBuildCommandOverride(
+		const FFinareDailyBuildCommandOverride& Override) = 0;
+	/** Removes the Automation command, stopping its owned build before fixture cleanup if necessary. */
+	virtual bool ClearDailyBuildCommandOverride() = 0;
 #endif
 };

@@ -288,7 +288,10 @@ public sealed class NativeUnrealInvocationBridgeTests
             new UnrealVector(10.0, 20.0, 30.0));
         Assert.Equal(new UnrealVector(11.0, 22.0, 33.0), vector);
         Assert.Equal(UnrealTransform.Identity, interop.EchoTransform(UnrealTransform.Identity));
-        Assert.Equal(Handle, interop.EchoObject(Handle));
+        Assert.Equal(Handle, bridge.Invoke<UnrealObjectHandle, UnrealObjectHandle>(Handle,
+            UnrealMemberId.FromPath("/Script/FinareRuntime.FinareInteropFixture:EchoObject"),
+            "/Script/FinareRuntime.FinareInteropFixture:EchoObject", Handle));
+        Assert.Null(interop.EchoObject(null));
         var classHandle = new UnrealClassHandle(Handle.Value);
         Assert.Equal(classHandle, interop.EchoClass(classHandle));
         Assert.Equal(5, interop.StringLength("可视化脚本"));

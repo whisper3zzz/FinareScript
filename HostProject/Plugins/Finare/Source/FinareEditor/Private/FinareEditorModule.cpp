@@ -19,6 +19,7 @@
 #include "KismetPins/SGraphPinExec.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "SGraphNodeKnot.h"
@@ -486,6 +487,36 @@ public:
 		bPrecompiledAutomationPlay = bEnabled;
 		return bPrevious;
 	}
+
+	virtual bool SetDailyBuildCommandOverride(
+		const FFinareDailyBuildCommandOverride& Override) override
+	{
+		if (!GIsAutomationTesting || IsDailyBuildRunning() ||
+			Override.Executable.IsEmpty() || Override.Arguments.IsEmpty() ||
+			Override.ReportPath.IsEmpty() || FPaths::IsRelative(Override.ReportPath))
+		{
+			return false;
+		}
+		DailyBuildCommandOverride = Override;
+		return true;
+	}
+
+	virtual bool ClearDailyBuildCommandOverride() override
+	{
+		if (!GIsAutomationTesting)
+		{
+			return false;
+		}
+		if (DailyBuildCommandOverride.IsSet() && IsDailyBuildRunning())
+		{
+			// A timed-out Automation must stop its owned compiler before restoring
+			// fixture files. Never cancel an ordinary project build through this hook.
+			ShutdownDailyBuild();
+			DailyBuildQueue = FFinareDailyBuildQueue();
+		}
+		DailyBuildCommandOverride.Reset();
+		return true;
+	}
 #endif
 
 	virtual bool OpenAuthoringMember(const FString& SemanticId) override
@@ -532,6 +563,7 @@ private:
 	mutable bool bAllowNextPlay = false;
 #if WITH_DEV_AUTOMATION_TESTS
 	bool bPrecompiledAutomationPlay = false;
+	TOptional<FFinareDailyBuildCommandOverride> DailyBuildCommandOverride;
 #endif
 	mutable TOptional<FRequestPlaySessionParams> DeferredPlayRequest;
 
@@ -634,6 +666,14 @@ private:
 			FinishDailyBuild(-1, Error);
 			return false;
 		}
+		#if WITH_DEV_AUTOMATION_TESTS
+		if (DailyBuildCommandOverride.IsSet())
+		{
+			Command.Executable = DailyBuildCommandOverride->Executable;
+			Command.Arguments = DailyBuildCommandOverride->Arguments;
+			Command.ReportPath = DailyBuildCommandOverride->ReportPath;
+		}
+		#endif
 		DailyBuildReportPath = Command.ReportPath;
 		IFileManager::Get().MakeDirectory(
 			*FPaths::GetPath(DailyBuildReportPath),

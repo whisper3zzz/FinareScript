@@ -270,6 +270,16 @@ namespace UE::Finare::Declaration::Private
 			OutType = EPropertyBagPropertyType::Text;
 			return true;
 		}
+		if (Kind == TEXT("object") && UnrealType.bPresent && (UnrealType.Kind == 5 || UnrealType.Kind == 6))
+		{
+			UClass* Class = LoadObject<UClass>(nullptr, *UnrealType.Path);
+			if (Class == nullptr || Class->GetPathName() != UnrealType.Path || Class->GetName() != UnrealType.NativeName ||
+				Class->HasAnyClassFlags(CLASS_Interface) != (UnrealType.Kind == 6)) return false;
+			OutType = EPropertyBagPropertyType::Object;
+			// Property bags carry defaults; the generated UClass uses an FInterfaceProperty for interface state.
+			OutTypeObject = UnrealType.Kind == 6 ? UObject::StaticClass() : Class;
+			return true;
+		}
 		if (Kind == TEXT("object") &&
 			MetadataName == TEXT("Finare.Unreal.UnrealObjectHandle"))
 		{
@@ -400,13 +410,21 @@ namespace UE::Finare::Declaration::Private
 					TSharedPtr<FJsonObject> ChildOwner = MakeShared<FJsonObject>();
 					ChildOwner->SetObjectField(TEXT("unrealType"), *ChildObject);
 					if (!ReadJsonUnrealType(ChildOwner, Child, Depth + 1) ||
-						(Child.bPresent && Child.Kind >= 2))
+						(Child.bPresent && Child.Kind >= 2 && Child.Kind <= 4))
 					{
 						return false;
 					}
 				}
 				OutType.TypeArguments.Add(MoveTemp(Child));
 			}
+			return true;
+		}
+		if (Kind == TEXT("object") || Kind == TEXT("interface"))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+			if (!(*TypeObject)->TryGetArrayField(TEXT("fields"), Fields) || Fields == nullptr || !Fields->IsEmpty() ||
+				(*TypeObject)->HasField(TEXT("typeArguments")) || !OutType.Path.StartsWith(TEXT("/Script/"))) return false;
+			OutType.Kind = Kind == TEXT("object") ? 5 : 6;
 			return true;
 		}
 		if (Kind == TEXT("enum"))
@@ -476,6 +494,7 @@ namespace UE::Finare::Declaration::Private
 		const FString& MetadataName,
 		const FStateUnrealType& UnrealType)
 	{
+		if (UnrealType.bPresent && (UnrealType.Kind == 5 || UnrealType.Kind == 6)) return TEXT("object");
 		if (UnrealType.bPresent && UnrealType.Kind == 0)
 		{
 			return TEXT("enum");
@@ -545,7 +564,7 @@ namespace UE::Finare::Declaration::Private
 				MetadataName == TEXT("Finare.Unreal.UnrealSoftObjectHandle") ||
 				MetadataName == TEXT("Finare.Unreal.UnrealSoftClassHandle");
 		}
-		if (UnrealType.Kind == 0)
+		if (UnrealType.Kind == 0 || UnrealType.Kind == 5 || UnrealType.Kind == 6)
 		{
 			return UnrealType.FieldNativeNames.IsEmpty() && UnrealType.FieldMetadataNames.IsEmpty() &&
 				UnrealType.FieldTypes.IsEmpty() && UnrealType.TypeArguments.IsEmpty();
@@ -630,7 +649,7 @@ namespace UE::Finare::Declaration::Private
 			return false;
 		}
 		if (UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].bPresent &&
-			UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].Kind >= 2)
+			UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].Kind >= 2 && UnrealType.TypeArguments[TypeKind == TEXT("map") ? 1 : 0].Kind <= 4)
 		{
 			return false;
 		}
@@ -659,7 +678,7 @@ namespace UE::Finare::Declaration::Private
 				UnrealType.TypeArguments[0],
 				KeyType,
 				KeyObject) ||
-			UnrealType.TypeArguments[0].bPresent && UnrealType.TypeArguments[0].Kind >= 2)
+			UnrealType.TypeArguments[0].bPresent && UnrealType.TypeArguments[0].Kind >= 2 && UnrealType.TypeArguments[0].Kind <= 4)
 		{
 			return false;
 		}
@@ -1415,7 +1434,7 @@ namespace UE::Finare::Declaration::Private
 			uint16 Minor = 0;
 			uint32 Reserved = 0;
 			if (!ReadUInt16(Major) || !ReadUInt16(Minor) || !ReadUInt32(Reserved) ||
-				Major != 1 || Minor > 5 || Reserved != 0)
+				Major != 1 || Minor > 6 || Reserved != 0)
 			{
 				OutError = TEXT("Compiled declaration payload is not canonical v1.0.");
 				return false;
@@ -1682,14 +1701,14 @@ namespace UE::Finare::Declaration::Private
 
 			OutType.bPresent = true;
 			uint32 FieldCount = 0;
-			if (!ReadByte(OutType.Kind) || OutType.Kind > 4 ||
+			if (!ReadByte(OutType.Kind) || OutType.Kind > 6 || (OutType.Kind >= 5 && MinorVersion < 6) ||
 				!ReadString(OutType.Path) ||
 				!ReadString(OutType.NativeName) || OutType.NativeName.IsEmpty() ||
 				!ReadCount(FieldCount))
 			{
 				return false;
 			}
-			if (OutType.Kind < 2 && OutType.Path.IsEmpty())
+			if ((OutType.Kind < 2 || OutType.Kind >= 5) && OutType.Path.IsEmpty())
 			{
 				return false;
 			}
@@ -1727,7 +1746,7 @@ namespace UE::Finare::Declaration::Private
 					{
 						return false;
 					}
-					if (ArgumentType.bPresent && ArgumentType.Kind >= 2)
+					if (ArgumentType.bPresent && ArgumentType.Kind >= 2 && ArgumentType.Kind <= 4)
 					{
 						return false;
 					}
@@ -1736,7 +1755,7 @@ namespace UE::Finare::Declaration::Private
 				}
 				return FieldCount == 0;
 			}
-			return OutType.Kind == 0 || OutType.Kind == 1;
+			return OutType.Kind == 1 || ((OutType.Kind == 0 || OutType.Kind == 5 || OutType.Kind == 6) && FieldCount == 0);
 		}
 
 		bool IsAtEnd() const { return Offset == Data.Num(); }

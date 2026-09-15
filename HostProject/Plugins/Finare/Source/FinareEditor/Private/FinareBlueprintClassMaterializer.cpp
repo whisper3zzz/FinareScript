@@ -7,6 +7,7 @@
 #include "EdGraphSchema_K2.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/InheritableComponentHandler.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Editor/TransBuffer.h"
@@ -199,6 +200,8 @@ namespace UE::Finare::BlueprintClass::Private
 		Array,
 		Set,
 		Map,
+		Object,
+		Interface,
 	};
 
 	struct FFunctionValueTypeDeclaration
@@ -449,6 +452,8 @@ namespace UE::Finare::BlueprintClass::Private
 		TStrongObjectPtr<UClass> ComponentClass;
 		TStrongObjectPtr<UFinareAsset> ScriptAsset;
 		FString ScriptAssetPath;
+		TArray<FGuid> ScriptStateOverrideIds;
+		bool bScriptStateOverrideBaselineInitialized = false;
 		TArray<FEditablePropertySnapshot> EditableProperties;
 		FInstancedPropertyBag EditableValues;
 	};
@@ -876,7 +881,312 @@ namespace UE::Finare::BlueprintClass::Private
 		{
 			return ActorDefaults->ScriptComponent;
 		}
-		return Cast<UFinareComponent>(GeneratedClass->GetDefaultObject());
+		if (Cast<UFinareComponent>(GeneratedClass->GetDefaultObject()) != nullptr)
+		{
+			return Cast<UFinareComponent>(GeneratedClass->GetDefaultObject());
+		}
+
+		// A managed Actor whose explicit parent is an ordinary AActor owns its
+		// carrier through SCS.  The ordinary AActor CDO does not necessarily
+		// instantiate SCS components, so use the exact generated SCS template as
+		// the authoring owner.  Runtime instances resolve the same template via
+		// their archetype.
+		UBlueprintGeneratedClass* BlueprintGeneratedClass =
+			Cast<UBlueprintGeneratedClass>(GeneratedClass);
+		UActorComponent* ExpectedTemplate = nullptr;
+		for (UBlueprintGeneratedClass* CurrentClass = BlueprintGeneratedClass;
+			CurrentClass != nullptr && ExpectedTemplate == nullptr;
+			CurrentClass = Cast<UBlueprintGeneratedClass>(CurrentClass->GetSuperClass()))
+		{
+			if (CurrentClass->SimpleConstructionScript == nullptr)
+			{
+				continue;
+			}
+			if (USCS_Node* Node = CurrentClass->SimpleConstructionScript->FindSCSNode(
+				TEXT("UnifiedScript")))
+			{
+				ExpectedTemplate = Node->GetActualComponentTemplate(BlueprintGeneratedClass);
+				if (ExpectedTemplate == nullptr)
+				{
+					ExpectedTemplate = Node->ComponentTemplate;
+				}
+			}
+		}
+		return Cast<UFinareComponent>(ExpectedTemplate);
+	}
+
+	UFinareComponent* FindManagedScriptComponentTemplate(UBlueprint& Blueprint)
+	{
+		UBlueprintGeneratedClass* GeneratedClass =
+			Cast<UBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+		if (GeneratedClass == nullptr)
+		{
+			return nullptr;
+		}
+		for (UBlueprintGeneratedClass* CurrentClass = GeneratedClass;
+			CurrentClass != nullptr;
+			CurrentClass = Cast<UBlueprintGeneratedClass>(CurrentClass->GetSuperClass()))
+		{
+			if (CurrentClass->SimpleConstructionScript == nullptr)
+			{
+				continue;
+			}
+			USCS_Node* Node = CurrentClass->SimpleConstructionScript->FindSCSNode(
+				TEXT("UnifiedScript"));
+			if (Node != nullptr && Node->ComponentTemplate != nullptr)
+			{
+				if (UFinareComponent* Template = Cast<UFinareComponent>(
+						Node->GetActualComponentTemplate(GeneratedClass)))
+				{
+					return Template;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	bool CopyScriptComponentConfiguration(
+		const UFinareComponent& Source,
+		UFinareComponent& Destination)
+	{
+		if (&Source == &Destination)
+		{
+			return true;
+		}
+		if (Source.GetClass() != Destination.GetClass())
+		{
+			return false;
+		}
+		for (TFieldIterator<FProperty> It(
+				 Source.GetClass(),
+				 EFieldIteratorFlags::IncludeSuper);
+			 It;
+			 ++It)
+		{
+			FProperty* Property = *It;
+			if (Property == nullptr ||
+				Property->HasAnyPropertyFlags(
+					CPF_Transient | CPF_DuplicateTransient | CPF_EditConst) ||
+				!Property->HasAnyPropertyFlags(CPF_Edit))
+			{
+				continue;
+			}
+			Property->CopyCompleteValue_InContainer(&Destination, &Source);
+		}
+		// Override IDs are persistent authoring metadata but intentionally are
+		// not editable reflected properties.  Preserve them explicitly when the
+		// legacy native carrier becomes an SCS template (or is restored).
+		Destination.CopyScriptStateOverrideMetadata(Source);
+		return true;
+	}
+
+	bool IsOrdinaryActorParent(const UClass* ParentClass)
+	{
+		return ParentClass != nullptr &&
+			ParentClass->IsChildOf(AActor::StaticClass()) &&
+			!ParentClass->IsChildOf(AFinareActor::StaticClass());
+	}
+
+	bool EnsureOrdinaryActorScriptComponent(
+		UBlueprint& Blueprint,
+		UFinareAsset& ScriptAsset,
+		UFinareComponent* ExistingComponent,
+		FString& OutError)
+	{
+		if (Blueprint.SimpleConstructionScript == nullptr)
+		{
+			OutError = FString::Printf(
+				TEXT("Blueprint '%s' has no SimpleConstructionScript for its managed Actor carrier."),
+				*Blueprint.GetPathName());
+			return false;
+		}
+		USCS_Node* Node = Blueprint.SimpleConstructionScript->FindSCSNode(
+			TEXT("UnifiedScript"));
+		bool bNewTemplate = false;
+		UFinareComponent* Template = Node != nullptr
+			                             ? Cast<UFinareComponent>(Node->ComponentTemplate)
+			                             : nullptr;
+		if (Node != nullptr && Template == nullptr)
+		{
+			OutError = FString::Printf(
+				TEXT("Blueprint '%s' already uses reserved SCS carrier name 'UnifiedScript' for a different component."),
+				*Blueprint.GetPathName());
+			return false;
+		}
+		if (Node == nullptr)
+		{
+			// A child Blueprint must override an inherited carrier through UE's
+			// component handler.  A second local SCS node would shadow the parent
+			// and make its template the wrong owner for this Script Asset.
+			USCS_Node* InheritedNode = nullptr;
+			for (UBlueprintGeneratedClass* CurrentClass =
+					Cast<UBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+				CurrentClass != nullptr && InheritedNode == nullptr;
+				CurrentClass = Cast<UBlueprintGeneratedClass>(CurrentClass->GetSuperClass()))
+			{
+				if (CurrentClass == Blueprint.GeneratedClass ||
+					CurrentClass->SimpleConstructionScript == nullptr)
+				{
+					continue;
+				}
+				InheritedNode = CurrentClass->SimpleConstructionScript->FindSCSNode(
+					TEXT("UnifiedScript"));
+			}
+			if (InheritedNode != nullptr)
+			{
+				UInheritableComponentHandler* Handler =
+					Blueprint.GetInheritableComponentHandler(true);
+				if (Handler == nullptr)
+				{
+					OutError = FString::Printf(
+						TEXT("Blueprint '%s' could not create its inherited SCS carrier override handler."),
+						*Blueprint.GetPathName());
+					return false;
+				}
+				const FComponentKey Key(InheritedNode);
+				Handler->Modify();
+				Template = Cast<UFinareComponent>(
+					Handler->GetOverridenComponentTemplate(Key));
+				if (Template == nullptr)
+				{
+					Template = Cast<UFinareComponent>(
+						Handler->CreateOverridenComponentTemplate(Key));
+					bNewTemplate = Template != nullptr;
+				}
+				if (Template == nullptr)
+				{
+					OutError = FString::Printf(
+						TEXT("Blueprint '%s' could not create its inherited SCS carrier override."),
+						*Blueprint.GetPathName());
+					return false;
+				}
+			}
+			else
+			{
+				Node = Blueprint.SimpleConstructionScript->CreateNode(
+					UFinareComponent::StaticClass(),
+					TEXT("UnifiedScript"));
+				if (Node == nullptr)
+				{
+					OutError = FString::Printf(
+						TEXT("Blueprint '%s' could not create its managed Actor SCS carrier."),
+						*Blueprint.GetPathName());
+					return false;
+				}
+				Blueprint.SimpleConstructionScript->AddNode(Node);
+				if (Node->GetVariableName() != FName(TEXT("UnifiedScript")))
+				{
+					Blueprint.SimpleConstructionScript->RemoveNode(Node, false);
+					OutError = FString::Printf(
+						TEXT("Blueprint '%s' could not reserve the exact SCS carrier name 'UnifiedScript'; generated '%s' instead."),
+						*Blueprint.GetPathName(),
+						*Node->GetVariableName().ToString());
+					return false;
+				}
+				Template = Cast<UFinareComponent>(Node->ComponentTemplate);
+				bNewTemplate = Template != nullptr;
+			}
+		}
+		if (Template == nullptr)
+		{
+			OutError = FString::Printf(
+				TEXT("Blueprint '%s' created an invalid managed Actor SCS carrier template."),
+				*Blueprint.GetPathName());
+			return false;
+		}
+		if (!bNewTemplate && Template->ScriptAsset.Get() != &ScriptAsset)
+		{
+			OutError = FString::Printf(
+				TEXT("Blueprint '%s' SCS carrier 'UnifiedScript' is owned by another Script Asset."),
+				*Blueprint.GetPathName());
+			return false;
+		}
+		Template->Modify();
+		if (ExistingComponent != nullptr && ExistingComponent != Template &&
+			!CopyScriptComponentConfiguration(*ExistingComponent, *Template))
+		{
+			OutError = FString::Printf(
+				TEXT("Blueprint '%s' could not migrate its managed Actor carrier configuration into SCS."),
+				*Blueprint.GetPathName());
+			return false;
+		}
+		Template->ScriptAsset = &ScriptAsset;
+		Blueprint.SimpleConstructionScript->ValidateSceneRootNodes();
+		OutError.Reset();
+		return true;
+	}
+
+	bool RemoveOrdinaryActorScriptComponent(
+		UBlueprint& Blueprint,
+		const UFinareAsset& ScriptAsset,
+		FString& OutError)
+	{
+		if (Blueprint.SimpleConstructionScript == nullptr)
+		{
+			OutError.Reset();
+			return true;
+		}
+		USCS_Node* Node = Blueprint.SimpleConstructionScript->FindSCSNode(
+			TEXT("UnifiedScript"));
+		if (Node != nullptr)
+		{
+			const UFinareComponent* Template = Cast<UFinareComponent>(Node->ComponentTemplate);
+			if (Template == nullptr)
+			{
+				OutError = FString::Printf(
+					TEXT("Blueprint '%s' reserves SCS name 'UnifiedScript' for a non-Finare component."),
+					*Blueprint.GetPathName());
+				return false;
+			}
+			if (Template->ScriptAsset.Get() != &ScriptAsset)
+			{
+				OutError = FString::Printf(
+					TEXT("Blueprint '%s' SCS carrier 'UnifiedScript' is owned by another Script Asset."),
+					*Blueprint.GetPathName());
+				return false;
+			}
+			Blueprint.SimpleConstructionScript->RemoveNode(Node, false);
+			OutError.Reset();
+			return true;
+		}
+
+		// An inherited carrier is represented by this Blueprint's override
+		// record, if one exists.  Remove only that record and preserve the parent
+		// SCS node for other generated classes.
+		USCS_Node* InheritedNode = nullptr;
+		for (UBlueprintGeneratedClass* CurrentClass =
+				Cast<UBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+			CurrentClass != nullptr && InheritedNode == nullptr;
+			CurrentClass = Cast<UBlueprintGeneratedClass>(CurrentClass->GetSuperClass()))
+		{
+			if (CurrentClass == Blueprint.GeneratedClass ||
+				CurrentClass->SimpleConstructionScript == nullptr)
+			{
+				continue;
+			}
+			InheritedNode = CurrentClass->SimpleConstructionScript->FindSCSNode(
+				TEXT("UnifiedScript"));
+		}
+		if (InheritedNode != nullptr)
+		{
+			if (UInheritableComponentHandler* Handler =
+					Blueprint.GetInheritableComponentHandler(false))
+			{
+				const UFinareComponent* Template = Cast<UFinareComponent>(
+					Handler->GetOverridenComponentTemplate(FComponentKey(InheritedNode)));
+				if (Template != nullptr && Template->ScriptAsset.Get() != &ScriptAsset)
+				{
+					OutError = FString::Printf(
+						TEXT("Blueprint '%s' inherited SCS carrier 'UnifiedScript' is owned by another Script Asset."),
+						*Blueprint.GetPathName());
+					return false;
+				}
+				Handler->Modify();
+				Handler->RemoveOverridenComponentTemplate(FComponentKey(InheritedNode));
+			}
+		}
+		OutError.Reset();
+		return true;
 	}
 
 	bool ValidateScriptComponentIdentity(
@@ -904,9 +1214,17 @@ namespace UE::Finare::BlueprintClass::Private
 			return false;
 		}
 
+		const bool bOrdinaryActor =
+			GeneratedClass->GetSuperClass() != nullptr &&
+			IsOrdinaryActorParent(GeneratedClass->GetSuperClass());
+		const UFinareComponent* ExpectedTemplate = bOrdinaryActor
+			? FindManagedScriptComponentTemplate(const_cast<UBlueprint&>(Blueprint))
+			: nullptr;
 		UObject* ExpectedOuter = bComponentIsClassDefaultObject
 			                         ? GeneratedClass->GetOuter()
-			                         : CurrentCdo;
+			                         : (bOrdinaryActor
+				                         ? GeneratedClass
+				                         : CurrentCdo);
 		if (Component->GetOuter() != ExpectedOuter)
 		{
 			OutError = FString::Printf(
@@ -919,14 +1237,28 @@ namespace UE::Finare::BlueprintClass::Private
 		// the duplicate GeneratedClass is compiled.  The existing generated
 		// hierarchy is therefore the only valid capture baseline; after compile
 		// its SuperClass reflects the prospective parent for exact restore checks.
-		UFinareComponent* ExpectedArchetype = FindManagedScriptComponent(
-			GeneratedClass->GetSuperClass());
+		UFinareComponent* ExpectedArchetype = bOrdinaryActor
+			? (Blueprint.SimpleConstructionScript != nullptr &&
+				Blueprint.SimpleConstructionScript->FindSCSNode(TEXT("UnifiedScript")) != nullptr
+				? Component->GetClass()->GetDefaultObject<UFinareComponent>()
+				: FindManagedScriptComponent(GeneratedClass->GetSuperClass()))
+			: FindManagedScriptComponent(GeneratedClass->GetSuperClass());
 		if (Component->GetArchetype() != ExpectedArchetype)
 		{
 			OutError = FString::Printf(
 				TEXT("Blueprint '%s' changed the managed ScriptComponent immediate archetype identity."),
 				*Blueprint.GetPathName());
 			return false;
+		}
+		if (bOrdinaryActor)
+		{
+			if (ExpectedTemplate == nullptr || Component != ExpectedTemplate)
+			{
+				OutError = FString::Printf(
+					TEXT("Blueprint '%s' changed the managed Actor SCS carrier template identity."),
+					*Blueprint.GetPathName());
+				return false;
+			}
 		}
 		OutError.Reset();
 		return true;
@@ -945,11 +1277,25 @@ namespace UE::Finare::BlueprintClass::Private
 			OutError.Reset();
 			return true;
 		}
+		// GetActualComponentTemplate returns the parent template when this
+		// Blueprint has no inheritable-component override.  It is not owned by
+		// this authoring object and must never be restored through the child.
+		if (IsOrdinaryActorParent(Blueprint.GeneratedClass != nullptr
+			? Blueprint.GeneratedClass->GetSuperClass()
+			: nullptr) &&
+			Component->GetOuter() != Blueprint.GeneratedClass)
+		{
+			OutError.Reset();
+			return true;
+		}
 		OutSnapshot.bHadComponent = true;
 		OutSnapshot.ComponentRoot.Reset(Component);
 		OutSnapshot.ComponentClass.Reset(Component->GetClass());
 		OutSnapshot.ScriptAsset.Reset(Component->ScriptAsset.Get());
 		OutSnapshot.ScriptAssetPath = Component->ScriptAssetPath;
+		Component->GetScriptStateOverrideMetadata(
+			OutSnapshot.ScriptStateOverrideIds,
+			OutSnapshot.bScriptStateOverrideBaselineInitialized);
 		if (!ValidateScriptComponentIdentity(
 			Blueprint,
 			Component,
@@ -1038,6 +1384,28 @@ namespace UE::Finare::BlueprintClass::Private
 					"Blueprint '%s' has not compiled its current ParentClass before managed ScriptComponent identity restore."),
 				*Blueprint->GetPathName());
 			return false;
+		}
+		if (IsOrdinaryActorParent(Blueprint->GeneratedClass->GetSuperClass()) &&
+			Component != nullptr && Component->GetOuter() != Blueprint->GeneratedClass)
+		{
+			// Native subobjects had distinct child CDO values. After switching to
+			// SCS, restore them into this child's override, not the parent template.
+			UFinareAsset* Binding = Snapshot.ScriptAsset.Get();
+			if (Binding == nullptr)
+			{
+				Binding = Component->ScriptAsset.Get();
+			}
+			Blueprint->Modify();
+			if (Binding == nullptr || !EnsureOrdinaryActorScriptComponent(
+				*Blueprint, *Binding, nullptr, OutError))
+			{
+				if (OutError.IsEmpty())
+				{
+					OutError = TEXT("Cannot restore a child SCS carrier without its behavior owner.");
+				}
+				return false;
+			}
+			Component = FindManagedScriptComponent(Blueprint->GeneratedClass);
 		}
 		if (!ValidateScriptComponentIdentity(
 			*Blueprint,
@@ -1131,6 +1499,9 @@ namespace UE::Finare::BlueprintClass::Private
 				MapHelper.Rehash();
 			}
 		}
+		Component->SetScriptStateOverrideMetadata(
+			Snapshot.ScriptStateOverrideIds,
+			Snapshot.bScriptStateOverrideBaselineInitialized);
 		OutError.Reset();
 		return true;
 	}
@@ -1275,7 +1646,7 @@ namespace UE::Finare::BlueprintClass::Private
 			return true;
 		}
 
-		bool Begin(FString& OutError)
+		bool Begin(FString& OutError, UObject* RelatedAsset = nullptr)
 		{
 			if (bActive)
 			{
@@ -1299,6 +1670,14 @@ namespace UE::Finare::BlueprintClass::Private
 			FAuthoringBlueprintTransaction* AuthoringTransaction =
 				static_cast<FAuthoringBlueprintTransaction*>(GUndo);
 			AuthoringTransaction->BeginExplicitAuthoringCapture();
+			if (RelatedAsset != nullptr)
+			{
+				// The transactor ignores objects outside this explicit capture.
+				// Include the Script Asset before changing its carrier requirement.
+				Save(RelatedAsset);
+				RelatedAssetPackage = RelatedAsset->GetOutermost();
+				bRelatedAssetPackageDirty = RelatedAssetPackage.IsValid() && RelatedAssetPackage->IsDirty();
+			}
 			CaptureBlueprint(Blueprint);
 			const UClass* OriginalGeneratedClass = Blueprint.GeneratedClass;
 			if (OriginalGeneratedClass != nullptr)
@@ -1395,6 +1774,10 @@ namespace UE::Finare::BlueprintClass::Private
 			{
 				Snapshot.RestorePackageDirtyFlag();
 			}
+			if (RelatedAssetPackage.IsValid())
+			{
+				RelatedAssetPackage->SetDirtyFlag(bRelatedAssetPackageDirty);
+			}
 		}
 
 		virtual ~FLocalBlueprintTransaction() override
@@ -1477,6 +1860,16 @@ namespace UE::Finare::BlueprintClass::Private
 			FBlueprintAuthoringSnapshot& AuthoringSnapshot = AuthoringSnapshots.AddDefaulted_GetRef();
 			AuthoringSnapshot.Capture(Candidate);
 			Save(&Candidate);
+			if (UInheritableComponentHandler* Handler = Candidate.GetInheritableComponentHandler(false))
+			{
+				Save(Handler);
+				TArray<UActorComponent*> Templates;
+				Handler->GetAllTemplates(Templates, true);
+				for (UActorComponent* Template : Templates)
+				{
+					CaptureObjectTree(Template);
+				}
+			}
 			if (Candidate.GeneratedClass != nullptr)
 			{
 				CaptureObjectTree(Candidate.GeneratedClass->GetDefaultObject());
@@ -1642,6 +2035,8 @@ namespace UE::Finare::BlueprintClass::Private
 		ITransaction* PreviousUndo = nullptr;
 		TArray<TObjectPtr<UObject>> ReferencedObjects;
 		TArray<FBlueprintAuthoringSnapshot> AuthoringSnapshots;
+		TWeakObjectPtr<UPackage> RelatedAssetPackage;
+		bool bRelatedAssetPackageDirty = false;
 		bool bIsolated = false;
 		bool bActive = false;
 		bool bRollbackAvailable = false;
@@ -1649,6 +2044,17 @@ namespace UE::Finare::BlueprintClass::Private
 
 	bool PrepareParentChange(UBlueprint& Blueprint, UClass& NewParent, FString& OutError)
 	{
+		UFinareAsset* ScriptAsset = nullptr;
+		if (const UFinareBlueprint* UnifiedBlueprint = Cast<UFinareBlueprint>(&Blueprint))
+		{
+			ScriptAsset = UnifiedBlueprint->ScriptAsset.Get();
+		}
+		const bool bWasOrdinaryActor = IsOrdinaryActorParent(Blueprint.ParentClass);
+		const bool bWillBeOrdinaryActor = IsOrdinaryActorParent(&NewParent);
+		UFinareComponent* ExistingComponent = ScriptAsset != nullptr &&
+			ScriptAsset->ScriptClassKind == EFinareClassKind::Actor
+			? FindManagedScriptComponent(Blueprint.GeneratedClass)
+			: nullptr;
 		Blueprint.Modify();
 		if (Blueprint.SimpleConstructionScript != nullptr)
 		{
@@ -1661,7 +2067,25 @@ namespace UE::Finare::BlueprintClass::Private
 				}
 			}
 		}
+		if (ScriptAsset != nullptr &&
+			ScriptAsset->ScriptClassKind == EFinareClassKind::Actor &&
+			bWasOrdinaryActor && !bWillBeOrdinaryActor &&
+			!RemoveOrdinaryActorScriptComponent(Blueprint, *ScriptAsset, OutError))
+		{
+			return false;
+		}
 		Blueprint.ParentClass = &NewParent;
+		if (ScriptAsset != nullptr &&
+			ScriptAsset->ScriptClassKind == EFinareClassKind::Actor &&
+			bWillBeOrdinaryActor &&
+			!EnsureOrdinaryActorScriptComponent(
+				Blueprint,
+				*ScriptAsset,
+				ExistingComponent,
+				OutError))
+		{
+			return false;
+		}
 		if (Blueprint.SimpleConstructionScript != nullptr)
 		{
 			Blueprint.SimpleConstructionScript->ValidateSceneRootNodes();
@@ -1717,22 +2141,29 @@ namespace UE::Finare::BlueprintClass::Private
 		{
 		case EFinareClassKind::Actor:
 			bFamilyMatches = ParentClass.IsChildOf(AActor::StaticClass());
-			bCarrierMatches = ParentClass.IsChildOf(AFinareActor::StaticClass());
+			bCarrierMatches = ParentClass.IsChildOf(AFinareActor::StaticClass()) ||
+				IsOrdinaryActorParent(&ParentClass);
 			break;
 		case EFinareClassKind::ActorComponent:
 			bFamilyMatches = ParentClass.IsChildOf(UActorComponent::StaticClass());
-			bCarrierMatches = ParentClass.IsChildOf(UFinareComponent::StaticClass());
+			// Managed execution uses an internal UFinareComponent sidecar; the
+			// generated native component itself is the receiver.  Any legal UE
+			// ActorComponent family is therefore valid here.
+			bCarrierMatches = bFamilyMatches;
 			break;
 		case EFinareClassKind::Object:
 			bFamilyMatches = ParentClass.IsChildOf(UObject::StaticClass()) &&
 				!ParentClass.IsChildOf(AActor::StaticClass()) &&
 				!ParentClass.IsChildOf(UActorComponent::StaticClass()) &&
 				!ParentClass.IsChildOf(UBlueprintFunctionLibrary::StaticClass());
-			bCarrierMatches = ParentClass.IsChildOf(UFinareObject::StaticClass());
+			// Ordinary UObject Script Classes use a World-owned internal
+			// execution sidecar.  The receiver itself remains the generated
+			// UObject, so no FinareObject carrier parent is required.
+			bCarrierMatches = bFamilyMatches;
 			break;
 		case EFinareClassKind::BlueprintFunctionLibrary:
 			bFamilyMatches = ParentClass.IsChildOf(UBlueprintFunctionLibrary::StaticClass());
-			bCarrierMatches = ParentClass.IsChildOf(UFinareBlueprintFunctionLibrary::StaticClass());
+			bCarrierMatches = bFamilyMatches;
 			break;
 		default:
 			break;
@@ -1966,6 +2397,18 @@ namespace UE::Finare::BlueprintClass::Private
 		const FFunctionValueTypeDeclaration* UnrealType = nullptr)
 	{
 		OutType = FEdGraphPinType();
+		if (TypeKind == TEXT("object") && UnrealType != nullptr &&
+			(UnrealType->Kind == EFunctionValueTypeKind::Object || UnrealType->Kind == EFunctionValueTypeKind::Interface))
+		{
+			UClass* Class = LoadObject<UClass>(nullptr, *UnrealType->UnrealTypePath);
+			const bool bInterface = UnrealType->Kind == EFunctionValueTypeKind::Interface;
+			if (Class == nullptr || Class->GetPathName() != UnrealType->UnrealTypePath ||
+				Class->GetName() != UnrealType->UnrealNativeName || Class->HasAnyClassFlags(CLASS_Interface) != bInterface)
+				return false;
+			OutType.PinCategory = bInterface ? UEdGraphSchema_K2::PC_Interface : UEdGraphSchema_K2::PC_Object;
+			OutType.PinSubCategoryObject = Class;
+			return true;
+		}
 		if (TypeKind == TEXT("boolean") && MetadataName == TEXT("System.Boolean"))
 		{
 			OutType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
@@ -2147,6 +2590,8 @@ namespace UE::Finare::BlueprintClass::Private
 			}
 			return true;
 		}
+		if (ValueType.Kind == EFunctionValueTypeKind::Object || ValueType.Kind == EFunctionValueTypeKind::Interface)
+			return ResolvePinType(TEXT("object"), MetadataName, OutType, &ValueType);
 		if (ValueType.Kind == EFunctionValueTypeKind::Enum)
 		{
 			UEnum* Enum = LoadObject<UEnum>(nullptr, *ValueType.UnrealTypePath);
@@ -3369,7 +3814,8 @@ namespace UE::Finare::BlueprintClass::Private
 
 		if (Value->IsNull())
 		{
-			if (MetadataName == TEXT("Finare.Unreal.UnrealObjectHandle") ||
+			if ((UnrealType != nullptr && (UnrealType->Kind == EFunctionValueTypeKind::Object ||
+				UnrealType->Kind == EFunctionValueTypeKind::Interface)) || MetadataName == TEXT("Finare.Unreal.UnrealObjectHandle") ||
 				MetadataName == TEXT("Finare.Unreal.UnrealClassHandle"))
 			{
 				OutDefault = TEXT("None");
@@ -3709,11 +4155,13 @@ namespace UE::Finare::BlueprintClass::Private
 			                                          ? EFunctionValueTypeKind::Enum
 			                                          : Kind == TEXT("struct")
 			                                          ? EFunctionValueTypeKind::Struct
+			                                          : Kind == TEXT("object") ? EFunctionValueTypeKind::Object
+			                                          : Kind == TEXT("interface") ? EFunctionValueTypeKind::Interface
 			                                          : EFunctionValueTypeKind::None;
 		if (ParsedKind == EFunctionValueTypeKind::None ||
 			!UnrealTypePath.StartsWith(TEXT("/Script/")) ||
 			Object->HasField(TEXT("typeArguments")) ||
-			(ParsedKind == EFunctionValueTypeKind::Enum && !Fields->IsEmpty()))
+			(ParsedKind != EFunctionValueTypeKind::Struct && !Fields->IsEmpty()))
 		{
 			OutError = FString::Printf(
 				TEXT("Function Unreal value type '%s' has an invalid kind, path, or field contract."),
@@ -3727,7 +4175,7 @@ namespace UE::Finare::BlueprintClass::Private
 			OutType.UnrealNativeName = UnrealNativeName;
 		}
 
-		if (ParsedKind == EFunctionValueTypeKind::Enum)
+		if (ParsedKind != EFunctionValueTypeKind::Struct)
 		{
 			return true;
 		}
@@ -3795,7 +4243,9 @@ namespace UE::Finare::BlueprintClass::Private
 		const FFunctionValueTypeDeclaration& Declaration)
 	{
 		FFinareManagedValueTypeBinding Result;
-		Result.UnrealTypePath = Declaration.UnrealTypePath;
+		// UObject wire cells remain handles. The generated FProperty owns the exact class/interface constraint.
+		if (Declaration.Kind != EFunctionValueTypeKind::Object && Declaration.Kind != EFunctionValueTypeKind::Interface)
+			Result.UnrealTypePath = Declaration.UnrealTypePath;
 		Result.StructFields.Reserve(Declaration.StructFieldPaths.Num());
 		for (const TArray<FName>& Path : Declaration.StructFieldPaths)
 		{
@@ -4616,6 +5066,7 @@ namespace UE::Finare::BlueprintClass::Private
 			ScriptAsset.ScriptClassKind == EFinareClassKind::BlueprintFunctionLibrary;
 		if (ScriptAsset.ScriptClassKind != EFinareClassKind::Actor &&
 			ScriptAsset.ScriptClassKind != EFinareClassKind::ActorComponent &&
+			ScriptAsset.ScriptClassKind != EFinareClassKind::Object &&
 			!bStaticLibrary)
 		{
 			return true;
@@ -8146,6 +8597,257 @@ namespace UE::Finare::BlueprintClass::Private
 		return true;
 	}
 
+	/**
+	 * Builds the deployment candidate for an Actor parent change.  The
+	 * deployment file is an external publication participant, so the caller
+	 * journals and writes this candidate together with the Blueprint package
+	 * and managed outputs.  Updating the parsed object preserves unrelated
+	 * entries and fields supplied by the project.
+	 */
+	bool BuildDeploymentParentCandidate(
+		const UFinareAsset& ScriptAsset,
+		const FString& RequiredTargetClassPath,
+		FString& OutPath,
+		TArray<uint8>& OutContent,
+		FString& OutError,
+		const TArray<FFinareExternalPublicationFile>* ExistingCandidates = nullptr)
+	{
+		OutPath.Reset();
+		OutContent.Reset();
+		OutError.Reset();
+		const FString OnboardingPath = FPaths::Combine(
+			FPaths::ProjectConfigDir(),
+			TEXT("Finare.onboarding.json"));
+		FString OnboardingJson;
+		if (!FFileHelper::LoadFileToString(OnboardingJson, *OnboardingPath))
+		{
+			if (!IFileManager::Get().FileExists(*OnboardingPath))
+			{
+				return true;
+			}
+			OutError = FString::Printf(TEXT("Cannot read onboarding configuration '%s'."), *OnboardingPath);
+			return false;
+		}
+		TSharedPtr<FJsonObject> Onboarding;
+		const TSharedRef<TJsonReader<>> OnboardingReader =
+			TJsonReaderFactory<>::Create(OnboardingJson);
+		const TSharedPtr<FJsonObject>* Deployment = nullptr;
+		FString Manifest;
+		if (!FJsonSerializer::Deserialize(OnboardingReader, Onboarding) || !Onboarding.IsValid())
+		{
+			OutError = FString::Printf(TEXT("Invalid onboarding JSON '%s'."), *OnboardingPath);
+			return false;
+		}
+		if (!Onboarding->TryGetObjectField(TEXT("deployment"), Deployment) ||
+			Deployment == nullptr ||
+			!(*Deployment)->TryGetStringField(TEXT("manifest"), Manifest) ||
+			Manifest.IsEmpty())
+		{
+			return true;
+		}
+		OutPath = FPaths::ConvertRelativePathToFull(FPaths::GetPath(OnboardingPath), Manifest);
+		FPaths::NormalizeFilename(OutPath);
+
+		FString DeploymentJson;
+		bool bLoadedCandidate = false;
+		if (ExistingCandidates != nullptr)
+		{
+			for (const FFinareExternalPublicationFile& ExistingCandidate : *ExistingCandidates)
+			{
+				FString ExistingPath = FPaths::ConvertRelativePathToFull(ExistingCandidate.Path);
+				FPaths::NormalizeFilename(ExistingPath);
+				if (!ExistingPath.Equals(OutPath, ESearchCase::IgnoreCase))
+				{
+					continue;
+				}
+				if (bLoadedCandidate)
+				{
+					OutError = FString::Printf(TEXT("Duplicate deployment publication path '%s'."), *OutPath);
+					return false;
+				}
+				if (ExistingCandidate.Content.IsEmpty())
+				{
+					OutError = FString::Printf(
+						TEXT("The prepared deployment candidate '%s' is not valid UTF-8 JSON."),
+						*OutPath);
+					return false;
+				}
+				FFileHelper::BufferToString(
+					DeploymentJson,
+					ExistingCandidate.Content.GetData(),
+					ExistingCandidate.Content.Num());
+				if (DeploymentJson.IsEmpty())
+				{
+					OutError = FString::Printf(
+						TEXT("The prepared deployment candidate '%s' is not valid UTF-8 JSON."),
+						*OutPath);
+					return false;
+				}
+				bLoadedCandidate = true;
+			}
+		}
+		if (!bLoadedCandidate && !FFileHelper::LoadFileToString(DeploymentJson, *OutPath))
+		{
+			if (!IFileManager::Get().FileExists(*OutPath))
+			{
+				OutPath.Reset();
+				return true;
+			}
+			OutError = FString::Printf(
+				TEXT("Cannot read deployment manifest '%s' while synchronizing the Actor parent."),
+				*OutPath);
+			return false;
+		}
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(DeploymentJson);
+		const TArray<TSharedPtr<FJsonValue>>* Scripts = nullptr;
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
+			!Root->TryGetArrayField(TEXT("scripts"), Scripts) || Scripts == nullptr)
+		{
+			OutError = FString::Printf(
+				TEXT("Deployment manifest '%s' has no valid scripts array."),
+				*OutPath);
+			return false;
+		}
+
+		const FString ExpectedAssetPath = ScriptAsset.GetOutermost() != nullptr
+			? ScriptAsset.GetOutermost()->GetName()
+			: FString();
+		const FString ExpectedTypeName = ScriptAsset.ScriptTypeName;
+		const FString ExpectedDeclarationAssetPath = ScriptAsset.DeclarationAssetPath;
+		const FString ExpectedScriptClassId = TEXT("us_") +
+			ScriptAsset.ScriptClassId.ToString(EGuidFormats::Digits).ToLower();
+		const FString ExpectedGeneratedClassPath = ScriptAsset.GeneratedClassPath.ToString();
+		TSharedPtr<FJsonObject> Match;
+		bool bIdentityMismatch = false;
+		bool bPackageEntryFound = false;
+		for (const TSharedPtr<FJsonValue>& Value : *Scripts)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString AssetPath;
+			FString TypeName;
+			FString DeclarationAssetPath;
+			if (Entry.IsValid() && Entry->TryGetStringField(TEXT("assetPath"), AssetPath) &&
+				AssetPath == ExpectedAssetPath)
+			{
+				if (bPackageEntryFound)
+				{
+					OutError = FString::Printf(TEXT("Deployment manifest '%s' duplicates package '%s'."),
+						*OutPath, *ExpectedAssetPath);
+					return false;
+				}
+				bPackageEntryFound = true;
+				if (!Entry->TryGetStringField(TEXT("typeName"), TypeName) ||
+					TypeName != ExpectedTypeName ||
+					!Entry->TryGetStringField(TEXT("declarationAssetPath"), DeclarationAssetPath) ||
+					DeclarationAssetPath != ExpectedDeclarationAssetPath)
+				{
+					bIdentityMismatch = true;
+					continue;
+				}
+				FString ExistingClassId;
+				FString ExistingGeneratedClassPath;
+				const bool bHasClassId = Entry->TryGetStringField(TEXT("scriptClassId"), ExistingClassId);
+				const bool bHasGeneratedClassPath = Entry->TryGetStringField(
+					TEXT("generatedClassPath"), ExistingGeneratedClassPath);
+				if ((bHasClassId && ExistingClassId != ExpectedScriptClassId) ||
+					(bHasGeneratedClassPath && ExistingGeneratedClassPath != ExpectedGeneratedClassPath))
+				{
+					bIdentityMismatch = true;
+					continue;
+				}
+				if (Match.IsValid())
+				{
+					OutError = FString::Printf(
+						TEXT("Deployment manifest '%s' contains duplicate entries for '%s' (%s)."),
+						*OutPath,
+						*ExpectedAssetPath,
+						*ExpectedTypeName);
+					return false;
+				}
+				Match = Entry;
+			}
+		}
+		if (!Match.IsValid())
+		{
+			if (!bPackageEntryFound)
+			{
+				OutPath.Reset();
+				return true;
+			}
+			if (bIdentityMismatch)
+			{
+				OutError = FString::Printf(
+					TEXT("Deployment manifest '%s' has no stable identity match for Script Asset '%s' (%s)."),
+					*OutPath,
+					*ExpectedAssetPath,
+					*ExpectedTypeName);
+			}
+			else
+			{
+				OutError = FString::Printf(
+					TEXT("Deployment manifest '%s' has no entry for Script Asset '%s' (%s)."),
+					*OutPath,
+					*ExpectedAssetPath,
+					*ExpectedTypeName);
+			}
+			return false;
+		}
+		FString ExistingRequiredTargetClass;
+		if (Match->TryGetStringField(TEXT("requiredTargetClass"), ExistingRequiredTargetClass) &&
+			ExistingRequiredTargetClass == RequiredTargetClassPath)
+		{
+			OutPath.Reset();
+			return true;
+		}
+		Match->SetStringField(TEXT("requiredTargetClass"), RequiredTargetClassPath);
+
+		FString CandidateJson;
+		const TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&CandidateJson);
+		if (!FJsonSerializer::Serialize(Root.ToSharedRef(), Writer))
+		{
+			OutError = FString::Printf(
+				TEXT("Deployment manifest '%s' could not be serialized after the Actor parent update."),
+				*OutPath);
+			return false;
+		}
+		CandidateJson.AppendChar(TEXT('\n'));
+		FTCHARToUTF8 Utf8(*CandidateJson);
+		OutContent.Append(
+			reinterpret_cast<const uint8*>(Utf8.Get()),
+			Utf8.Length());
+		return true;
+	}
+
+	bool SaveScriptAsset(UFinareAsset& ScriptAsset, FString& OutError)
+	{
+		UPackage* Package = ScriptAsset.GetOutermost();
+		if (Package == nullptr || Package == GetTransientPackage() ||
+			Package->GetName().StartsWith(TEXT("/Engine/Transient")))
+		{
+			return true;
+		}
+
+		const FString PackageName = Package->GetName();
+		const FString Filename = FPackageName::LongPackageNameToFilename(
+			PackageName,
+			FPackageName::GetAssetPackageExtension());
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Filename), true);
+		FSavePackageArgs SaveArguments;
+		SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArguments.SaveFlags = SAVE_NoError;
+		if (!UPackage::SavePackage(Package, &ScriptAsset, *Filename, SaveArguments))
+		{
+			OutError = FString::Printf(
+				TEXT("Failed to save Finare Script Asset '%s' to '%s'."),
+				*ScriptAsset.GetPathName(),
+				*Filename);
+			return false;
+		}
+		return true;
+	}
+
 	bool ResolveExternalPublicationPath(
 		const FString& InputPath,
 		FString& OutPath,
@@ -8299,9 +9001,10 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	bool bValidateOnly,
 	FFinareBlueprintClassSyncResult& OutResult,
 	FString& OutError,
-	const FFinareBlueprintClassMaterializerOptions& Options)
+	const FFinareBlueprintClassMaterializerOptions& InputOptions)
 {
 	using namespace UE::Finare::BlueprintClass::Private;
+	FFinareBlueprintClassMaterializerOptions Options = InputOptions;
 
 	OutResult = FFinareBlueprintClassSyncResult();
 	OutError.Reset();
@@ -8401,8 +9104,53 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	{
 		return false;
 	}
+	// Reconcile the carrier requirement in the shared publication path, including
+	// commandlet/C# synchronization. Workbench and direct callers share one journal.
+	const UClass* TargetParentClass = ParentPlan.bChanged
+		? ParentPlan.RequestedParent : Blueprint.ParentClass.Get();
+	const bool bActorParentChange = ParentPlan.bChanged &&
+		ScriptAsset.ScriptClassKind == EFinareClassKind::Actor;
+	const bool bOrdinaryActor = ScriptAsset.ScriptClassKind == EFinareClassKind::Actor &&
+		IsOrdinaryActorParent(TargetParentClass);
+	const FString CurrentRequiredTargetPath =
+		ScriptAsset.RequiredTargetClass.ToSoftObjectPath().ToString();
+	const bool bRepairOrdinaryTarget = bOrdinaryActor &&
+		CurrentRequiredTargetPath == AFinareActor::StaticClass()->GetPathName();
+	UClass* RequiredTargetClassAfterParentChange = (bActorParentChange || bRepairOrdinaryTarget)
+		? (bOrdinaryActor ? AActor::StaticClass() : AFinareActor::StaticClass())
+		: nullptr;
+	const bool bRequiredTargetClassChanged = RequiredTargetClassAfterParentChange != nullptr &&
+		CurrentRequiredTargetPath != RequiredTargetClassAfterParentChange->GetPathName();
+	if (bActorParentChange || bRepairOrdinaryTarget ||
+		(bOrdinaryActor && CurrentRequiredTargetPath == AActor::StaticClass()->GetPathName()))
+	{
+		FString DeploymentPath;
+		TArray<uint8> DeploymentContent;
+		const FString TargetPath = (bOrdinaryActor ? AActor::StaticClass() : AFinareActor::StaticClass())->GetPathName();
+		if (!BuildDeploymentParentCandidate(ScriptAsset, TargetPath, DeploymentPath,
+			DeploymentContent, OutError, &Options.ExternalPublicationFiles))
+		{
+			return false;
+		}
+		if (!DeploymentPath.IsEmpty())
+		{
+			FFinareExternalPublicationFile* Existing = Options.ExternalPublicationFiles.FindByPredicate(
+				[&DeploymentPath](const FFinareExternalPublicationFile& File)
+				{
+					FString Path = FPaths::ConvertRelativePathToFull(File.Path);
+					FPaths::NormalizeFilename(Path);
+					return Path.Equals(DeploymentPath, ESearchCase::IgnoreCase);
+				});
+			if (Existing == nullptr)
+			{
+				Existing = &Options.ExternalPublicationFiles.AddDefaulted_GetRef();
+				Existing->Path = DeploymentPath;
+			}
+			Existing->Content = MoveTemp(DeploymentContent);
+		}
+	}
 	const bool bHasExternalPublicationFiles = !Options.ExternalPublicationFiles.IsEmpty();
-	const bool bTransactional = ParentPlan.bChanged || bHasExternalPublicationFiles;
+	const bool bTransactional = ParentPlan.bChanged || bHasExternalPublicationFiles || bRequiredTargetClassChanged;
 
 	// A native publication may carry binding/source outputs even when the
 	// physical UE parent remains unchanged.  It still replaces the managed
@@ -8553,6 +9301,15 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	const UClass* EffectiveParentClass = ParentPlan.bChanged
 		                                     ? ParentPlan.RequestedParent
 		                                     : Blueprint.ParentClass.Get();
+	const UPackage* ScriptAssetPackage = ScriptAsset.GetOutermost();
+	const bool bPersistentScriptAssetPackage = ScriptAssetPackage != nullptr &&
+		ScriptAssetPackage != GetTransientPackage() &&
+		!ScriptAssetPackage->GetName().StartsWith(TEXT("/Engine/Transient"));
+	const FString ScriptAssetPackageFilename = bPersistentScriptAssetPackage
+		? FPackageName::LongPackageNameToFilename(
+			ScriptAssetPackage->GetName(),
+			FPackageName::GetAssetPackageExtension())
+		: FString();
 	FSyncPlan Plan;
 	if (!BuildPlan(Blueprint, EffectiveParentClass, StateDeclarations, Plan, OutResult, OutError) ||
 		!BuildFunctionPlan(
@@ -8581,6 +9338,16 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	}
 
 	OutResult.bChanged |= bTransactional;
+	// A class with no exposed members still owns a managed receiver. Its
+	// runtime asset association is part of materialization, independently of
+	// whether any property, function, or explicit lifecycle binding changed.
+	if (UnifiedBlueprint != nullptr)
+	{
+		const UFinareBlueprintGeneratedClass* RuntimeClass =
+			Cast<UFinareBlueprintGeneratedClass>(Blueprint.GeneratedClass);
+		OutResult.bChanged |= RuntimeClass != nullptr &&
+			RuntimeClass->ManagedScriptAsset != UnifiedBlueprint->ScriptAsset;
+	}
 
 	if (!OutResult.bChanged)
 	{
@@ -9019,7 +9786,8 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	};
 
 	const bool bNeedsJournal =
-		(ParentPlan.bChanged && !PackageFilename.IsEmpty()) ||
+		((ParentPlan.bChanged || bRequiredTargetClassChanged) &&
+			(!PackageFilename.IsEmpty() || !ScriptAssetPackageFilename.IsEmpty())) ||
 		!Options.ExternalPublicationFiles.IsEmpty();
 	if (bNeedsJournal)
 	{
@@ -9037,6 +9805,20 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 			if (bCaptured)
 			{
 				JournalPaths.Add(FPaths::ConvertRelativePathToFull(PackageFilename));
+				JournalSnapshots.Add(PackageSnapshot);
+			}
+		}
+		if (bCaptured && bRequiredTargetClassChanged &&
+			!ScriptAssetPackageFilename.IsEmpty() &&
+			!JournalPaths.Contains(FPaths::ConvertRelativePathToFull(ScriptAssetPackageFilename)))
+		{
+			bCaptured = ClassOperationJournal::CaptureSnapshot(
+				ScriptAssetPackageFilename,
+				PackageSnapshot,
+				JournalError);
+			if (bCaptured)
+			{
+				JournalPaths.Add(FPaths::ConvertRelativePathToFull(ScriptAssetPackageFilename));
 				JournalSnapshots.Add(PackageSnapshot);
 			}
 		}
@@ -9115,7 +9897,7 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 	if (bTransactional)
 	{
 		if ((ParentPlan.bChanged && ParentPlan.RequestedParent == nullptr) ||
-			!ParentTransaction.Begin(OutError))
+			!ParentTransaction.Begin(OutError, bRequiredTargetClassChanged ? &ScriptAsset : nullptr))
 		{
 			if (bJournalActive)
 			{
@@ -9222,6 +10004,21 @@ bool FFinareBlueprintClassMaterializer::SynchronizeJson(
 		OutError = TEXT("Injected package publication failure for Finare Blueprint transaction test.");
 		FinishFailure();
 		return false;
+	}
+	if (bRequiredTargetClassChanged)
+	{
+		ScriptAsset.Modify();
+		ScriptAsset.RequiredTargetClass =
+			TSoftClassPtr<UObject>(RequiredTargetClassAfterParentChange);
+		if (UPackage* Package = ScriptAsset.GetOutermost())
+		{
+			Package->SetDirtyFlag(true);
+		}
+		if (!SaveScriptAsset(ScriptAsset, OutError))
+		{
+			FinishFailure();
+			return false;
+		}
 	}
 	int32 ExternalPublicationWriteCount = 0;
 	for (const FFinareExternalPublicationFile& ExternalFile :

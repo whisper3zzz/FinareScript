@@ -1920,7 +1920,7 @@ public sealed class CSharpPatchPlanApplier
             patchedRequest.EffectCatalog,
             patchedRequest.Settings,
             patchedRequest.RuntimeReferencePaths,
-            patchedRequest.IncludeDefaultReferences);
+            patchedRequest.IncludeDefaultReferences, patchedRequest.SourceGeneratorPaths);
     }
 
     private static bool SiblingsMatch(

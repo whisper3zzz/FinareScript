@@ -228,6 +228,11 @@ public static class ScriptAssetJson
                     $"Enum state '{state.Name}' has an invalid Unreal enum identity.");
             }
         }
+        else if (state.TypeKind == ScriptStateTypeKind.Object && state.UnrealType is not null)
+        {
+            if (state.UnrealType.Kind is not (ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface))
+                throw new JsonException($"Object state '{state.Name}' requires an object or interface identity.");
+        }
         else if (state.TypeKind is ScriptStateTypeKind.SoftObject or ScriptStateTypeKind.SoftClass)
         {
             if (state.UnrealType is not null ||
@@ -333,6 +338,10 @@ public static class ScriptAssetJson
     public static bool IsSupportedCollectionLeaf(ScriptFunctionTypeArgumentDeclaration argument)
     {
         string metadata = argument.TypeMetadataName;
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface)
+            return argument.UnrealType.UnrealTypePath.StartsWith("/Script/", StringComparison.Ordinal) &&
+                argument.UnrealType.UnrealNativeName.Length != 0 && argument.UnrealType.Fields.Count == 0 &&
+                argument.UnrealType.TypeArguments is null;
         if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Array or
             ScriptFunctionValueTypeKind.Set or ScriptFunctionValueTypeKind.Map)
         {
@@ -437,6 +446,8 @@ public static class ScriptAssetJson
             return false;
         }
         string metadata = argument.TypeMetadataName;
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface)
+            return value.ValueKind == JsonValueKind.Null;
         if (metadata == "System.Boolean") return value.ValueKind is JsonValueKind.True or JsonValueKind.False;
         if (metadata == "System.Byte")
             return value.ValueKind == JsonValueKind.Number &&
@@ -521,7 +532,8 @@ public static class ScriptAssetJson
         if (metadata is "Finare.Unreal.UnrealSoftObjectHandle" or
             "Finare.Unreal.UnrealSoftClassHandle")
             return "soft:" + CanonicalSoftPath(value.GetString());
-        if (metadata is "Finare.Unreal.UnrealObjectHandle" or
+        if (argument.UnrealType?.Kind is ScriptFunctionValueTypeKind.Object or ScriptFunctionValueTypeKind.Interface ||
+            metadata is "Finare.Unreal.UnrealObjectHandle" or
             "Finare.Unreal.UnrealClassHandle")
             return "null";
         if (metadata == "Finare.Unreal.UnrealVector")

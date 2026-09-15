@@ -7,6 +7,8 @@
 #include "FinareNativeTransport.h"
 #include "FinarePropertyValueCodec.h"
 #include "FinareWorldSubsystem.h"
+#include "FinareWorldContext.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -134,6 +136,155 @@ namespace UE::Finare::Blueprint::Private
 		return false;
 	}
 
+	UFinareWorldSubsystem* ResolveWorldHost(UObject* WorldContextObject);
+
+	bool IsManagedLifecycleName(
+		const UFinareBlueprintGeneratedClass* GeneratedClass,
+		const FString& ManagedName)
+	{
+		if (GeneratedClass == nullptr)
+		{
+			return false;
+		}
+		for (const TPair<EFinareManagedLifecycleHookKind, FFinareManagedLifecycleBinding>& Pair :
+			 GeneratedClass->ManagedLifecycleBindings)
+		{
+			if (Pair.Value.ManagedName.ToString().Equals(
+					ManagedName,
+					ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsNativeLifecycleFunction(FName FunctionName)
+	{
+		return FunctionName == FName(TEXT("ReceiveBeginPlay")) ||
+			FunctionName == FName(TEXT("ReceiveTick")) ||
+			FunctionName == FName(TEXT("ReceiveEndPlay"));
+	}
+
+	bool IsOrdinaryActorComponentClass(
+		const UFinareBlueprintGeneratedClass* GeneratedClass)
+	{
+		const UClass* ParentClass = GeneratedClass != nullptr
+			                            ? GeneratedClass->GetSuperClass()
+			                            : nullptr;
+		return ParentClass != nullptr &&
+			ParentClass->IsChildOf(UActorComponent::StaticClass()) &&
+			!ParentClass->IsChildOf(UFinareComponent::StaticClass());
+	}
+
+	bool IsOrdinaryObjectClass(
+		const UFinareBlueprintGeneratedClass* GeneratedClass)
+	{
+		const UClass* ParentClass = GeneratedClass != nullptr
+			                            ? GeneratedClass->GetSuperClass()
+			                            : nullptr;
+		return ParentClass != nullptr &&
+			ParentClass->IsChildOf(UObject::StaticClass()) &&
+			!ParentClass->IsChildOf(AActor::StaticClass()) &&
+			!ParentClass->IsChildOf(UActorComponent::StaticClass()) &&
+			!ParentClass->IsChildOf(UBlueprintFunctionLibrary::StaticClass());
+	}
+
+	UFinareComponent* ResolveOrdinaryObject(
+		UObject* Context,
+		const UFinareBlueprintGeneratedClass* GeneratedClass,
+		FString& OutError)
+	{
+		if (!IsOrdinaryObjectClass(GeneratedClass) ||
+			!IsValid(Context) || Context->IsTemplate() ||
+			!Context->IsA(GeneratedClass))
+		{
+			return nullptr;
+		}
+		UFinareComponent* ExecutionHost = UFinareComponent::CreateExecutionHost(
+			Context,
+			GeneratedClass->ManagedScriptAsset,
+			OutError);
+		if (ExecutionHost == nullptr)
+		{
+			return nullptr;
+		}
+		if (ExecutionHost->StartScript())
+		{
+			return ExecutionHost;
+		}
+		if (OutError.IsEmpty())
+		{
+			OutError = ExecutionHost->LastScriptError;
+		}
+		// CreateExecutionHost retains ordinary-object sidecars in the World
+		// subsystem before startup.  Failed lazy activation must retire that
+		// sidecar so a retry cannot accumulate unreachable hosts.
+		ExecutionHost->StopScript();
+		return nullptr;
+	}
+
+	FName NativeLifecycleFunctionName(EFinareManagedLifecycleHookKind Kind)
+	{
+		switch (Kind)
+		{
+		case EFinareManagedLifecycleHookKind::BeginPlay:
+			return FName(TEXT("ReceiveBeginPlay"));
+		case EFinareManagedLifecycleHookKind::Tick:
+			return FName(TEXT("ReceiveTick"));
+		case EFinareManagedLifecycleHookKind::EndPlay:
+			return FName(TEXT("ReceiveEndPlay"));
+		default:
+			return NAME_None;
+		}
+	}
+
+	UFunction* CreateLifecycleFunction(
+		UFinareBlueprintGeneratedClass& GeneratedClass,
+		FName FunctionName)
+	{
+		if (UFunction* Existing = GeneratedClass.FindFunctionByName(
+				FunctionName,
+				EIncludeSuperFlag::ExcludeSuper))
+		{
+			return Existing;
+		}
+		const UClass* ParentClass = GeneratedClass.GetSuperClass();
+		const UFunction* Signature = ParentClass != nullptr
+			                            ? ParentClass->FindFunctionByName(FunctionName)
+			                            : nullptr;
+		if (Signature == nullptr)
+		{
+			return nullptr;
+		}
+
+		UFunction* Function = NewObject<UFunction>(
+			&GeneratedClass,
+			FunctionName,
+			RF_Public | RF_Transient);
+		Function->FunctionFlags = Signature->FunctionFlags | FUNC_Native;
+		FField::FLinkedListBuilder PropertyList(&Function->ChildProperties);
+		for (TFieldIterator<FProperty> It(
+				 Signature,
+				 EFieldIteratorFlags::ExcludeSuper);
+			 It;
+			 ++It)
+		{
+			if (!It->HasAnyPropertyFlags(CPF_Parm))
+			{
+				continue;
+			}
+			FProperty* Clone = CastFieldChecked<FProperty>(
+				FField::Duplicate(*It, Function, It->GetFName()));
+			Clone->Next = nullptr;
+			PropertyList.AppendNoTerminate(*Clone);
+		}
+		Function->StaticLink(true);
+		Function->InitializeDerivedMembers();
+		GeneratedClass.AddFunctionToFunctionMap(Function, FunctionName);
+		return Function->IsSignatureCompatibleWith(Signature) ? Function : nullptr;
+	}
+
 	UFinareComponent* ResolveComponent(
 		UObject* Context,
 		const UFinareBlueprintGeneratedClass* GeneratedClass,
@@ -150,6 +301,29 @@ namespace UE::Finare::Blueprint::Private
 			}
 			OutError = TEXT("The managed function context is not owned by its active Script Component.");
 			return nullptr;
+		}
+		if (UFinareWorldSubsystem* Host = ResolveWorldHost(Context))
+		{
+			FString ReceiverError;
+			if (UFinareComponent* Component = Host->ResolveManagedReceiver(
+					Context, GeneratedClass, false, ReceiverError))
+			{
+				OutResolution = EManagedComponentResolution::Unique;
+				return Component;
+			}
+			if (UFinareComponent* ObjectHost = ResolveOrdinaryObject(
+					Context,
+					GeneratedClass,
+					OutError))
+			{
+				OutResolution = EManagedComponentResolution::Unique;
+				return ObjectHost;
+			}
+			if (Cast<AActor>(Context) == nullptr)
+			{
+				if (OutError.IsEmpty()) OutError = MoveTemp(ReceiverError);
+				return nullptr;
+			}
 		}
 		AActor* Actor = Cast<AActor>(Context);
 		if (Actor == nullptr)
@@ -192,6 +366,30 @@ namespace UE::Finare::Blueprint::Private
 			OutError = TEXT("The pre-start managed function context is not owned by its configured Script Component.");
 			return nullptr;
 		}
+		if (UFinareWorldSubsystem* Host = ResolveWorldHost(Context))
+		{
+			FString ReceiverError;
+			if (UFinareComponent* Component = Host->ResolveManagedReceiver(
+					Context, GeneratedClass, true, ReceiverError))
+			{
+				return Component;
+			}
+			if (IsOrdinaryActorComponentClass(GeneratedClass) &&
+				IsValid(Context) && !Context->IsTemplate() && Context->IsA(GeneratedClass))
+			{
+				return UFinareComponent::CreateExecutionHost(
+					Context, GeneratedClass->ManagedScriptAsset, OutError);
+			}
+			if (IsOrdinaryObjectClass(GeneratedClass))
+			{
+				return ResolveOrdinaryObject(Context, GeneratedClass, OutError);
+			}
+			if (Cast<AActor>(Context) == nullptr && !ReceiverError.IsEmpty())
+			{
+				OutError = MoveTemp(ReceiverError);
+				return nullptr;
+			}
+		}
 		AActor* Actor = Cast<AActor>(Context);
 		if (Actor == nullptr)
 		{
@@ -217,11 +415,7 @@ namespace UE::Finare::Blueprint::Private
 
 	UFinareWorldSubsystem* ResolveWorldHost(UObject* WorldContextObject)
 	{
-		UWorld* World = GEngine != nullptr && WorldContextObject != nullptr
-			                ? GEngine->GetWorldFromContextObject(
-				                WorldContextObject,
-				                EGetWorldErrorMode::ReturnNull)
-			                : nullptr;
+		UWorld* World = UE::Finare::WorldContext::Resolve(WorldContextObject);
 		return World != nullptr
 			       ? World->GetSubsystem<UFinareWorldSubsystem>()
 			       : nullptr;
@@ -1628,6 +1822,16 @@ void UFinareBlueprintGeneratedClass::PostInitInstance(
 	FObjectInstancingGraph* InstanceGraph)
 {
 	Super::PostInitInstance(InObj, InstanceGraph);
+	// Construction only establishes the receiver's tick capability. The host
+	// is created lazily at BeginPlay (or a pre-start RepNotify), after native
+	// construction has completed and an actual runtime World is available.
+	if (UE::Finare::Blueprint::Private::IsOrdinaryActorComponentClass(this))
+	{
+		if (UActorComponent* Receiver = Cast<UActorComponent>(InObj))
+		{
+			Receiver->PrimaryComponentTick.bCanEverTick = true;
+		}
+	}
 	// CDO construction may happen on the async loading thread. The first
 	// gameplay instance is constructed on the game thread; re-apply the table
 	// there in case a cooked UFunction::Bind ran after the class/CDO hooks and
@@ -1637,6 +1841,15 @@ void UFinareBlueprintGeneratedClass::PostInitInstance(
 	{
 		for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
 		     ManagedFunctionBindings)
+		{
+			if (!IsManagedFunctionBound(Pair.Key))
+			{
+				bNeedsManagedFunctionRebind = true;
+				break;
+			}
+		}
+		for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
+			 RuntimeLifecycleFunctionBindings)
 		{
 			if (!IsManagedFunctionBound(Pair.Key))
 			{
@@ -1654,67 +1867,18 @@ void UFinareBlueprintGeneratedClass::PostInitInstance(
 void UFinareBlueprintGeneratedClass::BindManagedFunctions()
 {
 	check(IsInGameThread());
+	BuildRuntimeLifecycleFunctionBindings();
 	RegisterManagedNativeFunctions();
 	bool bAllFunctionsBound = true;
 	for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
 	     ManagedFunctionBindings)
 	{
-		UFunction* Function = FindFunctionByName(
-			Pair.Key,
-			EIncludeSuperFlag::ExcludeSuper);
-		if (Function == nullptr)
-		{
-			bAllFunctionsBound = false;
-			continue;
-		}
-		// Blueprint VM calls, including an explicit Call Parent Function from a
-		// child override, only invoke the installed dispatcher for a native
-		// UFunction. Register the generic thunk on this generated class before
-		// any later UFunction::Bind pass tries to resolve it.
-		Function->FunctionFlags |= FUNC_Native;
-		Function->FunctionFlags |= FUNC_Public | FUNC_BlueprintCallable;
-		Function->FunctionFlags &= ~(FUNC_Net | FUNC_NetServer | FUNC_NetClient | FUNC_NetMulticast | FUNC_NetReliable);
-		const bool bManagedEventEntry = Pair.Value.bBlueprintEvent ||
-			Pair.Value.bInterfaceFunction;
-		if (bManagedEventEntry)
-		{
-			Function->FunctionFlags |= FUNC_Event | FUNC_BlueprintEvent;
-		}
-		else
-		{
-			Function->FunctionFlags &= ~(FUNC_Event | FUNC_BlueprintEvent);
-		}
-		Function->SetNativeFunc(
-			&UFinareBlueprintGeneratedClass::execDispatchManagedFunction);
-		Function->FunctionFlags |= FinareRpcFlags(Pair.Value.RpcTarget, Pair.Value.bReliable);
-		if (!Pair.Value.RepNotifyProperty.IsNone())
-		{
-			FProperty* Property = FindFProperty<FProperty>(this, Pair.Value.RepNotifyProperty);
-			if (Property && Property->HasAllPropertyFlags(CPF_Net | CPF_RepNotify))
-			{
-				// UE's Blueprint compiler accepts only zero-parameter OnRep,
-				// but RepLayout also supports a native previous-value parameter.
-				// The declaration validator has checked that exact property type.
-				Property->RepNotifyFunc = Pair.Key;
-			}
-			else
-			{
-				bAllFunctionsBound = false;
-			}
-		}
-#if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
-		if (bManagedEventEntry)
-		{
-			// The empty generated base graph is only a durable signature for
-			// managed Blueprint events and interface implementations. Cook or
-			// package reload may patch it as an ubergraph fast-call stub, which
-			// would bypass the native managed implementation installed above.
-			// Child Blueprint overrides own separate functions and keep their
-			// normal fast-call path; only the managed base entry is cleared.
-			Function->EventGraphFunction = nullptr;
-			Function->EventGraphCallOffset = INDEX_NONE;
-		}
-#endif
+		BindManagedFunction(Pair.Key, Pair.Value, bAllFunctionsBound);
+	}
+	for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
+		 RuntimeLifecycleFunctionBindings)
+	{
+		BindManagedFunction(Pair.Key, Pair.Value, bAllFunctionsBound);
 	}
 	bManagedFunctionsBound = bAllFunctionsBound;
 }
@@ -2096,6 +2260,17 @@ void UFinareBlueprintGeneratedClass::PrepareManagedFunctionsForRecompile()
 			Function->FunctionFlags &= ~FUNC_Native;
 		}
 	}
+	for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
+	     RuntimeLifecycleFunctionBindings)
+	{
+		if (UFunction* Function = FindFunctionByName(
+				Pair.Key,
+				EIncludeSuperFlag::ExcludeSuper))
+		{
+			Function->FunctionFlags &= ~FUNC_Native;
+		}
+	}
+	RuntimeLifecycleFunctionBindings.Reset();
 	bManagedFunctionsBound = false;
 }
 
@@ -2113,6 +2288,143 @@ void UFinareBlueprintGeneratedClass::RegisterManagedNativeFunctions()
 			&UFinareBlueprintGeneratedClass::execDispatchManagedFunction);
 		RegisteredManagedNativeFunctions.Add(Pair.Key);
 	}
+	for (const TPair<FName, FFinareManagedFunctionBinding>& Pair :
+	     RuntimeLifecycleFunctionBindings)
+	{
+		if (RegisteredManagedNativeFunctions.Contains(Pair.Key))
+		{
+			continue;
+		}
+		AddNativeFunction(
+			*Pair.Key.ToString(),
+			&UFinareBlueprintGeneratedClass::execDispatchManagedFunction);
+		RegisteredManagedNativeFunctions.Add(Pair.Key);
+	}
+}
+
+void UFinareBlueprintGeneratedClass::BuildRuntimeLifecycleFunctionBindings()
+{
+	RuntimeLifecycleFunctionBindings.Reset();
+	if (!UE::Finare::Blueprint::Private::IsOrdinaryActorComponentClass(this))
+	{
+		return;
+	}
+
+	// Ownership needs BeginPlay and EndPlay even when the user only overrides
+	// one lifecycle method. Tick also advances generation-owned async work.
+	for (const EFinareManagedLifecycleHookKind Kind : {
+		EFinareManagedLifecycleHookKind::BeginPlay,
+		EFinareManagedLifecycleHookKind::Tick,
+		EFinareManagedLifecycleHookKind::EndPlay})
+	{
+		const FName NativeName =
+			UE::Finare::Blueprint::Private::NativeLifecycleFunctionName(Kind);
+		if (NativeName.IsNone() || ManagedFunctionBindings.Contains(NativeName))
+		{
+			continue;
+		}
+		UFunction* Function = FindFunctionByName(
+			NativeName,
+			EIncludeSuperFlag::ExcludeSuper);
+		if (Function == nullptr)
+		{
+			Function = UE::Finare::Blueprint::Private::CreateLifecycleFunction(
+				*this,
+				NativeName);
+		}
+		if (Function == nullptr)
+		{
+			UE_LOG(
+				LogTemp,
+				Error,
+				TEXT("Finare ordinary ActorComponent class '%s' could not create lifecycle function '%s'."),
+				*GetPathName(),
+				*NativeName.ToString());
+			continue;
+		}
+
+		FFinareManagedFunctionBinding SyntheticBinding;
+		SyntheticBinding.ManagedName = NativeName.ToString();
+		if (const FFinareManagedLifecycleBinding* Declared = ManagedLifecycleBindings.Find(Kind))
+		{
+			SyntheticBinding.FunctionId = Declared->HookId;
+		}
+		SyntheticBinding.AbiVersion = 3;
+		SyntheticBinding.bBlueprintEvent = true;
+		for (TFieldIterator<FProperty> It(
+				 Function,
+				 EFieldIteratorFlags::ExcludeSuper);
+			 It;
+			 ++It)
+		{
+			if (!It->HasAnyPropertyFlags(CPF_Parm) ||
+				It->HasAnyPropertyFlags(CPF_ReturnParm))
+			{
+				continue;
+			}
+			SyntheticBinding.ParameterNames.Add(It->GetFName());
+			SyntheticBinding.ParameterTypes.AddDefaulted();
+			SyntheticBinding.ParameterDirections.Add(
+				EFinareManagedParameterDirection::Input);
+		}
+		RuntimeLifecycleFunctionBindings.Add(
+			NativeName,
+			MoveTemp(SyntheticBinding));
+	}
+}
+
+void UFinareBlueprintGeneratedClass::BindManagedFunction(
+	FName FunctionName,
+	const FFinareManagedFunctionBinding& Binding,
+	bool& bOutAllFunctionsBound)
+{
+	UFunction* Function = FindFunctionByName(
+		FunctionName,
+		EIncludeSuperFlag::ExcludeSuper);
+	if (Function == nullptr)
+	{
+		bOutAllFunctionsBound = false;
+		return;
+	}
+	// Blueprint VM calls, including an explicit Call Parent Function from a
+	// child override, only invoke the installed dispatcher for a native
+	// UFunction. Register the generic thunk on this generated class before any
+	// later UFunction::Bind pass tries to resolve it.
+	Function->FunctionFlags |= FUNC_Native;
+	Function->FunctionFlags |= FUNC_Public | FUNC_BlueprintCallable;
+	Function->FunctionFlags &= ~(FUNC_Net | FUNC_NetServer | FUNC_NetClient | FUNC_NetMulticast | FUNC_NetReliable);
+	const bool bManagedEventEntry = Binding.bBlueprintEvent ||
+		Binding.bInterfaceFunction;
+	if (bManagedEventEntry)
+	{
+		Function->FunctionFlags |= FUNC_Event | FUNC_BlueprintEvent;
+	}
+	else
+	{
+		Function->FunctionFlags &= ~(FUNC_Event | FUNC_BlueprintEvent);
+	}
+	Function->SetNativeFunc(
+		&UFinareBlueprintGeneratedClass::execDispatchManagedFunction);
+	Function->FunctionFlags |= FinareRpcFlags(Binding.RpcTarget, Binding.bReliable);
+	if (!Binding.RepNotifyProperty.IsNone())
+	{
+		FProperty* Property = FindFProperty<FProperty>(this, Binding.RepNotifyProperty);
+		if (Property && Property->HasAllPropertyFlags(CPF_Net | CPF_RepNotify))
+		{
+			Property->RepNotifyFunc = FunctionName;
+		}
+		else
+		{
+			bOutAllFunctionsBound = false;
+		}
+	}
+#if UE_BLUEPRINT_EVENTGRAPH_FASTCALLS
+	if (bManagedEventEntry)
+	{
+		Function->EventGraphFunction = nullptr;
+		Function->EventGraphCallOffset = INDEX_NONE;
+	}
+#endif
 }
 
 bool UFinareBlueprintGeneratedClass::IsManagedFunctionBound(
@@ -2120,6 +2432,10 @@ bool UFinareBlueprintGeneratedClass::IsManagedFunctionBound(
 {
 	const FFinareManagedFunctionBinding* Binding =
 		ManagedFunctionBindings.Find(FunctionName);
+	if (Binding == nullptr)
+	{
+		Binding = RuntimeLifecycleFunctionBindings.Find(FunctionName);
+	}
 	const UFunction* Function = FindFunctionByName(
 		FunctionName,
 		EIncludeSuperFlag::ExcludeSuper);
@@ -2190,8 +2506,16 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
 		                                                       : nullptr;
 	const FFinareManagedFunctionBinding* Binding = GeneratedClass != nullptr
 		                                               ? GeneratedClass->ManagedFunctionBindings.Find(
-			                                               Function->GetFName())
+		                                               Function->GetFName())
 		                                               : nullptr;
+	const bool bRuntimeLifecycleBinding = GeneratedClass != nullptr &&
+		GeneratedClass->RuntimeLifecycleFunctionBindings.Contains(
+			Function != nullptr ? Function->GetFName() : NAME_None);
+	if (Binding == nullptr && bRuntimeLifecycleBinding)
+	{
+		Binding = GeneratedClass->RuntimeLifecycleFunctionBindings.Find(
+			Function->GetFName());
+	}
 
 	// ProcessEvent supplies an already materialized parameter frame, while a
 	// call emitted by the Blueprint VM leaves its arguments in the caller's
@@ -2339,8 +2663,28 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
 					OwnershipError);
 				bConfiguredPreStartOwner = Component != nullptr;
 			}
+			if (Component == nullptr &&
+				ActiveResolution == EManagedComponentResolution::None &&
+				Function->GetFName() == FName(TEXT("ReceiveBeginPlay")))
+			{
+				Component = ResolveConfiguredComponent(
+					Context,
+					GeneratedClass,
+					OwnershipError);
+				if (Component != nullptr)
+				{
+					bConfiguredPreStartOwner = !Component->bScriptRunning;
+					if (bConfiguredPreStartOwner && !Component->StartScript())
+					{
+						Component = nullptr;
+					}
+				}
+			}
 			if (Component == nullptr)
 			{
+				// EndPlay must not resurrect a generation that never started,
+				// or one already retired by receiver maintenance.
+				if (Function->GetFName() == FName(TEXT("ReceiveEndPlay"))) return;
 				UE_LOG(
 					LogTemp,
 					Error,
@@ -2494,7 +2838,64 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
 
 		FString Error;
 		bool bInvoked = false;
-		if (Binding->bStatic)
+		if (!bRuntimeLifecycleBinding &&
+			Function->GetFName() == FName(TEXT("ReceiveTick")) &&
+			Component != nullptr && Context != Component &&
+			Cast<UActorComponent>(Context) != nullptr)
+		{
+			const FFloatProperty* DeltaProperty = CastField<FFloatProperty>(
+				FindFProperty<FProperty>(Function, TEXT("DeltaSeconds")));
+			if (DeltaProperty == nullptr ||
+				!Component->TickManagedScriptFromNativeReceiver(
+					DeltaProperty->GetPropertyValue_InContainer(ParameterContainer),
+					Error))
+			{
+				if (Error.IsEmpty())
+				{
+					Error = TEXT("Automatic ActorComponent ReceiveTick has no float DeltaSeconds parameter.");
+				}
+				UE_LOG(
+					LogTemp,
+					Error,
+					TEXT("Finare managed receiver Tick could not advance its execution host: %s"),
+					*Error);
+				return;
+			}
+		}
+		if (bRuntimeLifecycleBinding &&
+			Function->GetFName() == FName(TEXT("ReceiveTick")))
+		{
+			const FFloatProperty* DeltaProperty = CastField<FFloatProperty>(
+				FindFProperty<FProperty>(Function, TEXT("DeltaSeconds")));
+			if (DeltaProperty == nullptr)
+			{
+				Error = TEXT("Automatic ActorComponent ReceiveTick has no float DeltaSeconds parameter.");
+			}
+			else
+			{
+				const float DeltaSeconds = DeltaProperty->GetPropertyValue_InContainer(
+					ParameterContainer);
+				bInvoked = Component->TickManagedScriptFromNativeReceiver(
+					DeltaSeconds,
+					Error);
+			}
+		}
+		else if (bRuntimeLifecycleBinding &&
+			(Function->GetFName() == FName(TEXT("ReceiveBeginPlay")) ||
+				Function->GetFName() == FName(TEXT("ReceiveEndPlay"))))
+		{
+			// Script activation/destruction invokes the managed ActorComponent
+			// lifecycle through the normal managed object boundary.  The generated
+			// receiver thunk only coordinates the native execution host.
+			if (Function->GetFName() == FName(TEXT("ReceiveEndPlay")))
+			{
+				Component->StopScript();
+			}
+			bInvoked = true;
+			Frame.Status = EFinareNativeCallStatusV3::Success;
+			Frame.ResultCount = 0;
+		}
+		else if (Binding->bStatic)
 		{
 			UFinareAsset* ScriptAsset = GeneratedClass->ManagedScriptAsset;
 			FString AssemblyPath;
@@ -2528,6 +2929,11 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
 				Binding->ManagedName,
 				Frame,
 				Error);
+		}
+		if (bRuntimeLifecycleBinding && bInvoked)
+		{
+			Frame.Status = EFinareNativeCallStatusV3::Success;
+			Frame.ResultCount = 0;
 		}
 		if (!bInvoked || Frame.Status != EFinareNativeCallStatusV3::Success)
 		{
@@ -2646,6 +3052,18 @@ DEFINE_FUNCTION(UFinareBlueprintGeneratedClass::execDispatchManagedFunction)
 					Parameter->CopyCompleteValue(
 						Parameter->ContainerPtrToValuePtr<void>(ParameterContainer), ParameterValue);
 				}
+			}
+		}
+		if (Component != nullptr &&
+			Component->GetNativeReceiver() == Context &&
+			Function->GetFName() == FName(TEXT("ReceiveEndPlay")))
+		{
+			// The receiver owns the actual UE lifecycle.  A sidecar must not
+			// outlive that lifecycle after the generated EndPlay event returns.
+			Component->StopScript();
+			if (Component->GetOwner() != nullptr)
+			{
+				Component->DestroyComponent();
 			}
 		}
 		return;

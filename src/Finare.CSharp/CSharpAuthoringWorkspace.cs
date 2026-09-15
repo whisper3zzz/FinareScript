@@ -273,7 +273,7 @@ public sealed class CSharpAuthoringWorkspace
             Current.Request.EffectCatalog,
             Current.Request.Settings,
             Current.Request.RuntimeReferencePaths,
-            Current.Request.IncludeDefaultReferences);
+            Current.Request.IncludeDefaultReferences, Current.Request.SourceGeneratorPaths);
         CSharpAnalysisResult analysis = pipeline.Analyze(request);
         return CreateMutation(new CSharpPatchResult(
             analysis.Succeeded ? request : null,
@@ -574,7 +574,7 @@ public sealed class CSharpAuthoringWorkspace
             request.EffectCatalog,
             request.Settings,
             request.RuntimeReferencePaths,
-            request.IncludeDefaultReferences);
+            request.IncludeDefaultReferences, request.SourceGeneratorPaths);
     }
 
     private static HistoryEntry RestoreEntry(
@@ -637,7 +637,7 @@ public sealed class CSharpAuthoringWorkspace
             template.EffectCatalog,
             template.Settings,
             template.RuntimeReferencePaths,
-            template.IncludeDefaultReferences);
+            template.IncludeDefaultReferences, template.SourceGeneratorPaths);
 
     private static void ValidateCurrentSources(
         CSharpCompilationRequest request,

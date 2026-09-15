@@ -950,6 +950,133 @@ namespace
 			Failure);
 		return Result;
 	}
+
+	/**
+	 * Runs the component reload barrier over one deterministic set of live
+	 * components.  The same barrier is used by single-asset reloads and by
+	 * the daily all-component reload so a failure in one Script Asset cannot
+	 * publish a different asset from the same batch.
+	 */
+	FFinareReloadBatchResult ReloadComponentBatch(
+		const TArray<TWeakObjectPtr<UFinareComponent>>& MatchingComponents,
+		const FString& ReloadTransactionJson)
+	{
+		FFinareReloadBatchResult Result;
+		Result.Matched = MatchingComponents.Num();
+
+		TArray<FString> PreflightTransactions;
+		PreflightTransactions.SetNum(MatchingComponents.Num());
+		for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
+		{
+			UFinareComponent* Component = MatchingComponents[Index].Get();
+			if (Component == nullptr ||
+				!Component->PreflightScriptReloadWithTransaction(
+					ReloadTransactionJson,
+					PreflightTransactions[Index]))
+			{
+				++Result.PreflightRejected;
+				if (Result.ObservedReloadTransactionJson.IsEmpty() &&
+					Component != nullptr)
+				{
+					Result.ObservedReloadTransactionJson =
+						PreflightTransactions[Index];
+				}
+			}
+		}
+		if (Result.PreflightRejected > 0)
+		{
+			// The batch barrier deliberately counts every match as failed because
+			// none was allowed to cross into runtime mutation.
+			Result.Failed = Result.Matched;
+			return Result;
+		}
+
+		auto AbortPreparedBatch = [&MatchingComponents, &Result](
+			const FString& Reason)
+		{
+			for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
+				 MatchingComponents)
+			{
+				UFinareComponent* Component = WeakComponent.Get();
+				if (Component == nullptr || !Component->HasPreparedScriptReload())
+				{
+					continue;
+				}
+				Component->AbortPreparedScriptReload(Reason);
+				++Result.Aborted;
+				if (!Component->LastReloadTransaction.IsEmpty())
+				{
+					Result.ObservedReloadTransactionJson =
+						Component->LastReloadTransaction;
+				}
+			}
+		};
+
+		for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
+		{
+			UFinareComponent* Component = MatchingComponents[Index].Get();
+			if (Component == nullptr ||
+				!Component->PrepareScriptReloadWithTransaction(
+					PreflightTransactions[Index]))
+			{
+				++Result.PrepareRejected;
+				if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+				{
+					Result.ObservedReloadTransactionJson =
+						Component->LastReloadTransaction;
+				}
+				AbortPreparedBatch(
+					TEXT(
+						"The all-instance reload batch aborted because another candidate failed during managed load, start, or event rebinding."));
+				Result.Failed = Result.Matched;
+				return Result;
+			}
+			++Result.Prepared;
+		}
+
+		for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
+			 MatchingComponents)
+		{
+			UFinareComponent* Component = WeakComponent.Get();
+			if (Component == nullptr || !Component->CommitPreparedScriptReload())
+			{
+				++Result.CommitRejected;
+				if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+				{
+					Result.ObservedReloadTransactionJson =
+						Component->LastReloadTransaction;
+				}
+				AbortPreparedBatch(
+					TEXT(
+						"The all-instance reload batch rolled back because a prepared candidate could not publish its generation pointer."));
+				Result.Failed = Result.Matched;
+				Result.Committed = 0;
+				return Result;
+			}
+			++Result.Committed;
+		}
+
+		for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
+			 MatchingComponents)
+		{
+			UFinareComponent* Component = WeakComponent.Get();
+			if (Component == nullptr || !Component->FinalizePreparedScriptReload())
+			{
+				++Result.FinalizeFailed;
+				++Result.Failed;
+			}
+			else
+			{
+				++Result.Reloaded;
+			}
+			if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
+			{
+				Result.ObservedReloadTransactionJson =
+					Component->LastReloadTransaction;
+			}
+		}
+		return Result;
+	}
 }
 
 class SFinareCanvasMinimap final : public SLeafWidget
@@ -6074,43 +6201,37 @@ FFinareReloadBatchResult
 SFinareAuthoringSurface::ReloadAllScriptClassComponents(
 	const FString& ReloadTransactionJson)
 {
-	TArray<TWeakObjectPtr<UFinareAsset>> Assets;
+	TArray<TWeakObjectPtr<UFinareComponent>> MatchingComponents;
 	for (TObjectIterator<UFinareComponent> It; It; ++It)
 	{
 		UFinareComponent* Component = *It;
 		UFinareAsset* Asset = Component != nullptr ? Component->ScriptAsset.Get() : nullptr;
 		if (!IsValid(Component) || Component->IsTemplate() ||
-			Component->GetWorld() == nullptr || Asset == nullptr)
+			Component->GetWorld() == nullptr ||
+			(Asset == nullptr && Component->ActiveScriptAssetPath.IsEmpty()) ||
+			(Asset != nullptr &&
+				Asset->ScriptClassKind == EFinareClassKind::BlueprintFunctionLibrary))
 		{
 			continue;
 		}
-		Assets.AddUnique(Asset);
+		MatchingComponents.AddUnique(Component);
 	}
-	Assets.Sort([](
-		const TWeakObjectPtr<UFinareAsset>& Left,
-		const TWeakObjectPtr<UFinareAsset>& Right)
+	MatchingComponents.Sort([](
+		const TWeakObjectPtr<UFinareComponent>& Left,
+		const TWeakObjectPtr<UFinareComponent>& Right)
 		{
-			const UFinareAsset* LeftAsset = Left.Get();
-			const UFinareAsset* RightAsset = Right.Get();
-			return LeftAsset != nullptr && RightAsset != nullptr
-				       ? LeftAsset->GetPathName() < RightAsset->GetPathName()
-				       : LeftAsset != nullptr;
+			const UFinareComponent* LeftComponent = Left.Get();
+			const UFinareComponent* RightComponent = Right.Get();
+			return LeftComponent != nullptr && RightComponent != nullptr
+				       ? LeftComponent->GetPathName() < RightComponent->GetPathName()
+				       : LeftComponent != nullptr;
 		});
 
-	FFinareReloadBatchResult Aggregate;
-	for (const TWeakObjectPtr<UFinareAsset>& WeakAsset : Assets)
+	FFinareReloadBatchResult Aggregate = ReloadComponentBatch(
+		MatchingComponents,
+		ReloadTransactionJson);
+	auto MergeBatch = [&Aggregate](const FFinareReloadBatchResult& Batch)
 	{
-		const UFinareAsset* Asset = WeakAsset.Get();
-		if (Asset == nullptr)
-		{
-			continue;
-		}
-		if (Asset->ScriptClassKind == EFinareClassKind::BlueprintFunctionLibrary)
-		{
-			continue;
-		}
-		const FFinareReloadBatchResult Batch =
-			ReloadMatchingComponentsForAsset(Asset, FString(), ReloadTransactionJson);
 		Aggregate.Matched += Batch.Matched;
 		Aggregate.Reloaded += Batch.Reloaded;
 		Aggregate.Failed += Batch.Failed;
@@ -6126,7 +6247,7 @@ SFinareAuthoringSurface::ReloadAllScriptClassComponents(
 			Aggregate.ObservedReloadTransactionJson =
 				Batch.ObservedReloadTransactionJson;
 		}
-	}
+	};
 
 	TArray<TWeakObjectPtr<UFinareAsset>> StaticAssets;
 	for (TObjectIterator<UFinareAsset> It; It; ++It)
@@ -6178,22 +6299,9 @@ SFinareAuthoringSurface::ReloadAllScriptClassComponents(
 			continue;
 		}
 		StaticKeys.Add({ResolvedPath, ResolvedType});
-		const FFinareReloadBatchResult Batch =
-			ReloadStaticLibraryForAsset(Asset, ReloadTransactionJson);
-		Aggregate.Matched += Batch.Matched;
-		Aggregate.Reloaded += Batch.Reloaded;
-		Aggregate.Failed += Batch.Failed;
-		Aggregate.PreflightRejected += Batch.PreflightRejected;
-		Aggregate.Prepared += Batch.Prepared;
-		Aggregate.PrepareRejected += Batch.PrepareRejected;
-		Aggregate.Committed += Batch.Committed;
-		Aggregate.CommitRejected += Batch.CommitRejected;
-		Aggregate.Aborted += Batch.Aborted;
-		Aggregate.FinalizeFailed += Batch.FinalizeFailed;
-		if (!Batch.ObservedReloadTransactionJson.IsEmpty())
+		if (Aggregate.Failed == 0)
 		{
-			Aggregate.ObservedReloadTransactionJson =
-				Batch.ObservedReloadTransactionJson;
+			MergeBatch(ReloadStaticLibraryForAsset(Asset, ReloadTransactionJson));
 		}
 	}
 	return Aggregate;
@@ -6205,7 +6313,6 @@ SFinareAuthoringSurface::ReloadMatchingComponentsForAsset(
 	const FString& LoadedSurfacePath,
 	const FString& ReloadTransactionJson)
 {
-	FFinareReloadBatchResult Result;
 	TArray<TWeakObjectPtr<UFinareComponent>> MatchingComponents;
 	for (TObjectIterator<UFinareComponent> It; It; ++It)
 	{
@@ -6244,115 +6351,9 @@ SFinareAuthoringSurface::ReloadMatchingComponentsForAsset(
 				       ? LeftComponent->GetPathName() < RightComponent->GetPathName()
 				       : LeftComponent != nullptr;
 		});
-	Result.Matched = MatchingComponents.Num();
-
-	TArray<FString> PreflightTransactions;
-	PreflightTransactions.SetNum(MatchingComponents.Num());
-	for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
-	{
-		UFinareComponent* Component = MatchingComponents[Index].Get();
-		if (Component == nullptr ||
-			!Component->PreflightScriptReloadWithTransaction(
-				ReloadTransactionJson,
-				PreflightTransactions[Index]))
-		{
-			++Result.PreflightRejected;
-			if (Result.ObservedReloadTransactionJson.IsEmpty() && Component != nullptr)
-			{
-				Result.ObservedReloadTransactionJson = PreflightTransactions[Index];
-			}
-		}
-	}
-	if (Result.PreflightRejected > 0)
-	{
-		// The batch barrier deliberately counts every match as failed because
-		// none was allowed to cross into runtime mutation.
-		Result.Failed = Result.Matched;
-		return Result;
-	}
-
-	auto AbortPreparedBatch = [&MatchingComponents, &Result](const FString& Reason)
-	{
-		for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
-		     MatchingComponents)
-		{
-			UFinareComponent* Component = WeakComponent.Get();
-			if (Component == nullptr || !Component->HasPreparedScriptReload())
-			{
-				continue;
-			}
-			Component->AbortPreparedScriptReload(Reason);
-			++Result.Aborted;
-			if (!Component->LastReloadTransaction.IsEmpty())
-			{
-				Result.ObservedReloadTransactionJson =
-					Component->LastReloadTransaction;
-			}
-		}
-	};
-
-	for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
-	{
-		UFinareComponent* Component = MatchingComponents[Index].Get();
-		if (Component == nullptr ||
-			!Component->PrepareScriptReloadWithTransaction(
-				PreflightTransactions[Index]))
-		{
-			++Result.PrepareRejected;
-			if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
-			{
-				Result.ObservedReloadTransactionJson =
-					Component->LastReloadTransaction;
-			}
-			AbortPreparedBatch(
-				TEXT(
-					"The all-instance reload batch aborted because another candidate failed during managed load, start, or event rebinding."));
-			Result.Failed = Result.Matched;
-			return Result;
-		}
-		++Result.Prepared;
-	}
-
-	for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
-	     MatchingComponents)
-	{
-		UFinareComponent* Component = WeakComponent.Get();
-		if (Component == nullptr || !Component->CommitPreparedScriptReload())
-		{
-			++Result.CommitRejected;
-			if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
-			{
-				Result.ObservedReloadTransactionJson =
-					Component->LastReloadTransaction;
-			}
-			AbortPreparedBatch(
-				TEXT(
-					"The all-instance reload batch rolled back because a prepared candidate could not publish its generation pointer."));
-			Result.Failed = Result.Matched;
-			Result.Committed = 0;
-			return Result;
-		}
-		++Result.Committed;
-	}
-
-	for (const TWeakObjectPtr<UFinareComponent>& WeakComponent :
-	     MatchingComponents)
-	{
-		UFinareComponent* Component = WeakComponent.Get();
-		if (Component == nullptr || !Component->FinalizePreparedScriptReload())
-		{
-			++Result.FinalizeFailed;
-			++Result.Failed;
-		}
-		else
-		{
-			++Result.Reloaded;
-		}
-		if (Component != nullptr && !Component->LastReloadTransaction.IsEmpty())
-		{
-			Result.ObservedReloadTransactionJson = Component->LastReloadTransaction;
-		}
-	}
+	FFinareReloadBatchResult Result = ReloadComponentBatch(
+		MatchingComponents,
+		ReloadTransactionJson);
 
 	if (PreferredAsset != nullptr &&
 		PreferredAsset->ScriptClassKind == EFinareClassKind::BlueprintFunctionLibrary)

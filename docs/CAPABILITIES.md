@@ -40,12 +40,19 @@ Start with the [first-project guide](UNREAL_FIRST_PROJECT.md),
 | Blueprint function exchange | Common values and supported ref/out; five container/Soft Reference families through actual Blueprint VM, package reload and Win64 Development cooked execution | Nested containers and known unhashable combinations are rejected |
 | Explicit event extension | Inherited native/Blueprint events, exact owner identity, explicit parent calls, compatible body reload and cooked lifecycle fixtures | General prototype/mixin behavior is not promised |
 | Inheritance and defaults | Reviewed Actor child/grandchild and managed-base state, component identity, scalar/collection overrides, saved/reloaded classes, two Worlds and cooked fixtures | These recorded C-3 results do not establish all future composition operations |
-| Composition and publication | Base edit/clear, partial binding owners, managed/native publication recovery, exact function routing and stopped descendant preservation | Ordinary Actor/component composition and remaining default/reference ownership are in progress; current C-4 checks are Editor-only |
+| Composition and publication | Base edit/clear, publication recovery, stopped descendants; first pure C# ordinary Actor + Health/Mover workflow with saved overrides, scalar component references and transactional batch reload; ordinary SceneComponent receiver lifecycle without a Finare native base | Broader composition edits, container references and remaining default/reference ownership are open. Current C-4 and ordinary component checks are Editor-only |
+| Object identity and types | Generated native inheritance, checked typed object/interface views, nullable references and common property/call/ref-out/callback marshalling; identity by World and native handle, access constrained by generation | Known generated type coverage still depends on native reflection; this does not establish arbitrary C++ inheritance or cooked acceptance for the new views |
+| Reflected property access | Required partial native accessors for Script Class state, declaration defaults, SDK/in-process compiler integration and preserved source-patch configuration | Non-partial reflected state is rejected; container reads are snapshots and assignment replaces the native value |
+| Ordinary UObject scripts | Ordinary native parents, generated function dispatch, public C# `CreateObject`, first-call activation, reload, failed-start cleanup and weak-receiver GC/World teardown | Editor-verified; native references own GC lifetime. No synthetic Actor Tick or blanket coverage of native factory/event requirements |
 
 Details: [Declaration IR](DECLARATION_IR.md), [Unreal adapter](UNREAL_ADAPTER.md),
 [event extension](plans/2026-09-07-blueprint-event-extension.md),
 [inheritance](plans/2026-09-08-blueprint-inherited-defaults.md),
 [class composition](plans/2026-09-09-class-composition.md).
+The [first composition workflow](../tests/Finare.Tests/Fixtures/ClassComposition/README.md)
+uses generated Blueprint/SCS storage with pure C# behavior. Its Automation
+substitutes the Daily Build command with an isolated real C# build; it does not
+renew full project installation or packaged acceptance.
 
 ## API families
 

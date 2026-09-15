@@ -8,6 +8,11 @@ implementation queue. See [CAPABILITIES.md](../CAPABILITIES.md) for current
 limits and [ROADMAP.md](../ROADMAP.md) for selection of the next consumer-driven
 follow-up. The detailed checkpoints below retain their original evidence.
 
+> Property synchronization notes and test results below describe the original implementation.
+> The current runtime requires generated partial native accessors and has removed
+> lifecycle/RPC/parent-call hydration and flushing. See the
+> [object model decision](2026-09-13-unified-unreal-object-model.md).
+
 ## Outcome and scope
 
 Use replicated managed state, RepNotify and Server/Client/Multicast RPCs in an

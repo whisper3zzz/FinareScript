@@ -39,15 +39,17 @@ $cli = Join-Path $artifacts 'bin/Finare.Cli/debug/Finare.Cli.dll'
 # Chunk dependency validation must not mix isolated tool-build DLLs with the staged host.
 $unreal = [Security.SecurityElement]::Escape((Join-Path $repo 'HostProject/Plugins/Finare/Binaries/Managed/Finare.Unreal.dll'))
 $core = [Security.SecurityElement]::Escape((Join-Path $repo 'HostProject/Plugins/Finare/Binaries/Managed/Finare.Core.dll'))
+$analyzer = [Security.SecurityElement]::Escape((Join-Path $repo 'HostProject/Plugins/Finare/Binaries/Managed/Finare.Unreal.Generators.dll'))
 $fixtureProject = Join-Path $output 'Finare.PureCSharp.csproj'
 @"
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><LangVersion>preview</LangVersion><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
   <ItemGroup>
     <Compile Include="FirstScript.cs" />
     <Compile Include="Bindings.g.cs" Condition="Exists('Bindings.g.cs')" />
     <Reference Include="Finare.Unreal"><HintPath>$unreal</HintPath><Private>false</Private></Reference>
     <Reference Include="Finare.Core"><HintPath>$core</HintPath><Private>false</Private></Reference>
+    <Analyzer Include="$analyzer" />
   </ItemGroup>
 </Project>
 "@ | Set-Content -LiteralPath $fixtureProject -Encoding utf8

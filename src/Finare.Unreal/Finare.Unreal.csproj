@@ -8,12 +8,16 @@
   <ItemGroup>
     <ProjectReference Include="../Finare.Core/Finare.Core.csproj" />
     <ProjectReference Include="../Finare.Runtime/Finare.Runtime.csproj" />
+    <ProjectReference Include="../Finare.Unreal.Generators/Finare.Unreal.Generators.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     <InternalsVisibleTo Include="Finare.Tests" />
   </ItemGroup>
   <Target Name="StageUnrealManagedHost" AfterTargets="Build"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(FinareSkipManagedHostStaging)' != 'true'">
     <ItemGroup>
       <_FinareManagedHostFile Include="$(TargetPath)" />
+      <_FinareManagedHostFile Include="@(Analyzer)"
+                             Condition="'%(Filename)' == 'Finare.Unreal.Generators'" />
       <_FinareManagedHostFile Include="$(TargetDir)Finare.Unreal.deps.json"
                                     Condition="Exists('$(TargetDir)Finare.Unreal.deps.json')" />
       <_FinareManagedHostFile Include="@(ReferenceCopyLocalPaths)"

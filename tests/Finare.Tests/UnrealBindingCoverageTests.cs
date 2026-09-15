@@ -88,7 +88,7 @@ public sealed class UnrealBindingCoverageTests
         Assert.DoesNotContain("BatchMove", managed.Source, StringComparison.Ordinal);
         Assert.Contains("public float Scale(float value)", managed.Source, StringComparison.Ordinal);
         Assert.Contains("public int Scale(int value)", managed.Source, StringComparison.Ordinal);
-        Assert.Contains("public global::Finare.Unreal.UnrealObjectHandle Spawn()", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::Finare.Unreal.UnrealObject? Spawn()", managed.Source, StringComparison.Ordinal);
         Assert.Contains("UnrealSoftObjectHandle", managed.Source, StringComparison.Ordinal);
         Assert.Equal(
             nodes.Types.SelectMany(static type => type.Nodes).Count(),

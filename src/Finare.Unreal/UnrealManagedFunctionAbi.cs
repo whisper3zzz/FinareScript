@@ -433,7 +433,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
         method.GetCustomAttributes<UnrealInputActionAttribute>(inherit: false).Any() ||
         method.GetCustomAttributes<UnrealInterfaceFunctionAttribute>(inherit: false).Any();
 
-    public void Invoke(object? target, string functionName, nint frameAddress)
+    public void Invoke(object? target, string functionName, nint frameAddress, IUnrealInvocationBridge? bridge = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(functionName);
         if (_staticOnly ? target is not null : target is null)
@@ -450,13 +450,14 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 $"Managed Script Class '{_typeName}' has no reviewed Blueprint-callable function '{functionName}'.");
         }
         ValidateFrame(frameAddress, contract.ArgumentCount, contract.ResultCount);
+        bridge ??= (target as UnrealObjectScript)?.Context.Bridge;
 
         if (target is UnrealObjectScript objectScript)
         {
             objectScript.BeginGeneratedFunctionCall();
             try
             {
-                contract.Invoke(target, frameAddress);
+                contract.Invoke(target, frameAddress, bridge);
             }
             finally
             {
@@ -464,10 +465,10 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             }
             return;
         }
-        contract.Invoke(target, frameAddress);
+        contract.Invoke(target, frameAddress, bridge);
     }
 
-    private delegate void InvokeFunction(object? target, nint frame);
+    private delegate void InvokeFunction(object? target, nint frame, IUnrealInvocationBridge? bridge);
 
     internal sealed record UnrealManagedFunctionSignature(string Canonical);
 
@@ -491,6 +492,14 @@ internal sealed class UnrealManagedFunctionDispatcherV2
 
             var target = Expression.Parameter(typeof(object), "target");
             var frame = Expression.Parameter(typeof(nint), "frame");
+            var bridge = Expression.Parameter(typeof(IUnrealInvocationBridge), "bridge");
+            Expression ReadProjected(Type valueType, int index)
+            {
+                Type wire = UnrealObjectInvocationAdapter.WireType(valueType);
+                Expression read = Expression.Call(GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(wire), frame, Expression.Constant(index));
+                return wire == valueType ? read : Expression.Call(
+                    GetGenericHelper(nameof(FromWire)).MakeGenericMethod(valueType, wire), read, bridge);
+            }
             var callArguments = new Expression[parameters.Length];
             var variables = new List<ParameterExpression>();
             var prefix = new List<Expression>();
@@ -509,10 +518,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 }
                 if (!parameterType.IsByRef)
                 {
-                    callArguments[index] = Expression.Call(
-                        GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(valueType),
-                        frame,
-                        Expression.Constant(index));
+                    callArguments[index] = ReadProjected(valueType, index);
                     continue;
                 }
 
@@ -524,10 +530,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 {
                     prefix.Add(Expression.Assign(
                         variable,
-                        Expression.Call(
-                            GetGenericHelper(nameof(ReadArgument)).MakeGenericMethod(valueType),
-                            frame,
-                            Expression.Constant(index))));
+                        ReadProjected(valueType, index)));
                 }
                 callArguments[index] = variable;
                 outputVariables.Add((variable, valueType));
@@ -545,6 +548,21 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             var bodyExpressions = new List<Expression>(prefix.Count + outputVariables.Count + 3);
             bodyExpressions.AddRange(prefix);
             int resultIndex = 0;
+            var writes = new List<Expression>();
+            void StageWrite(Expression value, Type valueType)
+            {
+                Type wire = UnrealObjectInvocationAdapter.WireType(valueType);
+                if (wire != valueType)
+                {
+                    var projected = Expression.Variable(wire, "wireResult" + resultIndex);
+                    variables.Add(projected);
+                    bodyExpressions.Add(Expression.Assign(projected, Expression.Call(
+                        GetGenericHelper(nameof(ToWire)).MakeGenericMethod(valueType, wire), value, bridge)));
+                    value = projected;
+                }
+                writes.Add(Expression.Call(GetGenericHelper(nameof(WriteResultAt)).MakeGenericMethod(wire),
+                    value, frame, Expression.Constant(resultIndex++)));
+            }
             if (method.ReturnType == typeof(void))
             {
                 bodyExpressions.Add(call);
@@ -556,20 +574,13 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                     "returnValue");
                 variables.Add(returnValue);
                 bodyExpressions.Add(Expression.Assign(returnValue, call));
-                bodyExpressions.Add(Expression.Call(
-                    GetGenericHelper(nameof(WriteResultAt)).MakeGenericMethod(method.ReturnType),
-                    returnValue,
-                    frame,
-                    Expression.Constant(resultIndex++)));
+                StageWrite(returnValue, method.ReturnType);
             }
             foreach ((ParameterExpression variable, Type valueType) in outputVariables)
             {
-                bodyExpressions.Add(Expression.Call(
-                    GetGenericHelper(nameof(WriteResultAt)).MakeGenericMethod(valueType),
-                    variable,
-                    frame,
-                    Expression.Constant(resultIndex++)));
+                StageWrite(variable, valueType);
             }
+            bodyExpressions.AddRange(writes);
             bodyExpressions.Add(Expression.Call(
                 GetHelper(nameof(CompleteResults)),
                 frame,
@@ -582,7 +593,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
             contract = new FunctionContract(
                 parameters.Length,
                 resultIndex,
-                Expression.Lambda<InvokeFunction>(body, target, frame).Compile());
+                Expression.Lambda<InvokeFunction>(body, target, frame, bridge).Compile());
             return true;
         }
 
@@ -664,7 +675,7 @@ internal sealed class UnrealManagedFunctionDispatcherV2
                 identity = "void";
                 return true;
             }
-            return UnrealNativeValueCodecV3.TryCreateContractIdentity(type, out identity);
+            return UnrealObjectInvocationAdapter.TryCreateContractIdentity(type, out identity);
         }
 
         private static void AppendPart(System.Text.StringBuilder builder, string value) =>
@@ -672,7 +683,13 @@ internal sealed class UnrealManagedFunctionDispatcherV2
     }
 
     private static bool IsSupported(Type type) =>
-        UnrealNativeValueCodecV3.TryCreateResultDescriptor(type, out _, out _);
+        UnrealNativeValueCodecV3.TryCreateResultDescriptor(UnrealObjectInvocationAdapter.WireType(type), out _, out _);
+
+    private static T FromWire<T, TWire>(TWire value, IUnrealInvocationBridge? bridge) =>
+        (T)UnrealObjectInvocationAdapter.Convert(value, typeof(T), bridge ?? throw new InvalidOperationException("Object calls require a World bridge."), true)!;
+
+    private static TWire ToWire<T, TWire>(T value, IUnrealInvocationBridge? bridge) =>
+        (TWire)UnrealObjectInvocationAdapter.Convert(value, typeof(T), bridge ?? throw new InvalidOperationException("Object calls require a World bridge."), false)!;
 
     private static MethodInfo GetHelper(string name) =>
         typeof(UnrealManagedFunctionDispatcherV2).GetMethod(

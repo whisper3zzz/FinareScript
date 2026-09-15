@@ -74,7 +74,8 @@ public sealed class CSharpCompilationRequest
         MethodEffectCatalog? effectCatalog = null,
         CSharpCompilationSettings? settings = null,
         IEnumerable<string>? runtimeReferencePaths = null,
-        bool includeDefaultReferences = true)
+        bool includeDefaultReferences = true,
+        IEnumerable<string>? sourceGeneratorPaths = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
         ArgumentNullException.ThrowIfNull(sources);
@@ -128,6 +129,13 @@ public sealed class CSharpCompilationRequest
         EffectCatalog = effectCatalog ?? MethodEffectCatalog.CreateDefault();
         Settings = settings ?? CSharpCompilationSettings.Default;
         IncludeDefaultReferences = includeDefaultReferences;
+        SourceGeneratorPaths = (sourceGeneratorPaths ?? [])
+            .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal).ToArray();
+        foreach (string path in SourceGeneratorPaths)
+        {
+            if (!File.Exists(path)) throw new FileNotFoundException("Source generator does not exist.", path);
+        }
         ConfigurationId = CreateConfigurationId();
     }
 
@@ -144,6 +152,8 @@ public sealed class CSharpCompilationRequest
     public CSharpCompilationSettings Settings { get; }
 
     public bool IncludeDefaultReferences { get; }
+
+    public IReadOnlyList<string> SourceGeneratorPaths { get; }
 
     public SemanticId ConfigurationId { get; }
 
@@ -164,7 +174,7 @@ public sealed class CSharpCompilationRequest
 
         bool legacyConfiguration =
             Settings.ConfigurationKey == CSharpCompilationSettings.Default.ConfigurationKey &&
-            IncludeDefaultReferences &&
+            IncludeDefaultReferences && SourceGeneratorPaths.Count == 0 &&
             ReferencePaths.SequenceEqual(RuntimeReferencePaths, StringComparer.OrdinalIgnoreCase);
         if (legacyConfiguration)
         {
@@ -186,6 +196,9 @@ public sealed class CSharpCompilationRequest
             EffectCatalog.Id.Value,
             string.Join(',', referenceFingerprints),
             string.Join(',', runtimeReferenceFingerprints));
+        if (SourceGeneratorPaths.Count != 0)
+            key = string.Join('|', "csharp-source-generators/v0.1", key,
+                string.Join(',', CreateReferenceFingerprints(SourceGeneratorPaths)));
         return SemanticId.FromKey(key);
     }
 

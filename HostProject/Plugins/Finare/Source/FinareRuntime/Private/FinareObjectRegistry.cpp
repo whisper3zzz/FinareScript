@@ -1,5 +1,7 @@
 #include "FinareObjectRegistry.h"
 
+#include "FinareWorldContext.h"
+
 #include "Engine/World.h"
 #include "HAL/CriticalSection.h"
 #include "Misc/ScopeLock.h"
@@ -274,7 +276,7 @@ FFinareObjectHandle FFinareObjectRegistry::RegisterObject(
 			TEXT("A live UObject is required to create a Finare handle."));
 		return {};
 	}
-	if (UWorld* ObjectWorld = Object->GetWorld();
+	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
 		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
 	{
 		Fail(
@@ -355,7 +357,7 @@ UObject* FFinareObjectRegistry::ResolveObject(
 			TEXT("The UObject referenced by the Finare handle has been destroyed."));
 		return nullptr;
 	}
-	if (UWorld* ObjectWorld = Object->GetWorld();
+	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
 		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
 	{
 		Impl->RetireSlotLocked(SlotIndex, Object);
@@ -492,7 +494,8 @@ bool FFinareObjectRegistry::RetainReference(
 		     TEXT("The UObject reference is no longer available."));
 		return false;
 	}
-	if (UWorld* ObjectWorld = Object->GetWorld(); ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
+	if (UWorld* ObjectWorld = UE::Finare::WorldContext::Resolve(Object);
+		ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
 	{
 		Fail(OutResult, EFinareObjectHandleError::WorldMismatch,
 		     TEXT("The UObject reference belongs to another world."));

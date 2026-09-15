@@ -41,7 +41,7 @@ public sealed record UnrealCallbackDescriptor(
             p.IsOut ? UnrealParameterDirection.Output : p.ParameterType.IsByRef
                 ? UnrealParameterDirection.InputOutput : UnrealParameterDirection.Input)).ToArray();
         foreach (var valueType in parameters.Select(p => p.Type).Append(invoke.ReturnType).Where(t => t != typeof(void)))
-            if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(valueType, out _, out _))
+            if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(UnrealObjectInvocationAdapter.WireType(valueType), out _, out _))
                 throw new NotSupportedException($"Callback value type '{valueType}' has no ABI v3 codec.");
         return new(attribute.SignaturePath, invoke.ReturnType, parameters);
     }
@@ -64,20 +64,22 @@ public interface IUnrealCallbackProvider
 
 internal interface IUnrealCallbackScopeFactory
 {
-    UnrealCallbackScope CreateCallbackScope();
+    UnrealCallbackScope CreateCallbackScope(IUnrealInvocationBridge owner);
 }
 
 /// <summary>A generation's callbacks. Disposal disables native copies before releasing managed handlers.</summary>
 public sealed class UnrealCallbackScope : IDisposable
 {
     private readonly IUnrealNativeCallbackTransport _transport;
+    private readonly IUnrealInvocationBridge? _bridge;
     private readonly object _gate = new();
     private readonly ulong _scope;
     private bool _disposed;
 
-    public UnrealCallbackScope(IUnrealNativeCallbackTransport transport)
+    public UnrealCallbackScope(IUnrealNativeCallbackTransport transport, IUnrealInvocationBridge? bridge = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        _bridge = bridge;
         if (!transport.SupportsCallbacks) throw new NotSupportedException("The installed runtime does not support typed callbacks.");
         RequireSuccess(transport.OpenCallbackScope(out _scope), "open scope");
         if (_scope == 0) throw new InvalidOperationException("Native callback transport returned an empty scope.");
@@ -91,10 +93,23 @@ public sealed class UnrealCallbackScope : IDisposable
     {
         ArgumentNullException.ThrowIfNull(handler);
         var descriptor = UnrealCallbackDescriptor.For<T>();
+        Delegate wireHandler = handler;
+        if (descriptor.Parameters.Select(p => p.Type).Append(descriptor.ReturnType)
+            .Any(UnrealObjectInvocationAdapter.ContainsObjectView))
+        {
+            wireHandler = UnrealObjectDelegateAdapter.Adapt(handler, _bridge ??
+                throw new NotSupportedException("Object callbacks require a World-bound callback scope."));
+            descriptor = descriptor with
+            {
+                ReturnType = UnrealObjectInvocationAdapter.WireType(descriptor.ReturnType),
+                Parameters = descriptor.Parameters.Select(p => p with
+                { Type = UnrealObjectInvocationAdapter.WireType(p.Type) }).ToArray(),
+            };
+        }
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            RequireSuccess(_transport.RegisterCallback(_scope, descriptor, handler, out ulong token), "register");
+            RequireSuccess(_transport.RegisterCallback(_scope, descriptor, wireHandler, out ulong token), "register");
             if (token == 0) throw new InvalidOperationException("Native callback transport returned an empty token.");
             return new(this, token, descriptor.SignatureId);
         }

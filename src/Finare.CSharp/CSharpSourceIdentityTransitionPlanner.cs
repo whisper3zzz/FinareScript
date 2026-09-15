@@ -243,7 +243,7 @@ public sealed class CSharpSourceIdentityTransitionPlanner
             request.EffectCatalog,
             request.Settings,
             request.RuntimeReferencePaths,
-            request.IncludeDefaultReferences);
+            request.IncludeDefaultReferences, request.SourceGeneratorPaths);
     }
 
     private static bool ValidateTransitions(

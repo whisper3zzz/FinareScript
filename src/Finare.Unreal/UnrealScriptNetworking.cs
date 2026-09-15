@@ -48,16 +48,14 @@ public abstract partial class UnrealObjectScript
             string.IsNullOrWhiteSpace(scriptClass.GeneratedClassPath))
             throw new InvalidOperationException("RPC sends require a generated gameplay class and a public instance void RPC with the exact input signature.");
         UnrealObjectHandle receiver = scriptClass.Kind == UnrealScriptClassKind.ActorComponent ? HostHandle : TargetHandle;
-        // A listen-server/local call can synchronously enter the receive body.
-        // Publish outer edits before it hydrates; then retain its resulting state.
-        _stateSession?.Flush();
-        Bridge.Invoke(
-            receiver,
-            UnrealScriptClassIdentity.MemberPath(
+        string path = UnrealScriptClassIdentity.MemberPath(
                 GetType(),
                 scriptClass.GeneratedClassPath,
-                method.Name),
-            arguments);
-        _stateSession?.Hydrate();
+                method.Name);
+        if (types.Any(UnrealObjectInvocationAdapter.ContainsObjectView))
+            UnrealObjectInvocationAdapter.InvokeWithOutputs(UnrealObject.InvocationTarget(receiver, Bridge),
+                UnrealMemberId.FromPath(path), path, typeof(void), types.Select((t, i) =>
+                    new UnrealOutputArgument(t, UnrealParameterDirection.Input, arguments[i])).ToArray());
+        else Bridge.Invoke(receiver, path, arguments);
     }
 }
