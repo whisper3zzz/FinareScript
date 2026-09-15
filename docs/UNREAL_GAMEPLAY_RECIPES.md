@@ -9,8 +9,10 @@ names with the exact names shown by the project's **Unreal API Browser**.
 
 1. Open the target Script Asset and the **Unreal API Browser**.
 2. Search for the required type, function, property, delegate, or World service.
-3. If it is absent, add the exact reflected type/member to the project Contract,
-   or let the configured development surface propose it.
+3. If it is absent, check the configured reflection modules and API coverage
+   diagnostic. Setup generates the supported module API library; there is no
+   project member Contract to maintain. A missing signature needs metadata or
+   transport support, not a new per-component binding record.
 4. Run **Build & Reload**. Use **Build, Restart & Continue** only when the shared
    receipt reports `restartRequired`.
 5. Use the generated C# wrapper or the matching typed node. Never call an
@@ -29,6 +31,15 @@ The API Browser is authoritative for member paths, parameter direction,
 World-context policy, thread policy, deprecation, and native/fallback coverage.
 
 ## Actor behavior
+
+For runtime component creation, see the complete
+[C# example](../tests/Finare.Tests/Fixtures/NativeComponentCreation/ComponentScripts.cs)
+and [reproduction guide](../tests/Finare.Tests/Fixtures/NativeComponentCreation/README.md).
+It uses the generated Actor's `AddComponentByClass`, sets properties before
+`FinishAddComponent` when deferred, and calls generated attachment/destruction
+methods. Release components owned by the behavior when it ends so a reload
+does not duplicate them. Native constructor/default-subobject support is a
+separate lifecycle requirement; these runtime calls do not implement it.
 
 Use `UnrealActorScript` when the Script Asset targets an Actor. It gives the
 generation-safe target and host handles, World-owned async lifetime, Tick, and

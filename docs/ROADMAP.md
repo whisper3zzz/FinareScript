@@ -21,8 +21,8 @@ performance win on every workload.
 ## Current execution cursor
 
 - Active milestone: **M13.3 — ordinary Script Class integration**.
-- Current tranche: **M13.3C-4** — remaining composition and ownership workflows,
-  using the completed Unreal object/type foundation below.
+- Current tranche: **M13.3C-4** — normal C# use of UE component creation,
+  attachment and lifecycle APIs, using the object/type foundation below.
 - [x] Unify generated C# object types, native inheritance, checked object views,
   and World-scoped identity through the existing invocation transport.
 - [x] Decouple managed behavior ownership from the native parent class,
@@ -83,10 +83,28 @@ three prior generations retained when one candidate fails. The
 [reproduction guide](../tests/Finare.Tests/Fixtures/ClassComposition/README.md)
 defines the Editor fixture and its isolated build-command substitution.
 
-Remaining C-4 work covers the broader normal-authoring composition operations:
+The runtime entry uses UE's component operations through the available
+generated API library. It does not introduce a Finare composition schema,
+component member list or per-native-family execution adapter. Native test code
+must observe the components created by C#, rather than assemble them for it.
 
-1. Edit the relevant Actor/component parent or composition through the existing
-   asset/C#/Graph workflow, including the component-family behavior still open.
+The runtime entry is now demonstrated by the
+[C# component creation example](../tests/Finare.Tests/Fixtures/NativeComponentCreation/README.md):
+an ordinary Actor creates a mesh and two ordinary SceneComponent script receivers
+through the generated module API library. Deferred inputs, attachment, Tick,
+destruction, stale-handle rejection and reload cleanup passed CMD Automation.
+
+Runtime `AddComponentByClass` / `FinishAddComponent` and native constructor
+`CreateDefaultSubobject` are distinct entry points. The latter still requires
+real constructor/CDO integration; invoking gameplay initialization at BeginPlay
+does not provide that capability.
+
+Remaining C-4 work follows concrete public API gaps:
+
+1. Build on the completed runtime component entry when a public workflow needs
+   native constructor/default-subobject initialization. This requires the real
+   construction phase, including CDO and loading behavior; it is not a new
+   component-composition data model.
 2. Keep source bindings, saved UE classes, component identity and runtime
    behavior ownership consistent. Preserve explicit default/reference overrides.
 3. Exercise save/reopen and permitted stop/edit/restart. Reject active or

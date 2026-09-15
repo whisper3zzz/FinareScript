@@ -545,8 +545,10 @@ public abstract partial class UnrealObjectScript : IUnrealManagedScript, IUnreal
 
 /// <summary>
 /// Actor behavior surface corresponding to BeginPlay, Tick, and EndPlay. The
-/// target handle is the owning Actor while the host handle identifies the
-/// UFinareComponent that owns the managed generation.
+/// target handle is the owning Actor. For an Actor Script Class, the host
+/// handle also identifies that native Actor; its execution component is an
+/// internal carrier. A directly configured component host without a Script
+/// Class retains its own component handle.
 /// </summary>
 public abstract class UnrealActorScript : UnrealObjectScript
 {

@@ -44,6 +44,7 @@ Start with the [first-project guide](UNREAL_FIRST_PROJECT.md),
 | Object identity and types | Generated native inheritance, checked typed object/interface views, nullable references and common property/call/ref-out/callback marshalling; identity by World and native handle, access constrained by generation | Known generated type coverage still depends on native reflection; this does not establish arbitrary C++ inheritance or cooked acceptance for the new views |
 | Reflected property access | Required partial native accessors for Script Class state, declaration defaults, SDK/in-process compiler integration and preserved source-patch configuration | Non-partial reflected state is rejected; container reads are snapshots and assignment replaces the native value |
 | Ordinary UObject scripts | Ordinary native parents, generated function dispatch, public C# `CreateObject`, first-call activation, reload, failed-start cleanup and weak-receiver GC/World teardown | Editor-verified; native references own GC lifetime. No synthetic Actor Tick or blanket coverage of native factory/event requirements |
+| Runtime component creation | Generated UE `AddComponentByClass`, deferred `FinishAddComponent`, typed attachment/mesh calls and destruction; an ordinary Actor creates two ordinary SceneComponent script receivers in C#, with independent lifecycle and reload cleanup | Editor-verified. Native CDO/default-subobject construction and persisted editor component trees are separate, unfinished workflows |
 
 Details: [Declaration IR](DECLARATION_IR.md), [Unreal adapter](UNREAL_ADAPTER.md),
 [event extension](plans/2026-09-07-blueprint-event-extension.md),
@@ -53,6 +54,10 @@ The [first composition workflow](../tests/Finare.Tests/Fixtures/ClassComposition
 uses generated Blueprint/SCS storage with pure C# behavior. Its Automation
 substitutes the Daily Build command with an isolated real C# build; it does not
 renew full project installation or packaged acceptance.
+
+The [native component creation example](../tests/Finare.Tests/Fixtures/NativeComponentCreation/README.md)
+uses the module API library generated before gameplay compilation. Its native
+test only observes the components created by C#; it does not assemble them.
 
 ## API families
 

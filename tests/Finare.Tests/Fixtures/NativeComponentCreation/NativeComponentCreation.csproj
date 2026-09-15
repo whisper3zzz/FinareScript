@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Finare.NativeComponentCreation</AssemblyName>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <ComponentFixtureDirectory Condition="'$(ComponentFixtureDirectory)' == ''">$(MSBuildProjectDirectory)/../../../../artifacts/native-component-creation</ComponentFixtureDirectory>
+    <ComponentHostDirectory>$(MSBuildProjectDirectory)/../../../../HostProject/Plugins/Finare/Binaries/Managed</ComponentHostDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ComponentFixtureDirectory)/Bindings.g.cs" />
+    <Compile Include="ComponentScripts.cs" Condition="'$(IncludeGameplay)' != 'false'" />
+    <Analyzer Include="$(ComponentHostDirectory)/Finare.Unreal.Generators.dll" />
+    <Reference Include="Finare.Unreal"><HintPath>$(ComponentHostDirectory)/Finare.Unreal.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Finare.Core"><HintPath>$(ComponentHostDirectory)/Finare.Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

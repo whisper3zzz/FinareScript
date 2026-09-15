@@ -27,6 +27,9 @@ Invoke-Checked $dotnet @('build', (Join-Path $repo 'src/Finare.Unreal/Finare.Unr
     '--verbosity', 'minimal')
 Build-Target 'FinareHostEditor'
 & (Join-Path $PSScriptRoot 'prepare-api-library.ps1') -EngineRoot $EngineRoot
+& (Join-Path $PSScriptRoot 'prepare-native-component-creation.ps1') -EngineRoot $EngineRoot `
+    -ReflectionPath (Join-Path $output 'full-reflection.json') `
+    -CliPath (Join-Path $output 'build/bin/Finare.Cli/debug/Finare.Cli.dll')
 
 $native = Join-Path $repo 'HostProject/Plugins/Finare/Source/FinareRuntime/Private/Generated/FinareRuntime.native-thunks.generated.cpp'
 $snapshots = @{}
@@ -41,7 +44,8 @@ try {
     Build-Target 'FinareHostEditor'
     Build-Target 'FinareHost'
     $tests = @('Finare.Unreal.ApiDiscovery.ExportScope', 'Finare.Unreal.ApiDiscovery.GenericOutputs',
-        'Finare.Unreal.ApiLibrary.NewCallReload', 'Finare.Unreal.ProjectSetup.SourceSave')
+        'Finare.Unreal.ApiLibrary.NewCallReload', 'Finare.Unreal.ProjectSetup.SourceSave',
+        'Finare.Unreal.Components.GeneratedCreation')
     $logPath = if ($AutomationLog) { [IO.Path]::GetFullPath($AutomationLog) } else { Join-Path $output 'automation.log' }
     if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath }
     Invoke-Checked $editor @($project, "-ExecCmds=Automation RunTests $($tests -join '+')",

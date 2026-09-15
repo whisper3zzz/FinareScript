@@ -91,3 +91,9 @@ World's handle.
 `Finare.Unreal.ApiDiscovery.GenericOutputs` covers descriptor rejection and
 single-execution retries. `Finare.Unreal.ProjectSetup.SourceSave` exercises real
 directory notifications and save debouncing.
+
+`Finare.Unreal.Components.GeneratedCreation` uses the same full-module export to
+compile C# before invoking UE component creation, deferred registration,
+attachment and destruction. The native test observes lifecycle and reload
+results without constructing the tested components. Preparation and this test
+are included in `tools/test-api-library.ps1` and its existing CI lane.
